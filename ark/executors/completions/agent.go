@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -41,6 +42,10 @@ func (a *Agent) FullName() string {
 	return a.Namespace + "/" + a.Name
 }
 
+func (a *Agent) GetToolRegistry() *ToolRegistry {
+	return a.Tools
+}
+
 // Execute executes the agent with optional event emission for tool calls
 func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
@@ -57,17 +62,37 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 
 	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
 	if err != nil {
-		a.telemetryRecorder.RecordError(span, err)
-		if !IsTerminateTeam(err) {
-			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
-			return nil, err
+		if signalResult, handled := a.handleSignalError(ctx, span, result, err, operationData); handled {
+			return signalResult, nil
 		}
-		return result, err
+		a.telemetryRecorder.RecordError(span, err)
+		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		return nil, err
 	}
 
 	a.telemetryRecorder.RecordSuccess(span)
 	a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed successfully", operationData)
 	return result, nil
+}
+
+func (a *Agent) handleSignalError(ctx context.Context, span telemetry.Span, result *ExecutionResult, err error, operationData map[string]string) (*ExecutionResult, bool) {
+	if result == nil {
+		result = &ExecutionResult{}
+	}
+	if IsTerminateTeam(err) {
+		result.Signal = &TerminateSignal{}
+		a.telemetryRecorder.RecordSuccess(span)
+		a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with termination", operationData)
+		return result, true
+	}
+	var selectionMade *SelectionMade
+	if errors.As(err, &selectionMade) {
+		result.Signal = &SelectionMadeSignal{SelectedName: selectionMade.SelectedName}
+		a.telemetryRecorder.RecordSuccess(span)
+		a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with selection", operationData)
+		return result, true
+	}
+	return nil, false
 }
 
 func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
@@ -77,7 +102,7 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
 	if err != nil {
-		if IsTerminateTeam(err) {
+		if IsTerminateTeam(err) || IsSelectionMade(err) {
 			return &ExecutionResult{Messages: messages}, err
 		}
 		return nil, err
@@ -200,7 +225,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
 			logger := logf.FromContext(ctx)
-			if !IsTerminateTeam(err) {
+			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
 				logger.Error(err, "Tool execution failed", "agent", a.FullName())
 			}
 			return newMessages, err

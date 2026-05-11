@@ -395,6 +395,7 @@ export const chatService = {
     conversationId?: string,
     timeout?: string,
     fileIds?: string[],
+    abortSignal?: AbortSignal,
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
@@ -420,6 +421,9 @@ export const chatService = {
     > {
       const response = await fetch(
         `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+        {
+          signal: abortSignal,
+        },
       );
 
       if (!response.ok) {
@@ -467,6 +471,8 @@ export const chatService = {
     sessionId?: string,
     conversationId?: string,
     timeout?: string,
+    fileIds?: string[],
+    abortSignal?: AbortSignal,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const { chunks } = await this.startStreamChatResponse(
       input,
@@ -475,7 +481,13 @@ export const chatService = {
       sessionId,
       conversationId,
       timeout,
+      fileIds,
+      abortSignal,
     );
     yield* chunks;
   },
+
+  async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
+    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`)
+  }
 };
