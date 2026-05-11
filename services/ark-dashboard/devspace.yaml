@@ -6,7 +6,8 @@ images:
     image: ark-dashboard
     dockerfile: Dockerfile
     context: .
-    buildKit: {}
+    docker:
+      useBuildKit: true
 
 pipelines:
   deploy: |-
