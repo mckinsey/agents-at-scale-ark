@@ -791,6 +791,7 @@ describe('FloatingChat', () => {
           undefined, // conversationId
           undefined, // enableStreaming
           '5m', // timeout
+          undefined, // fileIds
         );
       });
 
@@ -919,6 +920,7 @@ describe('FloatingChat', () => {
           undefined,
           undefined,
           '5m',
+          undefined,
         );
       });
 
