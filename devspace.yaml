@@ -129,11 +129,16 @@ pipelines:
   deploy: |-
 
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
-      create_deployments cert-manager
+      if ! helm status cert-manager -n cert-manager > /dev/null 2>&1; then
+        create_deployments cert-manager
+      fi
+      kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
     fi
 
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      create_deployments gateway-api
+      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
+        create_deployments gateway-api
+      fi
     fi
 
     run_dependency_pipelines ark-controller --pipeline=deploy
@@ -160,11 +165,16 @@ pipelines:
   dev: |-
 
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
-      create_deployments cert-manager
+      if ! helm status cert-manager -n cert-manager > /dev/null 2>&1; then
+        create_deployments cert-manager
+      fi
+      kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
     fi
 
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      create_deployments gateway-api
+      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
+        create_deployments gateway-api
+      fi
     fi
 
     run_dependency_pipelines ark-controller --pipeline=dev
