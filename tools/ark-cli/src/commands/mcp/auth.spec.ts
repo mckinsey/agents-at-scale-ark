@@ -9,7 +9,9 @@ import {
   registerClient,
   runAuth,
   runLogout,
+  startCallbackListener,
   writeSecret,
+  MCP_TOKEN_SECRET_LABEL,
   type AuthDeps,
   type MCPServerResource,
 } from './auth.js';
@@ -246,6 +248,7 @@ describe('writeSecret', () => {
     expect(
       Buffer.from(patchJson.data.refresh_token, 'base64').toString('utf8')
     ).toBe('r');
+    expect(patchJson.metadata.labels[MCP_TOKEN_SECRET_LABEL]).toBe('true');
   });
 
   it('creates a new Opaque secret when missing', async () => {
@@ -277,6 +280,65 @@ describe('writeSecret', () => {
     expect(manifest.kind).toBe('Secret');
     expect(manifest.type).toBe('Opaque');
     expect(manifest.metadata.namespace).toBe('ns');
+    expect(manifest.metadata.labels[MCP_TOKEN_SECRET_LABEL]).toBe('true');
+  });
+});
+
+describe('startCallbackListener IPv6 dual-stack', () => {
+  it('accepts callbacks arriving on [::1]', async () => {
+    const listener = startCallbackListener(undefined, 5000);
+    try {
+      const port = await listener.port;
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          {
+            host: '::1',
+            port,
+            path: '/callback?code=ipv6-code&state=ipv6-state',
+            method: 'GET',
+          },
+          (res) => {
+            res.resume();
+            res.on('end', () => resolve());
+          }
+        );
+        req.on('error', reject);
+        req.end();
+      });
+      const result = await listener.awaitCode;
+      expect(result.code).toBe('ipv6-code');
+      expect(result.state).toBe('ipv6-state');
+    } finally {
+      listener.server.close();
+    }
+  });
+
+  it('accepts callbacks arriving on 127.0.0.1 identically', async () => {
+    const listener = startCallbackListener(undefined, 5000);
+    try {
+      const port = await listener.port;
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          {
+            host: '127.0.0.1',
+            port,
+            path: '/callback?code=ipv4-code&state=ipv4-state',
+            method: 'GET',
+          },
+          (res) => {
+            res.resume();
+            res.on('end', () => resolve());
+          }
+        );
+        req.on('error', reject);
+        req.end();
+      });
+      const result = await listener.awaitCode;
+      expect(result.code).toBe('ipv4-code');
+      expect(result.state).toBe('ipv4-state');
+    } finally {
+      listener.server.close();
+    }
   });
 });
 
@@ -367,6 +429,7 @@ describe('runAuth end-to-end', () => {
       'utf8'
     );
     expect(Number.isNaN(Date.parse(expIso))).toBe(false);
+    expect(patch.metadata.labels[MCP_TOKEN_SECRET_LABEL]).toBe('true');
   });
 
   it('refuses when state is not Required and --force not passed', async () => {

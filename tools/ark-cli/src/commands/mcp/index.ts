@@ -2,6 +2,7 @@ import {Command} from 'commander';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import {runAuth, runLogout} from './auth.js';
+import {parseGoDuration} from './duration.js';
 
 function parsePositiveInt(value: string, field: string): number {
   const n = Number(value);
@@ -37,9 +38,9 @@ export function createMcpCommand(_config: ArkConfig): Command {
     )
     .option('--no-open', "Don't auto-open the browser; just print the URL")
     .option(
-      '--timeout <ms>',
-      'Max wait for the callback, in milliseconds',
-      (v) => parsePositiveInt(v, '--timeout')
+      '--timeout <duration>',
+      'Max wait for the callback as a Go-duration string (e.g. 60s, 5m)',
+      parseGoDuration
     )
     .action(async (serverName: string, opts) => {
       try {

@@ -239,9 +239,10 @@ export function startCallbackListener(
     resolveCode({code, state});
   });
 
-  // Empty string binds to all, but we want loopback only — 127.0.0.1 keeps the
-  // OAuth redirect off the LAN.
-  server.listen(port ?? 0, '127.0.0.1', () => {
+  // Bind dual-stack so callbacks arriving on [::1] are accepted identically
+  // to 127.0.0.1. Node listens on both v4 and v6 loopback when passed '::'
+  // unless ipv6Only is set.
+  server.listen(port ?? 0, '::', () => {
     const addr = server.address() as AddressInfo | null;
     if (!addr) {
       rejectPort(new Error('failed to bind callback listener'));
@@ -349,6 +350,10 @@ interface SecretWriteInput {
   clientSecret?: string;
 }
 
+// Label the MCPServer controller's Secret watch keys off — its absence only
+// delays reconcile to the next pollInterval tick rather than breaking auth.
+export const MCP_TOKEN_SECRET_LABEL = 'ark.mckinsey.com/mcp-token-secret';
+
 // Merges tokens into the named Secret — creates it opaque if missing, patches it
 // otherwise. Patch (not replace) is deliberate so unrelated keys survive.
 export async function writeSecret(
@@ -367,6 +372,8 @@ export async function writeSecret(
     data[input.keys.clientSecretKey] = b64(input.clientSecret);
   }
 
+  const labels = {[MCP_TOKEN_SECRET_LABEL]: 'true'};
+
   let exists = false;
   try {
     await kubectl(
@@ -380,7 +387,7 @@ export async function writeSecret(
   }
 
   if (exists) {
-    const patch = JSON.stringify({data});
+    const patch = JSON.stringify({metadata: {labels}, data});
     await kubectl(
       'kubectl',
       ['patch', 'secret', input.name, '-n', input.namespace, '--type=merge', '-p', patch],
@@ -391,7 +398,7 @@ export async function writeSecret(
       apiVersion: 'v1',
       kind: 'Secret',
       type: 'Opaque',
-      metadata: {name: input.name, namespace: input.namespace},
+      metadata: {name: input.name, namespace: input.namespace, labels},
       data,
     };
     await kubectl('kubectl', ['apply', '-f', '-'], {
