@@ -234,7 +234,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.62rc0-py3-none-any.whl", hash = "sha256:8f77b8fedd62e68838cfca683bc97a7d1a8138b7d4d95d234cc82d00d5205079" },
+    { filename = "ark_sdk-0.1.62rc0-py3-none-any.whl", hash = "sha256:9d894fd74fb07031891391a50a7836fe9da9a4151b3396f0838582f9e67b97b1" },
 ]
 
 [package.metadata]
