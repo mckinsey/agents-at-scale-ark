@@ -17,6 +17,18 @@ ark install
 
 This will run an interactive install of the core Ark controller, dependencies, and optional additional services.
 
+### Storage backend
+
+`ark install` accepts `--backend etcd` (default) or `--backend postgresql`. The etcd path stores resources as CRDs and is the simplest option. The PostgreSQL path uses an aggregated API server backed by Postgres and is suited for larger fleets, oversize resources, or shared-DB strategies.
+
+For PostgreSQL mode, supply a values file with the connection details:
+
+```bash
+ark install --backend postgresql --values pg-values.yaml
+```
+
+See [PostgreSQL Storage Backend](./postgres-storage-backend) for the full setup, database requirements, and operational notes.
+
 ## Local Development
 
 To run in local development mode with live-reload, install [Devspace](https://devspace.sh), clone and run:
