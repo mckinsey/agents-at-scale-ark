@@ -288,9 +288,11 @@ describe('FloatingChat', () => {
 
       vi.mocked(chatService.streamChatResponse)
         .mockImplementationOnce(async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-1' } };
           yield { choices: [{ delta: { content: 'First response' } }] };
         })
         .mockImplementationOnce(async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-2' } };
           yield { choices: [{ delta: { content: 'Second response' } }] };
         });
 
@@ -577,6 +579,7 @@ describe('FloatingChat', () => {
       const user = userEvent.setup();
 
       const mockChunks = [
+        { id: 'stream-init', ark: { query: 'test-query-1' } },
         {
           choices: [
             {
@@ -988,6 +991,7 @@ describe('FloatingChat', () => {
 
       vi.mocked(chatService.streamChatResponse).mockImplementation(
         async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-1' } };
           yield { choices: [{ delta: { content: 'Response' } }] };
         },
       );
@@ -1013,6 +1017,7 @@ describe('FloatingChat', () => {
 
       vi.mocked(chatService.streamChatResponse).mockImplementation(
         async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-1' } };
           yield { choices: [{ delta: { content: 'First response' } }] };
         },
       );
@@ -1047,9 +1052,11 @@ describe('FloatingChat', () => {
 
       vi.mocked(chatService.streamChatResponse)
         .mockImplementationOnce(async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-1' } };
           yield { choices: [{ delta: { content: 'First response' } }] };
         })
         .mockImplementationOnce(async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-2' } };
           yield { choices: [{ delta: { content: 'Second response' } }] };
         });
 
@@ -1095,6 +1102,7 @@ describe('FloatingChat', () => {
 
       vi.mocked(chatService.streamChatResponse).mockImplementation(
         async function* () {
+          yield { id: 'stream-init', ark: { query: 'test-query-1' } };
           yield { choices: [{ delta: { content: 'Response' } }] };
         },
       );

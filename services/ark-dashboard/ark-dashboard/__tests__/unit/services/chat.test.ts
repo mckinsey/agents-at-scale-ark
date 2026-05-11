@@ -681,7 +681,11 @@ describe('chatService', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
+      expect(chunks).toEqual([
+        { id: 'stream-init', ark: { query: 'test-query-1' } },
+        { content: 'Hello' },
+        { content: 'World' },
+      ]);
       expect(mockApiPost).toHaveBeenCalledWith(
         '/api/v1/queries/',
         expect.objectContaining({
@@ -726,7 +730,10 @@ describe('chatService', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([{ content: 'Hello' }]);
+      expect(chunks).toEqual([
+        { id: 'stream-init', ark: { query: 'test-query-2' } },
+        { content: 'Hello' },
+      ]);
     });
 
     it('should skip [DONE] markers', async () => {
@@ -761,7 +768,10 @@ describe('chatService', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([{ content: 'Hello' }]);
+      expect(chunks).toEqual([
+        { id: 'stream-init', ark: { query: 'test-query-3' } },
+        { content: 'Hello' },
+      ]);
     });
 
     it('should throw error when response is not ok', async () => {
