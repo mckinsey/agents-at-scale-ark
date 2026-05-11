@@ -34,10 +34,23 @@ export function setupSwagger(app: Express, version: string): void {
       },
     ],
   },
-  // In production, we run from dist; in dev, from src
-  apis: process.env.NODE_ENV === 'production' 
-    ? ['./dist/**/*.js']
-    : ['./src/**/*.ts'],
+  apis: process.env.NODE_ENV === 'production'
+    ? [
+        './dist/routes/memory.js',
+        './dist/routes/stream.js',
+        './dist/routes/traces.js',
+        './dist/routes/events.js',
+        './dist/routes/sessions.js',
+        './dist/routes/otlp.js',
+      ]
+    : [
+        './src/routes/memory.ts',
+        './src/routes/stream.ts',
+        './src/routes/traces.ts',
+        './src/routes/events.ts',
+        './src/routes/sessions.ts',
+        './src/routes/otlp.ts',
+      ],
   };
 
   const specs = swaggerJsdoc(options);
@@ -53,7 +66,7 @@ export function setupSwagger(app: Express, version: string): void {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'ARK Memory API Docs',
   }));
-  
+
   console.log(`API documentation available at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/api-docs`);
   console.log(`OpenAPI spec available at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/openapi.json`);
 }
