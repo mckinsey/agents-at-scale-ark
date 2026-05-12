@@ -152,29 +152,90 @@ export function AgentFilePanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 gap-4 overflow-hidden p-4">
-      <Card className="flex w-80 flex-shrink-0 flex-col p-4">
-        <h2 className="text-muted-foreground mb-3 text-sm font-medium tracking-wide uppercase">
-          Files
-        </h2>
+    <Card className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-0">
+      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
+        <ChatMessageList
+          messages={messages}
+          type="agent"
+          debugMode={false}
+          isProcessing={isProcessing}
+          processingPhase={processingPhase}
+          error={error}
+          viewMode="markdown"
+          messagesEndRef={messagesEndRef}
+          messageTokenUsage={messageTokenUsage}
+          hideEmptyState
+        />
+      </div>
+
+      <div className="flex-shrink-0 border-t">
+        {files.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2">
+            {files.map(f => {
+              const selected = selectedFileIds.includes(f.id);
+              return (
+                <span
+                  key={f.id}
+                  className={`group inline-flex max-w-[16rem] items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                    selected
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'border-border hover:bg-muted cursor-pointer'
+                  }`}
+                  onClick={() => toggleFileSelection(f.id)}
+                  title={`${f.filename} · ${formatBytes(f.bytes)}`}>
+                  <Paperclip className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{f.filename}</span>
+                  <button
+                    className="text-muted-foreground hover:text-destructive ml-0.5 opacity-60 group-hover:opacity-100"
+                    onClick={e => {
+                      e.stopPropagation();
+                      deleteFile(f.id);
+                    }}
+                    aria-label={`Delete ${f.filename}`}>
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+            {selectedFileIds.length > 0 && (
+              <>
+                <Separator orientation="vertical" className="mx-1 h-4" />
+                <span className="text-muted-foreground text-xs">
+                  {selectedFileIds.length} attached
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1 text-xs"
+                  onClick={() => setSelectedFileIds([])}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        )}
 
         <div
-          className={`mb-3 cursor-pointer rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
-            dragOver
-              ? 'border-primary bg-primary/5'
-              : 'border-border hover:border-primary/50'
+          className={`flex items-center gap-2 p-3 transition-colors ${
+            dragOver ? 'bg-primary/5' : ''
           }`}
-          onClick={() => fileInputRef.current?.click()}
           onDragOver={e => {
             e.preventDefault();
             setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}>
-          <FileUp className="text-muted-foreground mx-auto mb-2 h-6 w-6" />
-          <p className="text-muted-foreground text-xs">
-            {uploading ? 'Uploading…' : 'Drop files or click to browse'}
-          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            aria-label="Attach files"
+            title={uploading ? 'Uploading…' : 'Attach files'}>
+            <FileUp className="h-4 w-4" />
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -185,135 +246,33 @@ export function AgentFilePanel({
               e.target.value = '';
             }}
           />
-        </div>
-
-        <div className="flex-1 space-y-1 overflow-y-auto">
-          {files.length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center text-xs">
-              No files uploaded for this agent yet
-            </p>
-          ) : (
-            files.map(f => (
-              <div
-                key={f.id}
-                className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
-                  selectedFileIds.includes(f.id)
-                    ? 'bg-primary/10 border-primary/30 border'
-                    : 'hover:bg-muted border border-transparent'
-                }`}
-                onClick={() => toggleFileSelection(f.id)}>
-                <Paperclip className="text-muted-foreground h-3 w-3 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{f.filename}</p>
-                  <p className="text-muted-foreground">
-                    {formatBytes(f.bytes)}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-                  onClick={e => {
-                    e.stopPropagation();
-                    deleteFile(f.id);
-                  }}>
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-
-        {selectedFileIds.length > 0 && (
-          <>
-            <Separator className="my-2" />
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                {selectedFileIds.length} file
-                {selectedFileIds.length > 1 ? 's' : ''} selected
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={() => setSelectedFileIds([])}>
-                <X className="mr-1 h-3 w-3" />
-                Clear
-              </Button>
-            </div>
-          </>
-        )}
-      </Card>
-
-      <Card className="flex flex-1 flex-col p-0">
-        <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
-          <ChatMessageList
-            messages={messages}
-            type="agent"
-            debugMode={false}
-            isProcessing={isProcessing}
-            processingPhase={processingPhase}
-            error={error}
-            viewMode="markdown"
-            messagesEndRef={messagesEndRef}
-            messageTokenUsage={messageTokenUsage}
-            hideEmptyState
-          />
-        </div>
-
-        <div className="flex-shrink-0 border-t">
-          {selectedFileIds.length > 0 && (
-            <div className="flex flex-wrap gap-1 border-b px-4 py-2">
-              {selectedFileIds.map(id => {
-                const file = files.find(f => f.id === id);
-                return (
-                  <span
-                    key={id}
-                    className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs">
-                    <Paperclip className="h-3 w-3" />
-                    {file?.filename || id}
-                    <button
-                      className="hover:text-destructive ml-0.5"
-                      onClick={() =>
-                        setSelectedFileIds(prev =>
-                          prev.filter(fid => fid !== id),
-                        )
-                      }>
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="flex gap-2 p-4">
-            <Input
-              ref={inputRef}
-              placeholder={
-                isProcessing
-                  ? 'Processing…'
+          <Input
+            ref={inputRef}
+            placeholder={
+              isProcessing
+                ? 'Processing…'
+                : dragOver
+                  ? 'Drop files to upload…'
                   : `Ask ${chatTarget} about your files…`
+            }
+            value={currentMessage}
+            onChange={e => setCurrentMessage(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
               }
-              value={currentMessage}
-              onChange={e => setCurrentMessage(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              disabled={isProcessing}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={!currentMessage.trim() || isProcessing}
-              size="sm">
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
+            }}
+            disabled={isProcessing}
+          />
+          <Button
+            onClick={handleSend}
+            disabled={!currentMessage.trim() || isProcessing}
+            size="sm">
+            <Send className="h-4 w-4" />
+          </Button>
         </div>
-      </Card>
-    </div>
+      </div>
+    </Card>
   );
 }
