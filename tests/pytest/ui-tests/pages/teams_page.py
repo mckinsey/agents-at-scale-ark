@@ -268,9 +268,7 @@ class TeamsPage(BasePage):
         self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
 
     def toggle_loops_checkbox(self) -> None:
-        checkbox = self.page.locator(
-            "label:has-text('Enable loops')"
-        ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+        checkbox = self.page.locator("label:has-text('Enable loops')").first
         current = checkbox.is_checked()
         if current:
             checkbox.uncheck()
@@ -298,9 +296,7 @@ class TeamsPage(BasePage):
         loops_visible = self.is_loops_checkbox_visible()
         if loops:
             if loops_visible:
-                checkbox = self.page.locator(
-                    "label:has-text('Enable loops')"
-                ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+                checkbox = self.page.locator("label:has-text('Enable loops')").first
                 checkbox.dispatch_event("click")
                 self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(
                     state="visible", timeout=8000
