@@ -21,10 +21,23 @@ function formatBytes(b: number) {
 }
 
 interface AgentFilePanelProps {
+  /** Agent whose Model credentials upload/list/delete should resolve under. */
   agentName: string;
+  /**
+   * Agent the chat targets. Defaults to `agentName` when uploads and chat
+   * share an agent (the standalone file-assistant case). When the dashboard
+   * pairs a responses agent with a `<name>-files` sibling, the responses
+   * agent goes here and the sibling on `agentName` — keeping uploads under
+   * the sibling's executor while chat still hits the parent agent.
+   */
+  chatAgentName?: string;
 }
 
-export function AgentFilePanel({ agentName }: AgentFilePanelProps) {
+export function AgentFilePanel({
+  agentName,
+  chatAgentName,
+}: AgentFilePanelProps) {
+  const chatTarget = chatAgentName ?? agentName;
   const [files, setFiles] = useState<ModelContextFile[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -41,7 +54,7 @@ export function AgentFilePanel({ agentName }: AgentFilePanelProps) {
     sendMessage,
     messagesEndRef,
     messageTokenUsage,
-  } = useChatSession({ name: agentName, type: 'agent' });
+  } = useChatSession({ name: chatTarget, type: 'agent' });
 
   const uploadFiles = useCallback(
     async (fileList: FileList) => {
@@ -243,7 +256,7 @@ export function AgentFilePanel({ agentName }: AgentFilePanelProps) {
               placeholder={
                 isProcessing
                   ? 'Processing…'
-                  : `Ask ${agentName} about your files…`
+                  : `Ask ${chatTarget} about your files…`
               }
               value={currentMessage}
               onChange={e => setCurrentMessage(e.target.value)}

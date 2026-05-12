@@ -46,7 +46,13 @@ import {
   SkillsDisplaySection,
   ToolSelectionSection,
 } from './sections';
-import { AgentFormMode, type AgentFormProps } from './types';
+import {
+  AgentFormMode,
+  type AgentFormProps,
+  FILE_ASSISTANT_SUFFIX,
+  FILE_INPUTS_EXECUTOR,
+  RESPONSES_EXECUTOR,
+} from './types';
 import { useAgentForm } from './use-agent-form';
 
 const breadcrumbs: BreadcrumbElement[] = [
@@ -365,11 +371,28 @@ export function AgentForm({
             className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
               isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
             }`}>
-            {agent?.executionEngine?.name === 'executor-openai-file-inputs' ? (
-              <AgentFilePanel agentName={agentName || ''} />
-            ) : (
-              <EmbeddedChatPanel name={agentName || ''} type="agent" />
-            )}
+            {(() => {
+              const execEngine = agent?.executionEngine?.name;
+              if (execEngine === FILE_INPUTS_EXECUTOR) {
+                return <AgentFilePanel agentName={agentName || ''} />;
+              }
+              if (execEngine === RESPONSES_EXECUTOR && agentName) {
+                const sibling = allAgents.find(
+                  a =>
+                    a.name === `${agentName}${FILE_ASSISTANT_SUFFIX}` &&
+                    a.executionEngine?.name === FILE_INPUTS_EXECUTOR,
+                );
+                if (sibling) {
+                  return (
+                    <AgentFilePanel
+                      agentName={sibling.name}
+                      chatAgentName={agentName}
+                    />
+                  );
+                }
+              }
+              return <EmbeddedChatPanel name={agentName || ''} type="agent" />;
+            })()}
           </div>
         </div>
       ) : (
@@ -445,6 +468,7 @@ Environment: {{.environment}}"
                       models={models}
                       executionEngines={executionEngines}
                       showExecutionEngine={isExperimentalExecutionEngineEnabled}
+                      showPairFileAssistant={mode === AgentFormMode.CREATE}
                       disabled={isDisabled}
                     />
                   )}

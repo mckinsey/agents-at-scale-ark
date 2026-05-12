@@ -2,6 +2,7 @@
 
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   FormControl,
   FormField,
@@ -19,7 +20,7 @@ import {
 import type { Model } from '@/lib/services';
 import type { ExecutionEngine, ExecutionEnginePhase } from '@/lib/services';
 
-import type { AgentFormValues } from '../types';
+import { type AgentFormValues, RESPONSES_EXECUTOR } from '../types';
 
 const PHASE_COLORS: Record<ExecutionEnginePhase, string> = {
   ready: 'bg-green-500',
@@ -32,6 +33,7 @@ interface ModelConfigSectionProps {
   models: Model[];
   executionEngines?: ExecutionEngine[];
   showExecutionEngine?: boolean;
+  showPairFileAssistant?: boolean;
   disabled?: boolean;
 }
 
@@ -40,8 +42,12 @@ export function ModelConfigSection({
   models,
   executionEngines = [],
   showExecutionEngine = false,
+  showPairFileAssistant = false,
   disabled = false,
 }: ModelConfigSectionProps) {
+  const executionEngineValue = form.watch('executionEngineName');
+  const showPairToggle =
+    showPairFileAssistant && executionEngineValue === RESPONSES_EXECUTOR;
   return (
     <div className="space-y-2">
       <FormField
@@ -111,6 +117,35 @@ export function ModelConfigSection({
                 </SelectContent>
               </Select>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {showPairToggle && (
+        <FormField
+          control={form.control}
+          name="pairFileAssistant"
+          render={({ field }) => (
+            <FormItem className="flex items-start gap-3 rounded-md border border-dashed p-3">
+              <FormControl>
+                <Checkbox
+                  checked={!!field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={disabled}
+                />
+              </FormControl>
+              <div className="space-y-1 text-sm leading-tight">
+                <FormLabel className="cursor-pointer text-sm font-medium">
+                  Pair a file assistant
+                </FormLabel>
+                <p className="text-muted-foreground text-xs">
+                  Also creates &lt;name&gt;-files using
+                  executor-openai-file-inputs and the same Model CR. The agent
+                  view will surface its uploads inline; files attached during
+                  chat flow through to this agent&apos;s Responses call.
+                </p>
+              </div>
             </FormItem>
           )}
         />

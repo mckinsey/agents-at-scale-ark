@@ -5,6 +5,10 @@ import type { Parameter } from '@/components/ui/parameter-editor';
 import type { Agent, AgentTool, Model, Skill, Tool } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
+export const RESPONSES_EXECUTOR = 'executor-openai-responses';
+export const FILE_INPUTS_EXECUTOR = 'executor-openai-file-inputs';
+export const FILE_ASSISTANT_SUFFIX = '-files';
+
 export const agentFormSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
@@ -12,6 +16,7 @@ export const agentFormSchema = z.object({
   selectedModelNamespace: z.string().optional(),
   executionEngineName: z.string().optional(),
   prompt: z.string().optional(),
+  pairFileAssistant: z.boolean().optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

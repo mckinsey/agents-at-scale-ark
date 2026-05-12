@@ -27,7 +27,14 @@ import {
 import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
+import {
+  AgentFormMode,
+  type AgentFormValues,
+  FILE_ASSISTANT_SUFFIX,
+  FILE_INPUTS_EXECUTOR,
+  RESPONSES_EXECUTOR,
+  agentFormSchema,
+} from './types';
 import {
   transformAgentParametersToForm,
   transformFormParametersToApi,
@@ -79,6 +86,7 @@ export function useAgentForm({
       selectedModelNamespace: '',
       executionEngineName: '',
       prompt: '',
+      pairFileAssistant: false,
     },
   });
 
@@ -98,7 +106,7 @@ export function useAgentForm({
                 ? executionEnginesService.getAll()
                 : Promise.resolve([]),
             ]);
-          
+
           if (!agentData) {
             toast.error('Agent not found');
             onSuccessRef.current?.();
@@ -196,6 +204,40 @@ export function useAgentForm({
           };
 
           await agentsService.create(createData);
+
+          // Optional: create a paired file-assistant agent that shares this
+          // agent's Model CR. Same Model = same OpenAI project, so file_ids
+          // uploaded via the sibling resolve when the responses agent's chat
+          // runs. The "<name>-files" suffix is how the view page finds the
+          // sibling — naming is the only pairing channel because
+          // AgentCreateRequest doesn't carry annotations.
+          if (
+            values.pairFileAssistant &&
+            values.executionEngineName === RESPONSES_EXECUTOR
+          ) {
+            const siblingName = `${values.name}${FILE_ASSISTANT_SUFFIX}`;
+            try {
+              await agentsService.create({
+                name: siblingName,
+                description: `File assistant paired with ${values.name}`,
+                modelRef: createData.modelRef,
+                executionEngine: { name: FILE_INPUTS_EXECUTOR },
+                prompt:
+                  'You are a file assistant. Help the user manage and reason about uploaded files.',
+              });
+            } catch (siblingError) {
+              toast.error(
+                `Agent created, but paired file assistant '${siblingName}' failed`,
+                {
+                  description:
+                    siblingError instanceof Error
+                      ? siblingError.message
+                      : 'Unknown error',
+                },
+              );
+            }
+          }
+
           queryClient.invalidateQueries({
             queryKey: [GET_ALL_AGENTS_QUERY_KEY],
           });
