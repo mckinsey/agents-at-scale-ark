@@ -12,6 +12,7 @@ type OperationTracker interface {
 	InitializeQueryContext(ctx context.Context, query *arkv1alpha1.Query) context.Context
 	Start(ctx context.Context, operation, message string, data map[string]string) context.Context
 	Complete(ctx context.Context, operation, message string, data map[string]string)
+	Cancel(ctx context.Context, operation, message string, data map[string]string)
 	Fail(ctx context.Context, operation, message string, err error, data map[string]string)
 }
 

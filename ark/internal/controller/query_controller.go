@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"sync"
 	"time"
@@ -241,6 +242,11 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	response, engineMeta, err := r.sendQueryA2A(opCtx, address, obj, *target)
 	if err != nil {
+		if stderrors.Is(err, context.Canceled) {
+			dispatchSpan.SetStatus(telemetry.StatusOk, "canceled")
+			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
+			return
+		}
 		dispatchSpan.RecordError(err)
 		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
