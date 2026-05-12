@@ -17,7 +17,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "httpx>=0.25.0",
     "click>=8.0.0",
-    "urllib3>=2.6.3",
+    "urllib3>=2.7.0",
     "protobuf>=6.33.4",
 ]
 
