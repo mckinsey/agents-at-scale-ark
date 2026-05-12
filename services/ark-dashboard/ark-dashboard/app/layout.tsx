@@ -30,8 +30,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'ARK Dashboard',
-  description: 'Basic Configuration and Monitoring for ARK',
+  title: 'Ark Dashboard',
+  description: 'Basic Configuration and Monitoring for Ark',
 };
 
 const analyticsProvider = process.env.NEXT_PUBLIC_ANALYTICS_PROVIDER || 'noop';

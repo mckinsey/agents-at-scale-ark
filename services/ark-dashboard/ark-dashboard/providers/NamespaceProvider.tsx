@@ -46,9 +46,11 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
 
-  apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+  const { data, isPending, error } = useGetContext(namespaceFromQueryParams);
 
-  const { data, isPending, error } = useGetContext();
+  useEffect(() => {
+    apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+  }, [namespaceFromQueryParams]);
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
@@ -81,35 +83,53 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (error) {
-      toast.error('Failed to get namespace', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
+      // Try to extract default_namespace from the 404 error response
+      // APIError has: { message, status, data: { detail: { default_namespace } } }
+      let defaultNamespace: string | null = null;
+
+      if (error && typeof error === 'object' && 'data' in error) {
+        const errorData = (error as { data?: { detail?: { default_namespace?: string } } }).data;
+        defaultNamespace = errorData?.detail?.default_namespace || null;
+      }
+
+      if (defaultNamespace && namespaceFromQueryParams !== defaultNamespace) {
+        toast.error(`Namespace "${namespaceFromQueryParams}" not found`, {
+          description: `Redirecting to ${defaultNamespace}...`,
+        });
+        setNamespace(defaultNamespace);
+      } else if (!defaultNamespace && namespaceFromQueryParams !== 'default') {
+        // Fallback to 'default' if we couldn't parse the default namespace
+        toast.error(`Namespace "${namespaceFromQueryParams}" not found`, {
+          description: 'Redirecting to default namespace...',
+        });
+        setNamespace('default');
+      } else {
+        toast.error('Failed to get namespace', {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        });
+      }
     }
-  }, [error]);
+  }, [error, namespaceFromQueryParams, setNamespace]);
 
   useEffect(() => {
-    if (!data && !isPending) {
+    if (!data && !isPending && !error) {
       toast.error('Failed to get namespace', {
         description: 'An unexpected error occurred',
       });
     }
-  }, [data, isPending]);
+  }, [data, isPending, error]);
 
   useEffect(() => {
     if (data) {
-      if (data.namespace !== namespaceFromQueryParams) {
-        setNamespace(data.namespace);
-      } else {
-        setIsNamespaceResolved(true);
-      }
+      setIsNamespaceResolved(true);
       const newReadOnlyMode = data.read_only_mode ?? false;
       setReadOnlyMode(newReadOnlyMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, namespaceFromQueryParams]);
+  }, [data]);
 
   const context = useMemo<NamespaceContext>(
     () => ({

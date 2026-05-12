@@ -65,7 +65,7 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
+        "cd /app/ark-dashboard && npm install && npm run dev",
       ]
     namespace: default
     # Stream logs instead of terminal

@@ -19,11 +19,11 @@ export async function fetchDemos(): Promise<Demo[]> {
     return labels['ark.mckinsey.com/demo'] === 'true';
   });
 
-  const httpRoutesResponse = await customApi.listClusterCustomObject(
-    'gateway.networking.k8s.io',
-    'v1',
-    'httproutes'
-  ) as any;
+  const httpRoutesResponse = await customApi.listClusterCustomObject({
+    group: 'gateway.networking.k8s.io',
+    version: 'v1',
+    plural: 'httproutes'
+  }) as any;
 
   const namespacesWithRoutes = new Set(
     httpRoutesResponse.body.items.map((route: any) => route.metadata?.namespace).filter(Boolean)

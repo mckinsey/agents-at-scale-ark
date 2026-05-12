@@ -453,9 +453,9 @@ export async function getMarketplaceItemsFromSources(
     : [
         {
           id: 'default',
-          name: 'ARK marketplace',
+          name: 'Ark marketplace',
           url: DEFAULT_MARKETPLACE_MANIFEST_URL,
-          displayName: 'ARK marketplace',
+          displayName: 'Ark marketplace',
           enabled: true,
         },
       ];

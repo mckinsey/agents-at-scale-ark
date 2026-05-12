@@ -32,12 +32,15 @@ interface UseChatSessionReturn {
   messages: ExtendedChatMessage[];
   sessionId: string;
   isProcessing: boolean;
+  processingPhase?: string;
+
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
+  cancelQuery: () => void
 }
 
 export function useChatSession({
@@ -145,11 +148,14 @@ export function useChatSession({
   );
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatStreamAbortControllerRef = useRef(new AbortController())
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -180,8 +186,12 @@ export function useChatSession({
     [],
   );
 
+  const lastQueryName = useRef('')
+
   const handleStreamChatResponse = useCallback(
     async (userMessage: string) => {
+      chatStreamAbortControllerRef.current = new AbortController()
+
       const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
       let currentMessageIndex = turnStartIndex;
@@ -249,20 +259,38 @@ export function useChatSession({
         currentMessageIndex += systemMsgCount + 1;
       };
 
-      for await (const chunk of chatService.streamChatResponse(
-        userMessage,
-        type,
-        name,
-        sessionId,
-        conversationId,
-        queryTimeout,
-      )) {
+      const { queryName: streamQueryName, chunks } =
+        await chatService.startStreamChatResponse(
+          userMessage,
+          type,
+          name,
+          sessionId,
+          conversationId,
+          queryTimeout,
+          chatStreamAbortControllerRef.current.signal,
+        );
+
+      queryName = streamQueryName;
+      lastQueryName.current = queryName;
+
+      const stopPhasePolling = await chatService.streamQueryStatus(
+        streamQueryName,
+        (status) => {
+          if (status && typeof status === 'object' && 'phase' in status) {
+            const phase = (status as { phase?: string }).phase;
+            setProcessingPhase(phase);
+          }
+        },
+      );
+
+      for await (const chunk of chunks) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
         if (typedChunk.error) {
           hasError = true;
           errorMessage = typedChunk.error.message || 'An error occurred';
           queryName = typedChunk.ark?.query || '';
+          lastQueryName.current = queryName;
           break;
         }
 
@@ -404,6 +432,7 @@ export function useChatSession({
         }
       }
 
+      stopPhasePolling();
       finalizeCurrentMessage();
 
       if (messageTokenUsage) {
@@ -537,6 +566,8 @@ export function useChatSession({
         queryTimeout,
       );
 
+      lastQueryName.current = query.name
+
       let pollingStopped = false;
       stopPollingRef.current = () => {
         pollingStopped = true;
@@ -545,6 +576,8 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(query.name);
+
+          setProcessingPhase(result.status);
 
           if (result.terminal) {
             const fullQuery = await chatService.getQuery(query.name);
@@ -713,6 +746,9 @@ export function useChatSession({
         let errMsg = 'Failed to send message';
 
         if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            return
+          }
           if (err.message.includes('Failed to fetch')) {
             errMsg =
               'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
@@ -734,6 +770,7 @@ export function useChatSession({
         setError(errMsg);
       } finally {
         setIsProcessing(false);
+        setProcessingPhase(undefined);
       }
     },
     [
@@ -762,15 +799,34 @@ export function useChatSession({
     setError(null);
   }, [chatKey, name, setChatHistory, setLastConversationId]);
 
+  const cancelQuery = useCallback(async () => {
+    chatStreamAbortControllerRef.current.abort()
+    stopPollingRef.current?.()
+    
+    setIsProcessing(false)
+
+    updateChatMessages(prev => [...prev, {
+      role: 'system',
+      content: 'Conversation stopped by user',
+    }])
+
+    await chatService.cancelQuery(lastQueryName.current).catch(() => {})
+  }, [
+    setIsProcessing,
+    updateChatMessages,
+  ])
+
   return {
     messages: chatMessages,
     sessionId,
     isProcessing,
+    processingPhase,
     error,
     sendMessage,
     clearChat,
     messagesEndRef,
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
+    cancelQuery,
   };
 }

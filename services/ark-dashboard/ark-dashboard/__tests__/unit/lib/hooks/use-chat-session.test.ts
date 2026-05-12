@@ -22,14 +22,20 @@ vi.mock('@/lib/analytics/utils', () => ({
 }));
 
 const mockStreamChatResponse = vi.fn();
+const mockStartStreamChatResponse = vi.fn();
+const mockStreamQueryStatus = vi.fn();
 const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
+const mockCancelQuery = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: (...args: unknown[]) => mockStreamChatResponse(...args),
+    startStreamChatResponse: (...args: unknown[]) => mockStartStreamChatResponse(...args),
+    streamQueryStatus: (...args: unknown[]) => mockStreamQueryStatus(...args),
     submitChatQuery: (...args: unknown[]) => mockSubmitChatQuery(...args),
     getQueryResult: (...args: unknown[]) => mockGetQueryResult(...args),
+    cancelQuery: (...args: unknown[]) => mockCancelQuery(...args),
   },
 }));
 
@@ -85,11 +91,18 @@ describe('useChatSession', () => {
   }
 
   beforeEach(() => {
+    vi.clearAllMocks();
     store = createStore();
     store.set(storedIsChatStreamingEnabledAtom, true);
     store.set(lastConversationIdAtom, null);
+    mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     sessionStorage.clear();
-    vi.clearAllMocks();
+
+    mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
+      const chunks = mockStreamChatResponse(...args);
+      return Promise.resolve({ queryName: 'test-query', chunks });
+    });
+    mockStreamQueryStatus.mockResolvedValue(() => {});
   });
 
   afterEach(() => {
@@ -593,6 +606,151 @@ describe('useChatSession', () => {
           m => m.role === 'assistant',
         );
         expect(assistantMessages.length).toBeGreaterThanOrEqual(2);
+      });
+    });
+  });
+
+  describe('cancelQuery', () => {
+    it('should stop a streaming agent conversation', async () => {
+      let resolveStream: (() => void) | undefined;
+      const streamPromise = new Promise<void>(resolve => {
+        resolveStream = resolve;
+      });
+
+      async function* hangingStream(): AsyncGenerator<Record<string, unknown>> {
+        yield createContentChunk('Partial');
+        await streamPromise;
+      }
+
+      mockStreamChatResponse.mockReturnValue(hangingStream());
+      mockCancelQuery.mockResolvedValue({});
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      act(() => {
+        result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(true);
+      });
+
+      await act(async () => {
+        await result.current.cancelQuery();
+      });
+
+      resolveStream?.();
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+        const systemMessages = result.current.messages.filter(
+          m => m.role === 'system',
+        );
+        expect(systemMessages.some(m => m.content === 'Conversation stopped by user')).toBe(true);
+        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+      });
+    });
+
+    it('should stop a streaming team conversation', async () => {
+      let resolveStream: (() => void) | undefined;
+      const streamPromise = new Promise<void>(resolve => {
+        resolveStream = resolve;
+      });
+
+      async function* hangingStream(): AsyncGenerator<Record<string, unknown>> {
+        yield createContentChunk('Partial');
+        await streamPromise;
+      }
+
+      mockStreamChatResponse.mockReturnValue(hangingStream());
+      mockCancelQuery.mockResolvedValue({});
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'my-team', type: 'team' }),
+        { wrapper },
+      );
+
+      act(() => {
+        result.current.sendMessage('Hello team');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(true);
+      });
+
+      await act(async () => {
+        await result.current.cancelQuery();
+      });
+
+      resolveStream?.();
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+        const systemMessages = result.current.messages.filter(
+          m => m.role === 'system',
+        );
+        expect(systemMessages.some(m => m.content === 'Conversation stopped by user')).toBe(true);
+        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+      });
+    });
+
+    it('should stop a polling conversation', async () => {
+      store.set(storedIsChatStreamingEnabledAtom, false);
+      mockCancelQuery.mockResolvedValue({});
+      mockGetQueryResult.mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      act(() => {
+        result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(true);
+      });
+
+      await act(async () => {
+        await result.current.cancelQuery();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+        const systemMessages = result.current.messages.filter(
+          m => m.role === 'system',
+        );
+        expect(systemMessages.some(m => m.content === 'Conversation stopped by user')).toBe(true);
+        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+      });
+    });
+
+    it('should silently handle AbortError without setting error state', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        const error = new Error('Aborted');
+        error.name = 'AbortError';
+        throw error;
+      });
+      mockCancelQuery.mockResolvedValue({});
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+        expect(result.current.error).toBeNull();
       });
     });
   });

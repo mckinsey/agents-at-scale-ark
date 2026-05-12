@@ -35,7 +35,6 @@ import {
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
-import { settingsModalOpenAtom } from '@/atoms/settings-modal';
 import { NamespaceEditor } from '@/components/editors';
 import {
   Collapsible,
@@ -73,6 +72,7 @@ import {
   type DashboardSection,
   MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
@@ -149,7 +149,7 @@ function CollapsibleSection({
 }
 
 export function AppSidebar() {
-  const router = useRouter();
+  const { push: navigateTo } = useNamespacedNavigation();
   const pathname = usePathname();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
@@ -159,7 +159,6 @@ export function AppSidebar() {
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
   );
-  const setSettingsModalOpen = useSetAtom(settingsModalOpenAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
     storedIsExperimentalDarkModeEnabledAtom,
@@ -222,7 +221,11 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    router.push(`/${sectionKey}`);
+    // Preserve query parameters (especially namespace) when navigating
+    const currentParams = new URLSearchParams(window.location.search);
+    const queryString = currentParams.toString();
+    const targetUrl = queryString ? `/${sectionKey}?${queryString}` : `/${sectionKey}`;
+    navigateTo(targetUrl);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];
@@ -255,7 +258,7 @@ export function AppSidebar() {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="text-sidebar-accent-foreground font-medium">
-                    ARK Dashboard
+                    Ark Dashboard
                   </span>
                   <span className="text-xs">
                     {isPending
@@ -427,7 +430,9 @@ export function AppSidebar() {
             <Separator className="my-2 !w-10" />
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('settings')}
+                  isActive={getCurrentSection() === 'settings'}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>
