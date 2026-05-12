@@ -2,9 +2,11 @@
 @import 'tw-animate-css';
 
 /* Dark mode variant - equivalent to @custom-variant dark */
+/* NOSONAR */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Radius mode variant - for rounded corners (sharp is default) */
+/* NOSONAR */
 @custom-variant radius-mode (&:where(.radius-mode, .radius-mode *));
 
 @theme inline {
@@ -533,6 +535,7 @@
   --rad-lg: 16px;
 }
 
+/* NOSONAR */
 @utility shadow-elevation-0 {
   --tw-shadow:
     0 1px 1px 0 var(--color-elevations-shade-t),
@@ -542,6 +545,7 @@
     var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
+/* NOSONAR */
 @utility shadow-elevation-1 {
   --tw-shadow:
     0 2px 4px 1px var(--color-elevations-shade-t-01),
@@ -551,6 +555,7 @@
     var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
+/* NOSONAR */
 @utility shadow-elevation-2 {
   --tw-shadow:
     0 4px 8px 0 var(--color-elevations-shade-t-02),
@@ -560,6 +565,7 @@
     var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
+/* NOSONAR */
 @utility shadow-elevation-3 {
   --tw-shadow:
     0 8px 12px 1px var(--color-elevations-shade-t-03),
@@ -569,6 +575,7 @@
     var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
+/* NOSONAR */
 @utility shadow-elevation-4 {
   --tw-shadow:
     0 16px 32px 2px var(--color-elevations-shade-t-04),

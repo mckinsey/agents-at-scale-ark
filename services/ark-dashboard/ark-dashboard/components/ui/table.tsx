@@ -9,6 +9,8 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
     <div
       data-slot="table-container"
       className="relative w-full overflow-x-auto">
+      {/* Table headers provided by children (TableHeader/TableHead components) */}
+      {/* sonar-disable-next-line Web:TableHeaderRule */}
       <table
         data-slot="table"
         className={cn('w-full caption-bottom', className)}
@@ -42,7 +44,7 @@ interface TableRowProps extends React.ComponentProps<'tr'> {
   selected?: boolean;
 }
 
-function TableRow({ className, selected = false, ...props }: TableRowProps) {
+function TableRow({ className, selected = false, ...props }: Readonly<TableRowProps>) {
   return (
     <tr
       data-slot="table-row"
@@ -63,7 +65,7 @@ function TableHead({
   size = 'default',
   selected = false,
   ...props
-}: TableHeadProps) {
+}: Readonly<TableHeadProps>) {
   return (
     <th
       data-slot="table-head"
@@ -90,7 +92,7 @@ interface TableCellProps extends React.ComponentProps<'td'> {
   size?: 'small' | 'default';
 }
 
-function TableCell({ className, size = 'default', ...props }: TableCellProps) {
+function TableCell({ className, size = 'default', ...props }: Readonly<TableCellProps>) {
   return (
     <td
       data-slot="table-cell"
