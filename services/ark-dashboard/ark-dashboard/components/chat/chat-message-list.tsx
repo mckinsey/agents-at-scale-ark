@@ -1,7 +1,8 @@
 import { AlertCircle } from 'lucide-react';
-import { useMemo, useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { RefObject } from 'react';
 
+import type { TokenUsage } from '@/atoms/chat-history';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
@@ -11,8 +12,11 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
-import type { TokenUsage } from '@/atoms/chat-history';
-import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
+import type {
+  ChatMessage as ChatMessageType,
+  ExtendedChatMessage,
+  GraphEdge,
+} from '@/lib/types/chat-message';
 
 interface ChatMessageListProps {
   messages: ExtendedChatMessage[];
@@ -28,6 +32,8 @@ interface ChatMessageListProps {
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
   messageTokenUsage?: Record<number, TokenUsage>;
+  /** Suppress the "Start a conversation…" empty-state hint. */
+  hideEmptyState?: boolean;
 }
 
 function extractMessageContent(msg: ChatMessageType): string {
@@ -105,7 +111,8 @@ function determineMessageFlags(
   const isMaxTurnsMessage =
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
-    msg.role === 'system' && content.includes('Selector returned invalid agent name');
+    msg.role === 'system' &&
+    content.includes('Selector returned invalid agent name');
   const isConversationStoppedMessage =
     msg.role === 'system' && content === 'Conversation stopped by user';
   const hasToolCalls =
@@ -142,6 +149,7 @@ export function ChatMessageList({
   viewMode = 'markdown',
   messagesEndRef,
   messageTokenUsage,
+  hideEmptyState,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -198,7 +206,8 @@ export function ChatMessageList({
         messages,
         index,
       );
-      const { terminateToolCall, terminateMessage } = extractTerminateInfo(toolCallsWithResults);
+      const { terminateToolCall, terminateMessage } =
+        extractTerminateInfo(toolCallsWithResults);
       const {
         isMaxTurnsMessage,
         isSelectorFailureMessage,
@@ -206,7 +215,13 @@ export function ChatMessageList({
         hasToolCalls,
         hasContent,
         hasTermination,
-      } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
+      } = determineMessageFlags(
+        msg,
+        content,
+        toolCallsWithResults,
+        terminateToolCall,
+        debugMode,
+      );
 
       if (
         !hasToolCalls &&
@@ -246,7 +261,6 @@ export function ChatMessageList({
 
     return result;
   }, [messages, debugMode]);
-
 
   const lastAssistantName = useMemo(() => {
     if (!isGraphStrategy) return undefined;
@@ -293,7 +307,7 @@ export function ChatMessageList({
         </div>
       )}
 
-      {messages.length === 0 && !error && (
+      {messages.length === 0 && !error && !hideEmptyState && (
         <div className="text-muted-foreground py-8 text-center">
           Start a conversation with the {type}
         </div>
@@ -419,7 +433,7 @@ export function ChatMessageList({
                   style={{ animationDelay: '0.2s' }}></div>
               </div>
               {processingPhase === 'provisioning' && (
-                <span className="text-xs text-foreground">
+                <span className="text-foreground text-xs">
                   Preparing new workspace...
                 </span>
               )}

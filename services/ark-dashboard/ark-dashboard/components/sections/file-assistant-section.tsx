@@ -1,7 +1,7 @@
 'use client';
 
 import { FileUp, Paperclip, Send, Trash2, X } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,36 @@ function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
   if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1048576).toFixed(1)} MB`;
+}
+
+const STORAGE_PREFIX = 'ark.file-assistant.files.';
+
+function loadStoredFiles(agentName: string): ModelContextFile[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + agentName);
+    if (!raw) return [];
+    const value = JSON.parse(raw);
+    return Array.isArray(value) ? (value as ModelContextFile[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredFiles(agentName: string, files: ModelContextFile[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (files.length === 0) {
+      window.localStorage.removeItem(STORAGE_PREFIX + agentName);
+    } else {
+      window.localStorage.setItem(
+        STORAGE_PREFIX + agentName,
+        JSON.stringify(files),
+      );
+    }
+  } catch {
+    /* storage full or disabled — non-fatal */
+  }
 }
 
 interface AgentFilePanelProps {
@@ -38,8 +68,14 @@ export function AgentFilePanel({
   chatAgentName,
 }: AgentFilePanelProps) {
   const chatTarget = chatAgentName ?? agentName;
-  const [files, setFiles] = useState<ModelContextFile[]>([]);
+  const [files, setFiles] = useState<ModelContextFile[]>(() =>
+    loadStoredFiles(agentName),
+  );
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    saveStoredFiles(agentName, files);
+  }, [agentName, files]);
   const [uploading, setUploading] = useState(false);
   const [currentMessage, setCurrentMessage] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -221,6 +257,7 @@ export function AgentFilePanel({
             viewMode="markdown"
             messagesEndRef={messagesEndRef}
             messageTokenUsage={messageTokenUsage}
+            hideEmptyState
           />
         </div>
 
