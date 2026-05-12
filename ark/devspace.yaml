@@ -81,23 +81,6 @@ deployments:
                 cpu: "200m"
           securityContext:
             runAsNonRoot: false
-          extraPVCs:
-            - name: ark-controller-gomod
-              size: 2Gi
-            - name: ark-controller-gobuild
-              size: 2Gi
-          extraVolumes:
-            - name: go-mod-cache
-              persistentVolumeClaim:
-                claimName: ark-controller-gomod
-            - name: go-build-cache
-              persistentVolumeClaim:
-                claimName: ark-controller-gobuild
-          extraVolumeMounts:
-            - name: go-mod-cache
-              mountPath: /go/pkg/mod
-            - name: go-build-cache
-              mountPath: /root/.cache/go-build
         webhook:
           enable: true
         completions:
@@ -124,23 +107,6 @@ deployments:
             cpu: "200m"
         securityContext:
           runAsNonRoot: false
-        extraPVCs:
-          - name: ark-completions-gomod
-            size: 2Gi
-          - name: ark-completions-gobuild
-            size: 2Gi
-        extraVolumes:
-          - name: go-mod-cache
-            persistentVolumeClaim:
-              claimName: ark-completions-gomod
-          - name: go-build-cache
-            persistentVolumeClaim:
-              claimName: ark-completions-gobuild
-        extraVolumeMounts:
-          - name: go-mod-cache
-            mountPath: /go/pkg/mod
-          - name: go-build-cache
-            mountPath: /root/.cache/go-build
   ark-apiserver:
     namespace: ark-system
     helm:
@@ -173,6 +139,11 @@ dev:
     namespace: ark-system
     logs:
       lastLines: 50
+    persistPaths:
+      - path: /go/pkg/mod
+        skipPopulate: true
+      - path: /root/.cache/go-build
+        skipPopulate: true
     sync:
       - path: .:/app
         startContainer: true
@@ -192,6 +163,11 @@ dev:
     namespace: ark-system
     logs:
       lastLines: 50
+    persistPaths:
+      - path: /go/pkg/mod
+        skipPopulate: true
+      - path: /root/.cache/go-build
+        skipPopulate: true
     sync:
       - path: .:/app
         startContainer: true

@@ -86,6 +86,8 @@ profiles:
             upgradeArgs: [ "--install" ]
             values:
               installCRDs: true
+              startupapicheck:
+                enabled: false
   - name: enable-gateway-api
     activation:
       - vars:
@@ -133,6 +135,9 @@ pipelines:
         create_deployments cert-manager
       fi
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+      kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+      echo "Waiting for cert-manager webhook CABundle..."
+      until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
     fi
 
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
@@ -169,6 +174,9 @@ pipelines:
         create_deployments cert-manager
       fi
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+      kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+      echo "Waiting for cert-manager webhook CABundle..."
+      until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
     fi
 
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
