@@ -90,7 +90,7 @@ class ToolsPage(BasePage):
         type_trigger.scroll_into_view_if_needed()
         type_trigger.wait_for(state="visible", timeout=15000)
 
-        listbox = self.page.locator("[role='listbox'][data-open]")
+        listbox = self.page.locator("[data-open] [role='listbox']")
         for attempt in range(3):
             logger.info(f"Clicking type trigger to open dropdown (attempt {attempt + 1})")
             type_trigger.click()

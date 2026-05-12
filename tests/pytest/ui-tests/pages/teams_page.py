@@ -268,12 +268,12 @@ class TeamsPage(BasePage):
         self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
 
     def toggle_loops_checkbox(self) -> None:
-        checkbox = self.page.locator("label:has-text('Enable loops')").first
-        current = checkbox.is_checked()
-        if current:
-            checkbox.uncheck()
+        checkbox = self.page.locator("label:has-text('Enable loops')").locator("..").locator("button[role='checkbox']").first
+        current_state = checkbox.get_attribute("data-state")
+        if current_state == "checked":
+            checkbox.click()  # uncheck
         else:
-            checkbox.check()
+            checkbox.click()  # check
         self.page.wait_for_timeout(300)
 
     def create_sequential_loops_team(self, team_name: str, member_name: str, max_turns: str, loops: bool = True) -> dict:
@@ -296,8 +296,8 @@ class TeamsPage(BasePage):
         loops_visible = self.is_loops_checkbox_visible()
         if loops:
             if loops_visible:
-                checkbox = self.page.locator("label:has-text('Enable loops')").first
-                checkbox.dispatch_event("click")
+                checkbox = self.page.locator("label:has-text('Enable loops')").locator("..").locator("button[role='checkbox']").first
+                checkbox.click()
                 self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(
                     state="visible", timeout=8000
                 )
