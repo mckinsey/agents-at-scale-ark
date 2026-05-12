@@ -18,6 +18,13 @@ interface ListResponse {
   object: 'list';
 }
 
+function buildUrl(suffix: string, agentName?: string): string {
+  const url = `${MODEL_CONTEXT_FILES_API_BASE_URL}${suffix}`;
+  if (!agentName) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}agent=${encodeURIComponent(agentName)}`;
+}
+
 async function ensureOk(res: Response, fallback: string): Promise<void> {
   if (res.ok) return;
   let detail = fallback;
@@ -31,8 +38,8 @@ async function ensureOk(res: Response, fallback: string): Promise<void> {
 }
 
 export const modelContextFilesService = {
-  async list(): Promise<ModelContextFile[]> {
-    const res = await fetch(MODEL_CONTEXT_FILES_API_BASE_URL);
+  async list(agentName?: string): Promise<ModelContextFile[]> {
+    const res = await fetch(buildUrl('', agentName));
     await ensureOk(res, 'Failed to list files');
     const data: ListResponse = await res.json();
     return data.data || [];
@@ -40,12 +47,12 @@ export const modelContextFilesService = {
 
   async upload(
     file: File,
-    purpose: string = 'user_data',
+    options?: { agentName?: string; purpose?: string },
   ): Promise<ModelContextFile> {
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('purpose', purpose);
-    const res = await fetch(MODEL_CONTEXT_FILES_API_BASE_URL, {
+    fd.append('purpose', options?.purpose ?? 'user_data');
+    const res = await fetch(buildUrl('', options?.agentName), {
       method: 'POST',
       body: fd,
     });
@@ -53,9 +60,9 @@ export const modelContextFilesService = {
     return res.json();
   },
 
-  async delete(fileId: string): Promise<void> {
+  async delete(fileId: string, agentName?: string): Promise<void> {
     const res = await fetch(
-      `${MODEL_CONTEXT_FILES_API_BASE_URL}/${encodeURIComponent(fileId)}`,
+      buildUrl(`/${encodeURIComponent(fileId)}`, agentName),
       { method: 'DELETE' },
     );
     await ensureOk(res, `Failed to delete ${fileId}`);

@@ -10,12 +10,13 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
 import { YamlViewer } from '@/components/common/yaml-viewer';
+import { NamespacedLink } from '@/components/namespaced-link';
+import { AgentFilePanel } from '@/components/sections/file-assistant-section';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -364,7 +365,11 @@ export function AgentForm({
             className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
               isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
             }`}>
-            <EmbeddedChatPanel name={agentName || ''} type="agent" />
+            {agent?.executionEngine?.name === 'executor-openai-file-inputs' ? (
+              <AgentFilePanel agentName={agentName || ''} />
+            ) : (
+              <EmbeddedChatPanel name={agentName || ''} type="agent" />
+            )}
           </div>
         </div>
       ) : (

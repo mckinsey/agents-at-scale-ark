@@ -7,22 +7,12 @@ import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useChatSession } from '@/lib/hooks';
-import { useGetAllAgents } from '@/lib/services/agents-hooks';
 import {
   type ModelContextFile,
   modelContextFilesService,
 } from '@/lib/services/model-context-files';
-
-const FILE_INPUTS_EXECUTOR = 'executor-openai-file-inputs';
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -30,65 +20,11 @@ function formatBytes(b: number) {
   return `${(b / 1048576).toFixed(1)} MB`;
 }
 
-export function FileAssistantSection() {
-  const { data: agents = [], isLoading: agentsLoading } = useGetAllAgents();
-  const fileAgents = agents.filter(
-    a => a.executionEngine?.name === FILE_INPUTS_EXECUTOR,
-  );
-  const [selectedAgent, setSelectedAgent] = useState<string>('');
-
-  return (
-    <div className="flex flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex items-center gap-3">
-        <span className="text-muted-foreground text-sm">Agent</span>
-        <Select
-          value={selectedAgent}
-          onValueChange={setSelectedAgent}
-          disabled={agentsLoading || fileAgents.length === 0}>
-          <SelectTrigger className="w-72">
-            <SelectValue
-              placeholder={
-                agentsLoading
-                  ? 'Loading agents…'
-                  : fileAgents.length === 0
-                    ? `No agents using ${FILE_INPUTS_EXECUTOR}`
-                    : 'Select an agent'
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {fileAgents.map(a => (
-              <SelectItem key={a.name} value={a.name}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {selectedAgent && (
-          <span className="text-muted-foreground text-xs">
-            Files and credentials are scoped to this agent&apos;s model.
-          </span>
-        )}
-      </div>
-
-      {selectedAgent ? (
-        <AgentFilePanel key={selectedAgent} agentName={selectedAgent} />
-      ) : (
-        <Card className="flex flex-1 items-center justify-center p-8">
-          <p className="text-muted-foreground text-sm">
-            Pick an agent above to upload files and chat with it.
-          </p>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 interface AgentFilePanelProps {
   agentName: string;
 }
 
-function AgentFilePanel({ agentName }: AgentFilePanelProps) {
+export function AgentFilePanel({ agentName }: AgentFilePanelProps) {
   const [files, setFiles] = useState<ModelContextFile[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -107,33 +43,41 @@ function AgentFilePanel({ agentName }: AgentFilePanelProps) {
     messageTokenUsage,
   } = useChatSession({ name: agentName, type: 'agent' });
 
-  const uploadFiles = useCallback(async (fileList: FileList) => {
-    setUploading(true);
-    for (const file of Array.from(fileList)) {
-      try {
-        const uploaded = await modelContextFilesService.upload(file);
-        setFiles(prev =>
-          prev.some(f => f.id === uploaded.id) ? prev : [...prev, uploaded],
-        );
-        setSelectedFileIds(prev =>
-          prev.includes(uploaded.id) ? prev : [...prev, uploaded.id],
-        );
-      } catch {
-        console.error(`Failed to upload ${file.name}`);
+  const uploadFiles = useCallback(
+    async (fileList: FileList) => {
+      setUploading(true);
+      for (const file of Array.from(fileList)) {
+        try {
+          const uploaded = await modelContextFilesService.upload(file, {
+            agentName,
+          });
+          setFiles(prev =>
+            prev.some(f => f.id === uploaded.id) ? prev : [...prev, uploaded],
+          );
+          setSelectedFileIds(prev =>
+            prev.includes(uploaded.id) ? prev : [...prev, uploaded.id],
+          );
+        } catch {
+          console.error(`Failed to upload ${file.name}`);
+        }
       }
-    }
-    setUploading(false);
-  }, []);
+      setUploading(false);
+    },
+    [agentName],
+  );
 
-  const deleteFile = useCallback(async (fileId: string) => {
-    try {
-      await modelContextFilesService.delete(fileId);
-    } catch {
-      console.error(`Failed to delete ${fileId}`);
-    }
-    setFiles(prev => prev.filter(f => f.id !== fileId));
-    setSelectedFileIds(prev => prev.filter(id => id !== fileId));
-  }, []);
+  const deleteFile = useCallback(
+    async (fileId: string) => {
+      try {
+        await modelContextFilesService.delete(fileId, agentName);
+      } catch {
+        console.error(`Failed to delete ${fileId}`);
+      }
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+      setSelectedFileIds(prev => prev.filter(id => id !== fileId));
+    },
+    [agentName],
+  );
 
   const handleSend = async () => {
     if (!currentMessage.trim() || isProcessing) return;
@@ -159,9 +103,7 @@ function AgentFilePanel({ agentName }: AgentFilePanelProps) {
   };
 
   return (
-    <div
-      className="flex flex-1 gap-4 overflow-hidden"
-      style={{ height: 'calc(100vh - 220px)' }}>
+    <div className="flex h-full min-h-0 flex-1 gap-4 overflow-hidden p-4">
       <Card className="flex w-80 flex-shrink-0 flex-col p-4">
         <h2 className="text-muted-foreground mb-3 text-sm font-medium tracking-wide uppercase">
           Files
