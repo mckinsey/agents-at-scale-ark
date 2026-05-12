@@ -1,0 +1,230 @@
+# PostgreSQL Storage Backend
+
+By default Ark stores resources as Kubernetes CRDs in etcd. Ark also supports a PostgreSQL-backed mode where resources live in a Postgres database and are served via a [Kubernetes aggregated API server](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/). This page covers when to choose it, the database requirements, how to install it, and how to operate it.
+
+For the architectural background, see [Core Architecture](../reference/core-architecture).
+
+## When to use PostgreSQL mode
+
+Prefer PostgreSQL when any of these apply:
+
+- **Resource scale beyond etcd's comfort zone.** Large fleets of Agents, Models, Queries, MCPServers can push etcd object-count limits and slow the API server.
+- **Resource-size pressure.** etcd's 1.5 MiB per-object limit is a hard ceiling; Postgres rows are not.
+- **Persistence and operational tooling.** Standard SQL backups, point-in-time recovery, CDC, and BI tooling become available.
+- **Multi-region or external DB strategy.** Managed Postgres (RDS, Cloud SQL, Aiven) is easier to share across clusters than etcd.
+
+Stay on etcd if:
+
+- You want zero database operational burden.
+- You don't need the scale above and prefer the simpler single-binary controller.
+
+## Architecture in PostgreSQL mode
+
+Two Helm releases work together:
+
+- **`ark-controller`** — runs the reconciler. CRDs for `ark.mckinsey.com/*` are **not** installed in this mode.
+- **`ark-apiserver`** — registers as an aggregated API server. The Kubernetes API server proxies all `ark.mckinsey.com` requests to it; it persists resources to Postgres.
+
+When a user runs `kubectl apply -f agent.yaml`, the request flow is:
+
+```
+kubectl → kube-apiserver → APIService (v1alpha1.ark.mckinsey.com)
+       → ark-apiserver → PostgreSQL (resources table)
+```
+
+The controller observes resources through the same K8s API path; it doesn't talk to Postgres directly.
+
+## PostgreSQL requirements
+
+The apiserver creates a logical replication slot to drive its watch stream, so the database **must** allow logical replication:
+
+```
+wal_level             = logical
+max_replication_slots >= 1
+max_wal_senders       >= 1
+```
+
+A user/role with permission to:
+
+- `CREATE TABLE`, `CREATE INDEX`, `CREATE PUBLICATION` on the target database
+- `pg_replication_slots` access (typically the `REPLICATION` attribute or a member of `pg_create_logical_replication_slots`)
+
+For managed services:
+
+| Provider | How to enable logical replication |
+|---|---|
+| AWS RDS | Set `rds.logical_replication = 1` in the parameter group, reboot. |
+| Google Cloud SQL | Set `cloudsql.logical_decoding = on` flag, reboot. |
+| Azure Database for PostgreSQL | Set `wal_level = logical` server parameter, restart. |
+| Aiven / Neon | Logical replication is on by default. |
+
+The connection settings the chart accepts are listed in [`ark/dist/chart-apiserver/values.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/dist/chart-apiserver/values.yaml).
+
+## Schema and replication slot
+
+On first start, `ark-apiserver` creates:
+
+- A single table, `resources`, with one row per Ark resource (Agent, Model, Query, Team, …). Columns include `kind`, `namespace`, `name`, `uid`, `resource_version`, JSONB columns for `spec`, `status`, `labels`, `annotations`, `finalizers`, `owner_references`, plus timestamps and a soft-delete flag (`deleted_at`).
+- Indexes on `(kind, namespace)`, `(kind, namespace, name)`, a GIN index on `labels`, and a unique partial index on active (non-deleted) rows.
+- A publication and a logical replication slot, both named `ark_cdc`. The slot is what powers `kubectl get -w` and controller informers.
+
+The slot is **persistent**: it survives apiserver restarts and is not removed by `helm uninstall`. See [Uninstall and cleanup](#uninstall-and-cleanup) below.
+
+## Installing PostgreSQL mode
+
+### 1. Prepare PostgreSQL
+
+Provision a database with logical replication enabled, create the Ark database and user, and obtain the password.
+
+### 2. Create the Kubernetes password secret
+
+The chart references the password by secret name; you create it once:
+
+```bash
+kubectl create namespace ark-system
+kubectl create secret generic ark-db-password \
+  -n ark-system \
+  --from-literal=password='<your-password>'
+```
+
+### 3. Configure `.arkrc.yaml`
+
+The CLI reads the backend choice and connection details from `.arkrc.yaml`. You can place this file in either:
+
+- `~/.arkrc.yaml` (user-level, applies to all projects)
+- `./.arkrc.yaml` (project-level, takes precedence)
+
+```yaml
+# .arkrc.yaml
+storage:
+  backend: postgresql
+  postgresql:
+    host: ark-storage.example.com
+    port: 5432
+    database: ark
+    user: ark
+    passwordSecretName: ark-db-password
+    passwordSecretKey: password
+    sslMode: require
+```
+
+`sslMode` accepts the standard libpq values: `disable`, `require`, `verify-ca`, `verify-full`.
+
+The `--backend` CLI flag and `ARK_STORAGE_BACKEND` env var override the config value, useful for testing the same code against a different backend without editing the file.
+
+### 4. Install via the CLI
+
+```bash
+ark install
+```
+
+The CLI installs `ark-controller` with `storage.backend=postgresql` (which disables CRD installation) and `ark-apiserver` with the connection values from the config. cert-manager and Gateway API CRDs are installed as dependencies just as in etcd mode.
+
+### Install via raw Helm
+
+If you prefer to skip the CLI, install the two charts directly with `--set` flags from the values you would have put in `.arkrc.yaml`:
+
+```bash
+helm upgrade --install ark-controller \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system --create-namespace \
+  --set rbac.enable=true \
+  --set storage.backend=postgresql
+
+helm upgrade --install ark-apiserver \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-apiserver \
+  --namespace ark-system \
+  --set postgresql.host=ark-storage.example.com \
+  --set postgresql.user=ark \
+  --set postgresql.passwordSecretName=ark-db-password \
+  --set postgresql.sslMode=require
+```
+
+The apiserver chart's `postgresql.host`, `postgresql.user`, and `postgresql.passwordSecretName` are **required** values — `helm install` will fail at template time if they are missing.
+
+## Verifying the install
+
+```bash
+# No Ark CRDs in postgresql mode.
+kubectl get crd | grep ark.mckinsey.com
+# (no output)
+
+# Both APIServices should report Available=True.
+kubectl get apiservice v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com
+
+# kubectl operates on Ark resources transparently.
+kubectl get agents,models,queries -A
+```
+
+Create a smoke-test Agent to confirm the round trip lands in Postgres:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: smoke
+  namespace: default
+spec:
+  description: smoke test
+  prompt: "You are a helpful assistant."
+EOF
+```
+
+Then connect to Postgres and confirm the row exists:
+
+```sql
+SELECT kind, namespace, name, uid FROM resources WHERE kind = 'Agent';
+```
+
+## Multi-replica behaviour
+
+The `ark-apiserver` chart defaults to a single replica. The chart wires the RBAC needed for controller-runtime leader election on a `Lease` named `ark-apiserver-leader`.
+
+If you scale to multiple replicas:
+
+- Only one instance acquires the lease and runs the WAL consumer.
+- The replication slot's `active` flag is a second backstop — even without leader election, Postgres only lets one connection hold the slot at a time.
+
+Multi-replica mainly improves API request throughput; the WAL stream is still single-consumer by design.
+
+## Backups and restore
+
+Treat the `resources` table like any other application table:
+
+- Use your provider's automated backups or `pg_dump` for ad-hoc snapshots.
+- A point-in-time restore restores Ark state to that moment. Take care to also drop and recreate the `ark_cdc` replication slot after a restore so the apiserver starts a fresh watch stream.
+- Cluster-side state (Pods, Deployments owned by Ark) is **not** restored by a Postgres restore — only the declarative resources are.
+
+## Uninstall and cleanup
+
+`helm uninstall` removes the apiserver Deployment and APIService but does **not** drop the publication or the replication slot. An orphaned slot will pin WAL retention and can fill the disk.
+
+After uninstalling, drop the slot manually:
+
+```sql
+SELECT pg_drop_replication_slot('ark_cdc');
+DROP PUBLICATION IF EXISTS ark_cdc;
+```
+
+If the slot was invalidated (`wal_status = 'lost'`, typically after `max_slot_wal_keep_size` was exceeded), the apiserver drops and recreates it automatically on startup.
+
+The `resources` table itself is yours — drop it manually if you are decommissioning the database, or keep it for forensic queries.
+
+## Troubleshooting
+
+**`helm install` fails with `postgresql.host is required`.** You ran the apiserver chart without supplying connection details. Set `storage.postgresql` in `.arkrc.yaml` (the CLI passes these through) or use `--set postgresql.host=… --set postgresql.user=… --set postgresql.passwordSecretName=…` for raw helm.
+
+**`ark install` fails with `missing 'storage.postgresql' block`.** You set `storage.backend: postgresql` in `.arkrc.yaml` but didn't add the `storage.postgresql` block, or it's missing `host`/`user`/`passwordSecretName`. Fill in the required fields.
+
+**Apiserver pod is `CreateContainerConfigError`.** The pod is referencing a secret that doesn't exist. Confirm the secret named in `postgresql.passwordSecretName` exists in the same namespace as the release.
+
+**Apiserver crashes with `failed to connect to database: dial tcp … connect: connection refused`.** The host/port is wrong, the database isn't up yet, or a NetworkPolicy is blocking egress. The pod will restart and retry.
+
+**Apiserver logs `error retrieving resource lock`.** Leader election can't reach the Kubernetes API. Usually a transient startup issue; if it persists, check the ServiceAccount, RBAC bindings, and any egress restrictions.
+
+**APIService stuck at `False (FailedDiscoveryCheck)`.** The aggregator can't reach the apiserver Service. Check `kubectl get svc -n ark-system ark-apiserver`, verify pods are 1/1, and confirm no NetworkPolicy blocks port 6443 from the kube-apiserver.
+
+**`kubectl get agents` returns "the server doesn't have a resource type ...".** The APIService is not registered or not Available. Look at `kubectl get apiservice v1alpha1.ark.mckinsey.com -o yaml`.
+
+**Resources don't appear after `kubectl apply`, but no error.** Check `kubectl get events -A`. Confirm the apiserver pod is running and the replication slot exists in Postgres (`SELECT slot_name, active, wal_status FROM pg_replication_slots`).
