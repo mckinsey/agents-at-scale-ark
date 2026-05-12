@@ -169,51 +169,58 @@ export function AgentFilePanel({
       </div>
 
       <div className="flex-shrink-0 border-t">
-        {files.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2">
-            {files.map(f => {
-              const selected = selectedFileIds.includes(f.id);
-              return (
-                <span
-                  key={f.id}
-                  className={`group inline-flex max-w-[16rem] items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                    selected
-                      ? 'bg-primary/10 border-primary/30 text-primary'
-                      : 'border-border hover:bg-muted cursor-pointer'
-                  }`}
-                  onClick={() => toggleFileSelection(f.id)}
-                  title={`${f.filename} · ${formatBytes(f.bytes)}`}>
-                  <Paperclip className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{f.filename}</span>
-                  <button
-                    className="text-muted-foreground hover:text-destructive ml-0.5 opacity-60 group-hover:opacity-100"
-                    onClick={e => {
-                      e.stopPropagation();
-                      deleteFile(f.id);
-                    }}
-                    aria-label={`Delete ${f.filename}`}>
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </span>
-              );
-            })}
-            {selectedFileIds.length > 0 && (
-              <>
-                <Separator orientation="vertical" className="mx-1 h-4" />
-                <span className="text-muted-foreground text-xs">
-                  {selectedFileIds.length} attached
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-1 text-xs"
-                  onClick={() => setSelectedFileIds([])}>
-                  <X className="h-3 w-3" />
-                </Button>
-              </>
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2">
+          {files.length === 0 && (
+            <span className="text-muted-foreground text-xs">
+              No files attached — drop here or use the upload button
+            </span>
+          )}
+          {files.length > 0 && (
+            <>
+              {files.map(f => {
+                const selected = selectedFileIds.includes(f.id);
+                return (
+                  <span
+                    key={f.id}
+                    className={`group inline-flex max-w-[16rem] items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                      selected
+                        ? 'bg-primary/10 border-primary/30 text-primary'
+                        : 'border-border hover:bg-muted cursor-pointer'
+                    }`}
+                    onClick={() => toggleFileSelection(f.id)}
+                    title={`${f.filename} · ${formatBytes(f.bytes)}`}>
+                    <Paperclip className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{f.filename}</span>
+                    <button
+                      className="text-muted-foreground hover:text-destructive ml-0.5 opacity-60 group-hover:opacity-100"
+                      onClick={e => {
+                        e.stopPropagation();
+                        deleteFile(f.id);
+                      }}
+                      aria-label={`Delete ${f.filename}`}>
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+              {selectedFileIds.length > 0 && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <span className="text-muted-foreground text-xs">
+                    {selectedFileIds.length} attached
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1 text-xs"
+                    onClick={() => setSelectedFileIds([])}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        </div>
 
         <div
           className={`flex items-center gap-2 p-3 transition-colors ${
