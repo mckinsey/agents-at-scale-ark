@@ -246,8 +246,11 @@ describe('ChatInput', () => {
       );
       expect(sendButton).toBeInTheDocument();
 
-      // Should NOT render tool toggle
-      expect(screen.queryByText('Show tool calls')).not.toBeInTheDocument();
+      // Should render tool toggle
+      expect(screen.getByText('Show tool calls')).toBeInTheDocument();
+
+      // Should not render tool count badge when toolCallCount is 0
+      expect(screen.queryByText('0')).not.toBeInTheDocument();
     });
 
     it('should render regular chat input even if conversation has tool calls (non-workflow)', () => {
