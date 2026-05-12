@@ -70,9 +70,8 @@ class TeamsPage(BasePage):
             except Exception as e2:
                 logger.warning(f"Could not select member via checkbox button: {e2}")
 
-    def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str, additional_members: list = None) -> dict:
+    def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
         logger.info(f"Creating team: {team_name}")
-        member_names = [member_name] + (additional_members or [])
 
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
         self.wait_for_load_state("domcontentloaded")

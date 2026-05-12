@@ -18,17 +18,12 @@ class SessionsPage(BasePage):
     DIALOG_CANCEL_BUTTON = "[role='dialog'] button:has-text('Cancel')"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
-    LOGS_TAB = "[role='tab']:has-text('Logs')"
     CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
     CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
     CHAT_TEXTAREA = "textarea[placeholder*='Message']"
-    CHAT_SEND_BUTTON = "button:has(svg.lucide-send-horizontal)"
     USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
     ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
-    PROCESSING_INDICATOR = "div.flex-1.space-y-4 div.flex.justify-start div.bg-muted"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border"
-    SESSION_DETAIL_HEADER = "div.space-y-4.rounded-lg.border.p-6"
-    NEW_SESSION_BADGE = "span:has-text('New Session'), [data-slot='badge']:has-text('New Session')"
     NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
 
     def navigate_to_session_history(self) -> None:
@@ -49,7 +44,7 @@ class SessionsPage(BasePage):
                 state="hidden",
                 timeout=10000,
             )
-        except Exception:
+        except PlaywrightTimeoutError:
             pass
 
         if participant_tab != "All":
@@ -57,31 +52,23 @@ class SessionsPage(BasePage):
                 tab = self.page.locator(f"[role='dialog'] [role='tab']:has-text('{participant_tab}')").first
                 if tab.is_visible(timeout=2000):
                     tab.click()
-                    self.page.wait_for_timeout(300)
-            except Exception:
+                    tab.wait_for(state="attached")
+            except PlaywrightTimeoutError:
                 logger.info("Could not click tab %s, using default", participant_tab)
 
         try:
             search = self.page.locator(self.DIALOG_SEARCH_INPUT).first
             if search.is_visible(timeout=2000):
                 search.fill(participant_name)
-                self.page.wait_for_timeout(500)
-        except Exception:
+        except PlaywrightTimeoutError:
             logger.info("Could not fill search input")
 
         participant_item = self.page.locator(
-            f"[role='dialog'] label:has(span:has-text('{participant_name}'))"
+            f"[role='dialog'] label:has-text('{participant_name}'), "
+            f"[role='dialog'] div.font-medium:has-text('{participant_name}')"
         ).first
-        if not participant_item.is_visible(timeout=10000):
-            participant_item = self.page.locator(
-                f"[role='dialog'] label:has(div.font-medium:has-text('{participant_name}'))"
-            ).first
-        if not participant_item.is_visible(timeout=1000):
-            participant_item = self.page.locator(
-                f"[role='dialog'] div.font-medium:has-text('{participant_name}')"
-            ).first
+        participant_item.wait_for(state="visible", timeout=10000)
         participant_item.click()
-        self.page.wait_for_timeout(300)
 
     def confirm_create_session(self) -> str:
         create_btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
@@ -90,7 +77,9 @@ class SessionsPage(BasePage):
         try:
             self.page.wait_for_url("**/sessions/**", timeout=10000)
         except PlaywrightTimeoutError:
-            logger.warning("URL did not change to /sessions/*, current: %s", self.page.url)
+            raise AssertionError(
+                f"Session creation failed — URL did not change to /sessions/*. Current: {self.page.url}"
+            )
         return self.get_session_id_from_url()
 
     def get_session_id_from_url(self) -> str:
@@ -139,12 +128,17 @@ class SessionsPage(BasePage):
             return False
 
     def send_message_in_conversation(self, message: str) -> None:
+        initial_count = self.get_user_message_count()
         textarea = self.page.locator(self.CHAT_TEXTAREA).first
         textarea.wait_for(state="visible", timeout=10000)
         textarea.click()
         textarea.fill(message)
         textarea.press("Enter")
-        self.page.wait_for_timeout(1500)
+        start = time.time()
+        while time.time() - start < 10:
+            if self.get_user_message_count() > initial_count:
+                return
+            self.page.wait_for_timeout(200)
 
     def wait_for_assistant_response(self, initial_count: int = 0, timeout_s: int = 90) -> bool:
         start = time.time()
@@ -236,12 +230,11 @@ class SessionsPage(BasePage):
             history_tab = self.page.locator(self.HISTORY_TAB).first
             if history_tab.is_visible(timeout=3000):
                 history_tab.click()
-                self.page.wait_for_timeout(500)
-        except Exception:
+        except PlaywrightTimeoutError:
             pass
         try:
             self.page.locator(self.CONVERSATION_SIDEBAR_ITEM).first.wait_for(state="visible", timeout=5000)
-        except Exception:
+        except PlaywrightTimeoutError:
             pass
 
     def wait_for_conversations_tab_content(self, timeout: int = 10000) -> None:
@@ -369,10 +362,10 @@ class SessionsPage(BasePage):
 
     def is_create_button_disabled(self) -> bool:
         try:
-            btn = self.page.locator("[role='dialog'] button:has-text('Create')").first
+            btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
             btn.wait_for(state="visible", timeout=5000)
             return btn.is_disabled()
-        except Exception:
+        except PlaywrightTimeoutError:
             return True
 
     def click_new_conversation_button(self) -> None:
@@ -385,30 +378,10 @@ class SessionsPage(BasePage):
 
     def confirm_new_conversation(self) -> None:
         if not self.is_visible(self.NEW_CONVERSATION_DIALOG, timeout=2000):
-            logger.info("New conversation dialog already closed after participant selection")
             return
-
-        for selector in [
-            "[role='dialog'] button:has-text('Create')",
-            "[role='dialog'] button:has-text('Start')",
-            "[role='dialog'] button:has-text('Start conversation')",
-            "[role='dialog'] button:has-text('Confirm')",
-            "[role='dialog'] button[type='submit']",
-        ]:
-            try:
-                btn = self.page.locator(selector).last
-                if btn.is_visible(timeout=2000):
-                    btn.click(force=True)
-                    logger.info("Clicked new conversation confirm button: %s", selector)
-                    return
-            except Exception:
-                continue
-
-        logger.warning("Named confirm button not found; clicking last button in dialog")
-        try:
-            self.page.locator("[role='dialog'] button").last.click(force=True)
-        except Exception as e:
-            logger.warning("Could not click any button in new conversation dialog: %s", e)
+        btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
+        btn.wait_for(state="visible", timeout=5000)
+        btn.click(force=True)
 
     def set_date_filter(self, value: str) -> None:
         try:

@@ -49,7 +49,7 @@ class TestSessionsAndConversations:
 
         teams.navigate_to_teams_tab()
         if not teams.is_visible(teams.ADD_TEAM_BUTTON):
-            pytest.skip("Add Team button not available")
+            pytest.fail("Add Team button not available")
 
         team_data = teams.TEST_DATA["default"]
         team_name = teams.generate_team_name("session-team")
@@ -61,8 +61,7 @@ class TestSessionsAndConversations:
             description=team_data["description"],
             strategy=team_data["strategy"],
             max_turns=team_data["max_turns"],
-            member_name=primary_agent,
-            additional_members=[secondary_agent],
+            member_names=[primary_agent, secondary_agent],
         )
         assert team_result["popup_visible"], "Team creation popup should be visible"
         assert team_result["in_table"], "Team should be visible in table"
@@ -111,7 +110,7 @@ class TestSessionsAndConversations:
 
         initial_count = sessions.get_assistant_message_count()
         sessions.send_message_in_conversation("What is 2 + 2? Please give a brief answer.")
-        assert sessions.get_user_message_count() >= 1, "User message should appear after sending"
+        assert sessions.get_user_message_count() == 1, "Exactly 1 user message should appear after sending"
 
         assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
             "Agent should respond within timeout"
@@ -130,6 +129,10 @@ class TestSessionsAndConversations:
         sessions.navigate_back_to_sessions()
         assert sessions.is_session_in_table(session_id, retries=5), \
             f"Agent session {session_id} should appear in the sessions list"
+
+        count = sessions.get_session_conversation_count_in_table(session_id)
+        assert count >= 1, \
+            f"Session {session_id} should show at least 1 conversation in the table"
 
     # -------------------------------------------------------------------------
     # Team session: create + conversation flow (multi-agent)
@@ -174,7 +177,7 @@ class TestSessionsAndConversations:
 
         initial_count = sessions.get_assistant_message_count()
         sessions.send_message_in_conversation("Hello, what is the capital of France?")
-        assert sessions.get_user_message_count() >= 1, "User message should appear after sending"
+        assert sessions.get_user_message_count() == 1, "Exactly 1 user message should appear after sending"
 
         assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
             "Team should respond within timeout"
@@ -199,21 +202,6 @@ class TestSessionsAndConversations:
     # -------------------------------------------------------------------------
     # Session counts and status verification
     # -------------------------------------------------------------------------
-
-    def test_session_conversation_counts_in_table(self, page: Page, sessions_test_resources: dict):
-        session_id = sessions_test_resources["sessions"].get("agent")
-        if not session_id:
-            pytest.skip("Agent session not created")
-
-        sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        assert sessions.is_session_in_table(session_id, retries=5), \
-            f"Session {session_id} should be visible in table"
-
-        count = sessions.get_session_conversation_count_in_table(session_id)
-        assert count >= 1, \
-            f"Session {session_id} should show at least 1 conversation in the table"
 
     def test_session_idle_status_after_conversation(self, page: Page, sessions_test_resources: dict):
         session_id = sessions_test_resources["sessions"].get("agent")
@@ -295,24 +283,14 @@ class TestSessionsAndConversations:
         assert sessions.is_visible(sessions.SESSION_DIALOG), \
             "New session dialog should be visible after clicking New session"
 
+        assert sessions.is_create_button_disabled(), \
+            "Create button should be disabled when no participant is selected"
+
         sessions.cancel_session_dialog()
         assert page.url == initial_url, \
             "URL should not change after canceling session dialog"
         assert not sessions.is_visible(sessions.SESSION_DIALOG, timeout=3000), \
             "Dialog should close after clicking Cancel"
-
-    def test_create_session_button_disabled_without_selection(self, page: Page, sessions_test_resources: dict):
-        sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        sessions.open_new_session_dialog()
-        assert sessions.is_visible(sessions.SESSION_DIALOG), \
-            "New session dialog should open"
-
-        assert sessions.is_create_button_disabled(), \
-            "Create button should be disabled when no participant is selected"
-
-        sessions.cancel_session_dialog()
 
     # -------------------------------------------------------------------------
     # Date range filter
@@ -343,24 +321,21 @@ class TestSessionsAndConversations:
         sessions = SessionsPage(page)
         sessions.navigate_to_session_history()
 
-        total = sessions.get_stats_total_session_count()
+        total = sessions.get_visible_session_count()
         if total < 1:
             pytest.skip("No sessions available for sort test")
 
         sessions.click_sort_header("Name")
-        count_after_name_sort = sessions.get_visible_session_count()
-        assert count_after_name_sort >= 0, \
-            "Session count should be non-negative after sorting by Name"
+        assert sessions.get_visible_session_count() == total, \
+            "Sorting by Name should not change the number of visible sessions"
 
         sessions.click_sort_header("Name")
-        count_after_name_reverse = sessions.get_visible_session_count()
-        assert count_after_name_reverse >= 0, \
-            "Session count should be non-negative after reversing Name sort"
+        assert sessions.get_visible_session_count() == total, \
+            "Reversing Name sort should not change the number of visible sessions"
 
         sessions.click_sort_header("Convos")
-        count_after_convo_sort = sessions.get_visible_session_count()
-        assert count_after_convo_sort >= 0, \
-            "Session count should be non-negative after sorting by Convos"
+        assert sessions.get_visible_session_count() == total, \
+            "Sorting by Convos should not change the number of visible sessions"
 
     # -------------------------------------------------------------------------
     # Empty search results
