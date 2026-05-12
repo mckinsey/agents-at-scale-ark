@@ -58,22 +58,21 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
           />
         </div>
         <div className="flex flex-shrink-0 items-center gap-1">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  asChild>
-                  <NamespacedLink href={`/models/${model.id}/update`}>
+          <NamespacedLink href={`/models/${model.id}/update`}>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0">
                     <Pencil className="h-4 w-4" />
-                  </NamespacedLink>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Edit model</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit model</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </NamespacedLink>
           {onDelete && (
             <TooltipProvider>
               <Tooltip>
