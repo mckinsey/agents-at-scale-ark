@@ -93,6 +93,54 @@ describe('SessionsBroker', () => {
       expect(query.phase).toBe('error');
     });
 
+    test('sets canceled phase on cancellation event', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionCanceled',
+      });
+
+      const query = broker.getSession('sess-1')!.queries['query-1'];
+      expect(query.phase).toBe('canceled');
+      expect(query.completedAt).toBeDefined();
+      expect(query.error).toBeUndefined();
+    });
+
+    test('sets canceled phase on reason containing Canceled', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'AgentExecutionCanceled',
+      });
+
+      const query = broker.getSession('sess-1')!.queries['query-1'];
+      expect(query.phase).toBe('canceled');
+    });
+
+    test('does not regress error phase to canceled', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+        error: 'something broke',
+      });
+
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionCanceled',
+      });
+
+      const query = broker.getSession('sess-1')!.queries['query-1'];
+      expect(query.phase).toBe('error');
+      expect(query.error).toBe('something broke');
+    });
+
     test('ignores events without sessionId', () => {
       broker.applyEvent({
         queryName: 'query-1',
