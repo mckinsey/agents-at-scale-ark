@@ -126,25 +126,25 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
         </Button>
       </div>
 
-      {toolCallCount > 0 && (
-        <div className="flex items-center gap-3 px-8 py-3 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Wrench className="size-4" />
+      <div className="flex items-center gap-3 px-8 py-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Wrench className="size-4" />
+            {toolCallCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-muted-foreground text-[10px] font-medium text-background">
                 {toolCallCount}
               </span>
-            </div>
-            <Switch
-              checked={showToolCalls}
-              onCheckedChange={onShowToolCallsChange}
-              className="scale-75"
-              aria-label="Toggle tool call visibility"
-            />
-            <span className="text-xs">Show tool calls</span>
+            )}
           </div>
+          <Switch
+            checked={showToolCalls}
+            onCheckedChange={onShowToolCallsChange}
+            className="scale-75"
+            aria-label="Toggle tool call visibility"
+          />
+          <span className="text-xs">Show tool calls</span>
         </div>
-      )}
+      </div>
     </div>
   );
 }
