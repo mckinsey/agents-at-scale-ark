@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.63-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.62...v0.1.63-rc) (2026-05-12)
+
+
+### Features
+
+* **ark-sdk:** emit chatcmpl-final chunk with completedQuery metadata ([#2052](https://github.com/mckinsey/agents-at-scale-ark/issues/2052)) ([63600a6](https://github.com/mckinsey/agents-at-scale-ark/commit/63600a690697b16c306ee8c611e629bd9ca7b72e))
+* **dashboard:** add ability to stop team and agent conversations ([#1937](https://github.com/mckinsey/agents-at-scale-ark/issues/1937)) ([20ab687](https://github.com/mckinsey/agents-at-scale-ark/commit/20ab687da2d5502fa512bbc21a9e5802f139c442))
+
+
+### Bug Fixes
+
+* address multiple security vulnerabilities (CVE-2026-33814, CVE-2020-26311, CVE-2021-4305, CVE-2022-29169) ([#2113](https://github.com/mckinsey/agents-at-scale-ark/issues/2113)) ([8b3d691](https://github.com/mckinsey/agents-at-scale-ark/commit/8b3d691f2723c350aa5ea027bd54f2937a7168f4))
+* conversation panel tool call toggle and narrow ui fixes ([8a68af6](https://github.com/mckinsey/agents-at-scale-ark/commit/8a68af66e9819e8111764bb387d30a5cf43ba2ee))
+* conversation panel ui fixes ([#2096](https://github.com/mckinsey/agents-at-scale-ark/issues/2096)) ([8a68af6](https://github.com/mckinsey/agents-at-scale-ark/commit/8a68af66e9819e8111764bb387d30a5cf43ba2ee))
+* **install:** make PostgreSQL backend installable end-to-end ([#2117](https://github.com/mckinsey/agents-at-scale-ark/issues/2117)) ([d60a6d9](https://github.com/mckinsey/agents-at-scale-ark/commit/d60a6d92247be49aca4c91a6d2d371ff1d03a49f))
+* retry calico rollout status to survive API server flap during CNI bootstrap ([#2057](https://github.com/mckinsey/agents-at-scale-ark/issues/2057)) ([66fc88e](https://github.com/mckinsey/agents-at-scale-ark/commit/66fc88e2a3930a313ef7ba25423df0a29073701b))
+* upgrade Go to 1.26.3 to patch CVE-2026-39820 and CVE-2026-33811 ([#2099](https://github.com/mckinsey/agents-at-scale-ark/issues/2099)) ([bf81f80](https://github.com/mckinsey/agents-at-scale-ark/commit/bf81f800f3700f1e6ad4aff69e79ddd35d4a8b45))
+* validate helm installation ([#2078](https://github.com/mckinsey/agents-at-scale-ark/issues/2078)) ([b10f7ab](https://github.com/mckinsey/agents-at-scale-ark/commit/b10f7abcbc262e7dc2a3929946c5734f7d52e7f8))
+
 ## [0.1.62](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.62...v0.1.62) (2026-05-08)
 
 
