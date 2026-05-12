@@ -53,6 +53,7 @@ pipelines:
     fi
     create_deployments ark-controller
     create_deployments ark-completions
+    kubectl apply -f hack/dev-pvcs.yaml
     start_dev --all
 
 deployments:
@@ -134,15 +135,14 @@ dev:
       - "-c"
       - |
         cd /app
+        mkdir -p /go-cache/mod /go-cache/build
         mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
-        GOTOOLCHAIN=auto go run cmd/main.go --role=controller --leader-elect=false --completions-addr=http://ark-completions.ark-system
+        GOMODCACHE=/go-cache/mod GOCACHE=/go-cache/build GOTOOLCHAIN=auto go run cmd/main.go --role=controller --leader-elect=false --completions-addr=http://ark-completions.ark-system
     namespace: ark-system
     logs:
       lastLines: 50
     persistPaths:
-      - path: /go/pkg/mod
-        skipPopulate: true
-      - path: /root/.cache/go-build
+      - path: /go-cache
         skipPopulate: true
     sync:
       - path: .:/app
@@ -159,14 +159,12 @@ dev:
     command:
       - "sh"
       - "-c"
-      - "cd /app && GOTOOLCHAIN=auto go run cmd/completions/main.go --addr=:9090"
+      - "cd /app && mkdir -p /go-cache/mod /go-cache/build && GOMODCACHE=/go-cache/mod GOCACHE=/go-cache/build GOTOOLCHAIN=auto go run cmd/completions/main.go --addr=:9090"
     namespace: ark-system
     logs:
       lastLines: 50
     persistPaths:
-      - path: /go/pkg/mod
-        skipPopulate: true
-      - path: /root/.cache/go-build
+      - path: /go-cache
         skipPopulate: true
     sync:
       - path: .:/app
@@ -209,8 +207,9 @@ profiles:
           - "-c"
           - |
             cd /app
+            mkdir -p /go-cache/mod /go-cache/build
             mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
-            GOTOOLCHAIN=auto \
+            GOMODCACHE=/go-cache/mod GOCACHE=/go-cache/build GOTOOLCHAIN=auto \
             ARK_STORAGE_BACKEND=postgresql \
             ARK_POSTGRES_HOST=ark-storage-dev.ark-system.svc.cluster.local \
             ARK_POSTGRES_PORT=5432 \

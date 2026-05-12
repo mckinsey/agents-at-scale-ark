@@ -130,6 +130,14 @@ profiles:
 pipelines:
   deploy: |-
 
+    GATEWAY_PID=""
+    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
+      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
+        kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml" &
+        GATEWAY_PID=$!
+      fi
+    fi
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       if ! helm status cert-manager -n cert-manager > /dev/null 2>&1; then
         create_deployments cert-manager
@@ -140,11 +148,7 @@ pipelines:
       until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
     fi
 
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
-        create_deployments gateway-api
-      fi
-    fi
+    if [ -n "${GATEWAY_PID}" ]; then wait ${GATEWAY_PID}; fi
 
     run_dependency_pipelines ark-controller --pipeline=deploy
 
@@ -169,6 +173,14 @@ pipelines:
     kubectl logs -f -n "${DEVSPACE_NAMESPACE}" --all-containers --prefix --max-log-requests=10 -l app
   dev: |-
 
+    GATEWAY_PID=""
+    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
+      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
+        kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml" &
+        GATEWAY_PID=$!
+      fi
+    fi
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       if ! helm status cert-manager -n cert-manager > /dev/null 2>&1; then
         create_deployments cert-manager
@@ -179,11 +191,7 @@ pipelines:
       until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
     fi
 
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
-        create_deployments gateway-api
-      fi
-    fi
+    if [ -n "${GATEWAY_PID}" ]; then wait ${GATEWAY_PID}; fi
 
     run_dependency_pipelines ark-controller --pipeline=dev
 
