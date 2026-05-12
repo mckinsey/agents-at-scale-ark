@@ -467,7 +467,7 @@ Environment: {{.environment}}"
                       form={form}
                       models={models}
                       executionEngines={executionEngines}
-                      showExecutionEngine={isExperimentalExecutionEngineEnabled}
+                      showExecutionEngine
                       showPairFileAssistant={mode === AgentFormMode.CREATE}
                       disabled={isDisabled}
                     />

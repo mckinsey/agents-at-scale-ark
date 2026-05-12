@@ -102,9 +102,7 @@ export function useAgentForm({
               agentsService.getByName(agentName),
               modelsService.getAll(),
               toolsService.getAll(),
-              isExperimentalExecutionEngineEnabled
-                ? executionEnginesService.getAll()
-                : Promise.resolve([]),
+              executionEnginesService.getAll(),
             ]);
 
           if (!agentData) {
