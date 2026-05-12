@@ -72,6 +72,7 @@ class TestAdapterBrokerMessages:
         broker = AsyncMock()
         broker.send_messages = AsyncMock()
         broker.send_chunk = AsyncMock()
+        broker.send_final_chunk = AsyncMock()
         broker.complete = AsyncMock()
 
         with patch(
@@ -114,6 +115,7 @@ class TestAdapterBrokerMessages:
         broker = AsyncMock()
         broker.send_messages = AsyncMock()
         broker.send_chunk = AsyncMock()
+        broker.send_final_chunk = AsyncMock()
         broker.complete = AsyncMock()
 
         with patch(
@@ -135,6 +137,80 @@ class TestAdapterBrokerMessages:
             await adapter._do_execute(context, event_queue)
 
         broker.send_messages.assert_not_awaited()
+
+    @pytest.mark.anyio
+    async def test_skipped_when_broker_not_configured(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "conv-1"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(name="q", namespace="ns"),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=AsyncMock(return_value=_make_request()),
+        ), patch(
+            "ark_sdk.executor_app.discover_broker_url",
+            new=AsyncMock(return_value=None),
+        ), patch(
+            "ark_sdk.executor_app.QueryStatusUpdater",
+            return_value=MagicMock(),
+        ):
+            await adapter._do_execute(context, event_queue)
+
+
+class TestAdapterBrokerFinalChunk:
+    @pytest.mark.anyio
+    async def test_sends_final_chunk_before_complete(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "conv-1"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        call_order: list[str] = []
+
+        broker = AsyncMock()
+        broker.send_messages = AsyncMock(side_effect=lambda *a, **k: call_order.append("messages"))
+        broker.send_chunk = AsyncMock(side_effect=lambda *a, **k: call_order.append("chunk"))
+        broker.send_final_chunk = AsyncMock(side_effect=lambda *a, **k: call_order.append("final"))
+        broker.complete = AsyncMock(side_effect=lambda *a, **k: call_order.append("complete"))
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(name="q", namespace="ns"),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=AsyncMock(return_value=_make_request()),
+        ), patch(
+            "ark_sdk.executor_app.discover_broker_url",
+            new=AsyncMock(return_value="http://broker"),
+        ), patch(
+            "ark_sdk.executor_app.BrokerClient",
+            return_value=broker,
+        ), patch(
+            "ark_sdk.executor_app.QueryStatusUpdater",
+            return_value=MagicMock(),
+        ):
+            await adapter._do_execute(context, event_queue)
+
+        broker.send_final_chunk.assert_awaited_once()
+        kwargs = broker.send_final_chunk.await_args.kwargs
+        assert kwargs["response_text"] == "stub"
+        assert kwargs["response_messages"][-1]["role"] == "assistant"
+        assert kwargs["response_messages"][-1]["content"] == "stub"
+
+        assert call_order.index("final") < call_order.index("complete")
+        assert call_order.index("chunk") < call_order.index("final")
 
     @pytest.mark.anyio
     async def test_skipped_when_broker_not_configured(self):
