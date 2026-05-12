@@ -124,3 +124,64 @@ class BrokerClient:
                     logger.warning(f"Broker /messages returned {resp.status_code} for query {self.query_name}")
         except Exception as e:
             logger.warning(f"Failed to send messages to broker for query {self.query_name}: {e}")
+
+    def _build_final_chunk(
+        self,
+        response_text: str,
+        response_messages: Optional[list[dict]] = None,
+        token_usage: Optional[dict] = None,
+    ) -> bytes:
+        completed_query: dict = {
+            "metadata": {"name": self.query_name},
+            "status": {
+                "phase": "done",
+                "conversationId": self.session_id,
+                "response": {
+                    "content": response_text,
+                    "phase": "done",
+                },
+            },
+        }
+        if response_messages:
+            completed_query["status"]["response"]["raw"] = json.dumps(response_messages)
+        if token_usage:
+            completed_query["status"]["tokenUsage"] = token_usage
+
+        chunk = {
+            "id": "chatcmpl-final",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": f"agent/{self.agent_name}" if self.agent_name else "unknown",
+            "choices": [{
+                "index": 0,
+                "delta": {"role": "assistant", "content": ""},
+                "finish_reason": "stop",
+            }],
+            "ark": {
+                "query": self.query_name,
+                "session": self.session_id,
+                "agent": self.agent_name,
+                "completedQuery": completed_query,
+            },
+        }
+        return (json.dumps(chunk) + "\n").encode()
+
+    async def send_final_chunk(
+        self,
+        response_text: str,
+        response_messages: Optional[list[dict]] = None,
+        token_usage: Optional[dict] = None,
+    ) -> None:
+        url = f"{self.base_url}/stream/{quote(self.query_name)}"
+        payload = self._build_final_chunk(response_text, response_messages, token_usage)
+        try:
+            async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as http:
+                resp = await http.post(
+                    url,
+                    content=payload,
+                    headers={"Content-Type": "application/x-ndjson"},
+                )
+                if resp.status_code not in (200, 202):
+                    logger.warning(f"Broker final chunk returned {resp.status_code} for query {self.query_name}")
+        except Exception as e:
+            logger.warning(f"Failed to send final chunk to broker for query {self.query_name}: {e}")

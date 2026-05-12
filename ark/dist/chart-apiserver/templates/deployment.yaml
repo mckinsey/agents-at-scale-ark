@@ -36,17 +36,17 @@ spec:
             - name: ARK_APISERVER_PORT
               value: {{ .Values.apiserver.port | quote }}
             - name: ARK_POSTGRES_HOST
-              value: {{ .Values.postgresql.host | quote }}
+              value: {{ required "postgresql.host is required" .Values.postgresql.host | quote }}
             - name: ARK_POSTGRES_PORT
               value: {{ .Values.postgresql.port | quote }}
             - name: ARK_POSTGRES_DATABASE
               value: {{ .Values.postgresql.database | quote }}
             - name: ARK_POSTGRES_USER
-              value: {{ .Values.postgresql.user | quote }}
+              value: {{ required "postgresql.user is required" .Values.postgresql.user | quote }}
             - name: ARK_POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgresql.passwordSecretName }}
+                  name: {{ required "postgresql.passwordSecretName is required" .Values.postgresql.passwordSecretName }}
                   key: {{ .Values.postgresql.passwordSecretKey }}
             - name: ARK_POSTGRES_SSL_MODE
               value: {{ .Values.postgresql.sslMode | quote }}

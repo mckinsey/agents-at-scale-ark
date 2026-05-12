@@ -142,9 +142,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   }
 
   return (
-    <div className="min-h-0 flex flex-1 flex-col space-y-4">
+    <div className="flex flex-col space-y-4">
       {allConversations.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex min-h-[400px] items-center justify-center">
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No conversations yet</EmptyTitle>
@@ -153,8 +153,8 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       ) : (
         <div
-          className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
-          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px minmax(0, 1fr)' : '300px minmax(0, 1fr)' }}
+          className="grid min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
+          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
         >
           <div className="flex h-full flex-col overflow-hidden">
             <div className="flex items-center justify-between border-r border-border bg-muted p-4">

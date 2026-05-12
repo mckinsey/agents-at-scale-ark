@@ -36,6 +36,30 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
   const isWorkflowConversation = participantCount > 1;
 
   if (isWorkflowConversation) {
+    // For workflows, only show tool toggle if there are tool calls
+    if (toolCallCount > 0) {
+      return (
+        <div className="border-b border-r border-t border-border">
+          <div className="flex items-center gap-3 px-8 py-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Wrench className="size-4" />
+                <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-muted-foreground text-[10px] font-medium text-background">
+                  {toolCallCount}
+                </span>
+              </div>
+              <Switch
+                checked={showToolCalls}
+                onCheckedChange={onShowToolCallsChange}
+                className="scale-75"
+                aria-label="Toggle tool call visibility"
+              />
+              <span className="text-xs">Show tool calls</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
     // Don't render anything - workflows are not conversational
     return null;
   }
@@ -115,6 +139,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
               checked={showToolCalls}
               onCheckedChange={onShowToolCallsChange}
               className="scale-75"
+              aria-label="Toggle tool call visibility"
             />
             <span className="text-xs">Show tool calls</span>
           </div>
