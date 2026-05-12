@@ -130,9 +130,12 @@ class TestSessionsAndConversations:
         assert sessions.is_session_in_table(session_id, retries=5), \
             f"Agent session {session_id} should appear in the sessions list"
 
-        count = sessions.get_session_conversation_count_in_table(session_id)
-        assert count >= 1, \
-            f"Session {session_id} should show at least 1 conversation in the table"
+        sessions.navigate_to_session_detail(session_id)
+        sessions.wait_for_session_detail_page()
+        conv_count = sessions.get_conversation_count_from_header()
+        assert conv_count >= 1, \
+            f"Session {session_id} should show at least 1 conversation in the detail header, got {conv_count}"
+        sessions.navigate_back_to_sessions()
 
     # -------------------------------------------------------------------------
     # Team session: create + conversation flow (multi-agent)

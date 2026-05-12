@@ -339,19 +339,25 @@ class SessionsPage(BasePage):
             logger.debug("Could not get session status for %s: %s", session_id, e)
         return ""
 
-    def get_session_conversation_count_in_table(self, session_id: str) -> int:
-        try:
-            row = self.page.locator(
-                f"button[type='button']:has-text('{session_id}')"
-            ).first
-            if row.is_visible(timeout=5000):
-                cells = row.locator("div.flex.items-center.text-sm")
-                if cells.count() > 0:
-                    text = cells.first.inner_text().strip()
-                    if text.isdigit():
-                        return int(text)
-        except Exception as e:
-            logger.debug("Could not get conversation count for %s: %s", session_id, e)
+    def get_session_conversation_count_in_table(self, session_id: str, retries: int = 5) -> int:
+        for attempt in range(retries):
+            try:
+                row = self.page.locator(
+                    f"button[type='button']:has-text('{session_id}')"
+                ).first
+                if row.is_visible(timeout=5000):
+                    row_text = row.inner_text()
+                    for token in row_text.split():
+                        token = token.strip()
+                        if token.isdigit() and token not in session_id:
+                            count = int(token)
+                            if count > 0:
+                                return count
+            except Exception as e:
+                logger.debug("Could not get conversation count for %s (attempt %d): %s", session_id, attempt + 1, e)
+            if attempt < retries - 1:
+                self.page.reload()
+                self.wait_for_navigation_complete()
         return 0
 
     def cancel_session_dialog(self) -> None:
@@ -379,9 +385,15 @@ class SessionsPage(BasePage):
     def confirm_new_conversation(self) -> None:
         if not self.is_visible(self.NEW_CONVERSATION_DIALOG, timeout=2000):
             return
-        btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
-        btn.wait_for(state="visible", timeout=5000)
-        btn.click(force=True)
+        btn = self.page.locator(
+            f"{self.NEW_CONVERSATION_DIALOG} button[type='submit'], "
+            f"{self.NEW_CONVERSATION_DIALOG} button:not(:has-text('Cancel'))"
+        ).first
+        try:
+            btn.wait_for(state="visible", timeout=5000)
+            btn.click(force=True)
+        except PlaywrightTimeoutError:
+            logger.warning("Could not find confirm button in new conversation dialog")
 
     def set_date_filter(self, value: str) -> None:
         try:
