@@ -877,6 +877,26 @@ describe('SessionsSection', () => {
       });
     });
 
+    it('should show Argo Workflows link with correct URL format', async () => {
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: mockWorkflow,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        const argoLink = screen.getByRole('link', { name: /view in argo/i });
+        expect(argoLink).toHaveAttribute(
+          'href',
+          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def'
+        );
+        expect(argoLink).toHaveAttribute('target', '_blank');
+        expect(argoLink).toHaveAttribute('rel', 'noopener noreferrer');
+      });
+    });
+
     it('should display workflow duration in list and detail view', async () => {
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockWorkflow,

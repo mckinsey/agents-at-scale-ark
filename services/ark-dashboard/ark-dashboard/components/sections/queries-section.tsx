@@ -342,19 +342,17 @@ export const QueriesSection = forwardRef<
                             </EmptyHeader>
                             <EmptyContent>
                               <NamespacedLink href="/query/new">
-                                <Button asChild>
-                                  <div>
-                                    <Plus className="h-4 w-4" />
-                                    Create Query
-                                  </div>
+                                <Button>
+                                  <Plus className="h-4 w-4" />
+                                  Create Query
                                 </Button>
                               </NamespacedLink>
                             </EmptyContent>
-                            <Button variant="ghost" asChild className="text-muted-foreground" size="sm">
-                              <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/queries/" target="_blank">
+                            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/queries/" target="_blank">
+                              <Button variant="ghost" className="text-muted-foreground" size="sm">
                                 Learn More <ArrowUpRightIcon />
-                              </a>
-                            </Button>
+                              </Button>
+                            </a>
                           </Empty>
                         )}
                       </td>

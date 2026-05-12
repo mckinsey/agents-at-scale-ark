@@ -195,12 +195,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
           actions={
             isViewing ? (
               <div className="flex items-center gap-2">
-                <Button variant="outline" asChild>
-                  <NamespacedLink href="/teams">
+                <NamespacedLink href="/teams">
+                  <Button variant="outline">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </NamespacedLink>
-                </Button>
+                  </Button>
+                </NamespacedLink>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
                   disabled={saving || !hasChanges}>
@@ -220,12 +220,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
               </div>
             ) : isCreating ? (
               <div className="flex items-center gap-2">
-                <Button variant="outline" asChild>
-                  <NamespacedLink href="/teams">
+                <NamespacedLink href="/teams">
+                  <Button variant="outline">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </NamespacedLink>
-                </Button>
+                  </Button>
+                </NamespacedLink>
                 <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>
                   {saving ? (
                     <Spinner className="mr-2 h-4 w-4" />

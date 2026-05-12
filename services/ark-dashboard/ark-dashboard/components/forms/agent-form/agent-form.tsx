@@ -174,12 +174,12 @@ export function AgentForm({
           actions={
             isViewing ? (
               <div className="flex items-center gap-2">
-                <Button variant="outline" asChild>
-                  <NamespacedLink href="/agents">
+                <NamespacedLink href="/agents">
+                  <Button variant="outline">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </NamespacedLink>
-                </Button>
+                  </Button>
+                </NamespacedLink>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
                   disabled={saving || !hasChanges || readOnlyMode}>
@@ -194,12 +194,12 @@ export function AgentForm({
             ) : (
               <div className="flex items-center gap-2">
                 {cancelHref ? (
-                  <Button variant="outline" asChild>
-                    <NamespacedLink href={cancelHref}>
+                  <NamespacedLink href={cancelHref}>
+                    <Button variant="outline">
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       Cancel
-                    </NamespacedLink>
-                  </Button>
+                    </Button>
+                  </NamespacedLink>
                 ) : (
                   <Button variant="outline" onClick={onCancel}>
                     <ArrowLeft className="mr-2 h-4 w-4" />

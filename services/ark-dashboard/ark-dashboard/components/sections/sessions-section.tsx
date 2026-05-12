@@ -870,18 +870,17 @@ function SessionDetailView({
             {session.type === 'workflow' &&
               session.namespace &&
               session.uid && (
-                <Button variant="outline" size="sm" asChild>
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="View in Argo Workflows"
-                    className="gap-2">
+                <a
+                  href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View in Argo Workflows">
+                  <Button variant="outline" size="sm" className="gap-2">
                     <ExternalLink className="h-4 w-4" />
                     <span className="hidden sm:inline">View in Argo</span>
                     <span className="sm:hidden">Argo</span>
-                  </a>
-                </Button>
+                  </Button>
+                </a>
               )}
           </div>
         </div>
