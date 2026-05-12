@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Spinner } from '@/components/ui/spinner';
 import { useChatSession } from '@/lib/hooks';
 import {
   type ModelContextFile,
@@ -72,15 +73,41 @@ export function AgentFilePanel({
     loadStoredFiles(agentName),
   );
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    saveStoredFiles(agentName, files);
-  }, [agentName, files]);
-  const [uploading, setUploading] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState<string[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    saveStoredFiles(agentName, files);
+  }, [agentName, files]);
+
+  // Hydrate from the executor's per-agent index on mount / agent change.
+  // The executor returns the intersection of its index with OpenAI's current
+  // files, so cross-browser uploads show up and pruned files drop out.
+  useEffect(() => {
+    let cancelled = false;
+    modelContextFilesService
+      .list(agentName)
+      .then(server => {
+        if (cancelled) return;
+        setFiles(prev => {
+          const byId = new Map<string, ModelContextFile>();
+          for (const f of prev) byId.set(f.id, f);
+          for (const f of server) byId.set(f.id, f);
+          // Drop locally-cached entries the server no longer knows about.
+          const serverIds = new Set(server.map(f => f.id));
+          return Array.from(byId.values()).filter(f => serverIds.has(f.id));
+        });
+      })
+      .catch(() => {
+        /* network error — keep whatever's in localStorage */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentName]);
 
   const {
     messages,
@@ -94,8 +121,9 @@ export function AgentFilePanel({
 
   const uploadFiles = useCallback(
     async (fileList: FileList) => {
-      setUploading(true);
-      for (const file of Array.from(fileList)) {
+      const items = Array.from(fileList);
+      setPendingUploads(prev => [...prev, ...items.map(f => f.name)]);
+      for (const file of items) {
         try {
           const uploaded = await modelContextFilesService.upload(file, {
             agentName,
@@ -108,12 +136,21 @@ export function AgentFilePanel({
           );
         } catch {
           console.error(`Failed to upload ${file.name}`);
+        } finally {
+          setPendingUploads(prev => {
+            const idx = prev.indexOf(file.name);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next.splice(idx, 1);
+            return next;
+          });
         }
       }
-      setUploading(false);
     },
     [agentName],
   );
+
+  const uploading = pendingUploads.length > 0;
 
   const deleteFile = useCallback(
     async (fileId: string) => {
@@ -170,11 +207,19 @@ export function AgentFilePanel({
 
       <div className="flex-shrink-0 border-t">
         <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2">
-          {files.length === 0 && (
+          {files.length === 0 && pendingUploads.length === 0 && (
             <span className="text-muted-foreground text-xs">
               No files attached — drop here or use the upload button
             </span>
           )}
+          {pendingUploads.map((name, i) => (
+            <span
+              key={`pending-${i}-${name}`}
+              className="bg-muted text-muted-foreground inline-flex max-w-[16rem] items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-xs">
+              <Spinner size="sm" className="h-3 w-3" />
+              <span className="truncate">{name}</span>
+            </span>
+          ))}
           {files.length > 0 && (
             <>
               {files.map(f => {
