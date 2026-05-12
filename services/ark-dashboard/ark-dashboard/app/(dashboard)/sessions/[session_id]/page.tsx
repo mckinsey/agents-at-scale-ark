@@ -197,7 +197,7 @@ export default function SessionDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue={HISTORY_TAB} className="min-h-0 flex-1">
+      <Tabs defaultValue={HISTORY_TAB} className="flex flex-col">
         <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto gap-4">
           <TabsTrigger
             value={HISTORY_TAB}
@@ -213,7 +213,7 @@ export default function SessionDetailPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={HISTORY_TAB} className="min-h-0 flex flex-1 flex-col">
+        <TabsContent value={HISTORY_TAB} className="flex flex-col">
           <ConversationsTab
             sessionId={session_id}
             initialParticipant={memoizedInitialParticipant}
@@ -223,7 +223,7 @@ export default function SessionDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value={LOGS_TAB} className="min-h-0 flex flex-1 flex-col">
+        <TabsContent value={LOGS_TAB} className="flex flex-col">
           <LogsTab sessionId={session_id} />
         </TabsContent>
       </Tabs>
