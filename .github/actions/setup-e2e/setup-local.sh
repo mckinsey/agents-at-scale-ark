@@ -73,9 +73,23 @@ if ! helm list -n cert-manager | grep -q cert-manager; then
   helm upgrade --install cert-manager jetstack/cert-manager \
     --namespace cert-manager \
     --create-namespace \
-    --set crds.enabled=true
+    --set crds.enabled=true \
+    --set startupapicheck.enabled=false
 else
   echo "cert-manager already installed"
+fi
+
+# Wait for webhook and cainjector to be fully rolled out before proceeding.
+# The webhook must be running before any cert-manager resources (Issuer, Certificate)
+# can be created, otherwise Helm will get x509 errors calling the webhook TLS endpoint.
+kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+
+# Wait for cainjector to populate the webhook's CABundle field. Only needed on first
+# install — once the selfsigned-issuer exists it persists across re-deploys.
+if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
+  echo "Waiting for cert-manager webhook CABundle..."
+  until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
 fi
 
 echo "=== Installing Gateway API CRDs ==="
@@ -187,6 +201,12 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
 fi
 
 helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
+
+# Verify cert-manager issued the webhook certificate end-to-end. rollout status +
+# CABundle checks above confirm pods are running and the webhook config is patched,
+# but don't catch issuance failures (e.g. broken RBAC, controller errors). This
+# ensures the webhook is serving valid TLS before any further Helm calls.
+kubectl wait --for=condition=Ready certificate/serving-cert -n ark-system --timeout=60s
 
 helm upgrade --install ark-completions ./executors/completions/chart \
   --namespace ark-system \
