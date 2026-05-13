@@ -207,7 +207,7 @@ ark-api SHALL POST to `status.authorization.tokenEndpoint` with `grant_type=auth
 
 ### Requirement: Tokens are written to the Secret using the configured key names
 
-ark-api SHALL write the token endpoint response into the Secret named in `spec.authorization.tokenSecretRef.name` using the key names from the same `tokenSecretRef` (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). When `expires_in` is present and positive, ark-api SHALL write `expires_at = now + expires_in - 30s` (RFC 3339 UTC). ark-api SHALL omit any key whose value is empty or absent. A missing Secret SHALL be created; an existing Secret SHALL be patched. When ark-api creates or patches the Secret, it SHALL also set the label `ark.mckinsey.com/mcp-token-secret: "true"` on the Secret (consumed by `mcp-auth-dispatch-injection` for the controller's real-time Secret watch).
+ark-api SHALL write the token endpoint response into the Secret named in `spec.authorization.tokenSecretRef.name` using the key names from the same `tokenSecretRef` (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). When `expires_in` is present and positive, ark-api SHALL write `expires_at = now + expires_in - 30s` (RFC 3339 UTC). ark-api SHALL omit any key whose value is empty or absent. A missing Secret SHALL be created; an existing Secret SHALL be patched. When ark-api creates or patches the Secret, it SHALL also set the label `ark.mckinsey.com/mcp-token-secret: "true"` on the Secret. The label is forward-compatible: it has no functional authorization behaviour on its own, and its absence SHALL NOT prevent authentication — it exists so any future controller-side optimization (e.g. a real-time Secret watch) can filter token Secrets without inspecting their contents.
 
 #### Scenario: Token response carries access, refresh, and expires_in
 
@@ -235,8 +235,9 @@ ark-api SHALL write the token endpoint response into the Secret named in `spec.a
 
 #### Scenario: Successful exchange stamps the mcp-token-secret label
 
-- **WHEN** ark-api creates or patches the Secret
+- **WHEN** ark-api creates or patches the Secret on a successful exchange
 - **THEN** the resulting Secret SHALL carry the label `ark.mckinsey.com/mcp-token-secret: "true"`
+- **AND** removing or omitting the label SHALL NOT break authentication — it is a forward-compatible marker with no consumer on main today
 
 ### Requirement: Successful exchange annotates the MCPServer with caller identity
 
@@ -266,7 +267,7 @@ The annotations SHALL be replaced (not appended) on each successful exchange. Th
 1. The cache entry for `auth_id` is in the `authorized` terminal state (token exchange succeeded, Secret patched).
 2. The MCPServer's `status.authorization.state` has reconciled to `Authorized`.
 
-If only (1) holds, the endpoint SHALL return `state: pending` with a message indicating the controller is still reconciling. This is the "honest completion signal" PR #2065's loopback exit could not provide.
+If only (1) holds, the endpoint SHALL return `state: pending` with a message indicating the controller is still reconciling. This is the "honest completion signal" that ensures `ark mcp auth login` only exits success when the system as a whole is in the `Authorized` state.
 
 #### Scenario: Token exchange completes, controller has not yet reconciled
 

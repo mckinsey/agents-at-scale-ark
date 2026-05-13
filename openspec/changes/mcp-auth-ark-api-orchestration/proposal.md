@@ -1,17 +1,17 @@
 ## Why
 
-Stage 1 (`mcp-auth-token-injection`) reads tokens from a Secret and reaches `Authorized`, but leaves token *production* to the operator. The prior proposal (`ark-cli-mcp-auth`, PR #2065) addressed that by adding `ark mcp auth login` — a self-contained CLI that ran the entire OAuth dance against the IdP, bound a `127.0.0.1:<port>` loopback listener, exchanged the code in-process, and `kubectl patch`'d the Secret.
+Stage 1 (`mcp-auth-token-injection`) reads tokens from a Secret and reaches `Authorized`, but leaves token *production* to the operator. There is no built-in way to run the OAuth flow that mints those tokens, so operators today script DCR + PKCE + token exchange + Secret patch out of band, copy-paste tokens from another tool's UI, or run a one-off helper that binds a `127.0.0.1:<port>` loopback listener and `kubectl patch`'s the Secret directly.
 
-Review of PR #2065 surfaced four structural problems with that shape:
+Building OAuth ergonomics into Ark has four structural constraints worth designing for up front:
 
-1. **Duplication.** The dashboard needs the same flow. A browser cannot bind a useful loopback port, so a separate implementation would be required end-to-end (DCR, state verification, token exchange, CORS handling on browser→IdP token endpoints, Secret RBAC).
-2. **Port binding pain.** `--port`, "port already in use," IPv6 dual-stack listener requirements, and the SSH-tunnel recipe for jumphost operators all exist solely to support the loopback callback.
-3. **Inconsistent RBAC.** PR #2065's CLI patches Secrets with the operator's `kubeconfig` — different audience and different permissions than the controller's ServiceAccount. Cluster admins succeed; developers without `patch secrets` fail.
-4. **Honest completion signal.** The CLI exits when the token exchange returns 200, not when the controller has reconciled the Secret to `Authorized`. The user thinks they're done before the system is.
+1. **Two callers, one flow.** The CLI needs the flow today; the dashboard needs the same flow next. A browser cannot bind a useful loopback port, so a CLI-only implementation centred on a loopback listener cannot be reused — the dashboard would re-implement DCR, state verification, token exchange, CORS handling on browser→IdP token endpoints, and Secret RBAC end-to-end.
+2. **Port binding pain.** Any loopback-callback design pays the cost of `--port`, "port already in use," IPv6 dual-stack listener requirements, and an SSH-tunnel recipe for jumphost operators — all in service of a single browser redirect.
+3. **Inconsistent RBAC.** A CLI that patches Secrets via the operator's `kubeconfig` runs against a different audience and different permissions than the controller's ServiceAccount. Cluster admins succeed; developers without `patch secrets` fail.
+4. **Honest completion signal.** Exiting on a 200 from the token endpoint is not the same as exiting when the controller has reconciled the Secret to `Authorized`. The user thinks they're done before the system is.
 
-This change supersedes `ark-cli-mcp-auth` by moving DCR, state verification, token exchange, and Secret writes into ark-api, with the CLI reduced to "two HTTP calls plus a status poll." The same ark-api endpoint surface is the foundation a future dashboard MCP authorize flow will consume, but **no dashboard changes ship here** — that lands in a follow-up capability (see Non-Goals).
+This change adds DCR, PKCE, state verification, token exchange, and Secret writes to ark-api, with the CLI reduced to "two HTTP calls plus a status poll." The same ark-api endpoint surface is the foundation a future dashboard MCP authorize flow will consume, but **no dashboard changes ship here** — that lands in a follow-up capability (see Non-Goals).
 
-The CLI keeps the same operator-facing UX as PR #2065 (`ark mcp auth login <server>` / `ark mcp auth logout <server>`, same flags minus `--port`); the implementation underneath is now a thin client.
+The CLI gains `ark mcp auth login <server>` / `ark mcp auth logout <server>`; the implementation underneath is a thin client over the new endpoints.
 
 ## What Changes
 
@@ -34,7 +34,7 @@ Three new endpoints under `services/ark-api/`:
   - On `error` from the IdP, marks the cache entry as `failed` (with the OAuth error code in the message) so the CLI's poll surfaces it, and renders an HTML page with the error.
   - On `code`, POSTs to `status.authorization.tokenEndpoint` with `grant_type=authorization_code`, `code`, `redirect_uri`, `code_verifier`, and `resource=<MCP URL>`, authenticating via HTTP Basic with the cached `client_id` / `client_secret`.
   - Computes `expires_at = now + expires_in - 30s` (RFC 3339 UTC) when `expires_in` is positive.
-  - Patches the Secret named in `spec.authorization.tokenSecretRef.name` (creates if absent), honouring the configured `*Key` overrides. Stamps the Secret with the `ark.mckinsey.com/mcp-token-secret: "true"` label (`mcp-auth-dispatch-injection` consumer). Stamps the MCPServer with the `ark.mckinsey.com/mcp-auth-authorized-by` and `ark.mckinsey.com/mcp-auth-authorized-at` annotations (best-effort caller identity + RFC 3339 timestamp).
+  - Patches the Secret named in `spec.authorization.tokenSecretRef.name` (creates if absent), honouring the configured `*Key` overrides. Stamps the Secret with the `ark.mckinsey.com/mcp-token-secret: "true"` label as a forward-compatible marker (no consumer on main today; harmless if any future controller-side optimization wants to filter token Secrets). Stamps the MCPServer with the `ark.mckinsey.com/mcp-auth-authorized-by` and `ark.mckinsey.com/mcp-auth-authorized-at` annotations (best-effort caller identity + RFC 3339 timestamp).
   - Renders an HTML page saying "Authorization complete — you can close this window" on success.
 
 - **`GET /api/v1/mcp-servers/{name}/auth/status`** — caller-facing status poll.
@@ -74,10 +74,10 @@ Three new endpoints under `services/ark-api/`:
 
 ### Headless / SSH operators
 
-The loopback bridge from PR #2065 disappears in the common case:
+Two operator recipes cover the laptop / jumphost case, depending on whether ark-api is reachable from the operator's browser:
 
 - **Publicly-reachable ark-api ingress:** the laptop browser hits `https://ark.example.com/api/v1/mcp/auth/callback` directly. The CLI on the jumphost just polls `/auth/status`. **No SSH tunnel needed.**
-- **Air-gapped / private ark-api:** the operator port-forwards ark-api to the laptop (`kubectl port-forward svc/ark-api 8080:80`) and sets `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback`. The DCR registers the loopback URL (RFC 8252 §7.3 permits this). Same end-state as PR #2065's SSH recipe but with one fewer hop and a more conventional tool (`kubectl port-forward` vs. arbitrary loopback bridging).
+- **Air-gapped / private ark-api:** the operator port-forwards ark-api to the laptop (`kubectl port-forward svc/ark-api 8080:80`) and sets `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback`. The DCR registers the loopback URL (RFC 8252 §7.3 permits this).
 
 ### Authorized-by surface
 
@@ -98,10 +98,6 @@ These annotations surface the **shared-token limitation** (one Secret per MCPSer
 
 - `mcp-auth-token-injection`: unchanged contract. ark-api becomes an additional writer of the Secret named in `spec.authorization.tokenSecretRef`; the controller's read path is untouched. Stage 1's reconcile-side rollback on 401 is unchanged.
 
-### Superseded Capabilities
-
-- `ark-cli-mcp-auth` (PR #2065): the CLI surface (`ark mcp auth login` / `logout` + flags) is preserved as-is minus `--port`. The implementation underneath (loopback listener, in-process DCR + token exchange, `kubectl patch` from the CLI) is replaced by HTTP calls to ark-api.
-
 ## Impact
 
 - **Scope:**
@@ -111,8 +107,7 @@ These annotations surface the **shared-token limitation** (one Secret per MCPSer
   - `tools/ark-cli/src/commands/mcp/` — `auth.ts` (thin client), no `loopback.ts`, no `pkce.ts`.
   - `docs/content/` — operator docs for the new env vars and the simplified SSH recipe.
 - **CRD:** none. Consumes `spec.authorization.tokenSecretRef` and `status.authorization.*` unchanged.
-- **RBAC:** ark-api SA gains `get/list/watch/create/patch/update/delete` on Secrets within the namespaces it serves. The completions executor RBAC change from `mcp-auth-dispatch-injection` is unaffected.
-- **Behavioural break vs PR #2065:** an Ark install that has *already* shipped the PR #2065 CLI would lose the `--port` flag and the loopback callback. Since PR #2065 is unmerged at the time of this proposal, there is no observed-in-the-wild impact.
+- **RBAC:** ark-api SA gains `get/list/watch/create/patch/update/delete` on Secrets within the namespaces it serves. The controller-side RBAC from Stage 1 (read-only on Secrets) is unaffected.
 - **Security:**
   - Tokens never reach the CLI process or any future browser. The full set of token material flows IdP → ark-api → Secret and never traverses an external boundary.
   - PKCE verifier is generated and consumed entirely inside ark-api; it never appears on any HTTP boundary.
@@ -127,4 +122,4 @@ These annotations surface the **shared-token limitation** (one Secret per MCPSer
 - **Validating webhook for `spec.headers[Authorization]` vs `spec.authorization` clash** — Stage 2.
 - **Multi-replica ark-api with shared in-flight cache** — the proposal specifies an opaque cache contract (TTL'd, addressed by `auth_id` and `state`) without prescribing storage. A single-replica deployment trivially satisfies the contract; HA-mode deployments will need either sticky sessions on the ingress, a shared backing store, or a persisted-cache implementation. Treated here as an operational consideration, not a feature.
 - **RFC 8628 device authorization grant** — out of scope. With status polling already in place, adding a device-flow mode to `auth/start` is a small additive change but it requires IdP support that most MCP authorization servers don't yet expose.
-- **Chainsaw e2e** — blocked on TLS-capable in-cluster mock MCP, same as PR #2065.
+- **Chainsaw e2e** — blocked on TLS-capable in-cluster mock MCP.

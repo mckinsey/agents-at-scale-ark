@@ -22,7 +22,7 @@
 
 - [ ] 4.1 `services/ark-api/ark-api/src/ark_api/api/v1/mcp_auth.py` — register the four routes
 - [ ] 4.2 `POST /api/v1/mcp-servers/{name}/auth/start` — preflight against `status.authorization.state`, DCR-cache-or-fresh, PKCE generation, cache entry creation, URL assembly with `resource` indicator (RFC 8707)
-- [ ] 4.3 `GET /api/v1/mcp/auth/callback` — state lookup, delete-on-lookup, token exchange, Secret patch (create-if-absent), `mcp-token-secret` label stamp, MCPServer annotations (`authorized-by`, `authorized-at`), success/failure HTML pages
+- [ ] 4.3 `GET /api/v1/mcp/auth/callback` — state lookup, delete-on-lookup, token exchange, Secret patch (create-if-absent), `mcp-token-secret` label stamp (forward-compatible), MCPServer annotations (`authorized-by`, `authorized-at`), success/failure HTML pages
 - [ ] 4.4 `GET /api/v1/mcp-servers/{name}/auth/status` — terminal state requires both cache `authorized` AND MCPServer `status.authorization.state == Authorized`
 - [ ] 4.5 `POST /api/v1/mcp-servers/{name}/auth/logout` — default / `keep_client` / `delete_secret` matrix; mutual-exclusion check; idempotent missing Secret; 404 missing MCPServer; annotation removal
 - [ ] 4.6 Plug the new module into the FastAPI router registration
@@ -49,7 +49,7 @@
 - [ ] 7.5 `auth/callback` — unknown state → 400 HTML; known state succeeds; second hit for same code → 400 (replay protection via delete-on-lookup)
 - [ ] 7.6 `auth/callback` — `error=access_denied` → 400 HTML, cache entry transitions to `failed`, Secret unchanged
 - [ ] 7.7 `auth/callback` — token-exchange 400 transitions cache to `failed` with the error string, Secret unchanged
-- [ ] 7.8 `auth/callback` — successful exchange creates the Secret if absent; patches with configured `*Key` overrides; stamps `mcp-token-secret` label; stamps MCPServer annotations
+- [ ] 7.8 `auth/callback` — successful exchange creates the Secret if absent; patches with configured `*Key` overrides; stamps the `mcp-token-secret` label on the Secret; stamps MCPServer annotations
 - [ ] 7.9 `auth/callback` — `expires_in` missing or ≤ 0 omits `expires_at` key and emits a warning
 - [ ] 7.10 `auth/status` — pending while cache is in-flight; pending when cache is `authorized` but MCPServer status hasn't reconciled; authorized only when both align; unknown `auth_id` returns `expired` (not 404)
 - [ ] 7.11 `auth/logout` — default empties five keys; `keep_client` preserves DCR creds; `delete_secret` removes the resource; mutual exclusion returns 400; missing Secret returns 200 `{noop:true}`; missing MCPServer returns 404; annotations are removed on every success path
@@ -87,10 +87,5 @@
 ## 11. Documentation
 
 - [ ] 11.1 `docs/content/` — operator guide for `ARK_API_PUBLIC_CALLBACK_URL` (public ingress + air-gapped port-forward recipes)
-- [ ] 11.2 `docs/content/` — `ark mcp auth login` / `logout` CLI reference (drop the `--port` flag and the loopback-bridging recipe from the PR #2065 draft)
+- [ ] 11.2 `docs/content/` — `ark mcp auth login` / `logout` CLI reference
 - [ ] 11.3 Note in the MCP authorization overview that token writes go through ark-api and surface the `authorized-by` annotation as the visible side-effect; link to the (future) per-user-tokens capability for the multi-user limitation
-
-## 12. Carry-over from PR #2065
-
-- [ ] 12.1 Mark `openspec/changes/ark-cli-mcp-auth/` as superseded by this change in its `proposal.md` Non-Goals or via an `archive/` move when this change lands (decision deferred to merge time)
-- [ ] 12.2 Confirm with PR #2065's author that the loopback-listener code on the existing feature branch is abandoned rather than carried forward into this implementation
