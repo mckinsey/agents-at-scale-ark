@@ -3,6 +3,10 @@
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
+  annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: selfsigned-issuer

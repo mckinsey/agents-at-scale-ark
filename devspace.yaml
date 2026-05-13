@@ -144,8 +144,10 @@ pipelines:
       fi
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
       kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
-      echo "Waiting for cert-manager webhook CABundle..."
-      until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
+        echo "Waiting for cert-manager webhook CABundle..."
+        until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      fi
     fi
 
     if [ -n "${GATEWAY_PID}" ]; then wait ${GATEWAY_PID}; fi
@@ -187,8 +189,10 @@ pipelines:
       fi
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
       kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
-      echo "Waiting for cert-manager webhook CABundle..."
-      until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
+        echo "Waiting for cert-manager webhook CABundle..."
+        until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      fi
     fi
 
     if [ -n "${GATEWAY_PID}" ]; then wait ${GATEWAY_PID}; fi
