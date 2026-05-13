@@ -170,7 +170,9 @@ pipelines:
     run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=deploy
 
     echo ""
-    echo "All services deployed. Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
+    echo "All services deployed. Waiting for pods to be ready..."
+    kubectl wait pod -l app -n "${DEVSPACE_NAMESPACE}" --for=condition=Ready --timeout=120s 2>/dev/null || true
+    echo "Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
     echo ""
     kubectl logs -f -n "${DEVSPACE_NAMESPACE}" --all-containers --prefix --max-log-requests=10 -l app
   dev: |-
