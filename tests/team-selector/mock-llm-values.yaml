@@ -22,16 +22,16 @@ config:
       content: '"Unrecognised agent"'
 
   - path: "/v1/chat/completions"
-    match: "contains(body.messages[-1].content || '', 'Select the next participant')"
+    match: "contains(body.messages[-1].content || '', 'Select the next speaker')"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":"researcher"},"finish_reason":"stop"}],"usage":{"prompt_tokens":60,"completion_tokens":1,"total_tokens":61}}'
+      content: '{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_select_researcher","type":"function","function":{"name":"select-next-speaker","arguments":"{\"name\":\"researcher\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":60,"completion_tokens":3,"total_tokens":63}}'
 
   - path: "/v1/chat/completions"
     match: "contains(body.messages[1].content || '', 'RESEARCH:')"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":"analyst"},"finish_reason":"stop"}],"usage":{"prompt_tokens":80,"completion_tokens":1,"total_tokens":81}}'
+      content: '{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_select_analyst","type":"function","function":{"name":"select-next-speaker","arguments":"{\"name\":\"analyst\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":80,"completion_tokens":3,"total_tokens":83}}'
 
   - path: "/v1/chat/completions"
     match: "contains(body.messages[1].content || '', 'ANALYSIS:')"
