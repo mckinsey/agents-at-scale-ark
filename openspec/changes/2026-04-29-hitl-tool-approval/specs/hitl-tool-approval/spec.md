@@ -45,52 +45,55 @@ The `AgentTool` type SHALL support an `approval` block for configuring per-tool 
 - **THEN** the webhook SHALL accept the resource
 - **AND** tools SHALL execute immediately without approval
 
-### Requirement: Query supports interaction-required phase
+### Requirement: Query supports input-required phase
 
-The Query CRD status phase SHALL support `interaction-required` as a valid value, indicating the query is paused awaiting human interaction (approval, input, selection, or confirmation) for a tool call.
+The Query CRD status phase SHALL support `input-required` as a valid value, indicating the query is paused awaiting human input (approval, confirmation, selection, or text input) for a tool call.
 
-#### Scenario: Query enters interaction-required phase
+#### Scenario: Query enters input-required phase
 
-- **WHEN** a Query targets an Agent with an interaction-required tool
+- **WHEN** a Query targets an Agent with an approval-required tool
 - **AND** the model returns a tool call for that tool
-- **THEN** the Query status phase SHALL be set to `interaction-required`
-- **AND** a ToolInteraction resource SHALL be created with a unique name (ti-{query-name}-{timestamp})
+- **THEN** the Query status phase SHALL be set to `input-required`
+- **AND** an A2ATask resource SHALL be created with `phase: input-required`
 
 #### Scenario: Query resumes after approval
 
-- **WHEN** a Query is in `interaction-required` phase
-- **AND** the corresponding ToolInteraction is completed (approved/confirmed)
+- **WHEN** a Query is in `input-required` phase
+- **AND** the corresponding A2ATask is completed (approved)
 - **THEN** the Query status phase SHALL transition to `running`
 - **AND** the tool SHALL be executed
 
 #### Scenario: Query fails after rejection
 
-- **WHEN** a Query is in `interaction-required` phase
-- **AND** the corresponding ToolInteraction is rejected
+- **WHEN** a Query is in `input-required` phase
+- **AND** the corresponding A2ATask is rejected
 - **THEN** the Query status phase SHALL transition to `error`
 - **AND** the Query response SHALL indicate the tool call was rejected
 
-### Requirement: ToolInteraction CRD tracks pending interactions
+### Requirement: A2ATask tracks pending approvals
 
-The system SHALL provide a `ToolInteraction` CRD to track pending human-in-the-loop interactions with full audit trail. ToolInteraction supports four types: approval, input, selection, and confirmation.
+The system SHALL use the existing `A2ATask` CRD to track pending tool approvals with full audit trail.
 
-#### Scenario: ToolInteraction created for interaction-required tool
+#### Scenario: A2ATask created for approval-required tool
 
-- **WHEN** a Query triggers a tool call that requires human interaction
-- **THEN** a ToolInteraction resource SHALL be created with a unique name (ti-{query-name}-{timestamp}) containing:
+- **WHEN** a Query triggers a tool call that requires approval
+- **THEN** an A2ATask resource SHALL be created with a unique name containing:
   - `spec.queryRef` referencing the Query
-  - `spec.type` indicating the interaction type (approval, input, selection, confirmation)
-  - `spec.toolCalls` array containing tool call details
-  - `spec.timeout` from the tool's interaction config
-  - `spec.approval.approvers` from the tool's approval config (for approval type)
-  - `spec.executionContext` containing serialized conversation state
-  - `status.phase` set to `pending`
+  - `spec.agentRef` referencing the Agent
+  - `spec.contextId` referencing the conversation in memory service
+  - `spec.parameters.interactionType` set to "tool-approval"
+  - `spec.parameters.toolCalls` containing tool call details (JSON string)
+  - `spec.parameters.timeout` from the tool's approval config
+  - `spec.parameters.onTimeout` from the tool's approval config
+  - `spec.parameters.pendingToolCallIndex` indicating resume point
+  - `spec.parameters.completedToolResults` containing results since last model call
+  - `status.phase` set to `input-required`
   - `status.requestedAt` set to current timestamp
 
-#### Scenario: ToolInteraction contains tool context for informed decisions
+#### Scenario: A2ATask contains tool context for informed decisions
 
-- **WHEN** a ToolInteraction is created
-- **THEN** each entry in `spec.toolCalls` SHALL contain:
+- **WHEN** an A2ATask is created for approval
+- **THEN** `spec.parameters.toolCalls` (parsed from JSON) SHALL contain:
   - `id` — the tool call ID
   - `name` — the tool name
   - `type` — the tool type (http, mcp, etc.)
@@ -99,58 +102,58 @@ The system SHALL provide a `ToolInteraction` CRD to track pending human-in-the-l
   - `annotations` — tool annotations (destructiveHint, readOnlyHint, etc.)
   - `agentReasoning` — the model's explanation for the tool call
 
-#### Scenario: ToolInteraction contains execution context for resume
+#### Scenario: A2ATask contains minimal execution context for resume
 
-- **WHEN** a ToolInteraction is created
-- **THEN** `spec.executionContext` SHALL contain:
-  - `conversationHistory` — serialized message array
+- **WHEN** an A2ATask is created for approval
+- **THEN** `spec.contextId` SHALL reference the conversation ID in memory service
+- **AND** `spec.parameters` SHALL contain:
   - `pendingToolCallIndex` — index of first pending tool
-  - `completedToolResults` — results of already-executed tools
-  - `agentName` and `agentNamespace` — agent identity
+  - `completedToolResults` — results of already-executed tools (since last model call)
+- **AND** conversation history SHALL be fetched from memory service on resume (NOT stored in CRD)
 
-#### Scenario: ToolInteraction transitions to completed
+#### Scenario: A2ATask transitions to completed
 
-- **WHEN** a ToolInteraction is in `pending` phase
-- **AND** a response is submitted (approval action, input data, selection, or confirmation)
+- **WHEN** an A2ATask is in `input-required` phase
+- **AND** an approval response is submitted
 - **THEN** `status.phase` SHALL be set to `completed`
-- **AND** `status.response.respondedAt` SHALL be set to the current timestamp
-- **AND** `status.response.respondedBy` SHALL be set to the user identity
-- **AND** `status.responseDuration` SHALL be set to the time since `requestedAt`
+- **AND** `status.completionTime` SHALL be set to the current timestamp
+- **AND** approval decision SHALL be recorded in task parameters or status
 
-#### Scenario: ToolInteraction transitions to rejected
+#### Scenario: A2ATask transitions to rejected
 
-- **WHEN** a ToolInteraction is in `pending` phase
-- **AND** a rejection response is submitted (action: rejected for approval, confirmed: false for confirmation)
-- **THEN** `status.phase` SHALL be set to `rejected`
-
-#### Scenario: ToolInteraction expires on timeout with reject policy
-
-- **WHEN** a ToolInteraction is in `pending` phase
-- **AND** `spec.timeout` duration elapses without a response
-- **AND** `spec.onTimeout` is `reject`
-- **THEN** `status.phase` SHALL be set to `expired`
+- **WHEN** an A2ATask is in `input-required` phase
+- **AND** a rejection response is submitted
+- **THEN** `status.phase` SHALL be set to `failed`
 - **AND** the Query SHALL transition to `error` phase
 
-#### Scenario: ToolInteraction proceeds on timeout with proceed policy
+#### Scenario: A2ATask expires on timeout with reject policy
 
-- **WHEN** a ToolInteraction is in `pending` phase
-- **AND** `spec.timeout` duration elapses without a response
-- **AND** `spec.onTimeout` is `proceed`
+- **WHEN** an A2ATask is in `input-required` phase
+- **AND** `spec.parameters.timeout` duration elapses without a response
+- **AND** `spec.parameters.onTimeout` is `reject`
+- **THEN** `status.phase` SHALL be set to `failed`
+- **AND** the Query SHALL transition to `error` phase
+
+#### Scenario: A2ATask proceeds on timeout with proceed policy
+
+- **WHEN** an A2ATask is in `input-required` phase
+- **AND** `spec.parameters.timeout` duration elapses without a response
+- **AND** `spec.parameters.onTimeout` is `proceed`
 - **THEN** `status.phase` SHALL be set to `completed`
 - **AND** the tool SHALL be executed
 
-#### Scenario: ToolInteraction deleted with Query
+#### Scenario: A2ATask deleted with Query
 
 - **WHEN** a Query is deleted
-- **AND** ToolInteraction resources exist with that Query as owner
-- **THEN** the ToolInteraction resources SHALL be deleted (via owner reference)
+- **AND** A2ATask resources exist with that Query as owner
+- **THEN** the A2ATask resources SHALL be deleted (via owner reference)
 
 #### Scenario: Response submitted during timeout expiration (race condition)
 
-- **WHEN** a ToolInteraction is in `pending` phase
+- **WHEN** an A2ATask is in `input-required` phase
 - **AND** a response is submitted at the same moment timeout expires
 - **THEN** the submitted response SHALL take precedence
-- **AND** `status.phase` SHALL be set based on the response (not `expired`)
+- **AND** `status.phase` SHALL be set based on the response (not `failed`)
 
 ### Requirement: Completions executor checks approval policy with O(1) lookup
 
@@ -160,7 +163,7 @@ The completions executor SHALL check approval requirements before executing each
 
 - **WHEN** the model returns a tool call for a tool without `approval` config
 - **THEN** the executor SHALL execute the tool immediately
-- **AND** no ToolApprovalRequest SHALL be created
+- **AND** no A2ATask SHALL be created
 
 #### Scenario: Tool with approval.required: false executes immediately
 
@@ -171,8 +174,8 @@ The completions executor SHALL check approval requirements before executing each
 
 - **WHEN** the model returns a tool call for a tool with `approval.required: true`
 - **THEN** the executor SHALL NOT execute the tool
-- **AND** the executor SHALL return an ApprovalRequiredError with full execution context
-- **AND** the Query SHALL enter `approval-required` phase
+- **AND** the executor SHALL return an ApprovalRequiredError with minimal execution context
+- **AND** the Query SHALL enter `input-required` phase
 
 #### Scenario: Multiple tools with mixed approval requirements
 
@@ -190,141 +193,124 @@ The completions executor SHALL check approval requirements before executing each
 
 ### Requirement: Batch approval for multiple tool calls
 
-The system SHALL support batching multiple approval-required tool calls into a single ToolApprovalRequest.
+The system SHALL support batching multiple approval-required tool calls into a single A2ATask.
 
-#### Scenario: Multiple approval-required tools batched into single request
+#### Scenario: Multiple approval-required tools batched into single task
 
 - **WHEN** the model returns multiple tool calls in one response
 - **AND** multiple tools require approval
-- **THEN** a single ToolApprovalRequest SHALL be created
-- **AND** `spec.toolCalls` SHALL contain all approval-required tools
+- **THEN** a single A2ATask SHALL be created
+- **AND** `spec.parameters.toolCalls` SHALL contain all approval-required tools
 
 #### Scenario: Batch approval approves all tools
 
-- **WHEN** a ToolApprovalRequest with multiple `toolCalls` is approved
+- **WHEN** an A2ATask with multiple tool calls is approved
 - **THEN** all tools in the batch SHALL be executed
 
 #### Scenario: Batch rejection rejects all tools
 
-- **WHEN** a ToolApprovalRequest with multiple `toolCalls` is rejected
+- **WHEN** an A2ATask with multiple tool calls is rejected
 - **THEN** no tools in the batch SHALL be executed
 - **AND** rejection message SHALL be returned for all tools
 
-### Requirement: Authorization controls for interaction response submission
+### Requirement: Authorization controls for approval response submission
 
-The system SHALL enforce authorization checks when interaction responses are submitted.
+The system SHALL enforce authorization checks when approval responses are submitted.
 
-#### Scenario: Response by authorized role succeeds
+#### Scenario: Response by user with RBAC permission succeeds (MVP)
 
-- **WHEN** a ToolInteraction has `spec.approval.approvers: [{role: admin}]`
-- **AND** response is submitted by a user with admin role
-- **THEN** the response SHALL be accepted
-
-#### Scenario: Response by authorized user succeeds
-
-- **WHEN** a ToolInteraction has `spec.approval.approvers: [{user: ops@example.com}]`
-- **AND** response is submitted by ops@example.com
-- **THEN** the response SHALL be accepted
-
-#### Scenario: Response by authorized group succeeds
-
-- **WHEN** a ToolInteraction has `spec.approval.approvers: [{group: platform-admins}]`
-- **AND** response is submitted by a user in the platform-admins group
+- **WHEN** an A2ATask is in `input-required` phase for approval
+- **AND** response is submitted by a user with A2ATask update permission (RBAC)
 - **THEN** the response SHALL be accepted
 
 #### Scenario: Response by unauthorized user rejected
 
-- **WHEN** a ToolInteraction has `spec.approval.approvers: [{role: admin}]`
-- **AND** response is submitted by a user WITHOUT admin role
+- **WHEN** an A2ATask is in `input-required` phase for approval
+- **AND** response is submitted by a user WITHOUT A2ATask update permission
 - **THEN** the API SHALL return HTTP 403 Forbidden
-
-#### Scenario: Response without approvers list allows any authorized user
-
-- **WHEN** a ToolInteraction has no `spec.approval.approvers` field
-- **AND** response is submitted by a user with ToolInteraction update permission
-- **THEN** the response SHALL be accepted
-
-#### Scenario: Rejection without required reason rejected
-
-- **WHEN** a ToolInteraction has `spec.approval.reasonRequired: true`
-- **AND** rejection is submitted without a reason
-- **THEN** the API SHALL return HTTP 400 Bad Request
 
 #### Scenario: Duplicate response submission rejected
 
-- **WHEN** a ToolInteraction already has a `status.response` set
+- **WHEN** an A2ATask is no longer in `input-required` phase
 - **AND** another response is submitted
 - **THEN** the API SHALL return HTTP 409 Conflict
 
-### Requirement: Event streaming emits interaction events
+**Phase 2 (deferred):**
+- Fine-grained `spec.approval.approvers` field (role, user, group matching)
+- `spec.approval.reasonRequired` validation
 
-The system SHALL emit real-time events when human interaction is required and when responses are received.
+### Requirement: Event streaming emits approval events
 
-#### Scenario: Interaction request event emitted
+The system SHALL emit real-time events when approval is required and when responses are received.
 
-- **WHEN** a Query enters `interaction-required` phase
-- **THEN** a `ToolInteraction` event SHALL be streamed to connected clients
+#### Scenario: Approval request event emitted
+
+- **WHEN** a Query enters `input-required` phase
+- **THEN** a `ToolApprovalRequest` event SHALL be streamed to connected clients
 - **AND** the event SHALL contain tool call details (name, arguments, description, annotations, timeout)
 
-#### Scenario: Interaction response event emitted
+#### Scenario: Approval response event emitted
 
-- **WHEN** a ToolInteraction receives a response (approved, rejected, input provided, etc.)
-- **THEN** a `ToolInteractionResponse` event SHALL be streamed to connected clients
+- **WHEN** an A2ATask receives an approval response (approved or rejected)
+- **THEN** a `ToolApprovalResponse` event SHALL be streamed to connected clients
 - **AND** the event SHALL contain the response details and duration
 
-### Requirement: API supports interaction response submission with conflict detection
+### Requirement: API supports approval response submission with conflict detection
 
-The Ark API SHALL provide endpoints for submitting interaction responses with conflict detection.
+The Ark API SHALL provide endpoints for submitting approval responses with conflict detection.
 
 #### Scenario: Submit approval response via API
 
-- **WHEN** a POST request is made to `/api/v1/tool-approvals/{name}/decision`
-- **AND** the request body contains `{"action": "approved"}`
-- **AND** the ToolInteraction is in `pending` phase
-- **THEN** the ToolInteraction SHALL be updated with the approval response
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
+- **AND** the request body contains `{"action": "approved", "toolCallId": "call_xyz"}`
+- **AND** the A2ATask is in `input-required` phase
+- **THEN** the A2ATask SHALL be updated with the approval response
+- **AND** the Query SHALL resume execution
 - **AND** the response SHALL contain the updated status
 
-#### Scenario: Submit rejection response with reason via API
+#### Scenario: Submit rejection response via API
 
-- **WHEN** a POST request is made to `/api/v1/tool-approvals/{name}/decision`
-- **AND** the request body contains `{"action": "rejected", "reason": "..."}`
-- **THEN** the ToolInteraction SHALL be updated with the rejection
-- **AND** the reason SHALL be recorded in `status.response.approval.reason`
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
+- **AND** the request body contains `{"action": "rejected", "toolCallId": "call_xyz"}`
+- **THEN** the A2ATask SHALL be updated with the rejection
+- **AND** the Query SHALL transition to `error` phase
 
 #### Scenario: Response for wrong phase rejected
 
-- **WHEN** a POST request is made to `/api/v1/tool-approvals/{name}/decision`
-- **AND** the ToolInteraction is NOT in `pending` phase
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
+- **AND** the A2ATask is NOT in `input-required` phase
 - **THEN** the API SHALL return HTTP 409 Conflict
-- **AND** the response SHALL indicate the interaction is not pending
+- **AND** the response SHALL indicate the task is not awaiting input
 
 #### Scenario: Duplicate response submission rejected
 
-- **WHEN** a POST request is made to `/api/v1/tool-approvals/{name}/decision`
-- **AND** the ToolInteraction already has a `status.response` set
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
+- **AND** the A2ATask has already been completed or failed
 - **THEN** the API SHALL return HTTP 409 Conflict
 - **AND** the response SHALL indicate a response has already been submitted
 
-### Requirement: A2A protocol supports tool-interaction-required state
+### Requirement: A2A protocol reuses input-required state for approval
 
-The A2A protocol SHALL support `tool-interaction-required` as a task state for external executor HITL support.
+The A2A protocol SHALL use existing `input-required` task state for tool approval (no protocol changes needed).
 
-#### Scenario: External executor signals interaction required
+#### Scenario: External executor signals approval required
 
-- **WHEN** an external executor (via A2A) returns task state `tool-interaction-required`
-- **THEN** the A2ATask status phase SHALL be set to `tool-interaction-required`
-- **AND** the parent Query phase SHALL be set to `interaction-required`
+- **WHEN** an external executor (via A2A) returns task state `input-required` with approval data
+- **THEN** the A2ATask status phase SHALL be set to `input-required`
+- **AND** the parent Query phase SHALL be set to `input-required`
 
-#### Scenario: A2A interaction request includes callback URL
+#### Scenario: A2A approval request includes callback URL
 
-- **WHEN** an external executor signals `tool-interaction-required`
+- **WHEN** an external executor signals `input-required` for approval
 - **THEN** the A2A message SHALL include a `callbackUrl` for response delivery
+- **AND** the message MIME type SHALL be `application/vnd.ark.tool-approval-request+json`
 
-#### Scenario: A2A task resumes after response via callback
+#### Scenario: A2A task resumes after approval via callback
 
-- **WHEN** an A2ATask is in `tool-interaction-required` phase
-- **AND** a response is submitted
+- **WHEN** an A2ATask is in `input-required` phase
+- **AND** an approval response is submitted
 - **THEN** the controller SHALL POST the response to the executor's `callbackUrl`
+- **AND** the executor SHALL fetch conversation history from memory service
 - **AND** the A2ATask SHALL resume execution
 
 #### Scenario: A2A callback URL validated for SSRF
@@ -334,44 +320,49 @@ The A2A protocol SHALL support `tool-interaction-required` as a task state for e
 - **THEN** the controller SHALL reject the callback URL
 - **AND** the A2ATask SHALL fail with a security error
 
-### Requirement: Execution context size is validated
+### Requirement: Execution context fetched from memory service
 
-The system SHALL validate that execution context does not exceed safe storage limits.
+The system SHALL fetch conversation history from memory service on resume, not store it in CRD.
 
-#### Scenario: Large execution context rejected
+#### Scenario: Resume fetches conversation from memory service
 
-- **WHEN** a ToolInteraction would be created with `executionContext` exceeding size threshold
-- **THEN** the system SHALL implement conversation truncation
-- **OR** the system SHALL store context reference to external storage
-- **AND** the ToolInteraction SHALL not exceed etcd's per-object size limit
+- **WHEN** an A2ATask is approved and executor resumes
+- **THEN** the executor SHALL call `GET /messages?conversation_id={contextId}` to fetch history
+- **AND** the executor SHALL apply `completedToolResults` from A2ATask parameters
+- **AND** the executor SHALL continue execution from `pendingToolCallIndex`
+
+#### Scenario: Memory service unavailable on resume
+
+- **WHEN** an A2ATask is approved and executor attempts to resume
+- **AND** the memory service is unavailable
+- **THEN** the Query SHALL transition to `error` phase
+- **AND** the error message SHALL indicate memory service unavailability
 
 ## MODIFIED Requirements
 
 ### Requirement: Query phase enum extended
 
-The Query CRD `status.phase` enum SHALL be extended from `pending|running|error|done|canceled` to `pending|running|interaction-required|error|done|canceled`.
+The Query CRD `status.phase` enum SHALL be extended from `pending|running|error|done|canceled` to `pending|running|input-required|error|done|canceled`.
 
-### Requirement: A2ATask phase enum extended
+### Requirement: A2ATask reused for approval tracking
 
-The A2ATask CRD `status.phase` enum SHALL be extended to include `tool-interaction-required` alongside existing `input-required` and `auth-required`.
+The existing A2ATask CRD SHALL be used to track tool approvals via `spec.parameters` with no schema changes.
 
-### Requirement: Audit trail includes timing and client context
+#### Scenario: A2ATask parameters store approval context
 
-The ToolInteraction status SHALL include audit information beyond basic response data.
+- **WHEN** an A2ATask is created for approval
+- **THEN** `spec.parameters.interactionType` SHALL be set to "tool-approval"
+- **AND** `spec.parameters.toolCalls` SHALL contain tool call details (JSON)
+- **AND** `spec.parameters.pendingToolCallIndex` SHALL indicate resume point
+- **AND** `spec.parameters.completedToolResults` SHALL contain tool results (JSON)
 
-#### Scenario: Audit trail includes request timestamp
+### Requirement: Completions executor fetches conversation history on resume
 
-- **WHEN** a ToolInteraction is created
-- **THEN** `status.requestedAt` SHALL be set to the creation timestamp
+The completions executor SHALL fetch conversation history from memory service on resume, not from CRD.
 
-#### Scenario: Audit trail includes response duration
+#### Scenario: Executor resume uses memory service
 
-- **WHEN** a ToolInteraction receives a response
-- **THEN** `status.responseDuration` SHALL be set to the time between `requestedAt` and `respondedAt`
-
-#### Scenario: Audit trail includes client context
-
-- **WHEN** an interaction response is submitted
-- **THEN** `status.response.clientContext` SHALL include:
-  - `ipAddress` — the client IP address
-  - `userAgent` — the client user agent string
+- **WHEN** the executor resumes after approval
+- **THEN** it SHALL call memory service `GET /messages?conversation_id={contextId}`
+- **AND** it SHALL NOT deserialize conversation history from A2ATask
+- **AND** it SHALL apply tool results from `spec.parameters.completedToolResults`

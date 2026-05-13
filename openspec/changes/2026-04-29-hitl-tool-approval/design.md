@@ -3,7 +3,9 @@
 The agent execution loop in `ark/executors/completions/agent.go` (lines 181-208) runs a tight loop: model completion returns tool calls, `executeToolCalls()` executes them immediately, results feed back to the model. No approval mechanism exists.
 
 Existing infrastructure to leverage:
-- **A2A protocol** has `input-required` and `auth-required` phases (used for external A2A task delegation)
+- **A2A protocol** has `input-required` and `auth-required` phases (used for external A2A task delegation) — reuse for tool approval
+- **A2ATask CRD** already exists for tracking A2A interactions with `contextId` linking to conversations
+- **Memory service** (ark-broker) stores conversation history indexed by `conversationId` — no need to serialize into CRD
 - **Event streaming** via ark-broker delivers real-time chunks to clients
 - **Tool annotations** (`DestructiveHint`, `ReadOnlyHint`) exist but are informational only
 - **Query CRD** has phases `pending → running → error/done/canceled`
@@ -15,152 +17,175 @@ Industry patterns researched:
 ## Goals / Non-Goals
 
 **Goals:**
-- Per-tool approval configuration: mark specific tools as requiring human approval before execution
-- Query pause/resume: queries can enter an `approval-required` state and resume after approval
-- Audit trail: record approval decisions for compliance
-- Real-time UX: clients receive immediate notification when approval is needed
-- Backwards compatibility: agents without HITL config continue executing tools immediately
+- Per-tool interaction configuration: mark specific tools as requiring human input before execution
+- Query pause/resume: queries can enter `input-required` state and resume after human response
+- Generic pattern: support approval as first use case, extensible to confirmation, input, selection
+- Audit trail: record human decisions for compliance
+- Real-time UX: clients receive immediate notification when input is needed
+- Backwards compatibility: agents without interaction config continue executing tools immediately
 - Cross-executor support: pattern works for both built-in completions executor and external execution engines
 
 **Non-Goals:**
-- Automated approval classifiers (like Claude Code's auto-mode) — can be added later
-- Complex approval policies (multi-approver, escalation chains) — start with simple approve/reject
-- Approval for model outputs (only tool calls) — model response approval is a separate concern
-- Modification of tool call arguments during approval — approve/reject only, no edit
+- Multiple interaction types in MVP — only "approval" type; others (input, confirmation, selection) deferred
+- Automated decision classifiers (like Claude Code's auto-mode) — can be added later
+- Complex policies (multi-approver, escalation chains) — start with simple binary decisions
+- Role-based authorization (approvers field) — defer to phase 2, use RBAC only for MVP
+- Interaction for model outputs (only tool calls) — model response approval is a separate concern
+- Modification of tool call arguments during interaction — accept/reject only, no edit
 
 ## Decisions
 
-### 1. Approval configuration location: `AgentTool.approval` block
+### 1. Interaction configuration location: `AgentTool.interaction` block
 
-Add an `approval` block to `AgentTool` (in `agent_types.go`). Do NOT add to `ToolAnnotations`.
+Add an `interaction` block to `AgentTool` (in `agent_types.go`). Do NOT add to `ToolAnnotations`.
 
-Rationale: Approval is an operational concern that varies per-agent, not an intrinsic property of the tool. The same MCP tool might require approval in a production agent but not in a development agent. Placing it on `AgentTool` allows per-agent configuration.
+Rationale: Human interaction requirements are operational concerns that vary per-agent, not intrinsic properties of the tool. The same tool might require approval in production but run freely in development. Placing it on `AgentTool` allows per-agent configuration.
 
 ```yaml
 spec:
   tools:
     - name: delete-record
       type: http
-      approval:
+      interaction:
         required: true
+        type: approval  # MVP: only "approval" supported; future: "input", "confirmation", "selection"
         timeout: 5m
-        onTimeout: reject  # or "proceed" (WARNING: proceed auto-approves on timeout)
-        approvers:         # Authorization control - at least one must match
-          - role: admin              # User bound to ClusterRole/Role named "admin"
-          - user: ops@example.com    # Specific user identity
-          - group: platform-admins   # User in this group
-        reasonRequired: false  # Require reason for rejections (audit compliance)
+        onTimeout: reject  # or "proceed" (WARNING: proceed auto-executes on timeout)
+        # Phase 2: Add type-specific fields
+        # approval:
+        #   approvers: [...]
+        #   reasonRequired: false
 ```
+
+**Why `interaction` not `approval`:** This pattern applies to any tool requiring human input (approval, confirmation, text input, selection). Using a generic name allows future expansion while keeping the same architectural pattern.
 
 **Alternative considered:** Add `requiresApproval` to `ToolAnnotations`. Rejected because it would apply globally to all agents using that tool.
 
-### 2. State management: Hybrid CRD + Event approach
+### 2. State management: Reuse A2ATask CRD + Event approach
 
-Use a ToolApprovalRequest CRD for persistence and audit trail, combined with event streaming for real-time UX.
+Use existing A2ATask CRD for persistence and audit trail, combined with event streaming for real-time UX.
 
 **CRD layer (persistence):**
-- Query enters `approval-required` phase when tool needs approval
-- ToolApprovalRequest CRD created with pending tool call details AND execution context
-- Controller watches ToolApprovalRequest; when approved, signals executor to continue
+- Query enters `input-required` phase when tool needs human input
+- A2ATask CRD created with tool interaction details and minimal execution context
+- A2ATask.spec.contextId references conversation in memory service (no serialization needed!)
+- A2ATask.spec.parameters.interactionType discriminates interaction type ("approval", "input", etc.)
+- Controller watches A2ATask; when completed, signals executor to continue
 
 **Event layer (real-time):**
-- Executor emits `ToolApprovalRequest` event to broker immediately
+- Executor emits interaction event to broker immediately
 - Connected clients receive notification without polling
 - If client disconnects, CRD state persists for later action
 
-**Alternative considered:** Pure event-based (no CRD). Rejected because state would be lost on system restart or client disconnect.
+**Why A2ATask instead of new CRD:**
+- A2A protocol already has `input-required` state for human interaction
+- A2ATask already links to conversations via `contextId`
+- Consistent pattern: all agent pauses (approval, input, auth) use same mechanism
+- Generic enough to support multiple interaction types
+- No CRD proliferation
 
-**Alternative considered:** Pure CRD-based (polling only). Rejected because polling adds latency; real-time UX is important for interactive workflows.
+**Alternative considered:** Create new ToolInteractionRequest CRD. Rejected because it duplicates A2ATask functionality and creates inconsistent patterns.
 
-### 3. Query phase: Add `approval-required` to existing enum
+### 3. Query phase: Add `input-required` to existing enum
 
-Extend the Query status phase enum to include `approval-required`:
+Extend the Query status phase enum to include `input-required`:
 ```
-pending → running → approval-required → running → done
-                                     ↘ error/canceled
+pending → running → input-required → running → done
+                                   ↘ error/canceled
 ```
 
-The query remains in `approval-required` until approval is received or timeout occurs. This integrates naturally with existing phase-based state machine.
+The query remains in `input-required` until approval is received or timeout occurs. This integrates naturally with existing phase-based state machine and aligns with A2A protocol semantics.
 
-**Alternative considered:** Create separate `ToolApprovalRequest` CRD without Query phase change. Rejected because it fragments state; Query phase should reflect that execution is paused.
+**Why `input-required` not `approval-required`:**
+- Aligns with existing A2A protocol phase naming
+- More general — supports future use cases (confirmation dialogs, selection prompts, text input)
+- Consistent with A2ATask phase enum which already has `input-required`
 
-### 4. ToolApprovalRequest CRD structure
+### 4. A2ATask structure for tool interactions
+
+Reuse existing A2ATask CRD with generic interaction parameters:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
-kind: ToolApprovalRequest
+kind: A2ATask
 metadata:
-  name: query-abc123-tool-0
+  name: query-abc123-interaction-0
   namespace: default
   ownerReferences:
     - kind: Query
       name: query-abc123
-  generation: 1  # Used for optimistic locking
 spec:
   queryRef:
     name: query-abc123
     namespace: default
-  # Support both single tool call and batch
-  toolCalls:
-    - id: "call_xyz"
-      name: "delete-record"
-      type: "http"
-      arguments: '{"recordId": "123"}'
-      description: "Permanently deletes a customer record from the database"
-      annotations:
-        destructiveHint: true
-        readOnlyHint: false
-      agentReasoning: "User requested deletion of record #123"
-  timeout: 5m
-  onTimeout: reject
-  approvers:
-    - role: admin
-    - user: ops@example.com
-    - group: platform-admins
-  reasonRequired: false
-  # Execution context for resume - CRITICAL for stateless executor
-  executionContext:
-    conversationHistory: "base64-encoded message array"
-    pendingToolCallIndex: 0
-    completedToolResults: []
-    agentName: "database-assistant"
-    agentNamespace: "default"
+  agentRef:
+    name: database-assistant
+    namespace: default
+  taskId: "interaction-abc123-0"
+  contextId: "conv-xyz-789"  # ← Links to conversation in memory service!
+  parameters:
+    # Interaction type discriminator (generic!)
+    interactionType: "approval"  # or "input", "confirmation", "selection"
+
+    # Tool call details (same for all types)
+    toolCalls: |
+      [{
+        "id": "call_xyz",
+        "name": "delete-record",
+        "type": "http",
+        "arguments": "{\"recordId\": \"123\"}",
+        "description": "Permanently deletes a customer record",
+        "annotations": {"destructiveHint": true},
+        "agentReasoning": "User requested deletion of record #123"
+      }]
+
+    # Minimal execution context (NOT full conversation history!)
+    pendingToolCallIndex: "0"
+    completedToolResults: "[]"
+
+    # Interaction policy (generic)
+    timeout: "5m"
+    onTimeout: "reject"  # or "proceed"
+
+    # Type-specific fields (future):
+    # For interactionType: "input"
+    #   prompt: "Enter database password"
+    #   inputType: "password"
+    # For interactionType: "selection"
+    #   options: ["option1", "option2", "option3"]
 status:
-  phase: pending  # pending, approved, rejected, expired
-  # Optimistic locking: observedGeneration must match metadata.generation
-  observedGeneration: 1
+  phase: "input-required"  # Existing A2ATask phase!
+  protocolState: "input-required"
   requestedAt: "2026-04-29T10:25:00Z"
-  decision:
-    action: approved  # approved, rejected
-    decidedBy: "user@example.com"
-    decidedAt: "2026-04-29T10:30:00Z"
-    reason: "Verified record can be deleted"
-    clientContext:
-      ipAddress: "10.0.0.5"
-      userAgent: "ark-dashboard/1.0"
-  approvalDuration: "5m0s"  # Time between requestedAt and decidedAt
+  # Response stored when user responds (format depends on interactionType)
 ```
+
+**Key advantage:** Conversation history fetched from memory service using `contextId` — no serialization, no size limits!
+
+**Generic pattern:** Same A2ATask structure supports all interaction types; only `interactionType` and response format vary.
 
 Owner reference ensures cleanup when Query is deleted.
 
-### 5. Executor integration: Yield pattern with state capture
+### 5. Executor integration: Yield pattern with minimal context
 
-Modify `executeToolCalls()` in `agent.go` to check approval policy before each tool call:
+Modify `executeToolCalls()` in `agent.go` to check interaction requirements before each tool call:
 
 ```go
 for i, tc := range toolCalls {
-    if requiresApproval(tc) {
-        // Capture full execution context for resume
+    if interactionConfig := requiresInteraction(tc); interactionConfig != nil {
+        // Capture MINIMAL execution context for resume
         context := &ExecutionContext{
-            ConversationHistory:   serializeMessages(agentMessages),
-            PendingToolCallIndex:  i,
-            CompletedToolResults:  completedResults,
-            AgentName:             a.Name,
-            AgentNamespace:        a.Namespace,
+            ConversationID:       memory.GetConversationID(),  // Just the reference!
+            PendingToolCallIndex: i,
+            CompletedToolResults: completedResults,  // Only results since last model call
+            AgentName:            a.Name,
+            AgentNamespace:       a.Namespace,
         }
-        return newMessages, &ApprovalRequiredError{
-            ToolCalls: toolCalls[i:],  // All remaining approval-required tools
-            Context:   context,
+        return newMessages, &InteractionRequiredError{
+            InteractionType: interactionConfig.Type,  // "approval", "input", etc.
+            ToolCalls:       toolCalls[i:],           // All remaining interaction-required tools
+            Config:          interactionConfig,
+            Context:         context,
         }
     }
     // Execute tool, store result
@@ -169,38 +194,58 @@ for i, tc := range toolCalls {
 }
 ```
 
-The executor returns an `ApprovalRequiredError` which signals the handler to:
-1. Create ToolApprovalRequest CRD with full execution context
-2. Update Query phase to `approval-required`
+The executor returns an `InteractionRequiredError` which signals the handler to:
+1. Create A2ATask with interaction parameters, `interactionType`, and `contextId`
+2. Update Query phase to `input-required`
 3. Emit streaming event
-4. Exit the current execution (state persisted in CRD)
+4. Exit the current execution (state persisted in A2ATask, conversation in memory service)
 
-### 6. Resume mechanism: Re-dispatch with context
+### 6. Resume mechanism: Fetch from memory service
 
-When ToolApprovalRequest is approved, the controller re-dispatches the query to the executor with:
-- Original conversation history (from `executionContext.conversationHistory`)
-- Completed tool results (from `executionContext.completedToolResults`)
-- Continuation point (from `executionContext.pendingToolCallIndex`)
-- Approval decision (which tools were approved)
+When A2ATask completes (user responds), the controller re-dispatches the query to the executor with:
+- Conversation ID (from `A2ATask.spec.contextId`)
+- Completed tool results (from `A2ATask.spec.parameters.completedToolResults`)
+- Continuation point (from `A2ATask.spec.parameters.pendingToolCallIndex`)
+- User response (format depends on `interactionType`)
 
 ```go
-func (h *Handler) ResumeFromApproval(ctx context.Context, approval *ToolApprovalRequest) error {
-    // Deserialize saved context
-    context := deserializeContext(approval.Spec.ExecutionContext)
+func (h *Handler) ResumeFromInteraction(ctx context.Context, task *A2ATask) error {
+    // Get conversation ID from task
+    conversationID := task.Spec.ContextID
 
-    // Reconstruct agent state
-    messages := context.ConversationHistory
-    for _, result := range context.CompletedToolResults {
-        messages = append(messages, result)
+    // Fetch conversation history from memory service (NOT from CRD!)
+    memory := NewHTTPMemory(ctx, conversationID)
+    messages, err := memory.GetMessages(ctx)  // Already implemented!
+    if err != nil {
+        return fmt.Errorf("failed to fetch conversation history: %w", err)
     }
 
-    // Mark approved tools and continue execution
-    approvedTools := extractApprovedTools(approval.Status.Decision)
-    return h.executeWithApprovals(ctx, messages, approvedTools)
+    // Apply completed tool results (from task parameters)
+    completedResults := parseCompletedResults(task.Spec.Parameters["completedToolResults"])
+    messages = append(messages, completedResults...)
+
+    // Handle response based on interaction type
+    interactionType := task.Spec.Parameters["interactionType"]
+    switch interactionType {
+    case "approval":
+        // Binary decision: continue or fail
+        if task.Status.Phase == "completed" {
+            return h.executeFromIndex(ctx, messages, toolCalls, index)
+        }
+        return fmt.Errorf("tool call rejected by user")
+    case "input":
+        // User provided text - add to tool arguments or context
+        userInput := task.Spec.Parameters["response"]
+        // Future: incorporate input into tool execution
+    case "confirmation", "selection":
+        // Future: handle other interaction types
+    }
 }
 ```
 
-This follows LangGraph's pattern of resuming from checkpointed state.
+**Key advantage:** No serialization/deserialization, no size limits, leverages existing memory infrastructure!
+
+**Generic pattern:** Same resume flow for all interaction types; only response handling logic varies.
 
 ### 7. Multiple tool calls: Batch approval with explicit structure
 
@@ -222,11 +267,11 @@ spec:
 
 **Future enhancement:** Add `allowPartialApproval: true` to enable per-tool decisions within a batch.
 
-### 8. A2A protocol extension: `tool-approval-required` state with callback
+### 8. A2A protocol: Reuse existing `input-required` state
 
-Add `tool-approval-required` to A2A task states alongside existing `input-required`. This enables external executors to signal approval needs using the standard protocol.
+The A2A protocol already has `input-required` state for human interaction. Reuse it for all tool interaction types — no protocol changes needed!
 
-**A2A Approval Request (executor → controller):**
+**A2A Interaction Request (executor → controller):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -234,16 +279,20 @@ Add `tool-approval-required` to A2A task states alongside existing `input-requir
   "params": {
     "taskId": "task-123",
     "status": {
-      "state": "tool-approval-required",
+      "state": "input-required",
       "message": {
         "role": "agent",
         "parts": [{
           "kind": "data",
-          "mimeType": "application/vnd.ark.tool-approval-request+json",
+          "mimeType": "application/vnd.ark.tool-interaction-request+json",
           "data": {
+            "interactionType": "approval",  // or "input", "confirmation", "selection"
             "toolCalls": [...],
             "timeout": "5m",
-            "callbackUrl": "https://executor/approval-callback"
+            "callbackUrl": "https://executor/interaction-callback",
+            // Type-specific fields
+            "prompt": "Enter password",  // for interactionType: "input"
+            "options": ["A", "B", "C"]   // for interactionType: "selection"
           }
         }]
       }
@@ -252,94 +301,104 @@ Add `tool-approval-required` to A2A task states alongside existing `input-requir
 }
 ```
 
-**A2A Approval Callback (controller → executor):**
+**A2A Interaction Callback (controller → executor):**
 ```json
 POST {callbackUrl}
 {
   "taskId": "task-123",
-  "decision": {
-    "action": "approved",
-    "toolCallIds": ["call_1", "call_2"],
-    "decidedBy": "user@example.com",
-    "reason": "Approved by ops team"
+  "response": {
+    "interactionType": "approval",
+    "respondedBy": "user@example.com",
+    // Type-specific response
+    "action": "approved",              // for interactionType: "approval"
+    "input": "secret123",              // for interactionType: "input"
+    "confirmed": true,                 // for interactionType: "confirmation"
+    "selectedOption": "B"              // for interactionType: "selection"
   }
 }
 ```
 
-The executor then resumes execution and sends the next `tasks/status` update.
+The executor then resumes execution (fetching conversation from memory service) and sends the next `tasks/status` update.
 
-### 9. API endpoint: REST approval submission with authorization
+**MIME type evolution:** For MVP, use `application/vnd.ark.tool-interaction-request+json` (generic). Future: support type-specific MIME types if needed.
+
+### 9. API endpoint: REST interaction response with RBAC
 
 ```
-POST /api/v1/namespaces/{namespace}/queries/{name}/approval
+POST /api/v1/namespaces/{namespace}/queries/{name}/interaction
 Authorization: Bearer <token>
 {
-  "toolCallId": "call_xyz",  // or "toolCallIds": ["call_1", "call_2"] for batch
-  "action": "approve",  // or "reject"
-  "reason": "optional reason"
+  "interactionType": "approval",  // Must match A2ATask interactionType
+  "toolCallId": "call_xyz",       // or "toolCallIds": ["call_1", "call_2"] for batch
+
+  // Type-specific response fields
+  "action": "approve",            // for interactionType: "approval"
+  "input": "user-provided-text",  // for interactionType: "input"
+  "confirmed": true,              // for interactionType: "confirmation"
+  "selectedOption": "option2"     // for interactionType: "selection"
 }
 ```
 
-**Authorization checks (in order):**
-1. User must have Kubernetes RBAC permission for ToolApprovalRequest update in the namespace
-2. If `spec.approvers` is set, user must match at least one:
-   - `role: <name>` → user is bound to a ClusterRole/Role with that name (checked via SubjectAccessReview)
-   - `user: ops@example.com` → user identity from authentication context matches
-   - `group: platform-admins` → user belongs to the specified group
-3. If `spec.reasonRequired: true`, `reason` field must be non-empty for rejections
+**Authorization checks (MVP - Phase 1):**
+1. User must have Kubernetes RBAC permission for A2ATask update in the namespace
+2. Return HTTP 403 Forbidden if RBAC check fails
 
-**Role resolution:** Roles are resolved using Kubernetes RBAC. The API server extracts the authenticated user from the Bearer token (via OIDC, service account, or configured authenticator), then performs a SubjectAccessReview to check if the user has the specified role binding. This integrates with existing Kubernetes identity providers (OIDC, LDAP via Dex, etc.).
+**Response validation:**
+- API validates response matches expected `interactionType`
+- Returns HTTP 400 Bad Request if response format doesn't match interaction type
 
-Returns HTTP 403 Forbidden if authorization fails.
+**Phase 2 (future):**
+- Add type-specific authorization (e.g., `spec.interaction.approval.approvers`)
+- Add type-specific validation (e.g., `spec.interaction.input.pattern`)
 
 ### 10. Timeout handling with optimistic locking
 
 To prevent race conditions between timeout expiration and approval submission:
 
 **Optimistic locking:**
-- ToolApprovalRequest uses `metadata.generation` and `status.observedGeneration`
-- Approval submission checks `observedGeneration == generation` before updating
-- If mismatch, return HTTP 409 Conflict
+- A2ATask uses `metadata.generation` and `status.observedGeneration` (standard K8s pattern)
+- Approval submission checks phase == `input-required` before updating
+- If phase already changed, return HTTP 409 Conflict
 
 **Precedence rules:**
 - If approval is submitted BEFORE timeout controller marks expired → approval wins
-- Controller checks `status.phase == pending` before setting `expired`
-- If phase changed (e.g., to `approved`), controller skips timeout action
+- Controller checks `status.phase == "input-required"` before setting `expired`
+- If phase changed (e.g., to `completed`), controller skips timeout action
 
 ```go
-func (c *Controller) handleTimeout(ctx context.Context, req *ToolApprovalRequest) error {
+func (c *Controller) handleTimeout(ctx context.Context, task *A2ATask) error {
     // Optimistic locking check
-    if req.Status.Phase != "pending" {
+    if task.Status.Phase != "input-required" {
         // Already decided, skip timeout
         return nil
     }
 
     // Use server-side apply with field manager to detect conflicts
-    patch := &ToolApprovalRequest{Status: {Phase: "expired"}}
-    return c.client.Status().Patch(ctx, req, patch, client.FieldOwner("timeout-controller"))
+    patch := &A2ATask{Status: {Phase: "expired"}}
+    return c.client.Status().Patch(ctx, task, patch, client.FieldOwner("timeout-controller"))
 }
 ```
 
-### 11. Performance: Pre-computed approval requirements
+### 11. Performance: Pre-computed interaction requirements
 
-To avoid checking approval config on every tool call in the hot path:
+To avoid checking interaction config on every tool call in the hot path:
 
 **During Agent initialization (in `MakeAgent`):**
 ```go
 type Agent struct {
     // ... existing fields
-    approvalRequiredTools map[string]*ToolApprovalConfig  // Pre-computed
+    interactionRequiredTools map[string]*ToolInteractionConfig  // Pre-computed
 }
 
 func MakeAgent(...) (*Agent, error) {
-    approvalMap := make(map[string]*ToolApprovalConfig)
+    interactionMap := make(map[string]*ToolInteractionConfig)
     for _, tool := range crd.Spec.Tools {
-        if tool.Approval != nil && tool.Approval.Required {
-            approvalMap[tool.Name] = tool.Approval
+        if tool.Interaction != nil && tool.Interaction.Required {
+            interactionMap[tool.Name] = tool.Interaction
         }
     }
     return &Agent{
-        approvalRequiredTools: approvalMap,
+        interactionRequiredTools: interactionMap,
         // ...
     }, nil
 }
@@ -347,25 +406,29 @@ func MakeAgent(...) (*Agent, error) {
 
 **During tool execution (O(1) lookup):**
 ```go
-func (a *Agent) requiresApproval(toolName string) *ToolApprovalConfig {
-    return a.approvalRequiredTools[toolName]  // nil if not required
+func (a *Agent) requiresInteraction(toolName string) *ToolInteractionConfig {
+    return a.interactionRequiredTools[toolName]  // nil if not required
 }
 ```
 
-### 12. Dashboard integration: Approval notification panel
+### 12. Dashboard integration: Interaction UI panel
 
-- Pending approvals shown in session view when query enters `approval-required`
+- Pending interactions shown in session view when query enters `input-required`
 - Tool call details displayed: name, arguments, description, annotations (destructiveHint, etc.)
-- Agent reasoning shown to help approver understand context
+- Agent reasoning shown to help user understand context
 - Timeout countdown displayed
-- Approve/Reject buttons with reason field (required if `reasonRequired: true`)
+- Interaction UI varies by type:
+  - `approval`: Approve/Reject buttons
+  - `input`: Text input field (Phase 2)
+  - `confirmation`: Yes/No buttons (Phase 2)
+  - `selection`: Option buttons or dropdown (Phase 2)
 - Real-time updates via existing SSE/WebSocket connection to broker
 
 ## Risks / Trade-offs
 
-- **Executor state complexity**: The completions executor is currently stateless. Pause/resume requires persisting conversation state. **Mitigation:** Store full execution context in ToolApprovalRequest CRD (`spec.executionContext`).
+- **Executor state complexity**: The completions executor is currently stateless. Pause/resume requires accessing conversation state. **Mitigation:** Fetch conversation history from memory service using `contextId` — no serialization needed, leverages existing infrastructure.
 
-- **Conversation history size limit**: The `executionContext.conversationHistory` is stored as base64 in the CRD. etcd has a ~1MB per-object limit. Long-running agents with many tool calls and large context windows could exceed this. **Mitigation:** Implement conversation truncation policy (keep last N messages + system prompt); for very long conversations, store reference to external state (e.g., ConfigMap or dedicated StateStore CRD) instead of inline data. Add validation webhook to reject ToolApprovalRequest if `executionContext` exceeds size threshold.
+- **Memory service availability**: Resume depends on memory service being available. **Mitigation:** Memory service is already critical path for all queries; no new dependency introduced. If memory service is down, queries already fail.
 
 - **Timeout handling**: Race conditions between timeout and approval. **Mitigation:** Optimistic locking with generation checks; precedence rules favor submitted approvals.
 
@@ -375,8 +438,6 @@ func (a *Agent) requiresApproval(toolName string) *ToolApprovalConfig {
 
 - **Performance overhead**: Approval checks add latency. **Mitigation:** Pre-compute approval requirements during Agent initialization; O(1) lookup during execution.
 
-- **Authorization complexity**: Per-tool approver lists add management overhead. **Mitigation:** Start with simple role/user matching; add full RBAC integration later.
-
 ## Open Questions
 
 1. **Approval persistence**: Should approved tool calls be cached to avoid re-approval on retry? Initial implementation: No caching, each execution is independent. Future: Consider caching for idempotent tools.
@@ -384,3 +445,5 @@ func (a *Agent) requiresApproval(toolName string) *ToolApprovalConfig {
 2. **Partial batch approval**: Allow approving some tools in a batch while rejecting others? Initial implementation: All-or-nothing. Future: Add `allowPartialApproval` flag.
 
 3. **Escalation**: What happens if no approver responds within timeout? Initial implementation: Follow `onTimeout` policy. Future: Add escalation to backup approvers.
+
+4. **A2ATask status extension**: Should we extend A2ATask status to store approval decision details, or use parameters for response? Initial implementation: Use parameters for symmetry with request. Future: Evaluate if dedicated status fields improve audit trail.
