@@ -52,6 +52,7 @@ import {
   FILE_ASSISTANT_SUFFIX,
   FILE_INPUTS_EXECUTOR,
   RESPONSES_EXECUTOR,
+  isPairedFileAssistant,
 } from './types';
 import { useAgentForm } from './use-agent-form';
 
@@ -252,11 +253,13 @@ export function AgentForm({
                           Loading...
                         </SelectItem>
                       ) : (
-                        allAgents.map(a => (
-                          <SelectItem key={a.name} value={a.name}>
-                            {a.name}
-                          </SelectItem>
-                        ))
+                        allAgents
+                          .filter(a => !isPairedFileAssistant(a, allAgents))
+                          .map(a => (
+                            <SelectItem key={a.name} value={a.name}>
+                              {a.name}
+                            </SelectItem>
+                          ))
                       )}
                     </SelectContent>
                   </Select>

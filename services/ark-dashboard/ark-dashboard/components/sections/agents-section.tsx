@@ -10,9 +10,10 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 
-import { NamespacedLink } from '@/components/namespaced-link';
 import { AgentCard } from '@/components/cards';
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
+import { isPairedFileAssistant } from '@/components/forms/agent-form/types';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { AgentRow } from '@/components/rows/agent-row';
 import {
   SortableSectionedList,
@@ -183,35 +184,44 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
           </div>
 
           <main className="mt-4 flex-1 overflow-auto">
-            {showCompactView && (
-              <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
-                {agents.map(agent => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    onDelete={handleDeleteAgent}
-                  />
-                ))}
-              </div>
-            )}
+            {(() => {
+              const visibleAgents = agents.filter(
+                a => !isPairedFileAssistant(a, agents),
+              );
+              return (
+                <>
+                  {showCompactView && (
+                    <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
+                      {visibleAgents.map(agent => (
+                        <AgentCard
+                          key={agent.id}
+                          agent={agent}
+                          onDelete={handleDeleteAgent}
+                        />
+                      ))}
+                    </div>
+                  )}
 
-            {!showCompactView && (
-              <SortableSectionedList
-                ref={listRef}
-                items={agents}
-                getKey={getAgentKey}
-                layout={layout}
-                setLayout={setLayout}
-                itemNoun={{ singular: 'agent', plural: 'agents' }}
-                renderItem={(agent, { dragHandle }) => (
-                  <AgentRow
-                    agent={agent}
-                    onDelete={handleDeleteAgent}
-                    leading={dragHandle}
-                  />
-                )}
-              />
-            )}
+                  {!showCompactView && (
+                    <SortableSectionedList
+                      ref={listRef}
+                      items={visibleAgents}
+                      getKey={getAgentKey}
+                      layout={layout}
+                      setLayout={setLayout}
+                      itemNoun={{ singular: 'agent', plural: 'agents' }}
+                      renderItem={(agent, { dragHandle }) => (
+                        <AgentRow
+                          agent={agent}
+                          onDelete={handleDeleteAgent}
+                          leading={dragHandle}
+                        />
+                      )}
+                    />
+                  )}
+                </>
+              );
+            })()}
           </main>
         </div>
 

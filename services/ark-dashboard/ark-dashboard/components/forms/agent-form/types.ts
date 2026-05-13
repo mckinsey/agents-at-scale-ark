@@ -9,6 +9,29 @@ export const RESPONSES_EXECUTOR = 'executor-openai-responses';
 export const FILE_INPUTS_EXECUTOR = 'executor-openai-file-inputs';
 export const FILE_ASSISTANT_SUFFIX = '-files';
 
+/**
+ * `<name>-files` agents created via the "Pair a file assistant" checkbox are
+ * implementation details of their parent responses agent — they share creds
+ * via the same Model CR and surface as the file panel in the parent's view.
+ * Hide them from the agents list and selectors so they don't look like
+ * top-level entities the user can pick standalone.
+ */
+export function isPairedFileAssistant(
+  agent: { name: string; executionEngine?: { name?: string | null } | null },
+  allAgents: ReadonlyArray<{
+    name: string;
+    executionEngine?: { name?: string | null } | null;
+  }>,
+): boolean {
+  if (agent.executionEngine?.name !== FILE_INPUTS_EXECUTOR) return false;
+  if (!agent.name.endsWith(FILE_ASSISTANT_SUFFIX)) return false;
+  const parentName = agent.name.slice(0, -FILE_ASSISTANT_SUFFIX.length);
+  return allAgents.some(
+    a =>
+      a.name === parentName && a.executionEngine?.name === RESPONSES_EXECUTOR,
+  );
+}
+
 export const agentFormSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
