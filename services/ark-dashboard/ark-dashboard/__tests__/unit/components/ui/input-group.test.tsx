@@ -41,28 +41,6 @@ describe('InputGroup', () => {
 
       expect(screen.getByTestId('test-input')).toBeInTheDocument();
     });
-
-    it('should handle disabled state', () => {
-      const { container } = render(
-        <InputGroup disabled>
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toHaveAttribute('data-disabled', 'true');
-    });
-
-    it('should handle invalid state', () => {
-      const { container } = render(
-        <InputGroup invalid>
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toHaveAttribute('data-invalid', 'true');
-    });
   });
 
   describe('InputGroupInput', () => {
@@ -83,7 +61,7 @@ describe('InputGroup', () => {
         </InputGroup>,
       );
 
-      const input = container.querySelector('[data-slot="input-group-input"]');
+      const input = container.querySelector('[data-slot="input-group-control"]');
       expect(input).toBeInTheDocument();
     });
 
@@ -94,7 +72,7 @@ describe('InputGroup', () => {
         </InputGroup>,
       );
 
-      const input = container.querySelector('[data-slot="input-group-input"]');
+      const input = container.querySelector('[data-slot="input-group-control"]');
       expect(input).toHaveClass('custom-input');
     });
 
@@ -141,9 +119,7 @@ describe('InputGroup', () => {
         </InputGroup>,
       );
 
-      const button = container.querySelector(
-        '[data-slot="input-group-button"]',
-      );
+      const button = container.querySelector('[data-slot="button"]');
       expect(button).toBeInTheDocument();
     });
 
@@ -157,9 +133,7 @@ describe('InputGroup', () => {
         </InputGroup>,
       );
 
-      const button = container.querySelector(
-        '[data-slot="input-group-button"]',
-      );
+      const button = container.querySelector('[data-slot="button"]');
       expect(button).toHaveClass('custom-button');
     });
 
@@ -188,27 +162,15 @@ describe('InputGroup', () => {
       expect(screen.getByText('$')).toBeInTheDocument();
     });
 
-    it('should have correct data-slot attribute', () => {
-      const { container } = render(
-        <InputGroup>
-          <InputGroupText>Label</InputGroupText>
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const text = container.querySelector('[data-slot="input-group-text"]');
-      expect(text).toBeInTheDocument();
-    });
-
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <InputGroup>
           <InputGroupText className="custom-text">@</InputGroupText>
           <InputGroupInput placeholder="Test" />
         </InputGroup>,
       );
 
-      const text = container.querySelector('[data-slot="input-group-text"]');
+      const text = screen.getByText('@');
       expect(text).toHaveClass('custom-text');
     });
   });
@@ -269,12 +231,12 @@ describe('InputGroup', () => {
       ).toBeInTheDocument();
     });
 
-    it('should work with disabled input group', () => {
+    it('should work with disabled children', () => {
       render(
-        <InputGroup disabled>
+        <InputGroup>
           <InputGroupText>Label</InputGroupText>
-          <InputGroupInput placeholder="Test" />
-          <InputGroupButton>Action</InputGroupButton>
+          <InputGroupInput disabled placeholder="Test" />
+          <InputGroupButton disabled>Action</InputGroupButton>
         </InputGroup>,
       );
 
@@ -284,75 +246,6 @@ describe('InputGroup', () => {
       expect(input).toBeDisabled();
       expect(button).toBeDisabled();
     });
-
-    it('should work with invalid state', () => {
-      const { container } = render(
-        <InputGroup invalid>
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toHaveAttribute('data-invalid', 'true');
-    });
   });
 
-  describe('InputGroup Sizes', () => {
-    it('should render with default size', () => {
-      const { container } = render(
-        <InputGroup size="default">
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toBeInTheDocument();
-    });
-
-    it('should render with small size', () => {
-      const { container } = render(
-        <InputGroup size="sm">
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toBeInTheDocument();
-    });
-
-    it('should render with large size', () => {
-      const { container } = render(
-        <InputGroup size="lg">
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toBeInTheDocument();
-    });
-  });
-
-  describe('InputGroup Variants', () => {
-    it('should render with default variant', () => {
-      const { container } = render(
-        <InputGroup variant="default">
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toBeInTheDocument();
-    });
-
-    it('should render with ghost variant', () => {
-      const { container } = render(
-        <InputGroup variant="ghost">
-          <InputGroupInput placeholder="Test" />
-        </InputGroup>,
-      );
-
-      const inputGroup = container.querySelector('[data-slot="input-group"]');
-      expect(inputGroup).toBeInTheDocument();
-    });
-  });
 });

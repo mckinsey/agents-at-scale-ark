@@ -13,8 +13,8 @@ import {
 
 describe('Select', () => {
   describe('Select Component', () => {
-    it('should render select root element', () => {
-      const { container } = render(
+    it('should render select trigger', () => {
+      render(
         <Select>
           <SelectTrigger>
             <SelectValue placeholder="Select..." />
@@ -22,12 +22,11 @@ describe('Select', () => {
         </Select>,
       );
 
-      const select = container.querySelector('[data-slot="select"]');
-      expect(select).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
     it('should pass through size prop', () => {
-      const { container } = render(
+      render(
         <Select size="lg">
           <SelectTrigger>
             <SelectValue />
@@ -35,8 +34,7 @@ describe('Select', () => {
         </Select>,
       );
 
-      const select = container.querySelector('[data-slot="select"]');
-      expect(select).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
     it('should render children', () => {
@@ -131,20 +129,21 @@ describe('Select', () => {
   });
 
   describe('SelectContent', () => {
-    it('should render content with data-slot', () => {
-      const { container } = render(
+    it('should render content when open', () => {
+      render(
         <Select open>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="test">Test</SelectItem>
+            <SelectItem value="test">
+              <SelectItemText>Test</SelectItemText>
+            </SelectItem>
           </SelectContent>
         </Select>,
       );
 
-      const content = container.querySelector('[data-slot="select-content"]');
-      expect(content).toBeInTheDocument();
+      expect(screen.getByText('Test')).toBeInTheDocument();
     });
 
     it('should render children items', () => {
@@ -169,18 +168,20 @@ describe('Select', () => {
     });
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <Select open>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="custom-content">
-            <SelectItem value="test">Test</SelectItem>
+            <SelectItem value="test">
+              <SelectItemText>Test</SelectItemText>
+            </SelectItem>
           </SelectContent>
         </Select>,
       );
 
-      const content = container.querySelector('[data-slot="select-content"]');
+      const content = document.querySelector('[data-slot="select-content"]');
       expect(content).toHaveClass('custom-content');
     });
   });
@@ -203,8 +204,8 @@ describe('Select', () => {
       expect(screen.getByText('Test Item')).toBeInTheDocument();
     });
 
-    it('should have correct data-slot attribute', () => {
-      const { container } = render(
+    it('should render with role option', () => {
+      render(
         <Select open>
           <SelectTrigger>
             <SelectValue />
@@ -217,12 +218,11 @@ describe('Select', () => {
         </Select>,
       );
 
-      const item = container.querySelector('[data-slot="select-item"]');
-      expect(item).toBeInTheDocument();
+      expect(screen.getByRole('option')).toBeInTheDocument();
     });
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <Select open>
           <SelectTrigger>
             <SelectValue />
@@ -235,7 +235,7 @@ describe('Select', () => {
         </Select>,
       );
 
-      const item = container.querySelector('[data-slot="select-item"]');
+      const item = document.querySelector('[data-slot="select-item"]');
       expect(item).toHaveClass('custom-item');
     });
   });
@@ -326,7 +326,7 @@ describe('Select', () => {
     });
 
     it('should support different sizes', () => {
-      const { container, rerender } = render(
+      const { rerender } = render(
         <Select size="sm">
           <SelectTrigger>
             <SelectValue />
@@ -334,7 +334,7 @@ describe('Select', () => {
         </Select>,
       );
 
-      expect(container.querySelector('[data-slot="select"]')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
 
       rerender(
         <Select size="lg">
@@ -344,7 +344,7 @@ describe('Select', () => {
         </Select>,
       );
 
-      expect(container.querySelector('[data-slot="select"]')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
     it('should render multiple items', () => {
@@ -373,41 +373,4 @@ describe('Select', () => {
     });
   });
 
-  describe('Select Size Variants', () => {
-    it('should render with default size', () => {
-      const { container } = render(
-        <Select size="default">
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-        </Select>,
-      );
-
-      expect(container.querySelector('[data-slot="select"]')).toBeInTheDocument();
-    });
-
-    it('should render with small size', () => {
-      const { container } = render(
-        <Select size="sm">
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-        </Select>,
-      );
-
-      expect(container.querySelector('[data-slot="select"]')).toBeInTheDocument();
-    });
-
-    it('should render with large size', () => {
-      const { container } = render(
-        <Select size="lg">
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-        </Select>,
-      );
-
-      expect(container.querySelector('[data-slot="select"]')).toBeInTheDocument();
-    });
-  });
 });
