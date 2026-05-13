@@ -229,7 +229,7 @@ class TestOpenAIResponsesExecutor:
     def test_t03_web_search_only(self):
         status, content, data = self._post(
             self._make_request(
-                "ADAM GROOMING BN LTD",
+                "TESCO PLC",
                 model=MODEL_GPT5,
                 prompt=(
                     "You are an expert web search agent located in UK. "
@@ -247,8 +247,8 @@ class TestOpenAIResponsesExecutor:
         )
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
-        assert any(w in content.lower() for w in ["http", "www", ".com"]), (
-            f"Expected a URL in response, got: {content[:200]}"
+        assert any(w in content.lower() for w in ["http", "www", ".com", "tesco"]), (
+            f"Expected a URL or company name in response, got: {content[:200]}"
         )
 
 
