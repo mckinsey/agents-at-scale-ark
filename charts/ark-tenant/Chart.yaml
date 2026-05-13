@@ -4,8 +4,8 @@ description: >-
   Helm chart for provisioning Ark tenant namespaces and service accounts with
   RBAC
 type: application
-version: 0.1.62
-appVersion: 0.1.62
+version: 0.1.63-rc
+appVersion: 0.1.63-rc
 keywords:
   - ark
   - tenant
