@@ -32,7 +32,7 @@ def mock_llm_model():
     if mock_llm_present:
         subprocess.run(
             ["kubectl", "wait", "--for=condition=ModelAvailable",
-             f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=120s"],
+             f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=180s"],
             check=True
         )
     else:

@@ -948,6 +948,20 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
+      - name: Install mock-llm
+        run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/cli-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
