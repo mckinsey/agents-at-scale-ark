@@ -90,24 +90,24 @@ class ToolsPage(BasePage):
         type_trigger.scroll_into_view_if_needed()
         type_trigger.wait_for(state="visible", timeout=15000)
 
-        listbox = self.page.locator("[role='listbox'][data-state='open']")
         for attempt in range(3):
             logger.info(f"Clicking type trigger to open dropdown (attempt {attempt + 1})")
             type_trigger.click()
             try:
-                listbox.wait_for(state="visible", timeout=5000)
-                logger.info("Listbox visible")
+                self.wait_for_dropdown_options(timeout=5000)
+                logger.info("Dropdown options visible")
                 break
             except Exception:
-                logger.info(f"Listbox not visible on attempt {attempt + 1}, retrying")
+                logger.info(f"Dropdown options not visible on attempt {attempt + 1}, retrying")
         else:
-            listbox.wait_for(state="visible", timeout=1)
+            logger.error("Dropdown failed to open after 3 attempts")
+            self.wait_for_dropdown_options(timeout=1000)
 
-        self.wait_for_animations_complete(listbox)
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
         http_option.wait_for(state="visible", timeout=10000)
         logger.info("HTTP option visible, clicking")
         http_option.click()
+        self.wait_for_element_hidden("[role='listbox'], [data-slot='select-content']", timeout=3000)
         name_value_after_type = name_input.input_value()
         logger.info(f"Name input value after type selection: '{name_value_after_type}'")
         if not name_value_after_type:
