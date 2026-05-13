@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.63-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.63-rc...v0.1.63-rc.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* Wait for apiserver to finish before installing the rest ([#2132](https://github.com/mckinsey/agents-at-scale-ark/issues/2132)) ([5520d96](https://github.com/mckinsey/agents-at-scale-ark/commit/5520d96697fd38e02dcd3d9510f660ef58c31d08))
+
 ## [0.1.63-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.62...v0.1.63-rc) (2026-05-12)
 
 
