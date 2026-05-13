@@ -30,6 +30,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -186,7 +187,7 @@ export function ToolEditor({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}  modal={false}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create New Tool</DialogTitle>
@@ -232,13 +233,16 @@ export function ToolEditor({
                       disabled={form.formState.isSubmitting}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select type..." />
+                          <SelectValue placeholder="Select type...">
+                            {typeOptions.find(opt => opt.value === field.value)
+                              ?.label || 'Select type...'}
+                          </SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {typeOptions.map(opt => (
                           <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
+                            <SelectItemText>{opt.label}</SelectItemText>
                           </SelectItem>
                         ))}
                       </SelectContent>

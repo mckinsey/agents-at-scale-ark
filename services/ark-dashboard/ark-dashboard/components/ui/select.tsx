@@ -142,12 +142,13 @@ function SelectContent({
       <SelectPrimitive.Positioner
         sideOffset={sideOffset}
         alignItemWithTrigger={alignItemWithTrigger}
+        className="z-[60]"
         {...positionerProps}>
         <SelectPrimitive.Popup
           data-slot="select-content"
           className={cn(
             'bg-stateslayer-overlay-active-inverse text-fg-primary',
-            'relative z-50 overflow-hidden',
+            'relative overflow-hidden',
             'shadow-elevation-1',
             'data-open:animate-in data-closed:animate-out',
             'data-closed:fade-out-0 data-open:fade-in-0',
