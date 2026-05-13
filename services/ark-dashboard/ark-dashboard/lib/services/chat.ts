@@ -121,7 +121,7 @@ export const chatService = {
     };
 
     const response = await apiClient.post<QueryDetailResponse>(
-      `/api/v1/queries/`,
+      `/api/v1/queries`,
       normalizedQuery,
     );
 
@@ -158,7 +158,7 @@ export const chatService = {
   },
 
   async listQueries(): Promise<QueryListResponse> {
-    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries/`);
+    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries`);
     return response;
   },
 
