@@ -14,18 +14,19 @@
 
 ## 3. ark-api outbound clients
 
-- [ ] 3.1 `services/ark-api/ark-api/src/ark_api/services/oauth_dcr.py` — RFC 7591 DCR client. POST `client_name=ark`, `redirect_uris=[<configured>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`. Reject responses whose `redirect_uris` omits the configured URI. Reject `token_endpoint_auth_method` other than `client_secret_basic` or `none`.
-- [ ] 3.2 `services/ark-api/ark-api/src/ark_api/services/oauth_token.py` — POST `grant_type=authorization_code`, `code`, `redirect_uri`, `code_verifier`, `resource=<MCP URL>`, HTTP Basic with `client_id` / `client_secret`. Surface OAuth `error` verbatim on non-2xx.
-- [ ] 3.3 Unit tests with `respx` (or equivalent) mocking the IdP endpoints — DCR redirect-URI enforcement, unsupported `token_endpoint_auth_method`, token exchange success, token exchange 4xx
+- [ ] 3.1 `services/ark-api/ark-api/src/ark_api/services/oauth_dcr.py` — RFC 7591 DCR client. POST `client_name=ark`, `redirect_uris=[<configured>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`. Reject responses whose `redirect_uris` omits the configured URI. Reject any `token_endpoint_auth_method` other than `client_secret_basic` (public-client `none` is out of scope — see spec). Fail-closed with HTTP 422 when `status.authorization.registrationEndpoint` is empty AND the Secret carries no cached `client_id` / `client_secret`.
+- [ ] 3.2 `services/ark-api/ark-api/src/ark_api/services/oauth_token.py` — POST `grant_type=authorization_code`, `code`, `redirect_uri`, `code_verifier`, `resource=<status.authorization.resource>` (canonical RFC 9728 URI), HTTP Basic with `client_id` / `client_secret`. Surface OAuth `error` verbatim on non-2xx.
+- [ ] 3.3 Unit tests with `respx` (or equivalent) mocking the IdP endpoints — DCR redirect-URI enforcement, unsupported `token_endpoint_auth_method` (assert `none` is rejected alongside `client_secret_post`), missing-`registrationEndpoint` + no-cached-creds → 422, token exchange success, token exchange 4xx
 
 ## 4. ark-api endpoints
 
 - [ ] 4.1 `services/ark-api/ark-api/src/ark_api/api/v1/mcp_auth.py` — register the four routes
-- [ ] 4.2 `POST /api/v1/mcp-servers/{name}/auth/start` — preflight against `status.authorization.state`, DCR-cache-or-fresh, PKCE generation, cache entry creation, URL assembly with `resource` indicator (RFC 8707)
-- [ ] 4.3 `GET /api/v1/mcp/auth/callback` — state lookup, delete-on-lookup, token exchange, Secret patch (create-if-absent), `mcp-token-secret` label stamp (forward-compatible), MCPServer annotations (`authorized-by`, `authorized-at`), success/failure HTML pages
-- [ ] 4.4 `GET /api/v1/mcp-servers/{name}/auth/status` — terminal state requires both cache `authorized` AND MCPServer `status.authorization.state == Authorized`
-- [ ] 4.5 `POST /api/v1/mcp-servers/{name}/auth/logout` — default / `keep_client` / `delete_secret` matrix; mutual-exclusion check; idempotent missing Secret; 404 missing MCPServer; annotation removal
+- [ ] 4.2 `POST /api/v1/mcp-servers/{name}/auth/start` — preflight against `status.authorization.state` (`Authorized` → 409 unless `force`; `DiscoveryFailed` → 422 even with `force`), DCR-cache-or-fresh, PKCE generation, cache entry creation, URL assembly with `resource=<status.authorization.resource>` (RFC 8707) and `scope` sourced from request body OR `status.authorization.scopesSupported` fallback. Return shape uses `flow_expires_at` (NOT `expires_at`) to keep the cache-deadline field name distinct from `auth/status`'s token expiry.
+- [ ] 4.3 `GET /api/v1/mcp/auth/callback` — state lookup, delete-state-index-on-lookup (keep `auth_id` index live until TTL so `auth/status` keeps reporting `authorized` after success), token exchange, Secret patch (create-if-absent), `mcp-token-secret` label stamp (forward-compatible), MCPServer annotations (`authorized-by` = `cli` for this change; user-identity branch is gated on the dashboard capability), HTML escape every IdP-supplied string (`error`, `error_description`) before interpolating into the success/failure HTML pages
+- [ ] 4.4 `GET /api/v1/mcp-servers/{name}/auth/status` — terminal state `authorized` requires both cache `authorized` AND MCPServer `status.authorization.state == Authorized`; cache wins for `failed`/`expired` regardless of MCPServer state; missing-MCPServer 404 SHALL precede any cache lookup (404-before-expired ordering)
+- [ ] 4.5 `POST /api/v1/mcp-servers/{name}/auth/logout` — default / `keep_client` / `delete_secret` matrix; mutual-exclusion check; **all three body shapes** idempotent on missing Secret (200 `{noop: true}`); 404 missing MCPServer for any body; annotation removal on every success path including the no-op-on-missing-Secret path
 - [ ] 4.6 Plug the new module into the FastAPI router registration
+- [ ] 4.7 `auth_id` generator uses `secrets.token_urlsafe(16)` (≥128 bits CSPRNG, base64url) — match the same primitive used for `state`
 
 ## 5. ark-api persistence helpers
 
@@ -37,28 +38,30 @@
 ## 6. ark-api RBAC
 
 - [ ] 6.1 Extend the ark-api SA ClusterRole / Role in `services/ark-api/chart/` with `get/list/watch/create/patch/update/delete` on Secrets in the namespaces ark-api serves
-- [ ] 6.2 Verify the SA already has `get/patch` on `mcpservers/status` (or add it) for the annotation patch
+- [ ] 6.2 Verify the SA already has `get/patch` on `mcpservers` (the parent resource, NOT `mcpservers/status`) — annotations live in `metadata.annotations` on the parent object; the `/status` subresource only services `.status.*` fields and a patch routed there will leave annotations untouched. Add the rule if missing.
 - [ ] 6.3 Document the RBAC delta in the chart values comments
 
 ## 7. ark-api endpoint tests
 
-- [ ] 7.1 `auth/start` — preflight refusal on Authorized without `force`; success on Required; `force` bypasses preflight; cache entry populated with verifier + state + caller identity
-- [ ] 7.2 `auth/start` — DCR happens when Secret lacks `client_secret`; DCR is skipped when both `client_id` and `client_secret` are populated; `force_registration: true` triggers fresh DCR even with cached credentials and replaces them on a successful exchange; `force_registration: true` without `force` on a non-Required MCPServer still returns 409
-- [ ] 7.3 `auth/start` — DCR rejection paths (missing `redirect_uris`, unsupported `token_endpoint_auth_method`) propagate as 502
+- [ ] 7.1 `auth/start` — preflight refusal on Authorized without `force`; success on Required; `force` bypasses Authorized preflight; `DiscoveryFailed` → 422 even with `force: true` (no path forward when registration/token endpoints are empty); cache entry populated with verifier + state + caller identity
+- [ ] 7.2 `auth/start` — DCR happens when Secret lacks `client_secret`; DCR is skipped when both `client_id` and `client_secret` are populated; `force_registration: true` triggers fresh DCR even with cached credentials and replaces them on a successful exchange; `force_registration: true` without `force` on a non-Required MCPServer still returns 409; empty `registrationEndpoint` + no cached creds → 422; empty `registrationEndpoint` + cached creds succeeds (DCR skipped)
+- [ ] 7.3 `auth/start` — DCR rejection paths (missing `redirect_uris`, unsupported `token_endpoint_auth_method` — assert `none` AND `client_secret_post` both rejected) propagate as 502
 - [ ] 7.4 `auth/start` — Secret untouched on any flow-pre-exchange failure
-- [ ] 7.5 `auth/callback` — unknown state → 400 HTML; known state succeeds; second hit for same code → 400 (replay protection via delete-on-lookup)
+- [ ] 7.5 `auth/callback` — unknown state → 400 HTML; known state succeeds; second hit for same code → 400 (replay protection via delete-state-index-on-lookup)
 - [ ] 7.6 `auth/callback` — `error=access_denied` → 400 HTML, cache entry transitions to `failed`, Secret unchanged
 - [ ] 7.7 `auth/callback` — token-exchange 400 transitions cache to `failed` with the error string, Secret unchanged
-- [ ] 7.8 `auth/callback` — successful exchange creates the Secret if absent; patches with configured `*Key` overrides; stamps the `mcp-token-secret` label on the Secret; stamps MCPServer annotations
+- [ ] 7.8 `auth/callback` — successful exchange creates the Secret if absent; patches with configured `*Key` overrides; stamps the `mcp-token-secret` label on the Secret; stamps MCPServer annotations (`authorized-by: cli`, `authorized-at: <RFC 3339>`); cache `auth_id` index remains live for repeat `auth/status` polls until TTL
 - [ ] 7.9 `auth/callback` — `expires_in` missing or ≤ 0 omits `expires_at` key and emits a warning
-- [ ] 7.10 `auth/status` — pending while cache is in-flight; pending when cache is `authorized` but MCPServer status hasn't reconciled; authorized only when both align; unknown `auth_id` returns `expired` (not 404)
-- [ ] 7.11 `auth/logout` — default empties five keys; `keep_client` preserves DCR creds; `delete_secret` removes the resource; mutual exclusion returns 400; missing Secret returns 200 `{noop:true}`; missing MCPServer returns 404; annotations are removed on every success path
-- [ ] 7.12 Token material redaction — assert logs across all four endpoints contain no token, refresh-token, client-secret, or PKCE-verifier values
+- [ ] 7.10 `auth/callback` HTML escaping — assert `?error=invalid_request&error_description=<script>alert(1)</script>` renders the literal text and NOT an executable `<script>` element (response body contains `&lt;script&gt;`, not `<script>`)
+- [ ] 7.11 `auth/status` — pending while cache is in-flight; pending when cache is `authorized` but MCPServer status hasn't reconciled; authorized only when both align; cache-`failed` reports `failed` even when MCPServer is `Authorized` from a prior flow; cache-`expired` reports `expired` even when MCPServer is `Authorized`; unknown `auth_id` against known MCPServer returns `expired` (not 404); unknown MCPServer returns 404 regardless of `auth_id` validity (404-before-expired ordering); cache entry persists for repeat polls
+- [ ] 7.12 `auth/logout` — default empties five keys; `keep_client` preserves DCR creds; `delete_secret` removes the resource; mutual exclusion returns 400; missing Secret returns 200 `{noop:true}` across all three body shapes (default / `keep_client` / `delete_secret`); missing MCPServer returns 404 for any body; annotations are removed on every success path including the no-op-on-missing-Secret path
+- [ ] 7.13 Token material redaction — assert logs across all four endpoints contain no token, refresh-token, client-secret, or PKCE-verifier values
+- [ ] 7.14 `auth_id` entropy — assert generated `auth_id` decodes to ≥16 bytes; statistical sanity check that two consecutive generations differ
 
 ## 8. ark-api OpenAPI surface
 
-- [ ] 8.1 Add request/response models for the four endpoints in `services/ark-api/ark-api/src/ark_api/models/`
-- [ ] 8.2 Regenerate the OpenAPI schema and the downstream typed clients (`lib/api/generated/types.ts` consumers picked up automatically by the dashboard repo when it lands the follow-up capability)
+- [ ] 8.1 Add request/response models for the four endpoints in `services/ark-api/ark-api/src/ark_api/models/`. The `auth/start` response field SHALL be named `flow_expires_at` (not `expires_at`) to keep it distinct from the token-expiry `expires_at` returned by `auth/status` — both endpoints currently emit RFC 3339 strings; the rename prevents callers from conflating cache-deadline with token lifetime
+- [ ] 8.2 Regenerate the OpenAPI schema and the downstream typed clients in `services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts` (the dashboard service — same monorepo, not a separate repo). The follow-up `mcp-auth-dashboard` capability consumes these types from the same path; no cross-repo coordination required.
 
 ## 9. CLI thin client
 
@@ -66,7 +69,7 @@
 - [ ] 9.2 Register `ark mcp auth` parent command with `login` and `logout` subcommands
 - [ ] 9.3 `ark mcp auth login <server-name>` flags: `--namespace`, `--force`, `--force-registration`, `--no-open`, `--timeout <duration>`. `--force` → `force: true` in `auth/start` body; `--force-registration` → `force_registration: true`. The two are orthogonal — `--force-registration` does not bypass the preflight. NO `--port` flag.
 - [ ] 9.4 Validate `--timeout` as a Go-duration string accepting positive durations only; clear error on parse failure
-- [ ] 9.5 Resolve namespace: `--namespace` → current `kubectl` context → `default`; pass as `?namespace=` query param
+- [ ] 9.5 Resolve namespace by reading the kubeconfig file directly (NOT by shelling out to `kubectl config view` — see 10.7's no-shell-out assertion): `--namespace` flag → active context's `namespace` field in the parsed kubeconfig → `default`; pass the resolved value as `?namespace=` query param to ark-api
 - [ ] 9.6 Drive the flow via `ArkApiProxy`: POST `/auth/start` → print and (unless `--no-open`) `open()` the URL → poll `GET /auth/status` every 2s up to `--timeout`
 - [ ] 9.7 Exit zero on `authorized`; exit non-zero on `failed`, `expired`, or poll-timeout — single `output.error("mcp auth failed:", <msg>)` line per failure
 - [ ] 9.8 Print resource URL + `expires_at` on success

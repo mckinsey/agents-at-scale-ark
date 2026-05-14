@@ -17,36 +17,43 @@ ark-api hosts the OAuth flow end-to-end. A client (CLI today, dashboard in a fol
 Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickoff to completion (the operator hits `start`, the browser hits `callback`, the CLI/dashboard polls `status`, and `logout` reverses it):
 
 - **`POST /api/v1/mcp-servers/{name}/auth/start`** — initiates a flow.
-  - Query: `?namespace=<ns>`.
+  - Query: `?namespace=<ns>` (optional; ark-api falls back to its pod-context namespace via `with_ark_client(None, ...)` when omitted, matching every other ark-api route).
   - Body: `{ force?: bool, force_registration?: bool, scopes?: string[] }`.
-  - Reads the MCPServer; refuses unless `status.authorization.state == Required` (override with `force: true`).
-  - Reads `spec.authorization.tokenSecretRef`. If the Secret already carries `client_id` / `client_secret`, ark-api reuses them (skip DCR) unless `force_registration: true` is passed, in which case it performs a fresh RFC 7591 Dynamic Client Registration regardless of cached credentials and replaces them on a successful exchange. Otherwise it performs RFC 7591 Dynamic Client Registration against `status.authorization.registrationEndpoint` with `redirect_uris=[<ark-api callback URL>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`.
-  - Generates PKCE verifier (64 unreserved chars), S256 challenge, and `state` (16 bytes, base64url).
+  - Reads the MCPServer; refuses unless `status.authorization.state == Required` (override with `force: true`). `DiscoveryFailed` is refused outright — even with `force: true` — because `registrationEndpoint` / `tokenEndpoint` are empty in that state.
+  - Reads `spec.authorization.tokenSecretRef`. If the Secret already carries `client_id` / `client_secret`, ark-api reuses them (skip DCR) unless `force_registration: true` is passed, in which case it performs a fresh RFC 7591 Dynamic Client Registration regardless of cached credentials and replaces them on a successful exchange. Otherwise it performs RFC 7591 Dynamic Client Registration against `status.authorization.registrationEndpoint` with `redirect_uris=[<ark-api callback URL>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`. If `registrationEndpoint` is empty and the Secret has no cached client credentials, ark-api fails the call with HTTP 422 (no path forward).
+  - DCR responses with `token_endpoint_auth_method` other than `client_secret_basic` are rejected. Public-client (`none`) support is out of scope here — every MCP authorization server Ark targets today (Notion, GitHub, Atlassian) issues a confidential client.
+  - Generates PKCE verifier (64 unreserved chars), S256 challenge, and `state` (≥128 bits, base64url). The opaque `auth_id` returned to the caller SHALL be ≥128 bits of CSPRNG entropy, base64url-encoded.
   - Stores `{verifier, state, mcpServer ref, registered client_id, registered client_secret, caller identity, created_at}` in a short-lived cache keyed by an opaque `auth_id`. TTL is configurable (default 10 minutes).
-  - Returns `{ auth_id, authorization_url, expires_at }`. The authorization URL carries `response_type=code`, the registered `client_id`, ark-api's redirect URI, `state`, `code_challenge`, `code_challenge_method=S256`, and `resource=<MCP URL>` (RFC 8707). `scope` is only included when supplied.
+  - Returns `{ auth_id, authorization_url, flow_expires_at }`. `flow_expires_at` is the cache-entry deadline (not a token expiry — that field lives on `auth/status`). The authorization URL carries `response_type=code`, the registered `client_id`, ark-api's redirect URI, `state`, `code_challenge`, `code_challenge_method=S256`, and `resource=<status.authorization.resource>` (RFC 8707; the canonical RFC 9728 resource URI discovered by the controller). `scope` is included when the body carries non-empty `scopes`, or — if the body omits `scopes` — when `status.authorization.scopesSupported` is non-empty (space-joined per RFC 6749 §3.3). When neither source has values, `scope` is omitted.
 
 - **`GET /api/v1/mcp/auth/callback`** — single, install-stable endpoint registered as the OAuth redirect URI at DCR time.
   - Receives `?code=<>&state=<>` (or `?error=<>&error_description=<>` on failure).
   - Looks up the cache entry by `state`. Unknown / expired state → 400 + a minimal HTML page explaining the flow expired and pointing the user back to `ark mcp auth login`. Cache entry is deleted on lookup so codes cannot be replayed.
   - On `error` from the IdP, marks the cache entry as `failed` (with the OAuth error code in the message) so the CLI's poll surfaces it, and renders an HTML page with the error.
-  - On `code`, POSTs to `status.authorization.tokenEndpoint` with `grant_type=authorization_code`, `code`, `redirect_uri`, `code_verifier`, and `resource=<MCP URL>`, authenticating via HTTP Basic with the cached `client_id` / `client_secret`.
+  - On `code`, POSTs to `status.authorization.tokenEndpoint` with `grant_type=authorization_code`, `code`, `redirect_uri`, `code_verifier`, and `resource=<status.authorization.resource>`, authenticating via HTTP Basic with the cached `client_id` / `client_secret`.
   - Computes `expires_at = now + expires_in - 30s` (RFC 3339 UTC) when `expires_in` is positive.
-  - Patches the Secret named in `spec.authorization.tokenSecretRef.name` (creates if absent), honouring the configured `*Key` overrides. Stamps the Secret with the `ark.mckinsey.com/mcp-token-secret: "true"` label as a forward-compatible marker (no consumer on main today; harmless if any future controller-side optimization wants to filter token Secrets). Stamps the MCPServer with the `ark.mckinsey.com/mcp-auth-authorized-by` and `ark.mckinsey.com/mcp-auth-authorized-at` annotations (best-effort caller identity + RFC 3339 timestamp).
-  - Renders an HTML page saying "Authorization complete — you can close this window" on success.
+  - Patches the Secret named in `spec.authorization.tokenSecretRef.name` (creates if absent), honouring the configured `*Key` overrides. Stamps the Secret with the `ark.mckinsey.com/mcp-token-secret: "true"` label as a forward-compatible marker for the planned controller-side Secret-watch optimization (mcp-auth-token-injection Stage 2); harmless if no consumer ever lands. Stamps the MCPServer with the `ark.mckinsey.com/mcp-auth-authorized-by` and `ark.mckinsey.com/mcp-auth-authorized-at` annotations (best-effort caller identity + RFC 3339 timestamp).
+  - Renders an HTML page saying "Authorization complete — you can close this window" on success. All IdP-supplied strings (`error`, `error_description`) are HTML-escaped before being interpolated into any rendered page — the IdP is an untrusted reflector and the operator's browser is the trust boundary that matters.
 
 - **`GET /api/v1/mcp-servers/{name}/auth/status`** — caller-facing status poll.
-  - Query: `?auth_id=<>&namespace=<ns>`.
-  - Returns `{ state: "pending" | "authorized" | "failed" | "expired", message?: string, expires_at?: string }`.
+  - Query: `?auth_id=<>&namespace=<ns>` (`namespace` optional with pod-context fallback).
+  - Returns `{ state: "pending" | "authorized" | "failed" | "expired", message?: string, expires_at?: string }`. Here `expires_at` is the **token** expiry (RFC 3339 UTC), distinct from `auth/start`'s `flow_expires_at` cache-entry deadline.
   - `authorized` is returned only when (a) the cache entry is in the `authorized` terminal state **and** (b) the MCPServer's `status.authorization.state` has reconciled to `Authorized`, so the caller exits when the system is actually ready.
+  - Resolution order: missing MCPServer → HTTP 404 wins over any `auth_id` lookup. With a known MCPServer, an unknown `auth_id` returns `state: expired` (distinguishing "flow aged out" from "no such server").
+  - The cache entry SHALL persist until its TTL elapses even after a successful `authorized` response, so concurrent / repeat pollers observe the same terminal state.
 
 - **`POST /api/v1/mcp-servers/{name}/auth/logout`** — mirrors `ark mcp auth logout`.
-  - Query: `?namespace=<ns>`.
+  - Query: `?namespace=<ns>` (optional with pod-context fallback).
   - Body: `{ keep_client?: bool, delete_secret?: bool }`. Mutual exclusion is enforced.
   - Default: patches the Secret so `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret` (or their `*Key`-overridden names) hold empty strings. Leaves the Secret resource in place.
   - `keep_client: true`: empties only `access_token`, `refresh_token`, `expires_at`. Preserves `client_id` / `client_secret` so a follow-up `start` skips DCR.
   - `delete_secret: true`: deletes the Secret resource entirely.
-  - Idempotent on missing Secret (no-op, 200). Missing MCPServer → 404.
+  - Idempotent on missing Secret across every path (default / `keep_client` / `delete_secret`) — returns 200 `{noop:true}`. Missing MCPServer → 404 regardless of body.
   - On any of the above paths, removes the `ark.mckinsey.com/mcp-auth-authorized-by` / `ark.mckinsey.com/mcp-auth-authorized-at` annotations from the MCPServer.
+
+### Trust boundary on the auth endpoints
+
+This change does not introduce inbound authentication on the four auth endpoints — they sit behind the same trust boundary as every other ark-api route (cluster-internal Service, optional gateway in front). Any client that can reach ark-api can initiate or revoke a flow for any MCPServer in any namespace ark-api serves; in particular `auth/logout` with `delete_secret: true` is destructive. Operators who expose ark-api beyond the cluster MUST front it with the same authenticating gateway they use for the rest of the API surface. End-user authentication for the dashboard path is owned by the follow-up `mcp-auth-dashboard` capability.
 
 ### Configuration
 
@@ -74,13 +81,13 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 Two operator recipes cover the laptop / jumphost case, depending on whether ark-api is reachable from the operator's browser:
 
 - **Publicly-reachable ark-api ingress:** the laptop browser hits `https://ark.example.com/api/v1/mcp/auth/callback` directly. The CLI on the jumphost just polls `/auth/status`. **No SSH tunnel needed.**
-- **Air-gapped / private ark-api:** the operator port-forwards ark-api to the laptop, binding both IPv4 and IPv6 loopback so the browser reaches it regardless of how the OS resolves `localhost` (`kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80`), and sets `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback` (or `http://[::1]:8080/...`). The DCR registers the loopback URL (RFC 8252 §7.3 permits this and recommends binding both stacks).
+- **Air-gapped / private ark-api:** the cluster operator deploys ark-api with `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback` (or `http://[::1]:8080/...`) — the env var is read at pod startup, so it has to be set on the Deployment, not on the laptop. The end user then port-forwards ark-api to the laptop, binding both IPv4 and IPv6 loopback so the browser reaches it regardless of how the OS resolves `localhost` (`kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80`). The DCR registers the loopback URL (RFC 8252 §7.3 permits this and recommends binding both stacks). This recipe is only viable in single-operator clusters — a callback URL that resolves to the cluster's `127.0.0.1` would be useless to a remote user-agent, so a publicly-reachable ingress is the normal mode.
 
 ### Authorized-by surface
 
 ark-api stamps two annotations on the MCPServer at exchange time:
 
-- `ark.mckinsey.com/mcp-auth-authorized-by`: best-effort caller identity as observed by ark-api. For dashboard callers, the authenticated user identity from the session. For CLI callers (via `ArkApiProxy`), `cli` (no per-user identity is available on the kubeconfig path today). Format is opaque; consumers display verbatim.
+- `ark.mckinsey.com/mcp-auth-authorized-by`: best-effort caller identity as observed by ark-api. This change ships only the `ArkApiProxy` (CLI) branch, which annotates `cli` because no per-user identity is available on the kubeconfig path. Resolving end-user identity from an authenticated bearer token is owned by the future `mcp-auth-dashboard` capability, which will add the inbound auth middleware that makes the user identity available to this annotation. Format is opaque; consumers display verbatim.
 - `ark.mckinsey.com/mcp-auth-authorized-at`: RFC 3339 UTC timestamp of the exchange.
 
 These annotations surface the **shared-token limitation** (one Secret per MCPServer; last login wins) without trying to fix it. A future per-user-tokens capability will own the controller- and dispatch-side changes required to act on caller identity.
