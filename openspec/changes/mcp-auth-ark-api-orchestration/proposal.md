@@ -2,18 +2,15 @@
 
 Ark's MCP integration lets agents call remote MCP servers as tools. When those servers require OAuth — Notion's `mcp.notion.com/mcp`, GitHub Copilot MCP, Atlassian MCP — the controller needs a valid `access_token` for the protected resource and must present it on every call. Two earlier capabilities cover discovery and injection: `mcp-auth-detection` parses `WWW-Authenticate` and surfaces `status.authorization.state = Required` with the RFC 9728 / RFC 8414 metadata, and `mcp-auth-token-injection` reads a referenced Secret and injects `Authorization: Bearer <access_token>` on each MCP call to reach `Authorized`. The step in between — actually **minting** those tokens via Dynamic Client Registration, PKCE, and a token exchange — is left to the operator. This change closes that loop inside Ark.
 
-Operators today script DCR + PKCE + token exchange + Secret patch out of band, copy-paste tokens from another tool's UI, or run a one-off helper that binds a `127.0.0.1:<port>` loopback listener and `kubectl patch`'s the Secret directly. Building this into Ark has four structural constraints worth designing for up front:
+Operators today script DCR + PKCE + token exchange + Secret patch out of band, or copy-paste tokens from another tool's UI. The orchestration lands in **ark-api**: a single service performs Dynamic Client Registration, generates the PKCE verifier and `state`, redirects the user's browser to the IdP, exchanges the authorization code for tokens, and writes the resulting Secret using its own in-cluster ServiceAccount. The user's CLI (and, in a follow-up capability, the dashboard) is a thin client over four ark-api endpoints — `auth/start`, `auth/callback`, `auth/status`, `auth/logout` — and never sees token material. Completion is signalled honestly: `auth/status` returns `authorized` only when both the token exchange succeeded and the MCPServer's `status.authorization.state` has reconciled to `Authorized`, so the CLI exits when the system is actually ready.
 
-1. **Two callers, one flow.** The CLI needs the flow today; the dashboard needs the same flow next. A browser cannot bind a useful loopback port, so a CLI-only implementation centred on a loopback listener cannot be reused — the dashboard would re-implement DCR, state verification, token exchange, CORS handling on browser→IdP token endpoints, and Secret RBAC end-to-end.
-2. **Port binding pain.** Any loopback-callback design pays the cost of `--port`, "port already in use," IPv6 dual-stack listener requirements, and an SSH-tunnel recipe for jumphost operators — all in service of a single browser redirect.
-3. **Inconsistent RBAC.** A CLI that patches Secrets via the operator's `kubeconfig` runs against a different audience and different permissions than the controller's ServiceAccount. Cluster admins succeed; developers without `patch secrets` fail.
-4. **Honest completion signal.** Exiting on a 200 from the token endpoint is not the same as exiting when the controller has reconciled the Secret to `Authorized`. The user thinks they're done before the system is.
-
-This change adds DCR, PKCE, state verification, token exchange, and Secret writes to ark-api, with the CLI reduced to "two HTTP calls plus a status poll." The same ark-api endpoint surface is the foundation a future dashboard MCP authorize flow will consume, but **no dashboard changes ship here** — that lands in a follow-up capability (see Non-Goals).
-
-The CLI gains `ark mcp auth login <server>` / `ark mcp auth logout <server>`; the implementation underneath is a thin client over the new endpoints.
+The CLI gains `ark mcp auth login <server>` / `ark mcp auth logout <server>` as a thin client over the new endpoints. **No dashboard changes ship here** — that lands in a follow-up capability (see Non-Goals) and consumes the same endpoint contract.
 
 ## What Changes
+
+### Architecture
+
+ark-api hosts the OAuth flow end-to-end. A client (CLI today, dashboard in a follow-up) calls `POST /auth/start` for a given MCPServer and receives an opaque `auth_id` plus an authorization URL. The operator's browser visits that URL and authenticates against the IdP, which redirects back to `GET /auth/callback` on the same ark-api instance. ark-api looks the in-flight state up by `state`, performs the code-for-token exchange against the IdP token endpoint, writes the access/refresh tokens into the Secret named by `spec.authorization.tokenSecretRef` using ark-api's in-cluster ServiceAccount, and updates the cache entry. The client polls `GET /auth/status` until ark-api reports `authorized` (after both the exchange succeeded and the controller has reconciled the MCPServer's `status.authorization.state` to `Authorized`). `POST /auth/logout` reverses the flow by emptying or deleting the Secret. The cache is in-memory and TTL'd; tokens, the `client_secret`, and the PKCE verifier are confined to ark-api.
 
 ### ark-api endpoint surface
 
@@ -40,7 +37,7 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 - **`GET /api/v1/mcp-servers/{name}/auth/status`** — caller-facing status poll.
   - Query: `?auth_id=<>&namespace=<ns>`.
   - Returns `{ state: "pending" | "authorized" | "failed" | "expired", message?: string, expires_at?: string }`.
-  - `authorized` is returned only when (a) the cache entry is in the `authorized` terminal state **and** (b) the MCPServer's `status.authorization.state` has reconciled to `Authorized`. This is the "honest completion signal" the loopback design lacked.
+  - `authorized` is returned only when (a) the cache entry is in the `authorized` terminal state **and** (b) the MCPServer's `status.authorization.state` has reconciled to `Authorized`, so the caller exits when the system is actually ready.
 
 - **`POST /api/v1/mcp-servers/{name}/auth/logout`** — mirrors `ark mcp auth logout`.
   - Query: `?namespace=<ns>`.
@@ -63,7 +60,7 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 `tools/ark-cli/` gains `ark mcp auth login` and `ark mcp auth logout` as a thin client over the ark-api endpoints. The CLI does not call `kubectl` for the auth flow — every operation flows through the existing `ArkApiProxy` (`tools/ark-cli/src/lib/arkApiProxy.ts`).
 
 - `ark mcp auth login <server-name>`:
-  - Flags: `--namespace`, `--force`, `--no-open`, `--timeout <duration>` (Go-duration; default `5m`). **No `--port` flag** — the loopback listener is gone.
+  - Flags: `--namespace`, `--force`, `--no-open`, `--timeout <duration>` (Go-duration; default `5m`).
   - POST `/auth/start`. On 4xx other than `force`-overridable preflight, exit non-zero with a single `mcp auth failed:` line.
   - Always print the returned `authorization_url` to stdout. Open the default browser via `open` unless `--no-open`.
   - Poll `GET /auth/status` every 2s up to `--timeout`. Exit zero on `authorized`; exit non-zero on `failed`, `expired`, or timeout.
@@ -104,7 +101,7 @@ These annotations surface the **shared-token limitation** (one Secret per MCPSer
   - `services/ark-api/ark-api/src/ark_api/api/v1/` — new `mcp_auth.py` module with the four endpoints.
   - `services/ark-api/ark-api/src/ark_api/services/` — DCR client, OAuth token-exchange client, PKCE/state primitives, in-flight cache.
   - `services/ark-api/chart/` — RBAC additions for `patch`/`create` on Secrets (the controller SA already has this; ark-api needs it added).
-  - `tools/ark-cli/src/commands/mcp/` — `auth.ts` (thin client), no `loopback.ts`, no `pkce.ts`.
+  - `tools/ark-cli/src/commands/mcp/` — `auth.ts` (thin client).
   - `docs/content/` — operator docs for the new env vars and the simplified SSH recipe.
 - **CRD:** none. Consumes `spec.authorization.tokenSecretRef` and `status.authorization.*` unchanged.
 - **RBAC:** ark-api SA gains `get/list/watch/create/patch/update/delete` on Secrets within the namespaces it serves. The controller-side RBAC from Stage 1 (read-only on Secrets) is unaffected.
