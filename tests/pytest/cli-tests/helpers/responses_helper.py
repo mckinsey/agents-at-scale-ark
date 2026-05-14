@@ -32,6 +32,9 @@ MODEL_NON_GPT5 = "gpt-4o"
 MODEL_GPT5     = "gpt-5.2-2025-12-11"
 MODEL_O3       = "o3"
 
+MOCK_LLM_MODEL_NAME = "test-model-mock"
+MOCK_LLM_BASE_URL   = "http://mock-llm.default.svc.cluster.local:6556/v1"
+
 
 # ---------------------------------------------------------------------------
 # Built-in tool definitions
@@ -334,8 +337,10 @@ spec:
 
 
 def build_agent_manifest(name: str, namespace: str, model_name: str,
-                   prompt: str = "You are a concise assistant. Answer questions directly and briefly.\nDo not add unnecessary explanation or caveats.\n") -> str:
+                   prompt: str = "You are a concise assistant. Answer questions directly and briefly.\nDo not add unnecessary explanation or caveats.\n",
+                   execution_engine: Optional[str] = "executor-openai-responses") -> str:
     indented_prompt = prompt.strip().replace("\n", "\n    ")
+    ee_block = f"  executionEngine:\n    name: {execution_engine}\n" if execution_engine else ""
     return f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
@@ -344,9 +349,7 @@ metadata:
 spec:
   modelRef:
     name: {model_name}
-  executionEngine:
-    name: executor-openai-responses
-  prompt: |
+{ee_block}  prompt: |
     {indented_prompt}
 """
 

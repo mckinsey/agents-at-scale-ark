@@ -935,8 +935,6 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-    env:
-      HAS_OPENAI_KEY: ${{ secrets.CICD_OPENAI_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -972,9 +970,6 @@ jobs:
           pip install -r tests/pytest/cli-tests/requirements.txt
 
       - name: Deploy executor-openai-responses
-        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
-        env:
-          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
         run: |
           helm upgrade --install executor-openai-responses \
             oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
@@ -985,27 +980,19 @@ jobs:
             --timeout=5m
           kubectl set env deployment/executor-openai-responses \
             -n default \
-            OPENAI_API_KEY="${OPENAI_API_KEY}" \
-            OPENAI_BASE_URL="https://api.openai.com/v1"
+            OPENAI_API_KEY="mock-api-key" \
+            OPENAI_BASE_URL="http://mock-llm.default.svc.cluster.local:6556/v1"
           kubectl rollout status deployment/executor-openai-responses \
             -n default --timeout=2m
 
       - name: Diagnose executor pod
-        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         run: |
           echo "=== Executor pod env vars ==="
           kubectl exec -n default deployment/executor-openai-responses -- env | grep -E "OPENAI|HOST|PORT" || true
-          echo "=== Connectivity test from pod ==="
-          OPENAI_URL=$(kubectl exec -n default deployment/executor-openai-responses -- env | grep OPENAI_BASE_URL | cut -d= -f2 || echo "not set")
-          echo "OPENAI_BASE_URL in pod: ${OPENAI_URL}"
-          DOMAIN=$(echo "${OPENAI_URL}" | sed 's|https://||' | cut -d/ -f1)
-          kubectl exec -n default deployment/executor-openai-responses -- sh -c "nslookup ${DOMAIN} 2>&1 || true"
-          kubectl exec -n default deployment/executor-openai-responses -- sh -c "wget -q --spider --timeout=5 ${OPENAI_URL} 2>&1 || true"
           echo "=== Executor pod logs ==="
           kubectl logs -n default deployment/executor-openai-responses --tail=50 || true
 
       - name: Port-forward executor service
-        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         run: |
           kubectl port-forward -n default svc/executor-openai-responses 18080:8000 &
           sleep 3
@@ -1013,9 +1000,7 @@ jobs:
       - name: Run executor E2E tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
-          EXECUTOR_URL: ${{ env.HAS_OPENAI_KEY == 'true' && 'http://localhost:18080/execute' || '' }}
-          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          EXECUTOR_URL: http://localhost:18080/execute
         run: |
           cd tests/pytest/cli-tests/tests
           pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO

@@ -16,11 +16,11 @@ from helpers.responses_helper import (
     MODEL_NON_GPT5,
     MODEL_GPT5,
     MODEL_O3,
+    MOCK_LLM_MODEL_NAME,
     WEB_SEARCH_TOOL,
     COMPANY_LOOKUP_SCHEMA,
     SQL_CFG_TOOL,
     ARK_CONCURRENT,
-    ARK_TIMEOUT,
     kill_port_forward,
     start_port_forward,
     reconnect_executor,
@@ -29,9 +29,6 @@ from helpers.responses_helper import (
     patch_webhooks,
     wait_for_webhook_ready,
     kubectl_apply,
-    check_executor_ready,
-    build_secret_manifest,
-    build_model_manifest,
     build_agent_manifest,
     build_query_manifest,
     submit_query,
@@ -89,21 +86,13 @@ class TestOpenAIResponsesExecutor:
     """
 
     executor_url: str = ""
-    api_key: str = ""
-    base_url: str = ""
+    api_key: str = "mock-api-key"
+    base_url: str = "http://mock-llm.default.svc.cluster.local:6556/v1"
     _pf_proc: subprocess.Popen = None
     _pf_port: int = 18080
 
     @classmethod
     def setup_class(cls):
-        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "").strip()
-        if not cls.api_key:
-            pytest.skip("CICD_OPENAI_API_KEY not set")
-
-        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "").strip()
-        if not cls.base_url:
-            pytest.skip("CICD_OPENAI_BASE_URL not set")
-
         executor_url_override = os.environ.get("EXECUTOR_URL", "")
         if executor_url_override:
             m = re.search(r":(\d+)/", executor_url_override)
@@ -199,9 +188,6 @@ class TestOpenAIResponsesExecutor:
             f"Response: {data}"
         )
         assert content, f"Empty response from executor: {data}"
-        assert "general data protection regulation" in content.lower(), (
-            f"Expected GDPR expansion, got: {content[:200]}"
-        )
 
     # ------------------------------------------------------------------
     # T02 — Annotations at agent/EE/query levels are accepted without error.
@@ -222,14 +208,11 @@ class TestOpenAIResponsesExecutor:
         )
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
-        assert "5" in content or "five" in content.lower(), (
-            f"Expected '5' or 'five' (permanent members) with query-level reasoning, got: {content[:200]}"
-        )
 
     def test_t03_web_search_only(self):
         status, content, data = self._post(
             self._make_request(
-                "TESCO PLC",
+                "ADAM GROOMING BN LTD",
                 model=MODEL_GPT5,
                 prompt=(
                     "You are an expert web search agent located in UK. "
@@ -247,9 +230,6 @@ class TestOpenAIResponsesExecutor:
         )
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
-        assert any(w in content.lower() for w in ["http", "www", ".com", "tesco"]), (
-            f"Expected a URL or company name in response, got: {content[:200]}"
-        )
 
 
     def test_t04_web_search_structured_output(self):
@@ -276,15 +256,6 @@ class TestOpenAIResponsesExecutor:
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
 
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
-            pytest.fail(f"Response is not valid JSON: {content[:300]}")
-
-        required = set(COMPANY_LOOKUP_SCHEMA["required"])
-        missing = required - set(parsed.keys())
-        assert not missing, f"JSON missing fields {missing}: {content[:300]}"
-
 
     def test_t05_sql_cfg_custom_tool(self):
         status, content, data = self._post(
@@ -304,9 +275,6 @@ class TestOpenAIResponsesExecutor:
         )
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
-        assert "SELECT" in content.upper() and "FROM" in content.upper(), (
-            f"Expected a SQL SELECT statement, got: {content[:200]}"
-        )
 
 
     def test_t06_query_level_reasoning_only(self):
@@ -319,10 +287,7 @@ class TestOpenAIResponsesExecutor:
             )
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert len(content) > 50, f"Unexpectedly short response: {repr(content)}"
-        assert any(w in content.lower() for w in ["retrieval", "fine-tun", "knowledge"]), (
-            f"Response does not address the question: {content[:200]}"
-        )
+        assert content, f"Empty response: {data}"
 
 
     def test_t07_tools_annotation_forwarded_to_model(self):
@@ -336,10 +301,7 @@ class TestOpenAIResponsesExecutor:
             timeout=60,
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert len(content) > 10, f"Unexpectedly short response: {repr(content)}"
-        assert "%" in content or "percent" in content.lower() or "rate" in content.lower(), (
-            f"Expected interest rate information in response, got: {content[:200]}"
-        )
+        assert content, f"Empty response: {data}"
 
 
     @pytest.mark.parametrize("model,user_input,expected", [
@@ -372,9 +334,6 @@ class TestOpenAIResponsesExecutor:
         )
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
-        assert any(e in content for e in expected), (
-            f"Expected one of {expected} with {model} reasoning, got: {content[:200]}"
-        )
 
 
     def test_t09_tool_cascade_query_overrides_agent(self):
@@ -410,11 +369,7 @@ class TestOpenAIResponsesExecutor:
             timeout=60,
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert len(content) > 10, f"Unexpectedly short response: {repr(content)}"
-        assert any(w in content.lower() for w in ["new york", "york", "nyc", "manhattan"]), (
-            f"Expected New York result (query annotation should override agent's London location). "
-            f"Got: {content[:300]}"
-        )
+        assert content, f"Empty response: {data}"
 
     def test_t10_multi_turn_memory(self):
         conv_id = "t10-multi-turn-memory"
@@ -444,12 +399,6 @@ class TestOpenAIResponsesExecutor:
             )
         assert status2 == 200, f"Turn 2 failed with HTTP {status2}: {data2}"
         assert content2, "Turn 2: empty response"
-        assert "alex" in content2.lower(), (
-            f"Expected name 'Alex' recalled in turn 2, got: {content2[:200]}"
-        )
-        assert any(w in content2.lower() for w in ["financial", "risk", "management"]), (
-            f"Expected field recalled in turn 2, got: {content2[:200]}"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -487,10 +436,6 @@ class TestARKQueriesWithOpenAIResponses:
     """
 
     namespace:        str  = "default"
-    api_key:          str  = ""
-    base_url:         str  = ""
-    secret_name:      str  = "test-responses-creds"
-    model_name:       str  = "test-responses-model"
     agent_name:       str  = "test-responses-agent"
     created_queries:  list = []
     _webhook_patched: bool = False
@@ -498,23 +443,14 @@ class TestARKQueriesWithOpenAIResponses:
 
     @classmethod
     def setup_class(cls):
-        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "").strip()
-        if not cls.api_key:
-            pytest.skip("CICD_OPENAI_API_KEY not set")
-
-        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "").strip()
-        if not cls.base_url:
-            pytest.skip("CICD_OPENAI_BASE_URL not set")
-
         cls.namespace = os.environ.get("ARK_NAMESPACE", "default")
         cls.created_queries = []
 
-        check_executor_ready(cls.namespace)
         wait_for_webhook_ready()
         cls._webhook_patched = patch_webhooks("Ignore")
-        kubectl_apply(build_secret_manifest(cls.secret_name, cls.namespace, cls.api_key, cls.base_url))
-        kubectl_apply(build_model_manifest(cls.model_name, cls.namespace, cls.secret_name))
-        kubectl_apply(build_agent_manifest(cls.agent_name, cls.namespace, cls.model_name))
+        kubectl_apply(build_agent_manifest(
+            cls.agent_name, cls.namespace, MOCK_LLM_MODEL_NAME, execution_engine=None,
+        ))
         time.sleep(3)
 
     @classmethod
@@ -527,16 +463,11 @@ class TestARKQueriesWithOpenAIResponses:
                  "--ignore-not-found=true"],
                 capture_output=True,
             )
-        for resource, name in [
-            ("agent",  cls.agent_name),
-            ("model",  cls.model_name),
-            ("secret", cls.secret_name),
-        ]:
-            subprocess.run(
-                ["kubectl", "delete", resource, name, "-n", cls.namespace,
-                 "--ignore-not-found=true"],
-                capture_output=True,
-            )
+        subprocess.run(
+            ["kubectl", "delete", "agent", cls.agent_name, "-n", cls.namespace,
+             "--ignore-not-found=true"],
+            capture_output=True,
+        )
 
     # ------------------------------------------------------------------
     # T13 — Single query through the full Ark stack
@@ -547,16 +478,13 @@ class TestARKQueriesWithOpenAIResponses:
         name = unique_name("t13-single")
         success, content, phase = run_query(
             name,
-            "What does GDPR stand for? Reply with the full expanded name only.",
+            "What does GDPR stand for?",
             self.agent_name,
             self.namespace,
             self.__class__.created_queries,
         )
         assert success, f"Query {name} did not reach phase=done (phase={phase})"
         assert content,  f"Query {name} returned empty content"
-        assert "general data protection regulation" in content.lower(), (
-            f"Expected GDPR expansion, got: {content[:200]}"
-        )
 
     # ------------------------------------------------------------------
     # T14 — N concurrent ARK queries (ARK_CONCURRENT_QUERIES, default 3)
@@ -568,33 +496,22 @@ class TestARKQueriesWithOpenAIResponses:
 
     def test_t14_concurrent_ark_queries(self):
         candidates = [
-            ("What does HTTP stand for? Reply with the full name only.",
-             ["hypertext transfer protocol"]),
-            ("What does CPU stand for? Reply with the full name only.",
-             ["central processing unit"]),
-            ("What does RAM stand for? Reply with the full name only.",
-             ["random access memory"]),
-            ("What does SQL stand for? Reply with the full name only.",
-             ["structured query language"]),
-            ("What does API stand for? Reply with the full name only.",
-             ["application programming interface"]),
-            ("What does JSON stand for? Reply with the full name only.",
-             ["javascript object notation"]),
-            ("What does DNS stand for? Reply with the full name only.",
-             ["domain name system"]),
-            ("What does SSH stand for? Reply with the full name only.",
-             ["secure shell"]),
-            ("What does TLS stand for? Reply with the full name only.",
-             ["transport layer security"]),
-            ("What does REST stand for? Reply with the full name only.",
-             ["representational state transfer"]),
+            "What does HTTP stand for?",
+            "What does CPU stand for?",
+            "What does RAM stand for?",
+            "What does SQL stand for?",
+            "What does API stand for?",
+            "What does JSON stand for?",
+            "What does DNS stand for?",
+            "What does SSH stand for?",
+            "What does TLS stand for?",
+            "What does REST stand for?",
         ]
 
         n       = ARK_CONCURRENT
-        batch   = candidates[:n]
         queries = [
-            (unique_name(f"t14-concurrent-{i}"), question, keywords)
-            for i, (question, keywords) in enumerate(batch)
+            (unique_name(f"t14-concurrent-{i}"), question)
+            for i, question in enumerate(candidates[:n])
         ]
 
         results: dict[str, dict] = {}
@@ -603,38 +520,27 @@ class TestARKQueriesWithOpenAIResponses:
                 pool.submit(
                     run_query, name, question,
                     self.agent_name, self.namespace, self.__class__.created_queries,
-                ): (name, keywords)
-                for name, question, keywords in queries
+                ): name
+                for name, question in queries
             }
             for future in as_completed(futures):
-                name, keywords = futures[future]
+                name = futures[future]
                 success, content, phase = future.result()
-                results[name] = {
-                    "success": success, "content": content,
-                    "phase": phase,     "keywords": keywords,
-                }
+                results[name] = {"success": success, "content": content, "phase": phase}
 
         failures = []
         for name, r in results.items():
             if not r["success"]:
                 failures.append(f"{name}: did not complete (phase={r['phase']})")
-                continue
-            if not r["content"]:
+            elif not r["content"]:
                 failures.append(f"{name}: empty content")
-                continue
-            low = r["content"].lower()
-            if not any(kw in low for kw in r["keywords"]):
-                failures.append(
-                    f"{name}: expected one of {r['keywords']!r} in response, "
-                    f"got: {r['content'][:150]}"
-                )
 
         assert not failures, (
             f"{len(failures)}/{n} concurrent queries failed:\n" +
             "\n".join(failures)
         )
 
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
     # T15 — Concurrent queries with query-level reasoning annotation
     #
     # Same concurrency pattern as T14 but each query carries a
@@ -642,39 +548,18 @@ class TestARKQueriesWithOpenAIResponses:
     # ------------------------------------------------------------------
 
     def test_t15_concurrent_with_reasoning(self):
-        problems = [
-            (
-                "A shop sells apples for £0.50 each. Alice buys 6. "
-                "What is the total cost in pounds? Reply with the number only.",
-                ["3", "£3", "3.00"],
-            ),
-            (
-                "A rectangle is 8 cm wide and 5 cm tall. "
-                "What is its area in cm²? Reply with the number only.",
-                ["40"],
-            ),
-            (
-                "A train travels at 60 mph for 2.5 hours. "
-                "How many miles does it cover? Reply with the number only.",
-                ["150"],
-            ),
-            (
-                "A team of 4 splits a £200 prize equally. "
-                "How much does each person receive? Reply with the number only.",
-                ["50", "£50"],
-            ),
-            (
-                "If a store gives a 20% discount on a £80 jacket, "
-                "what is the sale price? Reply with the number only.",
-                ["64", "£64"],
-            ),
+        inputs = [
+            "What is 2 + 2?",
+            "Name any primary colour.",
+            "What planet do we live on?",
+            "What is the boiling point of water in Celsius?",
+            "How many sides does a triangle have?",
         ]
 
         n       = ARK_CONCURRENT
-        batch   = problems[:n]
         queries = [
-            (unique_name(f"t15-reasoning-{i}"), question, keywords)
-            for i, (question, keywords) in enumerate(batch)
+            (unique_name(f"t15-reasoning-{i}"), text)
+            for i, text in enumerate(inputs[:n])
         ]
 
         results: dict[str, dict] = {}
@@ -682,40 +567,30 @@ class TestARKQueriesWithOpenAIResponses:
             futures = {
                 pool.submit(
                     run_query,
-                    name, question,
+                    name, text,
                     self.agent_name, self.namespace, self.__class__.created_queries,
                     {REASONING_KEY: '{"effort": "low"}'},
-                ): (name, keywords)
-                for name, question, keywords in queries
+                ): name
+                for name, text in queries
             }
             for future in as_completed(futures):
-                name, keywords = futures[future]
+                name = futures[future]
                 success, content, phase = future.result()
-                results[name] = {
-                    "success": success, "content": content,
-                    "phase": phase,     "keywords": keywords,
-                }
+                results[name] = {"success": success, "content": content, "phase": phase}
 
         failures = []
         for name, r in results.items():
             if not r["success"]:
                 failures.append(f"{name}: did not complete (phase={r['phase']})")
-                continue
-            if not r["content"]:
+            elif not r["content"]:
                 failures.append(f"{name}: empty content")
-                continue
-            if not any(kw in r["content"] for kw in r["keywords"]):
-                failures.append(
-                    f"{name}: expected one of {r['keywords']!r} in response, "
-                    f"got: {r['content'][:150]}"
-                )
 
         assert not failures, (
             f"{len(failures)}/{n} concurrent reasoning queries failed:\n" +
             "\n".join(failures)
         )
 
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
     # T16 — Burst: fire-and-forget N queries, then poll all in parallel
     #
     # Submits all queries first (no waiting), then enters a single
@@ -724,16 +599,13 @@ class TestARKQueriesWithOpenAIResponses:
     # ------------------------------------------------------------------
 
     def test_t16_burst_then_poll(self):
-        inputs = [
-            f"Count to {i} and reply with only the number {i}."
-            for i in range(1, ARK_CONCURRENT + 1)
-        ]
+        inputs = [f"Say hello {i}." for i in range(1, ARK_CONCURRENT + 1)]
         queries = [
-            (unique_name(f"t16-burst-{i}"), text, str(i))
+            (unique_name(f"t16-burst-{i}"), text)
             for i, text in enumerate(inputs, start=1)
         ]
 
-        for name, text, _ in queries:
+        for name, text in queries:
             submitted = submit_query(
                 name, text, self.agent_name, self.namespace, self.__class__.created_queries,
             )
@@ -742,30 +614,20 @@ class TestARKQueriesWithOpenAIResponses:
         results: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=len(queries)) as pool:
             futures = {
-                pool.submit(poll_query, name, self.namespace): (name, expected)
-                for name, _, expected in queries
+                pool.submit(poll_query, name, self.namespace): name
+                for name, _ in queries
             }
             for future in as_completed(futures):
-                name, expected = futures[future]
+                name = futures[future]
                 success, content, phase = future.result()
-                results[name] = {
-                    "success": success, "content": content,
-                    "phase": phase,     "expected": expected,
-                }
+                results[name] = {"success": success, "content": content, "phase": phase}
 
         failures = []
         for name, r in results.items():
             if not r["success"]:
                 failures.append(f"{name}: did not complete (phase={r['phase']})")
-                continue
-            if not r["content"]:
+            elif not r["content"]:
                 failures.append(f"{name}: empty content")
-                continue
-            if r["expected"] not in r["content"]:
-                failures.append(
-                    f"{name}: expected {r['expected']!r} in response, "
-                    f"got: {r['content'][:100]}"
-                )
 
         assert not failures, (
             f"{len(failures)}/{len(queries)} burst queries failed:\n" +

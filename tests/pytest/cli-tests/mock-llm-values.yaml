@@ -18,3 +18,9 @@ config:
     response:
       status: 200
       content: '{"id":"mock-response","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Hello! I received your message."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'
+
+  - path: "/v1/responses"
+    method: "POST"
+    response:
+      status: 200
+      content: '{"id":"resp_mock","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello! I received your message.","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":0}}}'
