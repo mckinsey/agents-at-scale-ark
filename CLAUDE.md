@@ -2,6 +2,7 @@
 
 **NEVER add comments** to generated code unless explicitly requested by the user
 
+
 # Pre-Push Gates (Non-Negotiable)
 
 BEFORE pushing ANY commit, `make lint` and `make test` MUST pass locally
