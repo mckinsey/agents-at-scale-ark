@@ -1,85 +1,79 @@
 ## ADDED Requirements
 
-### Requirement: AgentTool supports interaction configuration
+### Requirement: AgentTool supports approval configuration
 
-The `AgentTool` type SHALL support an `interaction` block for configuring per-tool interaction requirements.
+The `AgentTool` type SHALL support an `approval` block for configuring per-tool approval requirements.
 
-#### Scenario: Agent with interaction-required tool accepted
+#### Scenario: Agent with approval-required tool accepted
 
-- **WHEN** an Agent is created with a tool containing `interaction.required: true`, `interaction.type: approval`
+- **WHEN** an Agent is created with a tool containing `approval.required: true`
 - **THEN** the webhook SHALL accept the resource
 
-#### Scenario: Interaction config with timeout accepted
+#### Scenario: Approval config with timeout accepted
 
-- **WHEN** an Agent is created with a tool containing `interaction.required: true`, `interaction.timeout: 5m`
+- **WHEN** an Agent is created with a tool containing `approval.required: true`, `approval.timeout: 5m`
 - **THEN** the webhook SHALL accept the resource
 
-#### Scenario: Interaction config with onTimeout accepted
+#### Scenario: Approval config with onTimeout accepted
 
-- **WHEN** an Agent is created with a tool containing `interaction.required: true`, `interaction.onTimeout: reject`
+- **WHEN** an Agent is created with a tool containing `approval.required: true`, `approval.onTimeout: reject`
 - **THEN** the webhook SHALL accept the resource
-
-#### Scenario: Invalid interaction type rejected (MVP)
-
-- **WHEN** an Agent is created with a tool containing `interaction.type: input`
-- **THEN** the webhook SHALL reject the resource with error "interaction type 'input' not supported in MVP; only 'approval' is supported"
 
 #### Scenario: Invalid onTimeout value rejected
 
-- **WHEN** an Agent is created with a tool containing `interaction.onTimeout: invalid`
+- **WHEN** an Agent is created with a tool containing `approval.onTimeout: invalid`
 - **THEN** the webhook SHALL reject the resource with error "onTimeout must be 'reject' or 'proceed'"
 
 #### Scenario: Default onTimeout is reject
 
-- **WHEN** an Agent is created with a tool containing `interaction.required: true` without `onTimeout`
+- **WHEN** an Agent is created with a tool containing `approval.required: true` without `onTimeout`
 - **THEN** the default value SHALL be "reject"
 
-#### Scenario: Agent without interaction config accepted (backwards compatibility)
+#### Scenario: Agent without approval config accepted (backwards compatibility)
 
-- **WHEN** an Agent is created with tools that have no `interaction` block
+- **WHEN** an Agent is created with tools that have no `approval` block
 - **THEN** the webhook SHALL accept the resource
-- **AND** tools SHALL execute immediately without interaction
+- **AND** tools SHALL execute immediately without approval
 
 ### Requirement: Query supports input-required phase
 
-The Query CRD status phase SHALL support `input-required` as a valid value, indicating the query is paused awaiting human input (approval, confirmation, selection, or text input) for a tool call.
+The Query CRD status phase SHALL support `input-required` as a valid value, indicating the query is paused awaiting human approval for a tool call.
 
 #### Scenario: Query enters input-required phase
 
-- **WHEN** a Query targets an Agent with an interaction-required tool
+- **WHEN** a Query targets an Agent with an approval-required tool
 - **AND** the model returns a tool call for that tool
 - **THEN** the Query status phase SHALL be set to `input-required`
-- **AND** an A2ATask resource SHALL be created with `phase: input-required` and `parameters.interactionType` set
+- **AND** an A2ATask resource SHALL be created with `phase: input-required`
 
-#### Scenario: Query resumes after positive response
+#### Scenario: Query resumes after approval
 
 - **WHEN** a Query is in `input-required` phase
-- **AND** the corresponding A2ATask is completed (approved, confirmed, or input provided)
+- **AND** the corresponding A2ATask is completed (approved)
 - **THEN** the Query status phase SHALL transition to `running`
 - **AND** the tool SHALL be executed
 
-#### Scenario: Query fails after negative response
+#### Scenario: Query fails after rejection
 
 - **WHEN** a Query is in `input-required` phase
-- **AND** the corresponding A2ATask is failed (rejected, denied, or cancelled)
+- **AND** the corresponding A2ATask is failed (rejected)
 - **THEN** the Query status phase SHALL transition to `error`
 - **AND** the Query response SHALL indicate the tool call was not executed
 
-### Requirement: A2ATask tracks pending interactions
+### Requirement: A2ATask tracks pending approvals
 
-The system SHALL use the existing `A2ATask` CRD to track pending tool interactions with full audit trail.
+The system SHALL use the existing `A2ATask` CRD to track pending tool approvals with full audit trail.
 
-#### Scenario: A2ATask created for interaction-required tool
+#### Scenario: A2ATask created for approval-required tool
 
-- **WHEN** a Query triggers a tool call that requires interaction
+- **WHEN** a Query triggers a tool call that requires approval
 - **THEN** an A2ATask resource SHALL be created with a unique name containing:
   - `spec.queryRef` referencing the Query
   - `spec.agentRef` referencing the Agent
   - `spec.contextId` referencing the conversation in memory service
-  - `spec.parameters.interactionType` set (e.g., "approval", "input", "confirmation", "selection")
   - `spec.parameters.toolCalls` containing tool call details (JSON string)
-  - `spec.parameters.timeout` from the tool's interaction config
-  - `spec.parameters.onTimeout` from the tool's interaction config
+  - `spec.parameters.timeout` from the tool's approval config
+  - `spec.parameters.onTimeout` from the tool's approval config
   - `spec.parameters.pendingToolCallIndex` indicating resume point
   - `spec.parameters.completedToolResults` containing results since last model call
   - `status.phase` set to `input-required`
@@ -87,7 +81,7 @@ The system SHALL use the existing `A2ATask` CRD to track pending tool interactio
 
 #### Scenario: A2ATask contains tool context for informed decisions
 
-- **WHEN** an A2ATask is created for interaction
+- **WHEN** an A2ATask is created for approval
 - **THEN** `spec.parameters.toolCalls` (parsed from JSON) SHALL contain:
   - `id` — the tool call ID
   - `name` — the tool name
@@ -99,10 +93,9 @@ The system SHALL use the existing `A2ATask` CRD to track pending tool interactio
 
 #### Scenario: A2ATask contains minimal execution context for resume
 
-- **WHEN** an A2ATask is created for interaction
+- **WHEN** an A2ATask is created for approval
 - **THEN** `spec.contextId` SHALL reference the conversation ID in memory service
 - **AND** `spec.parameters` SHALL contain:
-  - `interactionType` — the type of interaction required
   - `pendingToolCallIndex` — index of first pending tool
   - `completedToolResults` — results of already-executed tools (since last model call)
 - **AND** conversation history SHALL be fetched from memory service on resume (NOT stored in CRD)
@@ -151,67 +144,67 @@ The system SHALL use the existing `A2ATask` CRD to track pending tool interactio
 - **THEN** the submitted response SHALL take precedence
 - **AND** `status.phase` SHALL be set based on the response (not `failed`)
 
-### Requirement: Completions executor checks interaction policy with O(1) lookup
+### Requirement: Completions executor checks approval policy with O(1) lookup
 
-The completions executor SHALL check interaction requirements before executing each tool call, using pre-computed lookup for performance.
+The completions executor SHALL check approval requirements before executing each tool call, using pre-computed lookup for performance.
 
-#### Scenario: Tool without interaction config executes immediately
+#### Scenario: Tool without approval config executes immediately
 
-- **WHEN** the model returns a tool call for a tool without `interaction` config
+- **WHEN** the model returns a tool call for a tool without `approval` config
 - **THEN** the executor SHALL execute the tool immediately
 - **AND** no A2ATask SHALL be created
 
-#### Scenario: Tool with interaction.required: false executes immediately
+#### Scenario: Tool with approval.required: false executes immediately
 
-- **WHEN** the model returns a tool call for a tool with `interaction.required: false`
+- **WHEN** the model returns a tool call for a tool with `approval.required: false`
 - **THEN** the executor SHALL execute the tool immediately
 
-#### Scenario: Tool with interaction.required: true pauses for interaction
+#### Scenario: Tool with approval.required: true pauses for approval
 
-- **WHEN** the model returns a tool call for a tool with `interaction.required: true`
+- **WHEN** the model returns a tool call for a tool with `approval.required: true`
 - **THEN** the executor SHALL NOT execute the tool
-- **AND** the executor SHALL return an InteractionRequiredError with minimal execution context and interaction type
+- **AND** the executor SHALL return an ApprovalRequiredError with minimal execution context
 - **AND** the Query SHALL enter `input-required` phase
 
-#### Scenario: Multiple tools with mixed interaction requirements
+#### Scenario: Multiple tools with mixed approval requirements
 
 - **WHEN** the model returns multiple tool calls in one response
-- **AND** some tools require interaction and some do not
-- **THEN** the executor SHALL execute tools that do not require interaction
-- **AND** the executor SHALL pause for interaction on tools that require it
+- **AND** some tools require approval and some do not
+- **THEN** the executor SHALL execute tools that do not require approval
+- **AND** the executor SHALL pause for approval on tools that require it
 - **AND** completed tool results SHALL be stored in execution context
 
-#### Scenario: Interaction lookup is O(1)
+#### Scenario: Approval lookup is O(1)
 
 - **WHEN** the Agent is initialized
-- **THEN** interaction requirements SHALL be pre-computed into a map
-- **AND** checking interaction requirements during tool execution SHALL be O(1) lookup
+- **THEN** approval requirements SHALL be pre-computed into a map
+- **AND** checking approval requirements during tool execution SHALL be O(1) lookup
 
-### Requirement: Batch interaction for multiple tool calls
+### Requirement: Batch approval for multiple tool calls
 
-The system SHALL support batching multiple interaction-required tool calls into a single A2ATask.
+The system SHALL support batching multiple approval-required tool calls into a single A2ATask.
 
-#### Scenario: Multiple interaction-required tools batched into single task
+#### Scenario: Multiple approval-required tools batched into single task
 
 - **WHEN** the model returns multiple tool calls in one response
-- **AND** multiple tools require interaction
+- **AND** multiple tools require approval
 - **THEN** a single A2ATask SHALL be created
-- **AND** `spec.parameters.toolCalls` SHALL contain all interaction-required tools
+- **AND** `spec.parameters.toolCalls` SHALL contain all approval-required tools
 
-#### Scenario: Batch positive response executes all tools
+#### Scenario: Batch approval executes all tools
 
-- **WHEN** an A2ATask with multiple tool calls receives a positive response
+- **WHEN** an A2ATask with multiple tool calls receives an approval
 - **THEN** all tools in the batch SHALL be executed
 
-#### Scenario: Batch negative response rejects all tools
+#### Scenario: Batch rejection rejects all tools
 
-- **WHEN** an A2ATask with multiple tool calls receives a negative response
+- **WHEN** an A2ATask with multiple tool calls receives a rejection
 - **THEN** no tools in the batch SHALL be executed
 - **AND** rejection message SHALL be returned for all tools
 
-### Requirement: Authorization controls for interaction response submission
+### Requirement: Authorization controls for approval response submission
 
-The system SHALL enforce authorization checks when interaction responses are submitted.
+The system SHALL enforce authorization checks when approval responses are submitted.
 
 #### Scenario: Response by user with RBAC permission succeeds (MVP)
 
@@ -232,87 +225,79 @@ The system SHALL enforce authorization checks when interaction responses are sub
 - **THEN** the API SHALL return HTTP 409 Conflict
 
 **Phase 2 (deferred):**
-- Fine-grained type-specific authorization (e.g., `spec.interaction.approval.approvers`)
-- Type-specific validation (e.g., `spec.interaction.approval.reasonRequired`)
+- Fine-grained authorization (e.g., `spec.approval.approvers`)
+- Validation (e.g., `spec.approval.reasonRequired`)
 
-### Requirement: Event streaming emits interaction events
+### Requirement: Event streaming emits approval events
 
-The system SHALL emit real-time events when interaction is required and when responses are received.
+The system SHALL emit real-time events when approval is required and when responses are received.
 
-#### Scenario: Interaction request event emitted
+#### Scenario: Approval request event emitted
 
 - **WHEN** a Query enters `input-required` phase
-- **THEN** a `ToolInteractionRequest` event SHALL be streamed to connected clients
-- **AND** the event SHALL contain interaction type and tool call details (name, arguments, description, annotations, timeout)
+- **THEN** a `ToolApprovalRequest` event SHALL be streamed to connected clients
+- **AND** the event SHALL contain tool call details (name, arguments, description, annotations, timeout)
 
-#### Scenario: Interaction response event emitted
+#### Scenario: Approval response event emitted
 
-- **WHEN** an A2ATask receives an interaction response
-- **THEN** a `ToolInteractionResponse` event SHALL be streamed to connected clients
-- **AND** the event SHALL contain the interaction type, response details, and duration
+- **WHEN** an A2ATask receives an approval response
+- **THEN** a `ToolApprovalResponse` event SHALL be streamed to connected clients
+- **AND** the event SHALL contain the response details and duration
 
-### Requirement: API supports interaction response submission with conflict detection
+### Requirement: API supports approval response submission with conflict detection
 
-The Ark API SHALL provide endpoints for submitting interaction responses with conflict detection.
+The Ark API SHALL provide endpoints for submitting approval responses with conflict detection.
 
-#### Scenario: Submit interaction response via API
+#### Scenario: Submit approval response via API
 
-- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/interaction`
-- **AND** the request body contains `{"interactionType": "approval", "action": "approved", "toolCallId": "call_xyz"}`
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
+- **AND** the request body contains `{"action": "approved", "toolCallId": "call_xyz"}`
 - **AND** the A2ATask is in `input-required` phase
-- **THEN** the A2ATask SHALL be updated with the interaction response
+- **THEN** the A2ATask SHALL be updated with the approval response
 - **AND** the Query SHALL resume execution
 - **AND** the response SHALL contain the updated status
 
-#### Scenario: Submit negative response via API
+#### Scenario: Submit rejection response via API
 
-- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/interaction`
-- **AND** the request body contains `{"interactionType": "approval", "action": "rejected", "toolCallId": "call_xyz"}`
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
+- **AND** the request body contains `{"action": "rejected", "toolCallId": "call_xyz"}`
 - **THEN** the A2ATask SHALL be updated with the rejection
 - **AND** the Query SHALL transition to `error` phase
 
-#### Scenario: Response type mismatch rejected
-
-- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/interaction`
-- **AND** the request `interactionType` does not match the A2ATask's `parameters.interactionType`
-- **THEN** the API SHALL return HTTP 400 Bad Request
-- **AND** the response SHALL indicate interaction type mismatch
-
 #### Scenario: Response for wrong phase rejected
 
-- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/interaction`
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
 - **AND** the A2ATask is NOT in `input-required` phase
 - **THEN** the API SHALL return HTTP 409 Conflict
-- **AND** the response SHALL indicate the task is not awaiting input
+- **AND** the response SHALL indicate the task is not awaiting approval
 
 #### Scenario: Duplicate response submission rejected
 
-- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/interaction`
+- **WHEN** a POST request is made to `/api/v1/namespaces/{namespace}/queries/{name}/approval`
 - **AND** the A2ATask has already been completed or failed
 - **THEN** the API SHALL return HTTP 409 Conflict
 - **AND** the response SHALL indicate a response has already been submitted
 
-### Requirement: A2A protocol reuses input-required state for interactions
+### Requirement: A2A protocol uses input-required state
 
-The A2A protocol SHALL use existing `input-required` task state for tool interactions (no protocol changes needed).
+The A2A protocol SHALL use `input-required` task state for tool approvals (aligning with A2A standard).
 
-#### Scenario: External executor signals interaction required
+#### Scenario: External executor signals approval required
 
-- **WHEN** an external executor (via A2A) returns task state `input-required` with interaction data
+- **WHEN** an external executor (via A2A) returns task state `input-required` with approval data
 - **THEN** the A2ATask status phase SHALL be set to `input-required`
 - **AND** the parent Query phase SHALL be set to `input-required`
 
-#### Scenario: A2A interaction request includes type and callback URL
+#### Scenario: A2A approval request includes callback URL
 
-- **WHEN** an external executor signals `input-required` for interaction
-- **THEN** the A2A message SHALL include `interactionType` field
-- **AND** the A2A message SHALL include a `callbackUrl` for response delivery
-- **AND** the message MIME type SHALL be `application/vnd.ark.tool-interaction-request+json`
+- **WHEN** an external executor signals `input-required` for approval
+- **THEN** the A2A message SHALL include a `callbackUrl` for response delivery
+- **AND** the message MIME type SHALL be `application/vnd.ark.tool-approval-request+json`
 
-#### Scenario: A2A task resumes after interaction via callback
+#### Scenario: A2A task resumes after approval via callback
 
 - **WHEN** an A2ATask is in `input-required` phase
-- **AND** an interaction response is submitted
+- **AND** an approval response is submitted
 - **THEN** the controller SHALL POST the response to the executor's `callbackUrl`
 - **AND** the executor SHALL fetch conversation history from memory service
 - **AND** the A2ATask SHALL resume execution
@@ -355,8 +340,7 @@ The existing A2ATask CRD SHALL be used to track tool approvals via `spec.paramet
 #### Scenario: A2ATask parameters store approval context
 
 - **WHEN** an A2ATask is created for approval
-- **THEN** `spec.parameters.interactionType` SHALL be set to "tool-approval"
-- **AND** `spec.parameters.toolCalls` SHALL contain tool call details (JSON)
+- **THEN** `spec.parameters.toolCalls` SHALL contain tool call details (JSON)
 - **AND** `spec.parameters.pendingToolCallIndex` SHALL indicate resume point
 - **AND** `spec.parameters.completedToolResults` SHALL contain tool results (JSON)
 
