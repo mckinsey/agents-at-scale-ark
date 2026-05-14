@@ -18,9 +18,9 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 
 - **`POST /api/v1/mcp-servers/{name}/auth/start`** — initiates a flow.
   - Query: `?namespace=<ns>`.
-  - Body: `{ force?: bool, scopes?: string[] }`.
+  - Body: `{ force?: bool, force_registration?: bool, scopes?: string[] }`.
   - Reads the MCPServer; refuses unless `status.authorization.state == Required` (override with `force: true`).
-  - Reads `spec.authorization.tokenSecretRef`. If the Secret already carries `client_id` / `client_secret`, ark-api reuses them (skip DCR). Otherwise it performs RFC 7591 Dynamic Client Registration against `status.authorization.registrationEndpoint` with `redirect_uris=[<ark-api callback URL>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`.
+  - Reads `spec.authorization.tokenSecretRef`. If the Secret already carries `client_id` / `client_secret`, ark-api reuses them (skip DCR) unless `force_registration: true` is passed, in which case it performs a fresh RFC 7591 Dynamic Client Registration regardless of cached credentials and replaces them on a successful exchange. Otherwise it performs RFC 7591 Dynamic Client Registration against `status.authorization.registrationEndpoint` with `redirect_uris=[<ark-api callback URL>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`.
   - Generates PKCE verifier (64 unreserved chars), S256 challenge, and `state` (16 bytes, base64url).
   - Stores `{verifier, state, mcpServer ref, registered client_id, registered client_secret, caller identity, created_at}` in a short-lived cache keyed by an opaque `auth_id`. TTL is configurable (default 10 minutes).
   - Returns `{ auth_id, authorization_url, expires_at }`. The authorization URL carries `response_type=code`, the registered `client_id`, ark-api's redirect URI, `state`, `code_challenge`, `code_challenge_method=S256`, and `resource=<MCP URL>` (RFC 8707). `scope` is only included when supplied.
@@ -50,7 +50,7 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 
 ### Configuration
 
-- `ARK_API_PUBLIC_CALLBACK_URL` — required when `auth/start` is invoked. Must be a stable, externally-reachable URL terminating at `GET /api/v1/mcp/auth/callback`. Validation: HTTPS scheme except for `127.0.0.1` / `localhost` (RFC 8252 §7.3 carve-out for the air-gapped/port-forward case).
+- `ARK_API_PUBLIC_CALLBACK_URL` — required when `auth/start` is invoked. Must be a stable, externally-reachable URL terminating at `GET /api/v1/mcp/auth/callback`. Validation: HTTPS scheme except for `127.0.0.1`, `[::1]`, or `localhost` (RFC 8252 §7.3 carve-out for the air-gapped/port-forward case; IPv6 loopback literals SHALL be bracketed per RFC 3986 §3.2.2).
 - `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` — TTL for cache entries (default `600`).
 - `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` — outbound DCR call timeout (default `15`).
 - `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` — outbound token-exchange call timeout (default `15`).
@@ -60,8 +60,8 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 `tools/ark-cli/` gains `ark mcp auth login` and `ark mcp auth logout` as a thin client over the ark-api endpoints. The CLI does not call `kubectl` for the auth flow — every operation flows through the existing `ArkApiProxy` (`tools/ark-cli/src/lib/arkApiProxy.ts`).
 
 - `ark mcp auth login <server-name>`:
-  - Flags: `--namespace`, `--force`, `--no-open`, `--timeout <duration>` (Go-duration; default `5m`).
-  - POST `/auth/start`. On 4xx other than `force`-overridable preflight, exit non-zero with a single `mcp auth failed:` line.
+  - Flags: `--namespace`, `--force`, `--force-registration`, `--no-open`, `--timeout <duration>` (Go-duration; default `5m`).
+  - POST `/auth/start`. `--force` maps to `force: true` (bypass `status.authorization.state` preflight); `--force-registration` maps to `force_registration: true` (perform a fresh RFC 7591 DCR even when the Secret carries cached `client_id` / `client_secret`). The two are orthogonal — `--force-registration` does not bypass the state guard. On 4xx other than `force`-overridable preflight, exit non-zero with a single `mcp auth failed:` line.
   - Always print the returned `authorization_url` to stdout. Open the default browser via `open` unless `--no-open`.
   - Poll `GET /auth/status` every 2s up to `--timeout`. Exit zero on `authorized`; exit non-zero on `failed`, `expired`, or timeout.
   - Print the resource URL and `expires_at` on success.
@@ -74,7 +74,7 @@ Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickof
 Two operator recipes cover the laptop / jumphost case, depending on whether ark-api is reachable from the operator's browser:
 
 - **Publicly-reachable ark-api ingress:** the laptop browser hits `https://ark.example.com/api/v1/mcp/auth/callback` directly. The CLI on the jumphost just polls `/auth/status`. **No SSH tunnel needed.**
-- **Air-gapped / private ark-api:** the operator port-forwards ark-api to the laptop (`kubectl port-forward svc/ark-api 8080:80`) and sets `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback`. The DCR registers the loopback URL (RFC 8252 §7.3 permits this).
+- **Air-gapped / private ark-api:** the operator port-forwards ark-api to the laptop, binding both IPv4 and IPv6 loopback so the browser reaches it regardless of how the OS resolves `localhost` (`kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80`), and sets `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback` (or `http://[::1]:8080/...`). The DCR registers the loopback URL (RFC 8252 §7.3 permits this and recommends binding both stacks).
 
 ### Authorized-by surface
 

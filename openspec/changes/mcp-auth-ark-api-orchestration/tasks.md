@@ -1,6 +1,6 @@
 ## 1. ark-api configuration
 
-- [ ] 1.1 Add `ARK_API_PUBLIC_CALLBACK_URL` env var with HTTPS-or-loopback validation at startup; refuse to start on a non-HTTPS public host
+- [ ] 1.1 Add `ARK_API_PUBLIC_CALLBACK_URL` env var with HTTPS-or-loopback validation at startup; refuse to start on a non-HTTPS public host. Loopback carve-out SHALL accept `127.0.0.1`, `[::1]` (bracketed per RFC 3986 §3.2.2), and `localhost`. Reject unbracketed IPv6 literals.
 - [ ] 1.2 Add `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` (default `600`)
 - [ ] 1.3 Add `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` (default `15`)
 - [ ] 1.4 Add `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` (default `15`)
@@ -43,7 +43,7 @@
 ## 7. ark-api endpoint tests
 
 - [ ] 7.1 `auth/start` — preflight refusal on Authorized without `force`; success on Required; `force` bypasses preflight; cache entry populated with verifier + state + caller identity
-- [ ] 7.2 `auth/start` — DCR happens when Secret lacks `client_secret`; DCR is skipped when both `client_id` and `client_secret` are populated
+- [ ] 7.2 `auth/start` — DCR happens when Secret lacks `client_secret`; DCR is skipped when both `client_id` and `client_secret` are populated; `force_registration: true` triggers fresh DCR even with cached credentials and replaces them on a successful exchange; `force_registration: true` without `force` on a non-Required MCPServer still returns 409
 - [ ] 7.3 `auth/start` — DCR rejection paths (missing `redirect_uris`, unsupported `token_endpoint_auth_method`) propagate as 502
 - [ ] 7.4 `auth/start` — Secret untouched on any flow-pre-exchange failure
 - [ ] 7.5 `auth/callback` — unknown state → 400 HTML; known state succeeds; second hit for same code → 400 (replay protection via delete-on-lookup)
@@ -64,7 +64,7 @@
 
 - [ ] 9.1 Register `ark mcp` parent command in `tools/ark-cli/src/index.tsx`
 - [ ] 9.2 Register `ark mcp auth` parent command with `login` and `logout` subcommands
-- [ ] 9.3 `ark mcp auth login <server-name>` flags: `--namespace`, `--force`, `--no-open`, `--timeout <duration>`. NO `--port` flag.
+- [ ] 9.3 `ark mcp auth login <server-name>` flags: `--namespace`, `--force`, `--force-registration`, `--no-open`, `--timeout <duration>`. `--force` → `force: true` in `auth/start` body; `--force-registration` → `force_registration: true`. The two are orthogonal — `--force-registration` does not bypass the preflight. NO `--port` flag.
 - [ ] 9.4 Validate `--timeout` as a Go-duration string accepting positive durations only; clear error on parse failure
 - [ ] 9.5 Resolve namespace: `--namespace` → current `kubectl` context → `default`; pass as `?namespace=` query param
 - [ ] 9.6 Drive the flow via `ArkApiProxy`: POST `/auth/start` → print and (unless `--no-open`) `open()` the URL → poll `GET /auth/status` every 2s up to `--timeout`
@@ -76,7 +76,8 @@
 ## 10. CLI tests
 
 - [ ] 10.1 `auth.spec.ts` — happy path with mock ark-api: start returns `auth_id` + URL → status polls return `pending` then `authorized` → CLI exits zero
-- [ ] 10.2 Negative paths: `auth/start` returns 409 without `force`; `auth/status` returns `failed` with `invalid_grant`; poll loop exceeds `--timeout`; ark-api unreachable via proxy
+- [ ] 10.2 Negative paths: `auth/start` returns 409 without `force`; `auth/status` returns `failed` with `invalid_grant`; poll loop exceeds `--timeout`; ark-api unreachable via proxy; `--force-registration` without `--force` on a non-Required MCPServer surfaces the 409 verbatim
+- [ ] 10.2.1 `--force-registration` test: assert the CLI sends `force_registration: true` in the `auth/start` body and that the flag is independent of `--force`
 - [ ] 10.3 `--no-open` test: assert the authorization URL is printed to stdout and `defaultDeps.openBrowser` is NOT invoked
 - [ ] 10.4 Namespace resolution unit tests: explicit `--namespace`, `kubectl` context fallback, `default` fallback
 - [ ] 10.5 `--timeout` parser tests: `60s`, `5m`, `1h` accepted; `abc`, `-1m`, `0s` rejected
@@ -86,6 +87,6 @@
 
 ## 11. Documentation
 
-- [ ] 11.1 `docs/content/` — operator guide for `ARK_API_PUBLIC_CALLBACK_URL` (public ingress + air-gapped port-forward recipes)
+- [ ] 11.1 `docs/content/` — operator guide for `ARK_API_PUBLIC_CALLBACK_URL` (public ingress + air-gapped port-forward recipes). The port-forward recipe SHALL show `kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80` so the browser reaches the listener regardless of how the OS resolves `localhost`.
 - [ ] 11.2 `docs/content/` — `ark mcp auth login` / `logout` CLI reference
 - [ ] 11.3 Note in the MCP authorization overview that token writes go through ark-api and surface the `authorized-by` annotation as the visible side-effect; link to the (future) per-user-tokens capability for the multi-user limitation

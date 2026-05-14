@@ -1,15 +1,8 @@
 ## ADDED Requirements
 
-### Requirement: ark-api exposes auth/start, auth/callback, auth/status, auth/logout endpoints
+### Requirement: ark-api exposes POST /auth/start to initiate an authorization flow
 
-ark-api SHALL expose four endpoints under `/api/v1` orchestrating the OAuth 2.1 authorization flow for an `MCPServer`:
-
-- `POST /api/v1/mcp-servers/{name}/auth/start` initiates a flow and returns `{ auth_id, authorization_url, expires_at }`.
-- `GET /api/v1/mcp/auth/callback` is the registered OAuth `redirect_uri`; it receives `?code` / `?error` from the IdP, performs the token exchange, patches the Secret, and renders an HTML completion page.
-- `GET /api/v1/mcp-servers/{name}/auth/status` returns `{ state, message?, expires_at? }` where `state` is one of `pending`, `authorized`, `failed`, `expired`.
-- `POST /api/v1/mcp-servers/{name}/auth/logout` clears or deletes the Secret referenced by `spec.authorization.tokenSecretRef`.
-
-All endpoints SHALL accept `namespace` as a query parameter, falling back to the namespace policy enforced by the existing ark-api request-scoping middleware.
+ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/start` to initiate an OAuth 2.1 authorization flow for the referenced `MCPServer` and SHALL return `{ auth_id, authorization_url, expires_at }`. The endpoint SHALL accept `namespace` as an optional query parameter; when absent, ark-api SHALL resolve the namespace from its own pod context (typically `default` in a default install), matching every other ark-api route via `with_ark_client(namespace, ...)`.
 
 #### Scenario: ark-api boots without ARK_API_PUBLIC_CALLBACK_URL
 
@@ -18,9 +11,37 @@ All endpoints SHALL accept `namespace` as a query parameter, falling back to the
 - **THEN** the endpoint SHALL return HTTP 503 with a message naming the missing configuration
 - **AND** SHALL NOT contact the IdP
 
-#### Scenario: ark-api receives a request for an unknown MCPServer
+#### Scenario: auth/start is invoked for an unknown MCPServer
 
-- **WHEN** any of the four endpoints is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
+- **WHEN** `POST /api/v1/mcp-servers/{name}/auth/start` is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
+- **THEN** the endpoint SHALL return HTTP 404 with a clear error body
+
+### Requirement: ark-api exposes GET /mcp/auth/callback as the registered OAuth redirect URI
+
+ark-api SHALL expose `GET /api/v1/mcp/auth/callback` as the registered OAuth `redirect_uri`. The endpoint SHALL receive `?code` / `?error` from the IdP, perform the token exchange, patch the Secret, and render an HTML completion page. Unlike the other auth endpoints, this path SHALL NOT include an `{name}` segment — the in-flight cache entry referenced by `state` resolves the target MCPServer.
+
+#### Scenario: Callback is reachable without an MCPServer name in the path
+
+- **WHEN** the IdP redirects the user-agent to `/api/v1/mcp/auth/callback?code=...&state=...`
+- **THEN** ark-api SHALL service the request without requiring an `{name}` path segment
+- **AND** SHALL resolve the target MCPServer by looking up the cache entry keyed on `state`
+
+### Requirement: ark-api exposes GET /auth/status to poll an in-flight flow
+
+ark-api SHALL expose `GET /api/v1/mcp-servers/{name}/auth/status` returning `{ state, message?, expires_at? }` where `state` is one of `pending`, `authorized`, `failed`, `expired`. The endpoint SHALL accept `namespace` as an optional query parameter; when absent, ark-api SHALL resolve the namespace from its own pod context (typically `default` in a default install), matching every other ark-api route via `with_ark_client(namespace, ...)`.
+
+#### Scenario: auth/status is invoked for an unknown MCPServer
+
+- **WHEN** `GET /api/v1/mcp-servers/{name}/auth/status` is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
+- **THEN** the endpoint SHALL return HTTP 404 with a clear error body
+
+### Requirement: ark-api exposes POST /auth/logout to clear or delete the token Secret
+
+ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/logout` to clear or delete the Secret referenced by `spec.authorization.tokenSecretRef`. The endpoint SHALL accept `namespace` as an optional query parameter; when absent, ark-api SHALL resolve the namespace from its own pod context (typically `default` in a default install), matching every other ark-api route via `with_ark_client(namespace, ...)`.
+
+#### Scenario: auth/logout is invoked for an unknown MCPServer
+
+- **WHEN** `POST /api/v1/mcp-servers/{name}/auth/logout` is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
 - **THEN** the endpoint SHALL return HTTP 404 with a clear error body
 
 ### Requirement: auth/start refuses non-Required state without force
@@ -47,7 +68,7 @@ All endpoints SHALL accept `namespace` as a query parameter, falling back to the
 
 ### Requirement: Namespace resolution prefers explicit query parameter
 
-The CLI client SHALL resolve namespace as: `--namespace` flag if set, else the current `kubectl` context namespace, else `default`. The resolved value SHALL be passed as the `namespace` query parameter to ark-api. ark-api SHALL trust the parameter only to the extent the existing request-scoping middleware authorizes the caller for that namespace.
+The CLI client SHALL resolve namespace as: `--namespace` flag if set, else the current `kubectl` context namespace, else `default`. The resolved value SHALL be passed as the `namespace` query parameter to ark-api. ark-api SHALL accept the parameter and SHALL fall back to its own pod-context namespace (via `with_ark_client(None, ...)`) when the caller omits the parameter — matching every other ark-api route.
 
 #### Scenario: CLI passes --namespace explicitly
 
@@ -66,6 +87,13 @@ The CLI client SHALL resolve namespace as: `--namespace` flag if set, else the c
 - **WHEN** the user omits `--namespace`
 - **THEN** the CLI SHALL include `?namespace=default` on every ark-api call
 
+#### Scenario: Non-CLI caller omits ?namespace= entirely
+
+- **GIVEN** a caller other than `ark mcp auth …` (e.g., curl, a future dashboard, an integration script) invokes any of the auth endpoints with no `?namespace=` query parameter
+- **WHEN** ark-api processes the request
+- **THEN** ark-api SHALL resolve the namespace from its own pod context via `with_ark_client(None, ...)` — the same fallback every other ark-api route uses
+- **AND** SHALL NOT reject the request for missing `?namespace=`
+
 ### Requirement: PKCE primitives meet RFC 7636 S256
 
 ark-api SHALL generate a PKCE code verifier of 43-128 unreserved characters and an S256-derived challenge, plus a cryptographically random opaque `state`. The verifier SHALL never leave ark-api; the challenge SHALL accompany the authorization URL; the `state` SHALL be returned to the caller indirectly via the `authorization_url` only.
@@ -83,7 +111,7 @@ ark-api SHALL generate a PKCE code verifier of 43-128 unreserved characters and 
 
 ### Requirement: ark-api owns a stable, install-scoped redirect URI
 
-The OAuth `redirect_uri` registered with the IdP SHALL be derived from the `ARK_API_PUBLIC_CALLBACK_URL` environment variable plus the path `/api/v1/mcp/auth/callback`. The URL SHALL use HTTPS unless the host is `127.0.0.1` or `localhost` (RFC 8252 §7.3 carve-out for port-forward / air-gapped operation).
+The OAuth `redirect_uri` registered with the IdP SHALL be derived from the `ARK_API_PUBLIC_CALLBACK_URL` environment variable plus the path `/api/v1/mcp/auth/callback`. The URL SHALL use HTTPS unless the host is `127.0.0.1`, `[::1]`, or `localhost` (RFC 8252 §7.3 carve-out for port-forward / air-gapped operation). IPv6 loopback literals SHALL be bracketed per RFC 3986 §3.2.2 (`[::1]`), and ark-api SHALL accept the bracketed form without unwrapping or canonicalising it.
 
 #### Scenario: ARK_API_PUBLIC_CALLBACK_URL is set to a non-HTTPS public host
 
@@ -96,6 +124,19 @@ The OAuth `redirect_uri` registered with the IdP SHALL be derived from the `ARK_
 - **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback`
 - **WHEN** ark-api starts
 - **THEN** ark-api SHALL accept the configuration
+
+#### Scenario: ARK_API_PUBLIC_CALLBACK_URL is set to http on an IPv6 loopback host
+
+- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://[::1]:8080/api/v1/mcp/auth/callback`
+- **WHEN** ark-api starts
+- **THEN** ark-api SHALL accept the configuration
+- **AND** SHALL register the bracketed literal `[::1]` verbatim with the IdP at DCR time (no unwrapping, no canonicalisation to `127.0.0.1`)
+
+#### Scenario: ARK_API_PUBLIC_CALLBACK_URL uses an unbracketed IPv6 literal
+
+- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://::1:8080/api/v1/mcp/auth/callback`
+- **WHEN** ark-api starts
+- **THEN** ark-api SHALL refuse to start and SHALL log a configuration error naming RFC 3986 §3.2.2 (IPv6 literals must be bracketed)
 
 #### Scenario: ARK_API_PUBLIC_CALLBACK_URL does not include the callback path
 
@@ -125,7 +166,7 @@ ark-api SHALL POST to `status.authorization.registrationEndpoint` with `client_n
 
 ### Requirement: DCR is reused across logins when client credentials exist
 
-If the Secret named in `spec.authorization.tokenSecretRef` already carries non-empty `client_id` and `client_secret` values (under the configured key names), ark-api SHALL reuse them and SHALL NOT perform a fresh DCR. If either value is empty or absent, ark-api SHALL perform DCR and SHALL persist the resulting `client_id` and `client_secret` to the Secret as part of the successful exchange.
+If the Secret named in `spec.authorization.tokenSecretRef` already carries non-empty `client_id` and `client_secret` values (under the configured key names), ark-api SHALL reuse them and SHALL NOT perform a fresh DCR, unless the `auth/start` body sets `force_registration: true`. If either value is empty or absent — or if `force_registration: true` is set — ark-api SHALL perform DCR and SHALL persist the resulting `client_id` and `client_secret` to the Secret as part of the successful exchange, replacing any cached values. `force_registration` SHALL be orthogonal to `force`: it controls DCR reuse only and SHALL NOT bypass the `status.authorization.state == Required` pre-flight guard.
 
 #### Scenario: Secret carries cached client credentials
 
@@ -138,6 +179,20 @@ If the Secret named in `spec.authorization.tokenSecretRef` already carries non-e
 - **GIVEN** the Secret contains `client_id` but `client_secret` is empty
 - **WHEN** `auth/start` is invoked
 - **THEN** ark-api SHALL perform a fresh DCR (treating the cached `client_id` as invalid)
+
+#### Scenario: Caller passes force_registration on a Secret with cached credentials
+
+- **GIVEN** the Secret contains non-empty `client_id` and `client_secret` keys
+- **WHEN** `auth/start` is invoked with `force_registration: true`
+- **THEN** ark-api SHALL perform a fresh DCR against `status.authorization.registrationEndpoint`
+- **AND** SHALL replace the cached `client_id` and `client_secret` with the newly issued values on a successful token exchange
+- **AND** SHALL NOT touch the Secret on any pre-exchange failure (DCR rejected, callback never arrives, token exchange 4xx)
+
+#### Scenario: force_registration without force on a non-Required MCPServer
+
+- **GIVEN** an MCPServer whose `status.authorization.state` is `Authorized`
+- **WHEN** the caller invokes `auth/start` with `force_registration: true` and no `force` flag
+- **THEN** ark-api SHALL return HTTP 409 (pre-flight refusal) without performing DCR — `force_registration` does not bypass the state guard
 
 ### Requirement: Authorization request includes PKCE S256 and resource indicator
 
@@ -316,7 +371,7 @@ Every failure path of `ark mcp auth login` SHALL exit non-zero with one `output.
 
 ### Requirement: ark-cli exposes mcp auth login as a thin client
 
-The Ark CLI SHALL expose `ark mcp auth login <server-name>` accepting `--namespace`, `--force`, `--no-open`, and `--timeout <duration>`. `--timeout` SHALL be a Go-duration string and SHALL reject non-parseable or non-positive values; default is `5m`. The CLI SHALL NOT accept a `--port` flag — no loopback listener exists. The CLI SHALL drive the flow as: `POST /auth/start` → open browser (unless `--no-open`) → poll `GET /auth/status` every 2s until a terminal state or timeout. The CLI SHALL always print the returned `authorization_url` to stdout regardless of `--no-open`.
+The Ark CLI SHALL expose `ark mcp auth login <server-name>` accepting `--namespace`, `--force`, `--force-registration`, `--no-open`, and `--timeout <duration>`. `--force` SHALL map to `force: true` in the `auth/start` request body (bypassing the `status.authorization.state == Required` preflight). `--force-registration` SHALL map to `force_registration: true` in the same body (forcing a fresh RFC 7591 DCR even when the Secret carries cached `client_id` / `client_secret`). The two flags SHALL be orthogonal — passing `--force-registration` without `--force` SHALL NOT bypass the preflight, and the CLI SHALL surface the resulting 409 verbatim. `--timeout` SHALL be a Go-duration string and SHALL reject non-parseable or non-positive values; default is `5m`. The CLI SHALL NOT accept a `--port` flag — no loopback listener exists. The CLI SHALL drive the flow as: `POST /auth/start` → open browser (unless `--no-open`) → poll `GET /auth/status` every 2s until a terminal state or timeout. The CLI SHALL always print the returned `authorization_url` to stdout regardless of `--no-open`.
 
 #### Scenario: User runs ark mcp auth login against a Required MCPServer
 
@@ -338,6 +393,20 @@ The Ark CLI SHALL expose `ark mcp auth login <server-name>` accepting `--namespa
 - **AND** SHALL continue polling `/auth/status` in the normal way
 
 Note: this follows the CLI's `--no-X` convention — every boolean flag whose default is "yes, do X" supports a corresponding `--no-X` to opt out.
+
+#### Scenario: --force-registration triggers a fresh DCR
+
+- **GIVEN** an MCPServer whose `status.authorization.state` is `Required` and whose Secret already carries non-empty `client_id` / `client_secret`
+- **WHEN** the user runs `ark mcp auth login <name> --force-registration`
+- **THEN** the CLI SHALL send `force_registration: true` in the `auth/start` body
+- **AND** ark-api SHALL perform a fresh DCR and replace the cached credentials on a successful exchange
+
+#### Scenario: --force-registration without --force on a non-Required MCPServer
+
+- **GIVEN** an MCPServer whose `status.authorization.state` is `Authorized`
+- **WHEN** the user runs `ark mcp auth login <name> --force-registration`
+- **THEN** the CLI SHALL send `force_registration: true` with no `force`
+- **AND** the CLI SHALL exit non-zero on the resulting HTTP 409 — `--force-registration` does not bypass the state guard
 
 #### Scenario: Poll budget elapses
 
