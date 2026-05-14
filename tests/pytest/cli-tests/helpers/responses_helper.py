@@ -6,6 +6,7 @@ executor-openai-responses tests (test_responses.py).
 import base64
 import json
 import os
+import select
 import subprocess
 import time
 import uuid
@@ -102,7 +103,6 @@ SQL_CFG_TOOL = [
 
 ARK_CONCURRENT = int(os.environ.get("ARK_CONCURRENT_QUERIES", "3"))
 ARK_TIMEOUT    = int(os.environ.get("ARK_QUERY_TIMEOUT", "300"))
-POLL_INTERVAL  = 5
 
 
 # ---------------------------------------------------------------------------
@@ -123,16 +123,19 @@ def kill_port_forward(pf_port: int, pf_proc: Optional[subprocess.Popen]) -> None
     time.sleep(1)
 
 
-def start_port_forward(pf_port: int) -> tuple:
+def start_port_forward(pf_port: int, skip_on_failure: bool = False) -> tuple:
     result = subprocess.run(
         ["kubectl", "get", "svc", "executor-openai-responses", "-n", "default"],
         capture_output=True,
     )
     if result.returncode != 0:
-        pytest.skip(
+        msg = (
             "executor-openai-responses service not found and EXECUTOR_URL not set. "
             "Deploy the executor or set EXECUTOR_URL."
         )
+        if skip_on_failure:
+            pytest.skip(msg)
+        raise RuntimeError(msg)
 
     proc = subprocess.Popen(
         ["kubectl", "port-forward", "-n", "default",
@@ -151,7 +154,7 @@ def reconnect_executor(pf_port: int, pf_proc: Optional[subprocess.Popen],
          "-l", "app=executor-openai-responses", "-n", "default", "--timeout=90s"],
         capture_output=True,
     )
-    executor_url, new_proc = start_port_forward(pf_port)
+    executor_url, new_proc = start_port_forward(pf_port, skip_on_failure=skip_on_failure)
     wait_for_executor(executor_url, skip_on_failure=skip_on_failure)
     return executor_url, new_proc
 
@@ -208,41 +211,6 @@ def kubectl_run(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
     except OSError as e:
         return False, "", str(e)
 
-
-def patch_webhooks(policy: str) -> bool:
-    """
-    Temporarily set failurePolicy on Ark mutating/validating webhooks (e.g. Ignore).
-
-    Avoids flaky kubectl apply failures when the webhook endpoint is unreachable
-    during executor test setup (pod restarts, cold clusters). Restored to Fail in
-    teardown_class.
-    """
-    patched = False
-    for kind, resource in [
-        ("mutatingwebhookconfiguration",  "ark-mutating-webhook-configuration"),
-        ("validatingwebhookconfiguration", "ark-validating-webhook-configuration"),
-    ]:
-        ok, stdout, _ = kubectl_run(["kubectl", "get", kind, resource, "-o", "json"])
-        if not ok:
-            continue
-        try:
-            config = json.loads(stdout)
-            webhooks = config.get("webhooks", [])
-        except json.JSONDecodeError:
-            continue
-        ops = [
-            {"op": "replace", "path": f"/webhooks/{i}/failurePolicy", "value": policy}
-            for i, _ in enumerate(webhooks)
-        ]
-        if not ops:
-            continue
-        ok, _, _ = kubectl_run([
-            "kubectl", "patch", kind, resource,
-            "--type=json", f"-p={json.dumps(ops)}",
-        ])
-        if ok:
-            patched = True
-    return patched
 
 
 def wait_for_webhook_ready(namespace: str = "ark-system",
@@ -401,36 +369,47 @@ def submit_query(name: str, input_text: str, agent_name: str,
 
 def poll_query(name: str, namespace: str,
                timeout: int = ARK_TIMEOUT) -> tuple:
+    proc = subprocess.Popen(
+        ["kubectl", "get", "query", name, "-n", namespace,
+         "--watch", "--output-watch-events", "-o", "json"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
     deadline = time.time() + timeout
-    while time.time() < deadline:
-        ok, stdout, _ = kubectl_run([
-            "kubectl", "get", "query", name, "-n", namespace, "-o", "json",
-        ])
-        if ok and stdout:
+    try:
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            ready = select.select([proc.stdout], [], [], min(remaining, 5.0))[0]
+            if not ready:
+                continue
+            line = proc.stdout.readline()
+            if not line:
+                break
             try:
-                data   = json.loads(stdout)
-                status = data.get("status", {})
-                phase  = status.get("phase", "")
-
-                if phase == "done":
-                    content = status.get("response", {}).get("content", "") or ""
-                    if not content.strip():
-                        conv = status.get("conversationId") or ""
-                        detail = (
-                            f"empty_response conversationId={conv!r}"
-                            if conv
-                            else "empty_response"
-                        )
-                        return False, None, detail
-                    return True, content, phase
-
-                if phase in ("error", "submit_failed"):
-                    return False, None, phase
-
+                event = json.loads(line)
             except json.JSONDecodeError:
-                pass
-        time.sleep(POLL_INTERVAL)
-
+                continue
+            status = event.get("object", {}).get("status", {})
+            phase  = status.get("phase", "")
+            if phase == "done":
+                content = status.get("response", {}).get("content", "") or ""
+                if not content.strip():
+                    conv = status.get("conversationId") or ""
+                    detail = (
+                        f"empty_response conversationId={conv!r}" if conv
+                        else "empty_response"
+                    )
+                    return False, None, detail
+                return True, content, phase
+            if phase in ("error", "submit_failed"):
+                return False, None, phase
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
     return False, None, "timeout"
 
 

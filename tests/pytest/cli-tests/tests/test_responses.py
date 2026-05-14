@@ -26,7 +26,6 @@ from helpers.responses_helper import (
     reconnect_executor,
     wait_for_executor,
     clear_sessions,
-    patch_webhooks,
     wait_for_webhook_ready,
     kubectl_apply,
     build_agent_manifest,
@@ -435,10 +434,9 @@ class TestARKQueriesWithOpenAIResponses:
     Queries are submitted concurrently using ThreadPoolExecutor.
     """
 
-    namespace:        str  = "default"
-    agent_name:       str  = "test-responses-agent"
-    created_queries:  list = []
-    _webhook_patched: bool = False
+    namespace:       str  = "default"
+    agent_name:      str  = "test-responses-agent"
+    created_queries: list = []
 
 
     @classmethod
@@ -447,7 +445,6 @@ class TestARKQueriesWithOpenAIResponses:
         cls.created_queries = []
 
         wait_for_webhook_ready()
-        cls._webhook_patched = patch_webhooks("Ignore")
         kubectl_apply(build_agent_manifest(
             cls.agent_name, cls.namespace, MOCK_LLM_MODEL_NAME, execution_engine=None,
         ))
@@ -455,8 +452,6 @@ class TestARKQueriesWithOpenAIResponses:
 
     @classmethod
     def teardown_class(cls):
-        if cls._webhook_patched:
-            patch_webhooks("Fail")
         for name in cls.created_queries:
             subprocess.run(
                 ["kubectl", "delete", "query", name, "-n", cls.namespace,

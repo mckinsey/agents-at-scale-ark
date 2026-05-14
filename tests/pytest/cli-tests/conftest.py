@@ -12,10 +12,6 @@ MOCK_LLM_MODEL_NAME = "test-model-mock"
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_llm_model():
-    subprocess.run(
-        ["kubectl", "delete", "-f", str(MOCK_LLM_MODEL_YAML), "--ignore-not-found"],
-        capture_output=True
-    )
     result = subprocess.run(
         ["kubectl", "apply", "-f", str(MOCK_LLM_MODEL_YAML)],
         capture_output=True, text=True
@@ -39,8 +35,3 @@ def mock_llm_model():
         logger.warning("mock-llm deployment not found — skipping ModelAvailable wait")
 
     yield MOCK_LLM_MODEL_NAME
-
-    subprocess.run(
-        ["kubectl", "delete", "-f", str(MOCK_LLM_MODEL_YAML), "--ignore-not-found"],
-        capture_output=True
-    )
