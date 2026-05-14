@@ -25,6 +25,7 @@ import {
   type WaitProgress,
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
+import {runReadinessChecks} from '../../lib/readinessChecks.js';
 
 type Backend = 'etcd' | 'postgresql';
 
@@ -383,6 +384,24 @@ export async function installArk(
           backendInstallArgs(service, backend, postgresValues)
         );
         output.success(`${service.name} installed successfully`);
+
+        // Wait for ark-apiserver to be ready before continuing to other services
+        if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
+          const spinner = ora('Waiting for ark-apiserver to be ready...').start();
+          try {
+            const results = await runReadinessChecks(120); // 2 minute timeout
+            const failed = results.find((r) => !r.passed);
+            if (failed) {
+              spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
+              output.error('ark-apiserver is not ready. Stopping installation.');
+              process.exit(1);
+            }
+            spinner.succeed('ark-apiserver is ready');
+          } catch (error) {
+            spinner.fail('Failed to check ark-apiserver readiness');
+            throw error;
+          }
+        }
       } catch (error) {
         if (handleInstallError(error, service, options)) {
           continue;
@@ -568,6 +587,24 @@ export async function installArk(
           options.marketplaceVersion,
           backendInstallArgs(service, backend, postgresValues)
         );
+
+        // Wait for ark-apiserver to be ready before continuing to other services
+        if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
+          const spinner = ora('Waiting for ark-apiserver to be ready...').start();
+          try {
+            const results = await runReadinessChecks(120); // 2 minute timeout
+            const failed = results.find((r) => !r.passed);
+            if (failed) {
+              spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
+              output.error('ark-apiserver is not ready. Stopping installation.');
+              process.exit(1);
+            }
+            spinner.succeed('ark-apiserver is ready');
+          } catch (error) {
+            spinner.fail('Failed to check ark-apiserver readiness');
+            throw error;
+          }
+        }
 
         console.log(); // Add blank line after command output
       } catch (error) {
