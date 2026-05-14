@@ -89,7 +89,7 @@ The CLI client SHALL resolve namespace as: `--namespace` flag if set, else the c
 
 #### Scenario: Non-CLI caller omits ?namespace= entirely
 
-- **GIVEN** a caller other than `ark mcp auth …` (e.g., curl, a future dashboard, an integration script) invokes any of the auth endpoints with no `?namespace=` query parameter
+- **GIVEN** a caller other than `ark mcp auth …` (e.g., curl, an integration script, or any other future client) invokes any of the auth endpoints with no `?namespace=` query parameter
 - **WHEN** ark-api processes the request
 - **THEN** ark-api SHALL resolve the namespace from its own pod context via `with_ark_client(None, ...)` — the same fallback every other ark-api route uses
 - **AND** SHALL NOT reject the request for missing `?namespace=`
@@ -298,14 +298,14 @@ ark-api SHALL write the token endpoint response into the Secret named in `spec.a
 
 On a successful token exchange, ark-api SHALL patch the MCPServer with two annotations:
 
-- `ark.mckinsey.com/mcp-auth-authorized-by`: best-effort caller identity as observed by ark-api. For requests carrying an authenticated user identity (e.g., dashboard NextAuth bearer), this is the user's identity string. For requests on the `ArkApiProxy` path without an end-user identity, this SHALL be `cli`. Format is opaque to consumers.
+- `ark.mckinsey.com/mcp-auth-authorized-by`: best-effort caller identity as observed by ark-api. For requests carrying an authenticated user-identity bearer token, this is the user's identity string resolved from the token. For requests on the `ArkApiProxy` (kubectl port-forward) path without an end-user identity, this SHALL be `cli`. Format is opaque to consumers.
 - `ark.mckinsey.com/mcp-auth-authorized-at`: RFC 3339 UTC timestamp of the exchange.
 
 The annotations SHALL be replaced (not appended) on each successful exchange. The annotations are intended to surface the shared-token limitation (one Secret per MCPServer) — they do not change controller dispatch behaviour.
 
-#### Scenario: Dashboard caller completes an exchange
+#### Scenario: Caller with an end-user identity completes an exchange
 
-- **GIVEN** the request to `auth/start` carried a NextAuth session resolving to `alice@example.com`
+- **GIVEN** the request to `auth/start` carried an authenticated user-identity bearer token resolving to `alice@example.com`
 - **WHEN** the exchange completes successfully
 - **THEN** the MCPServer SHALL be annotated `ark.mckinsey.com/mcp-auth-authorized-by: alice@example.com`
 
@@ -338,20 +338,36 @@ If only (1) holds, the endpoint SHALL return `state: pending` with a message ind
 - **WHEN** the caller polls `auth/status`
 - **THEN** the response SHALL be `{ state: "authorized", expires_at: <RFC 3339> }`
 
-### Requirement: Secrets and tokens never appear in logs
+### Requirement: ark-api never logs OAuth credentials or inbound Authorization headers
 
-ark-api and the CLI SHALL never log access tokens, refresh tokens, client secrets, PKCE verifiers, or `Authorization` headers. Diagnostic output across both surfaces SHALL be limited to: resource URL, MCPServer name and namespace, registered `client_id`, computed `expires_at`, opaque `auth_id`, and high-level state transitions.
+ark-api SHALL never log access tokens, refresh tokens, `client_secret`, PKCE verifiers, or the value of any inbound `Authorization` header. Diagnostic output SHALL be limited to: MCPServer name and namespace, resource URL, registered `client_id`, computed `expires_at`, opaque `auth_id`, and high-level state transitions of the in-flight cache entry.
+
+#### Scenario: Callback handler completes an exchange
+
+- **WHEN** the callback handler completes a successful token exchange
+- **THEN** the ark-api logs SHALL contain the MCPServer name, the registered `client_id`, the computed `expires_at`, and the resulting cache state transition
+- **AND** SHALL NOT contain access-token, refresh-token, `client_secret`, or PKCE-verifier values
+
+#### Scenario: Request carries a user-identity bearer token
+
+- **WHEN** any auth endpoint receives a request with an `Authorization` header
+- **THEN** the ark-api logs SHALL NOT contain the header value (the resolved identity string MAY appear, per the `authorized-by` annotation contract)
+
+### Requirement: ark-cli emits only non-sensitive flow context to stdout/stderr
+
+The CLI never receives access tokens, refresh tokens, `client_secret`, or PKCE verifiers — those live exclusively in ark-api memory and the target Secret. The CLI's stdout/stderr SHALL be limited to fields it actually holds: the resolved MCPServer name and namespace, the `authorization_url` returned by `auth/start`, the opaque `auth_id`, the computed `expires_at`, and high-level state transitions reported by `auth/status` (including the single-line error from [the failure-surfacing requirement](#requirement-failures-surface-as-a-single-error-line-on-the-cli)).
 
 #### Scenario: Successful run from the CLI
 
 - **WHEN** `ark mcp auth login` succeeds end-to-end
-- **THEN** stdout/stderr SHALL contain the resource URL and `expires_at` but SHALL NOT contain access or refresh token values, PKCE verifiers, or `client_secret`
+- **THEN** stdout/stderr SHALL contain the `authorization_url` and `expires_at`
+- **AND** SHALL NOT contain any field beyond those returned by `auth/start` and `auth/status`
 
-#### Scenario: Successful run on the ark-api side
+#### Scenario: CLI debug logging is enabled
 
-- **WHEN** the callback handler completes an exchange
-- **THEN** the ark-api logs SHALL contain the MCPServer name, the registered `client_id`, the computed `expires_at`, and the resulting cache state transition
-- **AND** SHALL NOT contain token, refresh-token, client-secret, or PKCE-verifier values
+- **GIVEN** the CLI is run with verbose/debug HTTP logging enabled
+- **WHEN** the CLI sends a request to ark-api
+- **THEN** the emitted log lines SHALL NOT contain the value of any `Authorization` header the CLI forwarded
 
 ### Requirement: Failures surface as a single error line on the CLI
 
