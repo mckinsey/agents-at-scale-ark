@@ -154,6 +154,102 @@ class TestBrokerClientSendMessages:
             assert any("500" in r.message for r in caplog.records)
 
 
+class TestBrokerClientFinalChunk:
+    def test_chunk_format(self):
+        client = BrokerClient("http://broker", "my-query", "sess-1", "my-agent")
+        raw = client._build_final_chunk(
+            response_text="final answer",
+            response_messages=[{"role": "assistant", "content": "final answer"}],
+        )
+        chunk = json.loads(raw.decode().strip())
+
+        assert chunk["id"] == "chatcmpl-final"
+        assert chunk["object"] == "chat.completion.chunk"
+        assert chunk["choices"][0]["delta"]["content"] == ""
+        assert chunk["choices"][0]["finish_reason"] == "stop"
+        assert chunk["ark"]["query"] == "my-query"
+        assert chunk["ark"]["session"] == "sess-1"
+        assert chunk["ark"]["agent"] == "my-agent"
+
+        cq = chunk["ark"]["completedQuery"]
+        assert cq["metadata"]["name"] == "my-query"
+        assert cq["status"]["phase"] == "done"
+        assert cq["status"]["conversationId"] == "sess-1"
+        assert cq["status"]["response"]["content"] == "final answer"
+        assert cq["status"]["response"]["phase"] == "done"
+        assert json.loads(cq["status"]["response"]["raw"]) == [
+            {"role": "assistant", "content": "final answer"}
+        ]
+        assert "tokenUsage" not in cq["status"]
+
+    def test_chunk_includes_token_usage_when_provided(self):
+        client = BrokerClient("http://broker", "q", "s", "a")
+        raw = client._build_final_chunk(
+            response_text="x",
+            token_usage={"promptTokens": 10, "completionTokens": 5, "totalTokens": 15},
+        )
+        chunk = json.loads(raw.decode().strip())
+        assert chunk["ark"]["completedQuery"]["status"]["tokenUsage"] == {
+            "promptTokens": 10,
+            "completionTokens": 5,
+            "totalTokens": 15,
+        }
+
+    def test_chunk_omits_raw_when_no_messages(self):
+        client = BrokerClient("http://broker", "q", "s", "a")
+        raw = client._build_final_chunk(response_text="x")
+        chunk = json.loads(raw.decode().strip())
+        assert "raw" not in chunk["ark"]["completedQuery"]["status"]["response"]
+
+    @pytest.mark.anyio
+    async def test_posts_to_stream_url(self):
+        client = BrokerClient("http://broker:3000", "my query", "sess", "agent")
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            await client.send_final_chunk(response_text="done")
+
+            mock_http.post.assert_called_once()
+            url = mock_http.post.call_args[0][0]
+            assert url.endswith("/stream/my%20query")
+
+    @pytest.mark.anyio
+    async def test_swallows_http_error(self):
+        client = BrokerClient("http://broker", "q", "", "a")
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(side_effect=httpx.ConnectError("unreachable"))
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            await client.send_final_chunk(response_text="x")
+
+    @pytest.mark.anyio
+    async def test_logs_non_2xx_status(self, caplog):
+        import logging
+        client = BrokerClient("http://broker", "q", "", "a")
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 500
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            with caplog.at_level(logging.WARNING):
+                await client.send_final_chunk(response_text="x")
+
+            assert any("500" in r.message for r in caplog.records)
+
+
 class TestBrokerClientComplete:
     @pytest.mark.anyio
     async def test_posts_to_complete_url(self):
