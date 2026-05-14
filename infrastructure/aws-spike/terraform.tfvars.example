@@ -1,0 +1,9 @@
+aws_region      = "eu-north-1"
+cluster_name    = "ark-cluster"
+cluster_version = "1.33"
+
+rds_multi_az       = false
+rds_instance_class = "db.t3.medium"
+rds_engine_version = "15.17"
+
+environment = "dev"
