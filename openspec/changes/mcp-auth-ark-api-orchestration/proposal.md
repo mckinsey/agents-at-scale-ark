@@ -1,8 +1,8 @@
 ## Why
 
-Stage 1 (`mcp-auth-token-injection`) reads tokens from a Secret and reaches `Authorized`, but leaves token *production* to the operator. There is no built-in way to run the OAuth flow that mints those tokens, so operators today script DCR + PKCE + token exchange + Secret patch out of band, copy-paste tokens from another tool's UI, or run a one-off helper that binds a `127.0.0.1:<port>` loopback listener and `kubectl patch`'s the Secret directly.
+Ark's MCP integration lets agents call remote MCP servers as tools. When those servers require OAuth — Notion's `mcp.notion.com/mcp`, GitHub Copilot MCP, Atlassian MCP — the controller needs a valid `access_token` for the protected resource and must present it on every call. Two earlier capabilities cover discovery and injection: `mcp-auth-detection` parses `WWW-Authenticate` and surfaces `status.authorization.state = Required` with the RFC 9728 / RFC 8414 metadata, and `mcp-auth-token-injection` reads a referenced Secret and injects `Authorization: Bearer <access_token>` on each MCP call to reach `Authorized`. The step in between — actually **minting** those tokens via Dynamic Client Registration, PKCE, and a token exchange — is left to the operator. This change closes that loop inside Ark.
 
-Building OAuth ergonomics into Ark has four structural constraints worth designing for up front:
+Operators today script DCR + PKCE + token exchange + Secret patch out of band, copy-paste tokens from another tool's UI, or run a one-off helper that binds a `127.0.0.1:<port>` loopback listener and `kubectl patch`'s the Secret directly. Building this into Ark has four structural constraints worth designing for up front:
 
 1. **Two callers, one flow.** The CLI needs the flow today; the dashboard needs the same flow next. A browser cannot bind a useful loopback port, so a CLI-only implementation centred on a loopback listener cannot be reused — the dashboard would re-implement DCR, state verification, token exchange, CORS handling on browser→IdP token endpoints, and Secret RBAC end-to-end.
 2. **Port binding pain.** Any loopback-callback design pays the cost of `--port`, "port already in use," IPv6 dual-stack listener requirements, and an SSH-tunnel recipe for jumphost operators — all in service of a single browser redirect.
@@ -17,7 +17,7 @@ The CLI gains `ark mcp auth login <server>` / `ark mcp auth logout <server>`; th
 
 ### ark-api endpoint surface
 
-Three new endpoints under `services/ark-api/`:
+Four new endpoints under `services/ark-api/`, walking the OAuth flow from kickoff to completion (the operator hits `start`, the browser hits `callback`, the CLI/dashboard polls `status`, and `logout` reverses it):
 
 - **`POST /api/v1/mcp-servers/{name}/auth/start`** — initiates a flow.
   - Query: `?namespace=<ns>`.
