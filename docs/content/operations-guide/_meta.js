@@ -2,6 +2,7 @@ export default {
   '---platform-ops': { type: 'separator', title: 'Platform operations' },
   provisioning: 'Cloud Infrastructure Provisioning',
   'deploying-ark': 'Deploying Ark',
+  'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
   monitoring: 'Monitoring',
 
