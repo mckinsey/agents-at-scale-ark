@@ -19,10 +19,10 @@ function getLogLevel(eventType: string): string {
   return 'INFO';
 }
 
-function getLogLevelVariant(level: string): 'default' | 'destructive' | 'secondary' {
-  if (level === 'ERROR') return 'destructive';
-  if (level === 'DEBUG') return 'secondary';
-  return 'default';
+function getLogLevelVariant(level: string): 'high-emphasis' | 'error' | 'alternative' {
+  if (level === 'ERROR') return 'error';
+  if (level === 'DEBUG') return 'alternative';
+  return 'high-emphasis';
 }
 
 function formatTimestamp(isoString: string): string {

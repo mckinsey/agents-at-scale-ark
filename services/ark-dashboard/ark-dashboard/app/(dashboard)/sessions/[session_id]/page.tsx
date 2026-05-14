@@ -188,7 +188,7 @@ export default function SessionDetailPage() {
             </div>
           </div>
           <Badge
-            variant="outline"
+            variant="alternative"
             className={cn('capitalize rounded-full', getStatusClassName(sessionStatus))}
           >
             {sessionStatus}

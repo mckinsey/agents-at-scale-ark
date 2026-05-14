@@ -44,7 +44,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
           <div className="text-base font-semibold">
             {session.sessionId}
             {session.errorCount > 0 && (
-              <Badge variant="destructive" className="ml-2 inline-flex h-5 items-center rounded px-1.5 text-xs align-middle">
+              <Badge variant="error" className="ml-2 inline-flex h-5 items-center rounded px-1.5 text-xs align-middle">
                 {session.errorCount}
               </Badge>
             )}

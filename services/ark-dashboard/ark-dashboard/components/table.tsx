@@ -17,8 +17,7 @@ import { useState } from 'react';
 
 import { ArrowDownwardAlt } from '@/components/icons/ArrowDownwardAlt';
 import { ArrowUpwardAlt } from '@/components/icons/ArrowUpwardAlt';
-import { Delete } from '@/components/icons/Delete';
-import { Edit } from '@/components/icons/Edit';
+import { Trash as Delete, Pencil as Edit } from 'lucide-react';
 import { SwapVert } from '@/components/icons/SwapVert';
 import {
   Avatar,
@@ -46,7 +45,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-const basePath = import.meta.env.VITE_BASE_PATH ?? '';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 const invoices = [
   {

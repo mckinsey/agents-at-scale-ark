@@ -161,7 +161,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-sm text-muted-foreground">Date range</span>
-          <Select value={dateFilter} onValueChange={(value: typeof dateFilter) => setDateFilter(value)}>
+          <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Date range" />
             </SelectTrigger>
@@ -175,7 +175,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-sm text-muted-foreground">Status</span>
-          <Select value={statusFilter} onValueChange={(value: typeof statusFilter) => setStatusFilter(value)}>
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
