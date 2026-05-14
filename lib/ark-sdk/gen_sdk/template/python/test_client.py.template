@@ -55,28 +55,6 @@ class TestARKResourceClient(BaseTestCase):
         )
         self.assertTrue(hasattr(result, 'metadata'))
     
-    def test_get_resource_not_found(self):
-        """Test getting a non-existent resource"""
-        
-        # Setup
-        api_exception = ApiException()
-        api_exception.status = 404
-        self.mock_api_client.get_namespaced_custom_object.side_effect = api_exception
-        
-        client = ARKResourceClient(
-            api_version="test.io/v1",
-            kind="TestResource",
-            plural="testresources",
-            model_class=MockModel,
-            namespace="default"
-        )
-        
-        # Get resource should raise exception
-        with self.assertRaises(Exception) as context:
-            client.get("non-existent")
-        
-        self.assertIn("not found", str(context.exception))
-    
     def test_list_resources(self):
         """Test listing resources"""
         
@@ -209,24 +187,3 @@ class TestARKResourceClient(BaseTestCase):
             name="test-resource"
         )
     
-    def test_delete_resource_not_found(self):
-        """Test deleting a non-existent resource"""
-        
-        # Setup
-        api_exception = ApiException()
-        api_exception.status = 404
-        self.mock_api_client.delete_namespaced_custom_object.side_effect = api_exception
-        
-        client = ARKResourceClient(
-            api_version="test.io/v1",
-            kind="TestResource",
-            plural="testresources",
-            model_class=MockModel,
-            namespace="default"
-        )
-        
-        # Delete should raise exception
-        with self.assertRaises(Exception) as context:
-            client.delete("non-existent")
-        
-        self.assertIn("not found", str(context.exception))

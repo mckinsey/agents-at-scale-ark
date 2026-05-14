@@ -183,6 +183,9 @@ func (n *noOpMemoryRecorder) Start(ctx context.Context, operation, description s
 func (n *noOpMemoryRecorder) Complete(ctx context.Context, operation, result string, data map[string]string) {
 }
 
+func (n *noOpMemoryRecorder) Cancel(ctx context.Context, operation, result string, data map[string]string) {
+}
+
 func (n *noOpMemoryRecorder) Fail(ctx context.Context, operation, result string, err error, data map[string]string) {
 }
 

@@ -213,17 +213,26 @@ runs:
 
     - name: Wait for calico, coredns, metrics server, traefik
       run: |
-        echo "::group::Wait for daemonset/calico-node"
-        kubectl rollout status --watch --timeout=5m daemonset/calico-node -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout() {
+          local kind="$1" name="$2"
+          echo "::group::Wait for $kind/$name"
+          for attempt in $(seq 1 36); do
+            if kubectl rollout status --timeout=30s "$kind/$name" -n kube-system 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for $name (attempt $attempt/36)..."
+            sleep 5
+            if [ "$attempt" -eq 36 ]; then
+              echo "Timed out waiting for $name"
+              kubectl rollout status --timeout=30s "$kind/$name" -n kube-system
+            fi
+          done
+          echo "::endgroup::"
+        }
 
-        echo "::group::Wait for deployment/calico-kube-controllers"
-        kubectl rollout status --watch --timeout=5m deployment/calico-kube-controllers -n kube-system
-        echo "::endgroup::"
-
-        echo "::group::Wait for deployment/coredns"
-        kubectl rollout status --watch --timeout=5m deployment/coredns -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout daemonset calico-node
+        wait_for_rollout deployment calico-kube-controllers
+        wait_for_rollout deployment coredns
 
         echo "::group::Wait for deployment/metrics-server"
         if [[ "${{ inputs.metrics-enabled }}" == true ]]; then

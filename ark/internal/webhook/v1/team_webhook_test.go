@@ -323,6 +323,89 @@ var _ = Describe("Team Webhook", func() {
 		})
 	})
 
+	Context("Selector prompt migration warning", func() {
+		var selectorDefaulter *validation.WebhookDefaulter
+
+		BeforeEach(func() {
+			selectorDefaulter = &validation.WebhookDefaulter{}
+		})
+
+		It("Should warn when custom selectorPrompt does not reference select-next-speaker", func() {
+			maxTurns := 10
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-team",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: "selector",
+					MaxTurns: &maxTurns,
+					Members: []arkv1alpha1.TeamMember{
+						{Name: "researcher", Type: "agent"},
+					},
+					Selector: &arkv1alpha1.TeamSelectorSpec{
+						Agent:          "coordinator",
+						SelectorPrompt: "Pick the next participant. Return only the name.",
+					},
+				},
+			}
+
+			err := selectorDefaulter.Default(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(team.Annotations).To(HaveKey(ContainSubstring("migration-warning-selector-prompt")))
+
+			warnings, err := validator.ValidateCreate(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(HaveLen(1))
+			Expect(warnings[0]).To(ContainSubstring("select-next-speaker"))
+		})
+
+		It("Should not warn when custom selectorPrompt references select-next-speaker", func() {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-team",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: "selector",
+					Members: []arkv1alpha1.TeamMember{
+						{Name: "researcher", Type: "agent"},
+					},
+					Selector: &arkv1alpha1.TeamSelectorSpec{
+						Agent:          "coordinator",
+						SelectorPrompt: "Use the select-next-speaker tool to pick the next speaker.",
+					},
+				},
+			}
+
+			err := selectorDefaulter.Default(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(team.Annotations).ToNot(HaveKey(ContainSubstring("migration-warning-selector-prompt")))
+		})
+
+		It("Should not warn when no custom selectorPrompt is set", func() {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-team",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: "selector",
+					Members: []arkv1alpha1.TeamMember{
+						{Name: "researcher", Type: "agent"},
+					},
+					Selector: &arkv1alpha1.TeamSelectorSpec{
+						Agent: "coordinator",
+					},
+				},
+			}
+
+			err := selectorDefaulter.Default(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(team.Annotations).ToNot(HaveKey(ContainSubstring("migration-warning-selector-prompt")))
+		})
+	})
+
 	Context("Graph strategy validation (should remain strict)", func() {
 		It("Should reject graph strategy as unsupported", func() {
 			By("creating a team with deprecated graph strategy")

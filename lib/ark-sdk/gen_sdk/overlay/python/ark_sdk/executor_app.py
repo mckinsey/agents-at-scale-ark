@@ -229,15 +229,23 @@ class A2AExecutorAdapter(AgentExecutor):
                 if msg.role == "assistant" and msg.content:
                     response_text += msg.content
 
+            response_dicts = [
+                m.model_dump(exclude_defaults=True) for m in response_messages
+            ]
+
             if broker and conversation_id:
-                all_messages = [request.userInput.model_dump(exclude_defaults=True)] + [
-                    m.model_dump(exclude_defaults=True) for m in response_messages
-                ]
+                all_messages = [
+                    request.userInput.model_dump(exclude_defaults=True)
+                ] + response_dicts
                 await broker.send_messages(conversation_id, all_messages)
 
             if broker:
                 if not self.executor._streamed:
                     await broker.send_chunk(response_text, finish_reason="stop")
+                await broker.send_final_chunk(
+                    response_text=response_text,
+                    response_messages=response_dicts,
+                )
                 await broker.complete()
 
             response_msg = A2AMessage(
