@@ -1,0 +1,19 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+azure_region    = "eastus"
+
+resource_group_name = "ark-rg"
+cluster_name        = "ark-cluster"
+kubernetes_version  = "1.30"
+
+node_count   = 3
+node_vm_size = "Standard_D4s_v3"
+
+postgres_admin_username = "arkadmin"
+postgres_admin_password = "ChangeMe123!"
+postgres_sku_name       = "GP_Standard_D2s_v3"
+postgres_storage_mb     = 32768
+
+langfuse_db_name         = "langfuse"
+langfuse_version         = "2.0.0"
+langfuse_nextauth_secret = "generate-random-secret-here"
+langfuse_salt            = "generate-random-salt-here"
