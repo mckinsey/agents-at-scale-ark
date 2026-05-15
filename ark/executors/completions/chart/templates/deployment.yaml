@@ -65,18 +65,28 @@ spec:
             capabilities:
               drop:
                 - "ALL"
-          {{- if .Values.customCACert.enabled }}
+          {{- if or .Values.customCACert.enabled .Values.extraVolumeMounts }}
           volumeMounts:
+            {{- if .Values.customCACert.enabled }}
             - name: custom-ca-cert
               mountPath: /etc/ssl/certs/custom-ca
               readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- if .Values.customCACert.enabled }}
+      {{- if or .Values.customCACert.enabled .Values.extraVolumes }}
       volumes:
+        {{- if .Values.customCACert.enabled }}
         - name: custom-ca-cert
           secret:
             secretName: {{ .Values.customCACert.secretName }}
             items:
               - key: {{ .Values.customCACert.key }}
                 path: {{ .Values.customCACert.key }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}

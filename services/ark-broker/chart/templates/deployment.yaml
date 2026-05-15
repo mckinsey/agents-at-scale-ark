@@ -64,11 +64,14 @@ spec:
             - name: SESSIONS_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.sessionsFileName }}"
             {{- end }}
-          {{- if .Values.persistence.enabled }}
           volumeMounts:
+            {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
-          {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -85,8 +88,8 @@ spec:
             failureThreshold: 3
           resources:
             {{- toYaml .Values.app.resources | nindent 12 }}
-      {{- if .Values.persistence.enabled }}
       volumes:
+        {{- if .Values.persistence.enabled }}
         - name: data
           {{- if .Values.persistence.existingClaim }}
           persistentVolumeClaim:
@@ -95,7 +98,10 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "ark-broker.fullname" . }}-data
           {{- end }}
-      {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

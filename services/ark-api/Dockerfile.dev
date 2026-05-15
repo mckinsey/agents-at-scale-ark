@@ -1,0 +1,17 @@
+FROM python:3.12-slim
+
+RUN adduser --system --uid 1001 --home /home/ark ark && \
+  apt-get update && \
+  apt-get install -y --no-install-recommends curl && \
+  rm -rf /var/lib/apt/lists/* && \
+  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app/ark-api
+COPY ark-api/pyproject.toml ark-api/uv.lock ./
+COPY ark-api/out/ark_sdk*.whl ./out/
+RUN uv sync --frozen --no-install-project
+
+ENV HOME=/home/ark
+USER ark
