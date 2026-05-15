@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -112,6 +113,12 @@ func (h *Handler) ProcessMessage(
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
+		// Check if this is an approval required error
+		var approvalErr *ApprovalRequiredError
+		if errors.As(err, &approvalErr) {
+			return h.handleApprovalRequired(ctx, state, approvalErr, handler)
+		}
+
 		// Save error messages to memory before returning
 		// This ensures failed queries appear in conversation history with error context
 		if state.memory != nil && len(state.inputMessages) > 0 {
@@ -576,4 +583,61 @@ func serializeResponseMessages(messages []Message) string {
 		return "[]"
 	}
 	return string(data)
+}
+
+// handleApprovalRequired handles the approval required error by creating an A2A task
+func (h *Handler) handleApprovalRequired(
+	ctx context.Context,
+	state *executionState,
+	approvalErr *ApprovalRequiredError,
+	handler taskmanager.TaskHandler,
+) (*taskmanager.MessageProcessingResult, error) {
+	// Generate task ID
+	taskID := protocol.GenerateRPCID()
+
+	// Serialize tool calls for metadata
+	toolCallsJSON, err := json.Marshal(approvalErr.ToolCalls)
+	if err != nil {
+		log.Error(err, "failed to serialize tool calls")
+		toolCallsJSON = []byte("[]")
+	}
+
+	// Serialize context for metadata
+	contextJSON, err := json.Marshal(approvalErr.Context)
+	if err != nil {
+		log.Error(err, "failed to serialize context")
+		contextJSON = []byte("{}")
+	}
+
+	// Build task metadata with approval details (all values as strings or primitive types)
+	metadata := map[string]interface{}{
+		"toolCalls": string(toolCallsJSON),
+		"timeout":   approvalErr.Config.Timeout.Duration.String(),
+		"onTimeout": approvalErr.Config.OnTimeout,
+		"context":   string(contextJSON),
+	}
+
+	// Create task with input-required state
+	task := &protocol.Task{
+		ID:        taskID,
+		ContextID: state.conversationId,
+		Kind:      "task",
+		Status: protocol.TaskStatus{
+			State: protocol.TaskStateInputRequired,
+		},
+		Metadata: metadata,
+	}
+
+	// Emit streaming event for approval request
+	if state.eventStream != nil {
+		StreamApprovalRequest(ctx, state.eventStream, taskID, approvalErr.ToolCalls,
+			approvalErr.Config, approvalErr.Context.AgentName)
+	}
+
+	h.telemetry.QueryRecorder().RecordSuccess(state.targetSpan)
+	h.telemetry.QueryRecorder().RecordSuccess(state.querySpan)
+
+	return &taskmanager.MessageProcessingResult{
+		Result: task,
+	}, nil
 }

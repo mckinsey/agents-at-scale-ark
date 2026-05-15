@@ -35,6 +35,8 @@ export type QueryEventReason =
   | 'MemoryGetMessagesComplete'
   | 'ToolCallStart'
   | 'ToolCallComplete'
+  | 'ToolApprovalRequest'
+  | 'ToolApprovalResponse'
   | 'TeamExecutionStart'
   | 'TeamExecutionComplete'
   | 'TeamExecutionError'

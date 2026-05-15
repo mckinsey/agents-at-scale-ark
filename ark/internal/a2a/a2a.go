@@ -14,6 +14,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
@@ -378,9 +379,12 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		return fmt.Errorf("unable to determine A2A Task originating query")
 	}
 
-	var a2aServerName string
+	var a2aServerRef *arkv1alpha1.A2AServerRef
 	if a2aServer, ok := obj.(*arkv1prealpha1.A2AServer); ok {
-		a2aServerName = a2aServer.Name
+		a2aServerRef = &arkv1alpha1.A2AServerRef{
+			Name:      a2aServer.Name,
+			Namespace: namespace,
+		}
 	}
 
 	a2aTask := &arkv1alpha1.A2ATask{
@@ -395,10 +399,7 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 				Name:      queryName,
 				Namespace: namespace,
 			},
-			A2AServerRef: arkv1alpha1.A2AServerRef{
-				Name:      a2aServerName,
-				Namespace: namespace,
-			},
+			A2AServerRef: a2aServerRef,
 			AgentRef: arkv1alpha1.AgentRef{
 				Name:      agentName,
 				Namespace: namespace,
@@ -409,14 +410,31 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		},
 	}
 
+	// Populate status before creation (for informational purposes)
 	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
-
 	now := metav1.NewTime(time.Now())
 	a2aTask.Status.StartTime = &now
 
+	// Create the resource (status will be ignored during create)
 	if err := k8sClient.Create(ctx, a2aTask); err != nil {
 		log.Error(err, "failed to create A2ATask resource", "taskId", task.ID)
 		return fmt.Errorf("failed to create A2ATask resource: %w", err)
+	}
+
+	// Refetch to get the latest resourceVersion before updating status
+	taskName := a2aTask.Name
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask); err != nil {
+		log.Error(err, "failed to refetch A2ATask after creation", "taskId", task.ID)
+		return fmt.Errorf("failed to refetch A2ATask: %w", err)
+	}
+
+	// Repopulate status with fresh data and update
+	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+	a2aTask.Status.StartTime = &now
+
+	if err := k8sClient.Status().Update(ctx, a2aTask); err != nil {
+		log.Error(err, "failed to update A2ATask status", "taskId", task.ID)
+		return fmt.Errorf("failed to update A2ATask status: %w", err)
 	}
 
 	return nil

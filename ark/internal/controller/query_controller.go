@@ -20,6 +20,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"go.opentelemetry.io/otel/baggage"
@@ -145,6 +146,9 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
+	case statusInputRequired:
+		// Query is awaiting approval/input, check if A2ATask has completed
+		return r.handleInputRequiredPhase(ctx, &obj, expiry)
 	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
@@ -170,6 +174,52 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
 	return ctrl.Result{}, nil
+}
+
+func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *arkv1alpha1.Query, expiry time.Time) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	// Check if there's an associated A2ATask
+	if obj.Status.Response == nil || obj.Status.Response.A2A == nil || obj.Status.Response.A2A.TaskID == "" {
+		log.Info("Query in input-required phase but no A2ATask found, waiting")
+		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+	}
+
+	taskID := obj.Status.Response.A2A.TaskID
+	taskName := fmt.Sprintf("a2a-task-%s", taskID)
+
+	var a2aTask arkv1alpha1.A2ATask
+	if err := r.Get(ctx, types.NamespacedName{Name: taskName, Namespace: obj.Namespace}, &a2aTask); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "failed to get A2ATask")
+			return ctrl.Result{}, err
+		}
+		// Task not found yet, wait
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	// Check task phase
+	switch a2aTask.Status.Phase {
+	case arka2a.PhaseCompleted:
+		// Task completed with approval - transition to done
+		log.Info("A2ATask completed, marking query as done", "taskId", taskID)
+		if err := r.updateStatus(ctx, obj, statusDone); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+
+	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
+		// Task failed or was cancelled - transition to error
+		log.Info("A2ATask failed or rejected, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase)
+		if err := r.updateStatus(ctx, obj, statusError); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+
+	default:
+		// Task still pending, keep waiting
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 }
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
@@ -391,6 +441,35 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 		return nil, engineResponseMeta{}, fmt.Errorf("query execution failed: %w", err)
 	}
 
+	// Check if result is a Task (approval required)
+	if task, ok := result.Result.(*protocol.Task); ok {
+		// Create A2ATask CRD for tracking
+		agentName := target.Name
+		if err := arka2a.HandleA2ATaskResponse(ctx, r.Client, task, agentName, query.Namespace, query.Name, nil); err != nil {
+			log.Error(err, "failed to create A2ATask resource")
+			return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2ATask: %w", err)
+		}
+
+		log.Info("A2A task created, query awaiting input", "taskId", task.ID, "state", task.Status.State)
+
+		// Extract any text from the task status or artifacts
+		responseText, _ := extractA2AResponseText(result)
+
+		response := &arkv1alpha1.Response{
+			Target:  target,
+			Content: responseText,
+			Raw:     "{}",
+			Phase:   statusInputRequired,
+			A2A: &arkv1alpha1.A2AMetadata{
+				ContextID: task.ContextID,
+				TaskID:    task.ID,
+			},
+		}
+
+		return response, engineResponseMeta{A2AContextID: task.ContextID, A2ATaskID: task.ID}, nil
+	}
+
+	// Normal message response path
 	responseText, err := extractA2AResponseText(result)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("failed to extract response: %w", err)
@@ -742,8 +821,13 @@ func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1
 }
 
 func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) string {
-	if response != nil && response.Phase == statusError {
-		return statusError
+	if response != nil {
+		if response.Phase == statusError {
+			return statusError
+		}
+		if response.Phase == statusInputRequired {
+			return statusInputRequired
+		}
 	}
 	return statusDone
 }
@@ -803,6 +887,28 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Query{}).
+		Watches(
+			&arkv1alpha1.A2ATask{},
+			handler.EnqueueRequestsFromMapFunc(r.findQueriesForA2ATask),
+		).
 		Named("query").
 		Complete(r)
+}
+
+// findQueriesForA2ATask maps an A2ATask to its associated Query for reconciliation
+func (r *QueryReconciler) findQueriesForA2ATask(ctx context.Context, obj client.Object) []ctrl.Request {
+	task := obj.(*arkv1alpha1.A2ATask)
+
+	if task.Spec.QueryRef.Name == "" {
+		return nil
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      task.Spec.QueryRef.Name,
+				Namespace: task.Spec.QueryRef.Namespace,
+			},
+		},
+	}
 }

@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect, useRef, memo } from 'react';
+import { useEffect, useRef, memo, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
 import type { ChatMessage } from '@/lib/types/chat-message';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { SessionMessage } from './session-message';
+import { ApprovalNotification } from './approval-notification';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
+import { useGetQuery } from '@/lib/services/queries-hooks';
+import { useGetApprovalDetails, useSubmitApproval } from '@/lib/services/query-approvals-hooks';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
@@ -73,6 +77,20 @@ function enhanceMessagesWithToolResults(messages: ConversationMessage[]): Enhanc
     });
 }
 
+interface ApprovalData {
+  toolCalls: Array<{
+    id: string;
+    type: string;
+    function?: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  timeout?: string;
+  onTimeout?: string;
+  agentName?: string;
+}
+
 interface MessageContentProps {
   readonly isTemporary: boolean;
   readonly messages: ConversationMessage[] | undefined;
@@ -80,6 +98,11 @@ interface MessageContentProps {
   readonly participantName: string;
   readonly isProcessing: boolean;
   readonly showToolCalls: boolean;
+  readonly queryName?: string;
+  readonly queryNamespace?: string;
+  readonly approvalData?: ApprovalData;
+  readonly onApprove?: () => Promise<void>;
+  readonly onReject?: () => Promise<void>;
 }
 
 const MessageContent = memo(function MessageContent({
@@ -88,7 +111,12 @@ const MessageContent = memo(function MessageContent({
   pendingMessages,
   participantName,
   isProcessing,
-  showToolCalls
+  showToolCalls,
+  queryName,
+  queryNamespace,
+  approvalData,
+  onApprove,
+  onReject
 }: MessageContentProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +171,18 @@ const MessageContent = memo(function MessageContent({
             showToolCalls={showToolCalls}
           />
         ))}
+        {approvalData && onApprove && onReject && queryName && queryNamespace && (
+          <ApprovalNotification
+            queryName={queryName}
+            queryNamespace={queryNamespace}
+            toolCalls={approvalData.toolCalls}
+            timeout={approvalData.timeout}
+            onTimeout={approvalData.onTimeout}
+            agentName={approvalData.agentName}
+            onApprove={onApprove}
+            onReject={onReject}
+          />
+        )}
         {hasPendingMessages && uniquePendingMessages.map((msg, idx) => (
           <SessionMessage
             key={`pending-${msg.timestamp}-${idx}`}
@@ -184,10 +224,44 @@ const MessageContent = memo(function MessageContent({
 
 export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing, showToolCalls }: Props) {
   const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
+  const searchParams = useSearchParams();
+  const namespace = searchParams.get('namespace') || 'default';
 
   const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
   const isTemporary = conversation?.isTemporary || false;
+
+  // Get the latest query ID from messages
+  const latestQueryId = useMemo(() => {
+    if (!messages || messages.length === 0) return null;
+    return messages[messages.length - 1]?.query_id || null;
+  }, [messages]);
+
+  // Fetch query details to check if approval is needed
+  const { data: queryDetails } = useGetQuery(latestQueryId, !!latestQueryId);
+  const queryPhase = queryDetails?.status?.phase;
+  const needsApproval = queryPhase === 'input-required';
+
+  // Fetch approval details if needed
+  const { data: approvalDetails } = useGetApprovalDetails(
+    latestQueryId || '',
+    namespace,
+    needsApproval
+  );
+
+  // Approval mutation
+  const { mutateAsync: submitApproval } = useSubmitApproval(
+    latestQueryId || '',
+    namespace
+  );
+
+  const handleApprove = async () => {
+    await submitApproval('approved');
+  };
+
+  const handleReject = async () => {
+    await submitApproval('rejected');
+  };
 
   useEffect(() => {
     // Clear processing only when agent response appears after pending user message
@@ -243,6 +317,11 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
           participantName={participantName}
           isProcessing={isProcessing}
           showToolCalls={showToolCalls}
+          queryName={latestQueryId || undefined}
+          queryNamespace={namespace}
+          approvalData={needsApproval && approvalDetails ? approvalDetails : undefined}
+          onApprove={handleApprove}
+          onReject={handleReject}
         />
       </div>
     </div>

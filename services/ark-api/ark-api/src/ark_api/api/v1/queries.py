@@ -1,7 +1,8 @@
 """API routes for Query resources."""
 
+import json
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
@@ -13,7 +14,12 @@ from ...models.queries import (
     QueryListResponse,
     QueryCreateRequest,
     QueryUpdateRequest,
-    QueryDetailResponse
+    QueryDetailResponse,
+    ApprovalActionRequest,
+    ApprovalResponse,
+    ApprovalDetails,
+    ApprovalAction,
+    ToolCall
 )
 from .exceptions import handle_k8s_errors
 
@@ -312,3 +318,120 @@ async def delete_query(query_name: str, namespace: Optional[str] = Query(None, d
     """Delete a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         await ark_client.queries.a_delete(query_name)
+
+
+@router.get("/{query_name}/approval", response_model=ApprovalDetails)
+@handle_k8s_errors(operation="get", resource_type="query approval")
+async def get_approval_details(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> ApprovalDetails:
+    """
+    Get pending approval details for a query.
+
+    Returns approval information including tool calls, timeout, and agent context.
+    Only available when query is in 'input-required' phase.
+    """
+    async with with_ark_client(namespace, VERSION) as ark_client:
+        query = await ark_client.queries.a_get(query_name)
+        query_dict = query.to_dict()
+
+        status = query_dict.get("status", {})
+        phase = status.get("phase")
+
+        if phase != "input-required":
+            raise HTTPException(
+                status_code=404,
+                detail=f"Query {query_name} is not awaiting approval (phase: {phase})"
+            )
+
+        response = status.get("response", {})
+        a2a_metadata = response.get("a2a", {})
+        task_id = a2a_metadata.get("taskId")
+
+        if not task_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No approval task found for query {query_name}"
+            )
+
+        task_name = f"a2a-task-{task_id}"
+        task = await ark_client.a2atasks.a_get(task_name)
+        task_dict = task.to_dict()
+
+        task_status = task_dict.get("status", {})
+        protocol_metadata = task_status.get("protocolMetadata", {})
+
+        tool_calls_json = protocol_metadata.get("toolCalls", "[]")
+        tool_calls_data = json.loads(tool_calls_json) if isinstance(tool_calls_json, str) else tool_calls_json
+        tool_calls = [ToolCall(**tc) for tc in tool_calls_data]
+
+        return ApprovalDetails(
+            taskId=task_id,
+            toolCalls=tool_calls,
+            timeout=protocol_metadata.get("timeout"),
+            onTimeout=protocol_metadata.get("onTimeout"),
+            agentName=protocol_metadata.get("context", {}).get("agentName") if isinstance(protocol_metadata.get("context"), dict) else None,
+            phase=task_status.get("phase", "")
+        )
+
+
+@router.post("/{query_name}/approval", response_model=ApprovalResponse)
+@handle_k8s_errors(operation="update", resource_type="query approval")
+async def submit_approval(query_name: str, request: ApprovalActionRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> ApprovalResponse:
+    """
+    Submit approval or rejection for a query's tool calls.
+
+    Args:
+        query_name: Name of the query
+        request: Approval action (approved/rejected)
+        namespace: Namespace for the query
+
+    Returns:
+        ApprovalResponse with status and query information
+    """
+    async with with_ark_client(namespace, VERSION) as ark_client:
+        query = await ark_client.queries.a_get(query_name)
+        query_dict = query.to_dict()
+
+        status = query_dict.get("status", {})
+        phase = status.get("phase")
+
+        if phase != "input-required":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Query {query_name} is not awaiting approval (phase: {phase})"
+            )
+
+        response = status.get("response", {})
+        a2a_metadata = response.get("a2a", {})
+        task_id = a2a_metadata.get("taskId")
+
+        if not task_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No approval task found for query {query_name}"
+            )
+
+        task_name = f"a2a-task-{task_id}"
+
+        if request.action == ApprovalAction.APPROVED:
+            patch = {
+                "status": {
+                    "phase": "completed"
+                }
+            }
+        else:
+            patch = {
+                "status": {
+                    "phase": "failed",
+                    "error": "Tool execution rejected by user"
+                }
+            }
+
+        await ark_client.a2atasks.a_patch(task_name, patch)
+
+        return ApprovalResponse(
+            status="success",
+            queryName=query_name,
+            queryNamespace=query_dict["metadata"]["namespace"],
+            action=request.action,
+            taskId=task_id
+        )

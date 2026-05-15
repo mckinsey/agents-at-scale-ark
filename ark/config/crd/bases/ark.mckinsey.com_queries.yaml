@@ -467,6 +467,7 @@ spec:
                 - pending
                 - provisioning
                 - running
+                - input-required
                 - error
                 - done
                 - canceled

@@ -185,6 +185,7 @@ func PopulateA2ATaskStatusFromProtocol(status *arkv1alpha1.A2ATaskStatus, task *
 	}
 
 	status.ProtocolState = string(task.Status.State)
+	status.Phase = ConvertA2AStateToPhase(string(task.Status.State))
 	status.ContextID = task.ContextID
 	status.Artifacts = artifacts
 	status.History = history

@@ -27,6 +27,20 @@ type ToolPartial struct {
 	Parameters []ToolFunction `json:"parameters,omitempty"`
 }
 
+type ToolApprovalConfig struct {
+	// +kubebuilder:validation:Optional
+	// Required indicates whether human approval is required before executing this tool
+	Required bool `json:"required,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Timeout specifies how long to wait for approval before timing out
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=reject;proceed
+	// +kubebuilder:default=reject
+	// OnTimeout specifies the action to take when approval times out: "reject" fails the query, "proceed" executes the tool
+	OnTimeout string `json:"onTimeout,omitempty"`
+}
+
 type AgentTool struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=built-in;custom;mcp;http;agent;team;builtin
@@ -44,6 +58,9 @@ type AgentTool struct {
 	// from the agent. Parameters defined here are injected at runtime and are not visible or
 	// editable by the agent itself.
 	Partial *ToolPartial `json:"partial,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Approval configuration for human-in-the-loop tool execution
+	Approval *ToolApprovalConfig `json:"approval,omitempty"`
 }
 
 // GetToolCRDName returns the actual Tool CRD name to lookup in Kubernetes.

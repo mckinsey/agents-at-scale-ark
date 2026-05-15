@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -71,6 +72,20 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
+	// Check for approval timeout if task is in input-required phase
+	if a2aTask.Status.Phase == arka2a.PhaseInputRequired {
+		if timedOut, err := r.checkApprovalTimeout(ctx, &a2aTask); err != nil {
+			log.Error(err, "failed to check approval timeout")
+		} else if timedOut {
+			// Timeout was handled, update status and return
+			if err := r.Status().Update(ctx, &a2aTask); err != nil {
+				log.Error(err, "unable to update A2ATask status after timeout")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+	}
+
 	// Fetch task status from A2A server for all non-terminal tasks
 	if err := r.fetchA2ATaskStatus(ctx, &a2aTask); err != nil {
 		log.Error(err, "failed to fetch A2A task status", "taskId", a2aTask.Spec.TaskID)
@@ -110,6 +125,11 @@ func (r *A2ATaskReconciler) fetchA2ATaskStatus(ctx context.Context, a2aTask *ark
 		return err
 	}
 
+	// For approval tasks without A2AServer (a2aClient is nil), skip remote polling
+	if a2aClient == nil {
+		return nil
+	}
+
 	task, err := r.queryTaskStatus(ctx, a2aClient, a2aTask.Spec.TaskID)
 	if err != nil {
 		return err
@@ -123,6 +143,11 @@ func (r *A2ATaskReconciler) fetchA2ATaskStatus(ctx context.Context, a2aTask *ark
 
 // createA2AClient creates an A2A client for the task
 func (r *A2ATaskReconciler) createA2AClient(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (*a2aclient.A2AClient, error) {
+	// For approval tasks without an A2AServer, there's no remote server to poll
+	if a2aTask.Spec.A2AServerRef == nil {
+		return nil, nil
+	}
+
 	serverNamespace := a2aTask.Spec.A2AServerRef.Namespace
 	if serverNamespace == "" {
 		serverNamespace = a2aTask.Namespace
@@ -188,4 +213,80 @@ func (r *A2ATaskReconciler) setConditionCompleted(a2aTask *arkv1alpha1.A2ATask, 
 		Message:            message,
 		ObservedGeneration: a2aTask.Generation,
 	})
+}
+
+// checkApprovalTimeout checks if an approval request has timed out and applies the onTimeout policy.
+// Returns true if timeout was handled, false otherwise.
+func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	// Check if there's approval metadata
+	if a2aTask.Status.ProtocolMetadata == nil {
+		return false, nil
+	}
+
+	timeoutStr, hasTimeout := a2aTask.Status.ProtocolMetadata["timeout"]
+	onTimeout := a2aTask.Status.ProtocolMetadata["onTimeout"]
+
+	if !hasTimeout || timeoutStr == "" {
+		return false, nil
+	}
+
+	// Parse timeout duration
+	var timeoutDuration time.Duration
+	if err := json.Unmarshal([]byte(timeoutStr), &timeoutDuration); err != nil {
+		// Try parsing as duration string
+		parsed, parseErr := time.ParseDuration(timeoutStr)
+		if parseErr != nil {
+			log.Error(parseErr, "failed to parse approval timeout", "timeout", timeoutStr)
+			return false, fmt.Errorf("invalid timeout format: %w", parseErr)
+		}
+		timeoutDuration = parsed
+	}
+
+	// Check if task has started
+	if a2aTask.Status.StartTime == nil {
+		return false, nil
+	}
+
+	// Calculate expiry time
+	expiryTime := a2aTask.Status.StartTime.Add(timeoutDuration)
+	now := time.Now()
+
+	// Check if timeout has been exceeded
+	if now.Before(expiryTime) {
+		return false, nil
+	}
+
+	// Timeout exceeded - apply onTimeout policy
+	log.Info("Approval timeout exceeded, applying onTimeout policy",
+		"taskId", a2aTask.Spec.TaskID,
+		"onTimeout", onTimeout,
+		"timeout", timeoutDuration)
+
+	switch onTimeout {
+	case "proceed":
+		// Allow execution to proceed
+		log.Info("Approval timeout expired, proceeding per onTimeout policy", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseCompleted
+		completionTime := metav1.Now()
+		a2aTask.Status.CompletionTime = &completionTime
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalTimeoutProceeded",
+			"Approval timeout exceeded, proceeding per onTimeout policy")
+
+	case "reject", "":
+		// Reject execution (default behavior)
+		log.Info("Approval timeout expired, rejecting per onTimeout policy", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = fmt.Sprintf("Approval timeout exceeded after %s", timeoutDuration)
+		completionTime := metav1.Now()
+		a2aTask.Status.CompletionTime = &completionTime
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalTimeoutRejected",
+			"Approval timeout exceeded, rejecting per onTimeout policy")
+
+	default:
+		return false, fmt.Errorf("invalid onTimeout value: %s", onTimeout)
+	}
+
+	return true, nil
 }

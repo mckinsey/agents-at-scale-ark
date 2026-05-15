@@ -2,6 +2,9 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { ListQueriesParams } from './queries';
 import { queriesService } from './queries';
+import type { components } from '@/lib/api/generated/types';
+
+type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 
 export const useListQueries = (params: ListQueriesParams = {}) => {
   return useQuery({
@@ -10,3 +13,18 @@ export const useListQueries = (params: ListQueriesParams = {}) => {
     placeholderData: keepPreviousData,
   });
 };
+
+export function useGetQuery(queryName: string | null | undefined, enabled = true) {
+  return useQuery<QueryDetailResponse>({
+    queryKey: ['queries', queryName],
+    queryFn: () => {
+      if (!queryName) {
+        throw new Error('Query name is required');
+      }
+      return queriesService.get(queryName);
+    },
+    enabled: enabled && !!queryName,
+    // Refetch to catch phase changes
+    refetchInterval: 5000,
+  });
+}

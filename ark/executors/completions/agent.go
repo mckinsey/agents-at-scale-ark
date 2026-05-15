@@ -21,20 +21,21 @@ import (
 )
 
 type Agent struct {
-	Name              string
-	Namespace         string
-	Prompt            string
-	Description       string
-	Parameters        []arkv1alpha1.Parameter
-	Model             *Model
-	Tools             *ToolRegistry
-	telemetryRecorder telemetry.AgentRecorder
-	eventingRecorder  eventing.AgentRecorder
-	eventing          eventing.Provider
-	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
-	Annotations       map[string]string
-	OutputSchema      *runtime.RawExtension
-	client            client.Client
+	Name                  string
+	Namespace             string
+	Prompt                string
+	Description           string
+	Parameters            []arkv1alpha1.Parameter
+	Model                 *Model
+	Tools                 *ToolRegistry
+	telemetryRecorder     telemetry.AgentRecorder
+	eventingRecorder      eventing.AgentRecorder
+	eventing              eventing.Provider
+	ExecutionEngine       *arkv1alpha1.ExecutionEngineRef
+	Annotations           map[string]string
+	OutputSchema          *runtime.RawExtension
+	client                client.Client
+	approvalRequiredTools map[string]*arkv1alpha1.ToolApprovalConfig
 }
 
 // FullName returns the namespace/name format for the agent
@@ -169,6 +170,43 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
+	// First pass: check if any tools require approval
+	var toolCallsNeedingApproval []ToolCall
+	var approvalConfig *arkv1alpha1.ToolApprovalConfig
+
+	for _, tc := range toolCalls {
+		if config := a.requiresApproval(tc.Function.Name); config != nil {
+			toolCallsNeedingApproval = append(toolCallsNeedingApproval, ToolCall(tc))
+			if approvalConfig == nil {
+				approvalConfig = config
+			}
+		}
+	}
+
+	// If any tools need approval, return error to pause execution
+	if len(toolCallsNeedingApproval) > 0 {
+		// Get conversation ID from query context
+		conversationID := ""
+		if query, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query); ok {
+			conversationID = query.Spec.ConversationId
+		}
+
+		execContext := &ExecutionContext{
+			ConversationID:       conversationID,
+			PendingToolCallIndex: 0,
+			CompletedToolResults: []ToolResult{},
+			AgentName:            a.Name,
+			AgentNamespace:       a.Namespace,
+		}
+
+		return &ApprovalRequiredError{
+			ToolCalls: toolCallsNeedingApproval,
+			Config:    approvalConfig,
+			Context:   execContext,
+		}
+	}
+
+	// No approval needed, execute normally
 	for _, tc := range toolCalls {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -229,6 +267,63 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 				logger.Error(err, "Tool execution failed", "agent", a.FullName())
 			}
 			return newMessages, err
+		}
+	}
+}
+
+// ResumeFromApproval resumes agent execution after tool approval is granted
+func (a *Agent) ResumeFromApproval(ctx context.Context, approvedResults []ToolResult, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	// Get existing messages from memory
+	agentMessages, err := memory.GetMessages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch conversation history: %w", err)
+	}
+
+	// Append approved tool results as tool messages
+	for _, result := range approvedResults {
+		toolMsg := ToolMessage(result.Content, result.ID)
+		agentMessages = append(agentMessages, toolMsg)
+	}
+
+	// Prepare tools
+	var tools []openai.ChatCompletionToolParam
+	if a.Tools != nil {
+		tools = a.Tools.ToOpenAITools()
+	}
+
+	if a.Model == nil {
+		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
+	}
+
+	newMessages := []Message{}
+
+	// Continue the agentic loop
+	for {
+		if ctx.Err() != nil {
+			return &ExecutionResult{Messages: newMessages}, ctx.Err()
+		}
+
+		response, err := a.executeModelCall(ctx, agentMessages, tools, eventStream)
+		if err != nil {
+			return nil, err
+		}
+
+		choice := response.Choices[0]
+		assistantMessage := a.processAssistantMessage(choice)
+
+		agentMessages = append(agentMessages, assistantMessage)
+		newMessages = append(newMessages, assistantMessage)
+
+		if len(choice.Message.ToolCalls) == 0 {
+			return &ExecutionResult{Messages: newMessages}, nil
+		}
+
+		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+			logger := logf.FromContext(ctx)
+			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
+				logger.Error(err, "Tool execution failed during approval resumption", "agent", a.FullName())
+			}
+			return &ExecutionResult{Messages: newMessages}, err
 		}
 	}
 }
@@ -383,20 +478,29 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
+	// Pre-compute approval requirements for O(1) lookup during execution
+	approvalMap := make(map[string]*arkv1alpha1.ToolApprovalConfig)
+	for _, tool := range crd.Spec.Tools {
+		if tool.Approval != nil && tool.Approval.Required {
+			approvalMap[tool.Name] = tool.Approval
+		}
+	}
+
 	return &Agent{
-		Name:              crd.Name,
-		Namespace:         crd.Namespace,
-		Prompt:            crd.Spec.Prompt,
-		Description:       crd.Spec.Description,
-		Parameters:        crd.Spec.Parameters,
-		Model:             resolvedModel,
-		Tools:             tools,
-		telemetryRecorder: telemetryProvider.AgentRecorder(),
-		eventingRecorder:  eventingProvider.AgentRecorder(),
-		eventing:          eventingProvider,
-		ExecutionEngine:   crd.Spec.ExecutionEngine,
-		Annotations:       crd.Annotations,
-		OutputSchema:      crd.Spec.OutputSchema,
-		client:            k8sClient,
+		Name:                  crd.Name,
+		Namespace:             crd.Namespace,
+		Prompt:                crd.Spec.Prompt,
+		Description:           crd.Spec.Description,
+		Parameters:            crd.Spec.Parameters,
+		Model:                 resolvedModel,
+		Tools:                 tools,
+		telemetryRecorder:     telemetryProvider.AgentRecorder(),
+		eventingRecorder:      eventingProvider.AgentRecorder(),
+		eventing:              eventingProvider,
+		ExecutionEngine:       crd.Spec.ExecutionEngine,
+		Annotations:           crd.Annotations,
+		OutputSchema:          crd.Spec.OutputSchema,
+		client:                k8sClient,
+		approvalRequiredTools: approvalMap,
 	}, nil
 }

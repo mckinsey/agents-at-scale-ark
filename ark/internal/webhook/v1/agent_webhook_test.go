@@ -141,4 +141,84 @@ var _ = Describe("Agent Webhook", func() {
 			Expect(agent.Annotations).ToNot(HaveKey(annotations.MigrationWarningPrefix + "tool-type-custom"))
 		})
 	})
+
+	Context("When validating tool approval config", func() {
+		It("Should accept tool with valid approval config", func() {
+			timeout := metav1.Duration{Duration: 300000000000} // 5 minutes
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{
+					Type: "http",
+					Name: "test-tool",
+					Approval: &arkv1alpha1.ToolApprovalConfig{
+						Required:  true,
+						Timeout:   &timeout,
+						OnTimeout: "reject",
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should accept tool without approval config", func() {
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{Type: "http", Name: "test-tool"},
+			}
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should reject tool with negative timeout", func() {
+			timeout := metav1.Duration{Duration: -1000000000} // -1 second
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{
+					Type: "http",
+					Name: "test-tool",
+					Approval: &arkv1alpha1.ToolApprovalConfig{
+						Required: true,
+						Timeout:  &timeout,
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("timeout must be a positive duration"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should reject tool with invalid onTimeout value", func() {
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{
+					Type: "http",
+					Name: "test-tool",
+					Approval: &arkv1alpha1.ToolApprovalConfig{
+						Required:  true,
+						OnTimeout: "invalid",
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("onTimeout must be 'reject' or 'proceed'"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should accept tool with onTimeout=proceed", func() {
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{
+					Type: "http",
+					Name: "test-tool",
+					Approval: &arkv1alpha1.ToolApprovalConfig{
+						Required:  true,
+						OnTimeout: "proceed",
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+	})
 })

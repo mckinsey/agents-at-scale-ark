@@ -44,10 +44,33 @@ func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 		if !hasName {
 			return fmt.Errorf("tool[%d]: %s tools must specify a name", index, tool.Type)
 		}
+		if err := validateToolApprovalConfig(index, tool); err != nil {
+			return err
+		}
 		return nil
 	default:
 		return fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, mcp, http, agent, team, builtin", index, tool.Type)
 	}
+}
+
+func validateToolApprovalConfig(index int, tool arkv1alpha1.AgentTool) error {
+	if tool.Approval == nil {
+		return nil
+	}
+
+	approval := tool.Approval
+
+	// Validate timeout is positive if specified
+	if approval.Timeout != nil && approval.Timeout.Duration <= 0 {
+		return fmt.Errorf("tool[%d]: approval.timeout must be a positive duration", index)
+	}
+
+	// Validate onTimeout enum
+	if approval.OnTimeout != "" && approval.OnTimeout != "reject" && approval.OnTimeout != "proceed" {
+		return fmt.Errorf("tool[%d]: approval.onTimeout must be 'reject' or 'proceed'", index)
+	}
+
+	return nil
 }
 
 func isValidBuiltInTool(name string) bool {

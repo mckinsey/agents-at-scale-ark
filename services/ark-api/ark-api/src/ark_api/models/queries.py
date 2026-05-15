@@ -158,3 +158,42 @@ class ArkOpenAICompletionsMetadata(BaseModel):
     Follows the pattern used by OpenAI for provider-specific extensions.
     """
     annotations: Optional[Dict[str, str]] = None
+
+
+class ApprovalAction(str, Enum):
+    """Approval action enumeration."""
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ToolCall(BaseModel):
+    """Tool call information for approval."""
+    id: str
+    type: str
+    function: Optional[Dict[str, Any]] = None
+
+
+class ApprovalActionRequest(BaseModel):
+    """Request body for approving or rejecting tool calls."""
+    action: ApprovalAction
+    toolCallId: Optional[str] = None
+    toolCallIds: Optional[List[str]] = None
+
+
+class ApprovalResponse(BaseModel):
+    """Response after submitting approval action."""
+    status: str
+    queryName: str
+    queryNamespace: str
+    action: ApprovalAction
+    taskId: Optional[str] = None
+
+
+class ApprovalDetails(BaseModel):
+    """Details about pending approval request."""
+    taskId: str
+    toolCalls: List[ToolCall]
+    timeout: Optional[str] = None
+    onTimeout: Optional[str] = None
+    agentName: Optional[str] = None
+    phase: str
