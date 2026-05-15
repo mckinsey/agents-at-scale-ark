@@ -23,7 +23,8 @@ class SessionsPage(BasePage):
     CHAT_TEXTAREA = "textarea[placeholder*='Message']"
     USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
     ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
-    SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border"
+    SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
+    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-medium"
     NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
 
     def navigate_to_session_history(self) -> None:
@@ -208,16 +209,15 @@ class SessionsPage(BasePage):
     def get_stats_total_session_count(self, retries: int = 8) -> int:
         for attempt in range(retries):
             try:
-                stats = self.page.locator(self.SESSION_STATS_BAR).first
-                if stats.is_visible(timeout=5000):
-                    text = stats.inner_text()
-                    numbers = re.findall(r"\d+", text)
-                    if numbers and int(numbers[0]) > 0:
-                        return int(numbers[0])
-            except Exception:
-                if attempt < retries - 1:
-                    logger.info("Stats session count not found, retrying (%d/%d)...", attempt + 1, retries)
-                    self.page.wait_for_timeout(1500)
+                span = self.page.locator(self.SESSION_STATS_TOTAL).first
+                if span.is_visible(timeout=5000):
+                    text = span.inner_text().strip()
+                    if text.isdigit() and int(text) > 0:
+                        return int(text)
+            except Exception as e:
+                logger.warning("Could not get stats session count (attempt %d): %s", attempt + 1, e)
+            if attempt < retries - 1:
+                self.page.wait_for_timeout(1500)
         return 0
 
     def create_new_session(self, participant_name: str, participant_tab: str = "All") -> str:
