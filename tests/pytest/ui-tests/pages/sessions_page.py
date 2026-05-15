@@ -101,7 +101,7 @@ class SessionsPage(BasePage):
                 if numbers:
                     return int(numbers[0])
         except Exception as e:
-            logger.debug("Could not get conversation count: %s", e)
+            logger.warning("Could not get conversation count: %s", e)
         return 0
 
     def get_participants_count_from_header(self) -> int:
@@ -115,7 +115,7 @@ class SessionsPage(BasePage):
                 if numbers:
                     return int(numbers[0])
         except Exception as e:
-            logger.debug("Could not get participants count: %s", e)
+            logger.warning("Could not get participants count: %s", e)
         return 0
 
     def is_participant_shown_in_header(self, participant_name: str) -> bool:
@@ -214,10 +214,10 @@ class SessionsPage(BasePage):
                     numbers = re.findall(r"\d+", text)
                     if numbers and int(numbers[0]) > 0:
                         return int(numbers[0])
-            except Exception as e:
-                logger.debug("Could not get stats session count (attempt %d): %s", attempt + 1, e)
-            if attempt < retries - 1:
-                self.page.wait_for_timeout(1500)
+            except Exception:
+                if attempt < retries - 1:
+                    logger.info("Stats session count not found, retrying (%d/%d)...", attempt + 1, retries)
+                    self.page.wait_for_timeout(1500)
         return 0
 
     def create_new_session(self, participant_name: str, participant_tab: str = "All") -> str:
@@ -241,26 +241,19 @@ class SessionsPage(BasePage):
         try:
             self.wait_for_element(self.CONVERSATION_SIDEBAR, timeout=timeout)
         except Exception:
-            logger.debug("Conversation sidebar not found")
+            logger.warning("Conversation sidebar not found")
 
     def set_status_filter(self, status: str) -> None:
-        try:
-            trigger = self.page.locator(
-                "label:has-text('Status') + div [role='combobox'], "
-                "div:has(> label:has-text('Status')) [role='combobox']"
-            ).first
-            if not trigger.is_visible(timeout=3000):
-                trigger = self.page.locator("[role='combobox']").filter(
-                    has_text=re.compile(r"All|Active|Idle|Error", re.IGNORECASE)
-                ).last
-            trigger.click()
-            self.page.wait_for_timeout(400)
-            option = self.page.locator(f"[role='option']:has-text('{status}')").first
-            option.wait_for(state="visible", timeout=5000)
-            option.click()
-            self.page.wait_for_timeout(500)
-        except Exception as e:
-            logger.debug("Could not set status filter to %s: %s", status, e)
+        trigger = self.page.locator(
+            "div.flex.flex-col.gap-1\\.5:has(span:has-text('Status')) button[role='combobox']"
+        ).first
+        trigger.wait_for(state="visible", timeout=5000)
+        trigger.click()
+        self.page.wait_for_timeout(400)
+        option = self.page.locator(f"[role='option']:has-text('{status}')").first
+        option.wait_for(state="visible", timeout=5000)
+        option.click()
+        self.page.wait_for_timeout(500)
 
     def get_visible_session_count(self) -> int:
         try:
@@ -282,7 +275,7 @@ class SessionsPage(BasePage):
             )
             return rows.count()
         except Exception as e:
-            logger.debug("Could not get visible session count: %s", e)
+            logger.warning("Could not get visible session count: %s", e)
         return 0
 
     def search_sessions(self, query: str) -> None:
@@ -294,7 +287,7 @@ class SessionsPage(BasePage):
             search.fill(query)
             self.page.wait_for_timeout(1200)
         except Exception as e:
-            logger.debug("Could not search sessions: %s", e)
+            logger.warning("Could not search sessions: %s", e)
 
     def clear_search(self) -> None:
         try:
@@ -305,7 +298,7 @@ class SessionsPage(BasePage):
                 search.fill("")
                 self.page.wait_for_timeout(400)
         except Exception as e:
-            logger.debug("Could not clear search: %s", e)
+            logger.warning("Could not clear search: %s", e)
 
     def navigate_to_session_detail(self, session_id: str) -> None:
         try:
@@ -318,7 +311,7 @@ class SessionsPage(BasePage):
             self.wait_for_navigation_complete()
             self.wait_for_session_detail_page()
         except Exception as e:
-            logger.debug("Could not navigate to session detail for %s: %s", session_id, e)
+            logger.warning("Could not navigate to session detail for %s: %s", session_id, e)
 
     def get_session_status_in_table(self, session_id: str) -> str:
         try:
@@ -336,7 +329,7 @@ class SessionsPage(BasePage):
                 if error_dot.count() > 0:
                     return "error"
         except Exception as e:
-            logger.debug("Could not get session status for %s: %s", session_id, e)
+            logger.warning("Could not get session status for %s: %s", session_id, e)
         return ""
 
     def get_session_conversation_count_in_table(self, session_id: str, retries: int = 5) -> int:
@@ -354,7 +347,7 @@ class SessionsPage(BasePage):
                             if count > 0:
                                 return count
             except Exception as e:
-                logger.debug("Could not get conversation count for %s (attempt %d): %s", session_id, attempt + 1, e)
+                logger.warning("Could not get conversation count for %s (attempt %d): %s", session_id, attempt + 1, e)
             if attempt < retries - 1:
                 self.page.reload()
                 self.wait_for_navigation_complete()
@@ -395,21 +388,6 @@ class SessionsPage(BasePage):
         except PlaywrightTimeoutError:
             logger.warning("Could not find confirm button in new conversation dialog")
 
-    def set_date_filter(self, value: str) -> None:
-        try:
-            trigger = self.page.locator(
-                "label:has-text('Date range') + div [role='combobox'], "
-                "div:has(> label:has-text('Date range')) [role='combobox']"
-            ).first
-            trigger.click()
-            self.page.wait_for_timeout(400)
-            option = self.page.locator(f"[role='option']:has-text('{value}')").first
-            option.wait_for(state="visible", timeout=5000)
-            option.click()
-            self.page.wait_for_timeout(500)
-        except Exception as e:
-            logger.debug("Could not set date filter to %s: %s", value, e)
-
     def click_sort_header(self, field: str) -> None:
         try:
             header = self.page.locator(
@@ -419,7 +397,7 @@ class SessionsPage(BasePage):
             header.click()
             self.page.wait_for_timeout(500)
         except Exception as e:
-            logger.debug("Could not click sort header %s: %s", field, e)
+            logger.warning("Could not click sort header %s: %s", field, e)
 
     def is_empty_state_shown(self) -> bool:
         try:
@@ -441,5 +419,5 @@ class SessionsPage(BasePage):
                 if numbers:
                     return int(numbers[0])
         except Exception as e:
-            logger.debug("Could not get selected conversation message count: %s", e)
+            logger.warning("Could not get selected conversation message count: %s", e)
         return 0

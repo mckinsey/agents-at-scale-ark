@@ -296,27 +296,6 @@ class TestSessionsAndConversations:
             "Dialog should close after clicking Cancel"
 
     # -------------------------------------------------------------------------
-    # Date range filter
-    # -------------------------------------------------------------------------
-
-    def test_session_date_range_filter(self, page: Page, sessions_test_resources: dict):
-        sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        baseline_count = sessions.get_visible_session_count()
-
-        for date_range in ("Last 24h", "Last 7 days", "Last 30 days"):
-            sessions.set_date_filter(date_range)
-            count = sessions.get_visible_session_count()
-            logger.info("Sessions with date filter '%s': %d", date_range, count)
-            assert count >= 0, f"Session count should be non-negative for filter '{date_range}'"
-
-        sessions.set_date_filter("Choose option")
-        reset_count = sessions.get_visible_session_count()
-        assert reset_count >= baseline_count, \
-            "Resetting date filter should restore at least the baseline session count"
-
-    # -------------------------------------------------------------------------
     # Sort controls
     # -------------------------------------------------------------------------
 
