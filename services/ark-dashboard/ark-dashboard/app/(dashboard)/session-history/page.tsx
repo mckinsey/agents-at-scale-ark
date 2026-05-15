@@ -9,7 +9,7 @@ export default function SessionsConversationsPage() {
 
   return (
     <div className="-m-10 flex h-full flex-col gap-5 px-12 py-10">
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1" data-testid="page-header">
         <div className="flex items-center gap-1">
           <Earthquake className="size-5" />
           <h1 className="text-2xl font-normal text-fg-primary">Sessions</h1>
