@@ -232,7 +232,8 @@ func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error
 		}
 		options = append(options, option.WithHeader("Authorization", fmt.Sprintf("Bearer %s", tokenResp.Token)))
 	} else {
-		options = append(options,
+		options = append(
+			options,
 			option.WithHeader("api-key", ap.APIKey),
 			option.WithAPIKey(ap.APIKey),
 		)

@@ -15,6 +15,21 @@ export interface MarketplaceConfig {
   registry?: string;
 }
 
+export interface PostgresStorageConfig {
+  host: string;
+  port?: number | string;
+  database?: string;
+  user: string;
+  passwordSecretName: string;
+  passwordSecretKey?: string;
+  sslMode?: string;
+}
+
+export interface StorageConfig {
+  backend?: 'etcd' | 'postgresql';
+  postgresql?: PostgresStorageConfig;
+}
+
 export interface ArkConfig {
   chat?: ChatConfig;
   marketplace?: MarketplaceConfig;
@@ -22,6 +37,7 @@ export interface ArkConfig {
     reusePortForwards?: boolean;
     [serviceName: string]: Partial<ArkService> | boolean | undefined;
   };
+  storage?: StorageConfig;
   queryTimeout?: string;
   defaultExportTypes?: string[];
   // Cluster info - populated during startup if context exists
@@ -115,6 +131,14 @@ export function loadConfig(): ArkConfig {
       process.env.ARK_SERVICES_REUSE_PORT_FORWARDS === '1';
   }
 
+  if (process.env.ARK_STORAGE_BACKEND !== undefined) {
+    const backend = process.env.ARK_STORAGE_BACKEND;
+    if (backend === 'etcd' || backend === 'postgresql') {
+      config.storage = config.storage || {};
+      config.storage.backend = backend;
+    }
+  }
+
   return config;
 }
 
@@ -157,6 +181,19 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
           ...overrides,
         };
       }
+    }
+  }
+
+  if (source.storage) {
+    target.storage = target.storage || {};
+    if (source.storage.backend !== undefined) {
+      target.storage.backend = source.storage.backend;
+    }
+    if (source.storage.postgresql) {
+      target.storage.postgresql = {
+        ...(target.storage.postgresql as PostgresStorageConfig),
+        ...source.storage.postgresql,
+      };
     }
   }
 

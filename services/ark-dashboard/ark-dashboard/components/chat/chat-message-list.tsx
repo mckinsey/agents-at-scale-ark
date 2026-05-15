@@ -3,6 +3,7 @@ import { useMemo, useEffect } from 'react';
 import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
 import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
@@ -22,7 +23,7 @@ interface ChatMessageListProps {
   debugMode: boolean;
   isProcessing: boolean;
   processingPhase?: string;
-  conditionMessage?: string;
+
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -105,18 +106,22 @@ function determineMessageFlags(
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
     msg.role === 'system' && content.includes('Selector returned invalid agent name');
+  const isConversationStoppedMessage =
+    msg.role === 'system' && content === 'Conversation stopped by user';
   const hasToolCalls =
     debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
   const hasContent =
     !!content &&
     content.trim().length > 0 &&
     !isMaxTurnsMessage &&
-    !isSelectorFailureMessage;
+    !isSelectorFailureMessage &&
+    !isConversationStoppedMessage;
   const hasTermination = terminateToolCall !== undefined;
 
   return {
     isMaxTurnsMessage,
     isSelectorFailureMessage,
+    isConversationStoppedMessage,
     hasToolCalls,
     hasContent,
     hasTermination,
@@ -132,7 +137,7 @@ export function ChatMessageList({
   debugMode,
   isProcessing,
   processingPhase,
-  conditionMessage,
+
   error,
   viewMode = 'markdown',
   messagesEndRef,
@@ -174,6 +179,7 @@ export function ChatMessageList({
       terminateMessage: string | undefined;
       isMaxTurnsMessage: boolean;
       isSelectorFailureMessage: boolean;
+      isConversationStoppedMessage: boolean;
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
@@ -196,6 +202,7 @@ export function ChatMessageList({
       const {
         isMaxTurnsMessage,
         isSelectorFailureMessage,
+        isConversationStoppedMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
@@ -206,7 +213,8 @@ export function ChatMessageList({
         !hasContent &&
         !hasTermination &&
         !isMaxTurnsMessage &&
-        !isSelectorFailureMessage
+        !isSelectorFailureMessage &&
+        !isConversationStoppedMessage
       ) {
         return;
       }
@@ -229,6 +237,7 @@ export function ChatMessageList({
         terminateMessage,
         isMaxTurnsMessage,
         isSelectorFailureMessage,
+        isConversationStoppedMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
@@ -389,6 +398,7 @@ export function ChatMessageList({
             {pm.isSelectorFailureMessage && (
               <SelectorFailureEvent message={pm.content} />
             )}
+            {pm.isConversationStoppedMessage && <ConversationStoppedEvent />}
           </div>
         );
       })}
@@ -400,17 +410,17 @@ export function ChatMessageList({
           <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
             <div className="flex items-center gap-2">
               <div className="flex space-x-1">
-                <div className={`h-2 w-2 animate-bounce rounded-full ${processingPhase === 'provisioning' ? 'bg-amber-400' : 'bg-gray-400'}`}></div>
+                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
                 <div
-                  className={`h-2 w-2 animate-bounce rounded-full ${processingPhase === 'provisioning' ? 'bg-amber-400' : 'bg-gray-400'}`}
+                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
                   style={{ animationDelay: '0.1s' }}></div>
                 <div
-                  className={`h-2 w-2 animate-bounce rounded-full ${processingPhase === 'provisioning' ? 'bg-amber-400' : 'bg-gray-400'}`}
+                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
                   style={{ animationDelay: '0.2s' }}></div>
               </div>
               {processingPhase === 'provisioning' && (
-                <span className="text-xs text-amber-600 dark:text-amber-400">
-                  {conditionMessage || 'Provisioning...'}
+                <span className="text-xs text-foreground">
+                  Preparing new workspace...
                 </span>
               )}
             </div>

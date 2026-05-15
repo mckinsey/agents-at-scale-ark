@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const endpoint = openidConfig.end_session_endpoint || fallbackEndpoint;
   const url = new URL(endpoint);
 
-  url.searchParams.append('id_token_hint', token.id_token);
+  url.searchParams.append('id_token_hint', String(token.id_token));
   url.searchParams.append('post_logout_redirect_uri', redirectURL);
   url.searchParams.append('client_id', process.env.OIDC_CLIENT_ID ?? '');
 

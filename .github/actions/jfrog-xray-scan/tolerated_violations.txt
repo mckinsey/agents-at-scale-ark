@@ -1,6 +1,12 @@
 XRAY-962117 - CVE-2026-32280
 - Go crypto/x509 Certificate.Verify slow chain building causing potential DoS in mTLS scenarios.
-- Patched by upgrading Go to 1.26.2 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile (1.25.9-alpine). Whitelist retained in case scanner caches previous scan images before rebuild.
+- Patched by upgrading Go to 1.26.3 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile. Whitelist retained in case scanner caches previous scan images before rebuild.
+XRAY-979047 - CVE-2026-39820
+- Go net/mail ParseAddress/ParseAddressList/ParseDate functions have quadratic complexity in comment parsing, allowing crafted email addresses to cause excessive CPU and memory usage.
+- Patched by upgrading Go to 1.26.3 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile. Whitelist retained in case scanner caches previous scan images before rebuild.
+XRAY-979069 - CVE-2026-33811
+- Go net package has double-free vulnerability in cgo DNS resolver when processing very long CNAME responses with LookupCNAME, potentially causing crashes.
+- Patched by upgrading Go to 1.26.3 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile. Whitelist retained in case scanner caches previous scan images before rebuild.
 XRAY-962422 - CVE-2026-39883
 - OpenTelemetry-Go PATH hijacking via bare `kenv` command on BSD and Solaris platforms (fix in 1.43.0).
 - Not exploitable in Ark: all Ark Go components run in Linux containers (alpine/bookworm). The `kenv` code path is only invoked on BSD/Solaris hosts. No BSD/Solaris runtime targets exist in Ark deployment.
