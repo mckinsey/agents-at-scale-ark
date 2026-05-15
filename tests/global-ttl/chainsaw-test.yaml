@@ -9,7 +9,7 @@ spec:
   - name: setup
     try:
     - script:
-        content: kubectl delete arkconfig default --ignore-not-found
+        content: kubectl delete arkconfig default --ignore-not-found || true
     - apply:
         file: manifests/a00-rbac.yaml
     - apply:
@@ -70,4 +70,4 @@ spec:
         name: test-query-override-ttl
     cleanup:
     - script:
-        content: kubectl delete arkconfig default --ignore-not-found
+        content: kubectl delete arkconfig default --ignore-not-found || true
