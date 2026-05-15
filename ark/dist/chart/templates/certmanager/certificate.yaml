@@ -3,6 +3,14 @@
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
+  annotations:
+    {{- if .Values.crd.keep }}
+    # Prevent helm uninstall from deleting the Issuer. Without this, re-deploying
+    # causes Helm to re-create the Issuer, which calls cert-manager's validating
+    # webhook before its TLS is stable, resulting in x509 errors. Keeping the
+    # Issuer alive across reinstalls avoids that bootstrap race entirely.
+    "helm.sh/resource-policy": keep
+    {{- end }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: selfsigned-issuer

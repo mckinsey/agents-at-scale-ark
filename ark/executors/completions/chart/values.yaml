@@ -26,3 +26,6 @@ customCACert:
   enabled: false
   secretName: "custom-ca-cert"
   key: "ca.crt"
+
+extraVolumes: []
+extraVolumeMounts: []
