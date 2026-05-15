@@ -24,7 +24,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "Kubernetes version for AKS"
   type        = string
-  default     = "1.30"
+  default     = "1.35"
 }
 
 variable "node_count" {
@@ -70,9 +70,9 @@ variable "langfuse_db_name" {
 }
 
 variable "langfuse_version" {
-  description = "Langfuse version to deploy"
+  description = "Langfuse Helm chart version to deploy"
   type        = string
-  default     = "2.0.0"
+  default     = "1.5.30"
 }
 
 variable "langfuse_nextauth_secret" {

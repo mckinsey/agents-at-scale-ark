@@ -13,12 +13,10 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   delegated_subnet_id = azurerm_subnet.postgres_subnet.id
   private_dns_zone_id = azurerm_private_dns_zone.postgres.id
 
+  public_network_access_enabled = false
+
   backup_retention_days        = 7
   geo_redundant_backup_enabled = false
-
-  high_availability {
-    mode = "ZoneRedundant"
-  }
 
   tags = local.tags
 

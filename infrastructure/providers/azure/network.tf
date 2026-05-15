@@ -35,7 +35,7 @@ resource "azurerm_subnet" "postgres_subnet" {
 }
 
 resource "azurerm_private_dns_zone" "postgres" {
-  name                = "${var.cluster_name}-postgres.postgres.database.azure.com"
+  name                = "privatelink.postgres.database.azure.com"
   resource_group_name = azurerm_resource_group.rg.name
   tags                = local.tags
 }

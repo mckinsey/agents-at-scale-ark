@@ -14,6 +14,6 @@ postgres_sku_name       = "GP_Standard_D2s_v3"
 postgres_storage_mb     = 32768
 
 langfuse_db_name         = "langfuse"
-langfuse_version         = "2.0.0"
+langfuse_version         = "1.5.30"
 langfuse_nextauth_secret = "generate-random-secret-here"
 langfuse_salt            = "generate-random-salt-here"

@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "langfuse" {
+resource "kubernetes_namespace_v1" "langfuse" {
   metadata {
     name = "langfuse"
   }
@@ -6,10 +6,10 @@ resource "kubernetes_namespace" "langfuse" {
   depends_on = [azurerm_kubernetes_cluster.aks]
 }
 
-resource "kubernetes_secret" "langfuse_db" {
+resource "kubernetes_secret_v1" "langfuse_db" {
   metadata {
     name      = "langfuse-db-secret"
-    namespace = kubernetes_namespace.langfuse.metadata[0].name
+    namespace = kubernetes_namespace_v1.langfuse.metadata[0].name
   }
 
   data = {
@@ -22,10 +22,10 @@ resource "kubernetes_secret" "langfuse_db" {
   ]
 }
 
-resource "kubernetes_secret" "langfuse_secrets" {
+resource "kubernetes_secret_v1" "langfuse_secrets" {
   metadata {
     name      = "langfuse-secrets"
-    namespace = kubernetes_namespace.langfuse.metadata[0].name
+    namespace = kubernetes_namespace_v1.langfuse.metadata[0].name
   }
 
   data = {
@@ -39,7 +39,7 @@ resource "helm_release" "langfuse" {
   repository = "https://langfuse.github.io/langfuse-k8s"
   chart      = "langfuse"
   version    = var.langfuse_version
-  namespace  = kubernetes_namespace.langfuse.metadata[0].name
+  namespace  = kubernetes_namespace_v1.langfuse.metadata[0].name
 
   values = [
     yamlencode({
@@ -60,7 +60,7 @@ resource "helm_release" "langfuse" {
           name = "DATABASE_URL"
           valueFrom = {
             secretKeyRef = {
-              name = kubernetes_secret.langfuse_db.metadata[0].name
+              name = kubernetes_secret_v1.langfuse_db.metadata[0].name
               key  = "DATABASE_URL"
             }
           }
@@ -69,7 +69,7 @@ resource "helm_release" "langfuse" {
           name = "NEXTAUTH_SECRET"
           valueFrom = {
             secretKeyRef = {
-              name = kubernetes_secret.langfuse_secrets.metadata[0].name
+              name = kubernetes_secret_v1.langfuse_secrets.metadata[0].name
               key  = "NEXTAUTH_SECRET"
             }
           }
@@ -78,7 +78,7 @@ resource "helm_release" "langfuse" {
           name = "SALT"
           valueFrom = {
             secretKeyRef = {
-              name = kubernetes_secret.langfuse_secrets.metadata[0].name
+              name = kubernetes_secret_v1.langfuse_secrets.metadata[0].name
               key  = "SALT"
             }
           }
@@ -109,7 +109,7 @@ resource "helm_release" "langfuse" {
   ]
 
   depends_on = [
-    kubernetes_secret.langfuse_db,
-    kubernetes_secret.langfuse_secrets
+    kubernetes_secret_v1.langfuse_db,
+    kubernetes_secret_v1.langfuse_secrets
   ]
 }

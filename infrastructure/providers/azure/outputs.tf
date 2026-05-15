@@ -31,7 +31,7 @@ output "postgres_server_name" {
 
 output "langfuse_namespace" {
   description = "Langfuse Kubernetes Namespace"
-  value       = kubernetes_namespace.langfuse.metadata[0].name
+  value       = kubernetes_namespace_v1.langfuse.metadata[0].name
 }
 
 output "langfuse_service_name" {
