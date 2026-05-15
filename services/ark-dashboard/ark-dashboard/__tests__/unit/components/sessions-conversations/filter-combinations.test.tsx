@@ -110,7 +110,7 @@ describe('Filter Combination Scenarios', () => {
   });
 
   describe('Date Range Filter', () => {
-    it('should send undefined when date range is "all"', () => {
+    it('should send undefined when date range is empty (Choose option)', () => {
       render(
         <SessionsTable
           onSelectSession={mockOnSelectSession}
