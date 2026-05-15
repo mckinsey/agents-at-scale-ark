@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpDown, BarChart3, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { Add, BarChart, Search, SwapVert } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import { brokerSessionsService, type BrokerSession } from '@/lib/services/broker-sessions';
@@ -25,7 +26,7 @@ type SortDirection = 'asc' | 'desc';
 export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'idle' | 'error'>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
+  const [dateFilter, setDateFilter] = useState<'' | '24h' | '7d' | '30d'>('');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -36,8 +37,22 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
+  const dateRangeItems = [
+    { value: '', label: 'Choose option' },
+    { value: '24h', label: 'Last 24h' },
+    { value: '7d', label: 'Last 7 days' },
+    { value: '30d', label: 'Last 30 days' },
+  ];
+
+  const statusItems = [
+    { value: 'all', label: 'All' },
+    { value: 'active', label: 'Active' },
+    { value: 'idle', label: 'Idle' },
+    { value: 'error', label: 'Error' },
+  ];
+
   const dateFrom = useMemo(() => {
-    if (dateFilter === 'all') return undefined;
+    if (!dateFilter) return undefined;
     const now = new Date();
     if (dateFilter === '24h') return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
     if (dateFilter === '7d') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -129,88 +144,103 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-6 rounded-lg border bg-muted p-6 text-sm">
-        <div className="flex items-center gap-1">
-          <BarChart3 className="size-4 text-muted-foreground" />
-          <span className="font-medium text-muted-foreground">{totalSessions}</span>
-          <span className="text-muted-foreground">Sessions</span>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-1">
-          <span className="size-2 rounded-full bg-blue-500" />
-          <span className="font-medium text-muted-foreground">{activeSessions}</span>
-          <span className="text-muted-foreground">active</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="size-2 rounded-full bg-red-500" />
-          <span className="font-medium text-muted-foreground">{errorSessions}</span>
-          <span className="text-muted-foreground">errors</span>
+      <div className="mx-auto flex w-full max-w-[1344px] flex-col items-start gap-5 border border-stroke-tertiary bg-surface-bg-secondary p-5">
+        <div className="inline-flex items-center gap-3">
+          <div className="flex items-end gap-6">
+            <div className="flex items-center gap-2">
+              <IconShell size="sm" variant="secondary">
+                <BarChart />
+              </IconShell>
+              <div className="flex items-center gap-1">
+                <span className="text-base font-semibold leading-6 text-fg-primary">{totalSessions}</span>
+                <span className="text-sm leading-5 text-fg-secondary">Sessions</span>
+              </div>
+            </div>
+            <div className="h-5 w-px border-r border-stroke-tertiary" />
+            <div className="flex items-center gap-2">
+              <div className="relative size-2 rounded-full bg-status-information" />
+              <div className="flex items-center gap-1">
+                <span className="text-base font-semibold leading-6 text-fg-primary">{activeSessions}</span>
+                <span className="text-sm leading-5 text-fg-secondary">active</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative size-2 rounded-full bg-status-error" />
+              <div className="flex items-center gap-1">
+                <span className="text-base font-semibold leading-6 text-fg-primary">{errorSessions}</span>
+                <span className="text-sm leading-5 text-fg-secondary">errors</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-end gap-2">
+      <div className="mx-auto flex w-full max-w-[1344px] items-end gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <IconShell size="sm" variant="secondary">
+              <Search />
+            </IconShell>
+          </div>
           <Input
             type="search"
             placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="h-9 pl-10 placeholder:text-fg-tertiary"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted-foreground">Date range</span>
-          <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Date range" />
+        <div className="flex w-48 flex-col gap-2">
+          <span className="text-sm leading-5 text-fg-secondary">Date range</span>
+          <Select items={dateRangeItems} value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
+            <SelectTrigger className="h-9 w-48">
+              <SelectValue placeholder="Choose option" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Choose option</SelectItem>
-              <SelectItem value="24h">Last 24h</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
+              {dateRangeItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  <SelectItemText>{item.label}</SelectItemText>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted-foreground">Status</span>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Status" />
+        <div className="flex w-48 flex-col gap-2">
+          <span className="text-sm leading-5 text-fg-secondary">Status</span>
+          <Select items={statusItems} value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+            <SelectTrigger className="h-9 w-48">
+              <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="idle">Idle</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
+              {statusItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  <SelectItemText>{item.label}</SelectItemText>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-2 size-4" />
+        <Button onClick={() => setDialogOpen(true)} className="h-9">
+          <IconShell size="sm">
+            <Add />
+          </IconShell>
           New session
         </Button>
       </div>
 
-      <div className="rounded-lg">
-        <div className="grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b border-border/50 px-4 py-3 text-sm font-medium text-muted-foreground">
+      <div className="mx-auto w-full max-w-[1344px]">
+        <div className="grid grid-cols-[2fr_3fr_1fr] gap-4 text-sm text-fg-secondary">
           <button
-            className="flex items-center gap-1 text-left"
+            className="flex items-center gap-2 text-left border-b border-stroke-tertiary h-12 px-3"
             onClick={() => toggleSort('name')}
           >
             Name
-            <ArrowUpDown className="size-3" />
+            <IconShell size="sm" variant="secondary">
+              <SwapVert />
+            </IconShell>
           </button>
-          <div>Participants</div>
-          <button
-            className="flex items-center gap-1 text-left"
-            onClick={() => toggleSort('conversations')}
-          >
-            Convos
-            <ArrowUpDown className="size-3" />
-          </button>
-          <div className="w-8" />
+          <div className="border-b border-stroke-tertiary h-12 flex items-center px-3">Participants</div>
+          <div className="text-right border-b border-stroke-tertiary h-12 flex items-center justify-end px-3">Convos</div>
         </div>
 
         {sessions.map((session) => (
