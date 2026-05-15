@@ -37,7 +37,7 @@
 
 ## 6. ark-api RBAC
 
-- [ ] 6.1 Extend the ark-api SA ClusterRole / Role in `services/ark-api/chart/` with `get/list/watch/create/patch/update/delete` on Secrets in the namespaces ark-api serves
+- [ ] 6.1 Extend the ark-api SA ClusterRole / Role in `services/ark-api/chart/` with `get/create/patch/update/delete` on Secrets in the namespaces ark-api serves. `list` / `watch` are NOT required — the four endpoints only touch the single Secret named in `spec.authorization.tokenSecretRef`.
 - [ ] 6.2 Verify the SA already has `get/patch` on `mcpservers` (the parent resource, NOT `mcpservers/status`) — annotations live in `metadata.annotations` on the parent object; the `/status` subresource only services `.status.*` fields and a patch routed there will leave annotations untouched. Add the rule if missing.
 - [ ] 6.3 Document the RBAC delta in the chart values comments
 
@@ -72,7 +72,7 @@
 - [ ] 9.5 Resolve namespace by reading the kubeconfig file directly (NOT by shelling out to `kubectl config view` — see 10.7's no-shell-out assertion): `--namespace` flag → active context's `namespace` field in the parsed kubeconfig → `default`; pass the resolved value as `?namespace=` query param to ark-api
 - [ ] 9.6 Drive the flow via `ArkApiProxy`: POST `/auth/start` → print and (unless `--no-open`) `open()` the URL → poll `GET /auth/status` every 2s up to `--timeout`
 - [ ] 9.7 Exit zero on `authorized`; exit non-zero on `failed`, `expired`, or poll-timeout — single `output.error("mcp auth failed:", <msg>)` line per failure
-- [ ] 9.8 Print resource URL + `expires_at` on success
+- [ ] 9.8 Print `expires_at` on success — do NOT print `status.authorization.resource` (the CLI never reads the MCPServer directly and the auth endpoints do not surface the resource URL in their response bodies; spec's "no fields beyond auth/start and auth/status responses" requirement forbids it)
 - [ ] 9.9 `ark mcp auth logout <server-name>` flags: `--namespace`, `--keep-client`, `--delete-secret`; client-side mutual-exclusion check before contacting ark-api
 - [ ] 9.10 POST `/auth/logout` and translate HTTP status to exit code (200 with `noop:true` → exit zero; other 200 → exit zero; 404 → exit non-zero with "MCPServer not found"; 4xx → exit non-zero with body message)
 
@@ -82,10 +82,10 @@
 - [ ] 10.2 Negative paths: `auth/start` returns 409 without `force`; `auth/status` returns `failed` with `invalid_grant`; poll loop exceeds `--timeout`; ark-api unreachable via proxy; `--force-registration` without `--force` on a non-Required MCPServer surfaces the 409 verbatim
 - [ ] 10.2.1 `--force-registration` test: assert the CLI sends `force_registration: true` in the `auth/start` body and that the flag is independent of `--force`
 - [ ] 10.3 `--no-open` test: assert the authorization URL is printed to stdout and `defaultDeps.openBrowser` is NOT invoked
-- [ ] 10.4 Namespace resolution unit tests: explicit `--namespace`, `kubectl` context fallback, `default` fallback
+- [ ] 10.4 Namespace resolution unit tests: explicit `--namespace`, active kubeconfig context's namespace fallback (read directly from the kubeconfig file, never via `kubectl config view` — see 10.7), `default` fallback
 - [ ] 10.5 `--timeout` parser tests: `60s`, `5m`, `1h` accepted; `abc`, `-1m`, `0s` rejected
 - [ ] 10.6 `logout.spec.ts` — default, `--keep-client`, `--delete-secret`, mutual-exclusion error, no-op on missing Secret, non-zero on missing MCPServer
-- [ ] 10.7 Assert no `kubectl` shell-out in any auth code path (mock `execa`/equivalent and fail the test if it's invoked)
+- [ ] 10.7 Assert no `kubectl` shell-out for Kubernetes resource operations (read/patch MCPServers, read/patch/create Secrets, list resources) in any auth code path. Mock `execa`/equivalent and fail the test if it is invoked with `kubectl` arguments other than `port-forward` — `ArkApiProxy`'s own `kubectl port-forward` to reach the in-cluster ark-api Service is the explicit carve-out, since every other CLI command uses it the same way.
 - [ ] 10.8 Assert tokens, refresh tokens, client secrets, and PKCE verifiers do not appear in CLI stdout/stderr across success and failure paths
 
 ## 11. Documentation

@@ -2,9 +2,20 @@
 
 ### Requirement: ark-api exposes POST /auth/start to initiate an authorization flow
 
-ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/start` to initiate an OAuth 2.1 authorization flow for the referenced `MCPServer` and SHALL return `{ auth_id, authorization_url, flow_expires_at }`. `flow_expires_at` is the cache-entry deadline and SHALL NOT be confused with the token-expiry `expires_at` field returned by `auth/status` — they are intentionally distinct field names so callers don't conflate the two lifetimes. The endpoint SHALL accept `namespace` as an optional query parameter; when absent, ark-api SHALL resolve the namespace from its own pod context (typically `default` in a default install), matching every other ark-api route via `with_ark_client(namespace, ...)`.
+ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/start` to initiate an OAuth 2.1 authorization flow for the referenced `MCPServer` and SHALL return `{ auth_id, authorization_url, flow_expires_at }`. `flow_expires_at` is the cache-entry deadline and SHALL NOT be confused with the token-expiry `expires_at` field returned by `auth/status` — they are intentionally distinct field names so callers don't conflate the two lifetimes. Namespace resolution follows the cross-cutting [Namespace resolution requirement](#requirement-namespace-resolution-prefers-explicit-query-parameter).
 
-#### Scenario: ark-api boots without ARK_API_PUBLIC_CALLBACK_URL
+The endpoint's response status codes SHALL be drawn from the following matrix; each row is enforced by a requirement and scenario elsewhere in this spec:
+
+| Status | Cause | Owning requirement |
+|---|---|---|
+| 200 | Flow initiated; body carries `{ auth_id, authorization_url, flow_expires_at }` | this requirement |
+| 404 | MCPServer not found in the resolved namespace | this requirement (scenario below) |
+| 409 | MCPServer is `Authorized` and no `force: true`; OR `status.authorization` is entirely absent | [auth/start refuses non-Required state without force](#requirement-authstart-refuses-non-required-state-without-force); [auth/start refuses when authorization metadata is missing](#requirement-authstart-refuses-when-authorization-metadata-is-missing-from-the-mcpserver) |
+| 422 | MCPServer is `DiscoveryFailed`; OR `spec.authorization` is unset; OR `registrationEndpoint` is empty AND the Secret carries no cached `client_id` / `client_secret` | [auth/start refuses non-Required state without force](#requirement-authstart-refuses-non-required-state-without-force); [auth/start refuses when authorization metadata is missing](#requirement-authstart-refuses-when-authorization-metadata-is-missing-from-the-mcpserver); [auth/start fails closed when no client credentials and no registration endpoint](#requirement-authstart-fails-closed-when-no-client-credentials-and-no-registration-endpoint) |
+| 502 | DCR response violates the contract (missing redirect URI, unsupported `token_endpoint_auth_method`) | [Dynamic Client Registration enforces the configured redirect URI](#requirement-dynamic-client-registration-enforces-the-configured-redirect-uri) |
+| 503 | `ARK_API_PUBLIC_CALLBACK_URL` is unset at boot | this requirement (scenario below) |
+
+The behaviour of every status code SHALL match the owning requirement; this table is non-normative and exists to surface the matrix in one place for implementers.
 
 - **GIVEN** ark-api starts with `ARK_API_PUBLIC_CALLBACK_URL` unset
 - **WHEN** a client calls `POST /api/v1/mcp-servers/{name}/auth/start`
@@ -37,24 +48,6 @@ ark-api SHALL expose `GET /api/v1/mcp/auth/callback` as the registered OAuth `re
 - **THEN** ark-api SHALL service the request without requiring an `{name}` path segment
 - **AND** SHALL resolve the target MCPServer by looking up the cache entry keyed on `state`
 
-### Requirement: ark-api exposes GET /auth/status to poll an in-flight flow
-
-ark-api SHALL expose `GET /api/v1/mcp-servers/{name}/auth/status` returning `{ state, message?, expires_at? }` where `state` is one of `pending`, `authorized`, `failed`, `expired`. The endpoint SHALL accept `namespace` as an optional query parameter; when absent, ark-api SHALL resolve the namespace from its own pod context (typically `default` in a default install), matching every other ark-api route via `with_ark_client(namespace, ...)`.
-
-#### Scenario: auth/status is invoked for an unknown MCPServer
-
-- **WHEN** `GET /api/v1/mcp-servers/{name}/auth/status` is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
-- **THEN** the endpoint SHALL return HTTP 404 with a clear error body
-
-### Requirement: ark-api exposes POST /auth/logout to clear or delete the token Secret
-
-ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/logout` to clear or delete the Secret referenced by `spec.authorization.tokenSecretRef`. The endpoint SHALL accept `namespace` as an optional query parameter; when absent, ark-api SHALL resolve the namespace from its own pod context (typically `default` in a default install), matching every other ark-api route via `with_ark_client(namespace, ...)`.
-
-#### Scenario: auth/logout is invoked for an unknown MCPServer
-
-- **WHEN** `POST /api/v1/mcp-servers/{name}/auth/logout` is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
-- **THEN** the endpoint SHALL return HTTP 404 with a clear error body
-
 ### Requirement: auth/start refuses non-Required state without force
 
 `POST /api/v1/mcp-servers/{name}/auth/start` SHALL read the target MCPServer and refuse to run unless `status.authorization.state == Required`. The caller MAY override `Authorized` by passing `force: true` in the body. `force` SHALL bypass the `Authorized` pre-flight only; every other invariant (Secret integrity on flow failure, state verification, DCR enforcement) SHALL continue to hold. `force` SHALL NOT bypass the `DiscoveryFailed` pre-flight — in that state `status.authorization.registrationEndpoint` and `tokenEndpoint` are empty and the flow has no path forward.
@@ -84,9 +77,30 @@ ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/logout` to clear or d
 - **WHEN** any step of the flow fails (DCR rejected, callback never arrives, token exchange 4xx, etc.)
 - **THEN** the existing Secret SHALL be left unchanged — `force` only bypasses the pre-flight guard, it never weakens the "Secret untouched on flow failure" invariant
 
+### Requirement: auth/start refuses when authorization metadata is missing from the MCPServer
+
+`POST /api/v1/mcp-servers/{name}/auth/start` SHALL refuse the request when the target MCPServer lacks the metadata required to drive a flow. Two cases:
+
+- `spec.authorization` is unset (no `tokenSecretRef` to write into): ark-api SHALL return HTTP 422 with a message instructing the operator to add `spec.authorization.tokenSecretRef`. `force` SHALL NOT bypass this — there is nowhere to write the resulting tokens.
+- `status.authorization` is entirely absent (the controller has not yet observed a 401 from the upstream, or `spec.authorization` was just added and no reconcile has run): ark-api SHALL return HTTP 409 with a message naming the missing discovery output and pointing the operator at the controller's poll interval. `force` SHALL NOT bypass this — without `tokenEndpoint` / `authorizationEndpoint` / `resource` the flow has no path forward. This case is distinct from `DiscoveryFailed`, which records a probe that ran and failed.
+
+#### Scenario: MCPServer has no spec.authorization
+
+- **GIVEN** an `MCPServer` whose `spec.authorization` is unset
+- **WHEN** the caller invokes `auth/start` with or without `force: true`
+- **THEN** ark-api SHALL return HTTP 422 with a message naming `spec.authorization.tokenSecretRef` as the missing input
+- **AND** SHALL NOT contact the IdP
+
+#### Scenario: MCPServer has no status.authorization yet
+
+- **GIVEN** an `MCPServer` whose `spec.authorization` is set but `status.authorization` is entirely absent (controller has not yet discovered)
+- **WHEN** the caller invokes `auth/start` with or without `force: true`
+- **THEN** ark-api SHALL return HTTP 409 with a message naming the missing discovery output and the `spec.pollInterval` the operator can wait on
+- **AND** SHALL NOT contact the IdP
+
 ### Requirement: Namespace resolution prefers explicit query parameter
 
-The CLI client SHALL resolve namespace as: `--namespace` flag if set, else the current `kubectl` context namespace, else `default`. The resolved value SHALL be passed as the `namespace` query parameter to ark-api. ark-api SHALL accept the parameter and SHALL fall back to its own pod-context namespace (via `with_ark_client(None, ...)`) when the caller omits the parameter — matching every other ark-api route.
+The CLI client SHALL resolve namespace as: `--namespace` flag if set, else the `namespace` field on the active context in the user's kubeconfig file (parsed directly from disk, never via a `kubectl config view` shell-out), else `default`. The resolved value SHALL be passed as the `namespace` query parameter to ark-api. ark-api SHALL accept the parameter and SHALL fall back to its own pod-context namespace (via `with_ark_client(None, ...)`) when the caller omits the parameter — matching every other ark-api route.
 
 #### Scenario: CLI passes --namespace explicitly
 
@@ -170,7 +184,7 @@ ark-api SHALL POST to `status.authorization.registrationEndpoint` with `client_n
 #### Scenario: Registration endpoint omits the configured redirect URI
 
 - **GIVEN** the registration endpoint returns a `redirect_uris` array that does not include ark-api's URL
-- **THEN** ark-api SHALL mark the cache entry `failed` and return HTTP 502 with an error naming the offending response
+- **THEN** ark-api SHALL return HTTP 502 with an error naming the offending response — DCR runs before cache-entry creation, so no cache entry exists yet to transition
 
 #### Scenario: Registration response omits redirect_uris entirely
 
@@ -185,7 +199,12 @@ ark-api SHALL POST to `status.authorization.registrationEndpoint` with `client_n
 
 ### Requirement: DCR is reused across logins when client credentials exist
 
-If the Secret named in `spec.authorization.tokenSecretRef` already carries non-empty `client_id` and `client_secret` values (under the configured key names), ark-api SHALL reuse them and SHALL NOT perform a fresh DCR, unless the `auth/start` body sets `force_registration: true`. If either value is empty or absent — or if `force_registration: true` is set — ark-api SHALL perform DCR and SHALL persist the resulting `client_id` and `client_secret` to the Secret as part of the successful exchange, replacing any cached values. `force_registration` SHALL be orthogonal to `force`: it controls DCR reuse only and SHALL NOT bypass the `status.authorization.state == Required` pre-flight guard.
+ark-api SHALL perform DCR when any of the following holds:
+
+- The Secret has no cached `client_id` or `client_secret` (under the configured key names), or either value is empty.
+- The `auth/start` body sets `force_registration: true`.
+
+Otherwise — both values cached and `force_registration` unset — ark-api SHALL reuse the cached credentials and SHALL skip DCR. On a successful exchange following DCR, ark-api SHALL persist the newly issued `client_id` and `client_secret` to the Secret, replacing any cached values. `force_registration` SHALL be orthogonal to `force`: it controls DCR reuse only and SHALL NOT bypass the `status.authorization.state == Required` pre-flight guard.
 
 #### Scenario: Secret carries cached client credentials
 
@@ -234,7 +253,14 @@ If `status.authorization.registrationEndpoint` is empty AND the Secret carries n
 
 ### Requirement: Authorization request includes PKCE S256 and resource indicator
 
-ark-api SHALL build the authorization URL with `response_type=code`, the registered `client_id`, `redirect_uri=<configured URI>`, the generated `state`, the S256 `code_challenge` and `code_challenge_method=S256`, and `resource=<status.authorization.resource>` per RFC 8707 — the canonical RFC 9728 resource URI populated by the controller's discovery probe. `scope` SHALL be included when the `auth/start` body carries a non-empty `scopes` array, OR — if the body omits `scopes` — when `status.authorization.scopesSupported` is non-empty (joined by single spaces per RFC 6749 §3.3). When neither source has values, `scope` SHALL be omitted.
+ark-api SHALL build the authorization URL with `response_type=code`, the registered `client_id`, `redirect_uri=<configured URI>`, the generated `state`, the S256 `code_challenge` and `code_challenge_method=S256`, and `resource=<status.authorization.resource>` per RFC 8707 — the canonical RFC 9728 resource URI populated by the controller's discovery probe. `scope` SHALL be sourced as follows:
+
+1. If the `auth/start` body sets `scopes` to a non-empty array, those values SHALL be used.
+2. If the `auth/start` body sets `scopes` to an explicit empty array (`[]`), `scope` SHALL be omitted — the caller has explicitly opted out of scope negotiation; `status.authorization.scopesSupported` SHALL NOT be consulted.
+3. If the `auth/start` body omits `scopes` entirely, ark-api SHALL fall back to `status.authorization.scopesSupported` when non-empty.
+4. When none of the above yield values, `scope` SHALL be omitted.
+
+Selected values SHALL be joined by single spaces per RFC 6749 §3.3.
 
 #### Scenario: Authorization URL is constructed for an MCP at https://mcp.example/mcp
 
@@ -255,9 +281,16 @@ ark-api SHALL build the authorization URL with `response_type=code`, the registe
 - **WHEN** ark-api builds the authorization URL
 - **THEN** the URL SHALL omit the `scope` parameter
 
+#### Scenario: Caller passes an explicit empty scopes array
+
+- **GIVEN** the `auth/start` body sets `scopes: []`
+- **AND** `status.authorization.scopesSupported = ["read", "write"]`
+- **WHEN** ark-api builds the authorization URL
+- **THEN** the URL SHALL omit the `scope` parameter — the explicit empty array is an opt-out and SHALL suppress the `scopesSupported` fallback
+
 ### Requirement: In-flight state is held in a TTL'd cache keyed by auth_id and state
 
-ark-api SHALL maintain a cache of in-flight authorization flows. Each entry SHALL hold the PKCE verifier, generated `state`, MCPServer reference, registered `client_id` / `client_secret`, caller identity, and creation timestamp. Entries SHALL expire after `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` (default `600`). Entries SHALL be addressable by `auth_id` (returned to the caller of `auth/start`) and by `state` (presented by the IdP at the callback). On lookup from the callback path, the entry's `state` index SHALL be deleted so codes cannot be replayed against the same `state`. The `auth_id` index SHALL remain addressable until TTL elapses so callers polling `auth/status` after a successful exchange continue to observe the terminal state.
+ark-api SHALL maintain a cache of in-flight authorization flows. Each entry SHALL hold the PKCE verifier, generated `state`, MCPServer reference, registered `client_id` / `client_secret`, caller identity, creation timestamp, a terminal-state field (`pending` | `authorized` | `failed` | `expired`) initially set to `pending`, an optional `message` populated on transition to `failed`, and an optional token `expires_at` populated on transition to `authorized` when the IdP advertised a positive `expires_in`. Entries SHALL expire after `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` (default `600`). Entries SHALL be addressable by `auth_id` (returned to the caller of `auth/start`) and by `state` (presented by the IdP at the callback). On lookup from the callback path, the entry's `state` index SHALL be deleted so codes cannot be replayed against the same `state`. The `auth_id` index SHALL remain addressable until TTL elapses so callers polling `auth/status` after a successful exchange continue to observe the terminal state.
 
 #### Scenario: Callback arrives with an unknown state
 
@@ -293,8 +326,10 @@ ark-api SHALL maintain a cache of in-flight authorization flows. Each entry SHAL
 
 - **GIVEN** two `auth/start` calls have been issued for the same MCPServer, producing distinct cache entries `auth_id=A` and `auth_id=B`
 - **WHEN** the callbacks arrive in some order
-- **THEN** ark-api SHALL service both — each `state` key maps to exactly one cache entry — and the **last successful callback SHALL be the writer of the Secret** (last-write-wins)
+- **THEN** ark-api SHALL service both — each `state` key maps to exactly one cache entry — and SHALL issue an independent Secret patch per successful exchange
 - **AND** the losing flow's `auth/status` SHALL still report `authorized` against its own `auth_id` even though its tokens have been overwritten — this is observable and intentional given the shared-Secret model
+
+Note: ordering between concurrent Secret patches is a property of the Kubernetes API server's last-write-wins semantics under strategic-merge patch, not of ark-api logic. The Secret's final contents reflect whichever patch lands last at the API server; ark-api does not serialize the patches.
 
 ### Requirement: State parameter is verified before token exchange
 
@@ -305,7 +340,7 @@ ark-api SHALL refuse to exchange a code unless the returned `state` exactly matc
 - **WHEN** `/callback` arrives with a `state` value the cache does not recognise
 - **THEN** ark-api SHALL respond HTTP 400 and SHALL NOT POST to the token endpoint
 
-### Requirement: Loopback callback listener handles IdP-side success and error responses
+### Requirement: Callback endpoint handles IdP success and error responses
 
 The `GET /api/v1/mcp/auth/callback` endpoint SHALL respond HTTP 200 with a "you can close this window" HTML page when both `code` and `state` are present and the cache lookup + token exchange succeed. It SHALL respond HTTP 400 with an HTML page naming the OAuth error when the IdP redirects with `error`. It SHALL respond HTTP 400 when `code` or `state` is missing entirely. Every IdP-supplied string interpolated into a rendered page (`error`, `error_description`, and any state echo) SHALL be HTML-escaped before being written into the response body — the IdP is an untrusted reflector and the operator's authenticating browser is the trust boundary that matters.
 
@@ -341,7 +376,7 @@ ark-api SHALL POST to `status.authorization.tokenEndpoint` with `grant_type=auth
 
 ### Requirement: Tokens are written to the Secret using the configured key names
 
-ark-api SHALL write the token endpoint response into the Secret named in `spec.authorization.tokenSecretRef.name` using the key names from the same `tokenSecretRef` (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). When `expires_in` is present and positive, ark-api SHALL write `expires_at = now + expires_in - 30s` (RFC 3339 UTC). ark-api SHALL omit any key whose value is empty or absent. A missing Secret SHALL be created; an existing Secret SHALL be patched. When ark-api creates or patches the Secret, it SHALL also set the label `ark.mckinsey.com/mcp-token-secret: "true"` on the Secret. The label is forward-compatible: it has no functional authorization behaviour on its own, and its absence SHALL NOT prevent authentication — it exists so any future controller-side optimization (e.g. a real-time Secret watch) can filter token Secrets without inspecting their contents.
+ark-api SHALL write the token endpoint response into the Secret named in `spec.authorization.tokenSecretRef.name` using the key names from the same `tokenSecretRef` (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). When `expires_in` is present and positive, ark-api SHALL write `expires_at = now + expires_in - 30s` (RFC 3339 UTC). ark-api SHALL omit any key whose value is empty or absent. A missing Secret SHALL be created; an existing Secret SHALL be patched. When ark-api creates or patches the Secret, it SHALL also set the label `ark.mckinsey.com/mcp-token-secret: "true"` on the Secret. The label exists so a future controller-side optimization (e.g. a real-time Secret watch) can filter token Secrets without inspecting their contents; it has no consumer on main today.
 
 #### Scenario: Token response carries access, refresh, and expires_in
 
@@ -371,20 +406,19 @@ ark-api SHALL write the token endpoint response into the Secret named in `spec.a
 
 - **WHEN** ark-api creates or patches the Secret on a successful exchange
 - **THEN** the resulting Secret SHALL carry the label `ark.mckinsey.com/mcp-token-secret: "true"`
-- **AND** removing or omitting the label SHALL NOT break authentication — it is a forward-compatible marker with no consumer on main today
 
 ### Requirement: Successful exchange annotates the MCPServer with caller identity
 
 On a successful token exchange, ark-api SHALL patch the MCPServer with two annotations:
 
-- `ark.mckinsey.com/mcp-auth-authorized-by`: best-effort caller identity as observed by ark-api. In this change, every caller arrives via the `ArkApiProxy` (kubectl port-forward) path with no inbound authentication, so this annotation SHALL be the literal string `cli`. Resolving end-user identity from an authenticated bearer token is gated on the inbound auth middleware introduced by the future `mcp-auth-dashboard` capability — that capability will widen this annotation to carry the resolved identity. Format is opaque to consumers and SHALL be displayed verbatim.
+- `ark.mckinsey.com/mcp-auth-authorized-by`: best-effort caller identity as observed by ark-api. In this change, every caller reaches ark-api over the in-cluster Service (typically via `ArkApiProxy`'s `kubectl port-forward`) with no inbound authentication, so this annotation SHALL be the literal string `cli`. Resolving end-user identity from an authenticated bearer token is gated on the inbound auth middleware introduced by the future `mcp-auth-dashboard` capability — that capability will widen this annotation to carry the resolved identity. Format is opaque to consumers and SHALL be displayed verbatim.
 - `ark.mckinsey.com/mcp-auth-authorized-at`: RFC 3339 UTC timestamp of the exchange.
 
 The annotations SHALL be replaced (not appended) on each successful exchange. The annotations are intended to surface the shared-token limitation (one Secret per MCPServer) — they do not change controller dispatch behaviour.
 
 #### Scenario: CLI caller completes an exchange via ArkApiProxy
 
-- **GIVEN** the request to `auth/start` arrived on the `ArkApiProxy` (kubectl port-forward) path with no inbound authentication
+- **GIVEN** the request to `auth/start` arrived on the in-cluster Service path (via `ArkApiProxy`) with no inbound authentication
 - **WHEN** the exchange completes successfully
 - **THEN** the MCPServer SHALL be annotated `ark.mckinsey.com/mcp-auth-authorized-by: cli`
 - **AND** the timestamp annotation SHALL be set to an RFC 3339 UTC value
@@ -397,12 +431,17 @@ The annotations SHALL be replaced (not appended) on each successful exchange. Th
 
 ### Requirement: auth/status reports a terminal state only after the controller has reconciled
 
-`GET /api/v1/mcp-servers/{name}/auth/status?auth_id=<id>` SHALL return `state: authorized` only when both conditions hold:
+ark-api SHALL expose `GET /api/v1/mcp-servers/{name}/auth/status?auth_id=<id>` returning `{ state, message?, expires_at? }` where `state` is one of `pending`, `authorized`, `failed`, `expired`. The endpoint SHALL return `state: authorized` only when both conditions hold:
 
 1. The cache entry for `auth_id` is in the `authorized` terminal state (token exchange succeeded, Secret patched).
 2. The MCPServer's `status.authorization.state` has reconciled to `Authorized`.
 
-If only (1) holds, the endpoint SHALL return `state: pending` with a message indicating the controller is still reconciling. This is the "honest completion signal" that ensures `ark mcp auth login` only exits success when the system as a whole is in the `Authorized` state. For non-authorized cache states the **cache wins** regardless of the MCPServer's controller-reconciled state: `failed` is reported as `failed` and an unknown-or-expired `auth_id` is reported as `expired`, both regardless of whether the MCPServer happens to be `Authorized` (a previous flow may have already populated valid tokens).
+If only (1) holds, the endpoint SHALL return `state: pending` with a message indicating the controller is still reconciling. This is the "honest completion signal" that ensures `ark mcp auth login` only exits success when the system as a whole is in the `Authorized` state. For non-authorized cache states the **cache wins** regardless of the MCPServer's controller-reconciled state: `failed` is reported as `failed` and an unknown-or-expired `auth_id` is reported as `expired`, both regardless of whether the MCPServer happens to be `Authorized` (a previous flow may have already populated valid tokens). Namespace resolution follows the cross-cutting [Namespace resolution requirement](#requirement-namespace-resolution-prefers-explicit-query-parameter).
+
+#### Scenario: auth/status is invoked for an unknown MCPServer
+
+- **WHEN** `GET /api/v1/mcp-servers/{name}/auth/status` is called with `{name}` referencing a non-existent MCPServer in the resolved namespace
+- **THEN** the endpoint SHALL return HTTP 404 with a clear error body
 
 #### Scenario: Token exchange completes, controller has not yet reconciled
 
@@ -445,7 +484,8 @@ ark-api SHALL never log access tokens, refresh tokens, `client_secret`, PKCE ver
 #### Scenario: Request carries a user-identity bearer token
 
 - **WHEN** any auth endpoint receives a request with an `Authorization` header
-- **THEN** the ark-api logs SHALL NOT contain the header value (the resolved identity string MAY appear, per the `authorized-by` annotation contract)
+- **THEN** the ark-api logs SHALL NOT contain the header value
+- **AND** no resolved identity string SHALL appear in logs under this change — identity resolution is gated on the inbound auth middleware introduced by `mcp-auth-dashboard`; once that lands, a resolved identity string MAY appear in logs per the `authorized-by` annotation contract
 
 ### Requirement: ark-cli emits only non-sensitive flow context to stdout/stderr
 
@@ -538,7 +578,7 @@ The CLI SHALL route every auth operation through the existing `ArkApiProxy`. The
 
 ### Requirement: ark-api exposes auth/logout that clears or deletes the token Secret
 
-`POST /api/v1/mcp-servers/{name}/auth/logout` SHALL accept `{ keep_client?: bool, delete_secret?: bool }`. By default it SHALL patch the Secret so `access_token`, `refresh_token`, `expires_at`, `client_id`, and `client_secret` (or their `*Key`-overridden names) hold empty strings, leaving the Secret resource itself in place. `keep_client: true` SHALL empty only `access_token`, `refresh_token`, and `expires_at`, preserving `client_id` and `client_secret`. `delete_secret: true` SHALL delete the Secret resource entirely. `keep_client` and `delete_secret` SHALL be mutually exclusive. On any successful path, ark-api SHALL also remove the `ark.mckinsey.com/mcp-auth-authorized-by` and `ark.mckinsey.com/mcp-auth-authorized-at` annotations from the MCPServer.
+ark-api SHALL expose `POST /api/v1/mcp-servers/{name}/auth/logout` to clear or delete the Secret referenced by `spec.authorization.tokenSecretRef`. The endpoint SHALL accept `{ keep_client?: bool, delete_secret?: bool }`. By default it SHALL patch the Secret so `access_token`, `refresh_token`, `expires_at`, `client_id`, and `client_secret` (or their `*Key`-overridden names) hold empty strings, leaving the Secret resource itself in place. `keep_client: true` SHALL empty only `access_token`, `refresh_token`, and `expires_at`, preserving `client_id` and `client_secret`. `delete_secret: true` SHALL delete the Secret resource entirely. `keep_client` and `delete_secret` SHALL be mutually exclusive. On any successful path, ark-api SHALL also remove the `ark.mckinsey.com/mcp-auth-authorized-by` and `ark.mckinsey.com/mcp-auth-authorized-at` annotations from the MCPServer. Namespace resolution follows the cross-cutting [Namespace resolution requirement](#requirement-namespace-resolution-prefers-explicit-query-parameter).
 
 #### Scenario: Default logout clears all five token+client keys
 
@@ -553,11 +593,13 @@ The CLI SHALL route every auth operation through the existing `ArkApiProxy`. The
 - **WHEN** the caller invokes `auth/logout` with `keep_client: true`
 - **THEN** the patched Secret SHALL contain empty `access_token`, `refresh_token`, `expires_at`
 - **AND** the patched Secret SHALL still contain the original `client_id` and `client_secret` values
+- **AND** the MCPServer's `mcp-auth-authorized-by` / `mcp-auth-authorized-at` annotations SHALL be removed
 
 #### Scenario: delete_secret removes the Secret resource
 
 - **WHEN** the caller invokes `auth/logout` with `delete_secret: true`
 - **THEN** ark-api SHALL delete the referenced Secret and return HTTP 200
+- **AND** the MCPServer's `mcp-auth-authorized-by` / `mcp-auth-authorized-at` annotations SHALL be removed
 
 #### Scenario: keep_client and delete_secret are mutually exclusive
 
