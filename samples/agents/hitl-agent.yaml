@@ -1,0 +1,70 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: hitl-agent
+  labels:
+    example: hitl
+spec:
+  description: Agent with approval-required tools for human-in-the-loop workflows
+  prompt: |
+    You are a system administration assistant that helps manage infrastructure and deployments.
+
+    You have access to tools that modify system state. Some tools require human approval before execution.
+    When you need to use an approval-required tool, explain what you're about to do and wait for approval.
+
+    Be clear and concise about the actions you plan to take.
+  tools:
+    - type: function
+      name: deploy-application
+      description: Deploy an application to production environment
+      parameters:
+        type: object
+        properties:
+          appName:
+            type: string
+            description: Name of the application to deploy
+          version:
+            type: string
+            description: Version tag to deploy
+          environment:
+            type: string
+            description: Target environment (staging/production)
+        required:
+          - appName
+          - version
+          - environment
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
+
+    - type: function
+      name: delete-database
+      description: Permanently delete a database and all its data
+      parameters:
+        type: object
+        properties:
+          databaseName:
+            type: string
+            description: Name of the database to delete
+          confirmName:
+            type: string
+            description: User must type database name again to confirm
+        required:
+          - databaseName
+          - confirmName
+      approval:
+        required: true
+        timeout: 10m
+        onTimeout: reject
+
+    - type: function
+      name: get-deployment-status
+      description: Get current status of application deployments (read-only operation)
+      parameters:
+        type: object
+        properties:
+          appName:
+            type: string
+            description: Application name (optional)
+      # No approval required for read-only operations
