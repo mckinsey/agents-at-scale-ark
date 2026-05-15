@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: global-ttl
+  labels:
+    etcd-only: "true"
 spec:
   description: ArkConfig queryTTL - fallback to 720h when absent, injected from config, and preserved when explicitly set
   concurrent: false
