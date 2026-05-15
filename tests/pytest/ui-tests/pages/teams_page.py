@@ -52,7 +52,25 @@ class TeamsPage(BasePage):
                     self.wait_for_element(self.ADD_TEAM_BUTTON, timeout=10000)
         return False
 
-    def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
+    def _select_member(self, member_name: str) -> None:
+        logger.info(f"Selecting member: {member_name}")
+        try:
+            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label.wait_for(state="visible", timeout=10000)
+            member_label.click()
+            logger.info(f"Selected member via label click: {member_name}")
+        except Exception as e:
+            logger.warning(f"Could not select member via label: {e}")
+            try:
+                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
+                checkbox = member_row.locator("button[role='checkbox']").first
+                checkbox.wait_for(state="visible", timeout=5000)
+                checkbox.click()
+                logger.info(f"Selected member via checkbox button: {member_name}")
+            except Exception as e2:
+                logger.warning(f"Could not select member via checkbox button: {e2}")
+
+    def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
         logger.info(f"Creating team: {team_name}")
 
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
@@ -60,10 +78,10 @@ class TeamsPage(BasePage):
         self.page.locator("input").first.wait_for(state="visible", timeout=10000)
 
         if "/teams/new" in self.page.url:
-            return self._create_team_full_page(team_name, description, strategy, max_turns, member_name)
-        return self._create_team_dialog(team_name, description, strategy, max_turns, member_name)
+            return self._create_team_full_page(team_name, description, strategy, max_turns, member_names)
+        return self._create_team_dialog(team_name, description, strategy, max_turns, member_names)
 
-    def _create_team_full_page(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
+    def _create_team_full_page(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
         logger.info("Using full-page team creation form")
 
         name_input = self.page.locator("input[name='name']")
@@ -87,22 +105,8 @@ class TeamsPage(BasePage):
         if max_turns_field.count() > 0:
             max_turns_field.first.fill(max_turns)
 
-        logger.info(f"Selecting member: {member_name}")
-        try:
-            member_label = self.page.locator(f"label:has-text('{member_name}')").first
-            member_label.wait_for(state="visible", timeout=10000)
-            member_label.click()
-            logger.info(f"Selected member via label click: {member_name}")
-        except Exception as e:
-            logger.warning(f"Could not select member via label: {e}")
-            try:
-                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
-                checkbox = member_row.locator("button[role='checkbox']").first
-                checkbox.wait_for(state="visible", timeout=5000)
-                checkbox.click()
-                logger.info(f"Selected member via checkbox button: {member_name}")
-            except Exception as e2:
-                logger.warning(f"Could not select member via checkbox button: {e2}")
+        for name in member_names:
+            self._select_member(name)
 
         logger.info("Clicking Create Team button")
         self.page.locator("button:has-text('Create Team')").first.click()
@@ -114,7 +118,7 @@ class TeamsPage(BasePage):
 
         return {"name": team_name, "popup_visible": popup_visible, "in_table": in_table, "strategy": strategy}
 
-    def _create_team_dialog(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
+    def _create_team_dialog(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
         logger.info("Using dialog-based team creation")
 
         self.page.locator("input").first.wait_for(state="visible", timeout=10000)
@@ -134,22 +138,8 @@ class TeamsPage(BasePage):
         if max_turns_fields.count() > 0:
             max_turns_fields.first.fill(max_turns)
 
-        logger.info(f"Selecting member: {member_name}")
-        try:
-            member_label = self.page.locator(f"label:has-text('{member_name}')").first
-            member_label.wait_for(state="visible", timeout=10000)
-            member_label.click()
-            logger.info(f"Selected member via label click: {member_name}")
-        except Exception as e:
-            logger.warning(f"Could not select member via label: {e}")
-            try:
-                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
-                checkbox = member_row.locator("button[role='checkbox']").first
-                checkbox.wait_for(state="visible", timeout=5000)
-                checkbox.click()
-                logger.info(f"Selected member via checkbox button: {member_name}")
-            except Exception as e2:
-                logger.warning(f"Could not select member via checkbox button: {e2}")
+        for name in member_names:
+            self._select_member(name)
 
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
