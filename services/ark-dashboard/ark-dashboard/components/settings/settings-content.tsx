@@ -4,13 +4,8 @@ import { Suspense, useMemo } from 'react';
 
 import type { SettingPage } from './settings-types';
 import { MemorySection } from '@/components/sections';
-import { A2AServersSection } from '@/components/sections/a2a-servers-section';
-import { SecretsSection } from '@/components/sections/secrets-section';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { ApiKeysSettings } from './api-keys-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
-import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 import { QueriesSettings } from './queries-settings';
 
 type SettingsContentProps = {
@@ -23,40 +18,22 @@ type PageConfig = {
 };
 
 export function SettingsContent({ activePage }: SettingsContentProps) {
-  const { namespace } = useNamespace();
-
   const pageConfigs: Record<SettingPage, PageConfig> = useMemo(
     () => ({
-      'a2a-servers': {
-        title: 'A2A Servers',
-        component: <A2AServersSection namespace={namespace} />,
-      },
       memory: {
         title: 'Memory',
         component: <MemorySection />,
-      },
-      'manage-marketplace': {
-        title: 'Manage marketplace',
-        component: <ManageMarketplaceSettings />,
-      },
-      'service-api-keys': {
-        title: 'Service API Keys',
-        component: <ApiKeysSettings />,
-      },
-      secrets: {
-        title: 'Secrets',
-        component: <SecretsSection namespace={namespace} />,
-      },
-      'experimental-features': {
-        title: 'Experimental Features',
-        component: <ExperimentalFeaturesSettings />,
       },
       queries: {
         title: 'Queries',
         component: <QueriesSettings />,
       },
+      'experimental-features': {
+        title: 'Experimental features',
+        component: <ExperimentalFeaturesSettings />,
+      },
     }),
-    [namespace],
+    [],
   );
 
   const config = pageConfigs[activePage];

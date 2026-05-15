@@ -7,7 +7,7 @@ import { SettingsContent } from '@/components/settings/settings-content';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
 import { type SettingPage, settingsSections } from '@/components/settings/settings-types';
 
-const DEFAULT_SETTINGS_PAGE: SettingPage = 'a2a-servers';
+const DEFAULT_SETTINGS_PAGE: SettingPage = 'memory';
 
 const VALID_SETTINGS_PAGES: SettingPage[] = settingsSections.flatMap(s =>
   s.items.map(i => i.key),

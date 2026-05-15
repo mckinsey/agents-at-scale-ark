@@ -1,15 +1,9 @@
-import { Database, Key, Lock, Search, Server, Store, Zap } from 'lucide-react';
+import { Database, Search, Zap } from 'lucide-react';
 
 export type SettingPage =
-  | 'a2a-servers'
   | 'memory'
-  | 'manage-marketplace'
-  | 'service-api-keys'
-  | 'secrets'
-  | 'experimental-features'
-  | 'queries';
-
-export const MANAGE_MARKETPLACE_KEY = 'manage-marketplace' as const;
+  | 'queries'
+  | 'experimental-features';
 
 export type SettingMenuItem = {
   key: SettingPage;
@@ -25,23 +19,13 @@ export type SettingsSection = {
 
 export const settingsSections: SettingsSection[] = [
   {
-    sectionKey: 'general',
-    sectionLabel: 'General',
+    sectionKey: 'settings',
+    sectionLabel: '',
     items: [
-      {
-        key: 'a2a-servers',
-        label: 'A2A Servers',
-        icon: Server,
-      },
       {
         key: 'memory',
         label: 'Memory',
         icon: Database,
-      },
-      {
-        key: 'manage-marketplace',
-        label: 'Manage marketplace',
-        icon: Store,
       },
       {
         key: 'queries',
@@ -50,24 +34,8 @@ export const settingsSections: SettingsSection[] = [
       },
       {
         key: 'experimental-features',
-        label: 'Experimental Features',
+        label: 'Experimental features',
         icon: Zap,
-      },
-    ],
-  },
-  {
-    sectionKey: 'privacy',
-    sectionLabel: 'Privacy',
-    items: [
-      {
-        key: 'service-api-keys',
-        label: 'Service API Keys',
-        icon: Key,
-      },
-      {
-        key: 'secrets',
-        label: 'Secrets',
-        icon: Lock,
       },
     ],
   },

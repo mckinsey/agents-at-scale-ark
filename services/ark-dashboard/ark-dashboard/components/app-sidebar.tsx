@@ -5,28 +5,33 @@ import {
   Activity,
   AlertCircle,
   Bot,
+  Check,
+  ChevronDown,
+  ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   ChevronsUpDownIcon,
   Cog,
+  Cpu,
   Download,
   File,
   HelpCircle,
-  Home,
+  Key,
+  LayoutGrid,
   ListTodo,
+  Lock,
   LogOut,
   Moon,
-  MoreHorizontal,
+  Network,
+  Plus,
   Server,
   Settings,
+  ShieldCheck,
   Store,
   Sun,
-  Workflow,
-  Wrench,
-  Zap,
 } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
@@ -49,16 +54,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -73,6 +75,7 @@ import {
   MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useGetAllNamespaces } from '@/lib/services/namespaces-hooks';
 import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
@@ -120,7 +123,6 @@ function CollapsibleSection({
           tooltip={label}
           className="group/button">
           <CollapsibleTrigger
-            open={isOpen}
             className="flex w-full items-center gap-2"
             onClick={e => {
               if (sidebarState === 'collapsed') {
@@ -128,6 +130,11 @@ function CollapsibleSection({
                 onExpand();
               }
             }}>
+            {isOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            )}
             {icon}
             <span>{label}</span>
           </CollapsibleTrigger>
@@ -145,6 +152,38 @@ function CollapsibleSection({
         ))}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+interface CollapsibleGroupProps {
+  label: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}
+
+function CollapsibleGroup({
+  label,
+  defaultOpen = true,
+  children,
+}: CollapsibleGroupProps) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <SidebarGroup>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-sidebar-accent flex h-8 w-full shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-2 text-sm font-normal outline-hidden transition-colors group-data-[collapsible=icon]:hidden">
+          {open ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+          <span>{label}</span>
+        </CollapsibleTrigger>
+        <CollapsibleContent style={{ marginLeft: 0 }}>
+          <SidebarGroupContent>{children}</SidebarGroupContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </SidebarGroup>
   );
 }
 
@@ -172,22 +211,28 @@ export function AppSidebar() {
     isNamespaceResolved,
     setNamespace,
   } = useNamespace();
+  const { data: fetchedNamespaces } = useGetAllNamespaces();
+  const namespaceOptions = fetchedNamespaces ?? availableNamespaces;
 
   const [loading, setLoading] = useState(true);
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false);
-  const [morePopoverOpen, setMorePopoverOpen] = useState(false);
 
   const currentSection = pathname.split('/')[1];
   const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
     item => item.key === currentSection,
   );
-  const isMonitoringSection =
-    MONITORING_SECTIONS.some(item => item.key === currentSection);
+  const isMonitoringSection = MONITORING_SECTIONS.some(
+    item => item.key === currentSection,
+  );
+
+  const isPrivacySection =
+    currentSection === 'api-keys' || currentSection === 'secrets';
 
   const [agentBuilderOpen, setAgentBuilderOpen] = useState(
     isAgentBuilderSection,
   );
   const [monitoringOpen, setMonitoringOpen] = useState(isMonitoringSection);
+  const [privacyOpen, setPrivacyOpen] = useState(isPrivacySection);
 
   useEffect(() => {
     const checkFilesAPIHealth = async () => {
@@ -210,6 +255,7 @@ export function AppSidebar() {
     if (sidebarState === 'collapsed') {
       setAgentBuilderOpen(false);
       setMonitoringOpen(false);
+      setPrivacyOpen(false);
     }
   }, [sidebarState]);
 
@@ -221,10 +267,11 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    // Preserve query parameters (especially namespace) when navigating
     const currentParams = new URLSearchParams(window.location.search);
     const queryString = currentParams.toString();
-    const targetUrl = queryString ? `/${sectionKey}?${queryString}` : `/${sectionKey}`;
+    const targetUrl = queryString
+      ? `/${sectionKey}?${queryString}`
+      : `/${sectionKey}`;
     navigateTo(targetUrl);
   };
 
@@ -235,7 +282,11 @@ export function AppSidebar() {
     return sections.some(item => item.key === current);
   };
 
-  const enabledMonitoringSections = MONITORING_SECTIONS;
+  const namespaceLabel = isPending
+    ? 'Loading...'
+    : availableNamespaces.length === 0
+      ? 'No namespaces'
+      : namespace;
 
   return (
     <div>
@@ -251,189 +302,267 @@ export function AppSidebar() {
                     src={
                       isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
                     }
-                    alt="QB Logo"
+                    alt="ARK"
                     width={32}
                     height={28}
                   />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="text-sidebar-accent-foreground font-medium">
-                    Ark Dashboard
-                  </span>
-                  <span className="text-xs">
-                    {isPending
-                      ? 'Loading...'
-                      : availableNamespaces.length === 0
-                        ? 'No namespaces'
-                        : namespace}
+                  <span className="text-sidebar-accent-foreground text-base font-medium tracking-wide">
+                    ARK
                   </span>
                 </div>
-                {availableNamespaces.length === 0 && !loading && (
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                )}
               </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+
+          <SidebarMenu className="mt-2 group-data-[collapsible=icon]:hidden">
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton className="bg-sidebar-accent/40 hover:bg-sidebar-accent relative flex h-12 flex-col items-start justify-center gap-0 px-3 py-1.5">
+                    <span className="text-sidebar-foreground/60 text-[11px]">
+                      Namespace
+                    </span>
+                    <div className="flex w-full items-center justify-between">
+                      <span className="text-sidebar-foreground text-sm font-medium">
+                        {namespaceLabel}
+                      </span>
+                      <ChevronsUpDownIcon className="text-sidebar-foreground/60 h-3.5 w-3.5" />
+                    </div>
+                    {availableNamespaces.length === 0 && !loading && (
+                      <AlertCircle className="absolute right-2 top-2 h-4 w-4 text-red-500" />
+                    )}
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="bottom"
+                  align="start"
+                  className="bg-sidebar w-[--radix-popper-anchor-width] min-w-56">
+                  <DropdownMenuLabel className="text-sidebar-foreground/60 text-xs font-normal">
+                    Namespaces
+                  </DropdownMenuLabel>
+                  {namespaceOptions.map(ns => (
+                    <DropdownMenuItem
+                      key={ns.name}
+                      onClick={() => setNamespace(ns.name)}
+                      className={
+                        ns.name === namespace
+                          ? 'bg-sidebar-accent flex items-center justify-between'
+                          : 'flex items-center justify-between'
+                      }>
+                      <span className="truncate">{ns.name}</span>
+                      {ns.name === namespace && (
+                        <Check className="text-sidebar-foreground h-4 w-4 shrink-0" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                  {namespaceOptions.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem
+                    onClick={() => setNamespaceEditorOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add namespace</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent className="px-4">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() => navigateToSection('')}
-                isActive={getCurrentSection() === ''}>
-                <Home />
-                <span>Home</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+        <SidebarContent className="px-2">
+          <CollapsibleGroup label="General" defaultOpen>
+            <SidebarMenu className="pl-3">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('')}
+                  isActive={getCurrentSection() === ''}>
+                  <LayoutGrid />
+                  <span>Home</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
-            <CollapsibleSection
-              sections={AGENT_BUILDER_SECTIONS}
-              isOpen={agentBuilderOpen}
-              onOpenChange={setAgentBuilderOpen}
-              icon={<Bot />}
-              label="Agent Builder"
-              isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
-              sidebarState={sidebarState}
-              onExpand={() => {
-                setSidebarOpen(true);
-                setTimeout(() => setAgentBuilderOpen(true), 100);
-              }}
-              onNavigate={navigateToSection}
-              isNamespaceResolved={isNamespaceResolved}
-              loading={loading}
-            />
+              <CollapsibleSection
+                sections={AGENT_BUILDER_SECTIONS}
+                isOpen={agentBuilderOpen}
+                onOpenChange={setAgentBuilderOpen}
+                icon={<Bot />}
+                label="Agent builder"
+                isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
+                sidebarState={sidebarState}
+                onExpand={() => {
+                  setSidebarOpen(true);
+                  setTimeout(() => setAgentBuilderOpen(true), 100);
+                }}
+                onNavigate={navigateToSection}
+                isNamespaceResolved={isNamespaceResolved}
+                loading={loading}
+              />
 
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() => navigateToSection('workflow-templates')}
-                isActive={getCurrentSection() === 'workflow-templates'}>
-                <Workflow />
-                <span>Workflows</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('workflow-templates')}
+                  isActive={getCurrentSection() === 'workflow-templates'}>
+                  <Network />
+                  <span>Workflows</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() => navigateToSection('mcp')}
-                isActive={getCurrentSection() === 'mcp'}>
-                <Server />
-                <span>MCPs</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('mcp')}
+                  isActive={getCurrentSection() === 'mcp'}>
+                  <Server />
+                  <span>MCPs</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() => navigateToSection('tools')}
-                isActive={getCurrentSection() === 'tools'}>
-                <Wrench />
-                <span>Tools</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('models')}
+                  isActive={getCurrentSection() === 'models'}>
+                  <Cpu />
+                  <span>Models</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() => navigateToSection('models')}
-                isActive={getCurrentSection() === 'models'}>
-                <Zap />
-                <span>Models</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+              <CollapsibleSection
+                sections={MONITORING_SECTIONS}
+                isOpen={monitoringOpen}
+                onOpenChange={setMonitoringOpen}
+                icon={<Activity />}
+                label="Monitoring"
+                isActive={isAnySectionActive(MONITORING_SECTIONS)}
+                sidebarState={sidebarState}
+                onExpand={() => {
+                  setSidebarOpen(true);
+                  setTimeout(() => setMonitoringOpen(true), 100);
+                }}
+                onNavigate={navigateToSection}
+                isNamespaceResolved={isNamespaceResolved}
+                loading={loading}
+              />
 
-            <CollapsibleSection
-              sections={enabledMonitoringSections}
-              isOpen={monitoringOpen}
-              onOpenChange={setMonitoringOpen}
-              icon={<Activity />}
-              label="Monitoring"
-              isActive={isAnySectionActive(MONITORING_SECTIONS)}
-              sidebarState={sidebarState}
-              onExpand={() => {
-                setSidebarOpen(true);
-                setTimeout(() => setMonitoringOpen(true), 100);
-              }}
-              onNavigate={navigateToSection}
-              isNamespaceResolved={isNamespaceResolved}
-              loading={loading}
-            />
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('marketplace')}
+                  isActive={getCurrentSection() === 'marketplace'}>
+                  <Store />
+                  <span>Marketplace</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </CollapsibleGroup>
 
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() => navigateToSection('marketplace')}
-                isActive={getCurrentSection() === 'marketplace'}>
-                <Store />
-                <span>Marketplace</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+          <CollapsibleGroup label="Other" defaultOpen={false}>
+            <SidebarMenu className="pl-3">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('files')}
+                  isActive={getCurrentSection() === 'files'}>
+                  <File />
+                  <span>Files</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
-            <SidebarMenuItem>
-              <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <SidebarMenuButton isActive={morePopoverOpen}>
-                    <MoreHorizontal />
-                    <span>More</span>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('a2a')}
+                  isActive={getCurrentSection() === 'a2a'}>
+                  <ListTodo />
+                  <span>A2A</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('services')}
+                  isActive={getCurrentSection() === 'services'}>
+                  <Server />
+                  <span>ARK Services</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <Collapsible
+                open={privacyOpen}
+                onOpenChange={setPrivacyOpen}
+                className="group/collapsible">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isPrivacySection}
+                    tooltip="Privacy"
+                    className="group/button">
+                    <CollapsibleTrigger
+                      className="flex w-full items-center gap-2"
+                      onClick={e => {
+                        if (sidebarState === 'collapsed') {
+                          e.preventDefault();
+                          setSidebarOpen(true);
+                          setTimeout(() => setPrivacyOpen(true), 100);
+                        }
+                      }}>
+                      {privacyOpen ? (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <ShieldCheck />
+                      <span>Privacy</span>
+                    </CollapsibleTrigger>
                   </SidebarMenuButton>
-                </PopoverTrigger>
-                <PopoverContent
-                  side="right"
-                  align="start"
-                  sideOffset={sidebarState === 'expanded' ? -110 : 8}
-                  className="w-56 p-2">
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => {
-                        navigateToSection('files');
-                        setMorePopoverOpen(false);
-                      }}
-                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
-                      <File className="h-4 w-4" />
-                      <span>Files</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigateToSection('tasks');
-                        setMorePopoverOpen(false);
-                      }}
-                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
-                      <ListTodo className="h-4 w-4" />
-                      <span>A2A Tasks</span>
-                    </button>
-                    {isExperimentalExecutionEngineEnabled && (
-                      <button
-                        onClick={() => {
-                          navigateToSection('execution-engines');
-                          setMorePopoverOpen(false);
-                        }}
-                        className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
-                        <Cog className="h-4 w-4" />
-                        <span>Execution Engines</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        navigateToSection('export');
-                        setMorePopoverOpen(false);
-                      }}
-                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
-                      <Download className="h-4 w-4" />
-                      <span>Exports</span>
-                    </button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </SidebarMenuItem>
-          </SidebarMenu>
+                </SidebarMenuItem>
+                <CollapsibleContent style={{ marginLeft: 8 }}>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => navigateToSection('api-keys')}
+                      isActive={getCurrentSection() === 'api-keys'}>
+                      <Key />
+                      <span>Service API Keys</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => navigateToSection('secrets')}
+                      isActive={getCurrentSection() === 'secrets'}>
+                      <Lock />
+                      <span>Secrets</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {isExperimentalExecutionEngineEnabled && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('execution-engines')}
+                    isActive={getCurrentSection() === 'execution-engines'}>
+                    <Cog />
+                    <span>Execution Engines</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('export')}
+                  isActive={getCurrentSection() === 'export'}>
+                  <Download />
+                  <span>Exports</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </CollapsibleGroup>
         </SidebarContent>
 
         <SidebarFooter>
           <div className="px-2">
-            <Separator className="my-2 !w-10" />
+            <Separator className="my-2" />
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('settings')}
                   isActive={getCurrentSection() === 'settings'}>
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="h-4 w-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -444,7 +573,7 @@ export function AppSidebar() {
                     href="https://mckinsey.github.io/agents-at-scale-ark/"
                     target="_blank"
                     rel="noopener noreferrer">
-                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <HelpCircle className="h-4 w-4" />
                     <span>Help</span>
                   </a>
                 </SidebarMenuButton>
@@ -458,25 +587,31 @@ export function AppSidebar() {
                     )
                   }>
                   {isExperimentalDarkModeEnabled ? (
-                    <Sun className="mr-2 h-4 w-4" />
+                    <Sun className="h-4 w-4" />
                   ) : (
-                    <Moon className="mr-2 h-4 w-4" />
+                    <Moon className="h-4 w-4" />
                   )}
                   <span>
-                    {isExperimentalDarkModeEnabled ? 'Light Mode' : 'Dark Mode'}
+                    {isExperimentalDarkModeEnabled ? 'Light mode' : 'Dark mode'}
                   </span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
+              <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() =>
                     setSidebarOpen(sidebarState === 'expanded' ? false : true)
+                  }
+                  className="w-8"
+                  tooltip={
+                    sidebarState === 'expanded'
+                      ? 'Collapse sidebar'
+                      : 'Expand sidebar'
                   }>
                   {sidebarState === 'expanded' ? (
-                    <ChevronsLeft className="mr-2 h-4 w-4" />
+                    <ChevronsLeft className="h-4 w-4" />
                   ) : (
-                    <ChevronsRight className="mr-2 h-4 w-4" />
+                    <ChevronsRight className="h-4 w-4" />
                   )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
