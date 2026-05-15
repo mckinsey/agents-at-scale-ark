@@ -1,9 +1,10 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: test-query-global-ttl
+  name: test-query-override-ttl
 spec:
-  input: "test ttl injection"
+  input: "test explicit ttl overrides arkconfig"
+  ttl: 5m
   target:
     type: agent
     name: placeholder-agent
