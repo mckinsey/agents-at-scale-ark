@@ -245,7 +245,7 @@ class SessionsPage(BasePage):
 
     def set_status_filter(self, status: str) -> None:
         trigger = self.page.locator(
-            "div.flex.flex-col.gap-1\\.5:has(span:has-text('Status')) button[role='combobox']"
+            "div.flex.flex-col.gap-2:has(span:has-text('Status')) button[role='combobox']"
         ).first
         trigger.wait_for(state="visible", timeout=5000)
         trigger.click()
