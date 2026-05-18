@@ -1,19 +1,27 @@
 import {Router} from 'express';
+import {z} from 'zod';
 import {CompletionChunkBroker} from '../completion-chunk-broker.js';
 import {StreamError} from '../types.js';
 import {streamSSE, writeSSEEvent} from '../sse.js';
 import {parsePaginationParams, PaginationError} from '../pagination.js';
 
-const parseTimeout = (
-  timeoutStr: string | undefined,
-  defaultTimeout: number
-): number => {
-  if (!timeoutStr) return defaultTimeout;
-  const timeout = parseInt(timeoutStr);
-  return isNaN(timeout)
-    ? defaultTimeout
-    : Math.max(1000, Math.min(timeout * 1000, 300000));
-};
+interface ChunkPayload {
+  error?: StreamError;
+  choices?: Array<{
+    delta?: {content?: string; tool_calls?: unknown[]};
+    finish_reason?: string;
+  }>;
+}
+
+const getStreamQuerySchema = z.object({
+  'from-beginning': z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  'wait-for-query': z.coerce.number().int().nonnegative().optional(),
+  'max-chunk-size': z.coerce.number().int().positive().optional(),
+});
+type GetStreamQuery = z.infer<typeof getStreamQuerySchema>;
 
 export function createStreamRouter(chunks: CompletionChunkBroker): Router {
   const router = Router();
@@ -103,8 +111,8 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       - in: query
    *         name: wait-for-query
    *         schema:
-   *           type: string
-   *         description: Wait timeout for query to start (e.g., "30s", "5m")
+   *           type: integer
+   *         description: Wait timeout in seconds for query to start (e.g., 30, 300)
    *       - in: query
    *         name: max-chunk-size
    *         schema:
@@ -121,31 +129,37 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *               example: 'data: {"id":"chatcmpl-123","choices":[{"delta":{"content":"Hello"}}]}'
    */
   router.get('/:query_name', async (req, res) => {
+    const parse = getStreamQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const streamQuery: GetStreamQuery = parse.data;
+
     try {
       const {query_name} = req.params;
-      const fromBeginning = req.query['from-beginning'] === 'true';
-      const waitForQueryParam = req.query['wait-for-query'] as string;
-      let waitForQuery = false;
-      let timeout = 30000;
-
-      if (waitForQueryParam) {
-        waitForQuery = true;
-        timeout = parseTimeout(waitForQueryParam, 30000);
-      }
-
-      let maxChunkSize = 50;
-      if (req.query['max-chunk-size']) {
-        const size = parseInt(req.query['max-chunk-size'] as string);
-        if (!isNaN(size) && size > 0) {
-          maxChunkSize = size;
-        }
-      }
+      const fromBeginning = streamQuery['from-beginning'] ?? false;
+      const waitForQuerySeconds = streamQuery['wait-for-query'];
+      const waitForQuery = waitForQuerySeconds !== undefined;
+      const timeout =
+        waitForQuerySeconds !== undefined
+          ? Math.max(1000, Math.min(waitForQuerySeconds * 1000, 300000))
+          : 30000;
+      const maxChunkSize = streamQuery['max-chunk-size'] ?? 50;
 
       req.log.info(
         {
           queryName: query_name,
           fromBeginning,
-          waitForQuery: waitForQueryParam,
+          waitForQuery,
           timeout,
           maxChunkSize,
         },
@@ -170,7 +184,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       };
 
       const unsubscribeChunks = chunks.subscribeToQuery(query_name, (item) => {
-        const chunk = item.data.chunk as any;
+        const chunk = item.data.chunk as ChunkPayload | string;
         hasReceivedChunks = true;
 
         if (timeoutHandle) {
@@ -178,12 +192,12 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           timeoutHandle = undefined;
         }
 
-        if (chunk === '[DONE]') {
+        if (typeof chunk === 'string') {
           return;
         }
 
-        if (chunk?.error) {
-          const streamError = chunk.error as StreamError;
+        if (chunk.error) {
+          const streamError = chunk.error;
           if (
             typeof streamError.message !== 'string' ||
             typeof streamError.type !== 'string'
@@ -226,11 +240,11 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
         outboundChunkCount++;
 
-        if (chunk?.choices?.[0]?.delta?.content) {
+        if (chunk.choices?.[0]?.delta?.content) {
           chunkTypeCounts.content++;
-        } else if (chunk?.choices?.[0]?.delta?.tool_calls?.length > 0) {
+        } else if ((chunk.choices?.[0]?.delta?.tool_calls?.length ?? 0) > 0) {
           chunkTypeCounts.tool_calls++;
-        } else if (chunk?.choices?.[0]?.finish_reason) {
+        } else if (chunk.choices?.[0]?.finish_reason) {
           chunkTypeCounts.finish_reason++;
         } else {
           chunkTypeCounts.other++;
@@ -335,7 +349,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         unsubscribeComplete();
       });
 
-      req.on('error', (error: any) => {
+      req.on('error', (error: Error & {code?: string}) => {
         if (error.code === 'ECONNRESET') {
           req.log.info({queryName: query_name}, 'client connection reset');
         } else {
@@ -487,7 +501,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         });
       });
 
-      req.on('error', (error: any) => {
+      req.on('error', (error: Error & {code?: string}) => {
         if (error.code === 'ECONNRESET') {
           req.log.error(
             {queryId: query_id},
