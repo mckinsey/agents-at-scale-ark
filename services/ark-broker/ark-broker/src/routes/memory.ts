@@ -27,6 +27,12 @@ const getMessagesQuerySchema = z.object({
   cursor: z.coerce.number().int().nonnegative().optional(),
 });
 type GetMessagesQuery = z.infer<typeof getMessagesQuerySchema>;
+type GetMessagesQueryRaw = {
+  watch?: 'true' | 'false';
+  conversation_id?: string;
+  query_id?: string;
+  cursor?: string;
+};
 
 export function createMemoryRouter(
   memory: MemoryBroker,
@@ -70,164 +76,173 @@ export function createMemoryRouter(
    *       400:
    *         description: Invalid request parameters
    */
-  router.post('/messages', (req, res) => {
-    const parse = postMessagesBodySchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: parse.error.issues
-            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-            .join('; '),
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
-      return;
-    }
-    const {conversation_id, query_id, messages}: PostMessagesBody = parse.data;
-
-    try {
-      req.log.info(
-        {
-          conversationId: conversation_id,
-          queryId: query_id,
-          count: messages.length,
-        },
-        'received messages'
-      );
-
-      memory.addMessages(conversation_id, query_id, messages);
-      memory.save();
-
-      if (sessions && conversation_id) {
-        sessions.applyMessage(conversation_id, query_id);
+  router.post<Record<string, string>, unknown, PostMessagesBody>(
+    '/messages',
+    (req, res) => {
+      const parse = postMessagesBodySchema.safeParse(req.body);
+      if (!parse.success) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parse.error.issues
+              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+              .join('; '),
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
+        return;
       }
+      const {conversation_id, query_id, messages}: PostMessagesBody =
+        parse.data;
 
-      res.status(200).send();
-    } catch (error) {
-      req.log.error({err: error}, 'failed to add messages');
-      const err = error as Error;
-      res.status(400).json({error: err.message});
-    }
-  });
-
-  router.get('/messages', (req, res) => {
-    const parse = getMessagesQuerySchema.safeParse(req.query);
-    if (!parse.success) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: parse.error.issues
-            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-            .join('; '),
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
-      return;
-    }
-    const {
-      watch,
-      conversation_id: conversationId,
-      query_id: queryId,
-      cursor,
-    }: GetMessagesQuery = parse.data;
-
-    if (watch) {
-      req.log.info({cursor}, 'starting SSE stream for all messages');
-
-      let replayItems:
-        | Array<{
-            timestamp: string;
-            conversation_id: string;
-            query_id: string;
-            message: unknown;
-            sequence: number;
-          }>
-        | undefined;
-      if (cursor !== undefined) {
-        let items = memory.all().filter((item) => item.sequenceNumber > cursor);
-        if (conversationId) {
-          items = items.filter(
-            (item) => item.data.conversationId === conversationId
-          );
-        }
-        replayItems = items.map((item) => ({
-          timestamp: item.timestamp.toISOString(),
-          conversation_id: item.data.conversationId,
-          query_id: item.data.queryId,
-          message: item.data.message,
-          sequence: item.sequenceNumber,
-        }));
-      }
-
-      streamSSE({
-        res,
-        req,
-        logger: req.log,
-        tag: 'MESSAGES',
-        itemName: 'messages',
-        subscribe: (callback) =>
-          memory.subscribe((item) => {
-            callback({
-              timestamp: item.timestamp.toISOString(),
-              conversation_id: item.data.conversationId,
-              query_id: item.data.queryId,
-              message: item.data.message,
-              sequence: item.sequenceNumber,
-            });
-          }),
-        filter: conversationId
-          ? (msg: {conversation_id: string}): boolean =>
-              msg.conversation_id === conversationId
-          : undefined,
-        replayItems,
-      });
-    } else {
       try {
-        const params = parsePaginationParams(
-          req.query as Record<string, unknown>
+        req.log.info(
+          {
+            conversationId: conversation_id,
+            queryId: query_id,
+            count: messages.length,
+          },
+          'received messages'
         );
 
-        const filters = {
-          conversationId: conversationId || undefined,
-          queryId: queryId || undefined,
-        };
+        memory.addMessages(conversation_id, query_id, messages);
+        memory.save();
 
-        const result = memory.paginate(params, filters);
-
-        interface MessageItem {
-          timestamp: string;
-          conversation_id: string;
-          query_id: string;
-          message: unknown;
-          sequence: number;
+        if (sessions && conversation_id) {
+          sessions.applyMessage(conversation_id, query_id);
         }
 
-        const response: PaginatedList<MessageItem> = {
-          items: result.items.map((item) => ({
+        res.status(200).send();
+      } catch (error) {
+        req.log.error({err: error}, 'failed to add messages');
+        const err = error as Error;
+        res.status(400).json({error: err.message});
+      }
+    }
+  );
+
+  router.get<Record<string, string>, unknown, unknown, GetMessagesQueryRaw>(
+    '/messages',
+    (req, res) => {
+      const parse = getMessagesQuerySchema.safeParse(req.query);
+      if (!parse.success) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parse.error.issues
+              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+              .join('; '),
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
+        return;
+      }
+      const {
+        watch,
+        conversation_id: conversationId,
+        query_id: queryId,
+        cursor,
+      }: GetMessagesQuery = parse.data;
+
+      if (watch) {
+        req.log.info({cursor}, 'starting SSE stream for all messages');
+
+        let replayItems:
+          | Array<{
+              timestamp: string;
+              conversation_id: string;
+              query_id: string;
+              message: unknown;
+              sequence: number;
+            }>
+          | undefined;
+        if (cursor !== undefined) {
+          let items = memory
+            .all()
+            .filter((item) => item.sequenceNumber > cursor);
+          if (conversationId) {
+            items = items.filter(
+              (item) => item.data.conversationId === conversationId
+            );
+          }
+          replayItems = items.map((item) => ({
             timestamp: item.timestamp.toISOString(),
             conversation_id: item.data.conversationId,
             query_id: item.data.queryId,
             message: item.data.message,
             sequence: item.sequenceNumber,
-          })),
-          total: result.total,
-          hasMore: result.hasMore,
-          nextCursor: result.nextCursor,
-        };
-
-        res.json(response);
-      } catch (error) {
-        if (error instanceof PaginationError) {
-          res.status(400).json({error: error.message});
-          return;
+          }));
         }
-        req.log.error({err: error}, 'failed to get messages');
-        const err = error as Error;
-        res.status(500).json({error: err.message});
+
+        streamSSE({
+          res,
+          req,
+          logger: req.log,
+          tag: 'MESSAGES',
+          itemName: 'messages',
+          subscribe: (callback) =>
+            memory.subscribe((item) => {
+              callback({
+                timestamp: item.timestamp.toISOString(),
+                conversation_id: item.data.conversationId,
+                query_id: item.data.queryId,
+                message: item.data.message,
+                sequence: item.sequenceNumber,
+              });
+            }),
+          filter: conversationId
+            ? (msg: {conversation_id: string}): boolean =>
+                msg.conversation_id === conversationId
+            : undefined,
+          replayItems,
+        });
+      } else {
+        try {
+          const params = parsePaginationParams(
+            req.query as Record<string, unknown>
+          );
+
+          const filters = {
+            conversationId: conversationId || undefined,
+            queryId: queryId || undefined,
+          };
+
+          const result = memory.paginate(params, filters);
+
+          interface MessageItem {
+            timestamp: string;
+            conversation_id: string;
+            query_id: string;
+            message: unknown;
+            sequence: number;
+          }
+
+          const response: PaginatedList<MessageItem> = {
+            items: result.items.map((item) => ({
+              timestamp: item.timestamp.toISOString(),
+              conversation_id: item.data.conversationId,
+              query_id: item.data.queryId,
+              message: item.data.message,
+              sequence: item.sequenceNumber,
+            })),
+            total: result.total,
+            hasMore: result.hasMore,
+            nextCursor: result.nextCursor,
+          };
+
+          res.json(response);
+        } catch (error) {
+          if (error instanceof PaginationError) {
+            res.status(400).json({error: error.message});
+            return;
+          }
+          req.log.error({err: error}, 'failed to get messages');
+          const err = error as Error;
+          res.status(500).json({error: err.message});
+        }
       }
     }
-  });
+  );
 
   router.get('/memory-status', (req, res) => {
     try {
@@ -337,20 +352,23 @@ export function createMemoryRouter(
    *       500:
    *         description: Failed to delete conversation
    */
-  router.delete('/conversations/:conversationId', (req, res) => {
-    const {conversationId} = req.params;
+  router.delete<{conversationId: string}>(
+    '/conversations/:conversationId',
+    (req, res) => {
+      const {conversationId} = req.params;
 
-    if (!conversationId) {
-      res.status(400).json({error: 'Conversation ID is required'});
-      return;
+      if (!conversationId) {
+        res.status(400).json({error: 'Conversation ID is required'});
+        return;
+      }
+
+      memory.deleteConversation(conversationId);
+      res.json({
+        status: 'success',
+        message: `Conversation ${conversationId} deleted`,
+      });
     }
-
-    memory.deleteConversation(conversationId);
-    res.json({
-      status: 'success',
-      message: `Conversation ${conversationId} deleted`,
-    });
-  });
+  );
 
   /**
    * @swagger
@@ -392,7 +410,7 @@ export function createMemoryRouter(
    *       500:
    *         description: Failed to delete query messages
    */
-  router.delete(
+  router.delete<{conversationId: string; queryId: string}>(
     '/conversations/:conversationId/queries/:queryId/messages',
     (req, res) => {
       const {conversationId, queryId} = req.params;
@@ -500,34 +518,37 @@ export function createMemoryRouter(
    *       404:
    *         description: Conversation not found
    */
-  router.get('/conversations/:conversationId', (req, res) => {
-    const {conversationId} = req.params;
+  router.get<{conversationId: string}>(
+    '/conversations/:conversationId',
+    (req, res) => {
+      const {conversationId} = req.params;
 
-    if (!conversationId) {
-      res.status(400).json({error: 'Conversation ID is required'});
-      return;
+      if (!conversationId) {
+        res.status(400).json({error: 'Conversation ID is required'});
+        return;
+      }
+
+      const items = memory.getByConversation(conversationId);
+
+      if (items.length === 0) {
+        res.status(404).json({error: 'Conversation not found'});
+        return;
+      }
+
+      const messages = items.map((item) => ({
+        timestamp: item.timestamp.toISOString(),
+        conversation_id: item.data.conversationId,
+        query_id: item.data.queryId,
+        message: item.data.message,
+        sequence: item.sequenceNumber,
+      }));
+
+      res.json({
+        conversation_id: conversationId,
+        messages,
+      });
     }
-
-    const items = memory.getByConversation(conversationId);
-
-    if (items.length === 0) {
-      res.status(404).json({error: 'Conversation not found'});
-      return;
-    }
-
-    const messages = items.map((item) => ({
-      timestamp: item.timestamp.toISOString(),
-      conversation_id: item.data.conversationId,
-      query_id: item.data.queryId,
-      message: item.data.message,
-      sequence: item.sequenceNumber,
-    }));
-
-    res.json({
-      conversation_id: conversationId,
-      messages,
-    });
-  });
+  );
 
   return router;
 }

@@ -20,6 +20,18 @@ const getSessionsQuerySchema = z.object({
   search: z.string().optional(),
 });
 type GetSessionsQuery = z.infer<typeof getSessionsQuerySchema>;
+type GetSessionsQueryRaw = {
+  watch?: 'true' | 'false';
+  session_id?: string;
+  status?: 'active' | 'idle' | 'error';
+  sort?: 'date' | 'name' | 'conversations';
+  order?: 'asc' | 'desc';
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  limit?: string;
+  cursor?: string;
+};
 
 const postSessionEventBodySchema = z
   .object({
@@ -91,48 +103,51 @@ function handlePaginatedSessions(
 export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
   const router = Router();
 
-  router.get('/', (req, res) => {
-    const parse = getSessionsQuerySchema.safeParse(req.query);
-    if (!parse.success) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: parse.error.issues
-            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-            .join('; '),
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
-      return;
-    }
-    const query: GetSessionsQuery = parse.data;
-
-    if (query.watch) {
-      handleStreamingSessions(req, res, sessionsBroker, query.session_id);
-      return;
-    }
-
-    try {
-      const hasPaginationParams = req.query['limit'] || req.query['cursor'];
-
-      if (hasPaginationParams) {
-        handlePaginatedSessions(req, res, sessionsBroker, query);
-      } else {
-        const store = sessionsBroker.getAll();
-        res.json(store);
-      }
-    } catch (error) {
-      if (error instanceof PaginationError) {
-        res.status(400).json({error: error.message});
+  router.get<Record<string, string>, unknown, unknown, GetSessionsQueryRaw>(
+    '/',
+    (req, res) => {
+      const parse = getSessionsQuerySchema.safeParse(req.query);
+      if (!parse.success) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parse.error.issues
+              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+              .join('; '),
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
-      req.log.error({err: error}, 'failed to get sessions');
-      const err = error as Error;
-      res.status(500).json({error: err.message});
-    }
-  });
+      const query: GetSessionsQuery = parse.data;
 
-  router.get('/:session_id', (req, res) => {
+      if (query.watch) {
+        handleStreamingSessions(req, res, sessionsBroker, query.session_id);
+        return;
+      }
+
+      try {
+        const hasPaginationParams = req.query['limit'] || req.query['cursor'];
+
+        if (hasPaginationParams) {
+          handlePaginatedSessions(req, res, sessionsBroker, query);
+        } else {
+          const store = sessionsBroker.getAll();
+          res.json(store);
+        }
+      } catch (error) {
+        if (error instanceof PaginationError) {
+          res.status(400).json({error: error.message});
+          return;
+        }
+        req.log.error({err: error}, 'failed to get sessions');
+        const err = error as Error;
+        res.status(500).json({error: err.message});
+      }
+    }
+  );
+
+  router.get<{session_id: string}>('/:session_id', (req, res) => {
     try {
       const {session_id} = req.params;
       const session = sessionsBroker.getSession(session_id);
@@ -149,32 +164,35 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
   });
 
   /** Receives event data to apply to the sessions store */
-  router.post('/', (req, res) => {
-    const parse = postSessionEventBodySchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: parse.error.issues
-            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-            .join('; '),
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
-      return;
-    }
-    const data: PostSessionEventBody = parse.data;
+  router.post<Record<string, string>, unknown, PostSessionEventBody>(
+    '/',
+    (req, res) => {
+      const parse = postSessionEventBodySchema.safeParse(req.body);
+      if (!parse.success) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parse.error.issues
+              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+              .join('; '),
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
+        return;
+      }
+      const data: PostSessionEventBody = parse.data;
 
-    try {
-      sessionsBroker.applyEvent(data as unknown as SessionEventData);
-      sessionsBroker.save();
-      res.status(201).json({status: 'success'});
-    } catch (error) {
-      req.log.error({err: error}, 'failed to ingest');
-      const err = error as Error;
-      res.status(500).json({error: err.message});
+      try {
+        sessionsBroker.applyEvent(data as unknown as SessionEventData);
+        sessionsBroker.save();
+        res.status(201).json({status: 'success'});
+      } catch (error) {
+        req.log.error({err: error}, 'failed to ingest');
+        const err = error as Error;
+        res.status(500).json({error: err.message});
+      }
     }
-  });
+  );
 
   router.delete('/', (req, res) => {
     try {
