@@ -308,7 +308,7 @@ class AgentsPage(BasePage):
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
-            self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
+            self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click(force=True)
         
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_toast_popup()
