@@ -78,6 +78,8 @@ runs:
         metrics-enabled: false
         traefik-enabled: false
         k3s-channel: stable
+        install-cert-manager: 'true'
+        install-gateway-api-crds: 'true'
 
     - name: Run setup-e2e script
       shell: bash

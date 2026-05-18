@@ -54,6 +54,14 @@ inputs:
     description: Enable Mock LLM Servder
     required: false
     default: "true"
+  install-cert-manager:
+    description: Install cert-manager and wait for webhook readiness
+    required: false
+    default: "false"
+  install-gateway-api-crds:
+    description: Install Gateway API CRDs
+    required: false
+    default: "false"
 
 outputs:
   kubeconfig:
@@ -187,6 +195,26 @@ runs:
         echo "::endgroup::"
       shell: bash
 
+    - name: Install cert-manager and Gateway API CRDs
+      if: ${{ inputs.install-cert-manager == 'true' || inputs.install-gateway-api-crds == 'true' }}
+      shell: bash
+      run: |
+        PIDS=()
+        if [[ "${{ inputs.install-cert-manager }}" == "true" ]]; then
+          helm repo add jetstack https://charts.jetstack.io --force-update > /dev/null 2>&1
+          helm upgrade --install cert-manager jetstack/cert-manager \
+            --namespace cert-manager \
+            --create-namespace \
+            --set crds.enabled=true \
+            --set startupapicheck.enabled=false > /dev/null 2>&1 &
+          PIDS+=($!)
+        fi
+        if [[ "${{ inputs.install-gateway-api-crds }}" == "true" ]]; then
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml > /dev/null 2>&1 &
+          PIDS+=($!)
+        fi
+        for pid in "${PIDS[@]}"; do wait "$pid"; done
+
     - name: Set version output
       id: set-output
       run: |
@@ -263,3 +291,13 @@ runs:
         fi
         echo "::endgroup::"
       shell: bash
+
+    - name: Wait for cert-manager webhook
+      if: ${{ inputs.install-cert-manager == 'true' }}
+      shell: bash
+      run: |
+        kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+        kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+        echo "Waiting for cert-manager webhook CABundle..."
+        until kubectl get mutatingwebhookconfiguration cert-manager-webhook \
+          -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done

@@ -95,35 +95,6 @@ if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
   echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
 fi
 
-# Install cert-manager if not present
-echo "=== Installing cert-manager ==="
-if ! helm list -n cert-manager | grep -q cert-manager; then
-  helm repo add jetstack https://charts.jetstack.io --force-update
-  helm upgrade --install cert-manager jetstack/cert-manager \
-    --namespace cert-manager \
-    --create-namespace \
-    --set crds.enabled=true \
-    --set startupapicheck.enabled=false
-else
-  echo "cert-manager already installed"
-fi
-
-# Wait for webhook and cainjector to be fully rolled out before proceeding.
-# The webhook must be running before any cert-manager resources (Issuer, Certificate)
-# can be created, otherwise Helm will get x509 errors calling the webhook TLS endpoint.
-kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
-kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
-
-# Wait for cainjector to populate the webhook's CABundle field. Only needed on first
-# install — once the selfsigned-issuer exists it persists across re-deploys.
-if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
-  echo "Waiting for cert-manager webhook CABundle..."
-  until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
-fi
-
-echo "=== Installing Gateway API CRDs ==="
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
-
 if [ "${INSTALL_BROKER}" = "true" ]; then
   echo "=== Pre-creating ark-config-broker ConfigMap ==="
   kubectl create namespace default 2>/dev/null || true
