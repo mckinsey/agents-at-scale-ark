@@ -212,6 +212,16 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     --set postgresql.passwordSecretName=ark-storage-dev-password
 fi
 
+echo "=== Installing ARK Completions (background) ==="
+helm upgrade --install ark-completions ./executors/completions/chart \
+  --namespace ark-system \
+  --create-namespace \
+  --wait --timeout=300s \
+  --set image.repository="${REGISTRY}/ark-completions" \
+  --set image.tag="${ARK_IMAGE_TAG}" \
+  --set image.pullPolicy=IfNotPresent &
+ARK_COMPLETIONS_PID=$!
+
 helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
 
 # Verify cert-manager issued the webhook certificate end-to-end. rollout status +
@@ -220,12 +230,8 @@ helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
 # ensures the webhook is serving valid TLS before any further Helm calls.
 kubectl wait --for=condition=Ready certificate/serving-cert -n ark-system --timeout=60s
 
-helm upgrade --install ark-completions ./executors/completions/chart \
-  --namespace ark-system \
-  --wait --timeout=300s \
-  --set image.repository="${REGISTRY}/ark-completions" \
-  --set image.tag="${ARK_IMAGE_TAG}" \
-  --set image.pullPolicy=IfNotPresent
+echo "=== Waiting for ARK Completions ==="
+wait "${ARK_COMPLETIONS_PID}"
 
 echo "=== Waiting for Ark Deployments ==="
 kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
