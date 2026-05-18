@@ -11,6 +11,8 @@ export default [
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
+        project: './tsconfig.eslint.json',
+        tsconfigRootDir: import.meta.dirname,
       },
       globals: {
         console: 'readonly',
@@ -36,6 +38,7 @@ export default [
       '@typescript-eslint/no-unused-vars': ['error', {argsIgnorePattern: '^_'}],
       '@typescript-eslint/explicit-function-return-type': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-floating-promises': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
     },
