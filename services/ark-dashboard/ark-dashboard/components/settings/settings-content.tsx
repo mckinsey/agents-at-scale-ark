@@ -3,7 +3,6 @@
 import { Suspense, useMemo } from 'react';
 
 import type { SettingPage } from './settings-types';
-import { MemorySection } from '@/components/sections';
 
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { QueriesSettings } from './queries-settings';
@@ -20,10 +19,6 @@ type PageConfig = {
 export function SettingsContent({ activePage }: SettingsContentProps) {
   const pageConfigs: Record<SettingPage, PageConfig> = useMemo(
     () => ({
-      memory: {
-        title: 'Memory',
-        component: <MemorySection />,
-      },
       queries: {
         title: 'Queries',
         component: <QueriesSettings />,

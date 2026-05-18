@@ -1,9 +1,6 @@
-import { Database, Search, Zap } from 'lucide-react';
+import { Search, Zap } from 'lucide-react';
 
-export type SettingPage =
-  | 'memory'
-  | 'queries'
-  | 'experimental-features';
+export type SettingPage = 'queries' | 'experimental-features';
 
 export type SettingMenuItem = {
   key: SettingPage;
@@ -22,11 +19,6 @@ export const settingsSections: SettingsSection[] = [
     sectionKey: 'settings',
     sectionLabel: '',
     items: [
-      {
-        key: 'memory',
-        label: 'Memory',
-        icon: Database,
-      },
       {
         key: 'queries',
         label: 'Queries',
