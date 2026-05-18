@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import {Router} from 'express';
 import express from 'express';
-import { TraceBroker, OTELSpan } from '../trace-broker.js';
+import {TraceBroker, OTELSpan} from '../trace-broker.js';
 import protobuf from 'protobufjs';
-import { join } from 'path';
+import {join} from 'path';
 
 let ExportTraceServiceRequest: protobuf.Type | null = null;
 
@@ -13,7 +13,10 @@ async function loadProtoDefinitions() {
     // Proto files are in the project root's proto directory
     // This works whether running from src/ or dist/
     const protoRootDir = join(process.cwd(), 'proto');
-    const protoPath = join(protoRootDir, 'opentelemetry/proto/collector/trace/v1/trace_service.proto');
+    const protoPath = join(
+      protoRootDir,
+      'opentelemetry/proto/collector/trace/v1/trace_service.proto'
+    );
 
     const root = new protobuf.Root();
     root.resolvePath = (origin: string, target: string) => {
@@ -25,7 +28,9 @@ async function loadProtoDefinitions() {
 
     await root.load(protoPath);
 
-    ExportTraceServiceRequest = root.lookupType('opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest');
+    ExportTraceServiceRequest = root.lookupType(
+      'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest'
+    );
     console.log('[OTLP] Proto definitions loaded successfully');
   } catch (error) {
     console.error('[OTLP] Failed to load proto definitions:', error);
@@ -41,14 +46,14 @@ interface OTLPSpan {
   kind?: number;
   startTimeUnixNano?: string;
   endTimeUnixNano?: string;
-  attributes?: Array<{ key: string; value: any }>;
-  status?: { code?: number; message?: string };
+  attributes?: Array<{key: string; value: any}>;
+  status?: {code?: number; message?: string};
 }
 
 interface OTLPRequest {
   resourceSpans?: Array<{
     resource?: {
-      attributes?: Array<{ key: string; value: any }>;
+      attributes?: Array<{key: string; value: any}>;
     };
     scopeSpans?: Array<{
       scope?: any;
@@ -60,11 +65,11 @@ interface OTLPRequest {
 export function createOTLPRouter(traces: TraceBroker): Router {
   const router = Router();
 
-  loadProtoDefinitions().catch(err => {
+  loadProtoDefinitions().catch((err) => {
     console.error('[OTLP] Failed to initialize proto definitions:', err);
   });
 
-  router.use(express.raw({ type: 'application/x-protobuf', limit: '10mb' }));
+  router.use(express.raw({type: 'application/x-protobuf', limit: '10mb'}));
 
   router.post('/traces', (req, res) => {
     try {
@@ -73,14 +78,17 @@ export function createOTLPRouter(traces: TraceBroker): Router {
 
       if (contentType.includes('application/x-protobuf')) {
         if (!Buffer.isBuffer(req.body)) {
-          console.error('[OTLP] Expected Buffer for protobuf, got:', typeof req.body);
-          res.status(400).json({ error: 'Invalid protobuf data' });
+          console.error(
+            '[OTLP] Expected Buffer for protobuf, got:',
+            typeof req.body
+          );
+          res.status(400).json({error: 'Invalid protobuf data'});
           return;
         }
 
         if (!ExportTraceServiceRequest) {
           console.error('[OTLP] Proto definitions not loaded yet');
-          res.status(503).json({ error: 'Service initializing, please retry' });
+          res.status(503).json({error: 'Service initializing, please retry'});
           return;
         }
 
@@ -93,11 +101,11 @@ export function createOTLPRouter(traces: TraceBroker): Router {
             bytes: String,
             defaults: true,
             arrays: true,
-            objects: true
+            objects: true,
           }) as OTLPRequest;
         } catch (error) {
           console.error('[OTLP] Failed to decode protobuf:', error);
-          res.status(400).json({ error: 'Failed to decode protobuf data' });
+          res.status(400).json({error: 'Failed to decode protobuf data'});
           return;
         }
       } else {
@@ -105,7 +113,9 @@ export function createOTLPRouter(traces: TraceBroker): Router {
       }
 
       if (!body || !body.resourceSpans) {
-        res.status(400).json({ error: 'Invalid OTLP request format. Expected resourceSpans array.' });
+        res.status(400).json({
+          error: 'Invalid OTLP request format. Expected resourceSpans array.',
+        });
         return;
       }
 
@@ -126,7 +136,7 @@ export function createOTLPRouter(traces: TraceBroker): Router {
               endTimeUnixNano: otlpSpan.endTimeUnixNano,
               attributes: convertAttributes(otlpSpan.attributes || []),
               status: otlpSpan.status,
-              resource: convertAttributesToObject(resourceAttrs)
+              resource: convertAttributesToObject(resourceAttrs),
             });
           }
         }
@@ -138,21 +148,25 @@ export function createOTLPRouter(traces: TraceBroker): Router {
     } catch (error) {
       console.error('[OTLP] Failed to process request:', error);
       const err = error as Error;
-      res.status(500).json({ error: err.message });
+      res.status(500).json({error: err.message});
     }
   });
 
   return router;
 }
 
-function convertAttributes(attrs: Array<{ key: string; value: any }>): Array<{ key: string; value: any }> {
-  return attrs.map(attr => ({
+function convertAttributes(
+  attrs: Array<{key: string; value: any}>
+): Array<{key: string; value: any}> {
+  return attrs.map((attr) => ({
     key: attr.key,
-    value: extractValue(attr.value)
+    value: extractValue(attr.value),
   }));
 }
 
-function convertAttributesToObject(attrs: Array<{ key: string; value: any }>): Record<string, any> {
+function convertAttributesToObject(
+  attrs: Array<{key: string; value: any}>
+): Record<string, any> {
   const result: Record<string, any> = {};
   for (const attr of attrs) {
     result[attr.key] = extractValue(attr.value);

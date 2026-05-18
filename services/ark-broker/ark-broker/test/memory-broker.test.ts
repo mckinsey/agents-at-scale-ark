@@ -1,4 +1,4 @@
-import { MemoryBroker } from '../src/memory-broker.js';
+import {MemoryBroker} from '../src/memory-broker.js';
 
 describe('MemoryBroker', () => {
   let broker: MemoryBroker;
@@ -9,12 +9,15 @@ describe('MemoryBroker', () => {
 
   describe('addMessage', () => {
     test('should add a single message', () => {
-      const item = broker.addMessage('conv1', 'query1', { role: 'user', content: 'Hello' });
+      const item = broker.addMessage('conv1', 'query1', {
+        role: 'user',
+        content: 'Hello',
+      });
 
       expect(item.sequenceNumber).toBe(1);
       expect(item.data.conversationId).toBe('conv1');
       expect(item.data.queryId).toBe('query1');
-      expect(item.data.message).toEqual({ role: 'user', content: 'Hello' });
+      expect(item.data.message).toEqual({role: 'user', content: 'Hello'});
       expect(item.timestamp).toBeInstanceOf(Date);
     });
 

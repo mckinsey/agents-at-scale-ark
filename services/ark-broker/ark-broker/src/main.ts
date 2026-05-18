@@ -1,15 +1,18 @@
-import { createRequire } from 'module';
-import app, { memory, chunks, traces, events, sessions } from './server.js';
-import { setupSwagger } from './swagger.js';
+import {createRequire} from 'module';
+import app, {memory, chunks, traces, events, sessions} from './server.js';
+import {setupSwagger} from './swagger.js';
 
 const require = createRequire(import.meta.url);
-const { version } = require('../package.json');
+const {version} = require('../package.json');
 
 setupSwagger(app, version);
 
 const PORT = process.env.PORT || '8080';
 const HOST = process.env.HOST || '0.0.0.0';
-const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '0', 10);
+const REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.REQUEST_TIMEOUT_MS || '0',
+  10
+);
 
 const server = app.listen(Number.parseInt(PORT), HOST, () => {
   console.log(`ARK Broker service running on http://${HOST}:${PORT}`);

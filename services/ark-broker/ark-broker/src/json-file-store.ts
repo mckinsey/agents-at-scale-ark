@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'fs';
+import {dirname} from 'path';
 
 export class JsonFileStore<T> {
   constructor(
@@ -12,7 +12,7 @@ export class JsonFileStore<T> {
     }
   }
 
-  load(): { items: T[]; nextSequence: number } | null {
+  load(): {items: T[]; nextSequence: number} | null {
     if (!this.path) return null;
     try {
       if (existsSync(this.path)) {
@@ -36,9 +36,12 @@ export class JsonFileStore<T> {
     if (!this.path) return;
     try {
       const dir = dirname(this.path);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      if (!existsSync(dir)) mkdirSync(dir, {recursive: true});
       const limited = this.applyLimit(items);
-      writeFileSync(this.path, JSON.stringify({ items: limited, nextSequence }, null, 2));
+      writeFileSync(
+        this.path,
+        JSON.stringify({items: limited, nextSequence}, null, 2)
+      );
       console.log(`[${this.name}] saved ${limited.length} records`);
     } catch (e) {
       console.error(`[${this.name}] failed to save:`, e);
@@ -48,7 +51,9 @@ export class JsonFileStore<T> {
   private applyLimit(items: T[]): T[] {
     if (!this.maxItems || items.length <= this.maxItems) return items;
     const removed = items.length - this.maxItems;
-    console.log(`[${this.name}] trimmed ${removed} items (limit: ${this.maxItems})`);
+    console.log(
+      `[${this.name}] trimmed ${removed} items (limit: ${this.maxItems})`
+    );
     return items.slice(-this.maxItems);
   }
 

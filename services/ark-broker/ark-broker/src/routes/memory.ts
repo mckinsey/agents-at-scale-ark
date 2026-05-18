@@ -1,11 +1,18 @@
-import { Router } from 'express';
-import { randomUUID } from 'crypto';
-import { MemoryBroker } from '../memory-broker.js';
-import { SessionsBroker } from '../sessions-broker.js';
-import { streamSSE } from '../sse.js';
-import { parsePaginationParams, PaginationError, PaginatedList } from '../pagination.js';
+import {Router} from 'express';
+import {randomUUID} from 'crypto';
+import {MemoryBroker} from '../memory-broker.js';
+import {SessionsBroker} from '../sessions-broker.js';
+import {streamSSE} from '../sse.js';
+import {
+  parsePaginationParams,
+  PaginationError,
+  PaginatedList,
+} from '../pagination.js';
 
-export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBroker): Router {
+export function createMemoryRouter(
+  memory: MemoryBroker,
+  sessions?: SessionsBroker
+): Router {
   const router = Router();
 
   /**
@@ -46,24 +53,26 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    */
   router.post('/messages', (req, res) => {
     try {
-      const { conversation_id, query_id, messages } = req.body;
+      const {conversation_id, query_id, messages} = req.body;
 
       if (!conversation_id) {
-        res.status(400).json({ error: 'conversation_id is required' });
+        res.status(400).json({error: 'conversation_id is required'});
         return;
       }
 
       if (!query_id) {
-        res.status(400).json({ error: 'query_id is required' });
+        res.status(400).json({error: 'query_id is required'});
         return;
       }
 
       if (!messages || !Array.isArray(messages)) {
-        res.status(400).json({ error: 'messages array is required' });
+        res.status(400).json({error: 'messages array is required'});
         return;
       }
 
-      console.log(`POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`);
+      console.log(
+        `POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`
+      );
 
       memory.addMessages(conversation_id, query_id, messages);
       memory.save();
@@ -76,7 +85,7 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
     } catch (error) {
       console.error('Failed to add messages:', error);
       const err = error as Error;
-      res.status(400).json({ error: err.message });
+      res.status(400).json({error: err.message});
     }
   });
 
@@ -85,21 +94,35 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
     const conversationId = req.query.conversation_id as string;
 
     if (watch) {
-      const cursor = req.query['cursor'] ? parseInt(req.query['cursor'] as string, 10) : undefined;
-      console.log(`[MESSAGES] GET /messages?watch=true${cursor ? `&cursor=${cursor}` : ''} - starting SSE stream for all messages`);
+      const cursor = req.query['cursor']
+        ? parseInt(req.query['cursor'] as string, 10)
+        : undefined;
+      console.log(
+        `[MESSAGES] GET /messages?watch=true${cursor ? `&cursor=${cursor}` : ''} - starting SSE stream for all messages`
+      );
 
-      let replayItems: Array<{ timestamp: string; conversation_id: string; query_id: string; message: unknown; sequence: number }> | undefined;
+      let replayItems:
+        | Array<{
+            timestamp: string;
+            conversation_id: string;
+            query_id: string;
+            message: unknown;
+            sequence: number;
+          }>
+        | undefined;
       if (cursor !== undefined && !isNaN(cursor)) {
-        let items = memory.all().filter(item => item.sequenceNumber > cursor);
+        let items = memory.all().filter((item) => item.sequenceNumber > cursor);
         if (conversationId) {
-          items = items.filter(item => item.data.conversationId === conversationId);
+          items = items.filter(
+            (item) => item.data.conversationId === conversationId
+          );
         }
-        replayItems = items.map(item => ({
+        replayItems = items.map((item) => ({
           timestamp: item.timestamp.toISOString(),
           conversation_id: item.data.conversationId,
           query_id: item.data.queryId,
           message: item.data.message,
-          sequence: item.sequenceNumber
+          sequence: item.sequenceNumber,
         }));
       }
 
@@ -108,26 +131,31 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
         req,
         tag: 'MESSAGES',
         itemName: 'messages',
-        subscribe: (callback) => memory.subscribe((item) => {
-          callback({
-            timestamp: item.timestamp.toISOString(),
-            conversation_id: item.data.conversationId,
-            query_id: item.data.queryId,
-            message: item.data.message,
-            sequence: item.sequenceNumber
-          });
-        }),
-        filter: conversationId ? (msg) => msg.conversation_id === conversationId : undefined,
-        replayItems
+        subscribe: (callback) =>
+          memory.subscribe((item) => {
+            callback({
+              timestamp: item.timestamp.toISOString(),
+              conversation_id: item.data.conversationId,
+              query_id: item.data.queryId,
+              message: item.data.message,
+              sequence: item.sequenceNumber,
+            });
+          }),
+        filter: conversationId
+          ? (msg) => msg.conversation_id === conversationId
+          : undefined,
+        replayItems,
       });
     } else {
       try {
         const queryId = req.query.query_id as string;
-        const params = parsePaginationParams(req.query as Record<string, unknown>);
+        const params = parsePaginationParams(
+          req.query as Record<string, unknown>
+        );
 
         const filters = {
           conversationId: conversationId || undefined,
-          queryId: queryId || undefined
+          queryId: queryId || undefined,
         };
 
         const result = memory.paginate(params, filters);
@@ -141,27 +169,27 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
         }
 
         const response: PaginatedList<MessageItem> = {
-          items: result.items.map(item => ({
+          items: result.items.map((item) => ({
             timestamp: item.timestamp.toISOString(),
             conversation_id: item.data.conversationId,
             query_id: item.data.queryId,
             message: item.data.message,
-            sequence: item.sequenceNumber
+            sequence: item.sequenceNumber,
           })),
           total: result.total,
           hasMore: result.hasMore,
-          nextCursor: result.nextCursor
+          nextCursor: result.nextCursor,
         };
 
         res.json(response);
       } catch (error) {
         if (error instanceof PaginationError) {
-          res.status(400).json({ error: error.message });
+          res.status(400).json({error: error.message});
           return;
         }
         console.error('Failed to get messages:', error);
         const err = error as Error;
-        res.status(500).json({ error: err.message });
+        res.status(500).json({error: err.message});
       }
     }
   });
@@ -171,37 +199,42 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
       const conversationIds = memory.getConversationIds();
       const allItems = memory.all();
 
-      const conversationStats: Record<string, { message_count: number; query_count: number }> = {};
+      const conversationStats: Record<
+        string,
+        {message_count: number; query_count: number}
+      > = {};
       for (const conversationId of conversationIds) {
-        const convItems = allItems.filter(i => i.data.conversationId === conversationId);
-        const queryIds = new Set(convItems.map(i => i.data.queryId));
+        const convItems = allItems.filter(
+          (i) => i.data.conversationId === conversationId
+        );
+        const queryIds = new Set(convItems.map((i) => i.data.queryId));
 
         conversationStats[conversationId] = {
           message_count: convItems.length,
-          query_count: queryIds.size
+          query_count: queryIds.size,
         };
       }
 
       res.json({
         total_conversations: conversationIds.length,
         total_messages: allItems.length,
-        conversations: conversationStats
+        conversations: conversationStats,
       });
     } catch (error) {
       console.error('Failed to get memory status:', error);
       const err = error as Error;
-      res.status(500).json({ error: err.message });
+      res.status(500).json({error: err.message});
     }
   });
 
   router.get('/conversations', (_req, res) => {
     try {
       const conversations = memory.getConversationIds();
-      res.json({ conversations });
+      res.json({conversations});
     } catch (error) {
       console.error('Failed to get conversations:', error);
       const err = error as Error;
-      res.status(400).json({ error: err.message });
+      res.status(400).json({error: err.message});
     }
   });
 
@@ -232,7 +265,7 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    */
   router.delete('/messages', (_req, res) => {
     memory.delete();
-    res.json({ status: 'success', message: 'Memory purged' });
+    res.json({status: 'success', message: 'Memory purged'});
   });
 
   /**
@@ -270,15 +303,18 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    *         description: Failed to delete conversation
    */
   router.delete('/conversations/:conversationId', (req, res) => {
-    const { conversationId } = req.params;
+    const {conversationId} = req.params;
 
     if (!conversationId) {
-      res.status(400).json({ error: 'Conversation ID is required' });
+      res.status(400).json({error: 'Conversation ID is required'});
       return;
     }
 
     memory.deleteConversation(conversationId);
-    res.json({ status: 'success', message: `Conversation ${conversationId} deleted` });
+    res.json({
+      status: 'success',
+      message: `Conversation ${conversationId} deleted`,
+    });
   });
 
   /**
@@ -321,22 +357,28 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    *       500:
    *         description: Failed to delete query messages
    */
-  router.delete('/conversations/:conversationId/queries/:queryId/messages', (req, res) => {
-    const { conversationId, queryId } = req.params;
+  router.delete(
+    '/conversations/:conversationId/queries/:queryId/messages',
+    (req, res) => {
+      const {conversationId, queryId} = req.params;
 
-    if (!conversationId) {
-      res.status(400).json({ error: 'Conversation ID is required' });
-      return;
+      if (!conversationId) {
+        res.status(400).json({error: 'Conversation ID is required'});
+        return;
+      }
+
+      if (!queryId) {
+        res.status(400).json({error: 'Query ID is required'});
+        return;
+      }
+
+      memory.deleteQuery(conversationId, queryId);
+      res.json({
+        status: 'success',
+        message: `Query ${queryId} messages deleted from conversation ${conversationId}`,
+      });
     }
-
-    if (!queryId) {
-      res.status(400).json({ error: 'Query ID is required' });
-      return;
-    }
-
-    memory.deleteQuery(conversationId, queryId);
-    res.json({ status: 'success', message: `Query ${queryId} messages deleted from conversation ${conversationId}` });
-  });
+  );
 
   /**
    * @swagger
@@ -365,7 +407,7 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    */
   router.delete('/conversations', (_req, res) => {
     memory.delete();
-    res.json({ status: 'success', message: 'All conversations deleted' });
+    res.json({status: 'success', message: 'All conversations deleted'});
   });
 
   /**
@@ -390,7 +432,7 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    */
   router.post('/conversations', (_req, res) => {
     const conversation_id = randomUUID();
-    res.status(201).json({ conversation_id });
+    res.status(201).json({conversation_id});
   });
 
   /**
@@ -424,31 +466,31 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
    *         description: Conversation not found
    */
   router.get('/conversations/:conversationId', (req, res) => {
-    const { conversationId } = req.params;
+    const {conversationId} = req.params;
 
     if (!conversationId) {
-      res.status(400).json({ error: 'Conversation ID is required' });
+      res.status(400).json({error: 'Conversation ID is required'});
       return;
     }
 
     const items = memory.getByConversation(conversationId);
 
     if (items.length === 0) {
-      res.status(404).json({ error: 'Conversation not found' });
+      res.status(404).json({error: 'Conversation not found'});
       return;
     }
 
-    const messages = items.map(item => ({
+    const messages = items.map((item) => ({
       timestamp: item.timestamp.toISOString(),
       conversation_id: item.data.conversationId,
       query_id: item.data.queryId,
       message: item.data.message,
-      sequence: item.sequenceNumber
+      sequence: item.sequenceNumber,
     }));
 
     res.json({
       conversation_id: conversationId,
-      messages
+      messages,
     });
   });
 
