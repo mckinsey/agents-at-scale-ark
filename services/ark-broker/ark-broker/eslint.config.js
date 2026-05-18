@@ -39,6 +39,7 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
+      'no-console': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
     },
