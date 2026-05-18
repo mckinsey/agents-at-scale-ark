@@ -44,9 +44,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       const cursor = req.query['cursor']
         ? parseInt(req.query['cursor'] as string, 10)
         : undefined;
-      console.log(
-        `[TRACES] GET /traces?watch=true${cursor ? `&cursor=${cursor}` : ''}${sessionId ? `&session_id=${sessionId}` : ''} - starting SSE stream for all spans`
-      );
+      req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
 
       let replayItems: OTELSpan[] | undefined;
       if (cursor !== undefined && !isNaN(cursor)) {
@@ -93,7 +91,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
           res.status(400).json({error: error.message});
           return;
         }
-        console.error('[TRACES] Failed to get traces:', error);
+        req.log.error({err: error}, 'failed to get traces');
         const err = error as Error;
         res.status(500).json({error: err.message});
       }
@@ -109,9 +107,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       : undefined;
 
     if (watch) {
-      console.log(
-        `[TRACES] GET /traces/${trace_id}?watch=true - starting SSE stream`
-      );
+      req.log.info({traceId: trace_id}, 'starting SSE stream for trace');
 
       let replayItems: OTELSpan[] | undefined;
       if (fromBeginning) {
@@ -143,19 +139,19 @@ export function createTracesRouter(traces: TraceBroker): Router {
         }
         res.json({traceId: trace_id, spans});
       } catch (error) {
-        console.error(`[TRACES] Failed to get trace ${trace_id}:`, error);
+        req.log.error({err: error, traceId: trace_id}, 'failed to get trace');
         const err = error as Error;
         res.status(500).json({error: err.message});
       }
     }
   });
 
-  router.delete('/', (_req, res) => {
+  router.delete('/', (req, res) => {
     try {
       traces.delete();
       res.json({status: 'success', message: 'Trace data purged'});
     } catch (error) {
-      console.error('Trace purge failed:', error);
+      req.log.error({err: error}, 'trace purge failed');
       res.status(500).json({error: 'Failed to purge trace data'});
     }
   });

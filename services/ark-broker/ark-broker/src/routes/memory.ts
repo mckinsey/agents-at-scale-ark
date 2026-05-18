@@ -70,8 +70,13 @@ export function createMemoryRouter(
         return;
       }
 
-      console.log(
-        `POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`
+      req.log.info(
+        {
+          conversationId: conversation_id,
+          queryId: query_id,
+          count: messages?.length,
+        },
+        'received messages'
       );
 
       memory.addMessages(conversation_id, query_id, messages);
@@ -83,7 +88,7 @@ export function createMemoryRouter(
 
       res.status(200).send();
     } catch (error) {
-      console.error('Failed to add messages:', error);
+      req.log.error({err: error}, 'failed to add messages');
       const err = error as Error;
       res.status(400).json({error: err.message});
     }
@@ -97,9 +102,7 @@ export function createMemoryRouter(
       const cursor = req.query['cursor']
         ? parseInt(req.query['cursor'] as string, 10)
         : undefined;
-      console.log(
-        `[MESSAGES] GET /messages?watch=true${cursor ? `&cursor=${cursor}` : ''} - starting SSE stream for all messages`
-      );
+      req.log.info({cursor}, 'starting SSE stream for all messages');
 
       let replayItems:
         | Array<{
@@ -188,14 +191,14 @@ export function createMemoryRouter(
           res.status(400).json({error: error.message});
           return;
         }
-        console.error('Failed to get messages:', error);
+        req.log.error({err: error}, 'failed to get messages');
         const err = error as Error;
         res.status(500).json({error: err.message});
       }
     }
   });
 
-  router.get('/memory-status', (_req, res) => {
+  router.get('/memory-status', (req, res) => {
     try {
       const conversationIds = memory.getConversationIds();
       const allItems = memory.all();
@@ -222,18 +225,18 @@ export function createMemoryRouter(
         conversations: conversationStats,
       });
     } catch (error) {
-      console.error('Failed to get memory status:', error);
+      req.log.error({err: error}, 'failed to get memory status');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
   });
 
-  router.get('/conversations', (_req, res) => {
+  router.get('/conversations', (req, res) => {
     try {
       const conversations = memory.getConversationIds();
       res.json({conversations});
     } catch (error) {
-      console.error('Failed to get conversations:', error);
+      req.log.error({err: error}, 'failed to get conversations');
       const err = error as Error;
       res.status(400).json({error: err.message});
     }

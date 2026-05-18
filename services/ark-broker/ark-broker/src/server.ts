@@ -74,7 +74,7 @@ export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
   app.use('/traces', createTracesRouter(traces));
   app.use('/events', createEventsRouter(events, sessions));
   app.use('/sessions', createSessionsRouter(sessions));
-  app.use('/v1', createOTLPRouter(traces));
+  app.use('/v1', createOTLPRouter(traces, logger.child({route: 'otlp'})));
 
   app.use(
     (

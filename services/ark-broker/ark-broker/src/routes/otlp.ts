@@ -1,17 +1,16 @@
 import {Router} from 'express';
 import express from 'express';
 import {TraceBroker, OTELSpan} from '../trace-broker.js';
+import type {Logger} from '../logging/logger.js';
 import protobuf from 'protobufjs';
 import {join} from 'path';
 
 let ExportTraceServiceRequest: protobuf.Type | null = null;
 
-async function loadProtoDefinitions() {
+async function loadProtoDefinitions(logger: Logger) {
   if (ExportTraceServiceRequest) return;
 
   try {
-    // Proto files are in the project root's proto directory
-    // This works whether running from src/ or dist/
     const protoRootDir = join(process.cwd(), 'proto');
     const protoPath = join(
       protoRootDir,
@@ -31,10 +30,10 @@ async function loadProtoDefinitions() {
     ExportTraceServiceRequest = root.lookupType(
       'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest'
     );
-    console.log('[OTLP] Proto definitions loaded successfully');
-  } catch (error) {
-    console.error('[OTLP] Failed to load proto definitions:', error);
-    throw error;
+    logger.info('proto definitions loaded');
+  } catch (err) {
+    logger.error({err}, 'failed to load proto definitions');
+    throw err;
   }
 }
 
@@ -62,11 +61,11 @@ interface OTLPRequest {
   }>;
 }
 
-export function createOTLPRouter(traces: TraceBroker): Router {
+export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
   const router = Router();
 
-  loadProtoDefinitions().catch((err) => {
-    console.error('[OTLP] Failed to initialize proto definitions:', err);
+  loadProtoDefinitions(logger).catch((err) => {
+    logger.error({err}, 'failed to initialize proto definitions');
   });
 
   router.use(
@@ -83,16 +82,16 @@ export function createOTLPRouter(traces: TraceBroker): Router {
 
       if (contentType.includes('application/x-protobuf')) {
         if (!Buffer.isBuffer(req.body)) {
-          console.error(
-            '[OTLP] Expected Buffer for protobuf, got:',
-            typeof req.body
+          req.log.error(
+            {bodyType: typeof req.body},
+            'expected Buffer for protobuf'
           );
           res.status(400).json({error: 'Invalid protobuf data'});
           return;
         }
 
         if (!ExportTraceServiceRequest) {
-          console.error('[OTLP] Proto definitions not loaded yet');
+          req.log.error('proto definitions not loaded yet');
           res.status(503).json({error: 'Service initializing, please retry'});
           return;
         }
@@ -108,8 +107,8 @@ export function createOTLPRouter(traces: TraceBroker): Router {
             arrays: true,
             objects: true,
           }) as OTLPRequest;
-        } catch (error) {
-          console.error('[OTLP] Failed to decode protobuf:', error);
+        } catch (err) {
+          req.log.error({err}, 'failed to decode protobuf');
           res.status(400).json({error: 'Failed to decode protobuf data'});
           return;
         }
@@ -148,12 +147,12 @@ export function createOTLPRouter(traces: TraceBroker): Router {
       }
 
       traces.addSpans(spans);
-      console.log(`[OTLP] Received ${spans.length} spans`);
+      req.log.info({count: spans.length}, 'received spans');
       res.status(200).json({});
-    } catch (error) {
-      console.error('[OTLP] Failed to process request:', error);
-      const err = error as Error;
-      res.status(500).json({error: err.message});
+    } catch (err) {
+      req.log.error({err}, 'failed to process request');
+      const e = err as Error;
+      res.status(500).json({error: e.message});
     }
   });
 

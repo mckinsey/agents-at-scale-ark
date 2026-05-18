@@ -90,7 +90,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
         res.status(400).json({error: error.message});
         return;
       }
-      console.error('[SESSIONS] Failed to get sessions:', error);
+      req.log.error({err: error}, 'failed to get sessions');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
@@ -106,7 +106,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       }
       res.json(session);
     } catch (error) {
-      console.error('[SESSIONS] Failed to get session:', error);
+      req.log.error({err: error}, 'failed to get session');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
@@ -124,18 +124,18 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       sessionsBroker.save();
       res.status(201).json({status: 'success'});
     } catch (error) {
-      console.error('[SESSIONS] Failed to ingest:', error);
+      req.log.error({err: error}, 'failed to ingest');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
   });
 
-  router.delete('/', (_req, res) => {
+  router.delete('/', (req, res) => {
     try {
       sessionsBroker.delete();
       res.json({status: 'success', message: 'Sessions purged'});
     } catch (error) {
-      console.error('[SESSIONS] Purge failed:', error);
+      req.log.error({err: error}, 'purge failed');
       res.status(500).json({error: 'Failed to purge sessions'});
     }
   });

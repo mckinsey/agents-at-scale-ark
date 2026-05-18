@@ -22,9 +22,7 @@ export function createEventsRouter(
       const cursor = req.query['cursor']
         ? parseInt(req.query['cursor'] as string, 10)
         : undefined;
-      console.log(
-        `[EVENTS] GET /events?watch=true${cursor ? `&cursor=${cursor}` : ''}${sessionId ? `&session_id=${sessionId}` : ''} - starting SSE stream for all events`
-      );
+      req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
 
       let replayItems: EventData[] | undefined;
       if (cursor !== undefined && !isNaN(cursor)) {
@@ -73,7 +71,7 @@ export function createEventsRouter(
           res.status(400).json({error: error.message});
           return;
         }
-        console.error('[EVENTS] Failed to get events:', error);
+        req.log.error({err: error}, 'failed to get events');
         const err = error as Error;
         res.status(500).json({error: err.message});
       }
@@ -89,9 +87,7 @@ export function createEventsRouter(
       : undefined;
 
     if (watch) {
-      console.log(
-        `[EVENTS] GET /events/${query_id}?watch=true - starting SSE stream`
-      );
+      req.log.info({queryId: query_id}, 'starting SSE stream for query');
 
       let replayItems: EventData[] | undefined;
       if (fromBeginning) {
@@ -134,9 +130,9 @@ export function createEventsRouter(
           res.status(400).json({error: error.message});
           return;
         }
-        console.error(
-          `[EVENTS] Failed to get events for query ${query_id}:`,
-          error
+        req.log.error(
+          {err: error, queryId: query_id},
+          'failed to get events for query'
         );
         const err = error as Error;
         res.status(500).json({error: err.message});
@@ -163,18 +159,18 @@ export function createEventsRouter(
 
       res.status(201).json({status: 'success'});
     } catch (error) {
-      console.error('[EVENTS] Failed to add event:', error);
+      req.log.error({err: error}, 'failed to add event');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
   });
 
-  router.delete('/', (_req, res) => {
+  router.delete('/', (req, res) => {
     try {
       events.delete();
       res.json({status: 'success', message: 'Event data purged'});
     } catch (error) {
-      console.error('Event purge failed:', error);
+      req.log.error({err: error}, 'event purge failed');
       res.status(500).json({error: 'Failed to purge event data'});
     }
   });
