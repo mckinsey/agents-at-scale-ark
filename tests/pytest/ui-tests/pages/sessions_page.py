@@ -24,7 +24,7 @@ class SessionsPage(BasePage):
     USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
     ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
-    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-medium"
+    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-semibold"
     NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
 
     def navigate_to_session_history(self) -> None:
@@ -245,7 +245,7 @@ class SessionsPage(BasePage):
 
     def set_status_filter(self, status: str) -> None:
         trigger = self.page.locator(
-            "div.flex.flex-col.gap-1\\.5:has(span:has-text('Status')) button[role='combobox']"
+            "div.flex.flex-col.gap-2:has(span:has-text('Status')) button[role='combobox']"
         ).first
         trigger.wait_for(state="visible", timeout=5000)
         trigger.click()
@@ -259,19 +259,19 @@ class SessionsPage(BasePage):
         try:
             try:
                 self.page.wait_for_selector(
-                    "div.rounded-lg button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
+                    "button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
                     timeout=10000,
                 )
             except Exception:
                 pass
             rows = self.page.locator(
-                "div.rounded-lg button[type='button'][aria-pressed]"
+                "button[type='button'][aria-pressed]"
             )
             count = rows.count()
             if count > 0:
                 return count
             rows = self.page.locator(
-                "div.rounded-lg > button[type='button']"
+                "button[type='button'].grid"
             )
             return rows.count()
         except Exception as e:
@@ -319,9 +319,9 @@ class SessionsPage(BasePage):
                 f"button[type='button']:has-text('{session_id}')"
             ).first
             if row.is_visible(timeout=5000):
-                active_dot = row.locator("span.bg-blue-500")
-                idle_dot = row.locator("span.bg-gray-400")
-                error_dot = row.locator("span.bg-red-500")
+                active_dot = row.locator("span.bg-status-information")
+                idle_dot = row.locator("span.bg-fg-tertiary")
+                error_dot = row.locator("span.bg-status-error")
                 if active_dot.count() > 0:
                     return "active"
                 if idle_dot.count() > 0:
