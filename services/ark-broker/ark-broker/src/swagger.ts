@@ -1,11 +1,18 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import {Express} from 'express';
 import swaggerUi from 'swagger-ui-express';
+import type {Logger} from './logging/logger.js';
 
-const HOST = process.env.HOST || '0.0.0.0';
-const PORT = process.env.PORT || '8080';
+export type SwaggerDeps = {
+  logger: Logger;
+  version: string;
+  host: string;
+  port: number;
+};
 
-export function setupSwagger(app: Express, version: string): void {
+export function setupSwagger(app: Express, deps: SwaggerDeps): void {
+  const {logger, version, host, port} = deps;
+
   const options: swaggerJsdoc.Options = {
     definition: {
       openapi: '3.0.0',
@@ -14,7 +21,6 @@ export function setupSwagger(app: Express, version: string): void {
         version,
         description: 'Memory and streaming service for ARK queries',
       },
-      // No servers specified - Swagger UI will use relative URLs
       tags: [
         {
           name: 'System',
@@ -35,7 +41,6 @@ export function setupSwagger(app: Express, version: string): void {
         },
       ],
     },
-    // In production, we run from dist; in dev, from src
     apis:
       process.env.NODE_ENV === 'production'
         ? ['./dist/**/*.js']
@@ -44,13 +49,11 @@ export function setupSwagger(app: Express, version: string): void {
 
   const specs = swaggerJsdoc(options);
 
-  // Serve OpenAPI spec as JSON
   app.get('/openapi.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(specs);
   });
 
-  // Serve Swagger UI
   app.use(
     '/api-docs',
     swaggerUi.serve,
@@ -60,10 +63,13 @@ export function setupSwagger(app: Express, version: string): void {
     })
   );
 
-  console.log(
-    `API documentation available at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/api-docs`
+  const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+  logger.info(
+    {url: `http://${displayHost}:${port}/api-docs`},
+    'API documentation available'
   );
-  console.log(
-    `OpenAPI spec available at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/openapi.json`
+  logger.info(
+    {url: `http://${displayHost}:${port}/openapi.json`},
+    'OpenAPI spec available'
   );
 }

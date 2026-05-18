@@ -27,6 +27,7 @@ function handleStreamingSessions(
   streamSSE({
     res,
     req,
+    logger: req.log,
     tag: 'SESSIONS',
     itemName: 'sessions',
     subscribe: (callback) =>

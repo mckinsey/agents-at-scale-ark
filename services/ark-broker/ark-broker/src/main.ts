@@ -7,25 +7,30 @@ import {setupSwagger} from './swagger.js';
 const require = createRequire(import.meta.url);
 const {version} = require('../package.json');
 
-function loadConfigOrExit(): AppConfig {
-  try {
-    return loadConfig(process.env);
-  } catch (err) {
-    console.error('Invalid configuration:', err);
-    process.exit(1);
-  }
+const logger = createLogger({
+  level: 'info',
+  pretty: process.env.NODE_ENV === 'development',
+});
+
+let config: AppConfig;
+try {
+  config = loadConfig(process.env);
+} catch (err) {
+  logger.error({err}, 'invalid configuration');
+  process.exit(1);
 }
 
-const config = loadConfigOrExit();
-const logger = createLogger({
-  level: config.logLevel,
-  pretty: config.nodeEnv === 'development',
-});
+logger.level = config.logLevel;
 
 const {app, brokers} = buildApp({config, logger});
 const {memory, chunks, traces, events, sessions} = brokers;
 
-setupSwagger(app, version);
+setupSwagger(app, {
+  logger,
+  version,
+  host: config.server.host,
+  port: config.server.port,
+});
 
 const server = app.listen(config.server.port, config.server.host, () => {
   logger.info(

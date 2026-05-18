@@ -129,6 +129,7 @@ export function createMemoryRouter(
       streamSSE({
         res,
         req,
+        logger: req.log,
         tag: 'MESSAGES',
         itemName: 'messages',
         subscribe: (callback) =>

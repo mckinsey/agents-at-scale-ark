@@ -40,6 +40,7 @@ export function createEventsRouter(
       streamSSE({
         res,
         req,
+        logger: req.log,
         tag: 'EVENTS',
         itemName: 'events',
         subscribe: (callback) =>
@@ -105,6 +106,7 @@ export function createEventsRouter(
       streamSSE({
         res,
         req,
+        logger: req.log,
         tag: 'EVENTS',
         itemName: 'events',
         subscribe: (callback) =>

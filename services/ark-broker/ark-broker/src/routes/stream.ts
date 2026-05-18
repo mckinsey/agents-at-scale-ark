@@ -56,6 +56,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       streamSSE({
         res,
         req,
+        logger: req.log,
         tag: 'STREAM',
         itemName: 'chunks',
         subscribe: (callback) =>

@@ -62,6 +62,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       streamSSE({
         res,
         req,
+        logger: req.log,
         tag: 'TRACES',
         itemName: 'spans',
         subscribe: (callback) =>
@@ -125,6 +126,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       streamSSE({
         res,
         req,
+        logger: req.log,
         tag: 'TRACES',
         itemName: 'spans',
         subscribe: (callback) =>
