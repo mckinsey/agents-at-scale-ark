@@ -19,6 +19,7 @@ import {createTracesRouter} from './routes/traces.js';
 import {createEventsRouter} from './routes/events.js';
 import {createSessionsRouter} from './routes/sessions.js';
 import {createOTLPRouter} from './routes/otlp.js';
+import {setupSwagger} from './swagger.js';
 
 export type Brokers = {
   memory: MemoryBroker;
@@ -33,8 +34,12 @@ export type AppBundle = {
   brokers: Brokers;
 };
 
-export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
-  const {config, logger} = deps;
+export function buildApp(deps: {
+  config: AppConfig;
+  logger: Logger;
+  version: string;
+}): AppBundle {
+  const {config, logger, version} = deps;
   const app = express();
 
   const memory = new MemoryBroker(
@@ -79,6 +84,13 @@ export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
   app.use('/events', createEventsRouter(events, sessions));
   app.use('/sessions', createSessionsRouter(sessions));
   app.use('/v1', createOTLPRouter(traces, logger.child({route: 'otlp'})));
+
+  setupSwagger(app, {
+    logger,
+    version,
+    host: config.server.host,
+    port: config.server.port,
+  });
 
   app.use(createErrorHandler({includeStack: config.nodeEnv === 'development'}));
   app.use(notFoundHandler);

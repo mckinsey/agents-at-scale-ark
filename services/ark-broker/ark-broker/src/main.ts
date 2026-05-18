@@ -2,7 +2,6 @@ import {createRequire} from 'module';
 import {loadConfig, type AppConfig} from './config/index.js';
 import {createLogger} from './logging/logger.js';
 import {buildApp} from './server.js';
-import {setupSwagger} from './swagger.js';
 
 const require = createRequire(import.meta.url);
 const {version} = require('../package.json');
@@ -22,15 +21,8 @@ try {
 
 logger.level = config.logLevel;
 
-const {app, brokers} = buildApp({config, logger});
+const {app, brokers} = buildApp({config, logger, version});
 const {memory, chunks, traces, events, sessions} = brokers;
-
-setupSwagger(app, {
-  logger,
-  version,
-  host: config.server.host,
-  port: config.server.port,
-});
 
 const server = app.listen(config.server.port, config.server.host, () => {
   logger.info(

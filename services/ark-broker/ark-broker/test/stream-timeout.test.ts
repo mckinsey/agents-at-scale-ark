@@ -6,6 +6,7 @@ import {buildApp} from '../src/server.js';
 const {app} = buildApp({
   config: loadConfig({}),
   logger: createLogger({level: 'silent', pretty: false}),
+  version: 'test',
 });
 
 describe('Stream Timeout', () => {

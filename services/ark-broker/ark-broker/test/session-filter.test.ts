@@ -11,6 +11,7 @@ const {
 } = buildApp({
   config: loadConfig({}),
   logger: createLogger({level: 'silent', pretty: false}),
+  version: 'test',
 });
 
 describe('Session ID Filtering', () => {
@@ -46,7 +47,7 @@ describe('Session ID Filtering', () => {
         attributes: [
           {key: 'ark.session.id', value: 'session-123'} as unknown as {
             key: string;
-            value: any;
+            value: unknown;
           },
         ],
       };

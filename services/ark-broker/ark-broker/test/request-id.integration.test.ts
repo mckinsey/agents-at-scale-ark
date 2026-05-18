@@ -18,6 +18,7 @@ describe('request-id middleware', () => {
     const {app} = buildApp({
       config: loadConfig({}),
       logger: createLogger({level: 'silent', pretty: false}),
+      version: 'test',
     });
 
     const res = await request(app)
@@ -32,6 +33,7 @@ describe('request-id middleware', () => {
     const {app} = buildApp({
       config: loadConfig({}),
       logger: createLogger({level: 'silent', pretty: false}),
+      version: 'test',
     });
 
     const res = await request(app).get('/health');
@@ -45,7 +47,7 @@ describe('request-id middleware', () => {
   test('the per-request child logger carries the request id', async () => {
     const sink = new MemorySink();
     const logger = createLogger({level: 'info', pretty: false}, sink);
-    const {app} = buildApp({config: loadConfig({}), logger});
+    const {app} = buildApp({config: loadConfig({}), logger, version: 'test'});
 
     await request(app).get('/health').set('X-Request-ID', 'log-correlation-1');
 
