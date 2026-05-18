@@ -13,6 +13,7 @@ import {
   ChevronsUpDownIcon,
   Cog,
   Cpu,
+  Database,
   Download,
   File,
   HelpCircle,
@@ -26,7 +27,6 @@ import {
   Plus,
   Server,
   Settings,
-  ShieldCheck,
   Store,
   Sun,
 } from 'lucide-react';
@@ -225,14 +225,10 @@ export function AppSidebar() {
     item => item.key === currentSection,
   );
 
-  const isPrivacySection =
-    currentSection === 'api-keys' || currentSection === 'secrets';
-
   const [agentBuilderOpen, setAgentBuilderOpen] = useState(
     isAgentBuilderSection,
   );
   const [monitoringOpen, setMonitoringOpen] = useState(isMonitoringSection);
-  const [privacyOpen, setPrivacyOpen] = useState(isPrivacySection);
 
   useEffect(() => {
     const checkFilesAPIHealth = async () => {
@@ -255,7 +251,6 @@ export function AppSidebar() {
     if (sidebarState === 'collapsed') {
       setAgentBuilderOpen(false);
       setMonitoringOpen(false);
-      setPrivacyOpen(false);
     }
   }, [sidebarState]);
 
@@ -418,6 +413,15 @@ export function AppSidebar() {
 
               <SidebarMenuItem>
                 <SidebarMenuButton
+                  onClick={() => navigateToSection('memory')}
+                  isActive={getCurrentSection() === 'memory'}>
+                  <Database />
+                  <span>Memory</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
                   onClick={() => navigateToSection('models')}
                   isActive={getCurrentSection() === 'models'}>
                   <Cpu />
@@ -482,54 +486,23 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              <Collapsible
-                open={privacyOpen}
-                onOpenChange={setPrivacyOpen}
-                className="group/collapsible">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isPrivacySection}
-                    tooltip="Privacy"
-                    className="group/button">
-                    <CollapsibleTrigger
-                      className="flex w-full items-center gap-2"
-                      onClick={e => {
-                        if (sidebarState === 'collapsed') {
-                          e.preventDefault();
-                          setSidebarOpen(true);
-                          setTimeout(() => setPrivacyOpen(true), 100);
-                        }
-                      }}>
-                      {privacyOpen ? (
-                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      <ShieldCheck />
-                      <span>Privacy</span>
-                    </CollapsibleTrigger>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <CollapsibleContent style={{ marginLeft: 8 }}>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      onClick={() => navigateToSection('api-keys')}
-                      isActive={getCurrentSection() === 'api-keys'}>
-                      <Key />
-                      <span>Service API Keys</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      onClick={() => navigateToSection('secrets')}
-                      isActive={getCurrentSection() === 'secrets'}>
-                      <Lock />
-                      <span>Secrets</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </CollapsibleContent>
-              </Collapsible>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('secrets')}
+                  isActive={getCurrentSection() === 'secrets'}>
+                  <Lock />
+                  <span>Secrets</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('api-keys')}
+                  isActive={getCurrentSection() === 'api-keys'}>
+                  <Key />
+                  <span>API keys</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
               {isExperimentalExecutionEngineEnabled && (
                 <SidebarMenuItem>
