@@ -1,5 +1,6 @@
 import {Router} from 'express';
 import {randomUUID} from 'crypto';
+import {z} from 'zod';
 import {MemoryBroker} from '../memory-broker.js';
 import {SessionsBroker} from '../sessions-broker.js';
 import {streamSSE} from '../sse.js';
@@ -8,6 +9,24 @@ import {
   PaginationError,
   PaginatedList,
 } from '../pagination.js';
+
+const postMessagesBodySchema = z.object({
+  conversation_id: z.string(),
+  query_id: z.string(),
+  messages: z.array(z.unknown()),
+});
+type PostMessagesBody = z.infer<typeof postMessagesBodySchema>;
+
+const getMessagesQuerySchema = z.object({
+  watch: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  conversation_id: z.string().optional(),
+  query_id: z.string().optional(),
+  cursor: z.coerce.number().int().nonnegative().optional(),
+});
+type GetMessagesQuery = z.infer<typeof getMessagesQuerySchema>;
 
 export function createMemoryRouter(
   memory: MemoryBroker,
@@ -52,29 +71,27 @@ export function createMemoryRouter(
    *         description: Invalid request parameters
    */
   router.post('/messages', (req, res) => {
+    const parse = postMessagesBodySchema.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const {conversation_id, query_id, messages}: PostMessagesBody = parse.data;
+
     try {
-      const {conversation_id, query_id, messages} = req.body;
-
-      if (!conversation_id) {
-        res.status(400).json({error: 'conversation_id is required'});
-        return;
-      }
-
-      if (!query_id) {
-        res.status(400).json({error: 'query_id is required'});
-        return;
-      }
-
-      if (!messages || !Array.isArray(messages)) {
-        res.status(400).json({error: 'messages array is required'});
-        return;
-      }
-
       req.log.info(
         {
           conversationId: conversation_id,
           queryId: query_id,
-          count: messages?.length,
+          count: messages.length,
         },
         'received messages'
       );
@@ -95,13 +112,27 @@ export function createMemoryRouter(
   });
 
   router.get('/messages', (req, res) => {
-    const watch = req.query['watch'] === 'true';
-    const conversationId = req.query.conversation_id as string;
+    const parse = getMessagesQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const {
+      watch,
+      conversation_id: conversationId,
+      query_id: queryId,
+      cursor,
+    }: GetMessagesQuery = parse.data;
 
     if (watch) {
-      const cursor = req.query['cursor']
-        ? parseInt(req.query['cursor'] as string, 10)
-        : undefined;
       req.log.info({cursor}, 'starting SSE stream for all messages');
 
       let replayItems:
@@ -113,7 +144,7 @@ export function createMemoryRouter(
             sequence: number;
           }>
         | undefined;
-      if (cursor !== undefined && !isNaN(cursor)) {
+      if (cursor !== undefined) {
         let items = memory.all().filter((item) => item.sequenceNumber > cursor);
         if (conversationId) {
           items = items.filter(
@@ -146,13 +177,13 @@ export function createMemoryRouter(
             });
           }),
         filter: conversationId
-          ? (msg) => msg.conversation_id === conversationId
+          ? (msg: {conversation_id: string}): boolean =>
+              msg.conversation_id === conversationId
           : undefined,
         replayItems,
       });
     } else {
       try {
-        const queryId = req.query.query_id as string;
         const params = parsePaginationParams(
           req.query as Record<string, unknown>
         );

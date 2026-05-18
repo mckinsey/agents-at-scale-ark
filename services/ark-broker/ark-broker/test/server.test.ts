@@ -101,7 +101,8 @@ describe('ARK Broker API', () => {
         });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('conversation_id is required');
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.message).toContain('conversation_id');
     });
 
     test('should return error for missing query_id', async () => {
@@ -110,7 +111,8 @@ describe('ARK Broker API', () => {
         .send({conversation_id: 'test-conv'});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('query_id is required');
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.message).toContain('query_id');
     });
   });
 
@@ -231,7 +233,33 @@ describe('ARK Broker API', () => {
       });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('messages array is required');
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.message).toContain('messages');
+    });
+
+    test('should return error when conversation_id is not a string', async () => {
+      const response = await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 123,
+          query_id: 'query1',
+          messages: [{role: 'user', content: 'test'}],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.message).toContain('conversation_id');
+    });
+
+    test('validation error response includes requestId', async () => {
+      const response = await request(app)
+        .post('/messages')
+        .set('X-Request-ID', 'test-req-id')
+        .send({query_id: 'q1', messages: []});
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.requestId).toBe('test-req-id');
     });
   });
 
@@ -331,7 +359,8 @@ describe('ARK Broker API', () => {
         .send({query_id: 'q1', messages: [{role: 'user', content: 'test'}]});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('conversation_id is required');
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.message).toContain('conversation_id');
     });
   });
 });

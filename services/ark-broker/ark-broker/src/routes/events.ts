@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import {z} from 'zod';
 import {EventBroker, EventData} from '../event-broker.js';
 import {SessionsBroker} from '../sessions-broker.js';
 import {streamSSE} from '../sse.js';
@@ -8,6 +9,27 @@ import {
   PaginatedList,
 } from '../pagination.js';
 
+const getEventsQuerySchema = z.object({
+  watch: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  session_id: z.string().optional(),
+  cursor: z.coerce.number().int().nonnegative().optional(),
+  'from-beginning': z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+});
+type GetEventsQuery = z.infer<typeof getEventsQuerySchema>;
+
+const postEventBodySchema = z
+  .object({
+    data: z.object({queryId: z.string().min(1)}).passthrough(),
+  })
+  .passthrough();
+type PostEventBody = z.infer<typeof postEventBodySchema>;
+
 export function createEventsRouter(
   events: EventBroker,
   sessions: SessionsBroker
@@ -15,17 +37,26 @@ export function createEventsRouter(
   const router = Router();
 
   router.get('/', (req, res) => {
-    const watch = req.query['watch'] === 'true';
-    const sessionId = req.query['session_id'] as string | undefined;
+    const parse = getEventsQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const {watch, session_id: sessionId, cursor}: GetEventsQuery = parse.data;
 
     if (watch) {
-      const cursor = req.query['cursor']
-        ? parseInt(req.query['cursor'] as string, 10)
-        : undefined;
       req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
 
       let replayItems: EventData[] | undefined;
-      if (cursor !== undefined && !isNaN(cursor)) {
+      if (cursor !== undefined) {
         let items = events.all().filter((item) => item.sequenceNumber > cursor);
         if (sessionId) {
           items = items.filter(
@@ -80,11 +111,24 @@ export function createEventsRouter(
 
   router.get('/:query_id', (req, res) => {
     const {query_id} = req.params;
-    const watch = req.query['watch'] === 'true';
-    const fromBeginning = req.query['from-beginning'] === 'true';
-    const cursor = req.query['cursor']
-      ? parseInt(req.query['cursor'] as string, 10)
-      : undefined;
+    const parse = getEventsQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const {
+      watch,
+      cursor,
+      'from-beginning': fromBeginning,
+    }: GetEventsQuery = parse.data;
 
     if (watch) {
       req.log.info({queryId: query_id}, 'starting SSE stream for query');
@@ -92,7 +136,7 @@ export function createEventsRouter(
       let replayItems: EventData[] | undefined;
       if (fromBeginning) {
         replayItems = events.getEventsByQuery(query_id);
-      } else if (cursor !== undefined && !isNaN(cursor)) {
+      } else if (cursor !== undefined) {
         replayItems = events
           .getByQuery(query_id)
           .filter((item) => item.sequenceNumber > cursor)
@@ -141,20 +185,30 @@ export function createEventsRouter(
   });
 
   router.post('/', (req, res) => {
+    const parse = postEventBodySchema.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const event: PostEventBody = parse.data;
+
     try {
-      const event = req.body;
-      if (!event || !event.data || !event.data.queryId) {
-        res
-          .status(400)
-          .json({error: 'Invalid event - data.queryId is required'});
-        return;
-      }
-      events.addEvent(event as EventData);
+      events.addEvent(event as unknown as EventData);
       events.save();
 
       sessions.applyEvent({
         ...event.data,
-        _reason: event.reason,
+        _reason: (event as Record<string, unknown>)['reason'] as
+          | string
+          | undefined,
       });
 
       res.status(201).json({status: 'success'});

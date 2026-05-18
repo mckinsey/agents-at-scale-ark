@@ -1,17 +1,39 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
+import {z} from 'zod';
 import {SessionsBroker} from '../sessions-broker.js';
 import {streamSSE} from '../sse.js';
 import type {SessionEventData} from '../types.js';
 import {parsePaginationParams, PaginationError} from '../pagination.js';
 
+const getSessionsQuerySchema = z.object({
+  watch: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  session_id: z.string().optional(),
+  status: z.enum(['active', 'idle', 'error']).optional(),
+  sort: z.enum(['date', 'name', 'conversations']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  search: z.string().optional(),
+});
+type GetSessionsQuery = z.infer<typeof getSessionsQuerySchema>;
+
+const postSessionEventBodySchema = z
+  .object({
+    sessionId: z.string().min(1),
+  })
+  .passthrough();
+type PostSessionEventBody = z.infer<typeof postSessionEventBodySchema>;
+
 function handleStreamingSessions(
   req: Request,
   res: Response,
-  sessionsBroker: SessionsBroker
-) {
-  const filterSessionId = req.query['session_id'] as string | undefined;
-
+  sessionsBroker: SessionsBroker,
+  filterSessionId: string | undefined
+): void {
   const store = sessionsBroker.getAll();
   let initialSessions = store.sessions;
   if (filterSessionId) {
@@ -43,21 +65,22 @@ function handleStreamingSessions(
 function handlePaginatedSessions(
   req: Request,
   res: Response,
-  sessionsBroker: SessionsBroker
-) {
+  sessionsBroker: SessionsBroker,
+  query: GetSessionsQuery
+): void {
   const params = parsePaginationParams(req.query as Record<string, unknown>);
 
   const filters = {
-    status: req.query['status'] as 'active' | 'idle' | 'error' | undefined,
-    dateFrom: req.query['dateFrom'] as string | undefined,
-    dateTo: req.query['dateTo'] as string | undefined,
-    search: req.query['search'] as string | undefined,
+    status: query.status,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+    search: query.search,
   };
 
-  const sort = req.query['sort']
+  const sort = query.sort
     ? {
-        field: req.query['sort'] as 'date' | 'name' | 'conversations',
-        direction: (req.query['order'] || 'desc') as 'asc' | 'desc',
+        field: query.sort,
+        direction: query.order ?? ('desc' as const),
       }
     : undefined;
 
@@ -69,10 +92,23 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
   const router = Router();
 
   router.get('/', (req, res) => {
-    const watch = req.query['watch'] === 'true';
+    const parse = getSessionsQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const query: GetSessionsQuery = parse.data;
 
-    if (watch) {
-      handleStreamingSessions(req, res, sessionsBroker);
+    if (query.watch) {
+      handleStreamingSessions(req, res, sessionsBroker, query.session_id);
       return;
     }
 
@@ -80,7 +116,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       const hasPaginationParams = req.query['limit'] || req.query['cursor'];
 
       if (hasPaginationParams) {
-        handlePaginatedSessions(req, res, sessionsBroker);
+        handlePaginatedSessions(req, res, sessionsBroker, query);
       } else {
         const store = sessionsBroker.getAll();
         res.json(store);
@@ -114,13 +150,23 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
 
   /** Receives event data to apply to the sessions store */
   router.post('/', (req, res) => {
+    const parse = postSessionEventBodySchema.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const data: PostSessionEventBody = parse.data;
+
     try {
-      const data = req.body as SessionEventData;
-      if (!data.sessionId) {
-        res.status(400).json({error: 'sessionId is required'});
-        return;
-      }
-      sessionsBroker.applyEvent(data);
+      sessionsBroker.applyEvent(data as unknown as SessionEventData);
       sessionsBroker.save();
       res.status(201).json({status: 'success'});
     } catch (error) {

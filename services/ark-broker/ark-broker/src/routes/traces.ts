@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import {z} from 'zod';
 import {TraceBroker, OTELSpan} from '../trace-broker.js';
 import {streamSSE} from '../sse.js';
 import {
@@ -6,6 +7,20 @@ import {
   PaginationError,
   PaginatedList,
 } from '../pagination.js';
+
+const getTracesQuerySchema = z.object({
+  watch: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  session_id: z.string().optional(),
+  cursor: z.coerce.number().int().nonnegative().optional(),
+  'from-beginning': z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+});
+type GetTracesQuery = z.infer<typeof getTracesQuerySchema>;
 
 /**
  * Check if a span matches a session ID.
@@ -37,17 +52,26 @@ export function createTracesRouter(traces: TraceBroker): Router {
   const router = Router();
 
   router.get('/', (req, res) => {
-    const watch = req.query['watch'] === 'true';
-    const sessionId = req.query['session_id'] as string | undefined;
+    const parse = getTracesQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const {watch, session_id: sessionId, cursor}: GetTracesQuery = parse.data;
 
     if (watch) {
-      const cursor = req.query['cursor']
-        ? parseInt(req.query['cursor'] as string, 10)
-        : undefined;
       req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
 
       let replayItems: OTELSpan[] | undefined;
-      if (cursor !== undefined && !isNaN(cursor)) {
+      if (cursor !== undefined) {
         let items = traces.all().filter((item) => item.sequenceNumber > cursor);
         if (sessionId) {
           items = items.filter((item) =>
@@ -100,11 +124,24 @@ export function createTracesRouter(traces: TraceBroker): Router {
 
   router.get('/:trace_id', (req, res) => {
     const {trace_id} = req.params;
-    const watch = req.query['watch'] === 'true';
-    const fromBeginning = req.query['from-beginning'] === 'true';
-    const cursor = req.query['cursor']
-      ? parseInt(req.query['cursor'] as string, 10)
-      : undefined;
+    const parse = getTracesQuerySchema.safeParse(req.query);
+    if (!parse.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parse.error.issues
+            .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
+            .join('; '),
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    const {
+      watch,
+      cursor,
+      'from-beginning': fromBeginning,
+    }: GetTracesQuery = parse.data;
 
     if (watch) {
       req.log.info({traceId: trace_id}, 'starting SSE stream for trace');
@@ -112,7 +149,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       let replayItems: OTELSpan[] | undefined;
       if (fromBeginning) {
         replayItems = traces.getSpansByTraceId(trace_id);
-      } else if (cursor !== undefined && !isNaN(cursor)) {
+      } else if (cursor !== undefined) {
         replayItems = traces
           .getByTraceId(trace_id)
           .filter((item) => item.sequenceNumber > cursor)
