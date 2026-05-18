@@ -141,18 +141,9 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     sudo k3s ctr images pull "$img" &
     IMAGE_PULL_PIDS+=($!)
   done
-fi
-
-if [ -n "${ARK_IMAGE_TAG}" ]; then
-  echo "=== Pre-pulling ARK images (background) ==="
-  for svc in ark-controller ark-completions ark-mcp; do
-    sudo k3s ctr images pull --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" "${REGISTRY}/${svc}:${ARK_IMAGE_TAG}" &
-    IMAGE_PULL_PIDS+=($!)
-  done
-fi
-
-if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
-  echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+  if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
+    echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+  fi
 fi
 
 BROKER_PID=""
