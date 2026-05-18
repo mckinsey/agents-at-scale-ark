@@ -69,7 +69,12 @@ export function createOTLPRouter(traces: TraceBroker): Router {
     console.error('[OTLP] Failed to initialize proto definitions:', err);
   });
 
-  router.use(express.raw({type: 'application/x-protobuf', limit: '10mb'}));
+  router.use(
+    express.raw({
+      type: 'application/x-protobuf',
+      limit: '10mb',
+    }) as express.RequestHandler
+  );
 
   router.post('/traces', (req, res) => {
     try {

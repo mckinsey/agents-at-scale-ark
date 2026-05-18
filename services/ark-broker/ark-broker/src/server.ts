@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import type {AppConfig} from './config/index.js';
 import type {Logger} from './logging/logger.js';
+import {createHttpLogger} from './middleware/http-logger.js';
+import {requestId} from './middleware/request-id.js';
 import {MemoryBroker} from './memory-broker.js';
 import {CompletionChunkBroker} from './completion-chunk-broker.js';
 import {TraceBroker} from './trace-broker.js';
@@ -52,12 +54,9 @@ export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
   logger.info('brokers initialized');
 
   app.use(cors());
-  app.use(express.json({limit: '10mb'}));
-
-  app.use((req, _res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-    next();
-  });
+  app.use(express.json({limit: '10mb'}) as express.RequestHandler);
+  app.use(requestId);
+  app.use(createHttpLogger(logger));
 
   app.get('/health', (_req, res) => {
     res.status(200).send('OK');

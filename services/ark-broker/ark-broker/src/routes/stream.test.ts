@@ -15,7 +15,7 @@ describe('Streaming API', () => {
   beforeEach(() => {
     chunks = new CompletionChunkBroker();
     app = express();
-    app.use(express.json());
+    app.use(express.json() as express.RequestHandler);
     app.use('/stream', createStreamRouter(chunks));
   });
 
