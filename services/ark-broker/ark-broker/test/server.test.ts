@@ -320,7 +320,8 @@ describe('ARK Broker API', () => {
       const response = await request(app).get('/unknown');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not found');
+      expect(response.body.error.code).toBe('NOT_FOUND');
+      expect(response.body.error.message).toBe('Not found');
     });
 
     test('should handle missing conversation_id', async () => {

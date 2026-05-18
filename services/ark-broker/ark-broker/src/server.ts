@@ -2,6 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import type {AppConfig} from './config/index.js';
 import type {Logger} from './logging/logger.js';
+import {
+  createErrorHandler,
+  notFoundHandler,
+} from './middleware/error-handler.js';
 import {createHttpLogger} from './middleware/http-logger.js';
 import {requestId} from './middleware/request-id.js';
 import {MemoryBroker} from './memory-broker.js';
@@ -76,21 +80,8 @@ export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
   app.use('/sessions', createSessionsRouter(sessions));
   app.use('/v1', createOTLPRouter(traces, logger.child({route: 'otlp'})));
 
-  app.use(
-    (
-      err: Error,
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction
-    ) => {
-      console.error('Unhandled error:', err);
-      res.status(500).json({error: 'Internal server error'});
-    }
-  );
-
-  app.use((_req, res) => {
-    res.status(404).json({error: 'Not found'});
-  });
+  app.use(createErrorHandler({includeStack: config.nodeEnv === 'development'}));
+  app.use(notFoundHandler);
 
   return {app, brokers: {memory, chunks, traces, events, sessions}};
 }
