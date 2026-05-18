@@ -2,7 +2,7 @@ import {Command} from 'commander';
 import chalk from 'chalk';
 import {execute} from '../../lib/commands.js';
 import inquirer from 'inquirer';
-import type {ArkConfig} from '../../lib/config.js';
+import type {ArkConfig, PostgresStorageConfig} from '../../lib/config.js';
 import {showNoClusterError} from '../../lib/startup.js';
 import output from '../../lib/output.js';
 import {
@@ -25,6 +25,61 @@ import {
   type WaitProgress,
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
+import {runReadinessChecks} from '../../lib/readinessChecks.js';
+
+type Backend = 'etcd' | 'postgresql';
+
+function validatePostgresConfig(
+  pg: PostgresStorageConfig | undefined
+): PostgresStorageConfig {
+  if (!pg) {
+    throw new Error(
+      "missing 'storage.postgresql' block in .arkrc.yaml"
+    );
+  }
+  for (const key of ['host', 'user', 'passwordSecretName'] as const) {
+    if (!pg[key]) {
+      throw new Error(
+        `missing required field storage.postgresql.${key} in .arkrc.yaml`
+      );
+    }
+  }
+  return pg;
+}
+
+function backendInstallArgs(
+  service: ArkService,
+  backend: Backend,
+  values?: PostgresStorageConfig
+): string[] {
+  if (backend === 'etcd') return [];
+  if (!values) return [];
+  if (service.helmReleaseName === 'ark-controller') {
+    return ['--set', 'storage.backend=postgresql'];
+  }
+  if (service.helmReleaseName === 'ark-apiserver') {
+    const args: string[] = [];
+    args.push('--set', `postgresql.host=${values.host}`);
+    if (values.port !== undefined)
+      args.push('--set', `postgresql.port=${values.port}`);
+    if (values.database)
+      args.push('--set', `postgresql.database=${values.database}`);
+    args.push('--set', `postgresql.user=${values.user}`);
+    args.push(
+      '--set',
+      `postgresql.passwordSecretName=${values.passwordSecretName}`
+    );
+    if (values.passwordSecretKey)
+      args.push(
+        '--set',
+        `postgresql.passwordSecretKey=${values.passwordSecretKey}`
+      );
+    if (values.sslMode)
+      args.push('--set', `postgresql.sslMode=${values.sslMode}`);
+    return args;
+  }
+  return [];
+}
 
 function isValidVersion(version: string): boolean {
   return /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(version);
@@ -127,7 +182,8 @@ async function installService(
   service: ArkService,
   verbose: boolean = false,
   arkVersionOverride?: string,
-  marketplaceVersionOverride?: string
+  marketplaceVersionOverride?: string,
+  extraArgs?: string[]
 ) {
   await uninstallPrerequisites(service, verbose);
   await checkAndCleanFailedRelease(
@@ -178,6 +234,8 @@ async function installService(
   // Add any additional install args
   helmArgs.push(...(service.installArgs || []));
 
+  if (extraArgs) helmArgs.push(...extraArgs);
+
   await execute(
     'helm',
     helmArgs,
@@ -198,6 +256,7 @@ export async function installArk(
     verbose?: boolean;
     arkVersion?: string;
     marketplaceVersion?: string;
+    backend?: string;
   } = {}
 ) {
   // Validate version strings
@@ -228,6 +287,27 @@ export async function installArk(
   // Show cluster info
   output.success(`connected to cluster: ${chalk.bold(clusterInfo.context)}`);
   console.log(); // Add blank line after cluster info
+
+  const requestedBackend = options.backend ?? config.storage?.backend ?? 'etcd';
+  if (requestedBackend !== 'etcd' && requestedBackend !== 'postgresql') {
+    output.error(
+      `Invalid backend value: ${requestedBackend}. Expected 'etcd' or 'postgresql'.`
+    );
+    process.exit(1);
+  }
+  const backend: Backend = requestedBackend;
+
+  let postgresValues: PostgresStorageConfig | undefined;
+  if (backend === 'postgresql') {
+    try {
+      postgresValues = validatePostgresConfig(config.storage?.postgresql);
+    } catch (err) {
+      output.error(
+        `${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  }
 
   // If specific services are requested, install only those services
   if (serviceNames.length > 0) {
@@ -269,7 +349,8 @@ export async function installArk(
             service,
             options.verbose,
             options.arkVersion,
-            options.marketplaceVersion
+            options.marketplaceVersion,
+            []
           );
           output.success(`${service.name} installed successfully`);
         } catch (error) {
@@ -281,7 +362,7 @@ export async function installArk(
       }
 
       // Core ARK service
-      const services = getInstallableServices();
+      const services = getInstallableServices(backend);
       const service = Object.values(services).find((s) => s.name === serviceName);
 
       if (!service) {
@@ -299,9 +380,28 @@ export async function installArk(
           service,
           options.verbose,
           options.arkVersion,
-          options.marketplaceVersion
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, postgresValues)
         );
         output.success(`${service.name} installed successfully`);
+
+        // Wait for ark-apiserver to be ready before continuing to other services
+        if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
+          const spinner = ora('Waiting for ark-apiserver to be ready...').start();
+          try {
+            const results = await runReadinessChecks(120); // 2 minute timeout
+            const failed = results.find((r) => !r.passed);
+            if (failed) {
+              spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
+              output.error('ark-apiserver is not ready. Stopping installation.');
+              process.exit(1);
+            }
+            spinner.succeed('ark-apiserver is ready');
+          } catch (error) {
+            spinner.fail('Failed to check ark-apiserver readiness');
+            throw error;
+          }
+        }
       } catch (error) {
         if (handleInstallError(error, service, options)) {
           continue;
@@ -313,12 +413,20 @@ export async function installArk(
 
   // If not using -y flag, show checklist interface
   if (!options.yes) {
+    const backendMatch = (s: ArkService) =>
+      !s.requiresBackend || s.requiresBackend === backend;
+
     const coreServices = Object.values(arkServices)
-      .filter((s) => s.category === 'core')
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .filter((s) => s.category === 'core' && backendMatch(s))
+      .sort((a, b) => {
+        // Ensure ark-controller is always first
+        if (a.name === 'ark-controller') return -1;
+        if (b.name === 'ark-controller') return 1;
+        return a.name.localeCompare(b.name);
+      });
 
     const otherServices = Object.values(arkServices)
-      .filter((s) => s.category === 'service')
+      .filter((s) => s.category === 'service' && backendMatch(s))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const mandatoryServiceNames = [...coreServices, ...otherServices]
@@ -476,8 +584,27 @@ export async function installArk(
           service,
           options.verbose,
           options.arkVersion,
-          options.marketplaceVersion
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, postgresValues)
         );
+
+        // Wait for ark-apiserver to be ready before continuing to other services
+        if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
+          const spinner = ora('Waiting for ark-apiserver to be ready...').start();
+          try {
+            const results = await runReadinessChecks(120); // 2 minute timeout
+            const failed = results.find((r) => !r.passed);
+            if (failed) {
+              spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
+              output.error('ark-apiserver is not ready. Stopping installation.');
+              process.exit(1);
+            }
+            spinner.succeed('ark-apiserver is ready');
+          } catch (error) {
+            spinner.fail('Failed to check ark-apiserver readiness');
+            throw error;
+          }
+        }
 
         console.log(); // Add blank line after command output
       } catch (error) {
@@ -512,8 +639,14 @@ export async function installArk(
     }
 
     // Install all services
-    const services = getInstallableServices();
-    for (const service of Object.values(services)) {
+    const services = getInstallableServices(backend);
+    const sortedServices = Object.values(services).sort((a, b) => {
+      // Ensure ark-controller is always first
+      if (a.name === 'ark-controller') return -1;
+      if (b.name === 'ark-controller') return 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const service of sortedServices) {
       output.info(`installing ${service.name}...`);
 
       try {
@@ -521,7 +654,8 @@ export async function installArk(
           service,
           options.verbose,
           options.arkVersion,
-          options.marketplaceVersion
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, postgresValues)
         );
         console.log(); // Add blank line after command output
       } catch (error) {
@@ -549,7 +683,8 @@ export async function installArk(
           s.enabled &&
           s.category === 'core' &&
           s.k8sDeploymentName &&
-          s.namespace
+          s.namespace &&
+          (!s.requiresBackend || s.requiresBackend === backend)
       );
 
       const spinner = ora(
@@ -614,6 +749,10 @@ export function createInstallCommand(config: ArkConfig) {
     .option(
       '--wait-for-ready <timeout>',
       'wait for Ark to be ready after installation (e.g., 30s, 2m)'
+    )
+    .option(
+      '--backend <type>',
+      "storage backend: 'etcd' (default) or 'postgresql' (overrides storage.backend in .arkrc.yaml)"
     )
     .option('-v, --verbose', 'show commands being executed')
     .action(async (services, options) => {

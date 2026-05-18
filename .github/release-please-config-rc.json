@@ -99,6 +99,16 @@
         },
         {
           "type": "yaml",
+          "path": "ark/dist/chart-apiserver/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "ark/dist/chart-apiserver/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
           "path": "samples/agent-hosting/hosted-langchain-agents/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
         },

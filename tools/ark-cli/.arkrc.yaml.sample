@@ -18,6 +18,23 @@ chat:
   # Environment variable: ARK_CHAT_OUTPUT_FORMAT
   outputFormat: text
 
+# Storage backend for ark install
+# 'etcd' (default) stores resources as CRDs in etcd.
+# 'postgresql' uses the aggregated ark-apiserver, backed by PostgreSQL.
+# Can be overridden with the --backend CLI flag or ARK_STORAGE_BACKEND env var.
+storage:
+  backend: etcd
+  # Connection details required when backend is 'postgresql'.
+  # The password lives in a Kubernetes Secret; only the secret name is referenced here.
+  # postgresql:
+  #   host: db.example.com
+  #   port: 5432
+  #   database: ark
+  #   user: ark
+  #   passwordSecretName: ark-db-password
+  #   passwordSecretKey: password
+  #   sslMode: require
+
 # Service overrides for ark install
 services:
   # Enable localhost-gateway for local development

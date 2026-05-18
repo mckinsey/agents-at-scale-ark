@@ -14,14 +14,17 @@ export const QueryPhases = {
 
 export const EventReasons = {
   QueryExecutionComplete: 'QueryExecutionComplete',
+  QueryExecutionCanceled: 'QueryExecutionCanceled',
   AgentExecutionStart: 'AgentExecutionStart',
 } as const;
 
 export const ERROR_REASON_SUFFIX = 'Error';
+export const CANCELED_REASON_SUFFIX = 'Canceled';
 
 export type QueryEventReason =
   | 'QueryExecutionStart'
   | 'QueryExecutionComplete'
+  | 'QueryExecutionCanceled'
   | 'AgentExecutionStart'
   | 'AgentExecutionComplete'
   | 'LLMCallStart'
