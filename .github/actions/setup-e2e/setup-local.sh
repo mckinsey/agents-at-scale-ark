@@ -129,6 +129,19 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
 fi
 
 IMAGE_PULL_PIDS=()
+echo "=== Pre-pulling ARK images (background) ==="
+for img in \
+  "${REGISTRY}/ark-controller:${ARK_IMAGE_TAG}" \
+  "${REGISTRY}/ark-completions:${ARK_IMAGE_TAG}" \
+  "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}"; do
+  sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+  IMAGE_PULL_PIDS+=($!)
+done
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+  IMAGE_PULL_PIDS+=($!)
+fi
+
 if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling test images (background) ==="
   for img in \
@@ -141,9 +154,9 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     sudo k3s crictl pull "$img" > /dev/null 2>&1 &
     IMAGE_PULL_PIDS+=($!)
   done
-  if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
-    echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
-  fi
+fi
+if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
+  echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
 fi
 
 BROKER_PID=""
