@@ -6,7 +6,8 @@ images:
     image: ark-dashboard
     dockerfile: Dockerfile
     context: .
-    buildKit: {}
+    docker:
+      useBuildKit: true
 
 pipelines:
   deploy: |-
@@ -14,6 +15,11 @@ pipelines:
     create_deployments --all
   dev: |-
     create_deployments --all
+
+    # Patch deployment to add PVC for node modules
+    kubectl patch deployment ark-dashboard -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
+      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-dashboard-node-modules"}}],"containers":[{"name":"ark-dashboard","volumeMounts":[{"name":"node-modules","mountPath":"/app/ark-dashboard/node_modules"}]}]}}}}' || true
+
     start_dev --all
 
 deployments:
@@ -30,7 +36,7 @@ deployments:
           # Override resources for local development
           resources:
             limits:
-              memory: "3072Mi"
+              memory: "6144Mi"
               cpu: "2000m"
             requests:
               memory: "256Mi"
@@ -53,6 +59,9 @@ deployments:
                 - DAC_OVERRIDE
         httpRoute:
           enabled: true
+        extraPVCs:
+          - name: ark-dashboard-node-modules
+            size: 2Gi
 
 dev:
   ark-dashboard:
@@ -65,7 +74,7 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app/ark-dashboard && npm install && npm run dev",
+        "cd /app/ark-dashboard && npm install && npm run dev 2>&1",
       ]
     namespace: default
     # Stream logs instead of terminal
@@ -77,6 +86,8 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
+        excludePaths:
+          - ark-dashboard/node_modules/
     # Enable SSH for IDE integration
     ssh:
       enabled: true
