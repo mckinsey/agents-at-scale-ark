@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "dev": "NODE_ENV=development tsx watch --clear-screen=false src/main.ts",
     "start": "node dist/main.js",
     "test": "jest",
     "test:watch": "jest --watch",
