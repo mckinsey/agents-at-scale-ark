@@ -1,5 +1,6 @@
 import {createRequire} from 'module';
 import {loadConfig, type AppConfig} from './config/index.js';
+import {createLogger} from './logging/logger.js';
 import {buildApp} from './server.js';
 import {setupSwagger} from './swagger.js';
 
@@ -16,38 +17,44 @@ function loadConfigOrExit(): AppConfig {
 }
 
 const config = loadConfigOrExit();
-const {app, brokers} = buildApp({config});
+const logger = createLogger({
+  level: config.logLevel,
+  pretty: config.nodeEnv === 'development',
+});
+
+const {app, brokers} = buildApp({config, logger});
 const {memory, chunks, traces, events, sessions} = brokers;
 
 setupSwagger(app, version);
 
 const server = app.listen(config.server.port, config.server.host, () => {
-  console.log(
-    `ARK Broker service running on http://${config.server.host}:${config.server.port}`
+  logger.info(
+    {host: config.server.host, port: config.server.port},
+    'ark-broker listening'
   );
 });
 
 server.requestTimeout = config.server.requestTimeoutMs;
 
 const gracefulShutdown = (): void => {
-  console.log('Shutting down gracefully');
+  logger.info('shutting down gracefully');
   memory.save();
   chunks.save();
   traces.save();
   events.save();
   sessions.save();
   server.close(() => {
-    console.log('Process terminated');
+    logger.info('process terminated');
     process.exit(0);
   });
 };
 
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received');
+  logger.info('SIGTERM received');
   gracefulShutdown();
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received');
+  logger.info('SIGINT received');
   gracefulShutdown();
 });

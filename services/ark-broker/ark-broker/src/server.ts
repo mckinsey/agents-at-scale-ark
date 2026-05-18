@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import type {AppConfig} from './config/index.js';
+import type {Logger} from './logging/logger.js';
 import {MemoryBroker} from './memory-broker.js';
 import {CompletionChunkBroker} from './completion-chunk-broker.js';
 import {TraceBroker} from './trace-broker.js';
@@ -26,8 +27,8 @@ export type AppBundle = {
   brokers: Brokers;
 };
 
-export function buildApp(deps: {config: AppConfig}): AppBundle {
-  const {config} = deps;
+export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
+  const {config, logger} = deps;
   const app = express();
 
   const memory = new MemoryBroker(
@@ -47,6 +48,8 @@ export function buildApp(deps: {config: AppConfig}): AppBundle {
     config.limits.maxEvents
   );
   const sessions = new SessionsBroker(config.persistence.sessionsFilePath);
+
+  logger.info('brokers initialized');
 
   app.use(cors());
   app.use(express.json({limit: '10mb'}));
