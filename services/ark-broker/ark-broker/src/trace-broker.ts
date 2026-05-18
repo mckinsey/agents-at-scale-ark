@@ -1,5 +1,6 @@
 import {BrokerItem} from './broker-item.js';
 import {BrokerItemStream} from './broker-item-stream.js';
+import type {Logger} from './logging/logger.js';
 import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
 import {spanMatchesSessionId} from './routes/traces.js';
 
@@ -28,8 +29,13 @@ export interface OTELSpan {
 export class TraceBroker {
   private stream: BrokerItemStream<OTELSpan>;
 
-  constructor(path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<OTELSpan>('Trace', path, maxItems);
+  constructor(logger: Logger, path?: string, maxItems?: number) {
+    this.stream = new BrokerItemStream<OTELSpan>(
+      logger,
+      'Trace',
+      path,
+      maxItems
+    );
   }
 
   addSpan(span: OTELSpan): BrokerItem<OTELSpan> {

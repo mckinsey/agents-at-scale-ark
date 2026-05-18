@@ -1,5 +1,6 @@
 import {BrokerItem} from './broker-item.js';
 import {BrokerItemStream} from './broker-item-stream.js';
+import type {Logger} from './logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 /** Event data from Ark controller operations */
@@ -28,8 +29,13 @@ export interface EventData {
 export class EventBroker {
   private stream: BrokerItemStream<EventData>;
 
-  constructor(path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<EventData>('Event', path, maxItems);
+  constructor(logger: Logger, path?: string, maxItems?: number) {
+    this.stream = new BrokerItemStream<EventData>(
+      logger,
+      'Event',
+      path,
+      maxItems
+    );
   }
 
   addEvent(event: EventData): BrokerItem<EventData> {

@@ -1,6 +1,7 @@
 import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {EventEmitter} from 'node:events';
+import type {Logger} from './logging/logger.js';
 import type {QueryPhase, SessionEventData} from './types.js';
 import {
   QueryPhases,
@@ -95,9 +96,12 @@ export class SessionsBroker {
   private dirty = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly path?: string) {
+  constructor(
+    private readonly logger: Logger,
+    private readonly path?: string
+  ) {
     if (path) {
-      console.log(`[Sessions] persistence enabled at ${path}`);
+      this.logger.info({path}, 'persistence enabled');
       this.loadFromDisk();
     }
   }
@@ -113,15 +117,16 @@ export class SessionsBroker {
 
           const sessionCount = Object.keys(this.store.sessions).length;
           const queryCount = this.queryToSession.size;
-          console.log(
-            `[Sessions] loaded ${sessionCount} sessions, ${queryCount} queries`
+          this.logger.info(
+            {sessions: sessionCount, queries: queryCount},
+            'loaded'
           );
         }
       } else {
-        console.log(`[Sessions] no existing data`);
+        this.logger.info('no existing data');
       }
-    } catch (e) {
-      console.error(`[Sessions] failed to load:`, e);
+    } catch (err) {
+      this.logger.error({err}, 'failed to load');
     }
   }
 
@@ -580,8 +585,8 @@ export class SessionsBroker {
       const dir = dirname(this.path);
       if (!existsSync(dir)) mkdirSync(dir, {recursive: true});
       writeFileSync(this.path, JSON.stringify(this.store, null, 2));
-    } catch (e) {
-      console.error(`[Sessions] failed to save:`, e);
+    } catch (err) {
+      this.logger.error({err}, 'failed to save');
     }
   }
 

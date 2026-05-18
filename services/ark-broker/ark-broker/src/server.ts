@@ -34,22 +34,29 @@ export function buildApp(deps: {config: AppConfig; logger: Logger}): AppBundle {
   const app = express();
 
   const memory = new MemoryBroker(
+    logger.child({broker: 'memory'}),
     config.persistence.memoryFilePath,
     config.limits.maxMessages
   );
   const chunks = new CompletionChunkBroker(
+    logger.child({broker: 'chunks'}),
     config.persistence.streamFilePath,
     config.limits.maxChunks
   );
   const traces = new TraceBroker(
+    logger.child({broker: 'traces'}),
     config.persistence.traceFilePath,
     config.limits.maxSpans
   );
   const events = new EventBroker(
+    logger.child({broker: 'events'}),
     config.persistence.eventFilePath,
     config.limits.maxEvents
   );
-  const sessions = new SessionsBroker(config.persistence.sessionsFilePath);
+  const sessions = new SessionsBroker(
+    logger.child({broker: 'sessions'}),
+    config.persistence.sessionsFilePath
+  );
 
   logger.info('brokers initialized');
 

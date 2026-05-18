@@ -1,3 +1,4 @@
+import {createLogger} from '../src/logging/logger.js';
 import {SessionsBroker} from '../src/sessions-broker.js';
 
 describe('SessionsBroker', () => {
@@ -5,7 +6,7 @@ describe('SessionsBroker', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    broker = new SessionsBroker();
+    broker = new SessionsBroker(createLogger({level: 'silent', pretty: false}));
   });
 
   afterEach(() => {

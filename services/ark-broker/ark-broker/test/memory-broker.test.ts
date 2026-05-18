@@ -1,10 +1,11 @@
+import {createLogger} from '../src/logging/logger.js';
 import {MemoryBroker} from '../src/memory-broker.js';
 
 describe('MemoryBroker', () => {
   let broker: MemoryBroker;
 
   beforeEach(() => {
-    broker = new MemoryBroker();
+    broker = new MemoryBroker(createLogger({level: 'silent', pretty: false}));
   });
 
   describe('addMessage', () => {

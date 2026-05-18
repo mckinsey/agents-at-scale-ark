@@ -1,6 +1,7 @@
 import http from 'http';
 import express from 'express';
 import {CompletionChunkBroker} from '../src/completion-chunk-broker';
+import {createLogger} from '../src/logging/logger';
 import {createStreamRouter} from '../src/routes/stream';
 import {createTextChunk, createFinishChunk} from '../src/testing/chunk-helpers';
 
@@ -10,7 +11,9 @@ function createBrokerServer(
   server: http.Server;
   chunks: CompletionChunkBroker;
 } {
-  const chunks = new CompletionChunkBroker();
+  const chunks = new CompletionChunkBroker(
+    createLogger({level: 'silent', pretty: false})
+  );
   const app = express();
   app.use(express.json());
   app.use('/stream', createStreamRouter(chunks));

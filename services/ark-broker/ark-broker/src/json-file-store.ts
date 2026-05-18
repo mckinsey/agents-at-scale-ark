@@ -1,14 +1,16 @@
 import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'fs';
 import {dirname} from 'path';
+import type {Logger} from './logging/logger.js';
 
 export class JsonFileStore<T> {
   constructor(
+    private readonly logger: Logger,
     private name: string,
     private path?: string,
     private maxItems?: number
   ) {
     if (path) {
-      console.log(`[${name}] persistence enabled at ${path}`);
+      this.logger.info({path}, 'persistence enabled');
     }
   }
 
@@ -18,16 +20,16 @@ export class JsonFileStore<T> {
       if (existsSync(this.path)) {
         const data = JSON.parse(readFileSync(this.path, 'utf-8'));
         if (!Array.isArray(data.items)) {
-          console.error(`[${this.name}] invalid data format`);
+          this.logger.error('invalid data format');
           return null;
         }
-        console.log(`[${this.name}] loaded ${data.items.length} records`);
+        this.logger.info({count: data.items.length}, 'loaded records');
         return data;
       } else {
-        console.log(`[${this.name}] no existing data`);
+        this.logger.info('no existing data');
       }
-    } catch (e) {
-      console.error(`[${this.name}] failed to load:`, e);
+    } catch (err) {
+      this.logger.error({err}, 'failed to load');
     }
     return null;
   }
@@ -42,18 +44,16 @@ export class JsonFileStore<T> {
         this.path,
         JSON.stringify({items: limited, nextSequence}, null, 2)
       );
-      console.log(`[${this.name}] saved ${limited.length} records`);
-    } catch (e) {
-      console.error(`[${this.name}] failed to save:`, e);
+      this.logger.info({count: limited.length}, 'saved records');
+    } catch (err) {
+      this.logger.error({err}, 'failed to save');
     }
   }
 
   private applyLimit(items: T[]): T[] {
     if (!this.maxItems || items.length <= this.maxItems) return items;
     const removed = items.length - this.maxItems;
-    console.log(
-      `[${this.name}] trimmed ${removed} items (limit: ${this.maxItems})`
-    );
+    this.logger.info({removed, limit: this.maxItems}, 'trimmed items');
     return items.slice(-this.maxItems);
   }
 

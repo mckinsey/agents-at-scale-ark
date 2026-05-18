@@ -1,5 +1,6 @@
 import {BrokerItem} from './broker-item.js';
 import {BrokerItemStream} from './broker-item-stream.js';
+import type {Logger} from './logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 /** OpenAI-format message (role, content, etc.) */
@@ -19,8 +20,13 @@ export interface MessageData {
 export class MemoryBroker {
   private stream: BrokerItemStream<MessageData>;
 
-  constructor(path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<MessageData>('Memory', path, maxItems);
+  constructor(logger: Logger, path?: string, maxItems?: number) {
+    this.stream = new BrokerItemStream<MessageData>(
+      logger,
+      'Memory',
+      path,
+      maxItems
+    );
   }
 
   addMessage(

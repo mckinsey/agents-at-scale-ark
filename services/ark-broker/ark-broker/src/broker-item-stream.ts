@@ -1,6 +1,7 @@
 import {EventEmitter} from 'events';
 import {BrokerItem} from './broker-item.js';
 import {JsonFileStore} from './json-file-store.js';
+import type {Logger} from './logging/logger.js';
 import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
 
 /**
@@ -16,17 +17,27 @@ export class BrokerItemStream<T> {
   private fileStore: JsonFileStore<BrokerItem<T>>;
   public eventEmitter = new EventEmitter();
 
-  constructor(name: string, path?: string, maxItems?: number) {
+  constructor(
+    private readonly logger: Logger,
+    name: string,
+    path?: string,
+    maxItems?: number
+  ) {
     this.maxItems = maxItems;
-    this.fileStore = new JsonFileStore<BrokerItem<T>>(name, path, maxItems);
+    this.fileStore = new JsonFileStore<BrokerItem<T>>(
+      logger,
+      name,
+      path,
+      maxItems
+    );
     const loaded = this.fileStore.load();
     if (loaded) {
       if (
         !Array.isArray(loaded.items) ||
         typeof loaded.nextSequence !== 'number'
       ) {
-        console.warn(
-          `[${name}] data file has invalid structure or data, no data loaded`
+        this.logger.warn(
+          'data file has invalid structure or data, no data loaded'
         );
       } else {
         this.items = loaded.items.map((item) => ({

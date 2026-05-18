@@ -1,6 +1,7 @@
 import {EventEmitter} from 'events';
 import {BrokerItem} from './broker-item.js';
 import {BrokerItemStream} from './broker-item-stream.js';
+import type {Logger} from './logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 /** Data payload for OpenAI chat completion streaming chunks */
@@ -18,8 +19,9 @@ export class CompletionChunkBroker {
   private stream: BrokerItemStream<CompletionChunkData>;
   public eventEmitter = new EventEmitter();
 
-  constructor(path?: string, maxItems?: number) {
+  constructor(logger: Logger, path?: string, maxItems?: number) {
     this.stream = new BrokerItemStream<CompletionChunkData>(
+      logger,
       'CompletionChunk',
       path,
       maxItems
