@@ -65,6 +65,35 @@ kubectl config current-context
 kubectl get nodes
 echo
 
+IMAGE_PULL_PIDS=()
+echo "=== Pre-pulling ARK images (background) ==="
+for img in \
+  "${REGISTRY}/ark-controller:${ARK_IMAGE_TAG}" \
+  "${REGISTRY}/ark-completions:${ARK_IMAGE_TAG}" \
+  "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}"; do
+  sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+  IMAGE_PULL_PIDS+=($!)
+done
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+  IMAGE_PULL_PIDS+=($!)
+fi
+if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
+  echo "=== Pre-pulling test images (background) ==="
+  for img in \
+    docker.io/curlimages/curl:latest \
+    docker.io/mockserver/mockserver:5.15.0 \
+    ghcr.io/orange-opensource/hurl:6.1.1 \
+    docker.io/python:3.12-bookworm \
+    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    ghcr.io/dwmkerr/mock-llm:latest; do
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  done
+fi
+if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
+  echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+fi
 
 # Install cert-manager if not present
 echo "=== Installing cert-manager ==="
@@ -126,37 +155,6 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
 
   echo "=== Waiting for PostgreSQL Pod Readiness ==="
   kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
-fi
-
-IMAGE_PULL_PIDS=()
-echo "=== Pre-pulling ARK images (background) ==="
-for img in \
-  "${REGISTRY}/ark-controller:${ARK_IMAGE_TAG}" \
-  "${REGISTRY}/ark-completions:${ARK_IMAGE_TAG}" \
-  "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}"; do
-  sudo k3s crictl pull "$img" > /dev/null 2>&1 &
-  IMAGE_PULL_PIDS+=($!)
-done
-if [ "${INSTALL_BROKER}" = "true" ]; then
-  sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
-  IMAGE_PULL_PIDS+=($!)
-fi
-
-if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
-  echo "=== Pre-pulling test images (background) ==="
-  for img in \
-    docker.io/curlimages/curl:latest \
-    docker.io/mockserver/mockserver:5.15.0 \
-    ghcr.io/orange-opensource/hurl:6.1.1 \
-    docker.io/python:3.12-bookworm \
-    ghcr.io/dwmkerr/mock-llm:0.1.28 \
-    ghcr.io/dwmkerr/mock-llm:latest; do
-    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
-    IMAGE_PULL_PIDS+=($!)
-  done
-fi
-if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
-  echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
 fi
 
 BROKER_PID=""
