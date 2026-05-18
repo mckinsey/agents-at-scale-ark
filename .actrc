@@ -1,0 +1,3 @@
+-P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:custom-24.04
+-P ubuntu-latest=ghcr.io/catthehacker/ubuntu:custom-24.04
+--secret-file .secrets

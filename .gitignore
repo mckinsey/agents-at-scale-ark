@@ -6,6 +6,7 @@
 scratch.md
 .ark.env
 .env
+.secrets
 tools/fark/bin/fark
 services/a2agw/a2agw
 .artifacts/
