@@ -141,11 +141,32 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     sudo k3s ctr images pull "$img" &
     IMAGE_PULL_PIDS+=($!)
   done
-  if [ -n "${ARK_IMAGE_TAG}" ]; then
-    sudo k3s ctr images pull --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}" &
+fi
+
+if [ -n "${ARK_IMAGE_TAG}" ]; then
+  echo "=== Pre-pulling ARK images (background) ==="
+  for svc in ark-controller ark-completions ark-mcp; do
+    sudo k3s ctr images pull --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" "${REGISTRY}/${svc}:${ARK_IMAGE_TAG}" &
     IMAGE_PULL_PIDS+=($!)
-  fi
+  done
+fi
+
+if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
   echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+fi
+
+BROKER_PID=""
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  echo "=== Installing ARK Broker (background) ==="
+  helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
+    --namespace default \
+    --create-namespace \
+    --set app.image.repository="${REGISTRY}/ark-broker" \
+    --set app.image.tag="${ARK_IMAGE_TAG}" \
+    --set app.image.pullPolicy=IfNotPresent \
+    --set restartController.enabled=false \
+    --wait --timeout=300s &
+  BROKER_PID=$!
 fi
 
 echo "=== Installing ARK Controller ==="
@@ -223,16 +244,9 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   kubectl wait --for=condition=Available apiservice v1prealpha1.ark.mckinsey.com --timeout=120s 2>/dev/null || true
 fi
 
-if [ "${INSTALL_BROKER}" = "true" ]; then
-  echo "=== Installing ARK Broker ==="
-  helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
-    --namespace default \
-    --create-namespace \
-    --set app.image.repository="${REGISTRY}/ark-broker" \
-    --set app.image.tag="${ARK_IMAGE_TAG}" \
-    --set app.image.pullPolicy=IfNotPresent \
-    --set restartController.enabled=false \
-    --wait --timeout=300s
+if [ -n "${BROKER_PID}" ]; then
+  echo "=== Waiting for ARK Broker ==="
+  wait "${BROKER_PID}"
 fi
 
 if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
