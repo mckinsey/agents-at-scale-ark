@@ -1,7 +1,13 @@
 import request from 'supertest';
-import app, {traces, events} from '../src/server.js';
+import {loadConfig} from '../src/config/index.js';
+import {buildApp} from '../src/server.js';
 import {OTELSpan} from '../src/trace-broker.js';
 import {EventData} from '../src/event-broker.js';
+
+const {
+  app,
+  brokers: {traces, events},
+} = buildApp({config: loadConfig({})});
 
 describe('Session ID Filtering', () => {
   afterEach(() => {

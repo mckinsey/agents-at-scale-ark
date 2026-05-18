@@ -1,24 +1,33 @@
 import {createRequire} from 'module';
-import app, {memory, chunks, traces, events, sessions} from './server.js';
+import {loadConfig, type AppConfig} from './config/index.js';
+import {buildApp} from './server.js';
 import {setupSwagger} from './swagger.js';
 
 const require = createRequire(import.meta.url);
 const {version} = require('../package.json');
 
+function loadConfigOrExit(): AppConfig {
+  try {
+    return loadConfig(process.env);
+  } catch (err) {
+    console.error('Invalid configuration:', err);
+    process.exit(1);
+  }
+}
+
+const config = loadConfigOrExit();
+const {app, brokers} = buildApp({config});
+const {memory, chunks, traces, events, sessions} = brokers;
+
 setupSwagger(app, version);
 
-const PORT = process.env.PORT || '8080';
-const HOST = process.env.HOST || '0.0.0.0';
-const REQUEST_TIMEOUT_MS = Number.parseInt(
-  process.env.REQUEST_TIMEOUT_MS || '0',
-  10
-);
-
-const server = app.listen(Number.parseInt(PORT), HOST, () => {
-  console.log(`ARK Broker service running on http://${HOST}:${PORT}`);
+const server = app.listen(config.server.port, config.server.host, () => {
+  console.log(
+    `ARK Broker service running on http://${config.server.host}:${config.server.port}`
+  );
 });
 
-server.requestTimeout = REQUEST_TIMEOUT_MS;
+server.requestTimeout = config.server.requestTimeoutMs;
 
 const gracefulShutdown = (): void => {
   console.log('Shutting down gracefully');

@@ -1,5 +1,8 @@
 import request from 'supertest';
-import app from '../src/server.js';
+import {loadConfig} from '../src/config/index.js';
+import {buildApp} from '../src/server.js';
+
+const {app} = buildApp({config: loadConfig({})});
 
 describe('Stream Timeout', () => {
   test('should send SSE error event with [DONE] on timeout', async () => {
