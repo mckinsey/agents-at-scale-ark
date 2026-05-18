@@ -138,7 +138,7 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     docker.io/python:3.12-bookworm \
     ghcr.io/dwmkerr/mock-llm:0.1.28 \
     ghcr.io/dwmkerr/mock-llm:latest; do
-    sudo k3s ctr images pull "$img" > /dev/null 2>&1 &
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
     IMAGE_PULL_PIDS+=($!)
   done
   if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
