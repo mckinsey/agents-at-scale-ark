@@ -160,14 +160,20 @@ fi
 BROKER_PID=""
 if [ "${INSTALL_BROKER}" = "true" ]; then
   echo "=== Installing ARK Broker (background) ==="
+  BROKER_HELM_ARGS=(
+    --namespace default
+    --create-namespace
+    --set app.image.repository="${REGISTRY}/ark-broker"
+    --set app.image.tag="${ARK_IMAGE_TAG}"
+    --set app.image.pullPolicy=IfNotPresent
+    --set restartController.enabled=false
+    --wait --timeout=300s
+  )
+  if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+    BROKER_HELM_ARGS+=(--set memory.createMemoryCRD=false)
+  fi
   helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
-    --namespace default \
-    --create-namespace \
-    --set app.image.repository="${REGISTRY}/ark-broker" \
-    --set app.image.tag="${ARK_IMAGE_TAG}" \
-    --set app.image.pullPolicy=IfNotPresent \
-    --set restartController.enabled=false \
-    --wait --timeout=300s &
+    "${BROKER_HELM_ARGS[@]}" &
   BROKER_PID=$!
 fi
 
