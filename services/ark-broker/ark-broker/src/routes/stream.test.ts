@@ -2,6 +2,8 @@ import request from 'supertest';
 import express from 'express';
 import {CompletionChunkBroker} from '../completion-chunk-broker';
 import {createLogger} from '../logging/logger';
+import {createHttpLogger} from '../middleware/http-logger';
+import {requestId} from '../middleware/request-id';
 import {createStreamRouter} from './stream';
 import {
   createTextChunk,
@@ -14,11 +16,12 @@ describe('Streaming API', () => {
   let chunks: CompletionChunkBroker;
 
   beforeEach(() => {
-    chunks = new CompletionChunkBroker(
-      createLogger({level: 'silent', pretty: false})
-    );
+    const logger = createLogger({level: 'silent', pretty: false});
+    chunks = new CompletionChunkBroker(logger);
     app = express();
     app.use(express.json() as express.RequestHandler);
+    app.use(requestId);
+    app.use(createHttpLogger(logger));
     app.use('/stream', createStreamRouter(chunks));
   });
 

@@ -50,9 +50,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
     const watch = req.query['watch'] === 'true';
 
     if (watch) {
-      console.log(
-        '[STREAM] GET /stream?watch=true - starting SSE stream for all chunks'
-      );
+      req.log.info('starting SSE stream for all chunks');
       streamSSE({
         res,
         req,
@@ -74,7 +72,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           res.status(400).json({error: error.message});
           return;
         }
-        console.error('[STREAM] Failed to get chunks:', error);
+        req.log.error({err: error}, 'failed to get chunks');
         const err = error as Error;
         res.status(500).json({error: err.message});
       }
@@ -126,17 +124,15 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
     try {
       const {query_name} = req.params;
       const fromBeginning = req.query['from-beginning'] === 'true';
-      // Parse wait-for-query parameter - timeout value (e.g., "30s")
       const waitForQueryParam = req.query['wait-for-query'] as string;
       let waitForQuery = false;
-      let timeout = 30000; // default 30 seconds
+      let timeout = 30000;
 
       if (waitForQueryParam) {
         waitForQuery = true;
         timeout = parseTimeout(waitForQueryParam, 30000);
       }
 
-      // Parse max chunk size, default to 50 characters
       let maxChunkSize = 50;
       if (req.query['max-chunk-size']) {
         const size = parseInt(req.query['max-chunk-size'] as string);
@@ -145,21 +141,25 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         }
       }
 
-      console.log(
-        `[STREAM] GET /stream/${query_name} - from-beginning=${fromBeginning}, wait-for-query=${waitForQueryParam}, timeout=${timeout}ms, max-chunk-size=${maxChunkSize}`
+      req.log.info(
+        {
+          queryName: query_name,
+          fromBeginning,
+          waitForQuery: waitForQueryParam,
+          timeout,
+          maxChunkSize,
+        },
+        'starting query stream'
       );
 
-      // Set SSE headers
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('Access-Control-Allow-Origin', '*');
 
-      // Set up timeout if wait-for-query is specified
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       let hasReceivedChunks = false;
 
-      // Subscribe to streaming chunks for this query
       let outboundChunkCount = 0;
       let lastLogTime = Date.now();
       const chunkTypeCounts: Record<string, number> = {
@@ -173,28 +173,24 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         const chunk = item.data.chunk as any;
         hasReceivedChunks = true;
 
-        // Clear timeout on first chunk
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
           timeoutHandle = undefined;
         }
 
-        // Skip [DONE] marker - it will be sent by the complete handler
         if (chunk === '[DONE]') {
           return;
         }
 
-        // Check for errors and send as SSE event (not JSON response)
         if (chunk?.error) {
-          // Validate error structure - chunk.error should be a StreamError
           const streamError = chunk.error as StreamError;
           if (
             typeof streamError.message !== 'string' ||
             typeof streamError.type !== 'string'
           ) {
-            console.error(
-              `[STREAM-OUT] Query ${query_name}: Invalid error chunk structure`,
-              chunk
+            req.log.error(
+              {queryName: query_name, chunk},
+              'invalid error chunk structure'
             );
             res.status(500).json({error: 'Invalid error chunk structure'});
             unsubscribeChunks();
@@ -202,17 +198,15 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
             return;
           }
 
-          // Error chunks should be sent as SSE events, not JSON responses
-          // This allows OpenAI SDK and other clients to properly handle errors
           if (!writeSSEEvent(res, chunk)) {
-            console.log(
-              `[STREAM-OUT] Query ${query_name}: Failed to write error chunk, client may have disconnected`
+            req.log.info(
+              {queryName: query_name},
+              'failed to write error chunk, client may have disconnected'
             );
             unsubscribeChunks();
             unsubscribeComplete();
             return;
           }
-          // After sending error, close the stream gracefully
           res.write('data: [DONE]\n\n');
           res.end();
           unsubscribeChunks();
@@ -220,10 +214,10 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           return;
         }
 
-        // Chunks are already in OpenAI format, just forward them (including finish_reason chunks)
         if (!writeSSEEvent(res, chunk)) {
-          console.log(
-            `[STREAM-OUT] Query ${query_name}: Client disconnected (write failed)`
+          req.log.info(
+            {queryName: query_name},
+            'client disconnected (write failed)'
           );
           unsubscribeChunks();
           unsubscribeComplete();
@@ -232,7 +226,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
         outboundChunkCount++;
 
-        // Count chunk type
         if (chunk?.choices?.[0]?.delta?.content) {
           chunkTypeCounts.content++;
         } else if (chunk?.choices?.[0]?.delta?.tool_calls?.length > 0) {
@@ -243,28 +236,28 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           chunkTypeCounts.other++;
         }
 
-        // Log every second instead of every 10 chunks
         const now = Date.now();
         if (now - lastLogTime >= 1000) {
-          const typeStr = Object.entries(chunkTypeCounts)
-            .filter(([_, count]) => count > 0)
-            .map(([type, count]) => `${count} ${type}`)
-            .join(', ');
-          console.log(
-            `[STREAM-OUT] Query ${query_name}: Sent ${outboundChunkCount} chunks (${typeStr})`
+          req.log.debug(
+            {
+              queryName: query_name,
+              total: outboundChunkCount,
+              types: chunkTypeCounts,
+            },
+            'sent chunks'
           );
           lastLogTime = now;
         }
       });
 
-      // Subscribe to completion event - this signals the entire query is done
       const completeHandler = (): void => {
-        const typeStr = Object.entries(chunkTypeCounts)
-          .filter(([_, count]) => count > 0)
-          .map(([type, count]) => `${count} ${type}`)
-          .join(', ');
-        console.log(
-          `[STREAM-OUT] Query ${query_name}: Query complete, sending [DONE] and closing stream (total: ${outboundChunkCount} chunks - ${typeStr})`
+        req.log.info(
+          {
+            queryName: query_name,
+            total: outboundChunkCount,
+            types: chunkTypeCounts,
+          },
+          'query complete, sending [DONE] and closing stream'
         );
         res.write('data: [DONE]\n\n');
         res.end();
@@ -276,12 +269,12 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       };
       chunks.eventEmitter.on(`complete:${query_name}`, completeHandler);
 
-      // Set up timeout if wait-for-query is specified
       if (waitForQuery) {
         timeoutHandle = setTimeout(() => {
           if (!hasReceivedChunks) {
-            console.error(
-              `[STREAM] Query ${query_name}: Timeout after ${timeout}ms waiting for chunks (no chunks received)`
+            req.log.error(
+              {queryName: query_name, timeout},
+              'timeout waiting for chunks'
             );
             const errorEvent = {
               error: {
@@ -299,20 +292,20 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         }, timeout);
       }
 
-      // If from-beginning, send existing chunks first
       if (fromBeginning) {
         const existingChunks = chunks.getChunksByQuery(query_name);
-        console.log(
-          `[STREAM] Sending ${existingChunks.length} existing chunks for query ${query_name}`
+        req.log.info(
+          {queryName: query_name, count: existingChunks.length},
+          'sending existing chunks for replay'
         );
 
         for (let i = 0; i < existingChunks.length; i++) {
           const chunk = existingChunks[i];
 
-          // Check for [DONE] marker - if found, send it properly and close
           if (chunk === '[DONE]') {
-            console.log(
-              `[STREAM-OUT] Query ${query_name}: Found [DONE] marker during replay, closing stream`
+            req.log.info(
+              {queryName: query_name},
+              'found [DONE] during replay, closing stream'
             );
             res.write('data: [DONE]\n\n');
             res.end();
@@ -321,10 +314,10 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
             return;
           }
 
-          // Chunks are already in OpenAI format, just forward them
           if (!writeSSEEvent(res, chunk)) {
-            console.log(
-              `[STREAM] Error writing existing chunk for query ${query_name}`
+            req.log.warn(
+              {queryName: query_name},
+              'error writing existing chunk'
             );
             unsubscribeChunks();
             unsubscribeComplete();
@@ -333,9 +326,8 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         }
       }
 
-      // Handle client disconnect
       req.on('close', () => {
-        console.log(`[STREAM-OUT] Query ${query_name}: Client disconnected`);
+        req.log.info({queryName: query_name}, 'client disconnected');
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
         }
@@ -345,13 +337,11 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
       req.on('error', (error: any) => {
         if (error.code === 'ECONNRESET') {
-          console.log(
-            `[STREAM-OUT] Query ${query_name}: Client connection reset`
-          );
+          req.log.info({queryName: query_name}, 'client connection reset');
         } else {
-          console.error(
-            `[STREAM-OUT] Query ${query_name}: Client connection error:`,
-            error
+          req.log.error(
+            {err: error, queryName: query_name},
+            'client connection error'
           );
         }
         if (timeoutHandle) {
@@ -361,7 +351,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         unsubscribeComplete();
       });
     } catch (error) {
-      console.error('[STREAM] Failed to handle stream request:', error);
+      req.log.error({err: error}, 'failed to handle stream request');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
@@ -417,11 +407,8 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      console.log(
-        `[STREAM] POST /stream/${query_id} - receiving chunks from ARK controller`
-      );
+      req.log.info({queryId: query_id}, 'receiving chunks from ARK controller');
 
-      // Set headers for newline-delimited JSON streaming
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Connection', 'keep-alive');
 
@@ -435,11 +422,9 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         other: 0,
       };
 
-      // Handle incoming streaming chunks
       req.on('data', (chunk: Buffer) => {
         buffer += chunk.toString('utf-8');
 
-        // Process complete lines (newline-delimited JSON)
         while (buffer.includes('\n')) {
           const newlineIndex = buffer.indexOf('\n');
           const line = buffer.slice(0, newlineIndex).trim();
@@ -450,7 +435,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
               const streamChunk = JSON.parse(line);
               chunkCount++;
 
-              // Count chunk type
               if (streamChunk?.choices?.[0]?.delta?.content) {
                 chunkTypeCounts.content++;
               } else if (
@@ -463,32 +447,28 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
                 chunkTypeCounts.other++;
               }
 
-              // Log first chunk immediately
               if (chunkCount === 1) {
-                console.log(
-                  `[STREAM-IN] Query ${query_id}: Receiving chunks...`
-                );
+                req.log.info({queryId: query_id}, 'receiving chunks...');
               }
 
-              // Log every second instead of every 10 chunks
               const now = Date.now();
               if (now - lastLogTime >= 1000) {
-                const typeStr = Object.entries(chunkTypeCounts)
-                  .filter(([_, count]) => count > 0)
-                  .map(([type, count]) => `${count} ${type}`)
-                  .join(', ');
-                console.log(
-                  `[STREAM-IN] Query ${query_id}: Received ${chunkCount} chunks (${typeStr})`
+                req.log.debug(
+                  {
+                    queryId: query_id,
+                    total: chunkCount,
+                    types: chunkTypeCounts,
+                  },
+                  'received chunks'
                 );
                 lastLogTime = now;
               }
 
-              // Store the chunk for later replay AND forward to active streaming clients
               chunks.addChunk(query_id, streamChunk);
             } catch (parseError) {
-              console.error(
-                `[STREAM-IN] Failed to parse chunk for query ${query_id}:`,
-                parseError
+              req.log.error(
+                {err: parseError, queryId: query_id},
+                'failed to parse chunk'
               );
             }
           }
@@ -496,12 +476,9 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       });
 
       req.on('end', () => {
-        const typeStr = Object.entries(chunkTypeCounts)
-          .filter(([_, count]) => count > 0)
-          .map(([type, count]) => `${count} ${type}`)
-          .join(', ');
-        console.log(
-          `[STREAM-IN] Query ${query_id}: Stream ended (total: ${chunkCount} chunks - ${typeStr})`
+        req.log.info(
+          {queryId: query_id, total: chunkCount, types: chunkTypeCounts},
+          'stream ended'
         );
         res.json({
           status: 'stream_processed',
@@ -512,19 +489,20 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
       req.on('error', (error: any) => {
         if (error.code === 'ECONNRESET') {
-          console.error(
-            `[STREAM-IN] Query ${query_id}: ARK controller disconnected unexpectedly (ECONNRESET) - likely timeout or network issue`
+          req.log.error(
+            {queryId: query_id},
+            'ARK controller disconnected unexpectedly (ECONNRESET)'
           );
         } else {
-          console.error(
-            `[STREAM-IN] Query ${query_id}: Stream error from ARK controller:`,
-            error
+          req.log.error(
+            {err: error, queryId: query_id},
+            'stream error from ARK controller'
           );
         }
         res.status(500).json({error: 'Stream processing failed'});
       });
     } catch (error) {
-      console.error('[STREAM] Failed to handle stream POST request:', error);
+      req.log.error({err: error}, 'failed to handle stream POST request');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
@@ -570,17 +548,13 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      console.log(
-        `[STREAM] POST /stream/${query_id}/complete - marking query as complete`
-      );
+      req.log.info({queryId: query_id}, 'marking query as complete');
 
-      // Check if stream exists
       if (!chunks.hasQuery(query_id)) {
         res.status(404).json({error: 'Stream not found'});
         return;
       }
 
-      // Check if already completed (for idempotency)
       if (chunks.isComplete(query_id)) {
         res.json({
           status: 'already_completed',
@@ -589,7 +563,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      // Mark query stream as complete
       chunks.completeQuery(query_id);
 
       res.json({
@@ -597,7 +570,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         query: query_id,
       });
     } catch (error) {
-      console.error('[STREAM] Failed to complete query stream:', error);
+      req.log.error({err: error}, 'failed to complete query stream');
       const err = error as Error;
       res.status(500).json({error: err.message});
     }
@@ -628,12 +601,12 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       500:
    *         description: Failed to purge streams
    */
-  router.delete('/', (_req, res) => {
+  router.delete('/', (req, res) => {
     try {
       chunks.delete();
       res.json({status: 'success', message: 'Stream data purged'});
     } catch (error) {
-      console.error('Stream purge failed:', error);
+      req.log.error({err: error}, 'stream purge failed');
       res.status(500).json({error: 'Failed to purge stream data'});
     }
   });
