@@ -376,9 +376,6 @@ export function AgentForm({
             }`}>
             {(() => {
               const execEngine = agent?.executionEngine?.name;
-              if (execEngine === FILE_INPUTS_EXECUTOR) {
-                return <AgentFilePanel agentName={agentName || ''} />;
-              }
               if (execEngine === RESPONSES_EXECUTOR && agentName) {
                 const sibling = allAgents.find(
                   a =>

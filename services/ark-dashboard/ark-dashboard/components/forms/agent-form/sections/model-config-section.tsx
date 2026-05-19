@@ -20,7 +20,13 @@ import {
 import type { Model } from '@/lib/services';
 import type { ExecutionEngine, ExecutionEnginePhase } from '@/lib/services';
 
-import { type AgentFormValues, RESPONSES_EXECUTOR } from '../types';
+import {
+  type AgentFormValues,
+  FILE_INPUTS_EXECUTOR,
+  RESPONSES_EXECUTOR,
+} from '../types';
+
+const HIDDEN_EXECUTORS = new Set<string>([FILE_INPUTS_EXECUTOR]);
 
 const PHASE_COLORS: Record<ExecutionEnginePhase, string> = {
   ready: 'bg-green-500',
@@ -101,19 +107,25 @@ export function ModelConfigSection({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">None (Unset)</span>
                   </SelectItem>
-                  {executionEngines.map(engine => (
-                    <SelectItem key={engine.name} value={engine.name}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`inline-block h-2 w-2 rounded-full ${PHASE_COLORS[engine.phase]}`}
-                        />
-                        <span>{engine.name}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {engine.phase}
+                  {executionEngines
+                    .filter(
+                      engine =>
+                        !HIDDEN_EXECUTORS.has(engine.name) ||
+                        engine.name === field.value,
+                    )
+                    .map(engine => (
+                      <SelectItem key={engine.name} value={engine.name}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`inline-block h-2 w-2 rounded-full ${PHASE_COLORS[engine.phase]}`}
+                          />
+                          <span>{engine.name}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {engine.phase}
+                          </span>
                         </span>
-                      </span>
-                    </SelectItem>
-                  ))}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <FormMessage />
