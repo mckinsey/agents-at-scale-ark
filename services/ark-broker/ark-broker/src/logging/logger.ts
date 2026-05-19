@@ -75,4 +75,4 @@ export function createLogger(
   return pino(options);
 }
 
-export type {Logger};
+export type {Logger} from 'pino';

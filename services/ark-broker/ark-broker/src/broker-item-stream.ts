@@ -114,7 +114,7 @@ export class BrokerItemStream<T> {
     const items = filtered.slice(0, limit);
     const hasMore = filtered.length > limit;
     const nextCursor =
-      items.length > 0 ? items[items.length - 1].sequenceNumber : undefined;
+      items.length > 0 ? items.at(-1)!.sequenceNumber : undefined;
 
     return {
       items,

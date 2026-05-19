@@ -157,9 +157,9 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         const waitForQuerySeconds = streamQuery['wait-for-query'];
         const waitForQuery = waitForQuerySeconds !== undefined;
         const timeout =
-          waitForQuerySeconds !== undefined
-            ? Math.max(1000, Math.min(waitForQuerySeconds * 1000, 300000))
-            : 30000;
+          waitForQuerySeconds === undefined
+            ? 30000
+            : Math.max(1000, Math.min(waitForQuerySeconds * 1000, 300000));
         const maxChunkSize = streamQuery['max-chunk-size'] ?? 50;
 
         req.log.info(
@@ -326,9 +326,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
             'sending existing chunks for replay'
           );
 
-          for (let i = 0; i < existingChunks.length; i++) {
-            const chunk = existingChunks[i];
-
+          for (const chunk of existingChunks) {
             if (chunk === '[DONE]') {
               req.log.info(
                 {queryName: query_name},

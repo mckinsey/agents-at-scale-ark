@@ -50,17 +50,15 @@ export class CompletionChunkBroker {
   }
 
   isComplete(queryId: string): boolean {
-    return (
-      this.stream.filter(
+    return this.stream
+      .all()
+      .some(
         (item) => item.data.queryId === queryId && item.data.complete === true
-      ).length > 0
-    );
+      );
   }
 
   hasQuery(queryId: string): boolean {
-    return (
-      this.stream.filter((item) => item.data.queryId === queryId).length > 0
-    );
+    return this.stream.all().some((item) => item.data.queryId === queryId);
   }
 
   all(): BrokerItem<CompletionChunkData>[] {
@@ -97,7 +95,8 @@ export class CompletionChunkBroker {
     queryId?: string
   ): PaginatedList<BrokerItem<CompletionChunkData>> {
     const predicate = queryId
-      ? (item: BrokerItem<CompletionChunkData>) => item.data.queryId === queryId
+      ? (item: BrokerItem<CompletionChunkData>): boolean =>
+          item.data.queryId === queryId
       : undefined;
     return this.stream.paginate(params, predicate);
   }
