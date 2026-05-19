@@ -11,7 +11,7 @@ import { SessionMessage } from './session-message';
 import { ApprovalNotification } from './approval-notification';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
-import { useGetQuery } from '@/lib/services/queries-hooks';
+import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 import { useGetApprovalDetails, useSubmitApproval } from '@/lib/services/query-approvals-hooks';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
@@ -237,21 +237,48 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     return messages[messages.length - 1]?.query_id || null;
   }, [messages]);
 
+  // When processing and no query ID from messages, poll for recent queries for this session
+  // This handles the case where approval is needed before messages are stored in broker
+  const shouldFetchQueries = !latestQueryId && isProcessing;
+  const { data: recentQueries } = useListQueries(
+    shouldFetchQueries ? { page: 1, pageSize: 50 } : undefined,
+    shouldFetchQueries
+  );
+
+  // Find the most recent query for this session that's awaiting approval
+  const pendingApprovalQuery = useMemo(() => {
+    if (latestQueryId || !isProcessing || !recentQueries?.items) return null;
+
+    // Filter to this session and input-required phase
+    const sessionQueries = recentQueries.items
+      .filter(q => q.sessionId === sessionId && q.status?.phase === 'input-required')
+      .sort((a, b) => {
+        // Sort by creation time descending
+        const timeA = a.metadata?.creationTimestamp ? new Date(a.metadata.creationTimestamp).getTime() : 0;
+        const timeB = b.metadata?.creationTimestamp ? new Date(b.metadata.creationTimestamp).getTime() : 0;
+        return timeB - timeA;
+      });
+
+    return sessionQueries[0] || null;
+  }, [recentQueries, sessionId, latestQueryId, isProcessing]);
+
+  const effectiveQueryId = latestQueryId || pendingApprovalQuery?.name || null;
+
   // Fetch query details to check if approval is needed
-  const { data: queryDetails } = useGetQuery(latestQueryId, !!latestQueryId);
+  const { data: queryDetails } = useGetQuery(effectiveQueryId, !!effectiveQueryId);
   const queryPhase = queryDetails?.status?.phase;
   const needsApproval = queryPhase === 'input-required';
 
   // Fetch approval details if needed
   const { data: approvalDetails } = useGetApprovalDetails(
-    latestQueryId || '',
+    effectiveQueryId || '',
     namespace,
     needsApproval
   );
 
   // Approval mutation
   const { mutateAsync: submitApproval } = useSubmitApproval(
-    latestQueryId || '',
+    effectiveQueryId || '',
     namespace
   );
 
@@ -317,7 +344,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
           participantName={participantName}
           isProcessing={isProcessing}
           showToolCalls={showToolCalls}
-          queryName={latestQueryId || undefined}
+          queryName={effectiveQueryId || undefined}
           queryNamespace={namespace}
           approvalData={needsApproval && approvalDetails ? approvalDetails : undefined}
           onApprove={handleApprove}

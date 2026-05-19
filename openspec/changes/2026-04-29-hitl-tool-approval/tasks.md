@@ -120,9 +120,21 @@
 - [ ] 8.4 Add pending approvals indicator to query list view (future enhancement)
 - [ ] 8.5 Handle real-time approval events from broker stream (future enhancement)
 - [x] 8.6 Display approval decision confirmation with duration (implemented in component)
+- [x] 8.7 **BUG FIX**: Handle approval detection when no conversation messages exist in broker:
+  - **Issue**: MessageDisplay gets query ID from last message, but when no messages are stored in broker, `latestQueryId` is null, so approval UI never appears
+  - **Root cause**: Completions executor doesn't emit conversation messages to broker for approval flows
+  - **Chosen approach**: Make dashboard poll for pending approval queries when processing
+  - **Implementation**:
+    - Modified `message-display.tsx` to call `useListQueries` when `isProcessing && !latestQueryId`
+    - Filter queries client-side to find most recent query for this session with `phase: input-required`
+    - Use `effectiveQueryId = latestQueryId || pendingApprovalQuery?.name`
+    - Added `enabled` parameter to `useListQueries` hook to only fetch when needed
+  - **Files changed**:
+    - `components/sessions-conversations/message-display.tsx`
+    - `lib/services/queries-hooks.ts`
 
 **Dashboard Integration Complete:**
-The approval notification now appears automatically in session conversations when a query enters `input-required` phase. Users can approve or reject tool calls directly from the message stream.
+The approval notification now appears automatically in session conversations when a query enters `input-required` phase, even when no prior messages exist in the broker. The dashboard polls for pending approval queries during processing and displays the approval UI as soon as the query transitions to `input-required`.
 
 ## 9. A2A Protocol — Use input-required State
 

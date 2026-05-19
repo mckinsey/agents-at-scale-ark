@@ -261,9 +261,13 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) (*E
 	}
 
 	if err != nil {
-		h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
-		h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
-		StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
+		// Don't stream error for approval required - it will be handled separately
+		var approvalErr *ApprovalRequiredError
+		if !errors.As(err, &approvalErr) {
+			h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
+			h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
+			StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
+		}
 		return nil, nil, err
 	}
 
@@ -632,6 +636,14 @@ func (h *Handler) handleApprovalRequired(
 	if state.eventStream != nil {
 		StreamApprovalRequest(ctx, state.eventStream, taskID, approvalErr.ToolCalls,
 			approvalErr.Config, approvalErr.Context.AgentName)
+
+		// Close stream without setting phase to "done" (query will transition to input-required)
+		if completionErr := state.eventStream.NotifyCompletion(ctx); completionErr != nil {
+			log.Error(completionErr, "failed to notify stream completion for approval")
+		}
+		if closeErr := state.eventStream.Close(); closeErr != nil {
+			log.Error(closeErr, "failed to close event stream for approval")
+		}
 	}
 
 	h.telemetry.QueryRecorder().RecordSuccess(state.targetSpan)

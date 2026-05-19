@@ -6,11 +6,12 @@ import type { components } from '@/lib/api/generated/types';
 
 type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 
-export const useListQueries = (params: ListQueriesParams = {}) => {
+export const useListQueries = (params: ListQueriesParams = {}, enabled = true) => {
   return useQuery({
     queryKey: ['list-all-queries', params],
     queryFn: () => queriesService.list(params),
     placeholderData: keepPreviousData,
+    enabled,
   });
 };
 

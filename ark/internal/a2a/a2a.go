@@ -422,20 +422,50 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 	}
 
 	// Refetch to get the latest resourceVersion before updating status
+	// Retry a few times in case the cache hasn't been updated yet
 	taskName := a2aTask.Name
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask); err != nil {
-		log.Error(err, "failed to refetch A2ATask after creation", "taskId", task.ID)
-		return fmt.Errorf("failed to refetch A2ATask: %w", err)
+	var refetchErr error
+	for i := 0; i < 3; i++ {
+		refetchErr = k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask)
+		if refetchErr == nil {
+			break
+		}
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if refetchErr != nil {
+		log.Error(refetchErr, "failed to refetch A2ATask after creation", "taskId", task.ID)
+		return fmt.Errorf("failed to refetch A2ATask: %w", refetchErr)
 	}
 
 	// Repopulate status with fresh data and update
-	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
-	a2aTask.Status.StartTime = &now
+	// Retry status update in case of conflicts with the A2ATask controller
+	var updateErr error
+	for i := 0; i < 3; i++ {
+		// Refetch before each update attempt to get latest resourceVersion
+		if i > 0 {
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask); err != nil {
+				log.Error(err, "failed to refetch A2ATask before status update retry", "taskId", task.ID, "attempt", i+1)
+				updateErr = err
+				continue
+			}
+		}
 
-	if err := k8sClient.Status().Update(ctx, a2aTask); err != nil {
-		log.Error(err, "failed to update A2ATask status", "taskId", task.ID)
-		return fmt.Errorf("failed to update A2ATask status: %w", err)
+		PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+		a2aTask.Status.StartTime = &now
+
+		updateErr = k8sClient.Status().Update(ctx, a2aTask)
+		if updateErr == nil {
+			return nil
+		}
+
+		if i < 2 {
+			log.Info("A2ATask status update conflict, retrying", "taskId", task.ID, "attempt", i+1, "error", updateErr.Error())
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
-	return nil
+	log.Error(updateErr, "failed to update A2ATask status after retries", "taskId", task.ID)
+	return fmt.Errorf("failed to update A2ATask status: %w", updateErr)
 }
