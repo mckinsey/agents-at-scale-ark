@@ -198,7 +198,9 @@
   --color-surface-bg-base: var(--surface-bg-base);
   --color-background: var(--surface-bg-base);
   --color-sidebar: var(--surface-bg-base);
-  --color-sidebar-foreground: var(--text-primary);
+  --color-sidebar-foreground: var(--text-tertiary);
+  --color-sidebar-accent: transparent;
+  --color-sidebar-accent-foreground: var(--text-primary);
   --color-surface-primary: var(--surface-primary);
   --color-surface-secondary: var(--surface-secondary);
 
