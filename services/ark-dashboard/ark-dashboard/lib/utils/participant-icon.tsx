@@ -1,4 +1,4 @@
-import { Bot, Users, Wrench } from 'lucide-react';
+import { SmartToy, Group, Handyman } from '@/components/icons';
 import type { ParticipantType } from '@/lib/services/conversations';
 
 interface GetParticipantIconOptions {
@@ -14,11 +14,11 @@ interface GetParticipantIconOptions {
 }
 
 /**
- * Returns the appropriate Lucide icon component for a participant type.
+ * Returns the appropriate QBDS icon component for a participant type.
  *
  * @param participantType - The type of participant (agent, team, or tool)
  * @param options - Optional configuration for icon size and name-based fallback
- * @returns A Lucide icon component (Bot, Users, or Wrench)
+ * @returns A QBDS icon component (SmartToy for agents, Group for teams, Handyman for tools)
  *
  * @example
  * ```tsx
@@ -41,16 +41,16 @@ export function getParticipantIcon(
   const className = `size-${size}`;
 
   // Primary type-based check
-  if (participantType === 'team') return <Users className={className} />;
-  if (participantType === 'tool') return <Wrench className={className} />;
-  if (participantType === 'agent') return <Bot className={className} />;
+  if (participantType === 'team') return <Group className={className} />;
+  if (participantType === 'tool') return <Handyman className={className} />;
+  if (participantType === 'agent') return <SmartToy className={className} />;
 
   // Fallback to name-based detection (if name provided and type is undefined)
   if (name) {
-    if (name.includes('team')) return <Users className={className} />;
-    if (name.includes('tool')) return <Wrench className={className} />;
+    if (name.includes('team')) return <Group className={className} />;
+    if (name.includes('tool')) return <Handyman className={className} />;
   }
 
   // Default fallback
-  return <Bot className={className} />;
+  return <SmartToy className={className} />;
 }
