@@ -40,28 +40,19 @@ describe('SettingsSidebar', () => {
     expect(screen.getByText('Settings')).toBeInTheDocument();
   });
 
-  it('should render all section labels', () => {
-    renderWithStore();
-    expect(screen.getByText('General')).toBeInTheDocument();
-    expect(screen.getByText('Privacy')).toBeInTheDocument();
-  });
-
   it('should render all menu items', () => {
     renderWithStore();
-    expect(screen.getByText('A2A Servers')).toBeInTheDocument();
-    expect(screen.getByText('Memory')).toBeInTheDocument();
-    expect(screen.getByText('Experimental Features')).toBeInTheDocument();
-    expect(screen.getByText('Service API Keys')).toBeInTheDocument();
-    expect(screen.getByText('Secrets')).toBeInTheDocument();
+    expect(screen.getByText('Queries')).toBeInTheDocument();
+    expect(screen.getByText('Experimental features')).toBeInTheDocument();
   });
 
   it('should navigate to settings page when a menu item is clicked', async () => {
     const user = userEvent.setup();
     renderWithStore();
 
-    await user.click(screen.getByText('Memory'));
+    await user.click(screen.getByText('Queries'));
 
-    expect(mockReplace).toHaveBeenCalledWith('/settings/memory');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/queries');
   });
 
   it('should navigate to entry URL when close button is clicked after soft navigation', async () => {

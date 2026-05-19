@@ -315,7 +315,7 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="bg-sidebar-accent/40 hover:bg-sidebar-accent relative flex h-12 flex-col items-start justify-center gap-0 px-3 py-1.5">
+                  <SidebarMenuButton className="bg-surface-bg-tertiary hover:bg-surface-bg-secondary relative flex h-12 flex-col items-start justify-center gap-0 px-3 py-1.5">
                     <span className="text-sidebar-foreground/60 text-[11px]">
                       Namespace
                     </span>
