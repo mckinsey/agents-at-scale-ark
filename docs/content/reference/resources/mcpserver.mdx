@@ -103,8 +103,8 @@ A successful flow leaves two annotations on the MCPServer:
 ```yaml
 metadata:
   annotations:
-    mcp.ark.mckinsey.com/authorized-by: cli       # cli | dashboard
-    mcp.ark.mckinsey.com/authorized-at: 2026-05-19T14:32:11Z
+    ark.mckinsey.com/mcp-auth-authorized-by: cli       # cli | dashboard
+    ark.mckinsey.com/mcp-auth-authorized-at: 2026-05-19T14:32:11Z
 ```
 
 `authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated dashboard user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
