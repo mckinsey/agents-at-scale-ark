@@ -1,0 +1,55 @@
+"""Request and response models for the MCP auth endpoints."""
+from __future__ import annotations
+
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, Field
+
+
+FlowState = Literal["pending", "authorized", "failed", "expired"]
+
+
+class AuthStartRequest(BaseModel):
+    force: Optional[bool] = Field(
+        default=None,
+        description="Bypass the Authorized preflight (does NOT bypass DiscoveryFailed)",
+    )
+    force_registration: Optional[bool] = Field(
+        default=None,
+        description="Perform a fresh DCR even when the Secret carries cached client credentials",
+    )
+    scopes: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Explicit scopes to request. An empty array opts out of scope negotiation; "
+            "omit the field entirely to fall back to status.authorization.scopesSupported."
+        ),
+    )
+
+
+class AuthStartResponse(BaseModel):
+    auth_id: str
+    authorization_url: str
+    flow_expires_at: str = Field(
+        description="RFC 3339 UTC cache-entry deadline; distinct from the token expiry returned by auth/status",
+    )
+
+
+class AuthStatusResponse(BaseModel):
+    state: FlowState
+    message: Optional[str] = None
+    expires_at: Optional[str] = Field(
+        default=None,
+        description="RFC 3339 UTC token expiry (only present once state == authorized)",
+    )
+
+
+class AuthLogoutRequest(BaseModel):
+    keep_client: Optional[bool] = None
+    delete_secret: Optional[bool] = None
+
+
+class AuthLogoutResponse(BaseModel):
+    noop: bool = False
+    deleted: bool = False
+    cleared_keys: List[str] = Field(default_factory=list)
