@@ -28,7 +28,6 @@ export type ArkExtendedChunk = ChatCompletionChunk & {
   };
 };
 
-
 export interface GraphEdge {
   from: string;
   to: string;
@@ -46,9 +45,15 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 
+export interface AttachedFile {
+  id: string;
+  filename: string;
+}
+
 export type ExtendedChatMessage = ChatMessage & {
   metadata?: {
     status?: 'pending' | 'processing' | 'completed' | 'failed';
     queryName?: string;
+    attachedFiles?: AttachedFile[];
   };
 };

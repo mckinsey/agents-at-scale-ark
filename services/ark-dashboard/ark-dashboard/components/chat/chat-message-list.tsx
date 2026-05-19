@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { RefObject } from 'react';
 
 import type { TokenUsage } from '@/atoms/chat-history';
@@ -384,6 +384,7 @@ export function ChatMessageList({
                 status={pm.message.metadata?.status}
                 queryName={pm.message.metadata?.queryName}
                 tokenUsage={messageTokenUsage?.[pm.index]}
+                attachedFiles={pm.message.metadata?.attachedFiles}
               />
             )}
             {pm.hasTermination && (

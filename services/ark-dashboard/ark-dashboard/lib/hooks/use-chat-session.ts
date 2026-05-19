@@ -20,6 +20,7 @@ import type { ChatType } from '@/lib/chat-events';
 import { chatService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
+  AttachedFile,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
 
@@ -29,7 +30,7 @@ interface UseChatSessionParams {
 }
 
 export interface SendMessageOptions {
-  fileIds?: string[];
+  attachedFiles?: AttachedFile[];
 }
 
 interface UseChatSessionReturn {
@@ -44,7 +45,7 @@ interface UseChatSessionReturn {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
-  cancelQuery: () => void
+  cancelQuery: () => void;
 }
 
 export function useChatSession({
@@ -161,7 +162,7 @@ export function useChatSession({
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatStreamAbortControllerRef = useRef(new AbortController())
+  const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -192,7 +193,7 @@ export function useChatSession({
     [],
   );
 
-  const lastQueryName = useRef('')
+  const lastQueryName = useRef('');
 
   const handleStreamChatResponse = useCallback(
     async (userMessage: string, fileIds?: string[]) => {
@@ -573,7 +574,7 @@ export function useChatSession({
         fileIds,
       );
 
-      lastQueryName.current = query.name
+      lastQueryName.current = query.name;
 
       let pollingStopped = false;
       stopPollingRef.current = () => {
@@ -725,7 +726,10 @@ export function useChatSession({
     async (userMessage: string, options?: SendMessageOptions) => {
       setError(null);
 
-      const fileIds = options?.fileIds?.length ? options.fileIds : undefined;
+      const attachedFiles = options?.attachedFiles?.length
+        ? options.attachedFiles
+        : undefined;
+      const fileIds = attachedFiles?.map(f => f.id);
 
       trackEvent({
         name: 'chat_message_sent',
@@ -739,7 +743,11 @@ export function useChatSession({
 
       updateChatMessages(prev => [
         ...prev,
-        { role: 'user', content: userMessage } as ExtendedChatMessage,
+        {
+          role: 'user',
+          content: userMessage,
+          metadata: attachedFiles ? { attachedFiles } : undefined,
+        } as ExtendedChatMessage,
       ]);
 
       setIsProcessing(true);
@@ -756,7 +764,7 @@ export function useChatSession({
 
         if (err instanceof Error) {
           if (err.name === 'AbortError') {
-            return
+            return;
           }
           if (err.message.includes('Failed to fetch')) {
             errMsg =
@@ -809,21 +817,21 @@ export function useChatSession({
   }, [chatKey, name, setChatHistory, setLastConversationId]);
 
   const cancelQuery = useCallback(async () => {
-    chatStreamAbortControllerRef.current.abort()
-    stopPollingRef.current?.()
-    
-    setIsProcessing(false)
+    chatStreamAbortControllerRef.current.abort();
+    stopPollingRef.current?.();
 
-    updateChatMessages(prev => [...prev, {
-      role: 'system',
-      content: 'Conversation stopped by user',
-    }])
+    setIsProcessing(false);
 
-    await chatService.cancelQuery(lastQueryName.current).catch(() => {})
-  }, [
-    setIsProcessing,
-    updateChatMessages,
-  ])
+    updateChatMessages(prev => [
+      ...prev,
+      {
+        role: 'system',
+        content: 'Conversation stopped by user',
+      },
+    ]);
+
+    await chatService.cancelQuery(lastQueryName.current).catch(() => {});
+  }, [setIsProcessing, updateChatMessages]);
 
   return {
     messages: chatMessages,

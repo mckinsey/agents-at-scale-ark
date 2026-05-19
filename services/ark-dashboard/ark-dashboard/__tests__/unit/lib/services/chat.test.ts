@@ -53,7 +53,7 @@ describe('chatService', () => {
 
       const result = await chatService.createQuery(queryRequest);
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`, {
+      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries`, {
         ...queryRequest,
         target: { type: 'agent', name: 'agent1' },
       });
@@ -106,7 +106,7 @@ describe('chatService', () => {
         'session-123',
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries`,
         expect.objectContaining({
           name: 'chat-query-mock-uuid',
           type: 'user',
@@ -137,7 +137,7 @@ describe('chatService', () => {
         true,
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries`,
         expect.objectContaining({
           type: 'user',
           input: 'Hello',
@@ -388,7 +388,7 @@ describe('chatService', () => {
 
       const result = await chatService.listQueries();
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/queries/`);
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/queries`);
       expect(result).toEqual(mockResponse);
     });
   });

@@ -1,9 +1,10 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Paperclip } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import type { AttachedFile } from '@/lib/types/chat-message';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
 interface ChatMessageProps {
@@ -20,6 +21,7 @@ interface ChatMessageProps {
     completion_tokens: number;
     total_tokens: number;
   };
+  attachedFiles?: AttachedFile[];
 }
 
 export function ChatMessage({
@@ -32,6 +34,7 @@ export function ChatMessage({
   toolCalls,
   sender,
   tokenUsage,
+  attachedFiles,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -155,6 +158,8 @@ export function ChatMessage({
     );
   }
 
+  const hasAttachedFiles = isUser && attachedFiles && attachedFiles.length > 0;
+
   return (
     <div
       className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
@@ -212,6 +217,20 @@ export function ChatMessage({
         <div className="flex w-full max-w-[80%] flex-col gap-3">
           {toolCalls.map(toolCall => (
             <ToolCall key={toolCall.id} toolCall={toolCall} />
+          ))}
+        </div>
+      )}
+
+      {hasAttachedFiles && (
+        <div className="flex max-w-[80%] flex-wrap items-center justify-end gap-1">
+          {attachedFiles!.map(f => (
+            <span
+              key={f.id}
+              className="bg-muted text-muted-foreground inline-flex max-w-[14rem] items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+              title={`${f.filename} (${f.id})`}>
+              <Paperclip className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{f.filename}</span>
+            </span>
           ))}
         </div>
       )}
