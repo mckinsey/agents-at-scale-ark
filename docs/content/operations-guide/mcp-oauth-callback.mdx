@@ -1,0 +1,95 @@
+---
+title: MCP OAuth Callback
+description: Configuring ark-api as the OAuth callback target for MCP server authorization
+---
+
+# MCP OAuth Callback
+
+When a user authorizes an MCP server through the dashboard or `ark mcp auth login`, the IdP redirects the browser back to ark-api with the authorization code. ark-api exchanges the code for tokens, writes the result to the MCPServer's referenced Secret, and stamps the parent MCPServer with an annotation that records who triggered the flow.
+
+The redirect target is a single externally reachable URL that ark-api must own. This page covers configuring `ARK_API_PUBLIC_CALLBACK_URL` for both public ingress and air-gapped clusters.
+
+## Env vars
+
+| Env var | Default | Description |
+|---|---|---|
+| `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/api/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four `auth/*` endpoints return `503`. |
+| `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries. After this window the cache reaps the entry and a late callback fails with "unknown state". |
+| `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
+| `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
+
+ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected.
+
+## Public ingress
+
+For clusters with an Ingress in front of ark-api, set the env var to the public HTTPS URL:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: https://ark.example.com/api/v1/mcp/auth/callback
+```
+
+The same URL MUST be one of the redirect URIs registered with the IdP (ark-api enforces this against the RFC 7591 DCR response).
+
+## Air-gapped port-forward
+
+Clusters without public ingress can run the flow through `kubectl port-forward`. The IdP redirects to a loopback URL on the operator's workstation, where `kubectl` forwards the connection into the cluster:
+
+```bash
+kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80
+```
+
+The `--address 127.0.0.1,::1` flag binds the listener to both IPv4 and IPv6 loopback. This avoids a class of bugs where the OS resolves `localhost` to `::1` but kubectl only listens on `127.0.0.1` (or vice versa) and the IdP redirect times out.
+
+Configure ark-api to advertise the same loopback URL:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: http://127.0.0.1:8080/api/v1/mcp/auth/callback
+```
+
+Use bracketed IPv6 if the cluster prefers v6:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: http://[::1]:8080/api/v1/mcp/auth/callback
+```
+
+The loopback carve-out also accepts the literal `localhost`:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: http://localhost:8080/api/v1/mcp/auth/callback
+```
+
+Register the chosen URL with the IdP as a redirect URI before running the flow.
+
+## RBAC
+
+ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/patch` on `mcpservers` (the parent resource, NOT `mcpservers/status` — annotations live in `metadata.annotations` on the parent). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
+
+## Verifying
+
+A successful login leaves two visible side-effects on the MCPServer:
+
+```bash
+kubectl get mcpserver notion-mcp -o jsonpath='{.metadata.annotations}'
+```
+
+```json
+{
+  "mcp.ark.mckinsey.com/authorized-by": "cli",
+  "mcp.ark.mckinsey.com/authorized-at": "2026-05-19T14:32:11Z"
+}
+```
+
+The referenced Secret holds the token material; ark-api never logs token bodies, refresh tokens, client secrets, or PKCE verifiers.
+
+## Related
+
+- [`ark mcp auth login` / `logout`](/developer-guide/cli-tools#ark-mcp-auth) — CLI reference
+- [MCPServer reference](/reference/resources/mcpserver) — `status.authorization` state machine
