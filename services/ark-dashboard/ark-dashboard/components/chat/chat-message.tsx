@@ -2,8 +2,11 @@ import { AlertCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
+import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
+import { submitApproval } from '@/lib/services/query-approvals';
+import type { ToolApprovalRequest } from '@/lib/types/chat-message';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
 interface ChatMessageProps {
@@ -20,6 +23,9 @@ interface ChatMessageProps {
     completion_tokens: number;
     total_tokens: number;
   };
+  approvalRequest?: ToolApprovalRequest;
+  namespace?: string;
+  pollAfterApproval?: () => Promise<void>;
 }
 
 export function ChatMessage({
@@ -32,6 +38,9 @@ export function ChatMessage({
   toolCalls,
   sender,
   tokenUsage,
+  approvalRequest,
+  namespace = 'default',
+  pollAfterApproval,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -42,6 +51,30 @@ export function ChatMessage({
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
 
   const showErrorIcon = isFailed && queryName;
+
+  const [approvalSubmitted, setApprovalSubmitted] = useState(false);
+
+  const handleApprove = async () => {
+    if (!queryName) return;
+    console.log('[HITL Debug] Submitting approval for query:', queryName);
+    await submitApproval(queryName, namespace, 'approved');
+    setApprovalSubmitted(true);
+    console.log('[HITL Debug] Approval submitted, starting polling');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
+
+  const handleReject = async () => {
+    if (!queryName) return;
+    console.log('[HITL Debug] Submitting rejection for query:', queryName);
+    await submitApproval(queryName, namespace, 'rejected');
+    setApprovalSubmitted(true);
+    console.log('[HITL Debug] Rejection submitted, starting polling');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
 
   const handleErrorIconClick = () => {
     if (queryName) {
@@ -143,6 +176,27 @@ export function ChatMessage({
 
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
+
+  if (approvalRequest) {
+    console.log('[HITL Debug] ChatMessage rendering approval request:', approvalRequest);
+    console.log('[HITL Debug] ChatMessage queryName:', queryName);
+    console.log('[HITL Debug] ChatMessage namespace:', namespace);
+    return (
+      <div
+        className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
+        <ApprovalNotification
+          queryName={queryName || ''}
+          queryNamespace={namespace}
+          toolCalls={approvalRequest.toolCalls}
+          timeout={approvalRequest.timeout}
+          onTimeout={approvalRequest.onTimeout}
+          agentName={approvalRequest.agentName}
+          onApprove={handleApprove}
+          onReject={handleReject}
+        />
+      </div>
+    );
+  }
 
   if (!hasContent && hasToolCalls) {
     return (

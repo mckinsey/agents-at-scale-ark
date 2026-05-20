@@ -48,6 +48,7 @@ export function ChatPanel({
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
+    pollAfterApproval,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -98,6 +99,7 @@ export function ChatPanel({
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
             messageTokenUsage={messageTokenUsage}
+            pollAfterApproval={pollAfterApproval}
           />
         </div>
       </div>

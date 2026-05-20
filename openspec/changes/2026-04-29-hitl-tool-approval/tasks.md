@@ -34,11 +34,14 @@
   - Check approval requirement before execution
   - Track completed tool results
   - Return `ApprovalRequiredError` with minimal execution context (NO conversation history serialization!)
-- [x] 3.5 Add `ResumeFromApproval()` handler to:
+- [ ] 3.5 **Add `ResumeFromApproval()` handler** to completions executor:
   - Fetch conversation history from memory service using `contextId`
   - Apply `completedToolResults` from A2ATask parameters
   - Handle approval response (approved/rejected)
   - Continue execution from `pendingToolCallIndex`
+  - Execute approved tool calls and feed results back to agent
+  - Continue agent loop until completion
+  **Status: NOT IMPLEMENTED** - currently just marks query as done without resuming
 - [x] 3.6 Create `ark/executors/completions/approval_test.go` with unit tests:
   - Approval policy evaluation
   - O(1) lookup performance
@@ -58,21 +61,127 @@
 - [x] 4.4 Add watch for A2ATask in query controller:
   - Added `Watches` with `findQueriesForA2ATask` mapping function
   - Maps A2ATask updates to associated Query via QueryRef
-- [x] 4.5 Add `handleInputRequiredPhase` to query controller:
-  - Checks A2ATask status when query is in input-required phase
-  - Transitions to `done` when task completes
-  - Transitions to `error` when task fails/cancelled
+- [ ] 4.5 **Fix `handleInputRequiredPhase`** in query controller:
+  - Currently: Just transitions to `done` when task completes ❌
+  - **Should**: Resume executor when task completes ✅
+  - Implementation approach (Option C - A2A Protocol):
+    1. When A2ATask phase transitions to `completed`:
+       - Transition Query back to `running` phase
+       - Invoke executor again with resumption context
+       - Pass A2ATask reference for accessing approval state
+    2. Executor detects this is a resumption:
+       - Fetches conversation from memory service via `contextId`
+       - Applies completed tool results from A2ATask parameters
+       - Executes approved tool calls (from `pendingToolCallIndex` onwards)
+       - Continues agent loop with tool results
+    3. Query completes when executor returns final result
+  - Transitions to `error` when task fails/cancelled (already working)
 
-## 5. A2ATask Controller — Timeout Handling
+## 5. Executor Resumption After Approval/Rejection (CRITICAL - Partially Implemented)
 
-- [x] 5.1 Extend `ark/internal/controller/a2atask_controller.go` to handle approval timeouts:
+**Current Issue**:
+- ✅ After approval, query resumes correctly
+- ❌ After rejection, query transitions to `error` phase and ends - agent never gets to handle the rejection
+
+**Goal**: Both approval AND rejection should resume the agent:
+- **Approval**: Execute tools and feed results to agent
+- **Rejection**: Return rejection error as tool result, let agent handle gracefully (ask what to do instead, try alternatives, etc.)
+
+**Implementation Plan (Option C - A2A Protocol)**:
+
+- [x] 5.1 **Query Controller Changes** (`ark/internal/controller/query_controller.go`):
+  - [x] 5.1.1 Modify `handleInputRequiredPhase()`:
+    - When A2ATask transitions to `completed` (approved), transition Query to `running` (NOT `done`)
+    - **NEW**: When A2ATask transitions to `failed` (rejected), ALSO transition Query to `running` (NOT `error`)
+    - Store A2ATask reference and decision in Query status for executor access
+    - Trigger query re-execution by requeueing
+  - [x] 5.1.2 Modify `Reconcile()` to detect resumption:
+    - Check if Query has A2ATask reference in status
+    - Pass A2ATask info and decision (approved/rejected) to executor dispatch
+
+- [x] 5.2 **Executor Handler Changes** (`ark/executors/completions/handler.go`):
+  - [x] 5.2.1 Detect resumption context:
+    - Check Query status for A2ATask reference
+    - If present, this is a resumption (not initial execution)
+    - Determine if approved or rejected from A2ATask status
+  - [x] 5.2.2 Add `handleResumption()` function:
+    ```go
+    func (h *Handler) handleResumption(ctx context.Context, query *Query, a2aTask *A2ATask) (*MessageProcessingResult, error) {
+        // 1. Get conversation ID from A2ATask
+        conversationID := a2aTask.Spec.ContextID
+
+        // 2. Fetch conversation history from memory service
+        memory := NewHTTPMemory(ctx, conversationID)
+        messages, err := memory.GetMessages(ctx)
+
+        // 3. Parse execution context from A2ATask parameters
+        context := parseExecutionContext(a2aTask.Spec.Parameters)
+
+        // 4. Get tool calls from A2ATask
+        toolCalls := parseToolCalls(a2aTask.Status.ProtocolMetadata["toolCalls"])
+
+        // 5. Check if approved or rejected
+        results := []ToolResult{}
+        if a2aTask.Status.Phase == "completed" {
+            // APPROVED: Execute tools
+            for i := context.PendingToolCallIndex; i < len(toolCalls); i++ {
+                result := executeToolCall(ctx, toolCalls[i])
+                results = append(results, result)
+            }
+        } else if a2aTask.Status.Phase == "failed" {
+            // REJECTED: Return rejection errors as tool results
+            for i := context.PendingToolCallIndex; i < len(toolCalls); i++ {
+                results = append(results, ToolResult{
+                    ID:    toolCalls[i].ID,
+                    Name:  toolCalls[i].Function.Name,
+                    Error: "Tool execution rejected by user",
+                })
+            }
+        }
+
+        // 6. Append tool results to conversation
+        messages = append(messages, buildToolResultMessages(results)...)
+
+        // 7. Continue agent loop with results (including rejection errors)
+        return h.continueAgentExecution(ctx, messages, query)
+    }
+    ```
+  - [x] 5.2.3 Modify main `Handle()` function:
+    - Before initial execution, check for resumption context
+    - If resuming, call `handleResumption()` instead of starting new execution
+
+- [x] 5.3 **Agent Execution Changes** (`ark/executors/completions/agent.go`):
+  - [x] 5.3.1 Add `ContinueFromResults()` method to Agent:
+    - Takes conversation messages + tool results (including rejection errors)
+    - Feeds results back to model
+    - Agent sees rejection as tool error and can respond gracefully
+    - Continues agent loop until completion
+  - [x] 5.3.2 Ensure tool result formatting matches model expectations
+  - [x] 5.3.3 Verify agent can handle tool errors and respond appropriately
+
+- [ ] 5.4 **Memory Service Integration**:
+  - [ ] 5.4.1 Verify memory service returns full conversation history
+  - [ ] 5.4.2 Add error handling for memory service unavailable
+
+- [ ] 5.5 **Testing**:
+  - [ ] 5.5.1 Unit test: Resumption context parsing (approval and rejection)
+  - [ ] 5.5.2 Unit test: Tool call execution after approval
+  - [ ] 5.5.3 Unit test: Tool error result generation after rejection
+  - [ ] 5.5.4 Unit test: Agent continuation with success results
+  - [ ] 5.5.5 Unit test: Agent continuation with error results
+  - [ ] 5.5.6 Integration test: End-to-end approval → resumption → completion
+  - [ ] 5.5.7 Integration test: End-to-end rejection → resumption → agent handles gracefully
+
+## 6. A2ATask Controller — Timeout Handling
+
+- [x] 6.1 Extend `ark/internal/controller/a2atask_controller.go` to handle approval timeouts:
   - Added `checkApprovalTimeout()` function to check and handle timeouts
   - Reads timeout from `status.ProtocolMetadata["timeout"]`
   - Checks `status.phase == "input-required"` before applying timeout action
   - Respects `onTimeout` policy: "reject" → `failed`, "proceed" → `completed`
   - Calculates timeout based on `status.StartTime`
   - Updates phase and condition when timeout expires
-- [ ] 5.2 Add unit tests for timeout handling and race conditions (deferred - functional tests needed)
+- [ ] 6.2 Add unit tests for timeout handling and race conditions (deferred - functional tests needed)
 
 ## 6. Event Streaming — Approval Events
 
@@ -95,7 +204,7 @@
 - [x] 7.3 Add Pydantic models for approval request/response in `services/ark-api/ark-api/src/ark_api/models/`
   - `ApprovalRequest` with action field
   - `ApprovalResponse` model
-- [ ] 7.4 Add API tests for approval endpoints including authorization scenarios
+- [x] 7.4 Add API tests for approval endpoints including authorization scenarios
 
 ## 8. Dashboard — Approval UI
 

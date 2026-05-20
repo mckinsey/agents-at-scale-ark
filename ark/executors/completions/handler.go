@@ -7,9 +7,11 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/shared/constant"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
@@ -110,6 +112,25 @@ func (h *Handler) ProcessMessage(
 	}
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
+
+	// Check if this is a resumption from HITL approval or rejection
+	if isResumption, a2aTask := h.checkResumption(ctx, query); isResumption {
+		decision := "approved"
+		if a2aTask.Status.Phase == arka2a.PhaseFailed {
+			decision = "rejected"
+		}
+		log.Info("Detected resumption from HITL decision, handling completion",
+			"queryName", query.Name,
+			"taskId", a2aTask.Spec.TaskID,
+			"decision", decision)
+		execResult, responseMessages, err := h.handleResumption(ctx, state, a2aTask)
+		if err != nil {
+			log.Error(err, "resumption failed")
+			state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
+			return nil, fmt.Errorf("resumption failed: %w", err)
+		}
+		return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
+	}
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
@@ -652,4 +673,159 @@ func (h *Handler) handleApprovalRequired(
 	return &taskmanager.MessageProcessingResult{
 		Result: task,
 	}, nil
+}
+
+// checkResumption checks if this query execution is a resumption from HITL approval or rejection
+func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
+	log := logf.FromContext(ctx)
+
+	// Check if query has A2A metadata with taskID
+	if query.Status.Response == nil || query.Status.Response.A2A == nil || query.Status.Response.A2A.TaskID == "" {
+		return false, nil
+	}
+
+	taskID := query.Status.Response.A2A.TaskID
+	taskName := fmt.Sprintf("a2a-task-%s", taskID)
+
+	var a2aTask arkv1alpha1.A2ATask
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: query.Namespace}, &a2aTask); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "failed to get A2ATask for resumption check")
+		}
+		return false, nil
+	}
+
+	// Check if task is completed (approval) or failed with user rejection
+	if a2aTask.Status.Phase == arka2a.PhaseCompleted {
+		return true, &a2aTask
+	}
+
+	// Check if this is a user rejection (not timeout or other failure)
+	if a2aTask.Status.Phase == arka2a.PhaseFailed && a2aTask.Status.Error == "Tool execution rejected by user" {
+		log.Info("Detected user rejection, will resume to let agent handle gracefully", "taskId", taskID)
+		return true, &a2aTask
+	}
+
+	return false, nil
+}
+
+// handleResumption handles query resumption after HITL approval or rejection
+func (h *Handler) handleResumption(ctx context.Context, state *executionState, a2aTask *arkv1alpha1.A2ATask) (*ExecutionResult, []Message, error) {
+	log := logf.FromContext(ctx)
+
+	// Get conversation ID from A2ATask
+	conversationID := a2aTask.Spec.ContextID
+	if conversationID == "" {
+		return nil, nil, fmt.Errorf("A2ATask has no contextId for memory retrieval")
+	}
+
+	log.Info("Fetching conversation history from memory service", "conversationId", conversationID)
+
+	// Parse tool calls from A2ATask metadata
+	toolCallsJSON, ok := a2aTask.Status.ProtocolMetadata["toolCalls"]
+	if !ok {
+		return nil, nil, fmt.Errorf("A2ATask has no toolCalls in protocolMetadata")
+	}
+
+	var toolCallsData []struct {
+		ID       string `json:"id"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(toolCallsJSON), &toolCallsData); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse toolCalls from A2ATask: %w", err)
+	}
+
+	// Check if this is approval or rejection
+	isApproved := a2aTask.Status.Phase == arka2a.PhaseCompleted
+	isRejected := a2aTask.Status.Phase == arka2a.PhaseFailed
+
+	if isApproved {
+		log.Info("Executing approved tool calls", "count", len(toolCallsData))
+	} else if isRejected {
+		log.Info("Handling rejected tool calls - will return error results", "count", len(toolCallsData))
+	}
+
+	// Fetch the agent CRD - needed for both approval and rejection to resume conversation
+	targetName := state.target.Name
+	var agentCRD arkv1alpha1.Agent
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: state.query.Namespace}, &agentCRD); err != nil {
+		return nil, nil, fmt.Errorf("failed to get agent %s: %w", targetName, err)
+	}
+
+	// Create agent instance - needed for resuming execution with results (approval or rejection)
+	agent, err := MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
+	}
+
+	// Convert parsed tool calls to openai format
+	toolCalls := make([]openai.ChatCompletionMessageToolCall, len(toolCallsData))
+	approvedResults := []ToolResult{}
+
+	for i, tcData := range toolCallsData {
+		tc := openai.ChatCompletionMessageToolCall{
+			ID:   tcData.ID,
+			Type: constant.Function(tcData.Type),
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      tcData.Function.Name,
+				Arguments: tcData.Function.Arguments,
+			},
+		}
+		toolCalls[i] = tc
+
+		if isApproved {
+			// APPROVED: Execute the tool
+			result, err := agent.executeToolCall(ctx, tc)
+			if err != nil {
+				log.Error(err, "failed to execute approved tool call", "toolName", tc.Function.Name)
+				// Create error result
+				approvedResults = append(approvedResults, ToolResult{
+					ID:      tc.ID,
+					Content: fmt.Sprintf("Error executing tool: %v", err),
+				})
+			} else {
+				// Extract message content - result is a Message type (tool message)
+				// Convert to string content for tool result
+				if toolMsg := result.OfTool; toolMsg != nil {
+					if content := toolMsg.Content.OfString; content.Value != "" {
+						approvedResults = append(approvedResults, ToolResult{
+							ID:      tc.ID,
+							Content: content.Value,
+						})
+					} else {
+						approvedResults = append(approvedResults, ToolResult{
+							ID:      tc.ID,
+							Content: fmt.Sprintf("%v", toolMsg.Content),
+						})
+					}
+				} else {
+					approvedResults = append(approvedResults, ToolResult{
+						ID:      tc.ID,
+						Content: fmt.Sprintf("%v", result),
+					})
+				}
+			}
+		} else if isRejected {
+			// REJECTED: Return error result without executing
+			approvedResults = append(approvedResults, ToolResult{
+				ID:      tc.ID,
+				Name:    tc.Function.Name,
+				Error:   "Tool execution rejected by user",
+				Content: "",
+			})
+		}
+	}
+
+	// Resume agent execution with tool results (may include approval successes or rejection errors)
+	log.Info("Resuming agent execution with tool results", "results", len(approvedResults), "decision", map[bool]string{true: "approved", false: "rejected"}[isApproved])
+	result, err := agent.ResumeFromApproval(ctx, toolCalls, approvedResults, state.memory, state.eventStream)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to resume agent execution: %w", err)
+	}
+
+	return result, result.Messages, nil
 }

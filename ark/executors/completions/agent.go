@@ -7,6 +7,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/openai/openai-go/shared/constant"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -160,7 +161,14 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
-	toolMessage := ToolMessage(result.Content, result.ID)
+
+	// If the result has an error field set, use that as the message content
+	// This allows tool results to communicate errors (e.g., HITL rejection) back to the model
+	content := result.Content
+	if result.Error != "" {
+		content = result.Error
+	}
+	toolMessage := ToolMessage(content, result.ID)
 
 	if err != nil {
 		return toolMessage, err
@@ -272,18 +280,37 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 }
 
 // ResumeFromApproval resumes agent execution after tool approval is granted
-func (a *Agent) ResumeFromApproval(ctx context.Context, approvedResults []ToolResult, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+// It takes the original tool calls and their execution results
+func (a *Agent) ResumeFromApproval(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, approvedResults []ToolResult, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	log := logf.FromContext(ctx)
+
 	// Get existing messages from memory
 	agentMessages, err := memory.GetMessages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch conversation history: %w", err)
 	}
 
-	// Append approved tool results as tool messages
+	log.Info("Fetched messages from memory for resumption", "count", len(agentMessages))
+
+	// Reconstruct the assistant message with tool_calls that triggered the approval
+	assistantMsg := openai.ChatCompletionMessage{
+		Role:      constant.Assistant("assistant"),
+		ToolCalls: toolCalls,
+	}
+	agentMessages = append(agentMessages, Message(assistantMsg.ToParam()))
+
+	// Append tool results as tool messages (may include approval successes or rejection errors)
 	for _, result := range approvedResults {
-		toolMsg := ToolMessage(result.Content, result.ID)
+		// Use error field if set (e.g., for rejections), otherwise use content
+		content := result.Content
+		if result.Error != "" {
+			content = result.Error
+		}
+		toolMsg := ToolMessage(content, result.ID)
 		agentMessages = append(agentMessages, toolMsg)
 	}
+
+	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
 
 	// Prepare tools
 	var tools []openai.ChatCompletionToolParam

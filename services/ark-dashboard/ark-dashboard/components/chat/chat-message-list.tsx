@@ -28,6 +28,7 @@ interface ChatMessageListProps {
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
   messageTokenUsage?: Record<number, TokenUsage>;
+  pollAfterApproval: () => Promise<void>;
 }
 
 function extractMessageContent(msg: ChatMessageType): string {
@@ -142,6 +143,7 @@ export function ChatMessageList({
   viewMode = 'markdown',
   messagesEndRef,
   messageTokenUsage,
+  pollAfterApproval,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -183,6 +185,7 @@ export function ChatMessageList({
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
+      hasApprovalRequest: boolean;
     }> = [];
 
     messages.forEach((message, index) => {
@@ -208,13 +211,16 @@ export function ChatMessageList({
         hasTermination,
       } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
 
+      const hasApprovalRequest = message.approvalRequest !== undefined;
+
       if (
         !hasToolCalls &&
         !hasContent &&
         !hasTermination &&
         !isMaxTurnsMessage &&
         !isSelectorFailureMessage &&
-        !isConversationStoppedMessage
+        !isConversationStoppedMessage &&
+        !hasApprovalRequest
       ) {
         return;
       }
@@ -241,6 +247,7 @@ export function ChatMessageList({
         hasToolCalls,
         hasContent,
         hasTermination,
+        hasApprovalRequest,
       });
     });
 
@@ -370,7 +377,22 @@ export function ChatMessageList({
                 status={pm.message.metadata?.status}
                 queryName={pm.message.metadata?.queryName}
                 tokenUsage={messageTokenUsage?.[pm.index]}
+                approvalRequest={pm.message.approvalRequest}
+                pollAfterApproval={pollAfterApproval}
               />
+            )}
+            {!pm.hasContent && pm.message.approvalRequest && (
+              <>
+                {console.log('[HITL Debug] Rendering approval request for message:', pm.index, pm.message.approvalRequest)}
+                <ChatMessage
+                  role="assistant"
+                  content=""
+                  viewMode={viewMode}
+                  queryName={pm.message.metadata?.queryName}
+                  approvalRequest={pm.message.approvalRequest}
+                  pollAfterApproval={pollAfterApproval}
+                />
+              </>
             )}
             {pm.hasTermination && (
               <div className="mt-2 flex flex-col gap-2">

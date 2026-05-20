@@ -36,28 +36,42 @@ export function ApprovalNotification({
   onApprove,
   onReject
 }: ApprovalNotificationProps) {
+  console.log('[HITL Debug] ApprovalNotification rendering with props:', {
+    queryName,
+    queryNamespace,
+    toolCalls,
+    timeout,
+    onTimeout,
+    agentName,
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<'approve' | 'reject' | null>(null);
   const [decision, setDecision] = useState<'approved' | 'rejected' | null>(null);
 
   const handleApprove = async () => {
     setIsSubmitting(true);
+    setSubmittingAction('approve');
     try {
       await onApprove();
       setDecision('approved');
     } catch (error) {
       console.error('Failed to approve:', error);
       setIsSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
   const handleReject = async () => {
     setIsSubmitting(true);
+    setSubmittingAction('reject');
     try {
       await onReject();
       setDecision('rejected');
     } catch (error) {
       console.error('Failed to reject:', error);
       setIsSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
@@ -84,8 +98,10 @@ export function ApprovalNotification({
     );
   }
 
+  console.log('[HITL Debug] ApprovalNotification rendering notification UI');
+
   return (
-    <div className="my-4 rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950 p-4">
+    <div className="my-4 rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950 p-4" style={{ minHeight: '100px' }} data-testid="approval-notification">
       <div className="space-y-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
@@ -136,7 +152,14 @@ export function ApprovalNotification({
                           View arguments
                         </summary>
                         <pre className="mt-2 overflow-x-auto rounded bg-amber-100 dark:bg-amber-900/40 p-2 text-amber-900 dark:text-amber-100">
-                          {JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}
+                          {(() => {
+                            try {
+                              return JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2);
+                            } catch (error) {
+                              console.error('[HITL Debug] Failed to parse tool call arguments:', error, toolCall.function.arguments);
+                              return toolCall.function.arguments;
+                            }
+                          })()}
                         </pre>
                       </details>
                     )}
@@ -147,24 +170,66 @@ export function ApprovalNotification({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-2">
-          <Button
-            onClick={handleApprove}
-            disabled={isSubmitting}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            <CheckCircle className="mr-2 size-4" />
-            Approve
-          </Button>
-          <Button
-            onClick={handleReject}
-            disabled={isSubmitting}
-            variant="destructive"
-          >
-            <XCircle className="mr-2 size-4" />
-            Reject
-          </Button>
-        </div>
+        {isSubmitting ? (
+          <div className="flex justify-start pt-2">
+            <div className={cn(
+              "rounded-lg px-3 py-2",
+              submittingAction === 'approve'
+                ? "bg-green-100 dark:bg-green-900/40"
+                : "bg-red-100 dark:bg-red-900/40"
+            )}>
+              <div className="flex items-center gap-2">
+                <div className="flex space-x-1">
+                  <div className={cn(
+                    "size-2 animate-bounce rounded-full [animation-delay:-0.3s]",
+                    submittingAction === 'approve'
+                      ? "bg-green-600 dark:bg-green-400"
+                      : "bg-red-600 dark:bg-red-400"
+                  )}></div>
+                  <div className={cn(
+                    "size-2 animate-bounce rounded-full [animation-delay:-0.15s]",
+                    submittingAction === 'approve'
+                      ? "bg-green-600 dark:bg-green-400"
+                      : "bg-red-600 dark:bg-red-400"
+                  )}></div>
+                  <div className={cn(
+                    "size-2 animate-bounce rounded-full",
+                    submittingAction === 'approve'
+                      ? "bg-green-600 dark:bg-green-400"
+                      : "bg-red-600 dark:bg-red-400"
+                  )}></div>
+                </div>
+                <span className={cn(
+                  "text-sm",
+                  submittingAction === 'approve'
+                    ? "text-green-900 dark:text-green-100"
+                    : "text-red-900 dark:text-red-100"
+                )}>
+                  {submittingAction === 'approve' ? 'Approving and resuming execution...' : 'Rejecting and ending query...'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 pt-2">
+            <Button
+              onClick={handleApprove}
+              disabled={isSubmitting}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <CheckCircle className="mr-2 size-4" />
+              Approve
+            </Button>
+            <Button
+              onClick={handleReject}
+              disabled={isSubmitting}
+              variant="destructive"
+            >
+              <XCircle className="mr-2 size-4" />
+              Reject
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 """API routes for Query resources."""
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException
@@ -412,21 +413,32 @@ async def submit_approval(query_name: str, request: ApprovalActionRequest, names
 
         task_name = f"a2a-task-{task_id}"
 
-        if request.action == ApprovalAction.APPROVED:
-            patch = {
-                "status": {
-                    "phase": "completed"
-                }
-            }
-        else:
-            patch = {
-                "status": {
-                    "phase": "failed",
-                    "error": "Tool execution rejected by user"
-                }
-            }
+        # Get the current task to preserve existing status fields
+        current_task = await ark_client.a2atasks.a_get(task_name)
+        current_task_dict = current_task.to_dict()
+        current_status = current_task_dict.get("status", {})
 
-        await ark_client.a2atasks.a_patch(task_name, patch)
+        if request.action == ApprovalAction.APPROVED:
+            # Update phase to completed
+            current_status["phase"] = "completed"
+        else:
+            # Update phase to failed with error message
+            current_status["phase"] = "failed"
+            current_status["error"] = "Tool execution rejected by user"
+
+        # Patch the status subresource using the Kubernetes API directly
+        from kubernetes import client
+        custom_api = client.CustomObjectsApi()
+        actual_namespace = query_dict["metadata"]["namespace"]
+        await asyncio.to_thread(
+            custom_api.patch_namespaced_custom_object_status,
+            group="ark.mckinsey.com",
+            version=VERSION,
+            namespace=actual_namespace,
+            plural="a2atasks",
+            name=task_name,
+            body={"status": current_status}
+        )
 
         return ApprovalResponse(
             status="success",

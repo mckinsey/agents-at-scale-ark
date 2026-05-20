@@ -201,16 +201,30 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 	// Check task phase
 	switch a2aTask.Status.Phase {
 	case arka2a.PhaseCompleted:
-		// Task completed with approval - transition to done
-		log.Info("A2ATask completed, marking query as done", "taskId", taskID)
-		if err := r.updateStatus(ctx, obj, statusDone); err != nil {
+		// Task completed with approval - resume query execution
+		log.Info("A2ATask completed, resuming query execution", "taskId", taskID)
+		if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+		// Immediately requeue to trigger executor resumption
+		return ctrl.Result{Requeue: true}, nil
 
 	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
-		// Task failed or was cancelled - transition to error
-		log.Info("A2ATask failed or rejected, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase)
+		// Check if this is a user rejection (should resume) vs actual failure (should error)
+		isRejection := a2aTask.Status.Error == "Tool execution rejected by user"
+
+		if isRejection && a2aTask.Status.Phase == arka2a.PhaseFailed {
+			// User rejected tool execution - resume query to let agent handle gracefully
+			log.Info("A2ATask rejected by user, resuming query execution for graceful handling", "taskId", taskID)
+			if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
+				return ctrl.Result{}, err
+			}
+			// Immediately requeue to trigger executor resumption with rejection
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		// Task failed or was cancelled (not user rejection) - transition to error
+		log.Info("A2ATask failed or cancelled, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase, "error", a2aTask.Status.Error)
 		if err := r.updateStatus(ctx, obj, statusError); err != nil {
 			return ctrl.Result{}, err
 		}
