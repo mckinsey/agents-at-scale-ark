@@ -7,6 +7,7 @@ from unittest.mock import patch
 from ark_api.core.mcp_auth_config import (
     CALLBACK_PATH,
     McpAuthConfigError,
+    _read_int,
     _validate_callback_url,
     load_mcp_auth_config,
 )
@@ -45,6 +46,55 @@ class TestValidateCallbackUrl(unittest.TestCase):
     def test_bad_scheme_is_rejected(self):
         with self.assertRaises(McpAuthConfigError):
             _validate_callback_url("ftp://ark.example.com/api/v1/mcp/auth/callback")
+
+    def test_empty_string_is_rejected(self):
+        with self.assertRaises(McpAuthConfigError) as ctx:
+            _validate_callback_url("")
+        self.assertIn("not set", str(ctx.exception))
+
+    def test_missing_netloc_is_rejected(self):
+        with self.assertRaises(McpAuthConfigError) as ctx:
+            _validate_callback_url("https:///api/v1/mcp/auth/callback")
+        self.assertIn("missing host", str(ctx.exception))
+
+    def test_empty_hostname_with_port_is_rejected(self):
+        with self.assertRaises(McpAuthConfigError) as ctx:
+            _validate_callback_url("https://:8080/api/v1/mcp/auth/callback")
+        self.assertIn("missing host", str(ctx.exception))
+
+    def test_extra_path_segments_are_preserved_and_callback_appended(self):
+        result = _validate_callback_url("https://ark.example.com/proxy")
+        self.assertTrue(result.endswith(CALLBACK_PATH))
+        self.assertIn("/proxy", result)
+
+
+class TestReadInt(unittest.TestCase):
+    def test_unset_returns_default(self):
+        import os
+
+        os.environ.pop("ARK_API_TEST_READ_INT", None)
+        self.assertEqual(_read_int("ARK_API_TEST_READ_INT", 42), 42)
+
+    def test_empty_string_returns_default(self):
+        with patch.dict("os.environ", {"ARK_API_TEST_READ_INT": ""}, clear=False):
+            self.assertEqual(_read_int("ARK_API_TEST_READ_INT", 17), 17)
+
+    def test_non_integer_raises(self):
+        with patch.dict("os.environ", {"ARK_API_TEST_READ_INT": "abc"}, clear=False):
+            with self.assertRaises(McpAuthConfigError) as ctx:
+                _read_int("ARK_API_TEST_READ_INT", 1)
+        self.assertIn("integer", str(ctx.exception))
+
+    def test_zero_raises(self):
+        with patch.dict("os.environ", {"ARK_API_TEST_READ_INT": "0"}, clear=False):
+            with self.assertRaises(McpAuthConfigError) as ctx:
+                _read_int("ARK_API_TEST_READ_INT", 1)
+        self.assertIn("positive", str(ctx.exception))
+
+    def test_negative_raises(self):
+        with patch.dict("os.environ", {"ARK_API_TEST_READ_INT": "-5"}, clear=False):
+            with self.assertRaises(McpAuthConfigError):
+                _read_int("ARK_API_TEST_READ_INT", 1)
 
 
 class TestLoadConfig(unittest.TestCase):

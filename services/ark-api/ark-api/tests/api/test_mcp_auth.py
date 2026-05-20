@@ -608,6 +608,237 @@ class TestRedaction(_AuthBase):
             self.assertNotIn(needle, joined)
 
 
+class TestConfigGuards(_AuthBase):
+    def test_callback_url_unset_returns_503(self):
+        original = os.environ.pop("ARK_API_PUBLIC_CALLBACK_URL", None)
+        mcp_auth_config.reset_mcp_auth_config()
+        try:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+            self.assertEqual(response.status_code, 503, response.text)
+        finally:
+            if original is not None:
+                os.environ["ARK_API_PUBLIC_CALLBACK_URL"] = original
+            mcp_auth_config.reset_mcp_auth_config()
+
+    def test_invalid_env_returns_503_for_callback(self):
+        os.environ["ARK_API_MCP_AUTH_CACHE_TTL_SECONDS"] = "not-an-int"
+        mcp_auth_config.reset_mcp_auth_config()
+        try:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "anything", "code": "x"},
+            )
+            self.assertEqual(response.status_code, 503, response.text)
+        finally:
+            del os.environ["ARK_API_MCP_AUTH_CACHE_TTL_SECONDS"]
+            mcp_auth_config.reset_mcp_auth_config()
+
+
+class TestAuthStartMissingFields(_AuthBase):
+    def test_missing_authorization_endpoint_returns_422(self):
+        patcher, _ = _patch_ark_client(_build_mcp_dict(authorization_endpoint=None))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 422, response.text)
+
+    def test_missing_token_secret_ref_returns_422(self):
+        patcher, _ = _patch_ark_client(_build_mcp_dict(token_secret_ref={}))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 422, response.text)
+
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_force_registration_falls_back_to_cached_when_endpoint_missing(
+        self, mock_register, mock_read_creds
+    ):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+
+        mock_read_creds.return_value = CachedClientCreds(client_id="cid", client_secret="csec")
+        patcher, _ = _patch_ark_client(_build_mcp_dict(registration_endpoint=None))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={"force_registration": True},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        mock_register.assert_not_called()
+
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    def test_explicit_scopes_override_advertised(self, mock_read_creds):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+
+        mock_read_creds.return_value = CachedClientCreds(client_id="cid", client_secret="csec")
+        patcher, _ = _patch_ark_client(
+            _build_mcp_dict(scopes_supported=["read", "write"])
+        )
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={"scopes": ["custom"]},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("scope=custom", response.json()["authorization_url"])
+
+
+class TestAuthCallbackMissingFields(_AuthBase):
+    def test_missing_state_returns_400(self):
+        response = self.client.get("/v1/mcp/auth/callback", params={"code": "x"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Missing state parameter", response.text)
+
+    def test_missing_code_marks_failed(self):
+        import asyncio
+        from ark_api.services.mcp_auth_cache import CacheEntry, get_mcp_auth_cache
+        from ark_api.services.pkce import generate_auth_id, generate_state, generate_verifier
+        import time as _time
+
+        async def _put():
+            cache = get_mcp_auth_cache(600)
+            entry = CacheEntry(
+                auth_id=generate_auth_id(),
+                state=generate_state(),
+                mcp_server_name="notion-mcp",
+                namespace="default",
+                verifier=generate_verifier(),
+                client_id="cid",
+                client_secret="csec",
+                caller_identity="cli",
+                created_at=_time.time(),
+                ttl_seconds=600,
+            )
+            await cache.put(entry)
+            return entry
+
+        entry = asyncio.run(_put())
+        response = self.client.get("/v1/mcp/auth/callback", params={"state": entry.state})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Missing authorization code", response.text)
+
+        async def _get():
+            cache = get_mcp_auth_cache(600)
+            return await cache.get_by_auth_id(entry.auth_id)
+
+        refreshed = asyncio.run(_get())
+        self.assertEqual(refreshed.flow_state, "failed")
+
+    def test_callback_metadata_missing_marks_failed(self):
+        import asyncio
+        from ark_api.services.mcp_auth_cache import CacheEntry, get_mcp_auth_cache
+        from ark_api.services.pkce import generate_auth_id, generate_state, generate_verifier
+        import time as _time
+
+        async def _put():
+            cache = get_mcp_auth_cache(600)
+            entry = CacheEntry(
+                auth_id=generate_auth_id(),
+                state=generate_state(),
+                mcp_server_name="notion-mcp",
+                namespace="default",
+                verifier=generate_verifier(),
+                client_id="cid",
+                client_secret="csec",
+                caller_identity="cli",
+                created_at=_time.time(),
+                ttl_seconds=600,
+            )
+            await cache.put(entry)
+            return entry
+
+        entry = asyncio.run(_put())
+        patcher, _ = _patch_ark_client(_build_mcp_dict(token_endpoint=None))
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": entry.state, "code": "the-code"},
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("metadata went missing", response.text)
+
+
+class TestAuthStatusExpired(_AuthBase):
+    def _seed_entry_sync(self, **overrides):
+        import asyncio
+        from ark_api.services.mcp_auth_cache import CacheEntry, get_mcp_auth_cache
+        from ark_api.services.pkce import generate_auth_id, generate_state, generate_verifier
+        import time as _time
+
+        async def _put():
+            cache = get_mcp_auth_cache(600)
+            entry = CacheEntry(
+                auth_id=overrides.get("auth_id") or generate_auth_id(),
+                state=overrides.get("state") or generate_state(),
+                mcp_server_name="notion-mcp",
+                namespace="default",
+                verifier=generate_verifier(),
+                client_id="cid",
+                client_secret="csec",
+                caller_identity="cli",
+                created_at=_time.time(),
+                ttl_seconds=600,
+                flow_state=overrides.get("flow_state", "pending"),
+                message=overrides.get("message"),
+            )
+            await cache.put(entry)
+            return entry
+
+        return asyncio.run(_put())
+
+    def test_expired_flow_state_is_returned(self):
+        entry = self._seed_entry_sync(flow_state="expired", message="ttl")
+        patcher, _ = _patch_ark_client(_build_mcp_dict(state="Required"))
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp-servers/notion-mcp/auth/status",
+                params={"auth_id": entry.auth_id, "namespace": "default"},
+            )
+        self.assertEqual(response.json()["state"], "expired")
+
+
+class TestAuthLogoutNoTokenRef(_AuthBase):
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_no_token_secret_ref_returns_noop(self, mock_strip):
+        patcher, _ = _patch_ark_client(_build_mcp_dict(token_secret_ref={}))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/logout",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["noop"])
+        mock_strip.assert_awaited_once()
+
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.delete_token_secret", new_callable=AsyncMock)
+    def test_delete_secret_missing_logs_noop_after_strip(self, mock_delete, mock_strip):
+        mock_delete.return_value = False
+        patcher, _ = _patch_ark_client(_build_mcp_dict())
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/logout",
+                json={"delete_secret": True},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["noop"])
+        mock_strip.assert_awaited_once()
+
+
 class TestAuthIdEntropy(unittest.TestCase):
     def test_auth_id_decodes_to_at_least_16_bytes(self):
         import base64

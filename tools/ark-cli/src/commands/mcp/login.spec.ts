@@ -312,6 +312,231 @@ describe('runLogin redaction', () => {
   });
 });
 
+describe('runLogin scope splitting', () => {
+  it('splits scope on whitespace and commas, dropping empties', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'x',
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'authorized'}),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    await runLogin(
+      'notion-mcp',
+      {scope: 'read  write,, admin', open: false},
+      deps
+    );
+    expect(client.start).toHaveBeenCalledWith('notion-mcp', 'default', {
+      scope: ['read', 'write', 'admin'],
+    });
+  });
+});
+
+describe('runLogin invalid --timeout', () => {
+  it('rejects garbage --timeout before contacting proxy', async () => {
+    const client = {start: vi.fn(), status: vi.fn(), logout: vi.fn()};
+    const startProxy = vi.fn();
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      startProxy,
+    });
+    const code = await runLogin(
+      'notion-mcp',
+      {timeout: 'not-a-duration', open: false},
+      deps
+    );
+    expect(code).toBe(1);
+    expect(startProxy).not.toHaveBeenCalled();
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      expect.stringContaining('invalid --timeout value')
+    );
+  });
+});
+
+describe('runLogin openBrowser failure', () => {
+  it('swallows browser open errors and continues polling', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'https://idp/example',
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'authorized'}),
+      logout: vi.fn(),
+    };
+    const openBrowser = vi.fn().mockRejectedValue(new Error('no browser'));
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser,
+    });
+    const code = await runLogin('notion-mcp', {}, deps);
+    expect(code).toBe(0);
+    expect(openBrowser).toHaveBeenCalledWith('https://idp/example');
+    expect(client.status).toHaveBeenCalled();
+  });
+});
+
+describe('runLogin status error mid-poll', () => {
+  it('surfaces AuthHttpError thrown by status() with body', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'x',
+        flow_expires_at: 'x',
+      }),
+      status: vi
+        .fn()
+        .mockRejectedValue(new AuthHttpError(500, 'kaboom')),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith('mcp auth failed:', 'kaboom');
+  });
+
+  it('falls back to HTTP <status> when AuthHttpError body is empty', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'x',
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockRejectedValue(new AuthHttpError(503, '')),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      'HTTP 503'
+    );
+  });
+
+  it('surfaces generic Error thrown by status()', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'x',
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockRejectedValue(new Error('network gone')),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      'network gone'
+    );
+  });
+});
+
+describe('runLogin start error fallback', () => {
+  it('falls back to HTTP <status> when AuthHttpError body is empty', async () => {
+    const client = {
+      start: vi.fn().mockRejectedValue(new AuthHttpError(500, '')),
+      status: vi.fn(),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      'HTTP 500'
+    );
+  });
+
+  it('surfaces generic Error thrown by start()', async () => {
+    const client = {
+      start: vi.fn().mockRejectedValue(new Error('boom')),
+      status: vi.fn(),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith('mcp auth failed:', 'boom');
+  });
+});
+
+describe('runLogin authorized without expires_at', () => {
+  it('prints "authorized" without timestamp suffix', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'x',
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'authorized'}),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(0);
+    expect(mockOutput.success).toHaveBeenCalledWith('authorized');
+  });
+});
+
+describe('runLogin expired terminal state', () => {
+  it('returns 1 on expired state with no message, using state as reason', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: 'x',
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'expired'}),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    const code = await runLogin('notion-mcp', {open: false}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith('mcp auth failed:', 'expired');
+  });
+});
+
 describe('execa carve-out', () => {
   it('runLogin never shells out to kubectl get/patch — only port-forward is allowed', async () => {
     const client = {

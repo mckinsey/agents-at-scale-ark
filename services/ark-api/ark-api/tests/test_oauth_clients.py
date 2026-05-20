@@ -221,6 +221,220 @@ class TestExchangeCode(unittest.TestCase):
         with self.assertRaises(TokenExchangeError):
             asyncio.run(run())
 
+    def test_4xx_non_json_response_uses_http_status_code(self):
+        def handler(request):
+            return httpx.Response(503, content=b"<html>maintenance</html>")
+
+        async def run():
+            async with _client_for(handler) as c:
+                await exchange_code(
+                    token_endpoint=TOKEN_ENDPOINT,
+                    code="x",
+                    redirect_uri=REDIRECT_URI,
+                    code_verifier="v",
+                    resource="https://mcp.example/mcp",
+                    client_id="cid",
+                    client_secret="csec",
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        with self.assertRaises(TokenExchangeError) as ctx:
+            asyncio.run(run())
+        self.assertEqual(ctx.exception.error_code, "http_503")
+
+    def test_2xx_non_json_raises(self):
+        def handler(request):
+            return httpx.Response(200, content=b"not-json")
+
+        async def run():
+            async with _client_for(handler) as c:
+                await exchange_code(
+                    token_endpoint=TOKEN_ENDPOINT,
+                    code="x",
+                    redirect_uri=REDIRECT_URI,
+                    code_verifier="v",
+                    resource="https://mcp.example/mcp",
+                    client_id="cid",
+                    client_secret="csec",
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        with self.assertRaises(TokenExchangeError):
+            asyncio.run(run())
+
+    def test_missing_expires_in_returns_none(self):
+        def handler(request):
+            return httpx.Response(200, json={"access_token": "at"})
+
+        async def run():
+            async with _client_for(handler) as c:
+                return await exchange_code(
+                    token_endpoint=TOKEN_ENDPOINT,
+                    code="x",
+                    redirect_uri=REDIRECT_URI,
+                    code_verifier="v",
+                    resource="https://mcp.example/mcp",
+                    client_id="cid",
+                    client_secret="csec",
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        result = asyncio.run(run())
+        self.assertIsNone(result.expires_in)
+        self.assertIsNone(result.refresh_token)
+
+    def test_non_integer_expires_in_coerces_to_none(self):
+        def handler(request):
+            return httpx.Response(200, json={"access_token": "at", "expires_in": "soon"})
+
+        async def run():
+            async with _client_for(handler) as c:
+                return await exchange_code(
+                    token_endpoint=TOKEN_ENDPOINT,
+                    code="x",
+                    redirect_uri=REDIRECT_URI,
+                    code_verifier="v",
+                    resource="https://mcp.example/mcp",
+                    client_id="cid",
+                    client_secret="csec",
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        result = asyncio.run(run())
+        self.assertIsNone(result.expires_in)
+
+    def test_owns_client_path_closes_default_client(self):
+        from unittest.mock import patch, AsyncMock, MagicMock
+
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json = MagicMock(
+            return_value={"access_token": "at", "expires_in": 3600}
+        )
+        fake_client = MagicMock()
+        fake_client.post = AsyncMock(return_value=fake_response)
+        fake_client.aclose = AsyncMock()
+
+        with patch(
+            "ark_api.services.oauth_token.httpx.AsyncClient", return_value=fake_client
+        ):
+            result = asyncio.run(
+                exchange_code(
+                    token_endpoint=TOKEN_ENDPOINT,
+                    code="x",
+                    redirect_uri=REDIRECT_URI,
+                    code_verifier="v",
+                    resource="https://mcp.example/mcp",
+                    client_id="cid",
+                    client_secret="csec",
+                    timeout_seconds=5,
+                )
+            )
+
+        fake_client.aclose.assert_awaited_once()
+        self.assertEqual(result.access_token, "at")
+
+
+class TestRegisterClientExtras(unittest.TestCase):
+    def test_redirect_uris_non_list_is_rejected(self):
+        def handler(request):
+            return httpx.Response(
+                200,
+                json={
+                    "client_id": "cid",
+                    "client_secret": "csec",
+                    "redirect_uris": "not-a-list",
+                    "token_endpoint_auth_method": "client_secret_basic",
+                },
+            )
+
+        async def run():
+            async with _client_for(handler) as c:
+                await register_client(
+                    registration_endpoint=REGISTRATION_ENDPOINT,
+                    redirect_uri=REDIRECT_URI,
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        with self.assertRaises(DcrError):
+            asyncio.run(run())
+
+    def test_2xx_non_json_is_rejected(self):
+        def handler(request):
+            return httpx.Response(200, content=b"<html>oops</html>")
+
+        async def run():
+            async with _client_for(handler) as c:
+                await register_client(
+                    registration_endpoint=REGISTRATION_ENDPOINT,
+                    redirect_uri=REDIRECT_URI,
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        with self.assertRaises(DcrError) as ctx:
+            asyncio.run(run())
+        self.assertIn("not JSON", str(ctx.exception))
+
+    def test_missing_client_id_is_rejected(self):
+        def handler(request):
+            return httpx.Response(
+                200,
+                json={
+                    "client_secret": "csec",
+                    "redirect_uris": [REDIRECT_URI],
+                    "token_endpoint_auth_method": "client_secret_basic",
+                },
+            )
+
+        async def run():
+            async with _client_for(handler) as c:
+                await register_client(
+                    registration_endpoint=REGISTRATION_ENDPOINT,
+                    redirect_uri=REDIRECT_URI,
+                    timeout_seconds=5,
+                    client=c,
+                )
+
+        with self.assertRaises(DcrError):
+            asyncio.run(run())
+
+    def test_owns_client_path_closes_default_client(self):
+        from unittest.mock import patch, AsyncMock, MagicMock
+
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json = MagicMock(
+            return_value={
+                "client_id": "cid",
+                "client_secret": "csec",
+                "redirect_uris": [REDIRECT_URI],
+                "token_endpoint_auth_method": "client_secret_basic",
+            }
+        )
+        fake_client = MagicMock()
+        fake_client.post = AsyncMock(return_value=fake_response)
+        fake_client.aclose = AsyncMock()
+
+        with patch(
+            "ark_api.services.oauth_dcr.httpx.AsyncClient", return_value=fake_client
+        ):
+            result = asyncio.run(
+                register_client(
+                    registration_endpoint=REGISTRATION_ENDPOINT,
+                    redirect_uri=REDIRECT_URI,
+                    timeout_seconds=5,
+                )
+            )
+
+        fake_client.aclose.assert_awaited_once()
+        self.assertEqual(result.client_id, "cid")
+
 
 if __name__ == "__main__":
     unittest.main()

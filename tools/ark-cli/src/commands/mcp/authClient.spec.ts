@@ -66,6 +66,39 @@ describe('McpAuthClient', () => {
     );
   });
 
+  it('status() raises AuthHttpError with body on non-2xx', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => 'service unavailable',
+    });
+    const client = new McpAuthClient('http://localhost:8080');
+    await expect(
+      client.status('notion-mcp', 'default', 'aid')
+    ).rejects.toThrow(AuthHttpError);
+    try {
+      await client.status('notion-mcp', 'default', 'aid');
+    } catch (err) {
+      expect(err).toBeInstanceOf(AuthHttpError);
+      expect((err as InstanceType<typeof AuthHttpError>).status).toBe(503);
+      expect((err as InstanceType<typeof AuthHttpError>).body).toBe(
+        'service unavailable'
+      );
+    }
+  });
+
+  it('logout() raises AuthHttpError with body on non-2xx', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'internal error',
+    });
+    const client = new McpAuthClient('http://localhost:8080');
+    await expect(
+      client.logout('notion-mcp', 'default', {delete_secret: true})
+    ).rejects.toThrow(AuthHttpError);
+  });
+
   it('POSTs to auth/logout', async () => {
     mockFetch.mockResolvedValue({
       ok: true,

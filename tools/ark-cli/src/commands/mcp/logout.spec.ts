@@ -158,6 +158,65 @@ describe('runLogout', () => {
   });
 });
 
+describe('runLogout error fallbacks', () => {
+  it('non-404 AuthHttpError surfaces body verbatim', async () => {
+    const client = {
+      start: vi.fn(),
+      status: vi.fn(),
+      logout: vi
+        .fn()
+        .mockRejectedValue(new AuthHttpError(500, 'server explosion')),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+    });
+    const code = await runLogout('notion-mcp', {}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      'server explosion'
+    );
+  });
+
+  it('non-404 AuthHttpError with empty body falls back to HTTP <status>', async () => {
+    const client = {
+      start: vi.fn(),
+      status: vi.fn(),
+      logout: vi.fn().mockRejectedValue(new AuthHttpError(502, '')),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+    });
+    const code = await runLogout('notion-mcp', {}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      'HTTP 502'
+    );
+  });
+
+  it('generic Error from logout() is surfaced and exits 1', async () => {
+    const client = {
+      start: vi.fn(),
+      status: vi.fn(),
+      logout: vi.fn().mockRejectedValue(new Error('network gone')),
+    };
+    const {deps, stop} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+    });
+    const code = await runLogout('notion-mcp', {}, deps);
+    expect(code).toBe(1);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'mcp auth failed:',
+      'network gone'
+    );
+    expect(stop).toHaveBeenCalled();
+  });
+});
+
 describe('logout execa carve-out', () => {
   it('runLogout never shells out to kubectl get/patch — only port-forward is allowed', async () => {
     const client = {
