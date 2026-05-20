@@ -191,8 +191,9 @@ export function createMemoryRouter(
               });
             }),
           filter: conversationId
-            ? (msg: {conversation_id: string}): boolean =>
-                msg.conversation_id === conversationId
+            ? (msg: unknown): boolean =>
+                (msg as {conversation_id: string}).conversation_id ===
+                conversationId
             : undefined,
           replayItems,
         });

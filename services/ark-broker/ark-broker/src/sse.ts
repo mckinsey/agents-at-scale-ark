@@ -18,15 +18,18 @@ export const writeSSEEvent = (
 const SSE_HEARTBEAT_INTERVAL_MS = 30000;
 
 export const startSSEHeartbeat = (
-  res: Response
+  res: Response,
+  logger: Logger
 ): ReturnType<typeof setInterval> => {
-  return setInterval(() => {
+  const interval = setInterval(() => {
     try {
       res.write(': heartbeat\n\n');
-    } catch {
-      // Ignore write errors - client may have disconnected
+    } catch (err) {
+      logger.debug({err}, 'heartbeat write failed, clearing interval');
+      clearInterval(interval);
     }
   }, SSE_HEARTBEAT_INTERVAL_MS);
+  return interval;
 };
 
 interface SSEStreamOptions {
@@ -35,9 +38,9 @@ interface SSEStreamOptions {
   logger: Logger;
   tag: string;
   itemName: string;
-  subscribe: (callback: (item: any) => void) => () => void;
-  replayItems?: any[];
-  filter?: (item: any) => boolean;
+  subscribe: (callback: (item: unknown) => void) => () => void;
+  replayItems?: unknown[];
+  filter?: (item: unknown) => boolean;
   identifier?: string;
 }
 
@@ -61,7 +64,7 @@ export const streamSSE = (options: SSEStreamOptions): void => {
 
   res.write(': connected\n\n');
 
-  const heartbeat = startSSEHeartbeat(res);
+  const heartbeat = startSSEHeartbeat(res, logger);
 
   let itemCount = 0;
   let lastLogTime = Date.now();
@@ -81,7 +84,7 @@ export const streamSSE = (options: SSEStreamOptions): void => {
     }
   }
 
-  const unsubscribe = subscribe((item: any) => {
+  const unsubscribe = subscribe((item: unknown) => {
     if (filter && !filter(item)) {
       return;
     }
