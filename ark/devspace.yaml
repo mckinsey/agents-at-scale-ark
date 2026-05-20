@@ -53,6 +53,11 @@ pipelines:
     fi
     create_deployments ark-controller
     create_deployments ark-completions
+    # Pre-create the Go cache PVCs before DevSpace starts dev mode. DevSpace names
+    # its own PVCs after the dev container (e.g. ark-controller-devspace) and deletes
+    # them on `devspace purge`. By applying these beforehand they are not tracked by
+    # DevSpace and therefore survive purge, preserving the Go module and build caches.
+    kubectl apply -f hack/dev-pvcs.yaml
     start_dev --all
 
 deployments:
@@ -134,11 +139,21 @@ dev:
       - "-c"
       - |
         cd /app
+        mkdir -p /go-cache/mod /go-cache/build
         mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
-        GOTOOLCHAIN=auto go run cmd/main.go --role=controller --leader-elect=false --completions-addr=http://ark-completions.ark-system
+        # Redirect module and build caches to /go-cache, which is on a PVC (see
+        # persistPaths below). This avoids re-downloading modules and recompiling
+        # everything from scratch on every container restart.
+        GOMODCACHE=/go-cache/mod GOCACHE=/go-cache/build GOTOOLCHAIN=auto go run cmd/main.go --role=controller --leader-elect=false --completions-addr=http://ark-completions.ark-system
     namespace: ark-system
     logs:
       lastLines: 50
+    # Mount a PVC at /go-cache that persists across container restarts.
+    # skipPopulate=true means DevSpace does not overwrite the PVC contents when
+    # the container starts, so cached modules and build artifacts survive restarts.
+    persistPaths:
+      - path: /go-cache
+        skipPopulate: true
     sync:
       - path: .:/app
         startContainer: true
@@ -154,10 +169,17 @@ dev:
     command:
       - "sh"
       - "-c"
-      - "cd /app && GOTOOLCHAIN=auto go run cmd/completions/main.go --addr=:9090"
+      # Redirect module and build caches to the persisted PVC (see persistPaths below).
+      - "cd /app && mkdir -p /go-cache/mod /go-cache/build && GOMODCACHE=/go-cache/mod GOCACHE=/go-cache/build GOTOOLCHAIN=auto go run cmd/completions/main.go --addr=:9090"
     namespace: ark-system
     logs:
       lastLines: 50
+    # Mount a PVC at /go-cache that persists across container restarts.
+    # skipPopulate=true means DevSpace does not overwrite the PVC contents when
+    # the container starts, so cached modules and build artifacts survive restarts.
+    persistPaths:
+      - path: /go-cache
+        skipPopulate: true
     sync:
       - path: .:/app
         startContainer: true
@@ -199,8 +221,10 @@ profiles:
           - "-c"
           - |
             cd /app
+            mkdir -p /go-cache/mod /go-cache/build
             mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
-            GOTOOLCHAIN=auto \
+            # Redirect caches to the persisted PVC (see dev.ark-controller.persistPaths).
+            GOMODCACHE=/go-cache/mod GOCACHE=/go-cache/build GOTOOLCHAIN=auto \
             ARK_STORAGE_BACKEND=postgresql \
             ARK_POSTGRES_HOST=ark-storage-dev.ark-system.svc.cluster.local \
             ARK_POSTGRES_PORT=5432 \

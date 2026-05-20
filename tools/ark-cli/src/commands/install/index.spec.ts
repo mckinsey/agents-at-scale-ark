@@ -58,6 +58,11 @@ const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
 vi.spyOn(console, 'log').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
+const mockRunReadinessChecks = vi.fn();
+vi.mock('../../lib/readinessChecks.js', () => ({
+  runReadinessChecks: mockRunReadinessChecks,
+}));
+
 const {createInstallCommand} = await import('./index.js');
 
 describe('install command', () => {
@@ -83,6 +88,11 @@ describe('install command', () => {
       namespace: 'default',
     });
     mockIsMarketplaceService.mockReturnValue(false);
+    // Mock successful readiness checks by default
+    mockRunReadinessChecks.mockResolvedValue([
+      {name: 'APIServices available', passed: true, durationMs: 100},
+      {name: 'API group registered', passed: true, durationMs: 100},
+    ]);
   });
 
   it('creates command with correct structure', () => {
@@ -1289,6 +1299,189 @@ describe('install command', () => {
       const args = installCall![1];
       expect(args.join(' ')).not.toContain('storage.backend');
       expect(args.join(' ')).not.toContain('postgresql.host');
+    });
+  });
+
+  describe('ark-apiserver readiness checks', () => {
+    const pgConfig = {
+      clusterInfo: {
+        context: 'test-cluster',
+        type: 'minikube',
+        namespace: 'default',
+      },
+      storage: {
+        backend: 'postgresql',
+        postgresql: {
+          host: 'db.example.com',
+          user: 'ark_user',
+          passwordSecretName: 'my-secret',
+          sslMode: 'require',
+        },
+      },
+    } as any;
+
+    it('waits for ark-apiserver readiness after install in postgresql mode', async () => {
+      const mockService = {
+        name: 'ark-apiserver',
+        helmReleaseName: 'ark-apiserver',
+        chartPath: './charts/ark-apiserver',
+        namespace: 'ark-system',
+        requiresBackend: 'postgresql',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-apiserver': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+      mockRunReadinessChecks.mockResolvedValue([
+        {name: 'APIServices available', passed: true, durationMs: 100},
+        {name: 'API group registered', passed: true, durationMs: 100},
+      ]);
+
+      const command = createInstallCommand(pgConfig);
+      await command.parseAsync(['node', 'test', 'ark-apiserver']);
+
+      expect(mockRunReadinessChecks).toHaveBeenCalledWith(120);
+    });
+
+    it('exits with error if ark-apiserver readiness check fails', async () => {
+      const mockService = {
+        name: 'ark-apiserver',
+        helmReleaseName: 'ark-apiserver',
+        chartPath: './charts/ark-apiserver',
+        namespace: 'ark-system',
+        requiresBackend: 'postgresql',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-apiserver': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+      mockRunReadinessChecks.mockResolvedValue([
+        {name: 'APIServices available', passed: false, durationMs: 100, message: 'timed out'},
+      ]);
+
+      const command = createInstallCommand(pgConfig);
+      await expect(
+        command.parseAsync(['node', 'test', 'ark-apiserver'])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockOutput.error).toHaveBeenCalledWith('ark-apiserver is not ready. Stopping installation.');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('exits with error if ark-apiserver readiness check throws', async () => {
+      const mockService = {
+        name: 'ark-apiserver',
+        helmReleaseName: 'ark-apiserver',
+        chartPath: './charts/ark-apiserver',
+        namespace: 'ark-system',
+        requiresBackend: 'postgresql',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-apiserver': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+      mockRunReadinessChecks.mockRejectedValue(new Error('kubectl not found'));
+
+      const command = createInstallCommand(pgConfig);
+      await expect(
+        command.parseAsync(['node', 'test', 'ark-apiserver'])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('does not run readiness checks for ark-apiserver in etcd mode', async () => {
+      const mockService = {
+        name: 'ark-apiserver',
+        helmReleaseName: 'ark-apiserver',
+        chartPath: './charts/ark-apiserver',
+        namespace: 'ark-system',
+        requiresBackend: 'postgresql',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-apiserver': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-apiserver']);
+
+      expect(mockRunReadinessChecks).not.toHaveBeenCalled();
+    });
+
+    it('does not run readiness checks for other services in postgresql mode', async () => {
+      const mockService = {
+        name: 'ark-controller',
+        helmReleaseName: 'ark-controller',
+        chartPath: './charts/ark-controller',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-controller': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(pgConfig);
+      await command.parseAsync(['node', 'test', 'ark-controller']);
+
+      expect(mockRunReadinessChecks).not.toHaveBeenCalled();
+    });
+
+    it('waits for ark-apiserver readiness in interactive mode', async () => {
+      const mockService = {
+        name: 'ark-apiserver',
+        helmReleaseName: 'ark-apiserver',
+        chartPath: './charts/ark-apiserver',
+        namespace: 'ark-system',
+        requiresBackend: 'postgresql',
+        category: 'core',
+        mandatory: true,
+        enabled: true,
+      };
+      Object.assign(mockArkServices, {'ark-apiserver': mockService});
+      Object.assign(mockArkDependencies, {
+        'cert-manager-repo': {
+          name: 'cert-manager-repo',
+          command: 'helm',
+          args: ['repo', 'add', 'jetstack', 'https://charts.jetstack.io'],
+          description: 'Add Jetstack Helm repository',
+        },
+        'helm-repo-update': {
+          name: 'helm-repo-update',
+          command: 'helm',
+          args: ['repo', 'update'],
+          description: 'Update Helm repositories',
+        },
+        'cert-manager': {
+          name: 'cert-manager',
+          command: 'helm',
+          args: ['upgrade', '--install', 'cert-manager', 'jetstack/cert-manager'],
+          description: 'Certificate management',
+        },
+        'gateway-api-crds': {
+          name: 'gateway-api-crds',
+          command: 'kubectl',
+          args: ['apply', '-f', 'https://example.com/gateway-api.yaml'],
+          description: 'Gateway API CRDs',
+        },
+      });
+      mockGetInstallableServices.mockReturnValue({
+        'ark-apiserver': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+      mockPrompt.mockResolvedValue({
+        components: ['ark-apiserver'],
+        installGatewayApi: false,
+      });
+      mockRunReadinessChecks.mockResolvedValue([
+        {name: 'APIServices available', passed: true, durationMs: 100},
+        {name: 'API group registered', passed: true, durationMs: 100},
+      ]);
+
+      const command = createInstallCommand(pgConfig);
+      await command.parseAsync(['node', 'test']);
+
+      expect(mockRunReadinessChecks).toHaveBeenCalledWith(120);
     });
   });
 

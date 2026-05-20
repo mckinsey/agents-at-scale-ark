@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Helper script to check documentation links using broken-link-checker (blc).
+ * Helper script to check documentation links using linkinator.
  * This script starts a local server to serve the built documentation and then
- * runs blc to check for broken links. The documentation must be built first
+ * runs linkinator to check for broken links. The documentation must be built first
  * using 'npm run build' which outputs to the 'out' directory.
  *
  * Usage: node scripts/check-links.js [--include-external]
@@ -29,16 +29,16 @@ server.listen(0, () => {
 
     // Wait for server to start then run link checker
     setTimeout(() => {
-      const args = ['blc', `http://localhost:${port}`, '--recursive', '--ordered'];
+      const args = ['linkinator', `http://localhost:${port}`, '--recurse'];
       if (!includeExternal) {
-        args.push('--exclude-external');
+        args.push('--skip', `^(?!http://localhost:${port})`);
       }
 
-      const blc = spawn(npxPath, args, {
+      const linkinator = spawn(npxPath, args, {
         stdio: 'inherit'
       });
 
-      blc.on('close', (code) => {
+      linkinator.on('close', (code) => {
         serve.kill();
         process.exit(code);
       });
