@@ -866,6 +866,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files/model-context/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Context Root */
+        get: operations["model_context_root_v1_files_model_context__provider__get"];
+        put?: never;
+        /** Model Context Root */
+        post: operations["model_context_root_v1_files_model_context__provider__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/model-context/{provider}/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Context File */
+        get: operations["model_context_file_v1_files_model_context__provider___file_id__get"];
+        put?: never;
+        post?: never;
+        /** Model Context File */
+        delete: operations["model_context_file_v1_files_model_context__provider___file_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/workspace/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Workspace Path */
+        get: operations["workspace_path_v1_files_workspace__path__get"];
+        /** Workspace Path */
+        put: operations["workspace_path_v1_files_workspace__path__put"];
+        /** Workspace Path */
+        post: operations["workspace_path_v1_files_workspace__path__post"];
+        /** Workspace Path */
+        delete: operations["workspace_path_v1_files_workspace__path__delete"];
+        options?: never;
+        /** Workspace Path */
+        head: operations["workspace_path_v1_files_workspace__path__head"];
+        /** Workspace Path */
+        patch: operations["workspace_path_v1_files_workspace__path__patch"];
+        trace?: never;
+    };
     "/v1/mcp-servers": {
         parameters: {
             query?: never;
@@ -5646,6 +5704,318 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpreadsheetData"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_context_root_v1_files_model_context__provider__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_context_root_v1_files_model_context__provider__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_context_file_v1_files_model_context__provider___file_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_context_file_v1_files_model_context__provider___file_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_path_v1_files_workspace__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_path_v1_files_workspace__path__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_path_v1_files_workspace__path__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_path_v1_files_workspace__path__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_path_v1_files_workspace__path__head: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_path_v1_files_workspace__path__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
