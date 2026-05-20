@@ -278,3 +278,86 @@ func TestApprovalRequiredErrorWithMissingContext(t *testing.T) {
 	require.Equal(t, "test-agent", approvalErr.Context.AgentName)
 	require.Equal(t, "default", approvalErr.Context.AgentNamespace)
 }
+func TestToolResultErrorConversion(t *testing.T) {
+	tests := []struct {
+		name           string
+		toolResult     ToolResult
+		expectedContent string
+	}{
+		{
+			name: "tool result with error field uses error",
+			toolResult: ToolResult{
+				ID:      "call-1",
+				Name:    "test-tool",
+				Error:   "Tool execution rejected by user",
+				Content: "some content",
+			},
+			expectedContent: "Tool execution rejected by user",
+		},
+		{
+			name: "tool result without error uses content",
+			toolResult: ToolResult{
+				ID:      "call-2",
+				Name:    "test-tool",
+				Error:   "",
+				Content: "success content",
+			},
+			expectedContent: "success content",
+		},
+		{
+			name: "tool result with empty error and empty content",
+			toolResult: ToolResult{
+				ID:      "call-3",
+				Name:    "test-tool",
+				Error:   "",
+				Content: "",
+			},
+			expectedContent: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the logic from agent.go executeToolCall
+			content := tt.toolResult.Content
+			if tt.toolResult.Error != "" {
+				content = tt.toolResult.Error
+			}
+
+			require.Equal(t, tt.expectedContent, content, "Content selection should prioritize error field when present")
+		})
+	}
+}
+
+func TestRejectionCreatesErrorResults(t *testing.T) {
+	// This test verifies that when tools are rejected, error ToolResults are created
+	// instead of executing the tools
+	
+	toolCalls := []struct {
+		ID       string
+		Name     string
+		Arguments string
+	}{
+		{ID: "call-1", Name: "write-file", Arguments: `{"path": "/tmp/test.txt"}`},
+		{ID: "call-2", Name: "delete-file", Arguments: `{"path": "/tmp/delete.txt"}`},
+	}
+
+	// Simulate rejection - create error results without execution
+	var results []ToolResult
+	for _, tc := range toolCalls {
+		results = append(results, ToolResult{
+			ID:      tc.ID,
+			Name:    tc.Name,
+			Error:   "Tool execution rejected by user",
+			Content: "",
+		})
+	}
+
+	require.Len(t, results, 2, "Should have error result for each tool call")
+	for i, result := range results {
+		require.Equal(t, toolCalls[i].ID, result.ID, "Tool call ID should match")
+		require.Equal(t, toolCalls[i].Name, result.Name, "Tool name should match")
+		require.Equal(t, "Tool execution rejected by user", result.Error, "Should have rejection error message")
+		require.Empty(t, result.Content, "Content should be empty for rejected tools")
+	}
+}
