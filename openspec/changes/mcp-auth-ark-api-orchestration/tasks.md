@@ -93,3 +93,15 @@
 - [x] 11.1 `docs/content/` — operator guide for `ARK_API_PUBLIC_CALLBACK_URL` (public ingress + air-gapped port-forward recipes). The port-forward recipe SHALL show `kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80` so the browser reaches the listener regardless of how the OS resolves `localhost`.
 - [x] 11.2 `docs/content/` — `ark mcp auth login` / `logout` CLI reference
 - [x] 11.3 Note in the MCP authorization overview that token writes go through ark-api and surface the `authorized-by` annotation as the visible side-effect; link to the (future) per-user-tokens capability for the multi-user limitation
+
+## 12. auth/start auto-provisioning of tokenSecretRef
+
+- [ ] 12.1 In `services/ark-api/ark-api/src/ark_api/api/v1/mcp_auth.py`, replace the HTTP 422 refusal on missing `tokenSecretRef.name` with bootstrap logic: derive the default Secret name `<server>-oauth`, create the Secret with `type: Opaque`, empty `data`, and the `ark.mckinsey.com/mcpserver: <server>` label (idempotent — skip creation if it already exists with the matching label), then merge-patch the MCPServer with `spec.authorization.tokenSecretRef.name = <server>-oauth` (preserving any pre-existing `*Key` overrides). If a Secret named `<server>-oauth` exists without the binding label, return HTTP 422 with a message naming the conflict.
+- [ ] 12.2 The merge-patch on `MCPServer.spec.authorization.tokenSecretRef.name` uses the existing `get/patch` permission on the `mcpservers` parent resource (already established in task 6.2 for annotations). No new RBAC rules are needed.
+- [ ] 12.3 Add tests to `services/ark-api/ark-api/tests/api/test_mcp_auth.py`:
+  - `auth/start` against an MCPServer with no `spec.authorization` (`state == Required`) SHALL create the labeled Secret, patch the spec, and return 200 with `auth_id` + `authorization_url`.
+  - `auth/start` against an MCPServer with `spec.authorization` set (including `*Key` overrides) but empty `tokenSecretRef.name` SHALL patch only the name, preserving overrides, then proceed.
+  - Pre-existing Secret with matching label SHALL be reused; no modification to its `data`.
+  - Pre-existing Secret without the binding label SHALL return 422 and leave both the Secret and MCPServer unchanged.
+  - `force: true` and `force_registration: true` are orthogonal — bootstrap runs regardless of either flag.
+- [ ] 12.4 Remove the existing test assertions that expect HTTP 422 on `spec.authorization` unset (tasks 7.1 / 7.2 test coverage); replace with the bootstrap assertions from 12.3 above.

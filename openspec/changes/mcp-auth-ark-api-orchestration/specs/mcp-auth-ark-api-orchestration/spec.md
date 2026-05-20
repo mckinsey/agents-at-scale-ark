@@ -11,7 +11,7 @@ The endpoint's response status codes SHALL be drawn from the following matrix; e
 | 200 | Flow initiated; body carries `{ auth_id, authorization_url, flow_expires_at }` | this requirement |
 | 404 | MCPServer not found in the resolved namespace | this requirement (scenario below) |
 | 409 | MCPServer is `Authorized` and no `force: true`; OR `status.authorization` is entirely absent | [auth/start refuses non-Required state without force](#requirement-authstart-refuses-non-required-state-without-force); [auth/start refuses when authorization metadata is missing](#requirement-authstart-refuses-when-authorization-metadata-is-missing-from-the-mcpserver) |
-| 422 | MCPServer is `DiscoveryFailed`; OR `spec.authorization` is unset; OR `registrationEndpoint` is empty AND the Secret carries no cached `client_id` / `client_secret` | [auth/start refuses non-Required state without force](#requirement-authstart-refuses-non-required-state-without-force); [auth/start refuses when authorization metadata is missing](#requirement-authstart-refuses-when-authorization-metadata-is-missing-from-the-mcpserver); [auth/start fails closed when no client credentials and no registration endpoint](#requirement-authstart-fails-closed-when-no-client-credentials-and-no-registration-endpoint) |
+| 422 | MCPServer is `DiscoveryFailed`; OR `registrationEndpoint` is empty AND the Secret carries no cached `client_id` / `client_secret`; OR a Secret named `<server>-oauth` exists without the `ark.mckinsey.com/mcpserver: <server>` binding label (auto-provision conflict) | [auth/start refuses non-Required state without force](#requirement-authstart-refuses-non-required-state-without-force); [auth/start fails closed when no client credentials and no registration endpoint](#requirement-authstart-fails-closed-when-no-client-credentials-and-no-registration-endpoint); [auth/start auto-provisions tokenSecretRef when unset](#requirement-authstart-auto-provisions-tokensecretref-when-unset) |
 | 502 | DCR response violates the contract (missing redirect URI, unsupported `token_endpoint_auth_method`) | [Dynamic Client Registration enforces the configured redirect URI](#requirement-dynamic-client-registration-enforces-the-configured-redirect-uri) |
 | 503 | `ARK_API_PUBLIC_CALLBACK_URL` is unset at boot | this requirement (scenario below) |
 
@@ -79,24 +79,85 @@ ark-api SHALL expose `GET /api/v1/mcp/auth/callback` as the registered OAuth `re
 
 ### Requirement: auth/start refuses when authorization metadata is missing from the MCPServer
 
-`POST /api/v1/mcp-servers/{name}/auth/start` SHALL refuse the request when the target MCPServer lacks the metadata required to drive a flow. Two cases:
+`POST /api/v1/mcp-servers/{name}/auth/start` SHALL refuse the request when the target MCPServer lacks the metadata required to drive a flow. The remaining refusal case here is `status.authorization` entirely absent (the controller has not yet observed a 401 from the upstream, or the MCPServer was just created and no reconcile has run): ark-api SHALL return HTTP 409 with a message naming the missing discovery output and pointing the operator at the controller's poll interval. `force` SHALL NOT bypass this — without `tokenEndpoint` / `authorizationEndpoint` / `resource` the flow has no path forward. This case is distinct from `DiscoveryFailed`, which records a probe that ran and failed.
 
-- `spec.authorization` is unset (no `tokenSecretRef` to write into): ark-api SHALL return HTTP 422 with a message instructing the operator to add `spec.authorization.tokenSecretRef`. `force` SHALL NOT bypass this — there is nowhere to write the resulting tokens.
-- `status.authorization` is entirely absent (the controller has not yet observed a 401 from the upstream, or `spec.authorization` was just added and no reconcile has run): ark-api SHALL return HTTP 409 with a message naming the missing discovery output and pointing the operator at the controller's poll interval. `force` SHALL NOT bypass this — without `tokenEndpoint` / `authorizationEndpoint` / `resource` the flow has no path forward. This case is distinct from `DiscoveryFailed`, which records a probe that ran and failed.
-
-#### Scenario: MCPServer has no spec.authorization
-
-- **GIVEN** an `MCPServer` whose `spec.authorization` is unset
-- **WHEN** the caller invokes `auth/start` with or without `force: true`
-- **THEN** ark-api SHALL return HTTP 422 with a message naming `spec.authorization.tokenSecretRef` as the missing input
-- **AND** SHALL NOT contact the IdP
+A missing or empty `spec.authorization.tokenSecretRef.name` is NOT a refusal — ark-api auto-provisions both the Secret and the spec wiring before continuing the flow. See [auth/start auto-provisions tokenSecretRef when unset](#requirement-authstart-auto-provisions-tokensecretref-when-unset).
 
 #### Scenario: MCPServer has no status.authorization yet
 
-- **GIVEN** an `MCPServer` whose `spec.authorization` is set but `status.authorization` is entirely absent (controller has not yet discovered)
+- **GIVEN** an `MCPServer` whose `status.authorization` is entirely absent (controller has not yet discovered)
 - **WHEN** the caller invokes `auth/start` with or without `force: true`
 - **THEN** ark-api SHALL return HTTP 409 with a message naming the missing discovery output and the `spec.pollInterval` the operator can wait on
 - **AND** SHALL NOT contact the IdP
+
+### Requirement: auth/start auto-provisions tokenSecretRef when unset
+
+When `POST /api/v1/mcp-servers/{name}/auth/start` is invoked against an MCPServer whose `status.authorization.state == Required` AND whose `spec.authorization.tokenSecretRef.name` is unset (either `spec.authorization` is entirely absent, or it is set with an empty / missing `tokenSecretRef.name`), ark-api SHALL auto-provision the token Secret and patch the MCPServer's spec before continuing the flow. This is the default and only behaviour — there is no opt-in flag.
+
+Bootstrap steps:
+
+- The default Secret name SHALL be `<mcp-server-name>-oauth`.
+- ark-api SHALL create the Secret in the resolved namespace with `type: Opaque`, an empty `data` block, and the label `ark.mckinsey.com/mcpserver: <mcp-server-name>`. If a Secret with the default name already exists in the same namespace and carries the matching binding label, ark-api SHALL reuse it without modifying its data — the standard `auth/callback` write path takes ownership from this point.
+- If a Secret with the default name already exists WITHOUT the `ark.mckinsey.com/mcpserver: <mcp-server-name>` label, ark-api SHALL return HTTP 422 with a message naming the conflicting Secret and instructing the operator either to set `spec.authorization.tokenSecretRef.name` to a different name or to label the existing Secret. ark-api SHALL NOT modify the existing Secret and SHALL NOT patch the MCPServer.
+- ark-api SHALL merge-patch the MCPServer with `spec.authorization.tokenSecretRef.name = <mcp-server-name>-oauth`, preserving any pre-existing `spec.authorization.*Key` overrides the operator may have set.
+- After bootstrap, the flow SHALL proceed as if `tokenSecretRef.name` had been authored in the original manifest — DCR (or cached-credentials reuse), PKCE generation, URL assembly, and cache-entry creation continue under the standard requirements.
+
+Rationale: at the point a client calls `auth/start`, the intent to begin OAuth is unambiguous — the user (or dashboard) chose to authorize an OAuth-protected MCPServer. Refusing because of a missing field that ark-api can safely populate just shifts internal plumbing onto the user. Operators who manage MCPServer manifests via GitOps and pre-author `tokenSecretRef.name` in their source-of-truth manifest never enter this branch, so auto-bootstrap does not collide with the GitOps reconcile loop.
+
+The `force` and `force_registration` body flags are orthogonal to bootstrap. Bootstrap fires whenever `tokenSecretRef.name` is unset, regardless of either flag's value.
+
+#### Scenario: spec.authorization is entirely absent on a Required MCPServer
+
+- **GIVEN** an `MCPServer` whose `status.authorization.state` is `Required`
+- **AND** whose `spec.authorization` is unset
+- **WHEN** the caller invokes `auth/start`
+- **THEN** ark-api SHALL create a Secret named `<name>-oauth` in the same namespace with `type: Opaque`, the `ark.mckinsey.com/mcpserver: <name>` label, and an empty `data` block
+- **AND** SHALL merge-patch the MCPServer with `spec.authorization.tokenSecretRef.name = <name>-oauth`
+- **AND** SHALL proceed with the DCR + PKCE flow as if the field had been set originally
+- **AND** SHALL return HTTP 200 with `{ auth_id, authorization_url, flow_expires_at }`
+
+#### Scenario: spec.authorization is set but tokenSecretRef.name is empty
+
+- **GIVEN** an `MCPServer` whose `status.authorization.state` is `Required`
+- **AND** whose `spec.authorization` is set with `tokenSecretRef.accessTokenKey = MY_ACCESS_TOKEN` but no `tokenSecretRef.name`
+- **WHEN** the caller invokes `auth/start`
+- **THEN** ark-api SHALL merge-patch the MCPServer with `spec.authorization.tokenSecretRef.name = <name>-oauth`, preserving the `accessTokenKey = MY_ACCESS_TOKEN` override
+- **AND** SHALL create the Secret with the binding label
+- **AND** SHALL proceed with the flow
+
+#### Scenario: Default-named Secret already exists with the correct label
+
+- **GIVEN** an `MCPServer` whose `tokenSecretRef.name` is unset
+- **AND** a Secret named `<name>-oauth` already exists in the same namespace with the `ark.mckinsey.com/mcpserver: <name>` label (possibly empty `data`, possibly partial DCR credentials from a prior flow)
+- **WHEN** the caller invokes `auth/start`
+- **THEN** ark-api SHALL merge-patch the MCPServer to point at the existing Secret
+- **AND** SHALL NOT modify the existing Secret's `data` — the `auth/callback` write path owns mutations from this point
+- **AND** SHALL proceed with the flow (reusing cached `client_id` / `client_secret` if present, per the existing DCR-reuse requirement)
+
+#### Scenario: Default-named Secret already exists without the binding label
+
+- **GIVEN** an `MCPServer` named `cloudflare` whose `tokenSecretRef.name` is unset
+- **AND** a Secret named `cloudflare-oauth` exists in the same namespace WITHOUT the `ark.mckinsey.com/mcpserver: cloudflare` label (used in the namespace for an unrelated purpose)
+- **WHEN** the caller invokes `auth/start`
+- **THEN** ark-api SHALL return HTTP 422 with a message naming the conflicting Secret and instructing the operator either to set `spec.authorization.tokenSecretRef.name` to a different name or to label the existing Secret
+- **AND** SHALL NOT modify the existing Secret
+- **AND** SHALL NOT patch the MCPServer
+- **AND** SHALL NOT contact the IdP
+
+#### Scenario: Caller passes force on a Required MCPServer with no tokenSecretRef
+
+- **GIVEN** the same conditions as the "spec.authorization is entirely absent" scenario
+- **WHEN** the caller invokes `auth/start` with `force: true` or `force_registration: true` or both
+- **THEN** the bootstrap SHALL still run — `force` and `force_registration` are orthogonal to bootstrap and do not gate auto-provisioning
+- **AND** the flow SHALL proceed as in the no-flag case
+
+#### Scenario: Bootstrap is reverted between flow start and completion
+
+- **GIVEN** ark-api has just bootstrapped a Secret and patched the spec for an MCPServer
+- **WHEN** the operator (or an external controller) removes the `spec.authorization.tokenSecretRef.name` field again between `auth/start` and `auth/callback`
+- **THEN** the in-flight cache entry SHALL retain the resolved Secret name captured at `auth/start` time
+- **AND** `auth/callback` SHALL write tokens to the originally-resolved Secret name (creating it again if it was deleted between the two requests, per the existing create-if-absent requirement)
+- **AND** the operator's manifest is now inconsistent with the runtime state — surfacing the conflict is owned by the controller's reconcile loop, not by ark-api
 
 ### Requirement: Namespace resolution prefers explicit query parameter
 
