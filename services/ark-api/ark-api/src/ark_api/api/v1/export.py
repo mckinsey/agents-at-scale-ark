@@ -7,13 +7,16 @@ import io
 import json
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
-from fastapi import APIRouter, Query, Response, HTTPException
+from fastapi import APIRouter, Depends, Query, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse
 from kubernetes import client
 from kubernetes.client import CustomObjectsApi
 from kubernetes.client.rest import ApiException
 
 from ark_sdk.client import with_ark_client
+from ark_sdk.impersonation import ImpersonationConfig
+
+from ...auth.dependencies import get_impersonation_config
 from ...models.export import (
     ExportRequest,
     ExportHistoryResponse,
@@ -113,10 +116,11 @@ async def _collect_standard_resource(
 
 async def _collect_a2a_servers(
     namespace: Optional[str],
-    resource_ids: Optional[Dict[str, List[str]]]
+    resource_ids: Optional[Dict[str, List[str]]],
+    impersonation: Optional[ImpersonationConfig] = None,
 ) -> List[Dict[str, Any]]:
     """Collect A2A servers (uses different API version)."""
-    async with with_ark_client(namespace, "v1prealpha1") as a2a_client:
+    async with with_ark_client(namespace, "v1prealpha1", impersonation=impersonation) as a2a_client:
         a2a_servers = await a2a_client.a2aservers.a_list()
         filter_names = resource_ids.get("a2a") if resource_ids else None
         return await _convert_and_filter_resources(a2a_servers, filter_names)
@@ -172,23 +176,23 @@ async def _collect_workflows(
 async def collect_resources(
     resource_types: List[ResourceType],
     namespace: Optional[str] = None,
-    resource_ids: Optional[Dict[str, List[str]]] = None
+    resource_ids: Optional[Dict[str, List[str]]] = None,
+    impersonation: Optional[ImpersonationConfig] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Collect resources from Kubernetes."""
     resources = {}
 
-    # Define which resource types are handled by the ark_client
     standard_resources = {
         "agents", "teams", "models", "queries",
         "mcpservers"
     }
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         for resource_type in resource_types:
             try:
                 # Handle special cases
                 if resource_type == "a2a":
-                    items = await _collect_a2a_servers(namespace, resource_ids)
+                    items = await _collect_a2a_servers(namespace, resource_ids, impersonation=impersonation)
                 elif resource_type == "workflows":
                     items = await _collect_workflows(namespace, resource_ids)
                 # Handle standard resources - now directly using resource_type as the name
@@ -266,8 +270,10 @@ def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> io.BytesIO:
 @router.post("/resources", response_class=StreamingResponse)
 @handle_k8s_errors(operation="export", resource_type="resources")
 async def export_resources(
+    request: Request,
     body: ExportRequest = ExportRequest(),
-    namespace: Optional[str] = Query(None, description="Namespace for this request")
+    namespace: Optional[str] = Query(None, description="Namespace for this request"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """
     Export Ark resources as a ZIP file.
@@ -288,7 +294,8 @@ async def export_resources(
     resources = await collect_resources(
         resource_types=resource_types,
         namespace=namespace or body.namespace,
-        resource_ids=body.resource_ids
+        resource_ids=body.resource_ids,
+        impersonation=impersonation,
     )
 
     # Count resources
