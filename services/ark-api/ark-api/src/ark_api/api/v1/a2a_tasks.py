@@ -2,9 +2,12 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.a2a_tasks import (
     A2ATaskResponse,
@@ -136,7 +139,7 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
 
 @router.get("", response_model=A2ATaskListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a task")
-async def list_a2a_tasks(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2ATaskListResponse:
+async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
     """
     List all A2ATask CRs in a namespace.
 
@@ -146,7 +149,7 @@ async def list_a2a_tasks(namespace: Optional[str] = Query(None, description="Nam
     Returns:
         A2ATaskListResponse: List of all A2A tasks in the namespace
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         tasks = await ark_client.a2atasks.a_list()
 
         task_list = []
@@ -161,7 +164,7 @@ async def list_a2a_tasks(namespace: Optional[str] = Query(None, description="Nam
 
 @router.get("/{task_name}", response_model=A2ATaskDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="a2a task")
-async def get_a2a_task(task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2ATaskDetailResponse:
+async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskDetailResponse:
     """
     Get a specific A2ATask CR by name.
 
@@ -172,7 +175,7 @@ async def get_a2a_task(task_name: str, namespace: Optional[str] = Query(None, de
     Returns:
         A2ATaskDetailResponse: The A2A task details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         task = await ark_client.a2atasks.a_get(task_name)
 
         return a2a_task_to_detail_response(task.to_dict())
@@ -180,7 +183,7 @@ async def get_a2a_task(task_name: str, namespace: Optional[str] = Query(None, de
 
 @router.delete("/{task_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="a2a task")
-async def delete_a2a_task(task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete an A2ATask CR by name.
 
@@ -188,5 +191,5 @@ async def delete_a2a_task(task_name: str, namespace: Optional[str] = Query(None,
         namespace: The namespace containing the A2A task
         task_name: The name of the A2A task
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.a2atasks.a_delete(task_name)

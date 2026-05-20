@@ -54,7 +54,7 @@ class TestArkTeams:
             description=team_data["description"],
             strategy=team_data["strategy"],
             max_turns=team_data["max_turns"],
-            member_name=member_name
+            member_names=[member_name],
         )
 
         assert team_result["popup_visible"], "Team creation popup should be visible"

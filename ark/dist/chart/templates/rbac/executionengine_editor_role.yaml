@@ -1,0 +1,27 @@
+{{- if .Values.rbac.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: executionengine-editor-role
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - executionengines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - executionengines/status
+  verbs:
+  - get
+{{- end -}}
