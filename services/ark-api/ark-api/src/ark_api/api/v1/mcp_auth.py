@@ -23,9 +23,11 @@ from ...models.mcp_auth import (
 )
 from ...services.mcp_auth_cache import CacheEntry, get_mcp_auth_cache
 from ...services.mcp_auth_persistence import (
+    BootstrapConflictError,
     SecretKeys,
     SecretPatchPayload,
     annotate_mcpserver_authorized,
+    bootstrap_token_secret,
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
@@ -161,10 +163,18 @@ async def start_mcp_auth(
 
         token_ref = _token_secret_ref(mcp_dict)
         if not token_ref or not token_ref.get("name"):
-            raise HTTPException(
-                status_code=422,
-                detail="MCPServer spec.authorization.tokenSecretRef.name is not set",
+            default_secret_name = f"{mcp_server_name}-oauth"
+            try:
+                await bootstrap_token_secret(ns, mcp_server_name, default_secret_name)
+            except BootstrapConflictError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            patch_data = {"spec": {"authorization": {"tokenSecretRef": {"name": default_secret_name}}}}
+            await ark_client.mcpservers.a_patch(mcp_server_name, patch_data, ns)
+            logger.info(
+                "Auto-provisioned tokenSecretRef.name=%s for MCPServer %s/%s",
+                default_secret_name, ns, mcp_server_name,
             )
+            token_ref = {**(token_ref or {}), "name": default_secret_name}
         secret_name = token_ref["name"]
         keys = SecretKeys.from_token_secret_ref(token_ref)
 

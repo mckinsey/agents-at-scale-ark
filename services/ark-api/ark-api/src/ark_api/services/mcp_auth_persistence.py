@@ -14,6 +14,7 @@ from kubernetes_asyncio.client.rest import ApiException
 logger = logging.getLogger(__name__)
 
 TOKEN_SECRET_LABEL = "ark.mckinsey.com/mcp-token-secret"
+MCPSERVER_BINDING_LABEL_KEY = "ark.mckinsey.com/mcpserver"
 ANNOTATION_AUTHORIZED_BY = "ark.mckinsey.com/mcp-auth-authorized-by"
 ANNOTATION_AUTHORIZED_AT = "ark.mckinsey.com/mcp-auth-authorized-at"
 
@@ -64,6 +65,10 @@ class CachedClientCreds:
         return bool(self.client_id) and bool(self.client_secret)
 
 
+class BootstrapConflictError(Exception):
+    pass
+
+
 def _decode_b64(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -71,6 +76,44 @@ def _decode_b64(value: Optional[str]) -> Optional[str]:
         return base64.b64decode(value).decode("utf-8")
     except (ValueError, UnicodeDecodeError):
         return None
+
+
+async def bootstrap_token_secret(namespace: str, server_name: str, secret_name: str) -> None:
+    """Create the bootstrap Secret with the binding label, or reuse it if already labeled.
+
+    Raises BootstrapConflictError when a same-named Secret exists without the binding label.
+    """
+    async with ApiClient() as api:
+        v1 = client.CoreV1Api(api)
+        metadata = client.V1ObjectMeta(
+            name=secret_name,
+            labels={MCPSERVER_BINDING_LABEL_KEY: server_name},
+        )
+        secret = client.V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=metadata,
+            data={},
+            type="Opaque",
+        )
+        try:
+            await v1.create_namespaced_secret(namespace=namespace, body=secret)
+            logger.info("Bootstrapped token Secret %s/%s for MCPServer %s", namespace, secret_name, server_name)
+            return
+        except ApiException as e:
+            if e.status != 409:
+                raise
+
+        existing = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
+        existing_labels = existing.metadata.labels or {}
+        if existing_labels.get(MCPSERVER_BINDING_LABEL_KEY) == server_name:
+            return
+        raise BootstrapConflictError(
+            f"Secret {namespace}/{secret_name} already exists without the "
+            f"'{MCPSERVER_BINDING_LABEL_KEY}: {server_name}' binding label; "
+            f"set spec.authorization.tokenSecretRef.name to a different name "
+            f"or add the label to the existing Secret"
+        )
 
 
 async def read_cached_client_creds(

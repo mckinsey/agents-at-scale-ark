@@ -81,8 +81,8 @@ app:
     # loopback literal (127.0.0.1, [::1] bracketed per RFC 3986 §3.2.2, or
     # localhost). The path /api/v1/mcp/auth/callback is appended automatically
     # if the configured URL has no path.
-    # - name: ARK_API_PUBLIC_CALLBACK_URL
-    #   value: "https://ark.example.com/api/v1/mcp/auth/callback"
+    - name: ARK_API_PUBLIC_CALLBACK_URL
+      value: "http://localhost:8088/api/v1/mcp/auth/callback"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"

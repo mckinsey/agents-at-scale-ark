@@ -1,8 +1,6 @@
 """Endpoint tests for the four MCP auth routes."""
 from __future__ import annotations
 
-import json
-import logging
 import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -649,16 +647,6 @@ class TestAuthStartMissingFields(_AuthBase):
             )
         self.assertEqual(response.status_code, 422, response.text)
 
-    def test_missing_token_secret_ref_returns_422(self):
-        patcher, _ = _patch_ark_client(_build_mcp_dict(token_secret_ref={}))
-        with patcher:
-            response = self.client.post(
-                "/v1/mcp-servers/notion-mcp/auth/start",
-                json={},
-                params={"namespace": "default"},
-            )
-        self.assertEqual(response.status_code, 422, response.text)
-
     @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
     def test_force_registration_falls_back_to_cached_when_endpoint_missing(
@@ -854,6 +842,191 @@ class TestAuthIdEntropy(unittest.TestCase):
 
         self.assertGreaterEqual(len(_decode(a)), 16)
         self.assertGreaterEqual(len(_decode(b)), 16)
+
+
+class TestAuthStartBootstrap(_AuthBase):
+    """Tests for auth/start tokenSecretRef auto-provisioning (task 12.x)."""
+
+    @patch("ark_api.api.v1.mcp_auth.bootstrap_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_no_spec_authorization_bootstraps_secret_and_proceeds(
+        self, mock_register, mock_read_creds, mock_bootstrap
+    ):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+        from ark_api.services.oauth_dcr import DcrResult
+
+        mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+        mock_register.return_value = DcrResult(client_id="cid", client_secret="csec", raw_response={})
+        mcp_dict = {
+            "metadata": {"name": "notion-mcp", "namespace": "default"},
+            "spec": {},
+            "status": {
+                "authorization": {
+                    "state": "Required",
+                    "registrationEndpoint": "https://idp.example.com/register",
+                    "tokenEndpoint": "https://idp.example.com/token",
+                    "authorizationEndpoint": "https://idp.example.com/authorize",
+                    "resource": "https://mcp.example/mcp",
+                }
+            },
+        }
+        patcher, mock_client = _patch_ark_client(mcp_dict)
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertIn("auth_id", body)
+        self.assertIn("authorization_url", body)
+        mock_bootstrap.assert_awaited_once_with("default", "notion-mcp", "notion-mcp-oauth")
+        mock_client.mcpservers.a_patch.assert_awaited_once_with(
+            "notion-mcp",
+            {"spec": {"authorization": {"tokenSecretRef": {"name": "notion-mcp-oauth"}}}},
+            "default",
+        )
+
+    @patch("ark_api.api.v1.mcp_auth.bootstrap_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_empty_token_secret_ref_preserves_key_overrides(
+        self, mock_register, mock_read_creds, mock_bootstrap
+    ):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+        from ark_api.services.oauth_dcr import DcrResult
+
+        mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+        mock_register.return_value = DcrResult(client_id="cid", client_secret="csec", raw_response={})
+        mcp_dict = {
+            "metadata": {"name": "notion-mcp", "namespace": "default"},
+            "spec": {"authorization": {"tokenSecretRef": {"accessTokenKey": "MY_ACCESS"}}},
+            "status": {
+                "authorization": {
+                    "state": "Required",
+                    "registrationEndpoint": "https://idp.example.com/register",
+                    "tokenEndpoint": "https://idp.example.com/token",
+                    "authorizationEndpoint": "https://idp.example.com/authorize",
+                    "resource": "https://mcp.example/mcp",
+                }
+            },
+        }
+        patcher, mock_client = _patch_ark_client(mcp_dict)
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        mock_bootstrap.assert_awaited_once_with("default", "notion-mcp", "notion-mcp-oauth")
+        mock_client.mcpservers.a_patch.assert_awaited_once()
+        _, patch_call_args, _ = mock_client.mcpservers.a_patch.mock_calls[0]
+        self.assertEqual(patch_call_args[1]["spec"]["authorization"]["tokenSecretRef"]["name"], "notion-mcp-oauth")
+        read_call = mock_read_creds.await_args
+        self.assertEqual(read_call.args[1], "notion-mcp-oauth")
+        keys_arg = read_call.args[2]
+        self.assertEqual(keys_arg.access_token, "MY_ACCESS")
+
+    @patch("ark_api.api.v1.mcp_auth.bootstrap_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_bootstrap_existing_labeled_secret_reused(
+        self, mock_register, mock_read_creds, mock_bootstrap
+    ):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+        from ark_api.services.oauth_dcr import DcrResult
+
+        mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+        mock_register.return_value = DcrResult(client_id="cid", client_secret="csec", raw_response={})
+        mcp_dict = {
+            "metadata": {"name": "notion-mcp", "namespace": "default"},
+            "spec": {},
+            "status": {
+                "authorization": {
+                    "state": "Required",
+                    "registrationEndpoint": "https://idp.example.com/register",
+                    "tokenEndpoint": "https://idp.example.com/token",
+                    "authorizationEndpoint": "https://idp.example.com/authorize",
+                    "resource": "https://mcp.example/mcp",
+                }
+            },
+        }
+        patcher, _ = _patch_ark_client(mcp_dict)
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        mock_bootstrap.assert_awaited_once()
+
+    @patch("ark_api.api.v1.mcp_auth.bootstrap_token_secret", new_callable=AsyncMock)
+    def test_bootstrap_conflict_returns_422(self, mock_bootstrap):
+        from ark_api.services.mcp_auth_persistence import BootstrapConflictError
+
+        mock_bootstrap.side_effect = BootstrapConflictError(
+            "Secret default/notion-mcp-oauth already exists without binding label"
+        )
+        mcp_dict = {
+            "metadata": {"name": "notion-mcp", "namespace": "default"},
+            "spec": {},
+            "status": {
+                "authorization": {
+                    "state": "Required",
+                    "registrationEndpoint": "https://idp.example.com/register",
+                    "tokenEndpoint": "https://idp.example.com/token",
+                    "authorizationEndpoint": "https://idp.example.com/authorize",
+                    "resource": "https://mcp.example/mcp",
+                }
+            },
+        }
+        patcher, _ = _patch_ark_client(mcp_dict)
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn("binding label", response.json()["detail"])
+
+    @patch("ark_api.api.v1.mcp_auth.bootstrap_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_bootstrap_runs_regardless_of_force_flags(
+        self, mock_register, mock_read_creds, mock_bootstrap
+    ):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+        from ark_api.services.oauth_dcr import DcrResult
+
+        mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+        mock_register.return_value = DcrResult(client_id="cid", client_secret="csec", raw_response={})
+        mcp_dict = {
+            "metadata": {"name": "notion-mcp", "namespace": "default"},
+            "spec": {},
+            "status": {
+                "authorization": {
+                    "state": "Required",
+                    "registrationEndpoint": "https://idp.example.com/register",
+                    "tokenEndpoint": "https://idp.example.com/token",
+                    "authorizationEndpoint": "https://idp.example.com/authorize",
+                    "resource": "https://mcp.example/mcp",
+                }
+            },
+        }
+        patcher, _ = _patch_ark_client(mcp_dict)
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={"force": True, "force_registration": True},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        mock_bootstrap.assert_awaited_once_with("default", "notion-mcp", "notion-mcp-oauth")
 
 
 if __name__ == "__main__":

@@ -89,6 +89,32 @@ kubectl get mcpserver notion-mcp -o jsonpath='{.metadata.annotations}'
 
 The referenced Secret holds the token material; ark-api never logs token bodies, refresh tokens, client secrets, or PKCE verifiers.
 
+## External executor header-resolution workaround
+
+When an agent targets an external `ExecutionEngine` (claude-agent-sdk, LangChain, or any marketplace executor) **and** uses `ark mcp auth login` against an MCPServer that is configured solely via `spec.authorization.tokenSecretRef`, the SDK's `_resolve_mcp_server()` will not inject the Bearer token on tool calls.
+
+**Why this happens:** the controller already reads `spec.authorization.tokenSecretRef` for tool *discovery* and injects the token on each MCP call. External executors build their `MCPServerConfig` at query *dispatch* time and read only `spec.headers[]` — they do not read `spec.authorization`. So the MCPServer discovers tools correctly, but the executor's tool calls will 401.
+
+**Workaround:** add a redundant `spec.headers[]` entry pointing at the same Secret and key:
+
+```yaml
+spec:
+  authorization:
+    tokenSecretRef:
+      name: notion-mcp-oauth        # set by ark mcp auth login
+  headers:
+    - name: Authorization
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: notion-mcp-oauth  # same Secret as tokenSecretRef.name
+            key: access_token       # or the accessTokenKey override if set
+```
+
+The redundancy is intentional: the controller reads `spec.authorization` for discovery; this header entry lets the SDK read the same token for dispatch. The default key is `access_token` unless `spec.authorization.tokenSecretRef.accessTokenKey` overrides it.
+
+This workaround becomes unnecessary once the `mcp-auth-sdk-header-resolution` capability lands; that capability will teach `_resolve_mcp_server()` to read `spec.authorization` directly.
+
 ## Related
 
 - [`ark mcp auth login` / `logout`](/developer-guide/cli-tools#ark-mcp-auth) — CLI reference
