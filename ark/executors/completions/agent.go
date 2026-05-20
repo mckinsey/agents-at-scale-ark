@@ -130,7 +130,7 @@ func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history 
 }
 
 // executeModelCall executes a single model call with optional streaming support.
-func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
+func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, eventStream EventStreamInterface, toolChoice ToolChoice, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	a.Model.OutputSchema = a.OutputSchema
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
@@ -207,7 +207,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 			return newMessages, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, tools, opts.ToolChoice, eventStream)
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, opts.ToolChoice, tools)
 		if err != nil {
 			return nil, err
 		}
