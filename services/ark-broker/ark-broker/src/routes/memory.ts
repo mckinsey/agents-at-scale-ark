@@ -1,6 +1,10 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
-import {sendValidationError} from './errors.js';
+import {
+  sendValidationError,
+  sendPaginationError,
+  sendInternalError,
+} from './errors.js';
 import {randomUUID} from 'crypto';
 import {z} from 'zod';
 import {MemoryBroker} from '../memory-broker.js';
@@ -127,23 +131,11 @@ function handlePaginatedMessages(
     res.json(response);
   } catch (error) {
     if (error instanceof PaginationError) {
-      res.status(400).json({
-        error: {
-          code: 'PAGINATION_ERROR',
-          message: error.message,
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendPaginationError(res, error, req.id);
       return;
     }
     req.log.error({err: error}, 'failed to get messages');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        requestId: req.id === undefined ? undefined : String(req.id),
-      },
-    });
+    sendInternalError(res, req.id);
   }
 }
 
@@ -220,13 +212,7 @@ export function createMemoryRouter(
         res.status(200).send();
       } catch (error) {
         req.log.error({err: error}, 'failed to add messages');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       }
     }
   );
@@ -282,13 +268,7 @@ export function createMemoryRouter(
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to get memory status');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 
@@ -298,13 +278,7 @@ export function createMemoryRouter(
       res.json({conversations});
     } catch (error) {
       req.log.error({err: error}, 'failed to get conversations');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 

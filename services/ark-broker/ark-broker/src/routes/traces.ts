@@ -8,7 +8,11 @@ import {
   PaginationError,
   PaginatedList,
 } from '../pagination.js';
-import {sendValidationError} from './errors.js';
+import {
+  sendValidationError,
+  sendPaginationError,
+  sendInternalError,
+} from './errors.js';
 
 const getTracesQuerySchema = z.object({
   watch: z
@@ -112,23 +116,11 @@ function handlePaginatedAllTraces(
     res.json(response);
   } catch (error) {
     if (error instanceof PaginationError) {
-      res.status(400).json({
-        error: {
-          code: 'PAGINATION_ERROR',
-          message: error.message,
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendPaginationError(res, error, req.id);
       return;
     }
     req.log.error({err: error}, 'failed to get traces');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        requestId: req.id === undefined ? undefined : String(req.id),
-      },
-    });
+    sendInternalError(res, req.id);
   }
 }
 
@@ -186,13 +178,7 @@ function handlePaginatedTrace(
     res.json({traceId, spans});
   } catch (error) {
     req.log.error({err: error, traceId}, 'failed to get trace');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        requestId: req.id === undefined ? undefined : String(req.id),
-      },
-    });
+    sendInternalError(res, req.id);
   }
 }
 
@@ -246,13 +232,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       res.json({status: 'success', message: 'Trace data purged'});
     } catch (error) {
       req.log.error({err: error}, 'trace purge failed');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 

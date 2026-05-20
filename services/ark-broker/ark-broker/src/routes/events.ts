@@ -9,7 +9,11 @@ import {
   PaginationError,
   PaginatedList,
 } from '../pagination.js';
-import {sendValidationError} from './errors.js';
+import {
+  sendValidationError,
+  sendPaginationError,
+  sendInternalError,
+} from './errors.js';
 
 const getEventsQuerySchema = z.object({
   watch: z
@@ -94,23 +98,11 @@ function handlePaginatedAllEvents(
     res.json(response);
   } catch (error) {
     if (error instanceof PaginationError) {
-      res.status(400).json({
-        error: {
-          code: 'PAGINATION_ERROR',
-          message: error.message,
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendPaginationError(res, error, req.id);
       return;
     }
     req.log.error({err: error}, 'failed to get events');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        requestId: req.id === undefined ? undefined : String(req.id),
-      },
-    });
+    sendInternalError(res, req.id);
   }
 }
 
@@ -167,23 +159,11 @@ function handlePaginatedQueryEvents(
     res.json(response);
   } catch (error) {
     if (error instanceof PaginationError) {
-      res.status(400).json({
-        error: {
-          code: 'PAGINATION_ERROR',
-          message: error.message,
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendPaginationError(res, error, req.id);
       return;
     }
     req.log.error({err: error, queryId}, 'failed to get events for query');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        requestId: req.id === undefined ? undefined : String(req.id),
-      },
-    });
+    sendInternalError(res, req.id);
   }
 }
 
@@ -265,13 +245,7 @@ export function createEventsRouter(
         res.status(201).json({status: 'success'});
       } catch (error) {
         req.log.error({err: error}, 'failed to add event');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       }
     }
   );
@@ -282,13 +256,7 @@ export function createEventsRouter(
       res.json({status: 'success', message: 'Event data purged'});
     } catch (error) {
       req.log.error({err: error}, 'event purge failed');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 

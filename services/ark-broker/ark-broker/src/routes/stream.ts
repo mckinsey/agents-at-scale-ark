@@ -5,7 +5,11 @@ import {CompletionChunkBroker} from '../completion-chunk-broker.js';
 import {StreamError} from '../types.js';
 import {streamSSE, writeSSEEvent} from '../sse.js';
 import {parsePaginationParams, PaginationError} from '../pagination.js';
-import {sendValidationError} from './errors.js';
+import {
+  sendValidationError,
+  sendPaginationError,
+  sendInternalError,
+} from './errors.js';
 
 interface ChunkPayload {
   error?: StreamError;
@@ -102,13 +106,7 @@ function handleQueryStream(
         typeof streamError.type !== 'string'
       ) {
         req.log.error({queryName, chunk}, 'invalid error chunk structure');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
         unsubscribeChunks();
         unsubscribeComplete();
         return;
@@ -334,23 +332,11 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         res.json(result);
       } catch (error) {
         if (error instanceof PaginationError) {
-          res.status(400).json({
-            error: {
-              code: 'PAGINATION_ERROR',
-              message: error.message,
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
+          sendPaginationError(res, error, req.id);
           return;
         }
         req.log.error({err: error}, 'failed to get chunks');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       }
     }
   });
@@ -418,13 +404,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         );
       } catch (error) {
         req.log.error({err: error}, 'failed to handle stream request');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       }
     }
   );
@@ -534,23 +514,11 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
             'stream error from ARK controller'
           );
         }
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to handle stream POST request');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 
@@ -629,13 +597,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to complete query stream');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 
@@ -670,13 +632,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       res.json({status: 'success', message: 'Stream data purged'});
     } catch (error) {
       req.log.error({err: error}, 'stream purge failed');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 

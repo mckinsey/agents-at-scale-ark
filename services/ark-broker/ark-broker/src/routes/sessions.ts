@@ -1,5 +1,9 @@
 import {Router} from 'express';
-import {sendValidationError} from './errors.js';
+import {
+  sendValidationError,
+  sendPaginationError,
+  sendInternalError,
+} from './errors.js';
 import type {Request, Response} from 'express';
 import {z} from 'zod';
 import {SessionsBroker} from '../sessions-broker.js';
@@ -130,23 +134,11 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
         }
       } catch (error) {
         if (error instanceof PaginationError) {
-          res.status(400).json({
-            error: {
-              code: 'PAGINATION_ERROR',
-              message: error.message,
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
+          sendPaginationError(res, error, req.id);
           return;
         }
         req.log.error({err: error}, 'failed to get sessions');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       }
     }
   );
@@ -168,13 +160,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       res.json(session);
     } catch (error) {
       req.log.error({err: error}, 'failed to get session');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 
@@ -195,13 +181,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
         res.status(201).json({status: 'success'});
       } catch (error) {
         req.log.error({err: error}, 'failed to ingest');
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Internal server error',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendInternalError(res, req.id);
       }
     }
   );
@@ -212,13 +192,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       res.json({status: 'success', message: 'Sessions purged'});
     } catch (error) {
       req.log.error({err: error}, 'purge failed');
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Internal server error',
-          requestId: req.id === undefined ? undefined : String(req.id),
-        },
-      });
+      sendInternalError(res, req.id);
     }
   });
 
