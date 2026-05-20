@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,11 +58,36 @@ const (
 	MCPServerReasonAuthorized = "Authorized"
 )
 
+type cachedMCPClient struct {
+	client    *arkmcp.MCPClient
+	url       string
+	headers   map[string]string
+	transport string
+	timeout   time.Duration
+}
+
 type MCPServerReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Eventing eventing.Provider
-	resolver *common.ValueSourceResolver
+	Scheme      *runtime.Scheme
+	Eventing    eventing.Provider
+	resolver    *common.ValueSourceResolver
+	clientsMu   sync.Mutex
+	mcpClients  map[string]*cachedMCPClient
+}
+
+func (r *MCPServerReconciler) closeCachedClient(key string) {
+	if cached, ok := r.mcpClients[key]; ok {
+		if cached.client != nil && cached.client.Client != nil {
+			_ = cached.client.Client.Close()
+		}
+		delete(r.mcpClients, key)
+	}
+}
+
+func (r *MCPServerReconciler) evictClient(namespace, name string) {
+	r.clientsMu.Lock()
+	defer r.clientsMu.Unlock()
+	r.closeCachedClient(fmt.Sprintf("%s/%s", namespace, name))
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=mcpservers,verbs=get;list;watch;create;update;patch;delete
@@ -78,7 +105,7 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var mcpServer arkv1alpha1.MCPServer
 	if err := r.Get(ctx, req.NamespacedName, &mcpServer); err != nil {
 		if errors.IsNotFound(err) {
-			// MCPServer was deleted, tools will be garbage collected due to owner references
+			r.evictClient(req.Namespace, req.Name)
 			log.Info("MCPServer deleted, associated tools will be garbage collected", "server", req.Name)
 			return ctrl.Result{}, nil
 		}
@@ -149,6 +176,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 
 	mcpTools, err := mcpClient.ListTools(ctx)
 	if err != nil {
+		r.evictClient(mcpServer.Namespace, mcpServer.Name)
 		if err := r.reconcileConditionsToolListingFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -572,10 +600,29 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 
 	timeout := parseTimeout(mcpServer.Spec.Timeout)
 
-	// MCP settings are not needed for listing tools, etc.
+	r.clientsMu.Lock()
+	defer r.clientsMu.Unlock()
+	if r.mcpClients == nil {
+		r.mcpClients = make(map[string]*cachedMCPClient)
+	}
+	key := fmt.Sprintf("%s/%s", mcpServer.Namespace, mcpServer.Name)
+	if cached, ok := r.mcpClients[key]; ok {
+		if cached.url == mcpURL && cached.transport == mcpServer.Spec.Transport && cached.timeout == timeout && reflect.DeepEqual(cached.headers, headers) {
+			return cached.client, nil
+		}
+		r.closeCachedClient(key)
+	}
+
 	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
+	}
+	r.mcpClients[key] = &cachedMCPClient{
+		client:    mcpClient,
+		url:       mcpURL,
+		headers:   headers,
+		transport: mcpServer.Spec.Transport,
+		timeout:   timeout,
 	}
 	return mcpClient, nil
 }
