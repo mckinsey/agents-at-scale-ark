@@ -43,3 +43,19 @@ XRAY-944492 - CVE-2026-26996
 - Not exploitable in our context: swagger-jsdoc only uses glob at startup to scan for JSDoc annotations using hardcoded patterns (`./dist/**/*.js`, `./src/**/*.ts`). No user-controlled input reaches the minimatch pattern argument. The CVE requires attacker-controlled patterns with many consecutive `*` wildcards.
 - Cannot upgrade: swagger-jsdoc@6.x depends on glob@7.x which requires minimatch@3.x API. minimatch@10.x is a complete rewrite with breaking API changes and cannot be used as a drop-in replacement. swagger-jsdoc has not released a version compatible with minimatch@10.x.
 - Used in services/ark-broker/ark-broker only.
+XRAY-946138 - CVE-2025-2148
+- PyTorch 2.6.0+ memory corruption vulnerability in torch.ops.profiler._call_end_callbacks_on_jit_fut (Tuple Handler component). Manipulation of None argument leads to memory corruption. Severity: High (CVSS 7.5 v3.1).
+- Not exploitable in Ark: (1) Attack requires remote access with high complexity and difficult exploitation (CVSS AC:H). (2) Used only in RAG sample (samples/rag-external-vectordb/ingestion) via sentence-transformers:5.5.1 -> torch:2.12.0, not in production services. (3) Profiler API (_call_end_callbacks_on_jit_fut) is internal PyTorch profiling code not invoked by sentence-transformers' embedding generation workflow. (4) Sample code processes only trusted local documents, no remote input.
+- PyTorch 2.7.0+ contains fix, but sentence-transformers 5.5.1 pins torch compatibility range. Upgrading torch independently may break sentence-transformers compatibility.
+- Used in samples/rag-external-vectordb/ingestion only (demonstration code, not production).
+XRAY-973334 - CVE-2026-4538
+- PyTorch 2.10.0 deserialization vulnerability in pt2 Loading Handler component. Severity: High (CVSS 7.8 v3.1).
+- Not exploitable in Ark: (1) Attack vector is LOCAL only (CVSS AV:L), requires authenticated local user with low privileges. (2) Requires loading malicious serialized PyTorch models via pt2 handler. (3) Used only in RAG sample via sentence-transformers:5.5.1 -> torch:2.12.0. (4) Sample uses sentence-transformers for embedding generation only (no model loading from untrusted sources). (5) All models loaded are from trusted HuggingFace repositories or local cache.
+- No patch available: Reported via PyTorch PR #176791, project has not yet released fix. torch:2.12.0 is current latest version.
+- Used in samples/rag-external-vectordb/ingestion only (demonstration code, not production).
+XRAY-987239 - CVE-2024-34997
+- joblib 1.4.2+ deserialization vulnerability in joblib.numpy_pickle::NumpyArrayWrapper().read_array(). Severity: High (CVSS 7.5 v3.1).
+- DISPUTED BY VENDOR: joblib maintainers dispute this CVE as false positive (see github.com/joblib/joblib/issues/1588). NumpyArrayWrapper is only used for caching trusted content in joblib's Memory caching system. The reported vulnerability conflates general pickle risks with joblib-specific usage.
+- Not exploitable in Ark: (1) Used only in RAG sample via sentence-transformers:5.5.1 -> scikit-learn:1.8.0 -> joblib:1.5.3. (2) joblib is used by scikit-learn internally for model serialization and parallel processing of trusted data only. (3) Sample code does not use joblib's Memory caching or load joblib pickles from untrusted sources. (4) Already on joblib:1.5.3 (latest available version still flagged by scanner despite being newer than initially reported 1.4.2).
+- No fix needed: Vendor states this is not a vulnerability in joblib's intended usage context. The CVE describes inherent pickle deserialization risks, not a joblib-specific flaw.
+- Used in samples/rag-external-vectordb/ingestion only (demonstration code, not production).
