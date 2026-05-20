@@ -89,7 +89,7 @@ func TestAgentExecute_StreamingChunksIncludeAgentName(t *testing.T) {
 	agent := newTestAgent(agentName, provider)
 	stream := &mockEventStream{}
 
-	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, stream)
+	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, stream, ExecuteOptions{})
 	require.NoError(t, err)
 
 	require.NotEmpty(t, stream.chunks, "expected streaming chunks to be emitted")

@@ -700,7 +700,7 @@ func TestSelectMember_RequiresToolCall(t *testing.T) {
 	_, err = team.selectMember(ctx, []Message{}, tmpl, "selected", "selected", members)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, mockSelector.executeWithOptionsCalls, "selector should call ExecuteWithOptions exactly once")
+	assert.Equal(t, 1, mockSelector.executeCalls, "selector should call Execute exactly once")
 	assert.Equal(t, ToolChoiceRequired, mockSelector.capturedOptions.ToolChoice, "selector must pass ToolChoiceRequired so the model is forced to call select-next-speaker or terminate")
 }
 

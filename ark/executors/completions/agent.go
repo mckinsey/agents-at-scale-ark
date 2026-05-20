@@ -46,13 +46,9 @@ func (a *Agent) GetToolRegistry() *ToolRegistry {
 	return a.Tools
 }
 
-// Execute executes the agent with optional event emission for tool calls
-func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	return a.ExecuteWithOptions(ctx, userInput, history, memory, eventStream, ExecuteOptions{})
-}
-
-// ExecuteWithOptions executes the agent with caller-controlled options such as forcing a tool call.
-func (a *Agent) ExecuteWithOptions(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
+// Execute executes the agent with optional event emission for tool calls.
+// opts carries caller-controlled options such as forcing a tool call; pass ExecuteOptions{} for defaults.
+func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 

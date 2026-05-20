@@ -78,7 +78,7 @@ func TestOpenAIProvider_ChatCompletion_SendsToolChoice(t *testing.T) {
 	}
 }
 
-func TestAgentExecuteWithOptions_ForwardsToolChoiceToProvider(t *testing.T) {
+func TestAgentExecute_ForwardsToolChoiceToProvider(t *testing.T) {
 	provider := &mockChatProvider{
 		response: &openai.ChatCompletion{
 			ID:    "cmpl-1",
@@ -93,7 +93,7 @@ func TestAgentExecuteWithOptions_ForwardsToolChoiceToProvider(t *testing.T) {
 	}
 	agent := newTestAgent("test-agent", provider)
 
-	_, err := agent.ExecuteWithOptions(context.Background(), NewUserMessage("hi"), nil, nil, nil, ExecuteOptions{ToolChoice: ToolChoiceRequired})
+	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, nil, ExecuteOptions{ToolChoice: ToolChoiceRequired})
 	require.NoError(t, err)
 	assert.Equal(t, ToolChoiceRequired, provider.capturedToolChoice)
 }
@@ -113,7 +113,7 @@ func TestAgentExecute_DefaultsToolChoiceUnset(t *testing.T) {
 	}
 	agent := newTestAgent("test-agent", provider)
 
-	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, nil)
+	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, nil, ExecuteOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, ToolChoiceUnset, provider.capturedToolChoice)
 }

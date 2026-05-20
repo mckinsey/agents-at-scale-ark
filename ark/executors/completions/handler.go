@@ -333,7 +333,7 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 	}
 
 	currentMessage, contextMessages := PrepareExecutionMessages(state.inputMessages, state.memoryMessages)
-	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream)
+	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream, ExecuteOptions{})
 	if err != nil {
 		return nil, nil, err
 	}

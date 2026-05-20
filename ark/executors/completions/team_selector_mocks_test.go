@@ -32,7 +32,7 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
-func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	return &ExecutionResult{}, nil
 }
 
@@ -43,7 +43,7 @@ type mockSelectorAgent struct {
 	returnError             error
 	capturedHistory         []Message
 	capturedOptions         ExecuteOptions
-	executeWithOptionsCalls int
+	executeCalls            int
 	tools                   *ToolRegistry
 }
 
@@ -54,14 +54,10 @@ func newMockSelectorAgent() *mockSelectorAgent {
 	}
 }
 
-func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	return m.ExecuteWithOptions(ctx, userInput, history, memory, eventStream, ExecuteOptions{})
-}
-
-func (m *mockSelectorAgent) ExecuteWithOptions(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
+func (m *mockSelectorAgent) Execute(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	m.capturedHistory = history
 	m.capturedOptions = opts
-	m.executeWithOptionsCalls++
+	m.executeCalls++
 	if m.returnError != nil {
 		return nil, m.returnError
 	}
@@ -109,11 +105,7 @@ type mockSelectorAgentNoTool struct {
 	tools *ToolRegistry
 }
 
-func (m *mockSelectorAgentNoTool) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	return m.ExecuteWithOptions(ctx, userInput, history, memory, eventStream, ExecuteOptions{})
-}
-
-func (m *mockSelectorAgentNoTool) ExecuteWithOptions(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+func (m *mockSelectorAgentNoTool) Execute(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	return &ExecutionResult{Messages: []Message{NewAssistantMessage("I pick researcher")}}, nil
 }
 
