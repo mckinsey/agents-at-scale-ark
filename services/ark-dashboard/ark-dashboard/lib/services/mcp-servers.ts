@@ -12,6 +12,13 @@ export type MCPServerCreateRequest =
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
 export type MCPHeader = components['schemas']['MCPServerHeader-Output'];
 
+// Auth types
+export type AuthStartRequest = components['schemas']['AuthStartRequest'];
+export type AuthStartResponse = components['schemas']['AuthStartResponse'];
+export type AuthStatusResponse = components['schemas']['AuthStatusResponse'];
+export type AuthLogoutRequest = components['schemas']['AuthLogoutRequest'];
+export type AuthLogoutResponse = components['schemas']['AuthLogoutResponse'];
+
 export type MCPServer = MCPServerResponse & { id: string };
 export type MCPServerDetail = MCPServerDetailResponse & { id: string };
 
@@ -114,5 +121,54 @@ export const mcpServersService = {
       ...response,
       id: response.name,
     };
+  },
+
+  // Auth operations
+  async authStart(
+    mcpServerName: string,
+    request: AuthStartRequest = {},
+  ): Promise<AuthStartResponse> {
+    const response = await apiClient.post<AuthStartResponse>(
+      `/api/v1/mcp-servers/${mcpServerName}/auth/start`,
+      request,
+    );
+
+    trackEvent({
+      name: 'mcp_server_auth_started',
+      properties: {
+        mcpServerName,
+      },
+    });
+
+    return response;
+  },
+
+  async authStatus(
+    mcpServerName: string,
+    authId: string,
+  ): Promise<AuthStatusResponse> {
+    const response = await apiClient.get<AuthStatusResponse>(
+      `/api/v1/mcp-servers/${mcpServerName}/auth/status?auth_id=${authId}`,
+    );
+    return response;
+  },
+
+  async authLogout(
+    mcpServerName: string,
+    request: AuthLogoutRequest = {},
+  ): Promise<AuthLogoutResponse> {
+    const response = await apiClient.post<AuthLogoutResponse>(
+      `/api/v1/mcp-servers/${mcpServerName}/auth/logout`,
+      request,
+    );
+
+    trackEvent({
+      name: 'mcp_server_auth_logout',
+      properties: {
+        mcpServerName,
+      },
+    });
+
+    return response;
   },
 };

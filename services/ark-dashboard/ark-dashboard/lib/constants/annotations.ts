@@ -14,6 +14,10 @@ export const ARK_ANNOTATIONS = {
   // MCP annotations
   MCP_SERVER_NAME: `${ARK_PREFIX}mcp-server-name`,
 
+  // MCP Auth annotations
+  AUTHORIZED_BY: `${ARK_PREFIX}authorized-by`,
+  AUTHORIZED_AT: `${ARK_PREFIX}authorized-at`,
+
   // ARK service annotations
   SERVICE: `${ARK_PREFIX}service`,
   RESOURCES: `${ARK_PREFIX}resources`,

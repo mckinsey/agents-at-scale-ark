@@ -33,6 +33,33 @@ vi.mock('@/components/editors/mcp-editor', () => ({
   ),
 }));
 
+vi.mock('@/components/dialogs/mcp-auth-dialog', () => ({
+  McpAuthDialog: vi.fn(({ open }) =>
+    open ? <div data-testid="mcp-auth-dialog">Auth Dialog</div> : null
+  ),
+}));
+
+vi.mock('@/components/ui/badge', () => ({
+  Badge: vi.fn(({ children, className }) => (
+    <span data-testid="badge" className={className}>{children}</span>
+  )),
+}));
+
+vi.mock('@/lib/services/mcp-servers', async () => {
+  const actual = await vi.importActual('@/lib/services/mcp-servers');
+  return {
+    ...actual,
+    mcpServersService: {
+      authLogout: vi.fn(),
+    },
+  };
+});
+
+vi.mock('@/lib/utils/mcp-auth', () => ({
+  getAuthorizationInfo: vi.fn(() => ({ state: 'Unknown' })),
+  formatAuthorizedAt: vi.fn((date) => date),
+}));
+
 vi.mock('./base-card', () => ({
   BaseCard: vi.fn(({ title, actions, footer }) => (
     <div data-testid="base-card">
@@ -271,6 +298,81 @@ describe('McpServerCard', () => {
         return element?.textContent === 'Tools: 10';
       })).toBeInTheDocument();
       expect(screen.queryByText(/status_message/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Authorization', () => {
+    it('should show authorize button when auth is required', () => {
+      const { getAuthorizationInfo } = require('@/lib/utils/mcp-auth');
+      getAuthorizationInfo.mockReturnValue({ state: 'Required' });
+
+      const unavailableServer: MCPServer = {
+        ...mockMcpServer,
+        available: 'False',
+      };
+
+      render(
+        <McpServerCard
+          mcpServer={unavailableServer}
+          namespace="default"
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /authorize/i })).toBeInTheDocument();
+    });
+
+    it('should show sign out button when authorized', () => {
+      const { getAuthorizationInfo } = require('@/lib/utils/mcp-auth');
+      getAuthorizationInfo.mockReturnValue({
+        state: 'Authorized',
+        authorizedBy: 'user@example.com',
+        authorizedAt: '2024-01-01T00:00:00Z',
+      });
+
+      render(
+        <McpServerCard
+          mcpServer={mockMcpServer}
+          namespace="default"
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    });
+
+    it('should not show auth buttons when state is Unknown', () => {
+      const { getAuthorizationInfo } = require('@/lib/utils/mcp-auth');
+      getAuthorizationInfo.mockReturnValue({ state: 'Unknown' });
+
+      render(
+        <McpServerCard
+          mcpServer={mockMcpServer}
+          namespace="default"
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: /authorize/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+    });
+
+    it('should open auth dialog when authorize button is clicked', async () => {
+      const { getAuthorizationInfo } = require('@/lib/utils/mcp-auth');
+      getAuthorizationInfo.mockReturnValue({ state: 'Required' });
+
+      const unavailableServer: MCPServer = {
+        ...mockMcpServer,
+        available: 'False',
+      };
+
+      render(
+        <McpServerCard
+          mcpServer={unavailableServer}
+          namespace="default"
+        />
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /authorize/i }));
+
+      expect(screen.getByTestId('mcp-auth-dialog')).toBeInTheDocument();
     });
   });
 });
