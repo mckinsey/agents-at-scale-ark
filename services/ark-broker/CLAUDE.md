@@ -41,8 +41,8 @@ violations.
 ### Verify locally before every commit
 
 ```bash
-cd services/ark-broker/ark-broker
-npm run lint && npm run type-check && npm run format:check && npm test
+cd services/ark-broker
+make lint && make test
 ```
 
 ### Mandatory toolchain
