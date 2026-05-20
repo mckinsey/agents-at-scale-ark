@@ -82,12 +82,23 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         res.json(result);
       } catch (error) {
         if (error instanceof PaginationError) {
-          res.status(400).json({error: error.message});
+          res.status(400).json({
+            error: {
+              code: 'PAGINATION_ERROR',
+              message: error.message,
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
           return;
         }
         req.log.error({err: error}, 'failed to get chunks');
-        const err = error as Error;
-        res.status(500).json({error: err.message});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       }
     }
   });
@@ -215,7 +226,14 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
                   {queryName: query_name, chunk},
                   'invalid error chunk structure'
                 );
-                res.status(500).json({error: 'Invalid error chunk structure'});
+                res.status(500).json({
+                  error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Internal server error',
+                    requestId:
+                      req.id === undefined ? undefined : String(req.id),
+                  },
+                });
                 unsubscribeChunks();
                 unsubscribeComplete();
                 return;
@@ -377,8 +395,13 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         });
       } catch (error) {
         req.log.error({err: error}, 'failed to handle stream request');
-        const err = error as Error;
-        res.status(500).json({error: err.message});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       }
     }
   );
@@ -429,7 +452,13 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       const {query_id} = req.params;
 
       if (!query_id) {
-        res.status(400).json({error: 'Query ID parameter is required'});
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Query ID parameter is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
@@ -525,12 +554,23 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
             'stream error from ARK controller'
           );
         }
-        res.status(500).json({error: 'Stream processing failed'});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to handle stream POST request');
-      const err = error as Error;
-      res.status(500).json({error: err.message});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 
@@ -570,14 +610,26 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       const {query_id} = req.params;
 
       if (!query_id) {
-        res.status(400).json({error: 'Query ID parameter is required'});
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Query ID parameter is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
       req.log.info({queryId: query_id}, 'marking query as complete');
 
       if (!chunks.hasQuery(query_id)) {
-        res.status(404).json({error: 'Stream not found'});
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Stream not found',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
@@ -597,8 +649,13 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to complete query stream');
-      const err = error as Error;
-      res.status(500).json({error: err.message});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 
@@ -633,7 +690,13 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       res.json({status: 'success', message: 'Stream data purged'});
     } catch (error) {
       req.log.error({err: error}, 'stream purge failed');
-      res.status(500).json({error: 'Failed to purge stream data'});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 

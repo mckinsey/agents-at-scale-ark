@@ -123,12 +123,23 @@ export function createTracesRouter(traces: TraceBroker): Router {
           res.json(response);
         } catch (error) {
           if (error instanceof PaginationError) {
-            res.status(400).json({error: error.message});
+            res.status(400).json({
+              error: {
+                code: 'PAGINATION_ERROR',
+                message: error.message,
+                requestId: req.id === undefined ? undefined : String(req.id),
+              },
+            });
             return;
           }
           req.log.error({err: error}, 'failed to get traces');
-          const err = error as Error;
-          res.status(500).json({error: err.message});
+          res.status(500).json({
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'Internal server error',
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
         }
       }
     }
@@ -185,14 +196,25 @@ export function createTracesRouter(traces: TraceBroker): Router {
         try {
           const spans = traces.getSpansByTraceId(trace_id);
           if (spans.length === 0 && !traces.hasTrace(trace_id)) {
-            res.status(404).json({error: 'Trace not found'});
+            res.status(404).json({
+              error: {
+                code: 'NOT_FOUND',
+                message: 'Trace not found',
+                requestId: req.id === undefined ? undefined : String(req.id),
+              },
+            });
             return;
           }
           res.json({traceId: trace_id, spans});
         } catch (error) {
           req.log.error({err: error, traceId: trace_id}, 'failed to get trace');
-          const err = error as Error;
-          res.status(500).json({error: err.message});
+          res.status(500).json({
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'Internal server error',
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
         }
       }
     }
@@ -204,7 +226,13 @@ export function createTracesRouter(traces: TraceBroker): Router {
       res.json({status: 'success', message: 'Trace data purged'});
     } catch (error) {
       req.log.error({err: error}, 'trace purge failed');
-      res.status(500).json({error: 'Failed to purge trace data'});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 

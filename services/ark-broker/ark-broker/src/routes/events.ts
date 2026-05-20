@@ -109,12 +109,23 @@ export function createEventsRouter(
           res.json(response);
         } catch (error) {
           if (error instanceof PaginationError) {
-            res.status(400).json({error: error.message});
+            res.status(400).json({
+              error: {
+                code: 'PAGINATION_ERROR',
+                message: error.message,
+                requestId: req.id === undefined ? undefined : String(req.id),
+              },
+            });
             return;
           }
           req.log.error({err: error}, 'failed to get events');
-          const err = error as Error;
-          res.status(500).json({error: err.message});
+          res.status(500).json({
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'Internal server error',
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
         }
       }
     }
@@ -184,15 +195,26 @@ export function createEventsRouter(
           res.json(response);
         } catch (error) {
           if (error instanceof PaginationError) {
-            res.status(400).json({error: error.message});
+            res.status(400).json({
+              error: {
+                code: 'PAGINATION_ERROR',
+                message: error.message,
+                requestId: req.id === undefined ? undefined : String(req.id),
+              },
+            });
             return;
           }
           req.log.error(
             {err: error, queryId: query_id},
             'failed to get events for query'
           );
-          const err = error as Error;
-          res.status(500).json({error: err.message});
+          res.status(500).json({
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'Internal server error',
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
         }
       }
     }
@@ -230,8 +252,13 @@ export function createEventsRouter(
         res.status(201).json({status: 'success'});
       } catch (error) {
         req.log.error({err: error}, 'failed to add event');
-        const err = error as Error;
-        res.status(500).json({error: err.message});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       }
     }
   );
@@ -242,7 +269,13 @@ export function createEventsRouter(
       res.json({status: 'success', message: 'Event data purged'});
     } catch (error) {
       req.log.error({err: error}, 'event purge failed');
-      res.status(500).json({error: 'Failed to purge event data'});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 

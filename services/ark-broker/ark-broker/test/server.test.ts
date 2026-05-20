@@ -150,7 +150,8 @@ describe('ARK Broker API', () => {
       const response = await request(app).get('/conversations/non-existent');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Conversation not found');
+      expect(response.body.error.code).toBe('NOT_FOUND');
+      expect(response.body.error.message).toBe('Conversation not found');
     });
 
     test('GET /conversations should list all conversations', async () => {

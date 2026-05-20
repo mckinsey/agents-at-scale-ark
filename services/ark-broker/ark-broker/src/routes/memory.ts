@@ -115,8 +115,13 @@ export function createMemoryRouter(
         res.status(200).send();
       } catch (error) {
         req.log.error({err: error}, 'failed to add messages');
-        const err = error as Error;
-        res.status(400).json({error: err.message});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       }
     }
   );
@@ -234,12 +239,23 @@ export function createMemoryRouter(
           res.json(response);
         } catch (error) {
           if (error instanceof PaginationError) {
-            res.status(400).json({error: error.message});
+            res.status(400).json({
+              error: {
+                code: 'PAGINATION_ERROR',
+                message: error.message,
+                requestId: req.id === undefined ? undefined : String(req.id),
+              },
+            });
             return;
           }
           req.log.error({err: error}, 'failed to get messages');
-          const err = error as Error;
-          res.status(500).json({error: err.message});
+          res.status(500).json({
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'Internal server error',
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
         }
       }
     }
@@ -273,8 +289,13 @@ export function createMemoryRouter(
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to get memory status');
-      const err = error as Error;
-      res.status(500).json({error: err.message});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 
@@ -284,8 +305,13 @@ export function createMemoryRouter(
       res.json({conversations});
     } catch (error) {
       req.log.error({err: error}, 'failed to get conversations');
-      const err = error as Error;
-      res.status(400).json({error: err.message});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 
@@ -359,7 +385,13 @@ export function createMemoryRouter(
       const {conversationId} = req.params;
 
       if (!conversationId) {
-        res.status(400).json({error: 'Conversation ID is required'});
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Conversation ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
@@ -417,12 +449,24 @@ export function createMemoryRouter(
       const {conversationId, queryId} = req.params;
 
       if (!conversationId) {
-        res.status(400).json({error: 'Conversation ID is required'});
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Conversation ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
       if (!queryId) {
-        res.status(400).json({error: 'Query ID is required'});
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Query ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
@@ -525,14 +569,26 @@ export function createMemoryRouter(
       const {conversationId} = req.params;
 
       if (!conversationId) {
-        res.status(400).json({error: 'Conversation ID is required'});
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Conversation ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 
       const items = memory.getByConversation(conversationId);
 
       if (items.length === 0) {
-        res.status(404).json({error: 'Conversation not found'});
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Conversation not found',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
 

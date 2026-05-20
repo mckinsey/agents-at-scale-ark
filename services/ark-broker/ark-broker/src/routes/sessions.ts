@@ -137,12 +137,23 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
         }
       } catch (error) {
         if (error instanceof PaginationError) {
-          res.status(400).json({error: error.message});
+          res.status(400).json({
+            error: {
+              code: 'PAGINATION_ERROR',
+              message: error.message,
+              requestId: req.id === undefined ? undefined : String(req.id),
+            },
+          });
           return;
         }
         req.log.error({err: error}, 'failed to get sessions');
-        const err = error as Error;
-        res.status(500).json({error: err.message});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       }
     }
   );
@@ -152,14 +163,25 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       const {session_id} = req.params;
       const session = sessionsBroker.getSession(session_id);
       if (!session) {
-        res.status(404).json({error: 'Session not found'});
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Session not found',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
         return;
       }
       res.json(session);
     } catch (error) {
       req.log.error({err: error}, 'failed to get session');
-      const err = error as Error;
-      res.status(500).json({error: err.message});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 
@@ -188,8 +210,13 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
         res.status(201).json({status: 'success'});
       } catch (error) {
         req.log.error({err: error}, 'failed to ingest');
-        const err = error as Error;
-        res.status(500).json({error: err.message});
+        res.status(500).json({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
       }
     }
   );
@@ -200,7 +227,13 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       res.json({status: 'success', message: 'Sessions purged'});
     } catch (error) {
       req.log.error({err: error}, 'purge failed');
-      res.status(500).json({error: 'Failed to purge sessions'});
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
     }
   });
 
