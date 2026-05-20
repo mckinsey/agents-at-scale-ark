@@ -168,8 +168,15 @@ func TestBuildAnthropicRequest(t *testing.T) {
 	t.Run("tool_choice is omitted from JSON when unset", func(t *testing.T) {
 		req := buildAnthropicRequest(messages, "", tools, ToolChoiceUnset, nil)
 		body, err := json.Marshal(req)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotContains(t, string(body), "tool_choice")
+	})
+
+	t.Run("tool_choice is serialized when set", func(t *testing.T) {
+		req := buildAnthropicRequest(messages, "", tools, ToolChoiceRequired, nil)
+		body, err := json.Marshal(req)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), `"tool_choice":{"type":"any"}`)
 	})
 }
 
