@@ -1,7 +1,6 @@
 package completions
 
 import (
-	"context"
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -33,20 +32,4 @@ func (a *Agent) requiresApproval(toolName string) *arkv1alpha1.ToolApprovalConfi
 		return nil
 	}
 	return a.approvalRequiredTools[toolName]
-}
-
-// buildA2ATaskForApproval creates an A2ATask resource for approval tracking
-func buildA2ATaskForApproval(
-	ctx context.Context,
-	queryName string,
-	queryNamespace string,
-	agentName string,
-	agentNamespace string,
-	toolCalls []ToolCall,
-	config *arkv1alpha1.ToolApprovalConfig,
-	execContext *ExecutionContext,
-) (*arkv1alpha1.A2ATask, error) {
-	// TODO: Implement A2ATask creation
-	// This will be implemented in the controller integration phase
-	return nil, fmt.Errorf("not implemented")
 }

@@ -222,7 +222,7 @@ class TestSubmitApproval(unittest.TestCase):
         self.client = TestClient(app)
 
     @patch('ark_api.api.v1.queries.asyncio.to_thread')
-    @patch('ark_api.api.v1.queries.client.CustomObjectsApi')
+    @patch('kubernetes.client.CustomObjectsApi')
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_submit_approval_approved(self, mock_ark_client, mock_custom_api, mock_to_thread):
         """Test POST approval with action='approved' updates A2ATask to completed."""
@@ -280,11 +280,11 @@ class TestSubmitApproval(unittest.TestCase):
         # Verify patch was called with completed phase
         mock_to_thread.assert_called_once()
         call_args = mock_to_thread.call_args
-        patch_body = call_args[0][-1]
+        patch_body = call_args.kwargs['body']
         self.assertEqual(patch_body["status"]["phase"], "completed")
 
     @patch('ark_api.api.v1.queries.asyncio.to_thread')
-    @patch('ark_api.api.v1.queries.client.CustomObjectsApi')
+    @patch('kubernetes.client.CustomObjectsApi')
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_submit_approval_rejected(self, mock_ark_client, mock_custom_api, mock_to_thread):
         """Test POST approval with action='rejected' updates A2ATask to failed."""
@@ -330,7 +330,7 @@ class TestSubmitApproval(unittest.TestCase):
 
         # Verify patch was called with failed phase and error message
         call_args = mock_to_thread.call_args
-        patch_body = call_args[0][-1]
+        patch_body = call_args.kwargs['body']
         self.assertEqual(patch_body["status"]["phase"], "failed")
         self.assertEqual(patch_body["status"]["error"], "Tool execution rejected by user")
 
@@ -413,7 +413,7 @@ class TestSubmitApproval(unittest.TestCase):
         self.assertIn("No approval task found", data["detail"])
 
     @patch('ark_api.api.v1.queries.asyncio.to_thread')
-    @patch('ark_api.api.v1.queries.client.CustomObjectsApi')
+    @patch('kubernetes.client.CustomObjectsApi')
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_submit_approval_validates_namespace(self, mock_ark_client, mock_custom_api, mock_to_thread):
         """Test POST approval validates namespace parameter."""
@@ -458,7 +458,7 @@ class TestSubmitApproval(unittest.TestCase):
 
         # Verify patch was called with correct namespace
         call_args = mock_to_thread.call_args
-        patch_namespace = call_args[0][4]
+        patch_namespace = call_args.kwargs['namespace']
         self.assertEqual(patch_namespace, "custom-namespace")
 
     def test_submit_approval_invalid_action(self):

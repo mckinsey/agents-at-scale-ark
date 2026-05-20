@@ -137,7 +137,7 @@ func (h *Handler) ProcessMessage(
 		// Check if this is an approval required error
 		var approvalErr *ApprovalRequiredError
 		if errors.As(err, &approvalErr) {
-			return h.handleApprovalRequired(ctx, state, approvalErr, handler)
+			return h.handleApprovalRequired(ctx, state, approvalErr), nil
 		}
 
 		// Save error messages to memory before returning
@@ -615,8 +615,7 @@ func (h *Handler) handleApprovalRequired(
 	ctx context.Context,
 	state *executionState,
 	approvalErr *ApprovalRequiredError,
-	handler taskmanager.TaskHandler,
-) (*taskmanager.MessageProcessingResult, error) {
+) *taskmanager.MessageProcessingResult {
 	// Generate task ID
 	taskID := protocol.GenerateRPCID()
 
@@ -672,7 +671,7 @@ func (h *Handler) handleApprovalRequired(
 
 	return &taskmanager.MessageProcessingResult{
 		Result: task,
-	}, nil
+	}
 }
 
 // checkResumption checks if this query execution is a resumption from HITL approval or rejection

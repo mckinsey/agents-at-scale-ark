@@ -278,10 +278,11 @@ func TestApprovalRequiredErrorWithMissingContext(t *testing.T) {
 	require.Equal(t, "test-agent", approvalErr.Context.AgentName)
 	require.Equal(t, "default", approvalErr.Context.AgentNamespace)
 }
+
 func TestToolResultErrorConversion(t *testing.T) {
 	tests := []struct {
-		name           string
-		toolResult     ToolResult
+		name            string
+		toolResult      ToolResult
 		expectedContent string
 	}{
 		{
@@ -332,10 +333,10 @@ func TestToolResultErrorConversion(t *testing.T) {
 func TestRejectionCreatesErrorResults(t *testing.T) {
 	// This test verifies that when tools are rejected, error ToolResults are created
 	// instead of executing the tools
-	
+
 	toolCalls := []struct {
-		ID       string
-		Name     string
+		ID        string
+		Name      string
 		Arguments string
 	}{
 		{ID: "call-1", Name: "write-file", Arguments: `{"path": "/tmp/test.txt"}`},
@@ -343,7 +344,7 @@ func TestRejectionCreatesErrorResults(t *testing.T) {
 	}
 
 	// Simulate rejection - create error results without execution
-	var results []ToolResult
+	results := make([]ToolResult, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		results = append(results, ToolResult{
 			ID:      tc.ID,
