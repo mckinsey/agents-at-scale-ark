@@ -15,10 +15,15 @@ export function createErrorHandler(deps: {
   return (err, req, res, _next) => {
     req.log.error({err}, 'unhandled error');
 
+    const status: number =
+      (err as {status?: number}).status ??
+      (err as {statusCode?: number}).statusCode ??
+      500;
+
     const body: ErrorBody = {
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
+        code: status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR',
+        message: status === 500 ? 'Internal server error' : String(err.message),
         requestId: req.id === undefined ? undefined : String(req.id),
       },
     };
@@ -27,7 +32,7 @@ export function createErrorHandler(deps: {
       body.error.stack = err.stack;
     }
 
-    res.status(500).json(body);
+    res.status(status).json(body);
   };
 }
 
