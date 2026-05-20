@@ -4,13 +4,13 @@ import type {Logger} from './logging/logger.js';
 export const writeSSEEvent = (
   res: Response,
   data: unknown,
-  logger?: Logger
+  logger: Logger
 ): boolean => {
   try {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
     return true;
   } catch (err) {
-    logger?.error({err}, 'error writing SSE event');
+    logger.error({err}, 'error writing SSE event');
     return false;
   }
 };

@@ -221,7 +221,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
                 return;
               }
 
-              if (!writeSSEEvent(res, chunk)) {
+              if (!writeSSEEvent(res, chunk, req.log)) {
                 req.log.info(
                   {queryName: query_name},
                   'failed to write error chunk, client may have disconnected'
@@ -237,7 +237,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
               return;
             }
 
-            if (!writeSSEEvent(res, chunk)) {
+            if (!writeSSEEvent(res, chunk, req.log)) {
               req.log.info(
                 {queryName: query_name},
                 'client disconnected (write failed)'
@@ -339,7 +339,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
               return;
             }
 
-            if (!writeSSEEvent(res, chunk)) {
+            if (!writeSSEEvent(res, chunk, req.log)) {
               req.log.warn(
                 {queryName: query_name},
                 'error writing existing chunk'
