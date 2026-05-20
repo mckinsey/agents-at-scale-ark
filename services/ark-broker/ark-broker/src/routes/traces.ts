@@ -8,6 +8,7 @@ import {
   PaginationError,
   PaginatedList,
 } from '../pagination.js';
+import {sendValidationError} from './errors.js';
 
 const getTracesQuerySchema = z.object({
   watch: z
@@ -203,15 +204,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
     (req, res) => {
       const parse = getTracesQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id, 'query');
         return;
       }
       const {watch, session_id: sessionId, cursor}: GetTracesQuery = parse.data;
@@ -230,15 +223,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
       const {trace_id} = req.params;
       const parse = getTracesQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id, 'query');
         return;
       }
       const {

@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import {sendValidationError} from './errors.js';
 import type {Request, Response} from 'express';
 import {z} from 'zod';
 import {SessionsBroker} from '../sessions-broker.js';
@@ -108,15 +109,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     (req, res) => {
       const parse = getSessionsQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id, 'query');
         return;
       }
       const query: GetSessionsQuery = parse.data;
@@ -191,15 +184,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     (req, res) => {
       const parse = postSessionEventBodySchema.safeParse(req.body);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id);
         return;
       }
       const data: PostSessionEventBody = parse.data;

@@ -9,6 +9,7 @@ import {
   PaginationError,
   PaginatedList,
 } from '../pagination.js';
+import {sendValidationError} from './errors.js';
 
 const getEventsQuerySchema = z.object({
   watch: z
@@ -197,15 +198,7 @@ export function createEventsRouter(
     (req, res) => {
       const parse = getEventsQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id, 'query');
         return;
       }
       const {watch, session_id: sessionId, cursor}: GetEventsQuery = parse.data;
@@ -224,15 +217,7 @@ export function createEventsRouter(
       const {query_id} = req.params;
       const parse = getEventsQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id, 'query');
         return;
       }
       const {
@@ -261,15 +246,7 @@ export function createEventsRouter(
     (req, res) => {
       const parse = postEventBodySchema.safeParse(req.body);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id);
         return;
       }
       const event: PostEventBody = parse.data;

@@ -5,6 +5,7 @@ import {CompletionChunkBroker} from '../completion-chunk-broker.js';
 import {StreamError} from '../types.js';
 import {streamSSE, writeSSEEvent} from '../sse.js';
 import {parsePaginationParams, PaginationError} from '../pagination.js';
+import {sendValidationError} from './errors.js';
 
 interface ChunkPayload {
   error?: StreamError;
@@ -400,15 +401,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
     (req, res) => {
       const parse = getStreamQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'query'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id, 'query');
         return;
       }
       const streamQuery: GetStreamQuery = parse.data;

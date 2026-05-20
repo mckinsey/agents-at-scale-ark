@@ -1,5 +1,6 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
+import {sendValidationError} from './errors.js';
 import {randomUUID} from 'crypto';
 import {z} from 'zod';
 import {MemoryBroker} from '../memory-broker.js';
@@ -193,15 +194,7 @@ export function createMemoryRouter(
     (req, res) => {
       const parse = postMessagesBodySchema.safeParse(req.body);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id);
         return;
       }
       const {conversation_id, query_id, messages}: PostMessagesBody =
@@ -243,15 +236,7 @@ export function createMemoryRouter(
     (req, res) => {
       const parse = getMessagesQuerySchema.safeParse(req.query);
       if (!parse.success) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: parse.error.issues
-              .map((e) => `${e.path.join('.') || 'body'}: ${e.message}`)
-              .join('; '),
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendValidationError(res, parse.error, req.id);
         return;
       }
       const {
