@@ -1,7 +1,9 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Wrench } from 'lucide-react';
+import { ChatBubble } from '@/components/icons/ChatBubble';
+import { Handyman } from '@/components/icons/Handyman';
+import { Schedule } from '@/components/icons/Schedule';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
@@ -11,6 +13,23 @@ interface Props {
   readonly conversations: Conversation[];
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
+}
+
+type ConversationStatus = 'error' | 'active' | 'completed';
+
+function getConversationStatus(conv: Conversation): ConversationStatus {
+  if (conv.errorCount > 0) return 'error';
+  if (conv.duration === 'ongoing') return 'active';
+  return 'completed';
+}
+
+function getStatusBorderClass(status: ConversationStatus): string {
+  const borderColors = {
+    error: 'bg-stroke-status-error',
+    active: 'bg-stroke-status-focus',
+    completed: 'bg-stroke-status-mono',
+  };
+  return borderColors[status];
 }
 
 function formatAbsoluteTime(timestamp: string): string {
@@ -25,45 +44,65 @@ function formatAbsoluteTime(timestamp: string): string {
 
 export function ConversationSidebar({ conversations, selectedId, onSelect }: Props) {
   return (
-    <div className="min-h-0 flex flex-col flex-1 space-y-3 overflow-y-auto border-r border-border">
+    <div className="flex flex-col gap-2 pr-3 py-3">
       {conversations.map(conv => {
+        const status = getConversationStatus(conv);
+        const isSelected = selectedId === conv.conversationId;
+
         return (
           <button
             key={conv.conversationId}
             type="button"
             className={cn(
-              'relative h-auto w-full flex flex-col items-start gap-2 px-4 py-3 text-left cursor-pointer transition-colors hover:bg-muted',
-              selectedId === conv.conversationId && 'bg-muted',
-              'border-l-2 border-l-border'
+              'relative h-auto w-full inline-flex justify-start items-start text-left cursor-pointer transition-colors',
+              isSelected && 'bg-stateslayer-overlay-hover',
+              !isSelected && 'hover:bg-stateslayer-overlay-hover'
             )}
             onClick={() => onSelect(conv.conversationId)}
           >
-            <div className="flex w-full items-center gap-2">
-              {getParticipantIcon(conv.participantType, { name: conv.name })}
-              <span className="flex-1 truncate text-base font-medium">{stripNamespace(conv.name)}</span>
-              <span className="text-sm text-muted-foreground">
-                {formatAbsoluteTime(conv.startTime)}
-              </span>
-            </div>
+            <div className={cn('w-px self-stretch', getStatusBorderClass(status))} />
+            <div className="flex-1 px-3 py-2 inline-flex flex-col justify-start items-start gap-3">
+              <div className="self-stretch inline-flex justify-between items-center">
+                <div className="flex justify-start items-center gap-1">
+                  {getParticipantIcon(conv.participantType, { name: conv.name, size: '4' })}
+                  <span className="text-sm font-normal leading-5 line-clamp-1 text-fg-primary">
+                    {stripNamespace(conv.name)}
+                  </span>
+                </div>
+                <span className="text-xs font-normal leading-4 text-fg-secondary">
+                  {formatAbsoluteTime(conv.startTime)}
+                </span>
+              </div>
 
-            <div className="flex w-full items-center gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <MessageSquare className="size-3" />
-                {conv.messageCount}
-              </span>
-              <span className="flex items-center gap-1">
-                <Wrench className="size-3" />
-                {conv.toolCallCount}
-              </span>
-            </div>
+              <div className="inline-flex justify-start items-center gap-2">
+                <span className="flex justify-start items-center gap-1">
+                  <ChatBubble className="size-4 opacity-60" />
+                  <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
+                    {conv.messageCount}
+                  </span>
+                </span>
+                <span className="flex justify-start items-center gap-1">
+                  <Handyman className="size-4 opacity-60" />
+                  <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
+                    {conv.toolCallCount}
+                  </span>
+                </span>
+                {conv.duration !== 'ongoing' && (
+                  <span className="flex justify-start items-center gap-1">
+                    <Schedule className="size-4 opacity-60" />
+                    <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
+                      {conv.duration}
+                    </span>
+                  </span>
+                )}
+              </div>
 
-            {conv.errorCount > 0 && (
-              <div className="flex w-full">
-                <Badge variant="error" className="rounded text-xs px-1.5 py-0.5">
+              {status === 'error' && conv.errorCount > 0 && (
+                <Badge variant="error" outline size="sm" format="rect">
                   {conv.errorCount}
                 </Badge>
-              </div>
-            )}
+              )}
+            </div>
           </button>
         );
       })}

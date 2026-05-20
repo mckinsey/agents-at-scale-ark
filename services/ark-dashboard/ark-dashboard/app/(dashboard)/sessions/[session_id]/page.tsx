@@ -126,7 +126,7 @@ export default function SessionDetailPage() {
   const formattedDate = `${dateStr} ${timeStr}`;
 
   return (
-    <div className="flex h-full flex-col space-y-6 p-8">
+    <div className="flex flex-col space-y-6 p-8">
       <button
         onClick={() => router.push('/session-history')}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -137,21 +137,22 @@ export default function SessionDetailPage() {
 
       <SessionConversationHeader session={session} formattedDate={formattedDate} />
 
-      <Tabs defaultValue={HISTORY_TAB} className="flex flex-col">
-        <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto gap-4">
-          <TabsTrigger
-            value={HISTORY_TAB}
-            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
-          >
-            History
-          </TabsTrigger>
-          <TabsTrigger
-            value={LOGS_TAB}
-            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
-          >
-            Logs
-          </TabsTrigger>
-        </TabsList>
+      <div className="flex justify-start items-center overflow-hidden">
+        <Tabs defaultValue={HISTORY_TAB} className="flex-1 max-w-[1344px] flex flex-col">
+          <TabsList className="flex-1 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
+            <TabsTrigger
+              value={HISTORY_TAB}
+              className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
+            >
+              History
+            </TabsTrigger>
+            <TabsTrigger
+              value={LOGS_TAB}
+              className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
+            >
+              Logs
+            </TabsTrigger>
+          </TabsList>
 
         <TabsContent value={HISTORY_TAB} className="flex flex-col">
           <ConversationsTab
@@ -163,10 +164,11 @@ export default function SessionDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value={LOGS_TAB} className="flex flex-col">
-          <LogsTab sessionId={session_id} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value={LOGS_TAB} className="flex flex-col">
+            <LogsTab sessionId={session_id} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }
