@@ -93,3 +93,17 @@
 - [ ] 11.1 `docs/content/` — operator guide for `ARK_API_PUBLIC_CALLBACK_URL` (public ingress + air-gapped port-forward recipes). The port-forward recipe SHALL show `kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80` so the browser reaches the listener regardless of how the OS resolves `localhost`.
 - [ ] 11.2 `docs/content/` — `ark mcp auth login` / `logout` CLI reference
 - [ ] 11.3 Note in the MCP authorization overview that token writes go through ark-api and surface the `authorized-by` annotation as the visible side-effect; link to the (future) per-user-tokens capability for the multi-user limitation
+- [ ] 11.4 External-executor header-resolution workaround. Document under `docs/content/` (MCP authorization page) that when an agent targets an external `ExecutionEngine` (claude-agent-sdk, langchain, …) AND uses `ark mcp auth login` against an MCPServer whose `spec.authorization.tokenSecretRef` is the sole authorization source, the operator SHALL add a redundant `spec.headers[]` entry of the form:
+
+  ```yaml
+  spec:
+    headers:
+      - name: Authorization
+        value:
+          valueFrom:
+            secretKeyRef:
+              name: <same as spec.authorization.tokenSecretRef.name>
+              key: <accessTokenKey override, or "access_token" by default>
+  ```
+
+  The redundancy is intentional: the controller already resolves `spec.authorization` for tool discovery; this extra entry lets the SDK's `_resolve_mcp_server()` resolve the same token for query-dispatch `MCPServerConfig`. The doc SHALL link to the `mcp-auth-sdk-header-resolution` follow-up capability and SHALL note that the entry becomes unnecessary once that capability lands.
