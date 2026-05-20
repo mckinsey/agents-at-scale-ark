@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NextRequestWithAuth } from '@/auth';
-import middleware from '@/middleware';
+import middleware from '@/proxy';
 
 // Mock global fetch
 const mockFetch = vi.fn();

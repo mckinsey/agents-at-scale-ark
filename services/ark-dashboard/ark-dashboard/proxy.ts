@@ -6,7 +6,7 @@ import type { NextRequestWithAuth } from './auth';
 import { auth } from './auth';
 import { COOKIE_SESSION_TOKEN, SIGNIN_PATH } from './lib/constants/auth';
 
-async function middleware(request: NextRequest) {
+async function proxy(request: NextRequest) {
   // Get the base path from environment (no default)
   const basePath = process.env.ARK_DASHBOARD_BASE_PATH || '';
 
@@ -56,7 +56,7 @@ async function middleware(request: NextRequest) {
       backendHeaders.set('Authorization', `Bearer ${token.access_token}`);
     }
 
-    const fetchOptions: RequestInit = {
+    const fetchOptions: RequestInit & { duplex?: string } = {
       method: request.method,
       headers: backendHeaders,
       signal: request.signal,
@@ -64,6 +64,7 @@ async function middleware(request: NextRequest) {
 
     if (request.body) {
       fetchOptions.body = request.body;
+      fetchOptions.duplex = 'half';
     }
     const backendResponse = await fetch(targetUrl, fetchOptions);
 
@@ -95,7 +96,7 @@ export default auth(async (req: NextRequestWithAuth) => {
     return NextResponse.next();
   }
 
-  return middleware(req);
+  return proxy(req);
 });
 
 export const config = {

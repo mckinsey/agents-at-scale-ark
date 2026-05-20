@@ -87,6 +87,12 @@ rules:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["arkconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- if .Values.impersonation.enabled }}
+  # User impersonation for SSO-authenticated requests (must be cluster-scoped)
+  - apiGroups: [""]
+    resources: ["users", "groups"]
+    verbs: ["impersonate"]
+  {{- end }}
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

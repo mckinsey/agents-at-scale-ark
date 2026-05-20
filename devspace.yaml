@@ -86,6 +86,10 @@ profiles:
             upgradeArgs: [ "--install" ]
             values:
               installCRDs: true
+              # Disable the post-install Job that probes the cert-manager webhook.
+              # The probe runs before the webhook TLS is stable, causing it to hang.
+              startupapicheck:
+                enabled: false
   - name: enable-gateway-api
     activation:
       - vars:
@@ -128,15 +132,49 @@ profiles:
 pipelines:
   deploy: |-
 
-    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
-      create_deployments cert-manager
+    # Start gateway-api CRD installation in background so it runs in parallel
+    # with cert-manager startup instead of sequentially after it.
+    GATEWAY_PID=""
+    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
+      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
+        kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml" &
+        GATEWAY_PID=$!
+      fi
     fi
 
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      create_deployments gateway-api
+    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
+      # Skip installation if cert-manager is already deployed (idempotent re-deploys).
+      if ! helm status cert-manager -n cert-manager > /dev/null 2>&1; then
+        create_deployments cert-manager
+      fi
+      # Wait for webhook and cainjector to be fully rolled out before proceeding.
+      # The webhook must be running before any cert-manager resources (Issuer, Certificate)
+      # can be created, otherwise Helm will get x509 errors calling the webhook TLS endpoint.
+      kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+      kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+      # Wait for cainjector to populate the webhook's CABundle field. Only needed on first
+      # install — once the selfsigned-issuer exists it persists across re-deploys (see
+      # ark/dist/chart/templates/certmanager/certificate.yaml for why).
+      if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
+        echo "Waiting for cert-manager webhook CABundle..."
+        until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      fi
     fi
+
+    # Wait for background gateway-api install to finish before creating ark-controller,
+    # which depends on gateway CRDs being established.
+    if [ -n "${GATEWAY_PID}" ]; then wait ${GATEWAY_PID}; fi
 
     run_dependency_pipelines ark-controller --pipeline=deploy
+
+    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
+      # Verify cert-manager can actually issue the webhook certificate end-to-end.
+      # rollout status + CABundle checks above only confirm pods are running and the
+      # webhook config is patched — they don't catch issuance failures (e.g. broken
+      # RBAC, controller errors). Waiting for serving-cert to be Ready provides that
+      # guarantee before dependent services try to call the webhook.
+      kubectl wait --for=condition=Ready certificate/serving-cert -n ark-system --timeout=60s
+    fi
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       echo "Waiting for Ark API to be available..."
@@ -154,20 +192,58 @@ pipelines:
     run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=deploy
 
     echo ""
-    echo "All services deployed. Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
+    echo "All services deployed. Waiting for pods to be ready..."
+    # Wait for pods before streaming logs; kubectl logs -f fails immediately if a
+    # pod is still in ContainerCreating state.
+    kubectl wait pod -l app -n "${DEVSPACE_NAMESPACE}" --for=condition=Ready --timeout=120s 2>/dev/null || true
+    echo "Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
     echo ""
     kubectl logs -f -n "${DEVSPACE_NAMESPACE}" --all-containers --prefix --max-log-requests=10 -l app
   dev: |-
 
-    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
-      create_deployments cert-manager
+    # Start gateway-api CRD installation in background so it runs in parallel
+    # with cert-manager startup instead of sequentially after it.
+    GATEWAY_PID=""
+    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
+      if ! kubectl get crd gateways.gateway.networking.k8s.io > /dev/null 2>&1; then
+        kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml" &
+        GATEWAY_PID=$!
+      fi
     fi
 
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      create_deployments gateway-api
+    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
+      # Skip installation if cert-manager is already deployed (idempotent re-deploys).
+      if ! helm status cert-manager -n cert-manager > /dev/null 2>&1; then
+        create_deployments cert-manager
+      fi
+      # Wait for webhook and cainjector to be fully rolled out before proceeding.
+      # The webhook must be running before any cert-manager resources (Issuer, Certificate)
+      # can be created, otherwise Helm will get x509 errors calling the webhook TLS endpoint.
+      kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
+      kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+      # Wait for cainjector to populate the webhook's CABundle field. Only needed on first
+      # install — once the selfsigned-issuer exists it persists across re-deploys (see
+      # ark/dist/chart/templates/certmanager/certificate.yaml for why).
+      if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
+        echo "Waiting for cert-manager webhook CABundle..."
+        until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      fi
     fi
+
+    # Wait for background gateway-api install to finish before creating ark-controller,
+    # which depends on gateway CRDs being established.
+    if [ -n "${GATEWAY_PID}" ]; then wait ${GATEWAY_PID}; fi
 
     run_dependency_pipelines ark-controller --pipeline=dev
+
+    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
+      # Verify cert-manager can actually issue the webhook certificate end-to-end.
+      # rollout status + CABundle checks above only confirm pods are running and the
+      # webhook config is patched — they don't catch issuance failures (e.g. broken
+      # RBAC, controller errors). Waiting for serving-cert to be Ready provides that
+      # guarantee before dependent services try to call the webhook.
+      kubectl wait --for=condition=Ready certificate/serving-cert -n ark-system --timeout=60s
+    fi
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       echo "Waiting for Ark API to be available..."
