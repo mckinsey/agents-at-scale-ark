@@ -38,7 +38,7 @@ $(ARK_BROKER_STAMP_DEPS): $(ARK_BROKER_SERVICE_DIR)/ark-broker/package.json $(AR
 # Test target
 $(ARK_BROKER_SERVICE_NAME)-test: $(ARK_BROKER_STAMP_TEST)
 $(ARK_BROKER_STAMP_TEST): $(ARK_BROKER_STAMP_DEPS)
-	cd $(ARK_BROKER_SERVICE_DIR)/ark-broker && npm run lint && npm run type-check && npm run test
+	cd $(ARK_BROKER_SERVICE_DIR)/ark-broker && npm run lint && npm run type-check && npm run format:check && npm run test
 	@touch $@
 
 # Build target
