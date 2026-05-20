@@ -363,6 +363,10 @@ export class SessionsBroker {
   applyEvent(eventData: Partial<SessionEventData>): void {
     const {sessionId, queryName} = eventData;
     if (!sessionId || !queryName) {
+      this.logger.warn(
+        {sessionId, queryName},
+        'dropping event: missing sessionId or queryName'
+      );
       return;
     }
 
@@ -374,7 +378,9 @@ export class SessionsBroker {
     // Map toolName to tool for backward compatibility with completions executor
     const normalizedEventData = {
       ...eventData,
-      tool: eventData.tool || (eventData as any).toolName,
+      tool:
+        eventData.tool ||
+        (eventData as Partial<SessionEventData> & {toolName?: string}).toolName,
     };
 
     if (!this.store.sessions[sessionId]) {
