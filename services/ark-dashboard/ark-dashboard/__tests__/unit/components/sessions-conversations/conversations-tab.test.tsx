@@ -249,7 +249,13 @@ describe('ConversationsTab', () => {
     expect(screen.getByTestId('conversation-id')).toHaveTextContent('conv-1');
   });
 
-  it('should show no selection state when no conversation selected', () => {
+  it('should show empty state when no conversations exist', () => {
+    // Mock empty conversations array
+    vi.mocked(useListConversations).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as any);
+
     render(
       <ConversationsTab
         sessionId="session-1"
@@ -258,8 +264,8 @@ describe('ConversationsTab', () => {
       />
     );
 
-    expect(screen.getByText('No participant selected')).toBeInTheDocument();
-    expect(screen.getByText('Create a conversation to start')).toBeInTheDocument();
+    // With no conversations, the Empty component shows
+    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
   });
 
   it('should toggle sidebar collapse', async () => {

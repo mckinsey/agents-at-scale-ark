@@ -67,9 +67,11 @@ describe('ChatInput', () => {
       // Should show "Show tool calls" label
       expect(screen.getByText('Show tool calls')).toBeInTheDocument();
 
-      // Should NOT render regular chat input
-      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-      expect(screen.queryByText(/Message/)).not.toBeInTheDocument();
+      // Chat input should render but be disabled for workflow conversations
+      const input = screen.getByRole('textbox');
+      expect(input).toBeInTheDocument();
+      expect(input).toBeDisabled();
+      expect(screen.getByPlaceholderText('Message agent-1')).toBeDisabled();
     });
 
     it('should render tool toggle with correct count for different toolCallCount values', () => {
@@ -160,7 +162,7 @@ describe('ChatInput', () => {
   });
 
   describe('Workflow conversations without tool calls', () => {
-    it('should render nothing when workflow has no tool calls', () => {
+    it('should render UI with disabled input when workflow has no tool calls', () => {
       const workflowConversation: Conversation = {
         conversationId: 'conv-1',
         name: 'Workflow',
@@ -180,17 +182,19 @@ describe('ChatInput', () => {
         />
       );
 
-      // Component should return null - no UI rendered
-      expect(container.firstChild).toBeNull();
+      // UI should render even with 0 tool calls
+      expect(container.firstChild).not.toBeNull();
 
-      // Should NOT render tool toggle
-      expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+      // Tool toggle should still be present (allows toggling even with no tools)
+      expect(screen.getByRole('switch')).toBeInTheDocument();
 
-      // Should NOT render regular chat input
-      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      // Chat input should be disabled for workflow conversations
+      const input = screen.getByRole('textbox');
+      expect(input).toBeInTheDocument();
+      expect(input).toBeDisabled();
     });
 
-    it('should render nothing when toolCallCount is undefined in workflow', () => {
+    it('should render UI with disabled input when toolCallCount is undefined in workflow', () => {
       const workflowConversation: Conversation = {
         conversationId: 'conv-1',
         name: 'Workflow',
@@ -210,7 +214,14 @@ describe('ChatInput', () => {
         />
       );
 
-      expect(container.firstChild).toBeNull();
+      // UI should render even when toolCallCount is undefined
+      expect(container.firstChild).not.toBeNull();
+
+      // Input should be disabled for workflow conversations
+      expect(screen.getByRole('textbox')).toBeDisabled();
+
+      // Tool toggle should be present
+      expect(screen.getByRole('switch')).toBeInTheDocument();
     });
   });
 
