@@ -54,7 +54,7 @@ def get_context():
         _, active_context = config.list_kube_config_contexts()
         if active_context and 'context' in active_context:
             ctx = active_context['context']
-            namespace = ctx.get('namespace', 'default')
+            namespace = ctx.get('namespace') or 'default'
             cluster = ctx.get('cluster', None)
             logger.info(f"Using kubeconfig context namespace: {namespace}, cluster: {cluster}")
             return {
