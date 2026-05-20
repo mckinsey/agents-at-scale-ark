@@ -12,13 +12,13 @@ build: # build Docker image
 	cd ark-broker && docker build -t ark-broker:latest .
 
 dev: # run service in development mode
-	npm run dev
+	cd ark-broker && npm run dev
 
 test: # run tests
-	npm test
+	cd ark-broker && npm test
 
 lint: # run linting and type checking
-	npm run lint && npm run type-check
+	cd ark-broker && npm run lint && npm run type-check && npm run format:check
 
 install: # deploy service to cluster (same as make ark-broker-install)
 	cd ../.. && make ark-broker-install

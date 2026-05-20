@@ -1,9 +1,15 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { EventEmitter } from 'node:events';
-import type { QueryPhase, SessionEventData } from './types.js';
-import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX, CANCELED_REASON_SUFFIX } from './types.js';
-import type { PaginationParams, PaginatedList } from './pagination.js';
+import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
+import {dirname} from 'node:path';
+import {EventEmitter} from 'node:events';
+import type {Logger} from './logging/logger.js';
+import type {QueryPhase, SessionEventData} from './types.js';
+import {
+  QueryPhases,
+  EventReasons,
+  ERROR_REASON_SUFFIX,
+  CANCELED_REASON_SUFFIX,
+} from './types.js';
+import type {PaginationParams, PaginatedList} from './pagination.js';
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
 
@@ -84,15 +90,18 @@ export interface PaginatedSessionsList extends PaginatedList<SessionEntry> {
  * to watch sessions mutate in real-time, or poll/GET for post-hoc analysis.
  */
 export class SessionsBroker {
-  private store: SessionsStore = { sessions: {} };
+  private store: SessionsStore = {sessions: {}};
   private queryToSession: Map<string, string> = new Map();
   private readonly emitter = new EventEmitter();
   private dirty = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly path?: string) {
+  constructor(
+    private readonly logger: Logger,
+    private readonly path?: string
+  ) {
     if (path) {
-      console.log(`[Sessions] persistence enabled at ${path}`);
+      this.logger.info({path}, 'persistence enabled');
       this.loadFromDisk();
     }
   }
@@ -108,13 +117,16 @@ export class SessionsBroker {
 
           const sessionCount = Object.keys(this.store.sessions).length;
           const queryCount = this.queryToSession.size;
-          console.log(`[Sessions] loaded ${sessionCount} sessions, ${queryCount} queries`);
+          this.logger.info(
+            {sessions: sessionCount, queries: queryCount},
+            'loaded'
+          );
         }
       } else {
-        console.log(`[Sessions] no existing data`);
+        this.logger.info('no existing data');
       }
-    } catch (e) {
-      console.error(`[Sessions] failed to load:`, e);
+    } catch (err) {
+      this.logger.error({err}, 'failed to load');
     }
   }
 
@@ -155,9 +167,15 @@ export class SessionsBroker {
     return QueryPhases.Running;
   }
 
-  private determineParticipantType(queries: QueryEntry[], participantName: string): ParticipantType {
-    const relevantQuery = queries.find(q =>
-      q.team === participantName || q.agent === participantName || q.tool === participantName
+  private determineParticipantType(
+    queries: QueryEntry[],
+    participantName: string
+  ): ParticipantType {
+    const relevantQuery = queries.find(
+      (q) =>
+        q.team === participantName ||
+        q.agent === participantName ||
+        q.tool === participantName
     );
 
     if (!relevantQuery) return 'agent';
@@ -190,12 +208,12 @@ export class SessionsBroker {
 
     // Get unique participant names from conversation names
     const participantNames = Array.from(
-      new Set(session.conversations.map(conv => conv.name))
+      new Set(session.conversations.map((conv) => conv.name))
     );
 
-    session.participants = participantNames.map(name => {
+    session.participants = participantNames.map((name) => {
       // Find a conversation to get participant type
-      const conv = session.conversations!.find(c => c.name === name);
+      const conv = session.conversations!.find((c) => c.name === name);
 
       return {
         id: name,
@@ -212,40 +230,49 @@ export class SessionsBroker {
     const queries = Object.values(session.queries);
     const conversationMap = new Map<string, QueryEntry[]>();
 
-    queries.forEach(query => {
+    queries.forEach((query) => {
       if (!query.conversationId) return;
       const existing = conversationMap.get(query.conversationId) || [];
       conversationMap.set(query.conversationId, [...existing, query]);
     });
 
-    session.conversations = Array.from(conversationMap.entries()).map(([convId, convQueries]) => {
-      const participants = Array.from(
-        new Set(convQueries.map(q => q.team || q.agent || q.tool).filter(Boolean))
-      ) as string[];
-      const participantName = participants[0] || convId;
+    session.conversations = Array.from(conversationMap.entries()).map(
+      ([convId, convQueries]) => {
+        const participants = Array.from(
+          new Set(
+            convQueries.map((q) => q.team || q.agent || q.tool).filter(Boolean)
+          )
+        ) as string[];
+        const participantName = participants[0] || convId;
 
-      const firstQuery = convQueries[0];
-      let participantType: ParticipantType = 'agent';
-      if (firstQuery.targetType === 'team') {
-        participantType = 'team';
-      } else if (firstQuery.targetType === 'tool') {
-        participantType = 'tool';
+        const firstQuery = convQueries[0];
+        let participantType: ParticipantType = 'agent';
+        if (firstQuery.targetType === 'team') {
+          participantType = 'team';
+        } else if (firstQuery.targetType === 'tool') {
+          participantType = 'tool';
+        }
+
+        const messageCount = convQueries.length;
+        const errorCount = convQueries.filter(
+          (q) => q.phase === 'error'
+        ).length;
+
+        return {
+          conversationId: convId,
+          name: participantName,
+          participants,
+          messageCount,
+          duration: this.calculateDuration(
+            convQueries[0].createdAt,
+            convQueries.at(-1)?.completedAt
+          ),
+          startTime: convQueries[0].createdAt,
+          participantType,
+          errorCount,
+        };
       }
-
-      const messageCount = convQueries.length;
-      const errorCount = convQueries.filter(q => q.phase === 'error').length;
-
-      return {
-        conversationId: convId,
-        name: participantName,
-        participants,
-        messageCount,
-        duration: this.calculateDuration(convQueries[0].createdAt, convQueries.at(-1)?.completedAt),
-        startTime: convQueries[0].createdAt,
-        participantType,
-        errorCount,
-      };
-    });
+    );
   }
 
   private recalculateSessionStatus(sessionId: string): void {
@@ -262,9 +289,11 @@ export class SessionsBroker {
       return;
     }
 
-    session.errorCount = queries.filter(q => q.phase === 'error').length;
+    session.errorCount = queries.filter((q) => q.phase === 'error').length;
 
-    const hasActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
+    const hasActive = queries.some(
+      (q) => q.phase === 'running' || q.phase === 'pending'
+    );
 
     if (hasActive) {
       session.status = 'active';
@@ -315,36 +344,51 @@ export class SessionsBroker {
       existing.phase = QueryPhases.Error;
       existing.error = errorMsg;
       existing.completedAt = now;
-    } else if (phase === QueryPhases.Canceled && existing.phase !== QueryPhases.Error) {
+    } else if (
+      phase === QueryPhases.Canceled &&
+      existing.phase !== QueryPhases.Error
+    ) {
       existing.phase = QueryPhases.Canceled;
       existing.completedAt = now;
-    } else if (phase === QueryPhases.Done && existing.phase !== QueryPhases.Error && existing.phase !== QueryPhases.Canceled) {
+    } else if (
+      phase === QueryPhases.Done &&
+      existing.phase !== QueryPhases.Error &&
+      existing.phase !== QueryPhases.Canceled
+    ) {
       existing.phase = QueryPhases.Done;
       existing.completedAt = now;
     }
   }
 
   applyEvent(eventData: Partial<SessionEventData>): void {
-    const { sessionId, queryName } = eventData;
+    const {sessionId, queryName} = eventData;
     if (!sessionId || !queryName) {
+      this.logger.warn(
+        {sessionId, queryName},
+        'dropping event: missing sessionId or queryName'
+      );
       return;
     }
 
     const now = new Date().toISOString();
-    const { queryNamespace } = eventData;
+    const {queryNamespace} = eventData;
     const reason = eventData._reason || '';
     const errorMsg = eventData.error;
 
     // Map toolName to tool for backward compatibility with completions executor
     const normalizedEventData = {
       ...eventData,
-      tool: eventData.tool || (eventData as any).toolName,
+      tool:
+        eventData.tool ||
+        (eventData as Partial<SessionEventData> & {toolName?: string}).toolName,
     };
 
     if (!this.store.sessions[sessionId]) {
       this.store.sessions[sessionId] = {
         sessionId,
-        name: sessionId.startsWith('session-') ? sessionId.substring(8) : sessionId,
+        name: sessionId.startsWith('session-')
+          ? sessionId.substring(8)
+          : sessionId,
         queries: {},
         status: 'idle',
         errorCount: 0,
@@ -360,7 +404,12 @@ export class SessionsBroker {
 
     const existing = session.queries[queryName];
     if (existing) {
-      this.updateExistingQuery(existing, queryPhase, normalizedEventData, errorMsg);
+      this.updateExistingQuery(
+        existing,
+        queryPhase,
+        normalizedEventData,
+        errorMsg
+      );
     } else {
       session.queries[queryName] = {
         name: queryName,
@@ -382,7 +431,7 @@ export class SessionsBroker {
     this.recalculateSessionStatus(sessionId);
 
     this.deferredSave();
-    this.emitter.emit('upsert', { sessionId, queryName });
+    this.emitter.emit('upsert', {sessionId, queryName});
   }
 
   applyMessage(conversationId: string, queryId: string): void {
@@ -420,19 +469,23 @@ export class SessionsBroker {
    * - Changing sort order or filters invalidates previous cursors
    * - Not suitable for reliable iteration over the full dataset
    */
-  paginate(params: PaginationParams, filters?: {
-    status?: 'active' | 'idle' | 'error';
-    dateFrom?: string;
-    dateTo?: string;
-    search?: string;
-  }, sort?: {
-    field: 'date' | 'name' | 'conversations';
-    direction: 'asc' | 'desc';
-  }): PaginatedSessionsList {
+  paginate(
+    params: PaginationParams,
+    filters?: {
+      status?: 'active' | 'idle' | 'error';
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+    },
+    sort?: {
+      field: 'date' | 'name' | 'conversations';
+      direction: 'asc' | 'desc';
+    }
+  ): PaginatedSessionsList {
     let sessions = Object.values(this.store.sessions);
 
     if (filters?.status) {
-      sessions = sessions.filter(s => {
+      sessions = sessions.filter((s) => {
         const sessionStatus = s.status ?? 'idle';
         return sessionStatus === filters.status;
       });
@@ -440,24 +493,30 @@ export class SessionsBroker {
 
     if (filters?.dateFrom) {
       const from = new Date(filters.dateFrom).getTime();
-      sessions = sessions.filter(s => new Date(s.lastActivity).getTime() >= from);
+      sessions = sessions.filter(
+        (s) => new Date(s.lastActivity).getTime() >= from
+      );
     }
 
     if (filters?.dateTo) {
       const to = new Date(filters.dateTo).getTime();
-      sessions = sessions.filter(s => new Date(s.lastActivity).getTime() <= to);
+      sessions = sessions.filter(
+        (s) => new Date(s.lastActivity).getTime() <= to
+      );
     }
 
     if (filters?.search) {
       const search = filters.search.toLowerCase();
-      sessions = sessions.filter(s =>
-        s.sessionId.toLowerCase().includes(search) ||
-        s.name.toLowerCase().includes(search) ||
-        Object.values(s.queries).some(q =>
-          (q.agent?.toLowerCase() || '').includes(search) ||
-          (q.team?.toLowerCase() || '').includes(search) ||
-          (q.tool?.toLowerCase() || '').includes(search)
-        )
+      sessions = sessions.filter(
+        (s) =>
+          s.sessionId.toLowerCase().includes(search) ||
+          s.name.toLowerCase().includes(search) ||
+          Object.values(s.queries).some(
+            (q) =>
+              (q.agent?.toLowerCase() || '').includes(search) ||
+              (q.team?.toLowerCase() || '').includes(search) ||
+              (q.tool?.toLowerCase() || '').includes(search)
+          )
       );
     }
 
@@ -465,13 +524,24 @@ export class SessionsBroker {
       sessions.sort((a, b) => {
         let comparison = 0;
         if (sort.field === 'date') {
-          comparison = new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime();
+          comparison =
+            new Date(a.lastActivity).getTime() -
+            new Date(b.lastActivity).getTime();
         } else if (sort.field === 'name') {
           comparison = a.name.localeCompare(b.name);
         } else if (sort.field === 'conversations') {
-          const firstSessionConversationCount = new Set(Object.values(a.queries).map(q => q.conversationId).filter(Boolean)).size;
-          const secondSessionConversationCount = new Set(Object.values(b.queries).map(q => q.conversationId).filter(Boolean)).size;
-          comparison = firstSessionConversationCount - secondSessionConversationCount;
+          const firstSessionConversationCount = new Set(
+            Object.values(a.queries)
+              .map((q) => q.conversationId)
+              .filter(Boolean)
+          ).size;
+          const secondSessionConversationCount = new Set(
+            Object.values(b.queries)
+              .map((q) => q.conversationId)
+              .filter(Boolean)
+          ).size;
+          comparison =
+            firstSessionConversationCount - secondSessionConversationCount;
         }
         return sort.direction === 'asc' ? comparison : -comparison;
       });
@@ -481,9 +551,9 @@ export class SessionsBroker {
 
     // Calculate status counts from the filtered result set
     const statusCounts = {
-      active: sessions.filter(s => s.status === 'active').length,
-      idle: sessions.filter(s => (s.status ?? 'idle') === 'idle').length,
-      error: sessions.filter(s => s.status === 'error').length,
+      active: sessions.filter((s) => s.status === 'active').length,
+      idle: sessions.filter((s) => (s.status ?? 'idle') === 'idle').length,
+      error: sessions.filter((s) => s.status === 'error').length,
     };
 
     const startIndex = params.cursor || 0;
@@ -502,11 +572,13 @@ export class SessionsBroker {
     };
   }
 
-  getQueryByConversationId(conversationId: string): (QueryEntry & { sessionId: string }) | undefined {
+  getQueryByConversationId(
+    conversationId: string
+  ): (QueryEntry & {sessionId: string}) | undefined {
     for (const [sessionId, session] of Object.entries(this.store.sessions)) {
       for (const query of Object.values(session.queries)) {
         if (query.conversationId === conversationId) {
-          return { ...query, sessionId };
+          return {...query, sessionId};
         }
       }
     }
@@ -517,19 +589,21 @@ export class SessionsBroker {
     if (!this.path) return;
     try {
       const dir = dirname(this.path);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      if (!existsSync(dir)) mkdirSync(dir, {recursive: true});
       writeFileSync(this.path, JSON.stringify(this.store, null, 2));
-    } catch (e) {
-      console.error(`[Sessions] failed to save:`, e);
+    } catch (err) {
+      this.logger.error({err}, 'failed to save');
     }
   }
 
   delete(): void {
-    this.store = { sessions: {} };
+    this.store = {sessions: {}};
     this.save();
   }
 
-  subscribe(callback: (data: { sessionId: string; queryName: string }) => void): () => void {
+  subscribe(
+    callback: (data: {sessionId: string; queryName: string}) => void
+  ): () => void {
     this.emitter.on('upsert', callback);
     return () => this.emitter.off('upsert', callback);
   }

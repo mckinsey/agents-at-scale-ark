@@ -219,7 +219,7 @@ func TestAzureProvider_PrepareStreamParams(t *testing.T) {
 			APIKey:     "test-key",
 		}
 		messages := []Message{NewUserMessage("hello")}
-		params := ap.prepareStreamParams(messages, 1)
+		params := ap.prepareStreamParams(messages, 1, nil, ToolChoiceUnset)
 
 		require.Equal(t, "gpt-4", params.Model)
 		require.Equal(t, openai.Bool(true), params.StreamOptions.IncludeUsage)
@@ -241,7 +241,7 @@ func TestAzureProvider_PrepareStreamParams(t *testing.T) {
 				},
 			},
 		}
-		params := ap.prepareStreamParams(messages, 1, tools)
+		params := ap.prepareStreamParams(messages, 1, tools, ToolChoiceUnset)
 
 		require.Len(t, params.Tools, 1)
 		require.Equal(t, "test_tool", params.Tools[0].Function.Name)
@@ -255,7 +255,7 @@ func TestAzureProvider_PrepareStreamParams(t *testing.T) {
 			APIKey:     "test-key",
 		}
 		messages := []Message{NewUserMessage("hello")}
-		params := ap.prepareStreamParams(messages, 1)
+		params := ap.prepareStreamParams(messages, 1, nil, ToolChoiceUnset)
 
 		require.Nil(t, params.Tools)
 	})
@@ -271,7 +271,7 @@ func TestAzureProvider_PrepareStreamParams(t *testing.T) {
 			},
 		}
 		messages := []Message{NewUserMessage("hello")}
-		params := ap.prepareStreamParams(messages, 1)
+		params := ap.prepareStreamParams(messages, 1, nil, ToolChoiceUnset)
 
 		require.Equal(t, "gpt-4", params.Model)
 		require.Equal(t, openai.Bool(true), params.StreamOptions.IncludeUsage)
@@ -288,7 +288,7 @@ func TestAzureProvider_PrepareStreamParams(t *testing.T) {
 			NewUserMessage("first"),
 			NewUserMessage("second"),
 		}
-		params := ap.prepareStreamParams(messages, 1)
+		params := ap.prepareStreamParams(messages, 1, nil, ToolChoiceUnset)
 
 		require.Len(t, params.Messages, 2)
 		require.Equal(t, openai.Int(int64(1)), params.N)

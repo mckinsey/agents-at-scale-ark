@@ -295,7 +295,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	// Call the agent's Execute function
 	// Pass nil for memory and eventStream (agents-as-tools don't use memory or streaming)
 	// See ARKQB-137 for discussion on streaming support for agents as tools
-	result, err := agent.Execute(ctx, userInput, history, nil, nil)
+	result, err := agent.Execute(ctx, userInput, history, nil, nil, ExecuteOptions{})
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -374,7 +374,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	userInput := NewUserMessage(inputStr)
 	history := []Message{}
 
-	result, err := team.Execute(ctx, userInput, history, nil, nil)
+	result, err := team.Execute(ctx, userInput, history, nil, nil, ExecuteOptions{})
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

@@ -46,8 +46,9 @@ func (a *Agent) GetToolRegistry() *ToolRegistry {
 	return a.Tools
 }
 
-// Execute executes the agent with optional event emission for tool calls
-func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+// Execute executes the agent with optional event emission for tool calls.
+// opts carries caller-controlled options such as forcing a tool call; pass ExecuteOptions{} for defaults.
+func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 
@@ -60,7 +61,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	}
 	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
-	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
+	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream, opts)
 	if err != nil {
 		if signalResult, handled := a.handleSignalError(ctx, span, result, err, operationData); handled {
 			return signalResult, nil
@@ -95,12 +96,12 @@ func (a *Agent) handleSignalError(ctx context.Context, span telemetry.Span, resu
 	return nil, false
 }
 
-func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	if a.ExecutionEngine != nil {
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
-	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
+	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream, opts)
 	if err != nil {
 		if IsTerminateTeam(err) || IsSelectionMade(err) {
 			return &ExecutionResult{Messages: messages}, err
@@ -129,13 +130,11 @@ func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history 
 }
 
 // executeModelCall executes a single model call with optional streaming support.
-func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
-	// Set schema information on the model
+func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, eventStream EventStreamInterface, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	a.Model.OutputSchema = a.OutputSchema
-	// Truncate schema name to 64 chars for OpenAI API compatibility - name is purely an identifier
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools)
+	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools, toolChoice)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
 	}
@@ -186,7 +185,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 }
 
 // executeLocally executes the agent using the built-in OpenAI-compatible engine
-func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
+func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) ([]Message, error) {
 	var tools []openai.ChatCompletionToolParam
 	if a.Tools != nil {
 		tools = a.Tools.ToOpenAITools()
@@ -208,7 +207,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 			return newMessages, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, tools, eventStream)
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, opts.ToolChoice)
 		if err != nil {
 			return nil, err
 		}

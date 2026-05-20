@@ -2,10 +2,13 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.memories import (
     MemoryResponse,
@@ -74,9 +77,9 @@ def memory_to_detail_response(memory) -> MemoryDetailResponse:
 
 @router.get("", response_model=MemoryListResponse)
 @handle_k8s_errors(operation="list", resource_type="memory")
-async def list_memories(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryListResponse:
+async def list_memories(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryListResponse:
     """List all memories in a namespace."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memories = await client.memories.a_list()
         
         memory_responses = [memory_to_response(memory.to_dict()) for memory in memories]
@@ -85,18 +88,18 @@ async def list_memories(namespace: Optional[str] = Query(None, description="Name
 
 @router.get("/{name}", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="memory")
-async def get_memory(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryDetailResponse:
+async def get_memory(request: Request, name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryDetailResponse:
     """Get a specific memory by name."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory = await client.memories.a_get(name)
         return memory_to_detail_response(memory.to_dict())
 
 
 @router.post("", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="memory")
-async def create_memory(memory_request: MemoryCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryDetailResponse:
+async def create_memory(request: Request, memory_request: MemoryCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryDetailResponse:
     """Create a new memory."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory_obj = MemoryV1alpha1(
             metadata={"name": memory_request.name, "namespace": namespace},
             spec={
@@ -111,9 +114,9 @@ async def create_memory(memory_request: MemoryCreateRequest, namespace: Optional
 
 @router.put("/{name}", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="memory")
-async def update_memory(name: str, memory_request: MemoryUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryDetailResponse:
+async def update_memory(request: Request, name: str, memory_request: MemoryUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryDetailResponse:
     """Update an existing memory."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         # Get existing memory
         existing_memory = await client.memories.a_get(name)
         existing_dict = existing_memory.to_dict()
@@ -137,18 +140,18 @@ async def update_memory(name: str, memory_request: MemoryUpdateRequest, namespac
 
 @router.delete("/{name}")
 @handle_k8s_errors(operation="delete", resource_type="memory")
-async def delete_memory(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
+async def delete_memory(request: Request, name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> dict:
     """Delete a memory."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         await client.memories.a_delete(name)
         return {"message": f"Memory {name} deleted successfully"}
 
 
 @router.get("/{name}/conversations/{conversation_id}/messages")
 @handle_k8s_errors(operation="get", resource_type="memory")
-async def get_memory_messages(name: str, conversation_id: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
+async def get_memory_messages(request: Request, name: str, conversation_id: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> dict:
     """Get messages for a specific conversation from a memory resource."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory = await client.memories.a_get(name)
         memory_dict = memory.to_dict()
 
@@ -169,13 +172,15 @@ memory_messages_router = APIRouter(prefix="/memory-messages", tags=["memory-mess
 @memory_messages_router.get("", response_model=MemoryMessageListResponse)
 @handle_k8s_errors(operation="list", resource_type="memory-messages")
 async def list_memory_messages(
+    request: Request,
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     memory: Optional[str] = Query(None, description="Filter by memory name"),
     conversation: Optional[str] = Query(None, description="Filter by conversation ID"),
-    query: Optional[str] = Query(None, description="Filter by query ID")
+    query: Optional[str] = Query(None, description="Filter by query ID"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> MemoryMessageListResponse:
     """List all memory messages with context, optionally filtered."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory_dicts = await get_all_memory_resources(client, memory)
         
         all_messages = []
