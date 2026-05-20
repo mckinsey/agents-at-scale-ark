@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import type {Request, Response} from 'express';
 import {randomUUID} from 'crypto';
 import {z} from 'zod';
 import {MemoryBroker} from '../memory-broker.js';
@@ -33,6 +34,117 @@ type GetMessagesQueryRaw = {
   query_id?: string;
   cursor?: string;
 };
+
+interface MessageItem {
+  timestamp: string;
+  conversation_id: string;
+  query_id: string;
+  message: unknown;
+  sequence: number;
+}
+
+function handleStreamingMessages(
+  req: Request,
+  res: Response,
+  memory: MemoryBroker,
+  conversationId: string | undefined,
+  cursor: number | undefined
+): void {
+  req.log.info({cursor}, 'starting SSE stream for all messages');
+
+  let replayItems: MessageItem[] | undefined;
+  if (cursor !== undefined) {
+    let items = memory.all().filter((item) => item.sequenceNumber > cursor);
+    if (conversationId) {
+      items = items.filter(
+        (item) => item.data.conversationId === conversationId
+      );
+    }
+    replayItems = items.map((item) => ({
+      timestamp: item.timestamp.toISOString(),
+      conversation_id: item.data.conversationId,
+      query_id: item.data.queryId,
+      message: item.data.message,
+      sequence: item.sequenceNumber,
+    }));
+  }
+
+  streamSSE({
+    res,
+    req,
+    logger: req.log,
+    tag: 'MESSAGES',
+    itemName: 'messages',
+    subscribe: (callback) =>
+      memory.subscribe((item) => {
+        callback({
+          timestamp: item.timestamp.toISOString(),
+          conversation_id: item.data.conversationId,
+          query_id: item.data.queryId,
+          message: item.data.message,
+          sequence: item.sequenceNumber,
+        });
+      }),
+    filter: conversationId
+      ? (msg: unknown): boolean =>
+          (msg as {conversation_id: string}).conversation_id === conversationId
+      : undefined,
+    replayItems,
+  });
+}
+
+function handlePaginatedMessages(
+  req: Request,
+  res: Response,
+  memory: MemoryBroker,
+  conversationId: string | undefined,
+  queryId: string | undefined
+): void {
+  try {
+    const params = parsePaginationParams(req.query as Record<string, unknown>);
+
+    const filters = {
+      conversationId: conversationId || undefined,
+      queryId: queryId || undefined,
+    };
+
+    const result = memory.paginate(params, filters);
+
+    const response: PaginatedList<MessageItem> = {
+      items: result.items.map((item) => ({
+        timestamp: item.timestamp.toISOString(),
+        conversation_id: item.data.conversationId,
+        query_id: item.data.queryId,
+        message: item.data.message,
+        sequence: item.sequenceNumber,
+      })),
+      total: result.total,
+      hasMore: result.hasMore,
+      nextCursor: result.nextCursor,
+    };
+
+    res.json(response);
+  } catch (error) {
+    if (error instanceof PaginationError) {
+      res.status(400).json({
+        error: {
+          code: 'PAGINATION_ERROR',
+          message: error.message,
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    req.log.error({err: error}, 'failed to get messages');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: req.id === undefined ? undefined : String(req.id),
+      },
+    });
+  }
+}
 
 export function createMemoryRouter(
   memory: MemoryBroker,
@@ -150,113 +262,9 @@ export function createMemoryRouter(
       }: GetMessagesQuery = parse.data;
 
       if (watch) {
-        req.log.info({cursor}, 'starting SSE stream for all messages');
-
-        let replayItems:
-          | Array<{
-              timestamp: string;
-              conversation_id: string;
-              query_id: string;
-              message: unknown;
-              sequence: number;
-            }>
-          | undefined;
-        if (cursor !== undefined) {
-          let items = memory
-            .all()
-            .filter((item) => item.sequenceNumber > cursor);
-          if (conversationId) {
-            items = items.filter(
-              (item) => item.data.conversationId === conversationId
-            );
-          }
-          replayItems = items.map((item) => ({
-            timestamp: item.timestamp.toISOString(),
-            conversation_id: item.data.conversationId,
-            query_id: item.data.queryId,
-            message: item.data.message,
-            sequence: item.sequenceNumber,
-          }));
-        }
-
-        streamSSE({
-          res,
-          req,
-          logger: req.log,
-          tag: 'MESSAGES',
-          itemName: 'messages',
-          subscribe: (callback) =>
-            memory.subscribe((item) => {
-              callback({
-                timestamp: item.timestamp.toISOString(),
-                conversation_id: item.data.conversationId,
-                query_id: item.data.queryId,
-                message: item.data.message,
-                sequence: item.sequenceNumber,
-              });
-            }),
-          filter: conversationId
-            ? (msg: unknown): boolean =>
-                (msg as {conversation_id: string}).conversation_id ===
-                conversationId
-            : undefined,
-          replayItems,
-        });
+        handleStreamingMessages(req, res, memory, conversationId, cursor);
       } else {
-        try {
-          const params = parsePaginationParams(
-            req.query as Record<string, unknown>
-          );
-
-          const filters = {
-            conversationId: conversationId || undefined,
-            queryId: queryId || undefined,
-          };
-
-          const result = memory.paginate(params, filters);
-
-          interface MessageItem {
-            timestamp: string;
-            conversation_id: string;
-            query_id: string;
-            message: unknown;
-            sequence: number;
-          }
-
-          const response: PaginatedList<MessageItem> = {
-            items: result.items.map((item) => ({
-              timestamp: item.timestamp.toISOString(),
-              conversation_id: item.data.conversationId,
-              query_id: item.data.queryId,
-              message: item.data.message,
-              sequence: item.sequenceNumber,
-            })),
-            total: result.total,
-            hasMore: result.hasMore,
-            nextCursor: result.nextCursor,
-          };
-
-          res.json(response);
-        } catch (error) {
-          if (error instanceof PaginationError) {
-            res.status(400).json({
-              error: {
-                code: 'PAGINATION_ERROR',
-                message: error.message,
-                requestId: req.id === undefined ? undefined : String(req.id),
-              },
-            });
-            return;
-          }
-          req.log.error({err: error}, 'failed to get messages');
-          res.status(500).json({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Internal server error',
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
-        }
+        handlePaginatedMessages(req, res, memory, conversationId, queryId);
       }
     }
   );

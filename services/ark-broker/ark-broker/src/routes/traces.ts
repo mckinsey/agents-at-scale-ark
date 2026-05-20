@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import type {Request, Response} from 'express';
 import {z} from 'zod';
 import {TraceBroker, OTELSpan} from '../trace-broker.js';
 import {streamSSE} from '../sse.js';
@@ -54,6 +55,146 @@ export function spanMatchesSessionId(
   return false;
 }
 
+function handleStreamingAllTraces(
+  req: Request,
+  res: Response,
+  traces: TraceBroker,
+  sessionId: string | undefined,
+  cursor: number | undefined
+): void {
+  req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
+
+  let replayItems: OTELSpan[] | undefined;
+  if (cursor !== undefined) {
+    let items = traces.all().filter((item) => item.sequenceNumber > cursor);
+    if (sessionId) {
+      items = items.filter((item) =>
+        spanMatchesSessionId(item.data, sessionId)
+      );
+    }
+    replayItems = items.map((item) => item.data);
+  }
+
+  streamSSE({
+    res,
+    req,
+    logger: req.log,
+    tag: 'TRACES',
+    itemName: 'spans',
+    subscribe: (callback) =>
+      traces.subscribe((item) => {
+        if (!sessionId || spanMatchesSessionId(item.data, sessionId)) {
+          callback(item.data);
+        }
+      }),
+    replayItems,
+  });
+}
+
+function handlePaginatedAllTraces(
+  req: Request,
+  res: Response,
+  traces: TraceBroker,
+  sessionId: string | undefined
+): void {
+  try {
+    const params = parsePaginationParams(req.query as Record<string, unknown>);
+    const result = traces.paginateTraces(params, sessionId);
+
+    const response: PaginatedList<{traceId: string; spans: OTELSpan[]}> = {
+      items: result.items,
+      total: result.total,
+      hasMore: result.hasMore,
+      nextCursor: result.nextCursor,
+    };
+
+    res.json(response);
+  } catch (error) {
+    if (error instanceof PaginationError) {
+      res.status(400).json({
+        error: {
+          code: 'PAGINATION_ERROR',
+          message: error.message,
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    req.log.error({err: error}, 'failed to get traces');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: req.id === undefined ? undefined : String(req.id),
+      },
+    });
+  }
+}
+
+function handleStreamingTrace(
+  req: Request,
+  res: Response,
+  traces: TraceBroker,
+  traceId: string,
+  fromBeginning: boolean | undefined,
+  cursor: number | undefined
+): void {
+  req.log.info({traceId}, 'starting SSE stream for trace');
+
+  let replayItems: OTELSpan[] | undefined;
+  if (fromBeginning) {
+    replayItems = traces.getSpansByTraceId(traceId);
+  } else if (cursor !== undefined) {
+    replayItems = traces
+      .getByTraceId(traceId)
+      .filter((item) => item.sequenceNumber > cursor)
+      .map((item) => item.data);
+  }
+
+  streamSSE({
+    res,
+    req,
+    logger: req.log,
+    tag: 'TRACES',
+    itemName: 'spans',
+    subscribe: (callback) =>
+      traces.subscribeToTrace(traceId, (item) => callback(item.data)),
+    replayItems,
+    identifier: `Trace ${traceId}`,
+  });
+}
+
+function handlePaginatedTrace(
+  req: Request,
+  res: Response,
+  traces: TraceBroker,
+  traceId: string
+): void {
+  try {
+    const spans = traces.getSpansByTraceId(traceId);
+    if (spans.length === 0 && !traces.hasTrace(traceId)) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Trace not found',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    res.json({traceId, spans});
+  } catch (error) {
+    req.log.error({err: error, traceId}, 'failed to get trace');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: req.id === undefined ? undefined : String(req.id),
+      },
+    });
+  }
+}
+
 export function createTracesRouter(traces: TraceBroker): Router {
   const router = Router();
 
@@ -76,71 +217,9 @@ export function createTracesRouter(traces: TraceBroker): Router {
       const {watch, session_id: sessionId, cursor}: GetTracesQuery = parse.data;
 
       if (watch) {
-        req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
-
-        let replayItems: OTELSpan[] | undefined;
-        if (cursor !== undefined) {
-          let items = traces
-            .all()
-            .filter((item) => item.sequenceNumber > cursor);
-          if (sessionId) {
-            items = items.filter((item) =>
-              spanMatchesSessionId(item.data, sessionId)
-            );
-          }
-          replayItems = items.map((item) => item.data);
-        }
-
-        streamSSE({
-          res,
-          req,
-          logger: req.log,
-          tag: 'TRACES',
-          itemName: 'spans',
-          subscribe: (callback) =>
-            traces.subscribe((item) => {
-              if (!sessionId || spanMatchesSessionId(item.data, sessionId)) {
-                callback(item.data);
-              }
-            }),
-          replayItems,
-        });
+        handleStreamingAllTraces(req, res, traces, sessionId, cursor);
       } else {
-        try {
-          const params = parsePaginationParams(
-            req.query as Record<string, unknown>
-          );
-          const result = traces.paginateTraces(params, sessionId);
-
-          const response: PaginatedList<{traceId: string; spans: OTELSpan[]}> =
-            {
-              items: result.items,
-              total: result.total,
-              hasMore: result.hasMore,
-              nextCursor: result.nextCursor,
-            };
-
-          res.json(response);
-        } catch (error) {
-          if (error instanceof PaginationError) {
-            res.status(400).json({
-              error: {
-                code: 'PAGINATION_ERROR',
-                message: error.message,
-                requestId: req.id === undefined ? undefined : String(req.id),
-              },
-            });
-            return;
-          }
-          req.log.error({err: error}, 'failed to get traces');
-          res.status(500).json({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Internal server error',
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
-        }
+        handlePaginatedAllTraces(req, res, traces, sessionId);
       }
     }
   );
@@ -169,53 +248,9 @@ export function createTracesRouter(traces: TraceBroker): Router {
       }: GetTracesQuery = parse.data;
 
       if (watch) {
-        req.log.info({traceId: trace_id}, 'starting SSE stream for trace');
-
-        let replayItems: OTELSpan[] | undefined;
-        if (fromBeginning) {
-          replayItems = traces.getSpansByTraceId(trace_id);
-        } else if (cursor !== undefined) {
-          replayItems = traces
-            .getByTraceId(trace_id)
-            .filter((item) => item.sequenceNumber > cursor)
-            .map((item) => item.data);
-        }
-
-        streamSSE({
-          res,
-          req,
-          logger: req.log,
-          tag: 'TRACES',
-          itemName: 'spans',
-          subscribe: (callback) =>
-            traces.subscribeToTrace(trace_id, (item) => callback(item.data)),
-          replayItems,
-          identifier: `Trace ${trace_id}`,
-        });
+        handleStreamingTrace(req, res, traces, trace_id, fromBeginning, cursor);
       } else {
-        try {
-          const spans = traces.getSpansByTraceId(trace_id);
-          if (spans.length === 0 && !traces.hasTrace(trace_id)) {
-            res.status(404).json({
-              error: {
-                code: 'NOT_FOUND',
-                message: 'Trace not found',
-                requestId: req.id === undefined ? undefined : String(req.id),
-              },
-            });
-            return;
-          }
-          res.json({traceId: trace_id, spans});
-        } catch (error) {
-          req.log.error({err: error, traceId: trace_id}, 'failed to get trace');
-          res.status(500).json({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Internal server error',
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
-        }
+        handlePaginatedTrace(req, res, traces, trace_id);
       }
     }
   );

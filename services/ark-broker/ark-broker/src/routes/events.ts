@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import type {Request, Response} from 'express';
 import {z} from 'zod';
 import {EventBroker, EventData} from '../event-broker.js';
 import {SessionsBroker} from '../sessions-broker.js';
@@ -36,6 +37,155 @@ const postEventBodySchema = z
   .passthrough();
 type PostEventBody = z.infer<typeof postEventBodySchema>;
 
+function handleStreamingAllEvents(
+  req: Request,
+  res: Response,
+  events: EventBroker,
+  sessionId: string | undefined,
+  cursor: number | undefined
+): void {
+  req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
+
+  let replayItems: EventData[] | undefined;
+  if (cursor !== undefined) {
+    let items = events.all().filter((item) => item.sequenceNumber > cursor);
+    if (sessionId) {
+      items = items.filter((item) => item.data.data.sessionId === sessionId);
+    }
+    replayItems = items.map((item) => item.data);
+  }
+
+  streamSSE({
+    res,
+    req,
+    logger: req.log,
+    tag: 'EVENTS',
+    itemName: 'events',
+    subscribe: (callback) =>
+      events.subscribe((item) => {
+        if (!sessionId || item.data.data.sessionId === sessionId) {
+          callback(item.data);
+        }
+      }),
+    replayItems,
+  });
+}
+
+function handlePaginatedAllEvents(
+  req: Request,
+  res: Response,
+  events: EventBroker,
+  sessionId: string | undefined
+): void {
+  try {
+    const params = parsePaginationParams(req.query as Record<string, unknown>);
+    const result = sessionId
+      ? events.paginateBySessionId(sessionId, params)
+      : events.paginate(params);
+
+    const response: PaginatedList<EventData> = {
+      items: result.items.map((item) => item.data),
+      total: result.total,
+      hasMore: result.hasMore,
+      nextCursor: result.nextCursor,
+    };
+
+    res.json(response);
+  } catch (error) {
+    if (error instanceof PaginationError) {
+      res.status(400).json({
+        error: {
+          code: 'PAGINATION_ERROR',
+          message: error.message,
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    req.log.error({err: error}, 'failed to get events');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: req.id === undefined ? undefined : String(req.id),
+      },
+    });
+  }
+}
+
+function handleStreamingQueryEvents(
+  req: Request,
+  res: Response,
+  events: EventBroker,
+  queryId: string,
+  fromBeginning: boolean | undefined,
+  cursor: number | undefined
+): void {
+  req.log.info({queryId}, 'starting SSE stream for query');
+
+  let replayItems: EventData[] | undefined;
+  if (fromBeginning) {
+    replayItems = events.getEventsByQuery(queryId);
+  } else if (cursor !== undefined) {
+    replayItems = events
+      .getByQuery(queryId)
+      .filter((item) => item.sequenceNumber > cursor)
+      .map((item) => item.data);
+  }
+
+  streamSSE({
+    res,
+    req,
+    logger: req.log,
+    tag: 'EVENTS',
+    itemName: 'events',
+    subscribe: (callback) =>
+      events.subscribeToQuery(queryId, (item) => callback(item.data)),
+    replayItems,
+    identifier: `Query ${queryId}`,
+  });
+}
+
+function handlePaginatedQueryEvents(
+  req: Request,
+  res: Response,
+  events: EventBroker,
+  queryId: string
+): void {
+  try {
+    const params = parsePaginationParams(req.query as Record<string, unknown>);
+    const result = events.paginateByQuery(queryId, params);
+
+    const response: PaginatedList<EventData> = {
+      items: result.items.map((item) => item.data),
+      total: result.total,
+      hasMore: result.hasMore,
+      nextCursor: result.nextCursor,
+    };
+
+    res.json(response);
+  } catch (error) {
+    if (error instanceof PaginationError) {
+      res.status(400).json({
+        error: {
+          code: 'PAGINATION_ERROR',
+          message: error.message,
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+    req.log.error({err: error, queryId}, 'failed to get events for query');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: req.id === undefined ? undefined : String(req.id),
+      },
+    });
+  }
+}
+
 export function createEventsRouter(
   events: EventBroker,
   sessions: SessionsBroker
@@ -61,72 +211,9 @@ export function createEventsRouter(
       const {watch, session_id: sessionId, cursor}: GetEventsQuery = parse.data;
 
       if (watch) {
-        req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
-
-        let replayItems: EventData[] | undefined;
-        if (cursor !== undefined) {
-          let items = events
-            .all()
-            .filter((item) => item.sequenceNumber > cursor);
-          if (sessionId) {
-            items = items.filter(
-              (item) => item.data.data.sessionId === sessionId
-            );
-          }
-          replayItems = items.map((item) => item.data);
-        }
-
-        streamSSE({
-          res,
-          req,
-          logger: req.log,
-          tag: 'EVENTS',
-          itemName: 'events',
-          subscribe: (callback) =>
-            events.subscribe((item) => {
-              if (!sessionId || item.data.data.sessionId === sessionId) {
-                callback(item.data);
-              }
-            }),
-          replayItems,
-        });
+        handleStreamingAllEvents(req, res, events, sessionId, cursor);
       } else {
-        try {
-          const params = parsePaginationParams(
-            req.query as Record<string, unknown>
-          );
-          const result = sessionId
-            ? events.paginateBySessionId(sessionId, params)
-            : events.paginate(params);
-
-          const response: PaginatedList<EventData> = {
-            items: result.items.map((item) => item.data),
-            total: result.total,
-            hasMore: result.hasMore,
-            nextCursor: result.nextCursor,
-          };
-
-          res.json(response);
-        } catch (error) {
-          if (error instanceof PaginationError) {
-            res.status(400).json({
-              error: {
-                code: 'PAGINATION_ERROR',
-                message: error.message,
-                requestId: req.id === undefined ? undefined : String(req.id),
-              },
-            });
-            return;
-          }
-          req.log.error({err: error}, 'failed to get events');
-          res.status(500).json({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Internal server error',
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
-        }
+        handlePaginatedAllEvents(req, res, events, sessionId);
       }
     }
   );
@@ -155,67 +242,16 @@ export function createEventsRouter(
       }: GetEventsQuery = parse.data;
 
       if (watch) {
-        req.log.info({queryId: query_id}, 'starting SSE stream for query');
-
-        let replayItems: EventData[] | undefined;
-        if (fromBeginning) {
-          replayItems = events.getEventsByQuery(query_id);
-        } else if (cursor !== undefined) {
-          replayItems = events
-            .getByQuery(query_id)
-            .filter((item) => item.sequenceNumber > cursor)
-            .map((item) => item.data);
-        }
-
-        streamSSE({
-          res,
+        handleStreamingQueryEvents(
           req,
-          logger: req.log,
-          tag: 'EVENTS',
-          itemName: 'events',
-          subscribe: (callback) =>
-            events.subscribeToQuery(query_id, (item) => callback(item.data)),
-          replayItems,
-          identifier: `Query ${query_id}`,
-        });
+          res,
+          events,
+          query_id,
+          fromBeginning,
+          cursor
+        );
       } else {
-        try {
-          const params = parsePaginationParams(
-            req.query as Record<string, unknown>
-          );
-          const result = events.paginateByQuery(query_id, params);
-
-          const response: PaginatedList<EventData> = {
-            items: result.items.map((item) => item.data),
-            total: result.total,
-            hasMore: result.hasMore,
-            nextCursor: result.nextCursor,
-          };
-
-          res.json(response);
-        } catch (error) {
-          if (error instanceof PaginationError) {
-            res.status(400).json({
-              error: {
-                code: 'PAGINATION_ERROR',
-                message: error.message,
-                requestId: req.id === undefined ? undefined : String(req.id),
-              },
-            });
-            return;
-          }
-          req.log.error(
-            {err: error, queryId: query_id},
-            'failed to get events for query'
-          );
-          res.status(500).json({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Internal server error',
-              requestId: req.id === undefined ? undefined : String(req.id),
-            },
-          });
-        }
+        handlePaginatedQueryEvents(req, res, events, query_id);
       }
     }
   );

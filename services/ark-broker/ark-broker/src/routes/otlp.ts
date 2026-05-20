@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import type {Request, Response} from 'express';
 import express from 'express';
 import {TraceBroker, OTELSpan} from '../trace-broker.js';
 import type {Logger} from '../logging/logger.js';
@@ -70,6 +71,67 @@ interface OTLPRequest {
   }>;
 }
 
+function decodeOTLPBody(req: Request, res: Response): OTLPRequest | null {
+  const contentType = req.headers['content-type'] || '';
+
+  if (!contentType.includes('application/x-protobuf')) {
+    return req.body as OTLPRequest;
+  }
+
+  if (!Buffer.isBuffer(req.body)) {
+    req.log.error({bodyType: typeof req.body}, 'expected Buffer for protobuf');
+    res.status(400).json({error: 'Invalid protobuf data'});
+    return null;
+  }
+
+  if (!ExportTraceServiceRequest) {
+    req.log.error('proto definitions unavailable');
+    res.status(503).json({error: 'Protobuf schema unavailable'});
+    return null;
+  }
+
+  try {
+    const uint8Array = new Uint8Array(req.body);
+    const decoded = ExportTraceServiceRequest.decode(uint8Array);
+    return ExportTraceServiceRequest.toObject(decoded, {
+      longs: String,
+      enums: String,
+      bytes: String,
+      defaults: true,
+      arrays: true,
+      objects: true,
+    }) as OTLPRequest;
+  } catch (err) {
+    req.log.error({err}, 'failed to decode protobuf');
+    res.status(400).json({error: 'Failed to decode protobuf data'});
+    return null;
+  }
+}
+
+function buildSpans(body: OTLPRequest): OTELSpan[] {
+  const spans: OTELSpan[] = [];
+  for (const resourceSpan of body.resourceSpans ?? []) {
+    const resourceAttrs = resourceSpan.resource?.attributes ?? [];
+    for (const scopeSpan of resourceSpan.scopeSpans ?? []) {
+      for (const otlpSpan of scopeSpan.spans ?? []) {
+        spans.push({
+          traceId: otlpSpan.traceId,
+          spanId: otlpSpan.spanId,
+          parentSpanId: otlpSpan.parentSpanId,
+          name: otlpSpan.name,
+          kind: otlpSpan.kind,
+          startTimeUnixNano: otlpSpan.startTimeUnixNano,
+          endTimeUnixNano: otlpSpan.endTimeUnixNano,
+          attributes: convertAttributes(otlpSpan.attributes ?? []),
+          status: otlpSpan.status,
+          resource: convertAttributesToObject(resourceAttrs),
+        });
+      }
+    }
+  }
+  return spans;
+}
+
 export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
   const router = Router();
 
@@ -87,75 +149,17 @@ export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
 
   router.post('/traces', (req, res) => {
     try {
-      const contentType = req.headers['content-type'] || '';
-      let body: OTLPRequest;
+      const body = decodeOTLPBody(req, res);
+      if (!body) return;
 
-      if (contentType.includes('application/x-protobuf')) {
-        if (!Buffer.isBuffer(req.body)) {
-          req.log.error(
-            {bodyType: typeof req.body},
-            'expected Buffer for protobuf'
-          );
-          res.status(400).json({error: 'Invalid protobuf data'});
-          return;
-        }
-
-        if (!ExportTraceServiceRequest) {
-          req.log.error('proto definitions unavailable');
-          res.status(503).json({error: 'Protobuf schema unavailable'});
-          return;
-        }
-
-        try {
-          const uint8Array = new Uint8Array(req.body);
-          const decoded = ExportTraceServiceRequest.decode(uint8Array);
-          body = ExportTraceServiceRequest.toObject(decoded, {
-            longs: String,
-            enums: String,
-            bytes: String,
-            defaults: true,
-            arrays: true,
-            objects: true,
-          }) as OTLPRequest;
-        } catch (err) {
-          req.log.error({err}, 'failed to decode protobuf');
-          res.status(400).json({error: 'Failed to decode protobuf data'});
-          return;
-        }
-      } else {
-        body = req.body as OTLPRequest;
-      }
-
-      if (!body || !body.resourceSpans) {
+      if (!body.resourceSpans) {
         res.status(400).json({
           error: 'Invalid OTLP request format. Expected resourceSpans array.',
         });
         return;
       }
 
-      const spans: OTELSpan[] = [];
-
-      for (const resourceSpan of body.resourceSpans) {
-        const resourceAttrs = resourceSpan.resource?.attributes || [];
-
-        for (const scopeSpan of resourceSpan.scopeSpans || []) {
-          for (const otlpSpan of scopeSpan.spans || []) {
-            spans.push({
-              traceId: otlpSpan.traceId,
-              spanId: otlpSpan.spanId,
-              parentSpanId: otlpSpan.parentSpanId,
-              name: otlpSpan.name,
-              kind: otlpSpan.kind,
-              startTimeUnixNano: otlpSpan.startTimeUnixNano,
-              endTimeUnixNano: otlpSpan.endTimeUnixNano,
-              attributes: convertAttributes(otlpSpan.attributes || []),
-              status: otlpSpan.status,
-              resource: convertAttributesToObject(resourceAttrs),
-            });
-          }
-        }
-      }
-
+      const spans = buildSpans(body);
       traces.addSpans(spans);
       req.log.info({count: spans.length}, 'received spans');
       res.status(200).json({});
