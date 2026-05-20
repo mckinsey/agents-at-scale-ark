@@ -356,7 +356,7 @@ func (h *Handler) executeModel(
 		return nil, fmt.Errorf("failed to load model %s: %w", modelName, err)
 	}
 
-	completion, err := model.ChatCompletion(ctx, allMessages, eventStream, 1, ToolChoiceUnset)
+	completion, err := model.ChatCompletion(ctx, allMessages, eventStream, 1, nil, ToolChoiceUnset)
 	if err != nil {
 		return nil, err
 	}

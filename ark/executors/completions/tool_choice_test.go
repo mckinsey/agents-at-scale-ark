@@ -65,7 +65,7 @@ func TestOpenAIProvider_ChatCompletion_SendsToolChoice(t *testing.T) {
 				APIKey:  "test",
 			}
 			messages := []Message{NewUserMessage("hi")}
-			_, err := provider.ChatCompletion(context.Background(), messages, 1, tc.toolChoice)
+			_, err := provider.ChatCompletion(context.Background(), messages, 1, nil, tc.toolChoice)
 			require.NoError(t, err)
 
 			if tc.expectKey {
