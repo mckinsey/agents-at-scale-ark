@@ -7,7 +7,7 @@ import {join} from 'path';
 
 let ExportTraceServiceRequest: protobuf.Type | null = null;
 
-async function loadProtoDefinitions(logger: Logger) {
+async function loadProtoDefinitions(logger: Logger): Promise<void> {
   if (ExportTraceServiceRequest) return;
 
   try {
@@ -18,7 +18,7 @@ async function loadProtoDefinitions(logger: Logger) {
     );
 
     const root = new protobuf.Root();
-    root.resolvePath = (origin: string, target: string) => {
+    root.resolvePath = (origin: string, target: string): string => {
       if (target.startsWith('opentelemetry/')) {
         return join(protoRootDir, target);
       }
@@ -37,6 +37,15 @@ async function loadProtoDefinitions(logger: Logger) {
   }
 }
 
+type AttrValue = {
+  stringValue?: string;
+  intValue?: number;
+  doubleValue?: number;
+  boolValue?: boolean;
+  arrayValue?: unknown;
+  kvlistValue?: unknown;
+};
+
 interface OTLPSpan {
   traceId: string;
   spanId: string;
@@ -45,17 +54,17 @@ interface OTLPSpan {
   kind?: number;
   startTimeUnixNano?: string;
   endTimeUnixNano?: string;
-  attributes?: Array<{key: string; value: any}>;
+  attributes?: Array<{key: string; value: AttrValue}>;
   status?: {code?: number; message?: string};
 }
 
 interface OTLPRequest {
   resourceSpans?: Array<{
     resource?: {
-      attributes?: Array<{key: string; value: any}>;
+      attributes?: Array<{key: string; value: AttrValue}>;
     };
     scopeSpans?: Array<{
-      scope?: any;
+      scope?: unknown;
       spans?: OTLPSpan[];
     }>;
   }>;
@@ -65,7 +74,8 @@ export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
   const router = Router();
 
   loadProtoDefinitions(logger).catch((err) => {
-    logger.error({err}, 'failed to initialize proto definitions');
+    logger.error({err}, 'failed to load proto definitions');
+    process.exit(1);
   });
 
   router.use(
@@ -91,8 +101,8 @@ export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
         }
 
         if (!ExportTraceServiceRequest) {
-          req.log.error('proto definitions not loaded yet');
-          res.status(503).json({error: 'Service initializing, please retry'});
+          req.log.error('proto definitions unavailable');
+          res.status(503).json({error: 'Protobuf schema unavailable'});
           return;
         }
 
@@ -160,25 +170,25 @@ export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
 }
 
 function convertAttributes(
-  attrs: Array<{key: string; value: any}>
-): Array<{key: string; value: any}> {
-  return attrs.map((attr) => ({
-    key: attr.key,
-    value: extractValue(attr.value),
-  }));
+  attrs: Array<{key: string; value: AttrValue}>
+): Array<{
+  key: string;
+  value: {stringValue?: string; intValue?: number; boolValue?: boolean};
+}> {
+  return attrs.map((attr) => ({key: attr.key, value: attr.value}));
 }
 
 function convertAttributesToObject(
-  attrs: Array<{key: string; value: any}>
-): Record<string, any> {
-  const result: Record<string, any> = {};
+  attrs: Array<{key: string; value: AttrValue}>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
   for (const attr of attrs) {
     result[attr.key] = extractValue(attr.value);
   }
   return result;
 }
 
-function extractValue(value: any): any {
+function extractValue(value: AttrValue): unknown {
   if (value.stringValue !== undefined) return value.stringValue;
   if (value.intValue !== undefined) return value.intValue;
   if (value.doubleValue !== undefined) return value.doubleValue;
