@@ -2,9 +2,9 @@ import request from 'supertest';
 import express from 'express';
 import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker';
 import {createLogger} from '@ark-broker/logging/logger';
-import {createHttpLogger} from '../middleware/http-logger';
-import {requestId} from '../middleware/request-id';
-import {createStreamRouter} from './stream';
+import {createHttpLogger} from '../../middleware/http-logger';
+import {requestId} from '../../middleware/request-id';
+import {createStreamRouter} from './index';
 import {
   createTextChunk,
   createToolCallChunk,
@@ -29,7 +29,7 @@ describe('Streaming API', () => {
   const sendChunks = async (
     queryId: string,
     chunks: unknown[]
-  ): Promise<ReturnType<typeof request.agent>> => {
+  ): Promise<unknown> => {
     const response = await request(app)
       .post(`/stream/${queryId}`)
       .set('Content-Type', 'application/x-ndjson')

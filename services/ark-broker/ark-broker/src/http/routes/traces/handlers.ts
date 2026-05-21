@@ -1,44 +1,18 @@
-import {Router} from 'express';
 import type {Request, Response} from 'express';
-import {z} from 'zod';
 import {
   TraceBroker,
   OTELSpan,
   spanMatchesSessionId,
 } from '@ark-broker/brokers/trace-broker.js';
-import {streamSSE} from '../sse.js';
+import {streamSSE} from '../../sse.js';
 import {
   parsePaginationParams,
   PaginationError,
   PaginatedList,
 } from '@ark-broker/brokers/pagination.js';
-import {
-  sendValidationError,
-  sendPaginationError,
-  sendInternalError,
-} from './errors.js';
+import {sendPaginationError, sendInternalError} from '../errors.js';
 
-const getTracesQuerySchema = z.object({
-  watch: z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true')
-    .optional(),
-  session_id: z.string().optional(),
-  cursor: z.coerce.number().int().nonnegative().optional(),
-  'from-beginning': z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true')
-    .optional(),
-});
-type GetTracesQuery = z.infer<typeof getTracesQuerySchema>;
-type GetTracesQueryRaw = {
-  watch?: 'true' | 'false';
-  session_id?: string;
-  cursor?: string;
-  'from-beginning'?: 'true' | 'false';
-};
-
-function handleStreamingAllTraces(
+export function handleStreamingAllTraces(
   req: Request,
   res: Response,
   traces: TraceBroker,
@@ -74,7 +48,7 @@ function handleStreamingAllTraces(
   });
 }
 
-function handlePaginatedAllTraces(
+export function handlePaginatedAllTraces(
   req: Request,
   res: Response,
   traces: TraceBroker,
@@ -102,7 +76,7 @@ function handlePaginatedAllTraces(
   }
 }
 
-function handleStreamingTrace(
+export function handleStreamingTrace(
   req: Request,
   res: Response,
   traces: TraceBroker,
@@ -135,7 +109,7 @@ function handleStreamingTrace(
   });
 }
 
-function handlePaginatedTrace(
+export function handlePaginatedTrace(
   req: Request,
   res: Response,
   traces: TraceBroker,
@@ -158,61 +132,4 @@ function handlePaginatedTrace(
     req.log.error({err: error, traceId}, 'failed to get trace');
     sendInternalError(res, req.id);
   }
-}
-
-export function createTracesRouter(traces: TraceBroker): Router {
-  const router = Router();
-
-  router.get<Record<string, string>, unknown, unknown, GetTracesQueryRaw>(
-    '/',
-    (req, res) => {
-      const parse = getTracesQuerySchema.safeParse(req.query);
-      if (!parse.success) {
-        sendValidationError(res, parse.error, req.id, 'query');
-        return;
-      }
-      const {watch, session_id: sessionId, cursor}: GetTracesQuery = parse.data;
-
-      if (watch) {
-        handleStreamingAllTraces(req, res, traces, sessionId, cursor);
-      } else {
-        handlePaginatedAllTraces(req, res, traces, sessionId);
-      }
-    }
-  );
-
-  router.get<{trace_id: string}, unknown, unknown, GetTracesQueryRaw>(
-    '/:trace_id',
-    (req, res) => {
-      const {trace_id} = req.params;
-      const parse = getTracesQuerySchema.safeParse(req.query);
-      if (!parse.success) {
-        sendValidationError(res, parse.error, req.id, 'query');
-        return;
-      }
-      const {
-        watch,
-        cursor,
-        'from-beginning': fromBeginning,
-      }: GetTracesQuery = parse.data;
-
-      if (watch) {
-        handleStreamingTrace(req, res, traces, trace_id, fromBeginning, cursor);
-      } else {
-        handlePaginatedTrace(req, res, traces, trace_id);
-      }
-    }
-  );
-
-  router.delete('/', (req, res) => {
-    try {
-      traces.delete();
-      res.json({status: 'success', message: 'Trace data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'trace purge failed');
-      sendInternalError(res, req.id);
-    }
-  });
-
-  return router;
 }
