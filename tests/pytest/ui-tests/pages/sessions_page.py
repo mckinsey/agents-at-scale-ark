@@ -20,7 +20,7 @@ class SessionsPage(BasePage):
     HISTORY_TAB = "[role='tab']:has-text('History')"
     CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
     CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
-    CHAT_TEXTAREA = "textarea[placeholder*='Message']"
+    CHAT_TEXTAREA = "input[placeholder*='Message']"
     USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
     ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
@@ -121,10 +121,10 @@ class SessionsPage(BasePage):
 
     def is_participant_shown_in_header(self, participant_name: str) -> bool:
         try:
-            badge = self.page.locator(
-                f"div.rounded-lg.bg-card span:has-text('{participant_name}')"
+            tag = self.page.locator(
+                f"[data-slot='tag']:has-text('{participant_name}')"
             ).first
-            return badge.is_visible(timeout=5000)
+            return tag.is_visible(timeout=5000)
         except Exception:
             return False
 
