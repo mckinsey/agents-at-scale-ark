@@ -4,6 +4,7 @@ import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
+import { a2aTasksService } from '@/lib/services/a2a-tasks';
 
 interface AxiosError extends Error {
   response?: {
@@ -155,6 +156,10 @@ export const chatService = {
       }
       throw error;
     }
+  },
+
+  async getA2ATask(taskId: string) {
+    return await a2aTasksService.get(taskId);
   },
 
   async listQueries(): Promise<QueryListResponse> {

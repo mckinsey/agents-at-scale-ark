@@ -902,6 +902,64 @@ export function useChatSession({
         const result = await chatService.getQueryResult(queryName);
         console.log('[HITL Debug] Query result:', result);
 
+        // Check for cascading approval (query returned to input-required state)
+        if (result.status === 'input-required') {
+          console.log('[HITL Debug] Detected cascading approval - query returned to input-required');
+
+          // Fetch full query to get A2A task info
+          const query = await chatService.getQuery(queryName);
+          if (query?.status && typeof query.status === 'object' && 'response' in query.status) {
+            const response = query.status.response as { a2a?: { taskId?: string; contextId?: string } };
+            if (response.a2a?.taskId) {
+              console.log('[HITL Debug] Found new A2A task for cascading approval:', response.a2a.taskId);
+
+              // Fetch the A2A task details
+              try {
+                // A2A task names are prefixed with "a2a-task-"
+                const taskName = `a2a-task-${response.a2a.taskId}`;
+                const a2aTask = await chatService.getA2ATask(taskName);
+                if (a2aTask?.status?.protocolMetadata?.toolCalls) {
+                  const toolCallsStr = a2aTask.status.protocolMetadata.toolCalls;
+                  const toolCalls = JSON.parse(toolCallsStr);
+                  const timeout = a2aTask.status.protocolMetadata.timeout;
+                  const onTimeout = a2aTask.status.protocolMetadata.onTimeout;
+                  const agentName = a2aTask.agentRef?.name;
+
+                  console.log('[HITL Debug] Showing cascading approval UI for task:', taskName);
+
+                  // Update the message at messageIndex with the new approval request
+                  updateChatMessages(prev => {
+                    const updated = [...prev];
+                    if (updated[messageIndex] && 'ark' in updated[messageIndex]) {
+                      updated[messageIndex] = {
+                        ...updated[messageIndex],
+                        ark: {
+                          approvalRequest: {
+                            queryName,
+                            queryNamespace: query.namespace || 'default',
+                            toolCalls,
+                            timeout,
+                            onTimeout,
+                            agentName,
+                          },
+                        },
+                      } as ExtendedChatMessage;
+                    }
+                    return updated;
+                  });
+
+                  // Stop polling and wait for the next approval
+                  stopPollingRef.current = null;
+                  setIsProcessing(false);
+                  break;
+                }
+              } catch (err) {
+                console.error('[HITL Debug] Error fetching cascading approval task:', err);
+              }
+            }
+          }
+        }
+
         if (result.terminal) {
           console.log('[HITL Debug] Query reached terminal state:', result.status);
           stopPollingRef.current = null;

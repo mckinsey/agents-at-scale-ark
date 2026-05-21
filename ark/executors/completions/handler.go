@@ -125,6 +125,11 @@ func (h *Handler) ProcessMessage(
 			"decision", decision)
 		execResult, responseMessages, err := h.handleResumption(ctx, state, a2aTask)
 		if err != nil {
+			// Check if this is another approval required error (cascading approval)
+			var approvalErr *ApprovalRequiredError
+			if errors.As(err, &approvalErr) {
+				return h.handleApprovalRequired(ctx, state, approvalErr), nil
+			}
 			log.Error(err, "resumption failed")
 			state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 			return nil, fmt.Errorf("resumption failed: %w", err)
@@ -823,6 +828,14 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 	log.Info("Resuming agent execution with tool results", "results", len(approvedResults), "decision", map[bool]string{true: "approved", false: "rejected"}[isApproved])
 	result, err := agent.ResumeFromApproval(ctx, toolCalls, approvedResults, state.memory, state.eventStream)
 	if err != nil {
+		// Check if this is another approval required error (cascading approval)
+		var approvalErr *ApprovalRequiredError
+		if errors.As(err, &approvalErr) {
+			log.Info("Detected cascading approval required, creating new approval task")
+			// Return the approval error directly to be handled by the caller
+			return nil, nil, err
+		}
+		log.Info("Error is not ApprovalRequiredError, wrapping", "errorType", fmt.Sprintf("%T", err))
 		return nil, nil, fmt.Errorf("failed to resume agent execution: %w", err)
 	}
 
