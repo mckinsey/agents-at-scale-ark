@@ -1,6 +1,6 @@
 import type {Response} from 'express';
 import type {ZodError} from 'zod';
-import {PaginationError} from '../pagination.js';
+import {PaginationError} from '@ark-broker/brokers/pagination.js';
 
 export function sendValidationError(
   res: Response,

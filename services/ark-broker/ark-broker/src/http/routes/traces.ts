@@ -1,13 +1,17 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
 import {z} from 'zod';
-import {TraceBroker, OTELSpan} from '../trace-broker.js';
+import {
+  TraceBroker,
+  OTELSpan,
+  spanMatchesSessionId,
+} from '@ark-broker/brokers/trace-broker.js';
 import {streamSSE} from '../sse.js';
 import {
   parsePaginationParams,
   PaginationError,
   PaginatedList,
-} from '../pagination.js';
+} from '@ark-broker/brokers/pagination.js';
 import {
   sendValidationError,
   sendPaginationError,
@@ -33,32 +37,6 @@ type GetTracesQueryRaw = {
   cursor?: string;
   'from-beginning'?: 'true' | 'false';
 };
-
-/**
- * Check if a span matches a session ID.
- * @param span - The span to check.
- * @param sessionId - The session ID to check against.
- * @returns True if the span matches the session ID, false otherwise.
- */
-export function spanMatchesSessionId(
-  span: OTELSpan,
-  sessionId: string
-): boolean {
-  if (span.attributes) {
-    const sessionAttr = span.attributes.find(
-      (attr) => attr.key === 'ark.session.id'
-    );
-
-    if (sessionAttr?.value?.stringValue === sessionId) {
-      return true;
-    }
-
-    if (typeof sessionAttr?.value === 'string') {
-      return sessionAttr.value === sessionId;
-    }
-  }
-  return false;
-}
 
 function handleStreamingAllTraces(
   req: Request,

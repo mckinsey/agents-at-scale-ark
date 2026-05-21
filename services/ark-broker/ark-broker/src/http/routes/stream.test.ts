@@ -1,7 +1,7 @@
 import request from 'supertest';
 import express from 'express';
-import {CompletionChunkBroker} from '../completion-chunk-broker';
-import {createLogger} from '../logging/logger';
+import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker';
+import {createLogger} from '@ark-broker/logging/logger';
 import {createHttpLogger} from '../middleware/http-logger';
 import {requestId} from '../middleware/request-id';
 import {createStreamRouter} from './stream';
@@ -9,7 +9,7 @@ import {
   createTextChunk,
   createToolCallChunk,
   createFinishChunk,
-} from '../testing/chunk-helpers';
+} from '@ark-broker/testing/chunk-helpers';
 
 describe('Streaming API', () => {
   let app: express.Application;
@@ -26,7 +26,10 @@ describe('Streaming API', () => {
   });
 
   // Helper to send chunks to stream endpoint
-  const sendChunks = async (queryId: string, chunks: any[]) => {
+  const sendChunks = async (
+    queryId: string,
+    chunks: unknown[]
+  ): Promise<ReturnType<typeof request.agent>> => {
     const response = await request(app)
       .post(`/stream/${queryId}`)
       .set('Content-Type', 'application/x-ndjson')

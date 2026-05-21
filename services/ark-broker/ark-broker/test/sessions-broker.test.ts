@@ -1,5 +1,5 @@
 import {createLogger} from '../src/logging/logger.js';
-import {SessionsBroker} from '../src/sessions-broker.js';
+import {SessionsBroker} from '../src/brokers/sessions-broker.js';
 
 describe('SessionsBroker', () => {
   let broker: SessionsBroker;
