@@ -8,10 +8,10 @@ const (
 	statusPending      = "pending"
 	statusProvisioning = "provisioning"
 	statusRunning      = "running"
-	statusDone     = "done"
-	statusError    = "error"
-	statusCanceled = "canceled"
-	statusReady    = "ready"
+	statusDone         = "done"
+	statusError        = "error"
+	statusCanceled     = "canceled"
+	statusReady        = "ready"
 
 	finalizer = annotations.Finalizer
 )

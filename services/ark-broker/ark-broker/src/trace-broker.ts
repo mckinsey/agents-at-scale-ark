@@ -1,11 +1,8 @@
-import { BrokerItem } from "./broker-item.js";
-import { BrokerItemStream } from "./broker-item-stream.js";
-import {
-  PaginatedList,
-  PaginationParams,
-  DEFAULT_LIMIT,
-} from "./pagination.js";
-import { spanMatchesSessionId } from "./routes/traces.js";
+import {BrokerItem} from './broker-item.js';
+import {BrokerItemStream} from './broker-item-stream.js';
+import type {Logger} from './logging/logger.js';
+import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
+import {spanMatchesSessionId} from './routes/traces.js';
 
 /** OTEL span data */
 export interface OTELSpan {
@@ -18,9 +15,9 @@ export interface OTELSpan {
   endTimeUnixNano?: string;
   attributes?: Array<{
     key: string;
-    value: { stringValue?: string; intValue?: number; boolValue?: boolean };
+    value: {stringValue?: string; intValue?: number; boolValue?: boolean};
   }>;
-  status?: { code?: number; message?: string };
+  status?: {code?: number; message?: string};
   resource?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -32,8 +29,13 @@ export interface OTELSpan {
 export class TraceBroker {
   private stream: BrokerItemStream<OTELSpan>;
 
-  constructor(path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<OTELSpan>("Trace", path, maxItems);
+  constructor(logger: Logger, path?: string, maxItems?: number) {
+    this.stream = new BrokerItemStream<OTELSpan>(
+      logger,
+      'Trace',
+      path,
+      maxItems
+    );
   }
 
   addSpan(span: OTELSpan): BrokerItem<OTELSpan> {
@@ -83,7 +85,7 @@ export class TraceBroker {
 
   subscribeToTrace(
     traceId: string,
-    callback: (item: BrokerItem<OTELSpan>) => void,
+    callback: (item: BrokerItem<OTELSpan>) => void
   ): () => void {
     return this.stream.subscribe((item) => {
       if (item.data.traceId === traceId) {
@@ -98,19 +100,19 @@ export class TraceBroker {
    */
   paginateTraces(
     params: PaginationParams,
-    sessionId?: string,
-  ): PaginatedList<{ traceId: string; spans: OTELSpan[] }> {
+    sessionId?: string
+  ): PaginatedList<{traceId: string; spans: OTELSpan[]}> {
     const limit = params.limit ?? DEFAULT_LIMIT;
 
     let allItems = this.stream.all();
 
     if (sessionId) {
       allItems = allItems.filter((item) =>
-        spanMatchesSessionId(item.data, sessionId),
+        spanMatchesSessionId(item.data, sessionId)
       );
     }
 
-    const traceMap = new Map<string, { firstSeq: number; spans: OTELSpan[] }>();
+    const traceMap = new Map<string, {firstSeq: number; spans: OTELSpan[]}>();
 
     for (const item of allItems) {
       const existing = traceMap.get(item.data.traceId);
@@ -141,7 +143,7 @@ export class TraceBroker {
 
     const items = traces
       .slice(0, limit)
-      .map(({ traceId, spans }) => ({ traceId, spans }));
+      .map(({traceId, spans}) => ({traceId, spans}));
     const hasMore = traces.length > limit;
     const nextCursor =
       items.length > 0 ? traces[items.length - 1]?.firstSeq : undefined;
