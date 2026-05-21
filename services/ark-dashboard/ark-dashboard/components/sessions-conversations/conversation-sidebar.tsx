@@ -44,7 +44,7 @@ function formatAbsoluteTime(timestamp: string): string {
 
 export function ConversationSidebar({ conversations, selectedId, onSelect }: Props) {
   return (
-    <div className="flex flex-col gap-2 pr-3 py-3">
+    <div className="flex flex-col gap-2 pr-3 py-3" data-testid="conversation-sidebar">
       {conversations.map(conv => {
         const status = getConversationStatus(conv);
         const isSelected = selectedId === conv.conversationId;
@@ -53,6 +53,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
           <button
             key={conv.conversationId}
             type="button"
+            data-testid="conversation-item"
             className={cn(
               'relative h-auto w-full inline-flex justify-start items-start text-left cursor-pointer transition-colors',
               isSelected && 'bg-stateslayer-overlay-hover',
@@ -65,7 +66,10 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
               <div className="self-stretch inline-flex justify-between items-center">
                 <div className="flex justify-start items-center gap-1">
                   {getParticipantIcon(conv.participantType, { name: conv.name, size: '4' })}
-                  <span className="text-sm font-normal leading-5 line-clamp-1 text-fg-primary">
+                  <span
+                    className="text-sm font-normal leading-5 line-clamp-1 text-fg-primary"
+                    data-testid="conversation-participant-name"
+                  >
                     {stripNamespace(conv.name)}
                   </span>
                 </div>

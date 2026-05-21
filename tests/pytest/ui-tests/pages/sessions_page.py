@@ -18,8 +18,8 @@ class SessionsPage(BasePage):
     DIALOG_CANCEL_BUTTON = "[role='dialog'] button:has-text('Cancel')"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
-    CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
-    CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
+    CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
+    CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
     CHAT_TEXTAREA = "input[placeholder*='Message']"
     USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
     ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
@@ -172,7 +172,7 @@ class SessionsPage(BasePage):
     def is_participant_in_conversation_sidebar(self, participant_name: str) -> bool:
         try:
             item = self.page.locator(
-                f"div.space-y-3 button span.font-medium:has-text('{participant_name}')"
+                f"[data-testid='conversation-item'] [data-testid='conversation-participant-name']:has-text('{participant_name}')"
             ).first
             return item.is_visible(timeout=5000)
         except Exception:
