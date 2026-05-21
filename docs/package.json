@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.5",
     "http-server": "^14.1.1",
     "jsdom": "^25.0.1",
