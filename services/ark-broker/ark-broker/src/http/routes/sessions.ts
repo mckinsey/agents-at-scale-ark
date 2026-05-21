@@ -6,10 +6,13 @@ import {
 } from './errors.js';
 import type {Request, Response} from 'express';
 import {z} from 'zod';
-import {SessionsBroker} from '../sessions-broker.js';
+import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
 import {streamSSE} from '../sse.js';
-import type {SessionEventData} from '../types.js';
-import {parsePaginationParams, PaginationError} from '../pagination.js';
+import type {SessionEventData} from '@ark-broker/brokers/sessions-broker.js';
+import {
+  parsePaginationParams,
+  PaginationError,
+} from '@ark-broker/brokers/pagination.js';
 
 const getSessionsQuerySchema = z.object({
   watch: z

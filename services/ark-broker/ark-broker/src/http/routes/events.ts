@@ -1,14 +1,14 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
 import {z} from 'zod';
-import {EventBroker, EventData} from '../event-broker.js';
-import {SessionsBroker} from '../sessions-broker.js';
+import {EventBroker, EventData} from '@ark-broker/brokers/event-broker.js';
+import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
 import {streamSSE} from '../sse.js';
 import {
   parsePaginationParams,
   PaginationError,
   PaginatedList,
-} from '../pagination.js';
+} from '@ark-broker/brokers/pagination.js';
 import {
   sendValidationError,
   sendPaginationError,

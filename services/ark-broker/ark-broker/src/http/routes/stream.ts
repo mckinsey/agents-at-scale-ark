@@ -1,15 +1,23 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
 import {z} from 'zod';
-import {CompletionChunkBroker} from '../completion-chunk-broker.js';
-import {StreamError} from '../types.js';
+import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker.js';
 import {streamSSE, writeSSEEvent} from '../sse.js';
-import {parsePaginationParams, PaginationError} from '../pagination.js';
+import {
+  parsePaginationParams,
+  PaginationError,
+} from '@ark-broker/brokers/pagination.js';
 import {
   sendValidationError,
   sendPaginationError,
   sendInternalError,
 } from './errors.js';
+
+interface StreamError {
+  message: string;
+  type: string;
+  code?: string;
+}
 
 interface ChunkPayload {
   error?: StreamError;
