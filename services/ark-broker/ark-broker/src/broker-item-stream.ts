@@ -1,7 +1,8 @@
-import { EventEmitter } from 'events';
-import { BrokerItem } from './broker-item.js';
-import { JsonFileStore } from './json-file-store.js';
-import { PaginatedList, PaginationParams, DEFAULT_LIMIT } from './pagination.js';
+import {EventEmitter} from 'events';
+import {BrokerItem} from './broker-item.js';
+import {JsonFileStore} from './json-file-store.js';
+import type {Logger} from './logging/logger.js';
+import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
 
 /**
  * An append-only stream of broker items with persistence support.
@@ -16,17 +17,32 @@ export class BrokerItemStream<T> {
   private fileStore: JsonFileStore<BrokerItem<T>>;
   public eventEmitter = new EventEmitter();
 
-  constructor(name: string, path?: string, maxItems?: number) {
+  constructor(
+    private readonly logger: Logger,
+    name: string,
+    path?: string,
+    maxItems?: number
+  ) {
     this.maxItems = maxItems;
-    this.fileStore = new JsonFileStore<BrokerItem<T>>(name, path, maxItems);
+    this.fileStore = new JsonFileStore<BrokerItem<T>>(
+      logger,
+      name,
+      path,
+      maxItems
+    );
     const loaded = this.fileStore.load();
     if (loaded) {
-      if (!Array.isArray(loaded.items) || typeof loaded.nextSequence !== 'number') {
-        console.warn(`[${name}] data file has invalid structure or data, no data loaded`);
+      if (
+        !Array.isArray(loaded.items) ||
+        typeof loaded.nextSequence !== 'number'
+      ) {
+        this.logger.warn(
+          'data file has invalid structure or data, no data loaded'
+        );
       } else {
-        this.items = loaded.items.map(item => ({
+        this.items = loaded.items.map((item) => ({
           ...item,
-          timestamp: new Date(item.timestamp as unknown as string)
+          timestamp: new Date(item.timestamp as unknown as string),
         }));
         this.nextSequence = loaded.nextSequence;
       }
@@ -37,7 +53,7 @@ export class BrokerItemStream<T> {
     const item: BrokerItem<T> = {
       sequenceNumber: this.nextSequence++,
       timestamp: new Date(),
-      data
+      data,
     };
     this.items.push(item);
     if (this.maxItems && this.items.length > this.maxItems) {
@@ -61,7 +77,7 @@ export class BrokerItemStream<T> {
 
   delete(predicate?: (item: BrokerItem<T>) => boolean): void {
     if (predicate) {
-      this.items = this.items.filter(item => !predicate(item));
+      this.items = this.items.filter((item) => !predicate(item));
     } else {
       this.items = [];
       this.nextSequence = 1;
@@ -92,18 +108,19 @@ export class BrokerItemStream<T> {
     const total = filtered.length;
 
     if (cursor !== undefined) {
-      filtered = filtered.filter(item => item.sequenceNumber > cursor);
+      filtered = filtered.filter((item) => item.sequenceNumber > cursor);
     }
 
     const items = filtered.slice(0, limit);
     const hasMore = filtered.length > limit;
-    const nextCursor = items.length > 0 ? items[items.length - 1].sequenceNumber : undefined;
+    const nextCursor =
+      items.length > 0 ? items.at(-1)!.sequenceNumber : undefined;
 
     return {
       items,
       total,
       hasMore,
-      nextCursor: hasMore ? nextCursor : undefined
+      nextCursor: hasMore ? nextCursor : undefined,
     };
   }
 

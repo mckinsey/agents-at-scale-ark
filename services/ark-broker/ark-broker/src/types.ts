@@ -1,7 +1,13 @@
 // These types must match the Ark CRD field names and values.
 // They will later be replaced by an ark-sdk TypeScript package.
 
-export type QueryPhase = 'pending' | 'running' | 'done' | 'error' | 'canceled' | 'unknown';
+export type QueryPhase =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'error'
+  | 'canceled'
+  | 'unknown';
 
 export const QueryPhases = {
   Pending: 'pending',

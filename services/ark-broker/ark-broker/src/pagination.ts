@@ -63,7 +63,9 @@ export class PaginationError extends Error {
  * @returns Validated pagination parameters
  * @throws {PaginationError} If limit or cursor values are invalid
  */
-export function parsePaginationParams(query: Record<string, unknown>): PaginationParams {
+export function parsePaginationParams(
+  query: Record<string, unknown>
+): PaginationParams {
   let limit = DEFAULT_LIMIT;
   let cursor: number | undefined;
 
@@ -86,5 +88,5 @@ export function parsePaginationParams(query: Record<string, unknown>): Paginatio
     cursor = parsed;
   }
 
-  return { limit, cursor };
+  return {limit, cursor};
 }
