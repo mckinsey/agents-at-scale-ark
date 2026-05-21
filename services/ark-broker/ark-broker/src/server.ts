@@ -13,11 +13,11 @@ import {CompletionChunkBroker} from './brokers/chunks-broker.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
 import {SessionsBroker} from './brokers/sessions-broker.js';
-import {createMemoryRouter} from './http/routes/memory.js';
-import {createStreamRouter} from './http/routes/stream.js';
-import {createTracesRouter} from './http/routes/traces.js';
-import {createEventsRouter} from './http/routes/events.js';
-import {createSessionsRouter} from './http/routes/sessions.js';
+import {createMemoryRouter} from './http/routes/memory/index.js';
+import {createStreamRouter} from './http/routes/stream/index.js';
+import {createTracesRouter} from './http/routes/traces/index.js';
+import {createEventsRouter} from './http/routes/events/index.js';
+import {createSessionsRouter} from './http/routes/sessions/index.js';
 import {createOTLPRouter} from './http/routes/otlp.js';
 import {setupSwagger} from './http/swagger.js';
 
