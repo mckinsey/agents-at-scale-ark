@@ -224,6 +224,18 @@ runs:
             sleep 5
             if [ "$attempt" -eq 36 ]; then
               echo "Timed out waiting for $name"
+              echo "--- pod status ---"
+              kubectl get pods -n kube-system -o wide || true
+              echo "--- $name describe ---"
+              kubectl describe "$kind/$name" -n kube-system || true
+              echo "--- $name pod describe ---"
+              kubectl describe pods -l k8s-app="$name" -n kube-system || true
+              echo "--- $name pod logs (all containers) ---"
+              kubectl logs -l k8s-app="$name" -n kube-system --all-containers=true --tail=50 || true
+              echo "--- node memory ---"
+              free -h || true
+              echo "--- k3s service logs ---"
+              sudo journalctl -u k3s --no-pager --since "10 minutes ago" --lines=50 || true
               kubectl rollout status --timeout=30s "$kind/$name" -n kube-system
             fi
           done
