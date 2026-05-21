@@ -97,7 +97,10 @@ export function NewConversationPanel({
   };
 
   return (
-    <div className="bg-surface-bg-primary flex h-full flex-col px-3 pt-3 pb-3">
+    <div
+      data-testid="new-conversation-panel"
+      className="bg-surface-bg-primary flex h-full flex-col px-3 pt-3 pb-3"
+    >
       <InputGroup>
         <InputGroupAddon>
           <IconShell size="sm" variant="secondary">
