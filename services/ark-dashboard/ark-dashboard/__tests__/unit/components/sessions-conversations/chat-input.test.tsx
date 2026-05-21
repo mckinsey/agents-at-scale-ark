@@ -251,10 +251,7 @@ describe('ChatInput', () => {
       expect(screen.getByPlaceholderText('Message agent-1')).toBeInTheDocument();
 
       // Should render send button
-      const buttons = screen.getAllByRole('button');
-      const sendButton = buttons.find((btn) =>
-        btn.querySelector('svg')?.classList.contains('lucide-send')
-      );
+      const sendButton = screen.getByRole('button', { name: 'Send message' });
       expect(sendButton).toBeInTheDocument();
 
       // Should render tool toggle
@@ -328,10 +325,7 @@ describe('ChatInput', () => {
       const textarea = screen.getByRole('textbox');
       await user.type(textarea, 'Hello agent');
 
-      const buttons = screen.getAllByRole('button');
-      const sendButton = buttons.find((btn) =>
-        btn.querySelector('svg')?.classList.contains('lucide-send')
-      );
+      const sendButton = screen.getByRole('button', { name: 'Send message' });
 
       await user.click(sendButton!);
 

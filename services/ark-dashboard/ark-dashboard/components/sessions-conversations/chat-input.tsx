@@ -96,6 +96,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
             disabled={!message.trim() || isDisabled}
             variant="ghost"
             size="icon"
+            aria-label="Send message"
             className="size-8 bg-surface-bg-tertiary hover:bg-surface-bg-tertiary/80 flex justify-center items-center"
           >
             <IconShell size="sm" className="opacity-100 [&_svg]:fill-none">

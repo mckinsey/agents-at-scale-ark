@@ -304,12 +304,8 @@ describe('ConversationsTab', () => {
     );
 
     // Find and click the Plus button (in the sidebar header)
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
   });
@@ -326,11 +322,8 @@ describe('ConversationsTab', () => {
     );
 
     // Open dialog
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     // Select participant
     await user.click(screen.getByTestId('select-participant'));
@@ -474,11 +467,8 @@ describe('ConversationsTab', () => {
 
     // The NewConversationDialog should receive session participants
     // We can verify this by checking that the dialog can be opened
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
   });

@@ -28,7 +28,7 @@ function hasToolError(toolCall: ToolCallData): boolean {
 function getToolIconColor(toolCall: ToolCallData): string {
   return hasToolError(toolCall)
     ? 'bg-status-error/10 text-status-error'
-    : 'bg-status-information/10 text-status-information';
+    : 'bg-viz-categorical-08/5 text-viz-categorical-08';
 }
 
 function ToolCallTreeItem({ toolCall }: { toolCall: ToolCallData }) {
