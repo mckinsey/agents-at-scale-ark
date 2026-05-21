@@ -1,6 +1,9 @@
 import {Router} from 'express';
 import {TraceBroker} from '@ark-broker/brokers/trace-broker.js';
-import {sendValidationError, sendInternalError} from '../errors.js';
+import {
+  sendValidationError,
+  sendInternalError,
+} from '@ark-broker/http/routes/errors.js';
 import {
   getTracesQuerySchema,
   GetTracesQuery,

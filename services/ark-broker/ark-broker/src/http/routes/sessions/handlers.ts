@@ -1,6 +1,6 @@
 import type {Request, Response} from 'express';
 import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
-import {streamSSE} from '../../sse.js';
+import {streamSSE} from '@ark-broker/http/sse.js';
 import {parsePaginationParams} from '@ark-broker/brokers/pagination.js';
 import {GetSessionsQuery} from './schemas.js';
 

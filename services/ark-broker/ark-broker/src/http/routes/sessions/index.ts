@@ -5,7 +5,7 @@ import {
   sendValidationError,
   sendPaginationError,
   sendInternalError,
-} from '../errors.js';
+} from '@ark-broker/http/routes/errors.js';
 import {PaginationError} from '@ark-broker/brokers/pagination.js';
 import {
   getSessionsQuerySchema,

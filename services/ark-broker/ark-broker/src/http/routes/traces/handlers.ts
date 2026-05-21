@@ -4,13 +4,16 @@ import {
   OTELSpan,
   spanMatchesSessionId,
 } from '@ark-broker/brokers/trace-broker.js';
-import {streamSSE} from '../../sse.js';
+import {streamSSE} from '@ark-broker/http/sse.js';
 import {
   parsePaginationParams,
   PaginationError,
   PaginatedList,
 } from '@ark-broker/brokers/pagination.js';
-import {sendPaginationError, sendInternalError} from '../errors.js';
+import {
+  sendPaginationError,
+  sendInternalError,
+} from '@ark-broker/http/routes/errors.js';
 
 export function handleStreamingAllTraces(
   req: Request,

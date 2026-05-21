@@ -1,12 +1,15 @@
 import type {Request, Response} from 'express';
 import {MemoryBroker} from '@ark-broker/brokers/memory-broker.js';
-import {streamSSE} from '../../sse.js';
+import {streamSSE} from '@ark-broker/http/sse.js';
 import {
   parsePaginationParams,
   PaginationError,
   PaginatedList,
 } from '@ark-broker/brokers/pagination.js';
-import {sendPaginationError, sendInternalError} from '../errors.js';
+import {
+  sendPaginationError,
+  sendInternalError,
+} from '@ark-broker/http/routes/errors.js';
 
 interface MessageItem {
   timestamp: string;

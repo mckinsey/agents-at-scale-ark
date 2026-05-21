@@ -1,7 +1,7 @@
 import type {Request, Response} from 'express';
 import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker.js';
-import {writeSSEEvent} from '../../sse.js';
-import {sendInternalError} from '../errors.js';
+import {writeSSEEvent} from '@ark-broker/http/sse.js';
+import {sendInternalError} from '@ark-broker/http/routes/errors.js';
 import {StreamError} from './schemas.js';
 
 interface ChunkPayload {
