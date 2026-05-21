@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "dev": "NODE_ENV=development tsx watch --clear-screen=false src/main.ts",
     "start": "node dist/main.js",
     "test": "jest",
@@ -57,6 +57,7 @@
     "prettier": "^3.8.3",
     "supertest": "^7.0.0",
     "ts-jest": "^29.4.6",
+    "tsc-alias": "^1.8.10",
     "tsx": "^4.19.2",
     "typescript": "^6.0.3"
   },

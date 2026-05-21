@@ -25,6 +25,7 @@ export default {
     },
   },
   moduleNameMapper: {
+    '^@ark-broker/(.*)$': '<rootDir>/src/$1',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };
