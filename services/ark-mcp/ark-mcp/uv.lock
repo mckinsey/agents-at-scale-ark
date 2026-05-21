@@ -203,7 +203,7 @@ dev = [
 requires-dist = [
     { name = "ark-sdk", path = "ark_sdk-0.1.62-py3-none-any.whl" },
     { name = "fastmcp", specifier = ">=0.5.0" },
-    { name = "kubernetes-asyncio", specifier = ">=24.0.0" },
+    { name = "kubernetes-asyncio", specifier = ">=24.0.0,<34.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.402" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
@@ -234,7 +234,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.62-py3-none-any.whl", hash = "sha256:6c6676e34431405d7b419013be290ddbd043bef618ec802e9400e62c2ce693e8" },
+    { filename = "ark_sdk-0.1.62-py3-none-any.whl", hash = "sha256:6eff6efaac1df2f1aed5a6312fac17a05612fd6358a5c226131eee55680840f9" },
 ]
 
 [package.metadata]
@@ -1060,7 +1060,7 @@ wheels = [
 
 [[package]]
 name = "kubernetes-asyncio"
-version = "35.0.1"
+version = "33.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1070,9 +1070,9 @@ dependencies = [
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/b9/f3b9fb2d3ef4550918b83c328dc720a58f65bc66732d9438e06469573ad1/kubernetes_asyncio-35.0.1.tar.gz", hash = "sha256:975870e3097b647c265a59b9175ab0841f0de06cd2162268273ca210b1fa672e", size = 1320250, upload-time = "2026-02-25T20:40:42.87Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/5f/c175f86b92ff5f19444e3be1423819491ae9859d1f6f7d83d404eab8b10d/kubernetes_asyncio-33.3.0.tar.gz", hash = "sha256:4c59cd4c99b197995ef38ef0c8ff45aab24b84830ebf0ddcb67355caea9674c9", size = 1124931, upload-time = "2025-08-11T21:39:37.825Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/36/b3/a8917d253763095fb8dcaaefc6a135ed31abbd13f681e78752e226e252fe/kubernetes_asyncio-35.0.1-py3-none-any.whl", hash = "sha256:244ef45943e89c5c5104276a646bfcbf1a9dc3d060876c2094aa601e932f1c03", size = 2868606, upload-time = "2026-02-25T20:40:41.191Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/20/90985f53c141e6f3464b7295a617ffd36574168861882f9291847d09f9b1/kubernetes_asyncio-33.3.0-py3-none-any.whl", hash = "sha256:25e6e265932ebb1aeecbdb30a107dbef3ee0bcd388ed12d092be70915733982b", size = 2174591, upload-time = "2025-08-11T21:39:35.697Z" },
 ]
 
 [[package]]
