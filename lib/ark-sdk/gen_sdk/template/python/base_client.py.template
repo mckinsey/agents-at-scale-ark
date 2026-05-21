@@ -52,14 +52,15 @@ def init_k8s():
 
 class ARKResourceClient(Generic[T]):
     """Generic client for ARK custom resources"""
-    
+
     def __init__(
         self,
         api_version: str,
         kind: str,
         plural: str,
         model_class: Type[T],
-        namespace: str = "default"
+        namespace: str = "default",
+        default_headers: Optional[Dict[str, str]] = None
     ):
         self.api_version = api_version
         self.kind = kind
@@ -67,10 +68,13 @@ class ARKResourceClient(Generic[T]):
         self.model_class = model_class
         self.namespace = namespace
         self.group, self.version = api_version.split('/')
-       
+
         init_k8s()
 
         self.api_client = client.ApiClient()
+        if default_headers:
+            for header_name, header_value in default_headers.items():
+                self.api_client.set_default_header(header_name, header_value)
         self.custom_api = client.CustomObjectsApi(self.api_client)
     
     def create(self, resource: T, namespace: Optional[str] = None) -> T:
@@ -227,7 +231,8 @@ class ARKResourceClient(Generic[T]):
 class _ARKClient:
     """Base ARK client class"""
 
-    def __init__(self, namespace: Optional[str] = None):
+    def __init__(self, namespace: Optional[str] = None, default_headers: Optional[Dict[str, str]] = None):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
+        self.default_headers = default_headers

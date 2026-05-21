@@ -42,13 +42,14 @@ type anthropicMessage struct {
 }
 
 type anthropicRequest struct {
-	Messages         []anthropicMessage `json:"messages"`
-	MaxTokens        int                `json:"max_tokens"`
-	Temperature      float64            `json:"temperature"`
-	SystemPrompt     string             `json:"system,omitempty"`
-	AnthropicVersion string             `json:"anthropic_version,omitempty"`
-	Tools            []anthropicTool    `json:"tools,omitempty"`
-	Model            string             `json:"model,omitempty"`
+	Messages         []anthropicMessage     `json:"messages"`
+	MaxTokens        int                    `json:"max_tokens"`
+	Temperature      float64                `json:"temperature"`
+	SystemPrompt     string                 `json:"system,omitempty"`
+	AnthropicVersion string                 `json:"anthropic_version,omitempty"`
+	Tools            []anthropicTool        `json:"tools,omitempty"`
+	ToolChoice       map[string]interface{} `json:"tool_choice,omitempty"`
+	Model            string                 `json:"model,omitempty"`
 }
 
 type anthropicTool struct {
@@ -185,7 +186,7 @@ func convertToolsToAnthropic(tools []openai.ChatCompletionToolParam) []anthropic
 	return result
 }
 
-func buildAnthropicRequest(messages []anthropicMessage, systemPrompt string, tools []anthropicTool, properties map[string]string) anthropicRequest {
+func buildAnthropicRequest(messages []anthropicMessage, systemPrompt string, tools []anthropicTool, toolChoice ToolChoice, properties map[string]string) anthropicRequest {
 	temperature := getFloatProperty(properties, "temperature", 1.0)
 	maxTokens := getIntProperty(properties, "max_tokens", 4096)
 
@@ -195,6 +196,20 @@ func buildAnthropicRequest(messages []anthropicMessage, systemPrompt string, too
 		Temperature:  temperature,
 		SystemPrompt: systemPrompt,
 		Tools:        tools,
+		ToolChoice:   anthropicToolChoice(toolChoice),
+	}
+}
+
+func anthropicToolChoice(toolChoice ToolChoice) map[string]interface{} {
+	switch toolChoice {
+	case ToolChoiceRequired:
+		return map[string]interface{}{"type": "any"}
+	case ToolChoiceAuto:
+		return map[string]interface{}{"type": "auto"}
+	case ToolChoiceNone:
+		return map[string]interface{}{"type": "none"}
+	default:
+		return nil
 	}
 }
 

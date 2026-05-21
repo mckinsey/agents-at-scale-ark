@@ -1,7 +1,7 @@
 """Kubernetes models API endpoints."""
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 
 from kubernetes_asyncio.client import CustomObjectsApi
@@ -9,6 +9,9 @@ from kubernetes_asyncio.client.api_client import ApiClient
 
 from ark_sdk.client import with_ark_client
 from ark_sdk.k8s import get_context
+from ark_sdk.impersonation import ImpersonationConfig
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.models import (
     ModelResponse,
@@ -110,7 +113,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelListResponse:
+async def list_models(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
     """
     List all Model CRs in a namespace.
     
@@ -120,7 +123,7 @@ async def list_models(namespace: Optional[str] = Query(None, description="Namesp
     Returns:
         ModelListResponse: List of all models in the namespace
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         models = await ark_client.models.a_list()
         
         model_list = []
@@ -354,7 +357,7 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
 
 @router.delete("/{model_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="model")
-async def delete_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_model(request: Request, model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Model CR by name.
     
@@ -362,5 +365,5 @@ async def delete_model(model_name: str, namespace: Optional[str] = Query(None, d
         namespace: The namespace containing the model
         model_name: The name of the model
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.models.a_delete(model_name)

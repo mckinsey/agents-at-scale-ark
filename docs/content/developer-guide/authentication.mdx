@@ -440,6 +440,166 @@ DELETE /v1/api-keys/{public_key}
 - No session storage requirements
 - Supports horizontal scaling
 
+## User Impersonation
+
+When users access Ark through the Dashboard or API with SSO authentication, all Kubernetes API calls
+normally use the ark-api service account. This bypasses any RBAC rules configured for individual users.
+
+User impersonation forwards the SSO user's identity to Kubernetes via
+`Impersonate-User` and `Impersonate-Group` headers, so K8s RBAC applies to the actual user.
+
+### When impersonation applies
+
+| Auth Mode | Impersonation | Reason |
+|-----------|--------------|--------|
+| `sso` | Yes | User identity available in JWT |
+| `hybrid` (JWT path) | Yes | Same as SSO |
+| `hybrid` (API key path) | No | API keys are machine identities |
+| `basic` | No | Service-to-service, no human user |
+| `open` | No | No authentication |
+
+### Configuration
+
+Helm values:
+
+```yaml
+impersonation:
+  enabled: true
+  fallback: false
+  usernameClaim: email
+  groupsClaim: groups
+  prefix: ""
+```
+
+Or environment variables on ark-api:
+
+```bash
+IMPERSONATION_ENABLED=true
+IMPERSONATION_USERNAME_CLAIM=email
+IMPERSONATION_GROUPS_CLAIM=groups
+IMPERSONATION_PREFIX=
+IMPERSONATION_FALLBACK=false
+```
+
+When `impersonation.enabled` is `true`, the Helm chart automatically grants the ark-api service account
+permission to impersonate users and groups via a ClusterRole rule.
+
+### Claim mapping
+
+Different OIDC providers put identity information in different JWT claims.
+Dot-path notation is supported for nested claims (e.g., `realm_access.roles`).
+
+| Provider | `usernameClaim` | `groupsClaim` |
+|----------|----------------|---------------|
+| Azure Entra ID | `preferred_username` | `groups` |
+| Keycloak | `email` | `groups` or `realm_access.roles` |
+| Okta | `email` | `groups` |
+| Auth0 | `email` | `https://custom/claims/groups` |
+| Google | `email` | `groups` |
+
+### RBAC setup
+
+Ark ships viewer/editor/admin ClusterRoles for each resource type. These are role _definitions_ —
+create namespace-scoped RoleBindings to grant access to specific users or groups.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admins-agents
+  namespace: default
+subjects:
+  - kind: Group
+    name: my-oidc-group
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: agent-editor-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Available ClusterRoles follow the pattern `{resource}-{viewer|editor|admin}-role` for:
+`agent`, `model`, `query`, `team`, `tool`, `memory`, `mcpserver`, `a2aserver`, `a2atask`, `executionengine`.
+
+See `samples/rbac-test-bindings.yaml` for a complete example covering all resource types with two groups.
+
+### Migration path
+
+1. **Deploy with defaults** — `impersonation.enabled: false`. No behavioral change.
+2. **Create RoleBindings** — Bind SSO users/groups to Ark ClusterRoles per namespace.
+3. **Enable fallback mode** — Set `enabled: true`, `fallback: true`. Monitor logs for `"Impersonation fallback"` warnings identifying users missing RBAC.
+4. **Fix RBAC gaps** — Create missing RoleBindings for users identified in logs.
+5. **Disable fallback** — Set `fallback: false`. K8s RBAC is now fully enforced.
+6. **Rollback** — Set `enabled: false` to revert to SA-based access.
+
+### Local development setup with Keycloak
+
+For local testing, you can run Keycloak as an OIDC provider via Docker:
+
+```bash
+docker run -d --name keycloak -p 8080:8080 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=change_me \
+  quay.io/keycloak/keycloak:latest start-dev
+```
+
+**Configure Keycloak** (admin console at `http://localhost:8080/admin`):
+
+1. Create client `ark-client-id` in the `master` realm with redirect URI `http://localhost:3000/api/auth/callback/keycloak`
+2. Enable "Direct access grants" on the client (useful for testing with curl)
+3. Add a groups mapper: Clients → `ark-client-id` → Client scopes → `ark-client-id-dedicated` → Add mapper → "Group Membership" with claim name `groups` and "Full group path" disabled
+4. Create groups (e.g., `ark-admin`, `ark-viewers`) and users with emails assigned to those groups
+
+**Dashboard `.env`:**
+
+```bash
+AUTH_MODE=sso
+OIDC_ISSUER_URL=http://localhost:8080/realms/master
+OIDC_CLIENT_ID=ark-client-id
+OIDC_PROVIDER_ID=keycloak
+OIDC_PROVIDER_NAME=Keycloak
+BASE_URL=http://localhost:3000
+AUTH_URL=http://localhost:3000/api/auth
+AUTH_SECRET=<generate with: openssl rand -base64 32>
+```
+
+**API `.env`:**
+
+```bash
+AUTH_MODE=sso
+OIDC_ISSUER_URL=http://localhost:8080/realms/master
+OIDC_APPLICATION_ID=ark-client-id
+IMPERSONATION_ENABLED=true
+IMPERSONATION_USERNAME_CLAIM=email
+IMPERSONATION_GROUPS_CLAIM=groups
+```
+
+**Verify claims and test:**
+
+```bash
+# Check JWT contains email and groups
+curl -s -X POST http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -d "grant_type=password" -d "client_id=ark-client-id" \
+  -d "username=admin" -d "password=change_me" \
+  | jq -r '.access_token' | cut -d. -f2 \
+  | python3 -c "import sys,base64,json; print(json.dumps(json.loads(base64.urlsafe_b64decode(sys.stdin.read().strip()+'==')),indent=2))" \
+  | jq '{email, groups, preferred_username}'
+
+# Apply test RBAC bindings
+kubectl apply -f samples/rbac-test-bindings.yaml
+
+# Test impersonation
+TOKEN=$(curl -s -X POST http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -d "grant_type=password" -d "client_id=ark-client-id" \
+  -d "username=viewer" -d "password=viewer" | jq -r '.access_token')
+
+# List should succeed (viewer has read access)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/v1/agents?namespace=default
+
+# Delete should return 403 (viewer has no write access)
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/v1/agents/claude?namespace=default
+```
+
 ## Troubleshooting
 
 ### Common Issues

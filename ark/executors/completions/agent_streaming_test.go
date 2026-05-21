@@ -14,15 +14,18 @@ import (
 )
 
 type mockChatProvider struct {
-	response *openai.ChatCompletion
-	chunks   []*openai.ChatCompletionChunk
+	response           *openai.ChatCompletion
+	chunks             []*openai.ChatCompletionChunk
+	capturedToolChoice ToolChoice
 }
 
-func (m *mockChatProvider) ChatCompletion(_ context.Context, _ []Message, _ int64, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *mockChatProvider) ChatCompletion(_ context.Context, _ []Message, _ int64, _ []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+	m.capturedToolChoice = toolChoice
 	return m.response, nil
 }
 
-func (m *mockChatProvider) ChatCompletionStream(_ context.Context, _ []Message, _ int64, streamFunc func(*openai.ChatCompletionChunk) error, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *mockChatProvider) ChatCompletionStream(_ context.Context, _ []Message, _ int64, streamFunc func(*openai.ChatCompletionChunk) error, _ []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+	m.capturedToolChoice = toolChoice
 	for _, chunk := range m.chunks {
 		if err := streamFunc(chunk); err != nil {
 			return nil, err
@@ -85,7 +88,7 @@ func TestAgentExecute_StreamingChunksIncludeAgentName(t *testing.T) {
 	agent := newTestAgent(agentName, provider)
 	stream := &mockEventStream{}
 
-	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, stream)
+	_, err := agent.Execute(context.Background(), NewUserMessage("hi"), nil, nil, stream, ExecuteOptions{})
 	require.NoError(t, err)
 
 	require.NotEmpty(t, stream.chunks, "expected streaming chunks to be emitted")

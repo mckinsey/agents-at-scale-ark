@@ -14,7 +14,10 @@ from typing import Optional
 import httpx
 import resource
 
-from fastapi import APIRouter, Query, Request, Response, HTTPException
+from fastapi import APIRouter, Depends, Query, Request, Response, HTTPException
+from ark_sdk.impersonation import ImpersonationConfig
+
+from ....auth.dependencies import get_impersonation_config
 
 from ..exceptions import handle_k8s_errors
 from ....models.models import ServiceListResponse
@@ -31,8 +34,8 @@ VERSION_A2A = "v1prealpha1"
 VERSION_MCP = "v1alpha1"
 VERSION = "v1"
 
-async def _get_a2a_server_address(a2a_server_name: str, 
-    namespace: Optional[str] = None) -> tuple[str, dict]:
+async def _get_a2a_server_address(a2a_server_name: str,
+    namespace: Optional[str] = None, impersonation: Optional[ImpersonationConfig] = None) -> tuple[str, dict]:
     """Collect A2A Server details from ark resources. If A2A Server requires 
         particular headers, they will be collected and provided back.
     Args:
@@ -44,7 +47,7 @@ async def _get_a2a_server_address(a2a_server_name: str,
         (mcp_endpoint, headers_required_by_mcp)
     """
     try:
-        async with with_ark_client(namespace, VERSION_A2A) as ark_client:
+        async with with_ark_client(namespace, VERSION_A2A, impersonation=impersonation) as ark_client:
             a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
             a2a_dict = a2a_server.to_dict()
             status = a2a_dict.get("status", {})
@@ -65,8 +68,8 @@ async def _get_a2a_server_address(a2a_server_name: str,
         logger.error(f"Failed to resolve A2A server '{a2a_server_name}': {e}")
         raise HTTPException(status_code=400, detail=f"Invalid resource a2a {a2a_server_name}")
     
-async def _get_mcp_server_address(mcp_server_name: str, 
-    namespace: Optional[str] = None) -> tuple[str, dict]:
+async def _get_mcp_server_address(mcp_server_name: str,
+    namespace: Optional[str] = None, impersonation: Optional[ImpersonationConfig] = None) -> tuple[str, dict]:
     """Collect MCP Resource details from ark resources. If MCP Server requires 
         particular headers, they will be collected and provided back.
     Args:
@@ -78,7 +81,7 @@ async def _get_mcp_server_address(mcp_server_name: str,
         (mcp_endpoint, headers_required_by_mcp)
     """
     try:
-        async with with_ark_client(namespace, VERSION_MCP) as ark_client:
+        async with with_ark_client(namespace, VERSION_MCP, impersonation=impersonation) as ark_client:
             mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
             mcp_dict = mcp_server.to_dict()
             status = mcp_dict.get("status", {})
@@ -185,7 +188,8 @@ async def proxy_server(
     resource: Resource,
     server_name: str,
     request: Request,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> Response:
     """
     Proxy requests to a specific resource inside your agentic cluster.
@@ -202,9 +206,9 @@ async def proxy_server(
         Response: Proxied response from the agentic resource
     """
     if resource == Resource.A2A:
-        resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
+        resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace, impersonation=impersonation)
     elif resource == Resource.MCP:
-        resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
+        resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace, impersonation=impersonation)
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
@@ -215,9 +219,6 @@ async def proxy_server(
     return await _proxy_request(resource_url, request, additional_headers)
 
 
-    # Construct the target path
-    #target_path = f"/{path}" if path else "/"
-
 @router.options("/{resource}/{server_name}/{path:path}")
 @router.get("/{resource}/{server_name}/{path:path}")
 @router.post("/{resource}/{server_name}/{path:path}")
@@ -225,12 +226,13 @@ async def proxy_server_path(resource: Resource,
     server_name: str,
     request: Request,
     path: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")):
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)):
 
     if resource == Resource.A2A:
-        resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
+        resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace, impersonation=impersonation)
     elif resource == Resource.MCP:
-        resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
+        resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace, impersonation=impersonation)
     else:
         if namespace is None:
             namespace = get_context()["namespace"]

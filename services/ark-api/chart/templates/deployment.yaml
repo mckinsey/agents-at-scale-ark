@@ -36,7 +36,6 @@ spec:
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          {{- if .Values.app.env }}
           env:
             {{- range .Values.app.env }}
             - name: {{ .name }}
@@ -47,7 +46,20 @@ spec:
                 {{- toYaml .valueFrom | nindent 16 }}
               {{- end }}
             {{- end }}
-          {{- end }}
+            {{- if .Values.impersonation }}
+            - name: IMPERSONATION_ENABLED
+              value: {{ .Values.impersonation.enabled | quote }}
+            - name: IMPERSONATION_FALLBACK
+              value: {{ .Values.impersonation.fallback | quote }}
+            - name: IMPERSONATION_USERNAME_CLAIM
+              value: {{ .Values.impersonation.usernameClaim | quote }}
+            - name: IMPERSONATION_GROUPS_CLAIM
+              value: {{ .Values.impersonation.groupsClaim | quote }}
+            {{- if .Values.impersonation.prefix }}
+            - name: IMPERSONATION_PREFIX
+              value: {{ .Values.impersonation.prefix | quote }}
+            {{- end }}
+            {{- end }}
           {{- if .Values.app.envFrom }}
           envFrom:
             {{- toYaml .Values.app.envFrom | nindent 12 }}
