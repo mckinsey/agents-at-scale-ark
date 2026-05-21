@@ -26,6 +26,23 @@ async function proxy(request: NextRequest) {
       secret: process.env.AUTH_SECRET,
       cookieName: COOKIE_SESSION_TOKEN,
     });
+
+    // Check if the access token has expired
+    // token.expires_at is in seconds (Unix timestamp)
+    const now = Math.floor(Date.now() / 1000);
+    const isTokenExpired = token?.expires_at && token.expires_at <= now;
+
+    // If the token is expired, redirect to sign-in
+    // This prevents API calls with expired tokens that would result in server errors
+    if (isTokenExpired) {
+      const baseURL = process.env.BASE_URL;
+      const newUrl = new URL(
+        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(request.nextUrl.href)}`,
+        baseURL,
+      );
+      return NextResponse.redirect(newUrl);
+    }
+
     // Read environment variables at runtime
     const host = process.env.ARK_API_SERVICE_HOST || 'localhost';
     const port = process.env.ARK_API_SERVICE_PORT || '8000';
