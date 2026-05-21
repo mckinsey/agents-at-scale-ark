@@ -1,10 +1,25 @@
+import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MessageDisplay } from '@/components/sessions-conversations/message-display';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 
 vi.mock('@/lib/services/conversations-hooks');
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useGetQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useListQueries: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock('@/lib/services/query-approvals-hooks', () => ({
+  useGetApprovalDetails: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useSubmitApproval: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}));
+vi.mock('next/navigation', () => ({
+  useSearchParams: vi.fn(() => ({
+    get: vi.fn((key: string) => key === 'namespace' ? 'default' : null),
+  })),
+}));
 vi.mock('@/components/sessions-conversations/session-message', () => ({
   SessionMessage: ({ role, content }: any) => (
     <div data-testid={`message-${role}`}>{content}</div>
@@ -41,6 +56,18 @@ describe('MessageDisplay', () => {
 
   const mockOnClearPending = vi.fn();
 
+  function createWrapper() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    return ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useGetMessages).mockReturnValue({
@@ -64,7 +91,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
@@ -80,7 +108,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('test-agent')).toBeInTheDocument();
@@ -97,7 +126,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByTestId('message-user')).toHaveTextContent('Hello');
@@ -118,7 +148,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getAllByTestId('message-user')).toHaveLength(2); // 1 backend + 1 pending
@@ -134,7 +165,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={true}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     // Processing indicator has animated dots
@@ -159,7 +191,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText(/Conversation started with/i)).toBeInTheDocument();
@@ -181,7 +214,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText(/No conversation messages available/i)).toBeInTheDocument();
@@ -202,7 +236,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     // Should only show 2 messages: 1 from backend (Hello) and 1 from backend (Hi there!)

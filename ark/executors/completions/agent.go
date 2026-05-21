@@ -329,7 +329,7 @@ func (a *Agent) ResumeFromApproval(ctx context.Context, toolCalls []openai.ChatC
 			return &ExecutionResult{Messages: newMessages}, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, tools, eventStream)
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, ToolChoiceUnset)
 		if err != nil {
 			return nil, err
 		}
