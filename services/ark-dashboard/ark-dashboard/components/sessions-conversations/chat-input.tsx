@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Send, Wrench } from 'lucide-react';
+import { NumericBadge } from '@/components/ui/badge';
+import { Send, SingleTool } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import { toast } from 'sonner';
@@ -30,39 +32,13 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
   const participantType = conversation?.participantType;
   const toolCallCount = conversation?.toolCallCount || 0;
 
-  // Don't render chat input for workflow conversations (multiple different participants)
+  // Workflow conversations have multiple different participants (not teams)
   // In workflows, we don't know which agent to target for new messages
   const participantCount = conversation?.participants?.length || 0;
-  const isWorkflowConversation = participantCount > 1;
+  const isWorkflowConversation = participantCount > 1 && participantType !== 'team';
 
-  if (isWorkflowConversation) {
-    // For workflows, only show tool toggle if there are tool calls
-    if (toolCallCount > 0) {
-      return (
-        <div className="border-b border-r border-t border-border">
-          <div className="flex items-center gap-3 px-8 py-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Wrench className="size-4" />
-                <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-muted-foreground text-[10px] font-medium text-background">
-                  {toolCallCount}
-                </span>
-              </div>
-              <Switch
-                checked={showToolCalls}
-                onCheckedChange={onShowToolCallsChange}
-                className="scale-75"
-                aria-label="Toggle tool call visibility"
-              />
-              <span className="text-xs">Show tool calls</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    // Don't render anything - workflows are not conversational
-    return null;
-  }
+  // Disable input when no conversation is selected
+  const isDisabled = !conversationId || isPending || isWorkflowConversation;
 
   const handleSend = () => {
     if (!message.trim() || isPending) return;
@@ -103,46 +79,56 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
   };
 
   return (
-    <div className="border-b border-r border-t border-border">
-      <div className="relative flex items-center gap-2 py-6 pl-6 pr-8">
-        <Textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={`Message ${participantName}`}
-          className="flex-1 min-h-[48px] resize-none border-0 bg-transparent pt-6 pb-3 pr-16 focus-visible:ring-0 placeholder:text-sm placeholder:leading-none placeholder:tracking-[-0.01px] placeholder:text-muted-foreground"
-          disabled={isPending}
-          rows={2}
-        />
-
-        <Button
-          onClick={handleSend}
-          disabled={!message.trim() || isPending}
-          variant="secondary"
-          size="icon"
-          className="absolute right-10 h-9 w-9 bg-field-enabled text-secondary-foreground hover:bg-field-hover"
-        >
-          <Send className="size-4" />
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-3 px-8 py-3 text-sm text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Wrench className="size-4" />
-            {toolCallCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-muted-foreground text-[10px] font-medium text-background">
-                {toolCallCount}
-              </span>
-            )}
-          </div>
-          <Switch
-            checked={showToolCalls}
-            onCheckedChange={onShowToolCallsChange}
-            className="scale-75"
-            aria-label="Toggle tool call visibility"
+    <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden">
+      <div className="self-stretch px-4 pt-3 flex flex-col justify-start items-start gap-4">
+        <div className="w-full h-16 p-3 bg-surface-bg-primary flex justify-start items-center gap-2">
+          <Input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={`Message ${participantName}`}
+            className="flex-1 h-4 border-0 bg-transparent shadow-none p-0 focus-visible:ring-0 focus-visible:bg-transparent hover:bg-transparent disabled:bg-transparent disabled:hover:bg-transparent text-sm font-normal placeholder:text-fg-tertiary"
+            disabled={isDisabled}
           />
-          <span className="text-xs">Show tool calls</span>
+
+          <Button
+            onClick={handleSend}
+            disabled={!message.trim() || isDisabled}
+            variant="ghost"
+            size="icon"
+            aria-label="Send message"
+            className="size-8 bg-surface-bg-tertiary hover:bg-surface-bg-tertiary/80 flex justify-center items-center"
+          >
+            <IconShell size="sm" className="opacity-100 [&_svg]:fill-none">
+              <Send />
+            </IconShell>
+          </Button>
+        </div>
+
+        <div className="self-stretch flex justify-between items-center pb-2">
+          <div className="flex justify-start items-center gap-5">
+            <div className="relative">
+              <IconShell size="sm" variant="secondary" className="[&_svg]:fill-none">
+                <SingleTool />
+              </IconShell>
+              {toolCallCount > 0 && (
+                <div className="absolute -right-2 -top-2">
+                  <NumericBadge size="sm">
+                    {toolCallCount}
+                  </NumericBadge>
+                </div>
+              )}
+            </div>
+            <Switch
+              checked={showToolCalls}
+              onCheckedChange={onShowToolCallsChange}
+              className="scale-75"
+              aria-label="Toggle tool call visibility"
+            />
+            <span className="text-xs font-normal leading-4 tracking-tight text-fg-secondary">
+              Show tool calls
+            </span>
+          </div>
         </div>
       </div>
     </div>

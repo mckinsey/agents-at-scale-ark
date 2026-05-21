@@ -18,11 +18,11 @@ class SessionsPage(BasePage):
     DIALOG_CANCEL_BUTTON = "[role='dialog'] button:has-text('Cancel')"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
-    CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
-    CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
-    CHAT_TEXTAREA = "textarea[placeholder*='Message']"
-    USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
-    ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
+    CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
+    CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
+    CHAT_TEXTAREA = "input[placeholder*='Message']"
+    USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
+    ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
     SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-semibold"
     NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
@@ -94,7 +94,7 @@ class SessionsPage(BasePage):
     def get_conversation_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(span:has-text('Conversations'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Conversations'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
@@ -108,7 +108,7 @@ class SessionsPage(BasePage):
     def get_participants_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(span:has-text('Participants'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Participants'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
@@ -121,10 +121,10 @@ class SessionsPage(BasePage):
 
     def is_participant_shown_in_header(self, participant_name: str) -> bool:
         try:
-            badge = self.page.locator(
-                f"div.rounded-lg.bg-card span:has-text('{participant_name}')"
+            tag = self.page.locator(
+                f"[data-slot='tag']:has-text('{participant_name}')"
             ).first
-            return badge.is_visible(timeout=5000)
+            return tag.is_visible(timeout=5000)
         except Exception:
             return False
 
@@ -172,7 +172,7 @@ class SessionsPage(BasePage):
     def is_participant_in_conversation_sidebar(self, participant_name: str) -> bool:
         try:
             item = self.page.locator(
-                f"div.space-y-3 button span.font-medium:has-text('{participant_name}')"
+                f"[data-testid='conversation-item'] [data-testid='conversation-participant-name']:has-text('{participant_name}')"
             ).first
             return item.is_visible(timeout=5000)
         except Exception:

@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { Plus, ChevronLeft, ChevronRight, Send } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
@@ -15,6 +16,7 @@ import { NewConversationDialog } from './new-conversation-dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { generateUUID } from '@/lib/utils/uuid';
 
 interface Props {
@@ -86,6 +88,13 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
     return [...uniqueTemporary, ...backend];
   }, [temporaryConversations, backendConversations]);
 
+  // Auto-select first conversation if none is selected
+  useEffect(() => {
+    if (!selectedConversationId && allConversations.length > 0 && !initialConversationId) {
+      setSelectedConversationId(allConversations[0].conversationId);
+    }
+  }, [allConversations, selectedConversationId, initialConversationId]);
+
   const selectedConversation = useMemo(() => {
     return allConversations.find(c => c.conversationId === selectedConversationId) || null;
   }, [allConversations, selectedConversationId]);
@@ -153,12 +162,12 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       ) : (
         <div
-          className="grid min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
+          className="grid h-[720px] min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
           style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
         >
-          <div className="flex h-full flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-r border-border bg-muted p-4">
-              {!isSidebarCollapsed && <h3 className="text-sm font-medium">Conversations</h3>}
+          <div className="flex h-full flex-col border-r border-stroke-divider overflow-hidden">
+            <div className="flex items-center justify-between h-14 bg-surface-bg-secondary px-5 py-2">
+              {!isSidebarCollapsed && <h3 className="text-sm font-semibold text-fg-primary">Conversations</h3>}
               <div className="flex items-center gap-1">
                 {!isSidebarCollapsed && (
                   <Button
@@ -169,7 +178,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                     aria-label="Create new conversation"
                     title="Create new conversation"
                   >
-                    <Plus className="size-4" />
+                    <IconShell size="sm" variant="secondary">
+                      <Plus />
+                    </IconShell>
                   </Button>
                 )}
                 <Button
@@ -179,23 +190,25 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                   className="size-6"
                   title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 >
-                  {isSidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+                  <IconShell size="sm" variant="secondary">
+                    {isSidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
+                  </IconShell>
                 </Button>
               </div>
             </div>
-            {!isSidebarCollapsed && (
-              <div className="min-h-0 flex-1 flex flex-col">
+            <ScrollArea className="flex-1 h-0">
+              {!isSidebarCollapsed && (
                 <ConversationSidebar
                   conversations={allConversations}
                   selectedId={selectedConversationId}
                   onSelect={setSelectedConversationId}
                 />
-              </div>
-            )}
+              )}
+            </ScrollArea>
           </div>
 
           {selectedConversationId ? (
-            <div className="flex h-full flex-col overflow-hidden border-r border-border">
+            <div className="flex h-full flex-col overflow-hidden">
               <MessageDisplay
                 conversationId={selectedConversationId}
                 sessionId={sessionId}
@@ -217,30 +230,25 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
               />
             </div>
           ) : (
-            <div className="flex h-full flex-col overflow-hidden border-r border-border">
-              <div className="flex items-center justify-between border-b border-border bg-muted p-4">
-                <h3 className="text-sm font-medium">No participant selected</h3>
+            <div className="flex h-full flex-col overflow-hidden">
+              <div className="flex items-center justify-between h-14 bg-surface-bg-secondary pl-4">
+                <h3 className="text-sm font-semibold text-fg-primary">No participant selected</h3>
               </div>
-              <div className="flex flex-1 items-center justify-center p-4">
-                <span className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-start flex-col gap-6 overflow-hidden bg-surface-bg-base p-4 outline outline-1 outline-offset-[-1px] outline-stroke-divider">
+                <span className="inline-flex items-center justify-center gap-1 rounded-full bg-surface-bg-primary px-3 py-2 text-xs font-normal leading-4 tracking-tight text-fg-tertiary outline outline-1 outline-offset-[-1px] outline-stroke-divider">
                   Create a conversation to start
                 </span>
               </div>
-              <div className="border-b border-r border-t border-border">
-                <div className="relative flex items-center gap-2 py-6 pl-6 pr-8 opacity-50 pointer-events-none">
-                  <div className="flex-1 min-h-[48px] resize-none border-0 bg-transparent pt-6 pb-3 pr-16 text-sm text-muted-foreground">
-                    Select a conversation to start messaging
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    disabled
-                    className="absolute right-10 h-9 w-9"
-                  >
-                    <Send className="size-4" />
-                  </Button>
-                </div>
-              </div>
+              <ChatInput
+                conversationId=""
+                sessionId={sessionId}
+                conversation={null}
+                onAddPendingMessage={handleAddPendingMessage}
+                onSetProcessing={handleSetProcessing}
+                onEnableQueries={handleEnableQueries}
+                showToolCalls={showToolCalls}
+                onShowToolCallsChange={setShowToolCalls}
+              />
             </div>
           )}
         </div>

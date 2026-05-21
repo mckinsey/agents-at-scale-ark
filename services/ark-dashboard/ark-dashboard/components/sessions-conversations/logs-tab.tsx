@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useGetEvents } from '@/lib/services/logs-hooks';
 import { logsService, type LogEvent } from '@/lib/services/logs';
 
@@ -62,42 +63,53 @@ function LogRow({ event, index }: LogRowProps) {
   const source = getEventSource(event);
 
   return (
-    <div className="border-b border-border/50 last:border-0">
+    <div className="border-b border-stroke-divider last:border-0">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-start gap-3 py-2 text-left transition-colors hover:bg-muted/50"
+        className="w-full py-2 text-left transition-colors hover:bg-stateslayer-overlay-hover"
       >
-        {isExpanded ? (
-          <ChevronDown className="mt-0.5 h-3 w-3 flex-shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="mt-0.5 h-3 w-3 flex-shrink-0 text-muted-foreground" />
-        )}
-        <span className="whitespace-nowrap text-muted-foreground">
-          {formatTimestamp(event.timestamp)}
-        </span>
-        <Badge variant={getLogLevelVariant(level)} className="shrink-0">
-          {level}
-        </Badge>
-        <span className="max-w-xs truncate text-muted-foreground">{source}</span>
-        <span className="min-w-0 flex-1 truncate">{event.message}</span>
+        <ScrollArea className="w-full">
+          <div className="flex items-start gap-3">
+            {isExpanded ? (
+              <ChevronDown className="mt-0.5 h-3 w-3 flex-shrink-0 text-fg-tertiary" />
+            ) : (
+              <ChevronRight className="mt-0.5 h-3 w-3 flex-shrink-0 text-fg-tertiary" />
+            )}
+            <span className="whitespace-nowrap text-fg-secondary text-xs font-normal leading-4">
+              {formatTimestamp(event.timestamp)}
+            </span>
+            <Badge variant={getLogLevelVariant(level)} size="sm" className="shrink-0">
+              {level}
+            </Badge>
+            <span className="whitespace-nowrap text-fg-tertiary text-xs font-normal leading-4">{source}</span>
+            <span className="whitespace-nowrap text-fg-primary text-sm font-normal leading-5">{event.message}</span>
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </button>
       {isExpanded && (
         <div className="ml-6 space-y-2 pb-3 pl-3">
           <div>
-            <div className="mb-1 text-xs font-medium text-muted-foreground">
+            <div className="mb-1 text-xs font-medium text-fg-secondary">
               Message
             </div>
-            <div className="rounded-md bg-muted p-2 text-sm">
-              {event.message}
-            </div>
+            <ScrollArea className="w-full">
+              <div className="bg-surface-bg-tertiary p-2 text-sm text-fg-primary whitespace-nowrap">
+                {event.message}
+              </div>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
           </div>
           <div>
-            <div className="mb-1 text-xs font-medium text-muted-foreground">
+            <div className="mb-1 text-xs font-medium text-fg-secondary">
               Event Data
             </div>
-            <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
-              {JSON.stringify(event.data, null, 2)}
-            </pre>
+            <ScrollArea className="w-full">
+              <pre className="bg-surface-bg-tertiary p-2 text-xs text-fg-primary">
+                {JSON.stringify(event.data, null, 2)}
+              </pre>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
           </div>
         </div>
       )}
@@ -139,7 +151,7 @@ export function LogsTab({ sessionId }: Props) {
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
+        <CardContent className="py-8 text-center text-fg-secondary">
           Loading events...
         </CardContent>
       </Card>
@@ -149,7 +161,7 @@ export function LogsTab({ sessionId }: Props) {
   if (error) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-destructive">
+        <CardContent className="py-8 text-center text-stroke-status-error">
           Failed to load events
         </CardContent>
       </Card>
@@ -159,7 +171,7 @@ export function LogsTab({ sessionId }: Props) {
   if (!data || data.items.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
+        <CardContent className="py-8 text-center text-fg-secondary">
           No events found for this session
         </CardContent>
       </Card>

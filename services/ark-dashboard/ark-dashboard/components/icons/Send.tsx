@@ -6,18 +6,20 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   readonly className?: string;
 }
 
-export function ChevronLeft({ className, ...props }: Readonly<IconProps>) {
+export function Send({ className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       className={cn('', className)}
       viewBox="0 0 16 16"
-      fill="currentColor"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       {...props}>
-      <g transform="translate(16 0) scale(-1 1)">
-        <path d="M8.63075 7.99993L5.56409 4.93326L6.26664 4.23071L10.0359 7.99993L6.26664 11.7691L5.56409 11.0666L8.63075 7.99993Z" />
-      </g>
+      <path d="M14.6668 1.3335L7.3335 8.66683" />
+      <path d="M14.6668 1.3335L10.0002 14.6668L7.3335 8.66683L1.3335 6.00016L14.6668 1.3335Z" />
     </svg>
   );
 }

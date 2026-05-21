@@ -6,6 +6,8 @@ import type { Conversation, ConversationMessage } from '@/lib/services/conversat
 import type { ChatMessage } from '@/lib/types/chat-message';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { IconShell } from '@/components/ui/icon-shell';
 import { SessionMessage } from './session-message';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
@@ -227,24 +229,28 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   }
 
   return (
-    <div className="min-h-0 flex flex-1 flex-col">
-      <div className="border-b border-border bg-muted p-4">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-b border-stroke-tertiary bg-surface-bg-secondary px-5 py-4">
         <div className="flex items-center gap-2">
-          {getParticipantIcon(participantType, { size: '4' })}
-          <span className="font-semibold">{stripNamespace(participantName)}</span>
-          <Badge className="border-0 bg-muted/50 capitalize text-muted-foreground">{participantType}</Badge>
+          <IconShell size="sm" className="opacity-100">
+            {getParticipantIcon(participantType, { size: '4' })}
+          </IconShell>
+          <span className="text-base font-semibold leading-6 text-fg-primary">{stripNamespace(participantName)}</span>
+          <span className="text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        <MessageContent
-          isTemporary={isTemporary}
-          messages={messages}
-          pendingMessages={pendingMessages}
-          participantName={participantName}
-          isProcessing={isProcessing}
-          showToolCalls={showToolCalls}
-        />
-      </div>
+      <ScrollArea className="flex-1 h-0 border-r border-stroke-divider">
+        <div className="space-y-4 p-4">
+          <MessageContent
+            isTemporary={isTemporary}
+            messages={messages}
+            pendingMessages={pendingMessages}
+            participantName={participantName}
+            isProcessing={isProcessing}
+            showToolCalls={showToolCalls}
+          />
+        </div>
+      </ScrollArea>
     </div>
   );
 }

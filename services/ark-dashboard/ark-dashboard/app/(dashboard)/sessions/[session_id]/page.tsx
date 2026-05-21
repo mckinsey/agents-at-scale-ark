@@ -2,19 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, MessageSquare, Users } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
+import { SessionConversationHeader } from '@/components/sessions-conversations/session-conversation-header';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 import { generateUUID } from '@/lib/utils/uuid';
-import { stripNamespace } from '@/lib/utils/participant';
-import { getParticipantIcon } from '@/lib/utils/participant-icon';
-import { cn } from '@/lib/utils';
-import type { ParticipantType } from '@/lib/services/conversations';
 
 const HISTORY_TAB = 'history';
 const LOGS_TAB = 'logs';
@@ -127,21 +123,10 @@ export default function SessionDetailPage() {
     minute: '2-digit',
     hour12: true,
   });
-  const sessionDate = `${dateStr} ${timeStr}`;
-
-  const participants = session.participants || [];
-  const conversationCount = session.conversationCount || 0;
-  const errorCount = session.errorCount || 0;
-  const sessionStatus = session.status;
-
-  const getStatusClassName = (status: string) => {
-    if (status === 'error') return 'border-red-500 text-white';
-    if (status === 'active') return 'border-blue-500 text-blue-500';
-    return 'border-border text-muted-foreground'; // idle
-  };
+  const formattedDate = `${dateStr} ${timeStr}`;
 
   return (
-    <div className="flex h-full flex-col space-y-6 p-8">
+    <div className="flex flex-col space-y-6 p-8">
       <button
         onClick={() => router.push('/session-history')}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -150,68 +135,24 @@ export default function SessionDetailPage() {
         Back to all sessions
       </button>
 
-      <div className="space-y-4 rounded-lg border bg-muted p-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-5">
-            <div className="flex items-center gap-2">
-              <div className="text-sm text-muted-foreground">{sessionDate}</div>
-            </div>
-            <div className="flex items-center gap-4 text-sm">
-              <h1 className="text-xl font-semibold">{session_id}</h1>
-              <div className="flex items-center gap-1">
-                <MessageSquare className="size-4 text-muted-foreground" />
-                <span className="font-medium">{conversationCount}</span>
-                <span className="text-muted-foreground">Conversations</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Users className="size-4 text-muted-foreground" />
-                <span className="font-medium">{participants.length}</span>
-                <span className="text-muted-foreground">Participants</span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-1">
-                <span className="size-2 rounded-full bg-red-500" />
-                <span className="font-medium">{errorCount}</span>
-                <span className="text-muted-foreground">errors</span>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {participants.map(p => (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
-                >
-                  {getParticipantIcon(p.type as ParticipantType)}
-                  <span>{stripNamespace(p.name)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <Badge
-            variant="alternative"
-            outline
-            className={cn('capitalize rounded-full', getStatusClassName(sessionStatus))}
-          >
-            {sessionStatus}
-          </Badge>
-        </div>
-      </div>
+      <SessionConversationHeader session={session} formattedDate={formattedDate} />
 
-      <Tabs defaultValue={HISTORY_TAB} className="flex flex-col">
-        <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto gap-4">
-          <TabsTrigger
-            value={HISTORY_TAB}
-            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
-          >
-            History
-          </TabsTrigger>
-          <TabsTrigger
-            value={LOGS_TAB}
-            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
-          >
-            Logs
-          </TabsTrigger>
-        </TabsList>
+      <div className="flex justify-start items-center overflow-hidden">
+        <Tabs defaultValue={HISTORY_TAB} className="flex-1 max-w-[1344px] flex flex-col">
+          <TabsList className="flex-1 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
+            <TabsTrigger
+              value={HISTORY_TAB}
+              className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
+            >
+              History
+            </TabsTrigger>
+            <TabsTrigger
+              value={LOGS_TAB}
+              className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
+            >
+              Logs
+            </TabsTrigger>
+          </TabsList>
 
         <TabsContent value={HISTORY_TAB} className="flex flex-col">
           <ConversationsTab
@@ -223,10 +164,11 @@ export default function SessionDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value={LOGS_TAB} className="flex flex-col">
-          <LogsTab sessionId={session_id} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value={LOGS_TAB} className="flex flex-col">
+            <LogsTab sessionId={session_id} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

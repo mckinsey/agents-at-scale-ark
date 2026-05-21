@@ -126,8 +126,12 @@
   --brand-accents-mckinsey-cyan: #00a9f4;
   --brand-accents-qb-accent: #00a9f4;
 
+  /** Data Viz Categorical */
+  --viz-categorical-08: #976fd1;
+
   /** Brand Accent Utility Colors */
   --color-brand-accents-qb-accent: var(--brand-accents-qb-accent);
+  --color-viz-categorical-08: var(--viz-categorical-08);
 
   /** Radius Tokens - Available as Tailwind utilities */
   --radius-round: var(--rad-round);

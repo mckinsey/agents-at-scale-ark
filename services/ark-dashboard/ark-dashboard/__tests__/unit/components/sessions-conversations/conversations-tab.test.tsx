@@ -249,7 +249,13 @@ describe('ConversationsTab', () => {
     expect(screen.getByTestId('conversation-id')).toHaveTextContent('conv-1');
   });
 
-  it('should show no selection state when no conversation selected', () => {
+  it('should show empty state when no conversations exist', () => {
+    // Mock empty conversations array
+    vi.mocked(useListConversations).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as any);
+
     render(
       <ConversationsTab
         sessionId="session-1"
@@ -258,8 +264,8 @@ describe('ConversationsTab', () => {
       />
     );
 
-    expect(screen.getByText('No participant selected')).toBeInTheDocument();
-    expect(screen.getByText('Create a conversation to start')).toBeInTheDocument();
+    // With no conversations, the Empty component shows
+    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
   });
 
   it('should toggle sidebar collapse', async () => {
@@ -298,12 +304,8 @@ describe('ConversationsTab', () => {
     );
 
     // Find and click the Plus button (in the sidebar header)
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
   });
@@ -320,11 +322,8 @@ describe('ConversationsTab', () => {
     );
 
     // Open dialog
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     // Select participant
     await user.click(screen.getByTestId('select-participant'));
@@ -468,11 +467,8 @@ describe('ConversationsTab', () => {
 
     // The NewConversationDialog should receive session participants
     // We can verify this by checking that the dialog can be opened
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
   });
