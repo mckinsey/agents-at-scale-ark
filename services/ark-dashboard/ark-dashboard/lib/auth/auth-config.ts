@@ -39,7 +39,7 @@ async function jwtCallback({
   }
 
   if (trigger === 'update' && session?.shouldRefreshToken) {
-    return await TokenManager.getNewAccessToken(token);
+    return await TokenManager.getNewAccessToken(token as Parameters<typeof TokenManager.getNewAccessToken>[0]);
   }
 
   return token;

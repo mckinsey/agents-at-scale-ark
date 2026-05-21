@@ -254,8 +254,8 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
       .filter(q => q.sessionId === sessionId && q.status?.phase === 'input-required')
       .sort((a, b) => {
         // Sort by creation time descending
-        const timeA = a.metadata?.creationTimestamp ? new Date(a.metadata.creationTimestamp).getTime() : 0;
-        const timeB = b.metadata?.creationTimestamp ? new Date(b.metadata.creationTimestamp).getTime() : 0;
+        const timeA = a.creationTimestamp ? new Date(a.creationTimestamp).getTime() : 0;
+        const timeB = b.creationTimestamp ? new Date(b.creationTimestamp).getTime() : 0;
         return timeB - timeA;
       });
 

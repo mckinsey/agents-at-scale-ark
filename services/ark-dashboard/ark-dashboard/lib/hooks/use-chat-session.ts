@@ -324,7 +324,7 @@ export function useChatSession({
 
         console.log('[HITL Debug] Processing regular chunk (not approval request)');
 
-        if (typedChunk.error) {
+        if ('error' in typedChunk && typedChunk.error) {
           hasError = true;
           errorMessage = typedChunk.error.message || 'An error occurred';
           queryName = typedChunk.ark?.query || '';
@@ -332,7 +332,7 @@ export function useChatSession({
           break;
         }
 
-        if (typedChunk?.id === 'chatcmpl-final' && typedChunk.ark) {
+        if ('id' in typedChunk && typedChunk.id === 'chatcmpl-final' && 'ark' in typedChunk && typedChunk.ark) {
           const arkData = typedChunk.ark;
 
           const returnedConversationId =
@@ -379,7 +379,7 @@ export function useChatSession({
           }
         }
 
-        if (typedChunk.ark) {
+        if ('ark' in typedChunk && typedChunk.ark) {
           const arkData = typedChunk.ark;
 
           if (arkData.systemMessage) {
@@ -410,7 +410,7 @@ export function useChatSession({
           }
         }
 
-        const delta = typedChunk?.choices?.[0]?.delta;
+        const delta = 'choices' in typedChunk ? typedChunk?.choices?.[0]?.delta : undefined;
         if (delta?.content) {
           accumulatedContent += delta.content;
         }
@@ -464,7 +464,7 @@ export function useChatSession({
           return updated;
         });
 
-        const finishReason = typedChunk?.choices?.[0]?.finish_reason;
+        const finishReason = 'choices' in typedChunk ? typedChunk?.choices?.[0]?.finish_reason : undefined;
         if (finishReason === 'stop') {
           turnComplete = true;
         }
