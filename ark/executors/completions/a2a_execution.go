@@ -4,6 +4,7 @@ package completions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -78,6 +79,13 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if agentAnnotations[arkann.A2AStreamingSupported] == TrueString && eventStream != nil {
 		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, eventStream, &a2aServer)
 		if err != nil {
+			// If the context was canceled, return the cancellation error immediately.
+			// Do not fall back to blocking SendMessage, as it would run in a dead context
+			// and produce misleading errors (e.g., secret resolution failures).
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution canceled: %v", err), err, operationData)
+				return nil, err
+			}
 			log.Error(err, "A2A streaming failed, falling back to blocking", "agent", agentName)
 		} else {
 			e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)

@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -191,4 +192,57 @@ func TestExtractTextFromTaskStatus(t *testing.T) {
 		}
 		assert.Equal(t, "", extractTextFromTaskStatus(task))
 	})
+}
+
+func TestConsumeA2AStreamEventsContextCanceled(t *testing.T) {
+	// Create a context that is already canceled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	stream := &mockEventStream{}
+
+	// consumeA2AStreamEvents should return immediately with context.Canceled error
+	_, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestConsumeA2AStreamEventsContextDeadlineExceeded(t *testing.T) {
+	// Create a context with an already-passed deadline
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
+	defer cancel()
+
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	stream := &mockEventStream{}
+
+	// consumeA2AStreamEvents should return immediately with context.DeadlineExceeded error
+	_, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestConsumeA2AStreamEventsPartialContentBeforeCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	stream := &mockEventStream{}
+
+	// Send one event then cancel the context
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskArtifactUpdateEvent{
+			TaskID: "task-1",
+			Artifact: protocol.Artifact{
+				Parts: []protocol.Part{protocol.NewTextPart("partial content")},
+			},
+		},
+	}
+	cancel()
+
+	// consumeA2AStreamEvents should return context.Canceled
+	// The partial content was received but the stream was interrupted
+	_, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	// Verify that the partial chunk was streamed before cancellation
+	assert.Len(t, stream.chunks, 1)
 }
