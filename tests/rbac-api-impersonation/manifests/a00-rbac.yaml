@@ -1,0 +1,304 @@
+# RBAC configuration for API impersonation testing
+# Creates RoleBindings for test groups (ark-admin and ark-viewers)
+# Uses the ClusterRoles shipped with Ark for viewer/editor/admin access
+
+---
+# Admin role binding for agents
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-agents
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: agent-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for models
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-models
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: model-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for queries
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-queries
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: query-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for teams
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-teams
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: team-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for tools
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-tools
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: tool-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for memories
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-memories
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: memory-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for mcpservers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-mcpservers
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: mcpserver-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for a2aservers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-a2aservers
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: a2aserver-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for a2atasks
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-a2atasks
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: a2atask-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Admin role binding for executionengines
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-admin-executionengines
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: executionengine-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for agents
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-agents
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: agent-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for models
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-models
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: model-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for queries
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-queries
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: query-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for teams
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-teams
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: team-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for tools
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-tools
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: tool-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for memories
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-memories
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: memory-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for mcpservers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-mcpservers
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: mcpserver-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for a2aservers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-a2aservers
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: a2aserver-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for a2atasks
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-a2atasks
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: a2atask-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Viewer role binding for executionengines
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-executionengines
+  namespace: ($namespace)
+subjects:
+  - kind: Group
+    name: ark-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: executionengine-viewer-role
+  apiGroup: rbac.authorization.k8s.io

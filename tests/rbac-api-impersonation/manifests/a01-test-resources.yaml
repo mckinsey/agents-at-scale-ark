@@ -1,0 +1,26 @@
+# Test resources for RBAC validation
+# Creates a simple model and agent that will be used for permission testing
+
+---
+apiVersion: ark.mckinsey.com/v1
+kind: Model
+metadata:
+  name: test-model
+  namespace: ($namespace)
+spec:
+  provider: openai
+  modelId: gpt-4o-mini
+  apiKeySecret:
+    name: test-openai-secret
+    key: apiKey
+---
+apiVersion: ark.mckinsey.com/v1
+kind: Agent
+metadata:
+  name: test-agent
+  namespace: ($namespace)
+spec:
+  model:
+    name: test-model
+  systemPrompt: |
+    You are a test agent used for RBAC validation.
