@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { ChevronLeft, ChevronRight, Plus } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -34,6 +34,12 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeNewConversationPanel = useCallback(() => {
+    setIsCreatingConversation(false);
+    requestAnimationFrame(() => createButtonRef.current?.focus());
+  }, []);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -115,7 +121,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
     };
     setTemporaryConversations((prev) => [...prev, newConversation]);
     setSelectedConversationId(conversationId);
-    setIsCreatingConversation(false);
+    closeNewConversationPanel();
   };
 
   const handleAddPendingMessage = (conversationId: string, content: string) => {
@@ -172,6 +178,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
               <div className="flex items-center gap-1">
                 {!isSidebarCollapsed && (
                   <Button
+                    ref={createButtonRef}
                     variant="ghost"
                     size="icon"
                     onClick={() => setIsCreatingConversation(true)}
@@ -202,7 +209,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
               <NewConversationPanel
                 sessionParticipants={session?.participants || []}
                 onSelectParticipant={handleSelectParticipant}
-                onCancel={() => setIsCreatingConversation(false)}
+                onCancel={closeNewConversationPanel}
               />
             ) : (
               <ScrollArea className="flex-1 h-0">

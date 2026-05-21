@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search } from '@/components/icons/Search';
 import {
   InputGroup,
@@ -29,6 +29,14 @@ export function NewConversationPanel({
 }: Props) {
   const [search, setSearch] = useState('');
   const { data: allParticipants = [] } = useParticipants();
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onCancel]);
 
   const { inSession, filteredAllParticipants } = useMemo(() => {
     const sessionParticipantsList: Participant[] = sessionParticipants.map(p => ({
