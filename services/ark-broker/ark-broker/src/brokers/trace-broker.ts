@@ -1,6 +1,6 @@
 import {BrokerItem} from './stream/broker-item.js';
 import {BrokerItemStream} from './stream/broker-item-stream.js';
-import type {Logger} from '../logging/logger.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
 
 export function spanMatchesSessionId(

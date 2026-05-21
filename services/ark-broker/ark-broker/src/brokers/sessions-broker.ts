@@ -1,7 +1,7 @@
 import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {EventEmitter} from 'node:events';
-import type {Logger} from '../logging/logger.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import type {PaginationParams, PaginatedList} from './pagination.js';
 
 export type QueryPhase =

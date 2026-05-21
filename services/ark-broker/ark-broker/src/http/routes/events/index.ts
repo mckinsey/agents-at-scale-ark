@@ -1,7 +1,10 @@
 import {Router} from 'express';
 import {EventBroker, EventData} from '@ark-broker/brokers/event-broker.js';
 import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
-import {sendValidationError, sendInternalError} from '../errors.js';
+import {
+  sendValidationError,
+  sendInternalError,
+} from '@ark-broker/http/routes/errors.js';
 import {
   getEventsQuerySchema,
   GetEventsQuery,

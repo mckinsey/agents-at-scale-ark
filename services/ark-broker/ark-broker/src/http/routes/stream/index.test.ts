@@ -2,8 +2,8 @@ import request from 'supertest';
 import express from 'express';
 import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker';
 import {createLogger} from '@ark-broker/logging/logger';
-import {createHttpLogger} from '../../middleware/http-logger';
-import {requestId} from '../../middleware/request-id';
+import {createHttpLogger} from '@ark-broker/http/middleware/http-logger';
+import {requestId} from '@ark-broker/http/middleware/request-id';
 import {createStreamRouter} from './index';
 import {
   createTextChunk,

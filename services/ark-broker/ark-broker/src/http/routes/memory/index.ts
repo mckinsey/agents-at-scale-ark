@@ -2,7 +2,10 @@ import {Router} from 'express';
 import {randomUUID} from 'crypto';
 import {MemoryBroker} from '@ark-broker/brokers/memory-broker.js';
 import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
-import {sendValidationError, sendInternalError} from '../errors.js';
+import {
+  sendValidationError,
+  sendInternalError,
+} from '@ark-broker/http/routes/errors.js';
 import {
   postMessagesBodySchema,
   PostMessagesBody,

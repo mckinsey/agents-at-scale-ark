@@ -1,6 +1,6 @@
 import {Router} from 'express';
 import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker.js';
-import {streamSSE} from '../../sse.js';
+import {streamSSE} from '@ark-broker/http/sse.js';
 import {
   parsePaginationParams,
   PaginationError,
@@ -9,7 +9,7 @@ import {
   sendValidationError,
   sendPaginationError,
   sendInternalError,
-} from '../errors.js';
+} from '@ark-broker/http/routes/errors.js';
 import {
   getStreamQuerySchema,
   GetStreamQuery,
