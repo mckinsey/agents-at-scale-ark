@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';

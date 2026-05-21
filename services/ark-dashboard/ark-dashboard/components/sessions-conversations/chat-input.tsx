@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { NumericBadge } from '@/components/ui/badge';
-import { Send, Wrench } from 'lucide-react';
+import { Send, SingleTool } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import { toast } from 'sonner';
@@ -78,9 +79,9 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
   };
 
   return (
-    <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider inline-flex flex-col justify-start items-start overflow-hidden">
+    <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden">
       <div className="self-stretch px-4 pt-3 flex flex-col justify-start items-start gap-4">
-        <div className="w-full h-16 p-3 bg-surface-bg-primary inline-flex justify-start items-center gap-2">
+        <div className="w-full h-16 p-3 bg-surface-bg-primary flex justify-start items-center gap-2">
           <Input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -97,17 +98,21 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
             size="icon"
             className="size-8 bg-surface-bg-tertiary hover:bg-surface-bg-tertiary/80 flex justify-center items-center"
           >
-            <Send className="size-4" />
+            <IconShell size="sm" className="opacity-100 [&_svg]:fill-none">
+              <Send />
+            </IconShell>
           </Button>
         </div>
 
-        <div className="self-stretch inline-flex justify-between items-center pb-2">
-          <div className="inline-flex justify-start items-center gap-5">
+        <div className="self-stretch flex justify-between items-center pb-2">
+          <div className="flex justify-start items-center gap-5">
             <div className="relative">
-              <Wrench className="size-4 opacity-60" />
+              <IconShell size="sm" variant="secondary" className="[&_svg]:fill-none">
+                <SingleTool />
+              </IconShell>
               {toolCallCount > 0 && (
-                <div className="absolute" style={{ right: '-8px', top: '-8px' }}>
-                  <NumericBadge size="sm" className="bg-zinc-200 text-gray-900/90">
+                <div className="absolute -right-2 -top-2">
+                  <NumericBadge size="sm">
                     {toolCallCount}
                   </NumericBadge>
                 </div>

@@ -3,10 +3,9 @@
 import { useState } from 'react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { IconShell } from '@/components/ui/icon-shell';
-import { ChevronRight } from '@/components/icons';
+import { ChevronRight, ErrorIcon } from '@/components/icons';
 import { SmartToy } from '@/components/icons/SmartToy';
 import { Handyman } from '@/components/icons/Handyman';
-import { AlertCircle } from 'lucide-react';
 import { type ToolCallData } from '@/components/chat/tool-call';
 import { cn } from '@/lib/utils';
 
@@ -27,8 +26,9 @@ function hasToolError(toolCall: ToolCallData): boolean {
 }
 
 function getToolIconColor(toolCall: ToolCallData): string {
-  // Red for errors, violet for success
-  return hasToolError(toolCall) ? 'bg-red-400/5 text-red-400' : 'bg-violet-500/5 text-violet-500';
+  return hasToolError(toolCall)
+    ? 'bg-status-error/10 text-status-error'
+    : 'bg-status-information/10 text-status-information';
 }
 
 function ToolCallTreeItem({ toolCall }: { toolCall: ToolCallData }) {
@@ -53,14 +53,16 @@ function ToolCallTreeItem({ toolCall }: { toolCall: ToolCallData }) {
       </div>
 
       {/* Input/Output container with additional indentation */}
-      <div className="flex flex-col gap-0" style={{ paddingLeft: '20px' }}>
+      <div className="flex flex-col gap-0 pl-5">
         {/* Input section */}
         <div className="flex gap-0">
-          <div className="w-5 h-5 border-l border-b border-stroke-divider" style={{ minHeight: '20px' }} />
+          <div className="w-5 h-5 min-h-5 border-l border-b border-stroke-divider" />
           <div className="flex-1">
             <Collapsible open={inputOpen} onOpenChange={setInputOpen}>
               <CollapsibleTrigger className="flex items-center gap-2 p-2 text-left hover:bg-stateslayer-overlay-hover transition-colors w-full">
-                <ChevronRight className={cn('size-4 transition-transform', inputOpen && 'rotate-90')} />
+                <IconShell size="sm" className={cn('transition-transform', inputOpen && 'rotate-90')}>
+                  <ChevronRight />
+                </IconShell>
                 <span className="text-fg-secondary text-sm leading-5">Input</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
@@ -77,11 +79,13 @@ function ToolCallTreeItem({ toolCall }: { toolCall: ToolCallData }) {
         {/* Output section */}
         {hasOutput && (
           <div className="flex gap-0">
-            <div className="w-5 h-5 border-l border-b border-stroke-divider rounded-bl" style={{ minHeight: '20px' }} />
+            <div className="w-5 h-5 min-h-5 border-l border-b border-stroke-divider rounded-bl" />
             <div className="flex-1">
               <Collapsible open={outputOpen} onOpenChange={setOutputOpen}>
                 <CollapsibleTrigger className="flex items-center gap-2 p-2 text-left hover:bg-stateslayer-overlay-hover transition-colors w-full">
-                  <ChevronRight className={cn('size-4 transition-transform', outputOpen && 'rotate-90')} />
+                  <IconShell size="sm" className={cn('transition-transform', outputOpen && 'rotate-90')}>
+                    <ChevronRight />
+                  </IconShell>
                   <span className="text-fg-secondary text-sm leading-5">Output</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -89,13 +93,13 @@ function ToolCallTreeItem({ toolCall }: { toolCall: ToolCallData }) {
                     <pre className="text-fg-tertiary text-xs leading-4 whitespace-pre-wrap break-words overflow-hidden">
                       {toolCall.result}
                     </pre>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -140,7 +144,9 @@ export function SessionMessage({
         <div className={cn('flex flex-col items-start', className)}>
           <div className="pl-4 text-sm max-w-[80%]">
             <div className="flex items-center gap-2 py-1.5">
-              <AlertCircle className="text-fg-secondary h-4 w-4 flex-shrink-0" />
+              <IconShell size="sm" variant="secondary" className="flex-shrink-0">
+                <ErrorIcon />
+              </IconShell>
               <span className="text-fg-secondary text-xs font-medium">System</span>
             </div>
             <div className="mt-1 pl-6">
@@ -160,7 +166,7 @@ export function SessionMessage({
     <div className={cn('flex flex-col', className)}>
       {/* Agent header row */}
       <div className="flex items-start gap-2">
-        <IconShell size="sm" className="size-6 bg-sky-500/10 text-sky-500">
+        <IconShell size="sm" className="size-6 bg-brand-accents-qb-accent/10 text-brand-accents-qb-accent">
           <SmartToy className="size-4" />
         </IconShell>
         <div className="flex-1 flex flex-col gap-1">
@@ -189,7 +195,7 @@ export function SessionMessage({
 
       {/* Tool calls tree - indented to align with center of icon */}
       {hasToolCalls && showToolCalls && (
-        <div className="pl-3 flex flex-col gap-2 relative" style={{ marginTop: '8px' }}>
+        <div className="pl-3 flex flex-col gap-2 relative mt-2">
           {/* Vertical line at 12px - only extends to first tool's connector */}
           <div className="absolute left-3 top-0 w-px bg-stroke-divider h-2" />
 

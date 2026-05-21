@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
@@ -161,7 +162,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       ) : (
         <div
-          className="grid h-[720px] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
+          className="grid h-[720px] min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
           style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
         >
           <div className="flex h-full flex-col border-r border-stroke-divider overflow-hidden">
@@ -177,7 +178,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                     aria-label="Create new conversation"
                     title="Create new conversation"
                   >
-                    <Plus className="size-4" />
+                    <IconShell size="sm" variant="secondary">
+                      <Plus />
+                    </IconShell>
                   </Button>
                 )}
                 <Button
@@ -187,7 +190,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                   className="size-6"
                   title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 >
-                  {isSidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+                  <IconShell size="sm" variant="secondary">
+                    {isSidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
+                  </IconShell>
                 </Button>
               </div>
             </div>

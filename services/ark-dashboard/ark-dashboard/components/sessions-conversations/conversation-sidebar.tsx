@@ -1,9 +1,8 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { ChatBubble } from '@/components/icons/ChatBubble';
-import { Handyman } from '@/components/icons/Handyman';
-import { Schedule } from '@/components/icons/Schedule';
+import { ChatBubble, Handyman, Schedule } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
@@ -55,17 +54,19 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
             type="button"
             data-testid="conversation-item"
             className={cn(
-              'relative h-auto w-full inline-flex justify-start items-start text-left cursor-pointer transition-colors',
+              'relative h-auto w-full flex justify-start items-start text-left cursor-pointer transition-colors',
               isSelected && 'bg-stateslayer-overlay-hover',
               !isSelected && 'hover:bg-stateslayer-overlay-hover'
             )}
             onClick={() => onSelect(conv.conversationId)}
           >
             <div className={cn('w-px self-stretch', getStatusBorderClass(status))} />
-            <div className="flex-1 px-3 py-2 inline-flex flex-col justify-start items-start gap-3">
-              <div className="self-stretch inline-flex justify-between items-center">
+            <div className="flex-1 px-3 py-2 flex flex-col justify-start items-start gap-3">
+              <div className="self-stretch flex justify-between items-center">
                 <div className="flex justify-start items-center gap-1">
-                  {getParticipantIcon(conv.participantType, { name: conv.name, size: '4' })}
+                  <IconShell size="sm" className="opacity-100">
+                    {getParticipantIcon(conv.participantType, { name: conv.name, size: '4' })}
+                  </IconShell>
                   <span
                     className="text-sm font-normal leading-5 line-clamp-1 text-fg-primary"
                     data-testid="conversation-participant-name"
@@ -78,22 +79,28 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
                 </span>
               </div>
 
-              <div className="inline-flex justify-start items-center gap-2">
+              <div className="flex justify-start items-center gap-2">
                 <span className="flex justify-start items-center gap-1">
-                  <ChatBubble className="size-4 opacity-60" />
+                  <IconShell size="sm" variant="secondary">
+                    <ChatBubble />
+                  </IconShell>
                   <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
                     {conv.messageCount}
                   </span>
                 </span>
                 <span className="flex justify-start items-center gap-1">
-                  <Handyman className="size-4 opacity-60" />
+                  <IconShell size="sm" variant="secondary">
+                    <Handyman />
+                  </IconShell>
                   <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
                     {conv.toolCallCount}
                   </span>
                 </span>
                 {conv.duration !== 'ongoing' && (
                   <span className="flex justify-start items-center gap-1">
-                    <Schedule className="size-4 opacity-60" />
+                    <IconShell size="sm" variant="secondary">
+                      <Schedule />
+                    </IconShell>
                     <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
                       {conv.duration}
                     </span>
