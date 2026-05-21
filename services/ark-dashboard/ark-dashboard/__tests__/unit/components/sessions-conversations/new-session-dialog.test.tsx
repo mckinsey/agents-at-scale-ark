@@ -10,8 +10,8 @@ import { toolsService } from '@/lib/services/tools';
 vi.mock('@/lib/services/agents');
 vi.mock('@/lib/services/teams');
 vi.mock('@/lib/services/tools');
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: () => ({ push: vi.fn() }),
 }));
 vi.mock('@/lib/utils/uuid', () => ({
   generateUUID: () => 'test-uuid-123',
@@ -132,7 +132,7 @@ describe('NewSessionDialog', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Agents'));
+    await user.click(screen.getByRole('button', { name: 'Agents' }));
 
     await waitFor(() => {
       expect(screen.getByText('agent-1')).toBeInTheDocument();
@@ -154,8 +154,8 @@ describe('NewSessionDialog', () => {
     const createButton = screen.getByRole('button', { name: /create/i });
     expect(createButton).toBeDisabled();
 
-    const radio = screen.getAllByRole('radio')[0];
-    await user.click(radio);
+    const checkbox = screen.getAllByRole('checkbox')[0];
+    await user.click(checkbox);
 
     expect(createButton).not.toBeDisabled();
   });
@@ -171,8 +171,8 @@ describe('NewSessionDialog', () => {
 
     expect(screen.getByText('0 participants selected')).toBeInTheDocument();
 
-    const radio = screen.getAllByRole('radio')[0];
-    await user.click(radio);
+    const checkbox = screen.getAllByRole('checkbox')[0];
+    await user.click(checkbox);
 
     expect(screen.getByText('1 participant selected')).toBeInTheDocument();
   });
