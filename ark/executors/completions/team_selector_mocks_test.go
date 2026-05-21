@@ -32,7 +32,7 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
-func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	return &ExecutionResult{}, nil
 }
 
@@ -42,6 +42,8 @@ type mockSelectorAgent struct {
 	returnTerminateResponse string
 	returnError             error
 	capturedHistory         []Message
+	capturedOptions         ExecuteOptions
+	executeCalls            int
 	tools                   *ToolRegistry
 }
 
@@ -52,8 +54,10 @@ func newMockSelectorAgent() *mockSelectorAgent {
 	}
 }
 
-func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockSelectorAgent) Execute(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	m.capturedHistory = history
+	m.capturedOptions = opts
+	m.executeCalls++
 	if m.returnError != nil {
 		return nil, m.returnError
 	}
@@ -101,7 +105,7 @@ type mockSelectorAgentNoTool struct {
 	tools *ToolRegistry
 }
 
-func (m *mockSelectorAgentNoTool) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockSelectorAgentNoTool) Execute(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	return &ExecutionResult{Messages: []Message{NewAssistantMessage("I pick researcher")}}, nil
 }
 

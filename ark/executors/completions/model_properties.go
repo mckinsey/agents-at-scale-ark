@@ -74,6 +74,15 @@ func getIntProperty(properties map[string]string, key string, defaultValue int) 
 	return defaultValue
 }
 
+func applyToolChoiceToParams(toolChoice ToolChoice, params *openai.ChatCompletionNewParams) {
+	if toolChoice == ToolChoiceUnset {
+		return
+	}
+	params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+		OfAuto: openai.String(string(toolChoice)),
+	}
+}
+
 // applyStructuredOutputToParams applies structured output schema to OpenAI parameters
 func applyStructuredOutputToParams(outputSchema *runtime.RawExtension, schemaName string, params *openai.ChatCompletionNewParams) {
 	if outputSchema != nil && outputSchema.Raw != nil {

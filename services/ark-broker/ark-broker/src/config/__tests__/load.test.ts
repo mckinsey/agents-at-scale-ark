@@ -1,0 +1,92 @@
+import {loadConfig} from '../load.js';
+
+describe('loadConfig', () => {
+  it('parses an empty env using defaults', () => {
+    const cfg = loadConfig({});
+
+    expect(cfg.nodeEnv).toBe('production');
+    expect(cfg.logLevel).toBe('info');
+    expect(cfg.server.port).toBe(8080);
+    expect(cfg.server.host).toBe('0.0.0.0');
+    expect(cfg.server.requestTimeoutMs).toBe(0);
+    expect(cfg.limits.maxMessages).toBe(0);
+    expect(cfg.limits.maxChunks).toBe(0);
+    expect(cfg.limits.maxSpans).toBe(0);
+    expect(cfg.limits.maxEvents).toBe(0);
+    expect(cfg.persistence.memoryFilePath).toBeUndefined();
+    expect(cfg.persistence.streamFilePath).toBeUndefined();
+    expect(cfg.persistence.traceFilePath).toBeUndefined();
+    expect(cfg.persistence.eventFilePath).toBeUndefined();
+    expect(cfg.persistence.sessionsFilePath).toBeUndefined();
+  });
+
+  it('honors provided values', () => {
+    const cfg = loadConfig({
+      NODE_ENV: 'development',
+      LOG_LEVEL: 'debug',
+      PORT: '9000',
+      HOST: '127.0.0.1',
+      REQUEST_TIMEOUT_MS: '5000',
+      MAX_MESSAGES: '100',
+      MAX_CHUNKS: '500',
+      MAX_SPANS: '50',
+      MAX_EVENTS: '200',
+      MEMORY_FILE_PATH: '/tmp/m.json',
+      STREAM_FILE_PATH: '/tmp/s.json',
+      TRACE_FILE_PATH: '/tmp/t.json',
+      EVENT_FILE_PATH: '/tmp/e.json',
+      SESSIONS_FILE_PATH: '/tmp/se.json',
+    });
+
+    expect(cfg.nodeEnv).toBe('development');
+    expect(cfg.logLevel).toBe('debug');
+    expect(cfg.server.port).toBe(9000);
+    expect(cfg.server.host).toBe('127.0.0.1');
+    expect(cfg.server.requestTimeoutMs).toBe(5000);
+    expect(cfg.limits.maxMessages).toBe(100);
+    expect(cfg.limits.maxChunks).toBe(500);
+    expect(cfg.limits.maxSpans).toBe(50);
+    expect(cfg.limits.maxEvents).toBe(200);
+    expect(cfg.persistence.memoryFilePath).toBe('/tmp/m.json');
+    expect(cfg.persistence.streamFilePath).toBe('/tmp/s.json');
+    expect(cfg.persistence.traceFilePath).toBe('/tmp/t.json');
+    expect(cfg.persistence.eventFilePath).toBe('/tmp/e.json');
+    expect(cfg.persistence.sessionsFilePath).toBe('/tmp/se.json');
+  });
+
+  it('rejects an unknown log level', () => {
+    expect(() => loadConfig({LOG_LEVEL: 'verbose'})).toThrow();
+  });
+
+  it('rejects an unknown node environment', () => {
+    expect(() => loadConfig({NODE_ENV: 'staging'})).toThrow();
+  });
+
+  it('rejects a non-numeric integer field', () => {
+    expect(() => loadConfig({PORT: 'eight-thousand'})).toThrow();
+  });
+
+  it('rejects negative integers', () => {
+    expect(() => loadConfig({MAX_MESSAGES: '-1'})).toThrow();
+  });
+
+  it('returns a frozen object at the top level and on each slice', () => {
+    const cfg = loadConfig({});
+
+    expect(Object.isFrozen(cfg)).toBe(true);
+    expect(Object.isFrozen(cfg.server)).toBe(true);
+    expect(Object.isFrozen(cfg.limits)).toBe(true);
+    expect(Object.isFrozen(cfg.persistence)).toBe(true);
+  });
+
+  it('throws when attempting to mutate the frozen object', () => {
+    const cfg = loadConfig({});
+
+    expect(() =>
+      Object.defineProperty(cfg, 'logLevel', {value: 'debug'})
+    ).toThrow();
+    expect(() =>
+      Object.defineProperty(cfg.server, 'port', {value: 1234})
+    ).toThrow();
+  });
+});

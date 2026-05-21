@@ -1,41 +1,57 @@
-import { createRequire } from 'module';
-import app, { memory, chunks, traces, events, sessions } from './server.js';
-import { setupSwagger } from './swagger.js';
+import {createRequire} from 'module';
+import {loadConfig, type AppConfig} from './config/index.js';
+import {createLogger} from './logging/logger.js';
+import {buildApp} from './server.js';
 
 const require = createRequire(import.meta.url);
-const { version } = require('../package.json');
+const {version} = require('../package.json');
 
-setupSwagger(app, version);
-
-const PORT = process.env.PORT || '8080';
-const HOST = process.env.HOST || '0.0.0.0';
-const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '0', 10);
-
-const server = app.listen(Number.parseInt(PORT), HOST, () => {
-  console.log(`ARK Broker service running on http://${HOST}:${PORT}`);
+const logger = createLogger({
+  level: 'info',
+  pretty: process.env.NODE_ENV === 'development',
 });
 
-server.requestTimeout = REQUEST_TIMEOUT_MS;
+let config: AppConfig;
+try {
+  config = loadConfig(process.env);
+} catch (err) {
+  logger.error({err}, 'invalid configuration');
+  process.exit(1);
+}
+
+logger.level = config.logLevel;
+
+const {app, brokers} = buildApp({config, logger, version});
+const {memory, chunks, traces, events, sessions} = brokers;
+
+const server = app.listen(config.server.port, config.server.host, () => {
+  logger.info(
+    {host: config.server.host, port: config.server.port},
+    'ark-broker listening'
+  );
+});
+
+server.requestTimeout = config.server.requestTimeoutMs;
 
 const gracefulShutdown = (): void => {
-  console.log('Shutting down gracefully');
+  logger.info('shutting down gracefully');
   memory.save();
   chunks.save();
   traces.save();
   events.save();
   sessions.save();
   server.close(() => {
-    console.log('Process terminated');
+    logger.info('process terminated');
     process.exit(0);
   });
 };
 
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received');
+  logger.info('SIGTERM received');
   gracefulShutdown();
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received');
+  logger.info('SIGINT received');
   gracefulShutdown();
 });

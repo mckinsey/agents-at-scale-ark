@@ -31,16 +31,11 @@ func (ap *AnthropicProvider) SetOutputSchema(schema *runtime.RawExtension, schem
 	ap.schemaName = schemaName
 }
 
-func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	var toolsParam []openai.ChatCompletionToolParam
-	if len(tools) > 0 {
-		toolsParam = tools[0]
-	}
-
+func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
-	anthropicTools := convertToolsToAnthropic(toolsParam)
+	anthropicTools := convertToolsToAnthropic(tools)
 
-	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, ap.Properties)
+	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, ap.Properties)
 	request.Model = ap.Model
 
 	version := ap.Version
@@ -90,8 +85,8 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 	return convertAnthropicResponse(response), nil
 }
 
-func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	completion, err := ap.ChatCompletion(ctx, messages, n, tools...)
+func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+	completion, err := ap.ChatCompletion(ctx, messages, n, tools, toolChoice)
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +114,6 @@ func (ap *AnthropicProvider) BuildConfig() map[string]any {
 
 func (ap *AnthropicProvider) HealthCheck(ctx context.Context) error {
 	testMessages := []Message{NewUserMessage("Hello")}
-	_, err := ap.ChatCompletion(ctx, testMessages, 1)
+	_, err := ap.ChatCompletion(ctx, testMessages, 1, nil, ToolChoiceUnset)
 	return err
 }
