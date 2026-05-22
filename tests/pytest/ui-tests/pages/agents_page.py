@@ -253,11 +253,7 @@ class AgentsPage(BasePage):
             for tool_name in tools:
                 self._select_tool(tool_name)
         
-        save_button = self.page.locator("button:has-text('Create Agent'), button:has-text('Save Changes')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        save_button = self.page.locator(self.SAVE_BUTTON).first
         
         logger.info("Clicking Create/Save button")
         save_button.scroll_into_view_if_needed()
