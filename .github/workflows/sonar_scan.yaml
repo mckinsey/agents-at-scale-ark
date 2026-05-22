@@ -36,7 +36,7 @@ jobs:
 
       - name: Download coverage artifacts
         id: download-coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: coverage-*
           path: coverage-artifacts
