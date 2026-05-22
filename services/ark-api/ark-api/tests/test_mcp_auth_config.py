@@ -62,6 +62,12 @@ class TestValidateCallbackUrl(unittest.TestCase):
             _validate_callback_url("https://:8080/api/v1/mcp/auth/callback")
         self.assertIn("missing host", str(ctx.exception))
 
+    def test_http_nip_io_loopback_is_accepted(self):
+        result = _validate_callback_url(
+            "http://ark-api.default.127.0.0.1.nip.io:8080/api/v1/mcp/auth/callback"
+        )
+        self.assertIn("nip.io", result)
+
     def test_extra_path_segments_are_preserved_and_callback_appended(self):
         result = _validate_callback_url("https://ark.example.com/proxy")
         self.assertTrue(result.endswith(CALLBACK_PATH))

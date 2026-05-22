@@ -11,6 +11,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import socket
 from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,24 @@ _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 
 class McpAuthConfigError(ValueError):
     """Raised when MCP-auth configuration is invalid."""
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host in _LOOPBACK_HOSTS:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_loopback:
+            return True
+    except ValueError:
+        pass
+    try:
+        resolved = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        return all(
+            ipaddress.ip_address(addr[4][0]).is_loopback for addr in resolved
+        )
+    except (socket.gaierror, ValueError):
+        return False
 
 
 def _validate_callback_url(raw: str) -> str:
@@ -58,16 +77,7 @@ def _validate_callback_url(raw: str) -> str:
     if not host:
         raise McpAuthConfigError("ARK_API_PUBLIC_CALLBACK_URL is missing host")
 
-    is_loopback = False
-    if host == "localhost" or host == "127.0.0.1":
-        is_loopback = True
-    else:
-        try:
-            ip = ipaddress.ip_address(host)
-            if ip.is_loopback:
-                is_loopback = True
-        except ValueError:
-            pass
+    is_loopback = _is_loopback_host(host)
 
     if parts.scheme == "http" and not is_loopback:
         raise McpAuthConfigError(
