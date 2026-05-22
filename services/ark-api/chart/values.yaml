@@ -82,7 +82,7 @@ app:
     # localhost). The path /api/v1/mcp/auth/callback is appended automatically
     # if the configured URL has no path.
     - name: ARK_API_PUBLIC_CALLBACK_URL
-      value: ""
+      value: "http://localhost:8088/api/v1/mcp/auth/callback"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"
