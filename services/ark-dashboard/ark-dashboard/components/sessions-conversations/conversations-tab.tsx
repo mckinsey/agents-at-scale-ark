@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { ChevronLeft, ChevronRight, Plus } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -12,7 +12,7 @@ import { sessionPendingMessagesAtom, sessionProcessingStateAtom } from '@/atoms/
 import { ConversationSidebar } from './conversation-sidebar';
 import { MessageDisplay } from './message-display';
 import { ChatInput } from './chat-input';
-import { NewConversationDialog } from './new-conversation-dialog';
+import { NewConversationPanel } from './new-conversation-panel';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
@@ -33,7 +33,13 @@ interface Props {
 export function ConversationsTab({ sessionId, initialParticipant, initialConversationId, hasSentMessage, onMessageSent }: Props) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeNewConversationPanel = useCallback(() => {
+    setIsCreatingConversation(false);
+    requestAnimationFrame(() => createButtonRef.current?.focus());
+  }, []);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -115,6 +121,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
     };
     setTemporaryConversations((prev) => [...prev, newConversation]);
     setSelectedConversationId(conversationId);
+    closeNewConversationPanel();
   };
 
   const handleAddPendingMessage = (conversationId: string, content: string) => {
@@ -171,12 +178,14 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
               <div className="flex items-center gap-1">
                 {!isSidebarCollapsed && (
                   <Button
+                    ref={createButtonRef}
                     variant="ghost"
                     size="icon"
-                    onClick={() => setDialogOpen(true)}
+                    onClick={() => setIsCreatingConversation(true)}
                     className="size-6"
                     aria-label="Create new conversation"
                     title="Create new conversation"
+                    disabled={isCreatingConversation}
                   >
                     <IconShell size="sm" variant="secondary">
                       <Plus />
@@ -196,15 +205,23 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                 </Button>
               </div>
             </div>
-            <ScrollArea className="flex-1 h-0">
-              {!isSidebarCollapsed && (
-                <ConversationSidebar
-                  conversations={allConversations}
-                  selectedId={selectedConversationId}
-                  onSelect={setSelectedConversationId}
-                />
-              )}
-            </ScrollArea>
+            {!isSidebarCollapsed && isCreatingConversation ? (
+              <NewConversationPanel
+                sessionParticipants={session?.participants || []}
+                onSelectParticipant={handleSelectParticipant}
+                onCancel={closeNewConversationPanel}
+              />
+            ) : (
+              <ScrollArea className="flex-1 h-0">
+                {!isSidebarCollapsed && (
+                  <ConversationSidebar
+                    conversations={allConversations}
+                    selectedId={selectedConversationId}
+                    onSelect={setSelectedConversationId}
+                  />
+                )}
+              </ScrollArea>
+            )}
           </div>
 
           {selectedConversationId ? (
@@ -254,13 +271,6 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       )}
 
-      <NewConversationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        sessionParticipants={session?.participants || []}
-        selectedConversation={selectedConversation}
-        onSelectParticipant={handleSelectParticipant}
-      />
     </div>
   );
 }

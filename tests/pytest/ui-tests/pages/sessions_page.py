@@ -25,7 +25,8 @@ class SessionsPage(BasePage):
     ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
     SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-semibold"
-    NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
+    NEW_CONVERSATION_PANEL = "[data-testid='new-conversation-panel']"
+    NEW_CONVERSATION_DIALOG = NEW_CONVERSATION_PANEL
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
@@ -369,24 +370,34 @@ class SessionsPage(BasePage):
 
     def click_new_conversation_button(self) -> None:
         btn = self.page.locator(
-            "button:has(svg.lucide-plus), button[class*='size-6']:has(svg)"
+            "button[aria-label='Create new conversation']"
         ).first
         btn.wait_for(state="visible", timeout=8000)
         btn.click()
-        self.wait_for_modal_open()
+        self.page.locator(self.NEW_CONVERSATION_PANEL).first.wait_for(
+            state="visible", timeout=10000
+        )
+
+    def select_participant_in_panel(self, participant_name: str) -> None:
+        panel = self.NEW_CONVERSATION_PANEL
+        try:
+            search = self.page.locator(
+                f"{panel} input[aria-label='Search participants']"
+            ).first
+            if search.is_visible(timeout=2000):
+                search.fill(participant_name)
+        except PlaywrightTimeoutError:
+            logger.info("Could not fill panel search input")
+
+        item = self.page.locator(
+            f"{panel} button:has-text('{participant_name}')"
+        ).first
+        item.wait_for(state="visible", timeout=10000)
+        item.click()
 
     def confirm_new_conversation(self) -> None:
-        if not self.is_visible(self.NEW_CONVERSATION_DIALOG, timeout=2000):
-            return
-        btn = self.page.locator(
-            f"{self.NEW_CONVERSATION_DIALOG} button[type='submit'], "
-            f"{self.NEW_CONVERSATION_DIALOG} button:not(:has-text('Cancel'))"
-        ).first
-        try:
-            btn.wait_for(state="visible", timeout=5000)
-            btn.click(force=True)
-        except PlaywrightTimeoutError:
-            logger.warning("Could not find confirm button in new conversation dialog")
+        # No-op: the inline panel auto-closes on participant selection.
+        return
 
     def click_sort_header(self, field: str) -> None:
         try:

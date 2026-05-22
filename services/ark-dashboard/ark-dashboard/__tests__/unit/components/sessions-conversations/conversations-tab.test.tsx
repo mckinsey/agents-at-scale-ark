@@ -60,20 +60,22 @@ vi.mock('@/components/sessions-conversations/chat-input', () => ({
   ),
 }));
 
-vi.mock('@/components/sessions-conversations/new-conversation-dialog', () => ({
-  NewConversationDialog: ({ open, onSelectParticipant }: any) =>
-    open ? (
-      <div data-testid="new-conversation-dialog">
-        <button
-          data-testid="select-participant"
-          onClick={() =>
-            onSelectParticipant({ id: 'p1', name: 'test-agent', type: 'agent' })
-          }
-        >
-          Select
-        </button>
-      </div>
-    ) : null,
+vi.mock('@/components/sessions-conversations/new-conversation-panel', () => ({
+  NewConversationPanel: ({ onSelectParticipant, onCancel }: any) => (
+    <div data-testid="new-conversation-panel">
+      <button
+        data-testid="select-participant"
+        onClick={() =>
+          onSelectParticipant({ id: 'p1', name: 'test-agent', type: 'agent' })
+        }
+      >
+        Select
+      </button>
+      <button data-testid="cancel-panel" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('@/lib/utils/uuid', () => ({
@@ -292,7 +294,7 @@ describe('ConversationsTab', () => {
     expect(screen.getByText('Conversations')).toBeInTheDocument();
   });
 
-  it('should open new conversation dialog', async () => {
+  it('should open new conversation panel', async () => {
     const user = userEvent.setup();
 
     render(
@@ -302,15 +304,17 @@ describe('ConversationsTab', () => {
         onMessageSent={mockOnMessageSent}
       />
     );
+
+    expect(screen.queryByTestId('new-conversation-panel')).not.toBeInTheDocument();
 
     // Find and click the Plus button (in the sidebar header)
     const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
     await user.click(plusButton);
 
-    expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('new-conversation-panel')).toBeInTheDocument();
   });
 
-  it('should create new conversation from dialog', async () => {
+  it('should create new conversation from panel', async () => {
     const user = userEvent.setup();
 
     render(
@@ -321,15 +325,16 @@ describe('ConversationsTab', () => {
       />
     );
 
-    // Open dialog
+    // Open panel
     const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
     await user.click(plusButton);
 
     // Select participant
     await user.click(screen.getByTestId('select-participant'));
 
-    // Should create new conversation with generated UUID
+    // Should create new conversation with generated UUID and return to list view
     expect(screen.getByTestId('conv-generated-uuid')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-conversation-panel')).not.toBeInTheDocument();
   });
 
   it('should handle pending messages state', async () => {
@@ -454,7 +459,7 @@ describe('ConversationsTab', () => {
     expect(screen.getByTestId('conv-temp-conv')).toBeInTheDocument();
   });
 
-  it('should pass session participants to dialog', async () => {
+  it('should pass session participants to panel', async () => {
     const user = userEvent.setup();
 
     render(
@@ -465,11 +470,9 @@ describe('ConversationsTab', () => {
       />
     );
 
-    // The NewConversationDialog should receive session participants
-    // We can verify this by checking that the dialog can be opened
     const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
     await user.click(plusButton);
 
-    expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('new-conversation-panel')).toBeInTheDocument();
   });
 });
