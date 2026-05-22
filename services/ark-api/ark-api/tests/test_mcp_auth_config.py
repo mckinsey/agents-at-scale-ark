@@ -15,28 +15,28 @@ from ark_api.core.mcp_auth_config import (
 
 class TestValidateCallbackUrl(unittest.TestCase):
     def test_https_public_host_is_accepted(self):
-        result = _validate_callback_url("https://ark.example.com/api/v1/mcp/auth/callback")
-        self.assertEqual(result, "https://ark.example.com/api/v1/mcp/auth/callback")
+        result = _validate_callback_url("https://ark.example.com/v1/mcp/auth/callback")
+        self.assertEqual(result, "https://ark.example.com/v1/mcp/auth/callback")
 
     def test_http_loopback_v4_is_accepted(self):
-        result = _validate_callback_url("http://127.0.0.1:8080/api/v1/mcp/auth/callback")
-        self.assertEqual(result, "http://127.0.0.1:8080/api/v1/mcp/auth/callback")
+        result = _validate_callback_url("http://127.0.0.1:8080/v1/mcp/auth/callback")
+        self.assertEqual(result, "http://127.0.0.1:8080/v1/mcp/auth/callback")
 
     def test_http_loopback_v6_is_accepted_bracketed(self):
-        result = _validate_callback_url("http://[::1]:8080/api/v1/mcp/auth/callback")
-        self.assertEqual(result, "http://[::1]:8080/api/v1/mcp/auth/callback")
+        result = _validate_callback_url("http://[::1]:8080/v1/mcp/auth/callback")
+        self.assertEqual(result, "http://[::1]:8080/v1/mcp/auth/callback")
 
     def test_http_localhost_is_accepted(self):
-        result = _validate_callback_url("http://localhost:8080/api/v1/mcp/auth/callback")
-        self.assertEqual(result, "http://localhost:8080/api/v1/mcp/auth/callback")
+        result = _validate_callback_url("http://localhost:8080/v1/mcp/auth/callback")
+        self.assertEqual(result, "http://localhost:8080/v1/mcp/auth/callback")
 
     def test_http_public_host_is_rejected(self):
         with self.assertRaises(McpAuthConfigError):
-            _validate_callback_url("http://ark.example.com/api/v1/mcp/auth/callback")
+            _validate_callback_url("http://ark.example.com/v1/mcp/auth/callback")
 
     def test_unbracketed_ipv6_is_rejected(self):
         with self.assertRaises(McpAuthConfigError) as ctx:
-            _validate_callback_url("http://::1:8080/api/v1/mcp/auth/callback")
+            _validate_callback_url("http://::1:8080/v1/mcp/auth/callback")
         self.assertIn("RFC 3986", str(ctx.exception))
 
     def test_callback_path_is_appended_when_root(self):
@@ -45,7 +45,7 @@ class TestValidateCallbackUrl(unittest.TestCase):
 
     def test_bad_scheme_is_rejected(self):
         with self.assertRaises(McpAuthConfigError):
-            _validate_callback_url("ftp://ark.example.com/api/v1/mcp/auth/callback")
+            _validate_callback_url("ftp://ark.example.com/v1/mcp/auth/callback")
 
     def test_empty_string_is_rejected(self):
         with self.assertRaises(McpAuthConfigError) as ctx:
@@ -54,17 +54,17 @@ class TestValidateCallbackUrl(unittest.TestCase):
 
     def test_missing_netloc_is_rejected(self):
         with self.assertRaises(McpAuthConfigError) as ctx:
-            _validate_callback_url("https:///api/v1/mcp/auth/callback")
+            _validate_callback_url("https:///v1/mcp/auth/callback")
         self.assertIn("missing host", str(ctx.exception))
 
     def test_empty_hostname_with_port_is_rejected(self):
         with self.assertRaises(McpAuthConfigError) as ctx:
-            _validate_callback_url("https://:8080/api/v1/mcp/auth/callback")
+            _validate_callback_url("https://:8080/v1/mcp/auth/callback")
         self.assertIn("missing host", str(ctx.exception))
 
     def test_http_dns_resolved_loopback_is_accepted(self):
         result = _validate_callback_url(
-            "http://ark-api.default.127.0.0.1.nip.io:8080/api/v1/mcp/auth/callback"
+            "http://ark-api.default.127.0.0.1.nip.io:8080/v1/mcp/auth/callback"
         )
         self.assertIn("nip.io", result)
 
@@ -118,7 +118,7 @@ class TestLoadConfig(unittest.TestCase):
 
     def test_set_callback_url_yields_enabled_config(self):
         env = {
-            "ARK_API_PUBLIC_CALLBACK_URL": "https://ark.example.com/api/v1/mcp/auth/callback",
+            "ARK_API_PUBLIC_CALLBACK_URL": "https://ark.example.com/v1/mcp/auth/callback",
             "ARK_API_MCP_AUTH_CACHE_TTL_SECONDS": "120",
             "ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS": "5",
             "ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS": "7",

@@ -6,14 +6,14 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ["AUTH_MODE"] = "open"
-os.environ["ARK_API_PUBLIC_CALLBACK_URL"] = "https://ark.example.com/api/v1/mcp/auth/callback"
+os.environ["ARK_API_PUBLIC_CALLBACK_URL"] = "https://ark.example.com/v1/mcp/auth/callback"
 
 from fastapi.testclient import TestClient
 
 from ark_api.core import mcp_auth_config
 
 
-REDIRECT_URI = "https://ark.example.com/api/v1/mcp/auth/callback"
+REDIRECT_URI = "https://ark.example.com/v1/mcp/auth/callback"
 SECRET_NAME = "notion-mcp-tokens"
 
 

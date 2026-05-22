@@ -11,7 +11,7 @@ from ark_api.services.oauth_dcr import DcrError, register_client
 from ark_api.services.oauth_token import TokenExchangeError, exchange_code
 
 
-REDIRECT_URI = "http://127.0.0.1:8080/api/v1/mcp/auth/callback"
+REDIRECT_URI = "http://127.0.0.1:8080/v1/mcp/auth/callback"
 REGISTRATION_ENDPOINT = "https://idp.example.com/register"
 TOKEN_ENDPOINT = "https://idp.example.com/token"
 

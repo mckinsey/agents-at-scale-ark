@@ -13,7 +13,7 @@ The redirect target is a single externally reachable URL that ark-api must own. 
 
 | Env var | Default | Description |
 |---|---|---|
-| `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/api/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four `auth/*` endpoints return `503`. |
+| `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four `auth/*` endpoints return `503`. |
 | `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries stored in the Secret. After this window a late callback returns "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
@@ -27,7 +27,7 @@ For clusters with an Ingress in front of ark-api, set the env var to the public 
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: https://ark.example.com/api/v1/mcp/auth/callback
+    value: https://ark.example.com/v1/mcp/auth/callback
 ```
 
 The same URL MUST be one of the redirect URIs registered with the IdP (ark-api enforces this against the RFC 7591 DCR response).
@@ -47,7 +47,7 @@ Configure ark-api to advertise the same loopback URL:
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: http://127.0.0.1:8080/api/v1/mcp/auth/callback
+    value: http://127.0.0.1:8080/v1/mcp/auth/callback
 ```
 
 Use bracketed IPv6 if the cluster prefers v6:
@@ -55,7 +55,7 @@ Use bracketed IPv6 if the cluster prefers v6:
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: http://[::1]:8080/api/v1/mcp/auth/callback
+    value: http://[::1]:8080/v1/mcp/auth/callback
 ```
 
 The loopback carve-out also accepts the literal `localhost`:
@@ -63,7 +63,7 @@ The loopback carve-out also accepts the literal `localhost`:
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: http://localhost:8080/api/v1/mcp/auth/callback
+    value: http://localhost:8080/v1/mcp/auth/callback
 ```
 
 Register the chosen URL with the IdP as a redirect URI before running the flow.

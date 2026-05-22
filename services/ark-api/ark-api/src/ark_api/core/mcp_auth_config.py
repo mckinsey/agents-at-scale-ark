@@ -16,7 +16,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
-CALLBACK_PATH = "/api/v1/mcp/auth/callback"
+CALLBACK_PATH = "/v1/mcp/auth/callback"
 
 DEFAULT_CACHE_TTL_SECONDS = 600
 DEFAULT_DCR_TIMEOUT_SECONDS = 15

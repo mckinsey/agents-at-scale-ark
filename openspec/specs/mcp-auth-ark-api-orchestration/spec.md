@@ -56,11 +56,11 @@ The four auth endpoints (`auth/start`, `auth/callback`, `auth/status`, `auth/log
 
 ### Requirement: ark-api exposes GET /mcp/auth/callback as the registered OAuth redirect URI
 
-ark-api SHALL expose `GET /api/v1/mcp/auth/callback` as the registered OAuth `redirect_uri`. The endpoint SHALL receive `?code` / `?error` from the IdP, perform the token exchange, patch the Secret, and render an HTML completion page. Unlike the other auth endpoints, this path SHALL NOT include an `{name}` segment — the in-flight cache entry referenced by `state` resolves the target MCPServer.
+ark-api SHALL expose `GET /v1/mcp/auth/callback` as the registered OAuth `redirect_uri`. The endpoint SHALL receive `?code` / `?error` from the IdP, perform the token exchange, patch the Secret, and render an HTML completion page. Unlike the other auth endpoints, this path SHALL NOT include an `{name}` segment — the in-flight cache entry referenced by `state` resolves the target MCPServer.
 
 #### Scenario: Callback is reachable without an MCPServer name in the path
 
-- **WHEN** the IdP redirects the user-agent to `/api/v1/mcp/auth/callback?code=...&state=...`
+- **WHEN** the IdP redirects the user-agent to `/v1/mcp/auth/callback?code=...&state=...`
 - **THEN** ark-api SHALL service the request without requiring an `{name}` path segment
 - **AND** SHALL resolve the target MCPServer by looking up the cache entry keyed on `state`
 
@@ -221,30 +221,30 @@ ark-api SHALL generate a PKCE code verifier of 43-128 unreserved characters and 
 
 ### Requirement: ark-api owns a stable, install-scoped redirect URI
 
-The OAuth `redirect_uri` registered with the IdP SHALL be derived from the `ARK_API_PUBLIC_CALLBACK_URL` environment variable plus the path `/api/v1/mcp/auth/callback`. The URL SHALL use HTTPS unless the host is `127.0.0.1`, `[::1]`, or `localhost` (RFC 8252 §7.3 carve-out for port-forward / air-gapped operation). IPv6 loopback literals SHALL be bracketed per RFC 3986 §3.2.2 (`[::1]`), and ark-api SHALL accept the bracketed form without unwrapping or canonicalising it.
+The OAuth `redirect_uri` registered with the IdP SHALL be derived from the `ARK_API_PUBLIC_CALLBACK_URL` environment variable plus the path `/v1/mcp/auth/callback`. The URL SHALL use HTTPS unless the host is `127.0.0.1`, `[::1]`, or `localhost` (RFC 8252 §7.3 carve-out for port-forward / air-gapped operation). IPv6 loopback literals SHALL be bracketed per RFC 3986 §3.2.2 (`[::1]`), and ark-api SHALL accept the bracketed form without unwrapping or canonicalising it.
 
 #### Scenario: ARK_API_PUBLIC_CALLBACK_URL is set to a non-HTTPS public host
 
-- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://ark.example.com/api/v1/mcp/auth/callback`
+- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://ark.example.com/v1/mcp/auth/callback`
 - **WHEN** ark-api starts
 - **THEN** ark-api SHALL refuse to start and SHALL log a configuration error
 
 #### Scenario: ARK_API_PUBLIC_CALLBACK_URL is set to http on a loopback host
 
-- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/api/v1/mcp/auth/callback`
+- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/v1/mcp/auth/callback`
 - **WHEN** ark-api starts
 - **THEN** ark-api SHALL accept the configuration
 
 #### Scenario: ARK_API_PUBLIC_CALLBACK_URL is set to http on an IPv6 loopback host
 
-- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://[::1]:8080/api/v1/mcp/auth/callback`
+- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://[::1]:8080/v1/mcp/auth/callback`
 - **WHEN** ark-api starts
 - **THEN** ark-api SHALL accept the configuration
 - **AND** SHALL register the bracketed literal `[::1]` verbatim with the IdP at DCR time (no unwrapping, no canonicalisation to `127.0.0.1`)
 
 #### Scenario: ARK_API_PUBLIC_CALLBACK_URL uses an unbracketed IPv6 literal
 
-- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://::1:8080/api/v1/mcp/auth/callback`
+- **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=http://::1:8080/v1/mcp/auth/callback`
 - **WHEN** ark-api starts
 - **THEN** ark-api SHALL refuse to start and SHALL log a configuration error naming RFC 3986 §3.2.2 (IPv6 literals must be bracketed)
 
@@ -252,7 +252,7 @@ The OAuth `redirect_uri` registered with the IdP SHALL be derived from the `ARK_
 
 - **GIVEN** `ARK_API_PUBLIC_CALLBACK_URL=https://ark.example.com`
 - **WHEN** ark-api builds the redirect URI for DCR
-- **THEN** ark-api SHALL append `/api/v1/mcp/auth/callback` to form the registered URL
+- **THEN** ark-api SHALL append `/v1/mcp/auth/callback` to form the registered URL
 
 ### Requirement: Dynamic Client Registration enforces the configured redirect URI
 
@@ -371,12 +371,12 @@ ark-api SHALL maintain a cache of in-flight authorization flows. Each entry SHAL
 
 #### Scenario: Callback arrives with an unknown state
 
-- **WHEN** `GET /api/v1/mcp/auth/callback` is hit with a `state` value the cache has never seen (or whose TTL has passed)
+- **WHEN** `GET /v1/mcp/auth/callback` is hit with a `state` value the cache has never seen (or whose TTL has passed)
 - **THEN** ark-api SHALL respond HTTP 400 with an HTML page explaining the flow expired and pointing the user back to `ark mcp auth login`
 
 #### Scenario: Callback is replayed
 
-- **GIVEN** `GET /api/v1/mcp/auth/callback?code=A&state=S` has already completed successfully
+- **GIVEN** `GET /v1/mcp/auth/callback?code=A&state=S` has already completed successfully
 - **WHEN** the same `?code=A&state=S` is requested again
 - **THEN** ark-api SHALL respond HTTP 400 (the cache entry's `state` index was deleted on first lookup)
 
@@ -419,7 +419,7 @@ ark-api SHALL refuse to exchange a code unless the returned `state` exactly matc
 
 ### Requirement: Callback endpoint handles IdP success and error responses
 
-The `GET /api/v1/mcp/auth/callback` endpoint SHALL respond HTTP 200 with a "you can close this window" HTML page when both `code` and `state` are present and the cache lookup + token exchange succeed. It SHALL respond HTTP 400 with an HTML page naming the OAuth error when the IdP redirects with `error`. It SHALL respond HTTP 400 when `code` or `state` is missing entirely. Every IdP-supplied string interpolated into a rendered page (`error`, `error_description`, and any state echo) SHALL be HTML-escaped before being written into the response body — the IdP is an untrusted reflector and the operator's authenticating browser is the trust boundary that matters.
+The `GET /v1/mcp/auth/callback` endpoint SHALL respond HTTP 200 with a "you can close this window" HTML page when both `code` and `state` are present and the cache lookup + token exchange succeed. It SHALL respond HTTP 400 with an HTML page naming the OAuth error when the IdP redirects with `error`. It SHALL respond HTTP 400 when `code` or `state` is missing entirely. Every IdP-supplied string interpolated into a rendered page (`error`, `error_description`, and any state echo) SHALL be HTML-escaped before being written into the response body — the IdP is an untrusted reflector and the operator's authenticating browser is the trust boundary that matters.
 
 #### Scenario: Authorization server redirects with code and state
 
