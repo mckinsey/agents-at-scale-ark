@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: mock-llm
-        image: ghcr.io/dwmkerr/mock-llm:latest
+        image: ghcr.io/dwmkerr/mock-llm:0.1.28
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 6556
