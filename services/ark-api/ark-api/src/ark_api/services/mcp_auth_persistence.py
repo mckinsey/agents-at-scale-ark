@@ -232,10 +232,13 @@ async def write_flow_state(
         logger.info("Patched flow-state into Secret %s/%s", namespace, secret_name)
 
 
-async def read_flow_state_by_state_param(state_param: str) -> Optional[FlowState]:
+async def read_flow_state_by_state_param(
+    namespace: str, state_param: str
+) -> Optional[FlowState]:
     async with ApiClient() as api:
         v1 = client.CoreV1Api(api)
-        secrets = await v1.list_secret_for_all_namespaces(
+        secrets = await v1.list_namespaced_secret(
+            namespace=namespace,
             label_selector=f"{FLOW_STATE_LABEL}={state_param}",
         )
         if not secrets.items:

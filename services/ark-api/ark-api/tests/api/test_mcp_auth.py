@@ -304,7 +304,7 @@ class TestAuthCallback(_AuthBase):
         with patcher:
             response = self.client.get(
                 "/v1/mcp/auth/callback",
-                params={"state": "st1", "code": "the-code"},
+                params={"state": "default.st1", "code": "the-code"},
             )
         self.assertEqual(response.status_code, 200, response.text)
         mock_write.assert_awaited_once()
@@ -314,7 +314,7 @@ class TestAuthCallback(_AuthBase):
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
     def test_unknown_state_returns_400_html(self, mock_read_flow):
         mock_read_flow.return_value = None
-        response = self.client.get("/v1/mcp/auth/callback", params={"state": "unknown", "code": "x"})
+        response = self.client.get("/v1/mcp/auth/callback", params={"state": "default.unknown", "code": "x"})
         self.assertEqual(response.status_code, 400)
         self.assertIn("Unknown or expired state", response.text)
 
@@ -335,7 +335,7 @@ class TestAuthCallback(_AuthBase):
         response = self.client.get(
             "/v1/mcp/auth/callback",
             params={
-                "state": "st1",
+                "state": "default.st1",
                 "error": "access_denied",
                 "error_description": "<script>alert(1)</script>",
             },

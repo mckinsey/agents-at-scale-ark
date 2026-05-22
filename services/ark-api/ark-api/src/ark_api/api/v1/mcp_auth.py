@@ -224,8 +224,9 @@ async def start_mcp_auth(
 
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
-        state = generate_state()
+        state_random = generate_state()
         auth_id = generate_auth_id()
+        external_state = f"{ns}.{state_random}"
 
         flow_expires = flow_deadline_rfc3339(cfg.cache_ttl_seconds)
 
@@ -233,7 +234,7 @@ async def start_mcp_auth(
             namespace=ns,
             secret_name=secret_name,
             auth_id=auth_id,
-            state_param=state,
+            state_param=state_random,
             verifier=verifier,
             expires_at=flow_expires,
             caller_identity=DEFAULT_AUTHORIZED_BY,
@@ -247,7 +248,7 @@ async def start_mcp_auth(
             authorization_endpoint=authorization_endpoint,
             client_id=client_id,
             redirect_uri=redirect_uri,
-            state=state,
+            state=external_state,
             code_challenge=challenge,
             resource=resource,
             scopes=scopes,
@@ -289,7 +290,17 @@ async def mcp_auth_callback(
             status_code=400,
         )
 
-    flow = await read_flow_state_by_state_param(state)
+    dot = state.find(".")
+    if dot < 1:
+        return _html_response(
+            title="Authorization failed",
+            body="Unknown or expired state",
+            status_code=400,
+        )
+    cb_namespace = state[:dot]
+    state_random = state[dot + 1:]
+
+    flow = await read_flow_state_by_state_param(cb_namespace, state_random)
     if flow is None or flow.is_expired or not flow.secret_name:
         return _html_response(
             title="Authorization failed",
