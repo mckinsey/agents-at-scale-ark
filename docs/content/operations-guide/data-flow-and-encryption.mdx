@@ -1,0 +1,758 @@
+# Data Flow and Encryption
+
+This guide maps every location where sensitive data lands during a Query lifecycle and explains what encryption is provided by default versus what requires customer-side configuration. Use this document to obtain InfoSec sign-off, perform compliance audits, and ensure your ARK deployment meets regulatory requirements (HIPAA, GDPR, FISMA, etc.).
+
+## Overview
+
+ARK delegates encryption to the underlying infrastructure rather than implementing its own encryption layer. This design follows Kubernetes best practices and cloud-native principles. Your encryption posture is determined by:
+
+1. **Kubernetes cluster configuration** (etcd encryption, network policies, TLS)
+2. **Storage backend choices** (Postgres TDE, managed database encryption)
+3. **Cloud provider settings** (KMS, disk encryption, managed service defaults)
+4. **LLM provider policies** (vendor-side encryption, data retention, logging)
+
+ARK itself does not:
+- Encrypt data at rest (delegated to etcd, Postgres, or cloud storage)
+- Provide built-in encryption keys or key management
+- Enforce TLS termination (delegated to ingress controllers, service mesh, or cert-manager)
+- Control vendor-side encryption or logging at LLM providers
+
+## Data Flow Diagram
+
+A single Query execution touches seven distinct surfaces where sensitive data can land:
+
+```mermaid
+graph TB
+    User[User/Application] -->|1. Query input| API[ARK API/Dashboard]
+    API -->|2. Create Query CR| Storage[(Storage Backend<br/>etcd or Postgres)]
+    Storage -->|3. Watch| Controller[ARK Controller]
+    Controller -->|4. Execute| Executor[Executor Pod]
+    Executor -->|5a. Prompt + response| LLM[LLM Provider<br/>OpenAI/Azure/Anthropic/Bedrock]
+    Executor -->|5b. Tool calls| MCP[MCP Servers<br/>In-cluster or external]
+    Executor -->|5c. Conversation history| Memory[Memory Backend<br/>ark-broker or external]
+    Executor -->|5d. Traces/spans| OTel[OTel Collector<br/>Phoenix/Langfuse/Tempo]
+    Executor -->|6. Streaming events| Broker[ark-broker<br/>In-memory or persistent]
+    Executor -->|7. Update status| Storage
+    Storage -.->|Audit events| K8sAudit[K8s Audit Log]
+    Executor -.->|App logs| PodLogs[Pod Logs]
+
+    classDef storage fill:#e1f5ff,stroke:#0288d1
+    classDef external fill:#fff3e0,stroke:#f57c00
+    classDef internal fill:#f3e5f5,stroke:#7b1fa2
+
+    class Storage,Memory,Broker storage
+    class LLM,MCP,OTel external
+    class Controller,Executor,API internal
+```
+
+### Data Surface Legend
+
+| # | Surface | Owned By | Default Encryption | Customer Config Required |
+|---|---------|----------|-------------------|-------------------------|
+| 1 | Query CR (`spec.input`, `status.response`) | etcd or Postgres | etcd: **No** (plaintext unless configured)<br/>Postgres: Depends on DB | etcd: Enable encryption-at-rest<br/>Postgres: Enable TDE or cloud KMS |
+| 2 | LLM provider calls | Vendor (OpenAI, Azure, Anthropic, Bedrock) | **Yes** (vendor-managed) | Review vendor data retention & logging policies |
+| 3 | MCP servers | In-cluster Deployments or external endpoints | Depends on each server | Configure TLS per MCP server; see [MCP Authentication](/developer-guide/mcp-servers/authentication) |
+| 4 | Memory backend | `ark-broker` (in-memory + optional JSON file) or external | **No** (in-memory by default) | Use external Memory with encryption; see [Memory Resources](/reference/resources/memory) |
+| 5 | OTel trace store | Phoenix, Langfuse, Tempo, Datadog, etc. | Depends on backend | Configure OTel scrubbing; encrypt backend storage |
+| 6 | `ark-broker` streams | In-memory + optional local JSON file | **No** (in-memory by default) | Enable persistence with encrypted PVC; see [ARK Broker](/developer-guide/services/ark-broker) |
+| 7 | Pod logs + K8s audit log | Cluster log aggregator + apiserver | Depends on cluster | Configure log masking; encrypt log storage backend |
+
+## Encryption at Rest
+
+### 1. Query Custom Resources (etcd or Postgres)
+
+**Default Storage: etcd**
+
+By default, ARK stores `Query`, `Agent`, `Model`, and other custom resources in Kubernetes etcd. Query CRs contain:
+- `spec.input`: User prompt and conversation context
+- `status.response`: LLM-generated response
+- `status.trace`: Execution metadata (may include tool inputs/outputs)
+
+**Encryption Status:**
+- **Not encrypted by default.** etcd stores resources in plaintext unless you enable etcd encryption-at-rest.
+- etcd encryption is a **cluster-level setting** configured when the cluster is created or via cluster reconfiguration.
+
+**How to Enable:**
+
+For managed Kubernetes:
+
+| Provider | Configuration |
+|----------|--------------|
+| **AWS EKS** | Enable [EKS encryption](https://docs.aws.amazon.com/eks/latest/userguide/enable-kms.html) with AWS KMS. Set `encryptionConfig` when creating the cluster. |
+| **Azure AKS** | Enable [encryption at host](https://learn.microsoft.com/en-us/azure/aks/enable-host-encryption) and configure Azure Key Vault for etcd encryption. |
+| **Google GKE** | Enable [application-layer secrets encryption](https://cloud.google.com/kubernetes-engine/docs/how-to/encrypting-secrets) with Cloud KMS. |
+
+For self-managed Kubernetes, see [Kubernetes documentation on etcd encryption](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).
+
+**Alternative: PostgreSQL Storage Backend**
+
+ARK supports [PostgreSQL as a storage backend](/operations-guide/postgres-storage-backend) instead of etcd. In Postgres mode:
+- Resources are stored in a `resources` table with JSONB columns for `spec`, `status`, `labels`, etc.
+- Encryption depends on your Postgres configuration:
+  - **Transparent Data Encryption (TDE)** — Postgres does not have built-in TDE; use third-party extensions like pgcrypto or disk-level encryption.
+  - **Managed Postgres encryption** — AWS RDS, Azure Database for PostgreSQL, and Google Cloud SQL encrypt data at rest by default using cloud provider KMS.
+  - **Connection encryption** — ARK supports `sslMode: require`, `verify-ca`, or `verify-full` for TLS between the apiserver and Postgres.
+
+**Verification:**
+
+For etcd mode:
+```bash
+# Check if etcd encryption is enabled (managed K8s)
+kubectl get secret -n kube-system | grep encryption
+
+# Check encryption provider configuration
+kubectl get pod -n kube-system kube-apiserver-* -o yaml | grep encryption-provider-config
+```
+
+For Postgres mode:
+```sql
+-- Check if your managed Postgres has encryption enabled
+-- AWS RDS
+SELECT * FROM rds.rds_kms_status;
+
+-- Azure Database for PostgreSQL
+-- Encryption at rest is enabled by default; verify via Azure Portal
+
+-- Google Cloud SQL
+-- Encryption at rest is enabled by default; verify via gcloud
+```
+
+### 2. Memory Backend (Conversation History)
+
+The Memory CRD provides conversation history to agents. By default, ARK creates a Memory CRD pointing at `ark-broker`, which stores messages **in-memory only**.
+
+**Default Configuration:**
+- `ark-broker` keeps messages in a TypeScript `Map` in process memory (`services/ark-broker/ark-broker/src/memory-broker.ts`).
+- Optional persistence writes to a local JSON file on a `ReadWriteOnce` PVC (`persistence.enabled: false` by default).
+- **Not encrypted by default.** In-memory data is lost on pod restart. Persistent JSON files are stored in plaintext on the PVC.
+
+**Production Alternative:**
+
+For production deployments with durable conversation history:
+1. Use an external Memory backend (e.g., Redis, Postgres, vector database) with encryption enabled.
+2. Create a Memory CRD pointing at the external backend:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  name: production-memory
+spec:
+  address:
+    value: "https://my-encrypted-memory-service.example.com"
+```
+
+3. Reference the Memory in your Agent:
+
+```yaml
+spec:
+  memoryRef:
+    name: production-memory
+```
+
+**Known Limitation:**
+
+As of ARK v1.x, `ark-broker` is in-memory only and not suitable for production conversation history. See [#2083](https://github.com/mckinsey/agents-at-scale-ark/issues/2083) for planned durable backend support (Postgres, Redis Streams).
+
+**Encryption for External Memory:**
+- If using Redis: Enable [Redis TLS](https://redis.io/docs/manual/security/encryption/) and Redis persistence with encrypted volumes.
+- If using Postgres: Follow Postgres encryption guidance above.
+- If using a vector database (Pinecone, Weaviate, Qdrant): Consult vendor documentation for encryption-at-rest and in-transit.
+
+### 3. ARK Broker Streams (Completion Chunks, Events, Sessions)
+
+`ark-broker` provides five distinct stores:
+1. **Messages** (conversation history, exposed via Memory CRD)
+2. **Completion chunks** (streaming LLM output)
+3. **OTEL spans** (execution traces)
+4. **Events** (controller lifecycle events)
+5. **Sessions** (multi-turn conversation state)
+
+All five are stored **in-memory by default**. Optional persistence writes to local JSON files.
+
+**Encryption Status:**
+- **Not encrypted by default.** In-memory data is ephemeral. JSON files (if persistence is enabled) are plaintext on the PVC.
+- PVCs inherit encryption from the underlying `StorageClass`:
+  - **AWS EBS**: Use `gp3` or `gp2` with [EBS encryption enabled](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSEncryption.html).
+  - **Azure Disk**: Use [encryption at rest](https://learn.microsoft.com/en-us/azure/virtual-machines/disk-encryption) (enabled by default for Premium and Standard SSD).
+  - **GCP Persistent Disk**: Use [customer-managed encryption keys (CMEK)](https://cloud.google.com/compute/docs/disks/customer-managed-encryption) or default encryption.
+
+**How to Enable Encrypted Persistence:**
+
+1. Create an encrypted `StorageClass`:
+
+```yaml
+# AWS EBS example
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: encrypted-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+  kmsKeyId: "arn:aws:kms:us-east-1:123456789012:key/..."
+```
+
+2. Enable broker persistence with the encrypted StorageClass:
+
+```bash
+helm upgrade ark-broker oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-broker \
+  --namespace ark-system \
+  --set persistence.enabled=true \
+  --set persistence.storageClass=encrypted-gp3 \
+  --set persistence.size=10Gi
+```
+
+**Limitation:** Broker persistence uses `ReadWriteOnce` PVCs, which pins the broker to a single replica. For HA and horizontal scaling, an external durable backend is required (tracked in [#2083](https://github.com/mckinsey/agents-at-scale-ark/issues/2083), [#2153](https://github.com/mckinsey/agents-at-scale-ark/issues/2153)).
+
+### 4. OpenTelemetry Trace Store
+
+Executor pods export OTEL traces to backends like Phoenix, Langfuse, Tempo, or Datadog. Traces can contain:
+- Full prompts sent to the LLM
+- LLM responses
+- Tool call inputs and outputs
+- Agent reasoning steps
+
+**Encryption Status:**
+- Depends on the OTEL backend.
+- Most managed observability platforms (Datadog, New Relic, Honeycomb) encrypt data at rest by default.
+- Self-hosted backends (Tempo, Jaeger) require explicit configuration.
+
+**Best Practices:**
+
+1. **Scrub sensitive data** before exporting traces. Use OTEL processors to redact PII:
+
+```yaml
+# otel-collector-config.yaml
+processors:
+  attributes:
+    actions:
+      - key: llm.prompt
+        action: delete
+      - key: llm.response
+        action: delete
+```
+
+2. **Encrypt backend storage:**
+   - **Tempo (S3 backend)**: Enable [S3 server-side encryption](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html).
+   - **Langfuse**: Use Postgres encryption for the Langfuse database.
+   - **Phoenix**: Runs on Postgres; follow Postgres encryption guidance.
+
+3. **Verify vendor encryption:**
+   - Datadog: [Encryption at rest enabled by default](https://docs.datadoghq.com/security/).
+   - Honeycomb: [Encryption at rest and in transit](https://docs.honeycomb.io/security/).
+
+### 5. Pod Logs and Kubernetes Audit Logs
+
+**Pod Logs:**
+
+Executor, controller, and broker pods log to stdout/stderr. Logs may include:
+- Query input on errors (e.g., "Failed to execute query: {input}")
+- LLM responses on errors
+- Tool call arguments
+
+**Encryption Status:**
+- **Not encrypted by default.** Logs are stored in plaintext on the node filesystem and forwarded to the cluster log aggregator (Fluentd, Fluent Bit, CloudWatch, Stackdriver).
+
+**How to Encrypt:**
+
+1. **Log aggregator encryption:**
+   - AWS CloudWatch Logs: Enable [encryption with KMS](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html).
+   - Azure Monitor Logs: Enable [customer-managed keys](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/customer-managed-keys).
+   - Google Cloud Logging: Enable [CMEK for Log Router](https://cloud.google.com/logging/docs/routing/managed-encryption).
+
+2. **Log masking:** Configure log redaction to prevent sensitive data from entering logs:
+   - ARK does not log full Query inputs by default, but errors may include partial data.
+   - Review executor and controller logs; add masking if needed.
+
+**Kubernetes Audit Logs:**
+
+The K8s apiserver logs all API requests, including:
+- `kubectl apply -f query.yaml` (full Query spec)
+- `kubectl get query my-query -o yaml` (full Query status)
+
+**Encryption Status:**
+- Depends on cluster configuration.
+- Managed K8s audit logs are encrypted by default:
+  - AWS EKS: Audit logs sent to CloudWatch (KMS encryption).
+  - Azure AKS: Audit logs sent to Azure Monitor (CMEK available).
+  - GCP GKE: Audit logs sent to Cloud Logging (CMEK available).
+
+**How to Verify:**
+
+```bash
+# Check audit log policy (self-managed K8s)
+kubectl get pod -n kube-system kube-apiserver-* -o yaml | grep audit-log
+
+# Check managed K8s audit log configuration
+# AWS EKS
+aws eks describe-cluster --name my-cluster | jq '.cluster.logging'
+
+# GCP GKE
+gcloud container clusters describe my-cluster --region us-central1 | grep cloudAuditLogging
+```
+
+## Encryption in Transit
+
+ARK uses TLS for most in-transit encryption, delegating to Kubernetes primitives (cert-manager, service mesh) and cloud-managed services.
+
+### Network Hops Overview
+
+| Hop | Default TLS | How to Verify | Configuration Required |
+|-----|------------|---------------|------------------------|
+| User → Dashboard | Depends on Ingress | Check Ingress TLS config | Configure TLS on Gateway/Ingress; see [Deploying ARK](/operations-guide/deploying-ark) |
+| Dashboard → ARK API | HTTP (cluster-internal) | N/A | Use service mesh (Istio, Linkerd) for mTLS; see below |
+| ARK API → K8s apiserver | HTTPS | `kubectl cluster-info` | Managed by K8s; verify cert with `kubectl config view` |
+| Controller → K8s apiserver | HTTPS | N/A | Managed by K8s; controller uses in-cluster config |
+| Executor → LLM provider | HTTPS | Enforced by ARK | See [Model URL Security](/operations-guide/model-url-security) |
+| Executor → MCP server | Depends on server | Check MCP endpoint | Configure TLS per MCP server; see [MCP Authentication](/developer-guide/mcp-servers/authentication) |
+| Executor → Memory backend | Depends on backend | Check Memory address | Use `https://` in Memory CRD `spec.address` |
+| Executor → OTel collector | Depends on config | Check OTEL_EXPORTER_OTLP_ENDPOINT | Use `https://` or gRPC TLS; see [Monitoring](/operations-guide/monitoring) |
+| Controller → ark-broker | HTTP (cluster-internal) | N/A | Use service mesh for mTLS |
+| Executor → ark-broker | HTTP (cluster-internal) | N/A | Use service mesh for mTLS |
+
+### 1. User → Dashboard (Ingress/Gateway)
+
+**Default:** HTTP (no TLS) when using `kubectl port-forward` or local development.
+
+**Production:** Configure TLS on your Ingress or Gateway:
+
+**Using Kubernetes Gateway API with cert-manager:**
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ark-gateway
+  namespace: ark-system
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ark-tls-cert
+            kind: Secret
+```
+
+**Using NGINX Ingress:**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ark-dashboard
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - ark.example.com
+      secretName: ark-tls
+  rules:
+    - host: ark.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ark-dashboard
+                port:
+                  number: 80
+```
+
+**Verification:**
+
+```bash
+curl -v https://ark.example.com 2>&1 | grep "SSL connection"
+# Should show: SSL connection using TLSv1.3 / TLS_AES_128_GCM_SHA256
+```
+
+### 2. Dashboard → ARK API → K8s apiserver (Cluster-Internal)
+
+By default, ARK services communicate over HTTP within the cluster:
+- `ark-dashboard` → `ark-api` (HTTP)
+- `ark-api` → Kubernetes apiserver (HTTPS, managed by K8s)
+- `ark-controller` → Kubernetes apiserver (HTTPS, managed by K8s)
+
+**Default Security Posture:**
+- **Dashboard → API**: HTTP (plaintext) by default. These services run in the same namespace and communicate via ClusterIP services.
+- **API → apiserver**: HTTPS (TLS) by default. Kubernetes enforces TLS for apiserver connections.
+
+**Recommended: Service Mesh for mTLS**
+
+For zero-trust networking and encryption of all cluster-internal traffic, deploy a service mesh:
+
+**Istio Example:**
+
+1. Install Istio:
+```bash
+istioctl install --set profile=default
+```
+
+2. Enable automatic mTLS for the ARK namespace:
+```bash
+kubectl label namespace ark-system istio-injection=enabled
+
+# Restart ARK pods to inject Envoy sidecars
+kubectl rollout restart deployment -n ark-system
+```
+
+3. Verify mTLS is active:
+```bash
+istioctl authn tls-check ark-dashboard.ark-system.svc.cluster.local
+# Should show: mTLS enabled for all connections
+```
+
+**Linkerd Example:**
+
+1. Install Linkerd:
+```bash
+linkerd install | kubectl apply -f -
+linkerd check
+```
+
+2. Inject Linkerd into ARK namespace:
+```bash
+kubectl get deploy -n ark-system -o yaml | linkerd inject - | kubectl apply -f -
+```
+
+3. Verify mTLS:
+```bash
+linkerd viz tap deploy/ark-dashboard -n ark-system
+# Should show: all connections with 🔒 (TLS)
+```
+
+### 3. Executor → LLM Provider
+
+**Default:** HTTPS enforced by ARK.
+
+ARK's [Model URL Security](/operations-guide/model-url-security) validation enforces HTTPS for all LLM provider connections. HTTP URLs are rejected at admission time (except for cluster-internal `.svc.cluster.local` endpoints used in testing).
+
+**Verification:**
+
+```yaml
+# ✅ Valid
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4
+spec:
+  provider: openai
+  config:
+    openai:
+      baseUrl:
+        value: "https://api.openai.com/v1"
+
+# ❌ Rejected
+spec:
+  config:
+    openai:
+      baseUrl:
+        value: "http://api.openai.com/v1"
+# Error: all URLs must use HTTPS
+```
+
+For cloud provider endpoints, TLS is managed by the vendor:
+- **OpenAI**: TLS 1.2+, certificate pinning available
+- **Azure OpenAI**: TLS 1.2+, Azure-managed certificates
+- **Anthropic**: TLS 1.3, certificate pinning available
+- **AWS Bedrock**: TLS 1.2+, AWS-managed certificates
+
+### 4. Executor → MCP Server
+
+MCP servers can be in-cluster (HTTP allowed) or external (HTTPS required).
+
+**In-Cluster MCP Servers:**
+
+Default is HTTP. Use a service mesh for mTLS (see Dashboard → API section above).
+
+**External MCP Servers:**
+
+Configure HTTPS in the MCPServer CRD:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: external-mcp
+spec:
+  address:
+    value: "https://mcp.example.com:8443"
+  # Optional: OAuth authentication
+  authentication:
+    type: oauth
+    oauth:
+      tokenUrl: "https://auth.example.com/token"
+```
+
+For OAuth-secured MCP servers, see [MCP Authentication](/developer-guide/mcp-servers/authentication) (tracked in [#2133](https://github.com/mckinsey/agents-at-scale-ark/issues/2133)).
+
+### 5. Executor → Memory Backend
+
+Memory endpoints can be HTTP (in-cluster) or HTTPS (external).
+
+**Default (ark-broker in-cluster):**
+
+```yaml
+spec:
+  address:
+    value: "http://ark-broker.ark-system.svc.cluster.local:80"
+```
+
+Use a service mesh for mTLS.
+
+**External Memory (production):**
+
+```yaml
+spec:
+  address:
+    value: "https://memory.example.com:443"
+```
+
+Configure TLS on the external Memory service. If using a managed service (Redis, Postgres), enable TLS:
+
+**Redis TLS:**
+```bash
+# Redis connection string with TLS
+rediss://default:password@redis.example.com:6380
+```
+
+**Postgres TLS:**
+```yaml
+# In .arkrc.yaml (for Postgres storage backend)
+storage:
+  postgresql:
+    sslMode: require  # or verify-ca, verify-full
+```
+
+### 6. Executor → OpenTelemetry Collector
+
+OTEL exporters support HTTP, HTTPS, and gRPC with TLS.
+
+**Default (HTTP in-cluster):**
+
+```yaml
+# Executor pod env
+OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"
+```
+
+**HTTPS for External OTEL Collector:**
+
+```yaml
+OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel.example.com:4318"
+```
+
+**gRPC with TLS:**
+
+```yaml
+OTEL_EXPORTER_OTLP_ENDPOINT: "otel.example.com:4317"
+OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+OTEL_EXPORTER_OTLP_INSECURE: "false"
+```
+
+For managed observability platforms:
+- **Datadog Agent**: TLS enabled by default; uses HTTPS to Datadog API.
+- **Honeycomb**: Requires API key over HTTPS (`https://api.honeycomb.io`).
+- **New Relic**: OTLP over HTTPS to `otlp.nr-data.net`.
+
+## Install-Time Security Checklist
+
+Use this checklist during ARK installation to ensure encryption is configured correctly.
+
+### Storage Backend Encryption
+
+- [ ] **etcd encryption-at-rest enabled** (managed K8s) or encryption provider configured (self-managed)
+  - AWS EKS: `encryptionConfig` with KMS key
+  - Azure AKS: Encryption at host + Key Vault
+  - GCP GKE: Application-layer secrets encryption with Cloud KMS
+  - Self-managed: `/etc/kubernetes/enc/encryption-config.yaml` configured
+
+- [ ] **PostgreSQL TDE or disk encryption enabled** (if using Postgres backend)
+  - AWS RDS: Encryption enabled in DB settings
+  - Azure Database for PostgreSQL: Encryption at rest (default)
+  - Google Cloud SQL: Encryption at rest (default)
+  - Self-hosted: Disk-level encryption (LUKS, dm-crypt) or pgcrypto
+
+- [ ] **Postgres TLS connection enforced** (if using Postgres backend)
+  - `.arkrc.yaml`: `sslMode: require` or `verify-full`
+
+### Memory and Broker Persistence
+
+- [ ] **Memory backend is durable and encrypted** (production deployments)
+  - NOT using default `ark-broker` in-memory store for production
+  - External Memory (Redis, Postgres, vector DB) with encryption enabled
+  - Memory CRD `spec.address` uses `https://` (if external)
+
+- [ ] **Broker persistence uses encrypted PVC** (if enabled)
+  - `persistence.enabled: true`
+  - `persistence.storageClass` is an encrypted StorageClass (EBS encrypted, Azure Disk SSE, GCP CMEK)
+
+### Telemetry and Logs
+
+- [ ] **OTEL backend storage is encrypted**
+  - Self-hosted Tempo: S3 SSE or KMS enabled
+  - Self-hosted Langfuse/Phoenix: Postgres encryption enabled
+  - Managed platform (Datadog, Honeycomb): Verify vendor encryption (enabled by default)
+
+- [ ] **OTEL scrubbing configured** (if exporting to external backend)
+  - OTEL processor removes `llm.prompt`, `llm.response`, PII attributes
+
+- [ ] **Pod logs encrypted at rest**
+  - AWS CloudWatch: KMS encryption enabled
+  - Azure Monitor: Customer-managed keys configured
+  - GCP Cloud Logging: CMEK enabled
+
+- [ ] **Kubernetes audit logs encrypted**
+  - Managed K8s: Verify audit logs sent to encrypted backend (CloudWatch, Azure Monitor, Cloud Logging)
+  - Self-managed: Audit log files on encrypted volumes
+
+### Network Encryption (TLS)
+
+- [ ] **Dashboard Ingress/Gateway uses TLS**
+  - cert-manager ClusterIssuer configured (Let's Encrypt, CA)
+  - TLS certificate issued and mounted (check `kubectl get certificate`)
+  - Ingress/Gateway configured with `tls:` section
+
+- [ ] **Cluster-internal mTLS enabled** (recommended)
+  - Service mesh (Istio, Linkerd, Cilium) installed and injected into `ark-system` namespace
+  - Verify mTLS with `istioctl authn tls-check` or `linkerd viz tap`
+
+- [ ] **LLM provider URLs use HTTPS**
+  - All Model CRDs use `https://` (enforced by ARK validation)
+  - No `http://` URLs (except `.svc.cluster.local` in dev/test)
+
+- [ ] **External MCP servers use HTTPS**
+  - All external MCPServer CRDs use `https://`
+  - OAuth authentication configured (if required)
+
+- [ ] **External Memory backends use HTTPS**
+  - Memory CRD `spec.address` uses `https://` or `rediss://` (Redis with TLS)
+
+### Cloud Provider Settings
+
+- [ ] **EBS/Azure Disk/GCP Disk encryption enabled**
+  - Default StorageClass uses encrypted volumes
+  - Verify with `kubectl get storageclass -o yaml | grep encrypted`
+
+- [ ] **Cloud KMS keys created and permissions granted**
+  - EKS: KMS key for etcd, EBS volumes
+  - AKS: Key Vault for etcd, disk encryption
+  - GKE: Cloud KMS for application-layer secrets, persistent disks
+
+- [ ] **VPC encryption and network policies**
+  - VPC/VNet uses encrypted communication (TLS 1.2+)
+  - Kubernetes Network Policies restrict pod-to-pod traffic (see [Penetration Testing Reports](/operations-guide/penetration-testing-reports) for recommendations)
+
+## What ARK Does NOT Do
+
+To set correct expectations for your security and compliance teams:
+
+**ARK does not:**
+- **Encrypt data at rest itself** — ARK relies on etcd encryption, Postgres TDE, or cloud KMS. If these are not configured, data is stored in plaintext.
+- **Provide built-in key management** — ARK does not generate, rotate, or manage encryption keys. Use your cloud provider KMS (AWS KMS, Azure Key Vault, GCP Cloud KMS) or a secrets manager (HashiCorp Vault, Sealed Secrets).
+- **Enforce TLS at the application layer** — ARK assumes you configure TLS via Kubernetes Ingress, Gateway API, or a service mesh. ARK itself does not terminate TLS.
+- **Control LLM provider logging or retention** — Once data is sent to OpenAI, Azure OpenAI, Anthropic, or Bedrock, encryption and logging are governed by the vendor's policies. Review each vendor's [data processing agreement (DPA)](https://openai.com/policies/data-processing-addendum) and [security whitepaper](https://openai.com/security).
+- **Scrub PII from prompts** — ARK does not inspect or redact sensitive data in Query inputs. If your prompts contain PII, you must implement PII detection and redaction before sending data to ARK.
+- **Encrypt pod logs or audit logs** — ARK logs to stdout/stderr. Encryption of logs is the responsibility of your log aggregator (CloudWatch, Stackdriver, Splunk, etc.).
+
+**ARK delegates encryption to:**
+- **Kubernetes** (etcd encryption, TLS, network policies, audit logs)
+- **Storage backends** (Postgres TDE, managed database encryption, PVC encryption)
+- **Cloud providers** (KMS, disk encryption, managed service defaults)
+- **Service mesh** (Istio, Linkerd, Cilium for mTLS)
+- **Ingress controllers** (NGINX, Istio Gateway, cert-manager for TLS certificates)
+- **LLM providers** (vendor-side encryption, DPA, retention policies)
+
+## Impact of Broker Durability Work
+
+As of ARK v1.x, the default `ark-broker` is **not suitable for production conversation history** due to in-memory-only storage.
+
+**Current State:**
+- `ark-broker` stores messages, chunks, traces, events, and sessions in process memory.
+- Optional persistence writes to a local JSON file on a `ReadWriteOnce` PVC.
+- **Data is lost on pod restart, eviction, or rollout.**
+
+**Target State (tracked in [#2083](https://github.com/mckinsey/agents-at-scale-ark/issues/2083), [#2153](https://github.com/mckinsey/agents-at-scale-ark/issues/2153)):**
+
+Planned work will add durable backends to `ark-broker`:
+- **Postgres backend** — Messages, chunks, traces, events, and sessions stored in Postgres tables.
+- **Redis Streams backend** — Messages and chunks stored in Redis Streams for high throughput.
+- **Multi-replica support** — Broker can scale horizontally with state shared across replicas.
+
+**Impact on Encryption:**
+
+Once durable backends are available:
+- **Postgres backend** will inherit Postgres encryption-at-rest (TDE, cloud KMS, disk encryption). Configure Postgres encryption as described in the [Storage Backend Encryption](#storage-backend-encryption) section above.
+- **Redis backend** will require Redis TLS and persistence with encrypted volumes (RDB/AOF on encrypted disks or managed Redis with encryption at rest).
+
+**Until then:**
+
+For production deployments requiring durable conversation history:
+1. **Do not use the default `ark-broker` Memory.** It is ephemeral and will lose data on pod restart.
+2. **Create an external Memory backend** (Redis, Postgres, vector database) with encryption enabled.
+3. **Create a Memory CRD** pointing at the external backend and reference it in your Agent CRDs.
+
+See [Memory Resources](/reference/resources/memory) for examples.
+
+## Related Documentation
+
+- [Model URL Security](/operations-guide/model-url-security) — SSRF protection, domain whitelist, private IP allowlist
+- [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) — Postgres mode, logical replication, connection settings
+- [Monitoring](/operations-guide/monitoring) — OTEL integration, Prometheus metrics, Grafana dashboards
+- [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) — Multi-tenancy, RBAC, cross-tenant access
+- [Penetration Testing Reports](/operations-guide/penetration-testing-reports) — Security findings, RBAC hardening, network policies
+- [Deploying ARK](/operations-guide/deploying-ark) — Installation, Helm charts, TLS configuration
+- [Memory Resources](/reference/resources/memory) — Memory CRD specification, external backends
+- [ARK Broker Service](/developer-guide/services/ark-broker) — Broker architecture, persistence, limits
+- [MCP Authentication](/developer-guide/mcp-servers/authentication) — OAuth for MCP servers (planned)
+
+## Compliance Checklists
+
+### HIPAA (Protected Health Information)
+
+- [ ] etcd or Postgres encryption at rest enabled
+- [ ] All external endpoints (LLM, MCP, Memory, OTEL) use TLS 1.2+
+- [ ] OTEL scrubbing removes PHI from traces
+- [ ] Pod logs do not contain PHI (audit logs, add masking if needed)
+- [ ] Business Associate Agreements (BAA) in place with LLM providers (Azure OpenAI, AWS Bedrock)
+- [ ] Access controls (RBAC) restrict PHI to authorized users
+- [ ] Audit logs enabled and encrypted
+
+### GDPR (Personal Data)
+
+- [ ] Data retention policies configured (OTEL backend, LLM provider)
+- [ ] Right to erasure: Mechanism to delete user data from Memory, OTEL, Postgres
+- [ ] Data processing agreements (DPA) with LLM providers
+- [ ] Encryption at rest and in transit for all personal data
+- [ ] Audit logs track access to personal data
+- [ ] Cross-border data transfer safeguards (EU-US Data Privacy Framework, Standard Contractual Clauses)
+
+### FISMA / FedRAMP (U.S. Government)
+
+- [ ] FIPS 140-2 validated encryption modules (etcd, Postgres, KMS)
+- [ ] TLS 1.2+ with approved cipher suites (no CBC mode, forward secrecy)
+- [ ] Kubernetes audit logs enabled and retained per NIST SP 800-53
+- [ ] FedRAMP-authorized LLM providers (Azure Government OpenAI, AWS GovCloud Bedrock)
+- [ ] Network segmentation (Network Policies, micro-segmentation via service mesh)
+- [ ] Continuous monitoring (OTEL, Prometheus, Grafana)
+- [ ] Incident response plan includes data breach notification
+
+## Summary
+
+ARK delegates encryption to Kubernetes, cloud providers, and storage backends. Your encryption posture depends on:
+
+1. **Enabling etcd encryption or Postgres TDE** for Query CRs
+2. **Using encrypted PVCs** for broker persistence
+3. **Configuring TLS** for Ingress, external MCP servers, external Memory backends
+4. **Deploying a service mesh** for mTLS on cluster-internal traffic
+5. **Scrubbing OTEL traces** and encrypting OTEL backend storage
+6. **Encrypting log aggregators** (CloudWatch, Stackdriver) and Kubernetes audit logs
+7. **Reviewing LLM provider DPAs** and encryption policies
+
+Use the [Install-Time Security Checklist](#install-time-security-checklist) to audit your deployment and obtain InfoSec sign-off.
