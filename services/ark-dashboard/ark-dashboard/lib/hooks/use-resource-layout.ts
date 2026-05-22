@@ -6,7 +6,6 @@ import {
 } from '@/lib/utils/section-layout';
 
 const WORKFLOW_TEMPLATES_PREFIX = 'ark-dashboard:workflow-layout:';
-const AGENTS_PREFIX = 'ark-dashboard:agents-layout:';
 const TEAMS_PREFIX = 'ark-dashboard:teams-layout:';
 
 export function parseLayout(raw: unknown): SectionedLayout {
@@ -109,13 +108,6 @@ export function useResourceLayout({
 export function useWorkflowsLayout(namespace: string) {
   return useResourceLayout({
     storagePrefix: WORKFLOW_TEMPLATES_PREFIX,
-    namespace,
-  });
-}
-
-export function useAgentsLayout(namespace: string) {
-  return useResourceLayout({
-    storagePrefix: AGENTS_PREFIX,
     namespace,
   });
 }

@@ -99,7 +99,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
             aria-label="Send message"
             className="size-8 bg-surface-bg-tertiary hover:bg-surface-bg-tertiary/80 flex justify-center items-center"
           >
-            <IconShell size="sm" className="opacity-100 [&_svg]:fill-none">
+            <IconShell size="sm" className="opacity-100">
               <Send />
             </IconShell>
           </Button>
@@ -108,7 +108,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
         <div className="self-stretch flex justify-between items-center pb-2">
           <div className="flex justify-start items-center gap-5">
             <div className="relative">
-              <IconShell size="sm" variant="secondary" className="[&_svg]:fill-none">
+              <IconShell size="sm" variant="secondary">
                 <SingleTool />
               </IconShell>
               {toolCallCount > 0 && (

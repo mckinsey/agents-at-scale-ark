@@ -14,7 +14,7 @@ export function ArrowUpwardAlt({ className, ...props }: Readonly<IconProps>) {
       fill="currentColor"
       aria-hidden="true"
       {...props}>
-      <path d="M452-244v-400L282-477l-42-43 241-241 241 241-42 42-168-168v402h-60Z" />
+      <path d="M458.92-256.69v-405.39L285.85-491.23l-32-32.62 226.77-226.76 227.15 226.76-32 32-171.46-171.46v406.62h-45.39Z" />
     </svg>
   );
 }

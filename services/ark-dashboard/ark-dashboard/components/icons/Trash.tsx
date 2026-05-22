@@ -6,7 +6,7 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   readonly className?: string;
 }
 
-export function ChatBubble({ className, ...props }: Readonly<IconProps>) {
+export function Trash({ className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       className={cn('size-full', className)}
@@ -15,7 +15,7 @@ export function ChatBubble({ className, ...props }: Readonly<IconProps>) {
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       {...props}>
-      <path d="M100-118.46V-860h760v600H241.54L100-118.46Zm121.69-186.93h592.92v-509.22H145.39v589.99l76.3-80.77Zm-76.3 0v-509.22 509.22Z" />
+      <path d="M220.62-140v-601.92H180v-45.39h171.08v-28.07h257.84v28.07H780v45.39h-40.62V-140H220.62ZM266-185.39h428v-556.53H266v556.53Zm115.23-84.46h45.39v-388.61h-45.39v388.61Zm152.15 0h45.39v-388.61h-45.39v388.61ZM266-741.92v556.53-556.53Z" />
     </svg>
   );
 }

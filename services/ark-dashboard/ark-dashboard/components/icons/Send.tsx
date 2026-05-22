@@ -10,16 +10,12 @@ export function Send({ className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       className={cn('', className)}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      viewBox="0 -960 960 960"
+      fill="currentColor"
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       {...props}>
-      <path d="M14.6668 1.3335L7.3335 8.66683" />
-      <path d="M14.6668 1.3335L10.0002 14.6668L7.3335 8.66683L1.3335 6.00016L14.6668 1.3335Z" />
+      <path d="M140-190v-580l688.46 290L140-190Zm45.39-70.31L710.54-480 185.39-701.92v168L403.92-480l-218.53 52.31v167.38Zm0 0v-441.61 441.61Z" />
     </svg>
   );
 }

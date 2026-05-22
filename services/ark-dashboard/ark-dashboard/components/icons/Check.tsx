@@ -14,7 +14,7 @@ export function Check({ className, ...props }: Readonly<IconProps>) {
       fill="currentColor"
       aria-hidden="true"
       {...props}>
-      <path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z" />
+      <path d="M379.15-258.31 168.62-468.85l32.61-32.23 177.92 177.93 379-379.39 32.62 32.62-411.62 411.61Z" />
     </svg>
   );
 }
