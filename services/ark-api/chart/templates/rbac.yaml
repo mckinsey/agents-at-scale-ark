@@ -50,10 +50,8 @@ rules:
     resources: ["httproutes", "gateways"]
     verbs: ["get", "list"]
   # Ark resources.
-  # MCP auth endpoints rely on get + patch/update on mcpservers (the parent
-  # object) to read status.authorization and stamp the authorized-by /
-  # authorized-at annotations. They do NOT touch the mcpservers/status
-  # subresource (annotations live on metadata, not status).
+  # MCP auth endpoints use get/update on mcpservers to read
+  # status.authorization and stamp authorized-by/authorized-at annotations.
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

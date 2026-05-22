@@ -8,6 +8,8 @@ export interface AuthStatusResponse {
   state: 'pending' | 'authorized' | 'failed' | 'expired';
   expires_at?: string | null;
   message?: string | null;
+  controller_state?: string | null;
+  controller_message?: string | null;
 }
 
 export interface AuthLogoutResponse {
@@ -18,7 +20,6 @@ export interface AuthLogoutResponse {
 
 export interface AuthStartBody {
   force?: boolean;
-  force_registration?: boolean;
   scope?: string[];
 }
 

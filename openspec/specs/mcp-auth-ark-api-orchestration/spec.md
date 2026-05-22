@@ -1,7 +1,20 @@
 # mcp-auth-ark-api-orchestration Specification
 
 ## Purpose
-TBD - created by syncing change mcp-auth-ark-api-orchestration. Update Purpose after archive.
+Orchestrate OAuth 2.1 authorization flows for MCP servers through ark-api, with CLI and dashboard support.
+
+## Revision Notes (post-review)
+
+The following changes were made per reviewer feedback on PR #2174:
+
+1. **Dropped auto-provisioning of `tokenSecretRef.name`.** `auth/start` now returns HTTP 422 when `spec.authorization.tokenSecretRef.name` is unset, with an actionable message. The bootstrap_token_secret, binding label, and MCPServer spec-patch logic are removed.
+2. **Replaced in-memory cache with Secret-backed flow state.** Flow state (verifier, state param, auth_id, flow status) is stored in the Secret alongside client credentials, indexed by a `ark.mckinsey.com/oauth-state` label. This fixes HA-mode silently breaking and rolling-restart dropping in-flight flows.
+3. **Extended `auth/status` response.** Added `controller_state` and `controller_message` fields. When flow is authorized but the controller reverts `status.authorization.state` to `Required` (e.g. token rejected by IdP), the endpoint collapses to `state: failed` with the controller's condition message.
+4. **Collapsed `--force` and `--force-registration`.** `--force` now does both: bypasses the Authorized preflight AND triggers fresh DCR. The `force_registration` field is removed from the API and CLI.
+5. **Named the 30s safety margin.** `TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 30` replaces the magic number.
+6. **Added sensitive data logging filter.** A `logging.Filter` subclass redacts access_token, refresh_token, client_secret, code_verifier from log records.
+7. **Added NetworkPolicy template.** Chart ships a NetworkPolicy (disabled by default) restricting ingress to the ark-api pod.
+8. **Used generated SDK types.** Endpoint code reads `status.authorization` fields via typed MCPServer model attributes instead of raw dict access.
 ## Requirements
 ### Requirement: ark-api exposes POST /auth/start to initiate an authorization flow
 

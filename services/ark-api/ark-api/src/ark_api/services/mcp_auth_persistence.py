@@ -14,15 +14,41 @@ from kubernetes_asyncio.client.rest import ApiException
 logger = logging.getLogger(__name__)
 
 TOKEN_SECRET_LABEL = "ark.mckinsey.com/mcp-token-secret"
-MCPSERVER_BINDING_LABEL_KEY = "ark.mckinsey.com/mcpserver"
+FLOW_STATE_LABEL = "ark.mckinsey.com/oauth-state"
 ANNOTATION_AUTHORIZED_BY = "ark.mckinsey.com/mcp-auth-authorized-by"
 ANNOTATION_AUTHORIZED_AT = "ark.mckinsey.com/mcp-auth-authorized-at"
+
+TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 30
 
 DEFAULT_ACCESS_TOKEN_KEY = "access_token"
 DEFAULT_REFRESH_TOKEN_KEY = "refresh_token"
 DEFAULT_EXPIRES_AT_KEY = "expires_at"
 DEFAULT_CLIENT_ID_KEY = "client_id"
 DEFAULT_CLIENT_SECRET_KEY = "client_secret"
+
+FLOW_AUTH_ID_KEY = "_flow_auth_id"
+FLOW_STATE_PARAM_KEY = "_flow_state_param"
+FLOW_VERIFIER_KEY = "_flow_verifier"
+FLOW_STATUS_KEY = "_flow_status"
+FLOW_MESSAGE_KEY = "_flow_message"
+FLOW_EXPIRES_AT_KEY = "_flow_expires_at"
+FLOW_CALLER_IDENTITY_KEY = "_flow_caller_identity"
+FLOW_TOKEN_EXPIRES_AT_KEY = "_flow_token_expires_at"
+FLOW_SERVER_NAME_KEY = "_flow_server_name"
+FLOW_NAMESPACE_KEY = "_flow_namespace"
+
+FLOW_KEYS = [
+    FLOW_AUTH_ID_KEY,
+    FLOW_STATE_PARAM_KEY,
+    FLOW_VERIFIER_KEY,
+    FLOW_STATUS_KEY,
+    FLOW_MESSAGE_KEY,
+    FLOW_EXPIRES_AT_KEY,
+    FLOW_CALLER_IDENTITY_KEY,
+    FLOW_TOKEN_EXPIRES_AT_KEY,
+    FLOW_SERVER_NAME_KEY,
+    FLOW_NAMESPACE_KEY,
+]
 
 
 @dataclass
@@ -45,6 +71,18 @@ class SecretKeys:
             client_secret=ref.get("clientSecretKey") or DEFAULT_CLIENT_SECRET_KEY,
         )
 
+    @classmethod
+    def from_typed_ref(cls, ref) -> "SecretKeys":
+        if not ref:
+            return cls()
+        return cls(
+            access_token=ref.access_token_key or DEFAULT_ACCESS_TOKEN_KEY,
+            refresh_token=ref.refresh_token_key or DEFAULT_REFRESH_TOKEN_KEY,
+            expires_at=ref.expires_at_key or DEFAULT_EXPIRES_AT_KEY,
+            client_id=ref.client_id_key or DEFAULT_CLIENT_ID_KEY,
+            client_secret=ref.client_secret_key or DEFAULT_CLIENT_SECRET_KEY,
+        )
+
     def as_list(self) -> list[str]:
         return [
             self.access_token,
@@ -65,8 +103,33 @@ class CachedClientCreds:
         return bool(self.client_id) and bool(self.client_secret)
 
 
-class BootstrapConflictError(Exception):
-    pass
+@dataclass
+class FlowState:
+    auth_id: str
+    state_param: str
+    verifier: str
+    status: str
+    message: str
+    expires_at: str
+    caller_identity: str
+    token_expires_at: str
+    server_name: str
+    namespace: str
+    client_id: str
+    client_secret: str
+    secret_name: str = ""
+
+    @property
+    def is_expired(self) -> bool:
+        if not self.expires_at:
+            return True
+        try:
+            deadline = datetime.strptime(self.expires_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc
+            )
+            return datetime.now(timezone.utc) >= deadline
+        except ValueError:
+            return True
 
 
 def _decode_b64(value: Optional[str]) -> Optional[str]:
@@ -78,48 +141,13 @@ def _decode_b64(value: Optional[str]) -> Optional[str]:
         return None
 
 
-async def bootstrap_token_secret(namespace: str, server_name: str, secret_name: str) -> None:
-    """Create the bootstrap Secret with the binding label, or reuse it if already labeled.
-
-    Raises BootstrapConflictError when a same-named Secret exists without the binding label.
-    """
-    async with ApiClient() as api:
-        v1 = client.CoreV1Api(api)
-        metadata = client.V1ObjectMeta(
-            name=secret_name,
-            labels={MCPSERVER_BINDING_LABEL_KEY: server_name},
-        )
-        secret = client.V1Secret(
-            api_version="v1",
-            kind="Secret",
-            metadata=metadata,
-            data={},
-            type="Opaque",
-        )
-        try:
-            await v1.create_namespaced_secret(namespace=namespace, body=secret)
-            logger.info("Bootstrapped token Secret %s/%s for MCPServer %s", namespace, secret_name, server_name)
-            return
-        except ApiException as e:
-            if e.status != 409:
-                raise
-
-        existing = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
-        existing_labels = existing.metadata.labels or {}
-        if existing_labels.get(MCPSERVER_BINDING_LABEL_KEY) == server_name:
-            return
-        raise BootstrapConflictError(
-            f"Secret {namespace}/{secret_name} already exists without the "
-            f"'{MCPSERVER_BINDING_LABEL_KEY}: {server_name}' binding label; "
-            f"set spec.authorization.tokenSecretRef.name to a different name "
-            f"or add the label to the existing Secret"
-        )
+def _decode_b64_or_empty(value: Optional[str]) -> str:
+    return _decode_b64(value) or ""
 
 
 async def read_cached_client_creds(
     namespace: str, secret_name: str, keys: SecretKeys
 ) -> CachedClientCreds:
-    """Read client_id / client_secret from the Secret (returns empty if missing)."""
     async with ApiClient() as api:
         v1 = client.CoreV1Api(api)
         try:
@@ -136,13 +164,165 @@ async def read_cached_client_creds(
     )
 
 
+async def write_flow_state(
+    *,
+    namespace: str,
+    secret_name: str,
+    auth_id: str,
+    state_param: str,
+    verifier: str,
+    expires_at: str,
+    caller_identity: str,
+    server_name: str,
+    client_id: str,
+    client_secret: str,
+    keys: SecretKeys,
+) -> None:
+    string_data = {
+        FLOW_AUTH_ID_KEY: auth_id,
+        FLOW_STATE_PARAM_KEY: state_param,
+        FLOW_VERIFIER_KEY: verifier,
+        FLOW_STATUS_KEY: "pending",
+        FLOW_MESSAGE_KEY: "",
+        FLOW_EXPIRES_AT_KEY: expires_at,
+        FLOW_CALLER_IDENTITY_KEY: caller_identity,
+        FLOW_TOKEN_EXPIRES_AT_KEY: "",
+        FLOW_SERVER_NAME_KEY: server_name,
+        FLOW_NAMESPACE_KEY: namespace,
+        keys.client_id: client_id,
+        keys.client_secret: client_secret,
+    }
+
+    body = {
+        "metadata": {
+            "labels": {
+                TOKEN_SECRET_LABEL: "true",
+                FLOW_STATE_LABEL: state_param,
+            },
+        },
+        "stringData": string_data,
+    }
+
+    async with ApiClient() as api:
+        v1 = client.CoreV1Api(api)
+        try:
+            await v1.create_namespaced_secret(
+                namespace=namespace,
+                body=client.V1Secret(
+                    api_version="v1",
+                    kind="Secret",
+                    metadata=client.V1ObjectMeta(
+                        name=secret_name,
+                        labels={
+                            TOKEN_SECRET_LABEL: "true",
+                            FLOW_STATE_LABEL: state_param,
+                        },
+                    ),
+                    string_data=string_data,
+                    type="Opaque",
+                ),
+            )
+            logger.info("Created flow-state Secret %s/%s", namespace, secret_name)
+            return
+        except ApiException as e:
+            if e.status != 409:
+                raise
+
+        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+        logger.info("Patched flow-state into Secret %s/%s", namespace, secret_name)
+
+
+async def read_flow_state_by_state_param(state_param: str) -> Optional[FlowState]:
+    async with ApiClient() as api:
+        v1 = client.CoreV1Api(api)
+        secrets = await v1.list_secret_for_all_namespaces(
+            label_selector=f"{FLOW_STATE_LABEL}={state_param}",
+        )
+        if not secrets.items:
+            return None
+        secret = secrets.items[0]
+        flow = _extract_flow_state(secret)
+        if flow is not None:
+            flow.secret_name = secret.metadata.name
+        return flow
+
+
+async def read_flow_state_by_auth_id(
+    namespace: str, secret_name: str
+) -> Optional[FlowState]:
+    async with ApiClient() as api:
+        v1 = client.CoreV1Api(api)
+        try:
+            secret = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        flow = _extract_flow_state(secret)
+        if flow is None:
+            return None
+        return flow
+
+
+def _extract_flow_state(secret) -> Optional[FlowState]:
+    data = secret.data or {}
+    auth_id = _decode_b64(data.get(FLOW_AUTH_ID_KEY))
+    if not auth_id:
+        return None
+    keys = SecretKeys()
+    return FlowState(
+        auth_id=auth_id,
+        state_param=_decode_b64_or_empty(data.get(FLOW_STATE_PARAM_KEY)),
+        verifier=_decode_b64_or_empty(data.get(FLOW_VERIFIER_KEY)),
+        status=_decode_b64_or_empty(data.get(FLOW_STATUS_KEY)) or "pending",
+        message=_decode_b64_or_empty(data.get(FLOW_MESSAGE_KEY)),
+        expires_at=_decode_b64_or_empty(data.get(FLOW_EXPIRES_AT_KEY)),
+        caller_identity=_decode_b64_or_empty(data.get(FLOW_CALLER_IDENTITY_KEY)),
+        token_expires_at=_decode_b64_or_empty(data.get(FLOW_TOKEN_EXPIRES_AT_KEY)),
+        server_name=_decode_b64_or_empty(data.get(FLOW_SERVER_NAME_KEY)),
+        namespace=_decode_b64_or_empty(data.get(FLOW_NAMESPACE_KEY)),
+        client_id=_decode_b64_or_empty(data.get(keys.client_id)),
+        client_secret=_decode_b64_or_empty(data.get(keys.client_secret)),
+    )
+
+
+async def mark_flow_authorized(
+    namespace: str, secret_name: str, token_expires_at: Optional[str]
+) -> None:
+    body = {
+        "metadata": {"labels": {FLOW_STATE_LABEL: None}},
+        "stringData": {
+            FLOW_STATUS_KEY: "authorized",
+            FLOW_STATE_PARAM_KEY: "",
+            FLOW_MESSAGE_KEY: "",
+            FLOW_TOKEN_EXPIRES_AT_KEY: token_expires_at or "",
+        },
+    }
+    async with ApiClient() as api:
+        v1 = client.CoreV1Api(api)
+        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+
+
+async def mark_flow_failed(namespace: str, secret_name: str, message: str) -> None:
+    body = {
+        "metadata": {"labels": {FLOW_STATE_LABEL: None}},
+        "stringData": {
+            FLOW_STATUS_KEY: "failed",
+            FLOW_STATE_PARAM_KEY: "",
+            FLOW_MESSAGE_KEY: message,
+        },
+    }
+    async with ApiClient() as api:
+        v1 = client.CoreV1Api(api)
+        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+
+
 def compute_expires_at(expires_in: Optional[int], now: Optional[datetime] = None) -> Optional[str]:
-    """Compute RFC 3339 UTC expires_at = now + expires_in - 30s for positive expires_in."""
     if expires_in is None or expires_in <= 0:
         logger.warning("Token endpoint did not advertise a positive expires_in; omitting expires_at")
         return None
     now = now or datetime.now(timezone.utc)
-    expires = now.timestamp() + expires_in - 30
+    expires = now.timestamp() + expires_in - TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS
     return datetime.fromtimestamp(expires, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -162,7 +342,6 @@ async def write_token_secret(
     keys: SecretKeys,
     payload: SecretPatchPayload,
 ) -> None:
-    """Create-or-patch the Secret with the token payload and stamp the mcp-token-secret label."""
     string_data: dict[str, str] = {
         keys.access_token: payload.access_token,
         keys.client_id: payload.client_id,
@@ -210,7 +389,6 @@ async def clear_token_secret(
     keys: SecretKeys,
     keep_client: bool,
 ) -> Optional[list[str]]:
-    """Clear token (and optionally client) keys on the Secret. Returns None when the Secret is absent."""
     cleared: dict[str, str] = {
         keys.access_token: "",
         keys.refresh_token: "",
@@ -220,23 +398,29 @@ async def clear_token_secret(
         cleared[keys.client_id] = ""
         cleared[keys.client_secret] = ""
 
+    for k in FLOW_KEYS:
+        cleared[k] = ""
+
     async with ApiClient() as api:
         v1 = client.CoreV1Api(api)
         try:
             await v1.patch_namespaced_secret(
                 name=secret_name,
                 namespace=namespace,
-                body={"stringData": cleared},
+                body={
+                    "metadata": {"labels": {FLOW_STATE_LABEL: None}},
+                    "stringData": cleared,
+                },
             )
         except ApiException as e:
             if e.status == 404:
                 return None
             raise
-    return list(cleared.keys())
+    visible_cleared = [k for k in cleared if not k.startswith("_flow")]
+    return visible_cleared
 
 
 async def delete_token_secret(*, namespace: str, secret_name: str) -> bool:
-    """Delete the Secret. Returns False if absent."""
     async with ApiClient() as api:
         v1 = client.CoreV1Api(api)
         try:
@@ -252,10 +436,14 @@ def now_rfc3339() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def flow_deadline_rfc3339(ttl_seconds: int) -> str:
+    deadline = datetime.now(timezone.utc).timestamp() + ttl_seconds
+    return datetime.fromtimestamp(deadline, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 async def annotate_mcpserver_authorized(
     ark_client, name: str, authorized_by: str
 ) -> None:
-    """Set the authorized-by / authorized-at annotations on the MCPServer."""
     mcp = await ark_client.mcpservers.a_get(name)
     obj = mcp.to_dict()
     metadata = obj.setdefault("metadata", {})
@@ -265,7 +453,6 @@ async def annotate_mcpserver_authorized(
     metadata["annotations"] = annotations
     obj["metadata"] = metadata
 
-    # Patch via the underlying core API client (works regardless of SDK update semantics).
     from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
 
     updated = MCPServerV1alpha1(**obj)
@@ -273,7 +460,6 @@ async def annotate_mcpserver_authorized(
 
 
 async def strip_mcpserver_auth_annotations(ark_client, name: str) -> None:
-    """Remove the authorized-by / authorized-at annotations from the MCPServer."""
     mcp = await ark_client.mcpservers.a_get(name)
     obj = mcp.to_dict()
     metadata = obj.setdefault("metadata", {})

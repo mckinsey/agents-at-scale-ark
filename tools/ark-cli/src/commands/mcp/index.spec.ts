@@ -42,7 +42,6 @@ describe('createMcpCommand structure', () => {
       expect.arrayContaining([
         '--namespace',
         '--force',
-        '--force-registration',
         '--no-open',
         '--timeout',
         '--scope',
@@ -89,7 +88,6 @@ describe('createMcpCommand wiring', () => {
         '--namespace',
         'team-a',
         '--force',
-        '--force-registration',
         '--no-open',
         '--timeout',
         '60s',
@@ -103,7 +101,6 @@ describe('createMcpCommand wiring', () => {
     expect(mockRunLogin).toHaveBeenCalledWith('notion-mcp', {
       namespace: 'team-a',
       force: true,
-      forceRegistration: true,
       open: false,
       timeout: '60s',
       scope: 'read write',

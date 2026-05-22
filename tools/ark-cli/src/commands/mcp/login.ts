@@ -9,7 +9,6 @@ import {AuthHttpError, McpAuthClient, AuthStartBody} from './authClient.js';
 export interface LoginOptions {
   namespace?: string;
   force?: boolean;
-  forceRegistration?: boolean;
   open?: boolean;
   timeout?: string;
   scope?: string;
@@ -66,7 +65,6 @@ export async function runLogin(
   const namespace = deps.resolveNs(options.namespace);
   const body: AuthStartBody = {};
   if (options.force) body.force = true;
-  if (options.forceRegistration) body.force_registration = true;
   if (options.scope) {
     body.scope = options.scope.split(/[\s,]+/).filter((s) => s.length > 0);
   }

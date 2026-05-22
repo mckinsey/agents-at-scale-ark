@@ -14,7 +14,7 @@ The redirect target is a single externally reachable URL that ark-api must own. 
 | Env var | Default | Description |
 |---|---|---|
 | `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/api/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four `auth/*` endpoints return `503`. |
-| `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries. After this window the cache reaps the entry and a late callback fails with "unknown state". |
+| `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries stored in the Secret. After this window a late callback returns "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
 
@@ -70,7 +70,11 @@ Register the chosen URL with the IdP as a redirect URI before running the flow.
 
 ## RBAC
 
-ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/patch` on `mcpservers` (the parent resource, NOT `mcpservers/status` — annotations live in `metadata.annotations` on the parent). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
+ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/update` on `mcpservers` (for reading `status.authorization` and stamping auth annotations). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
+
+## Callback URL changes
+
+If you change `ARK_API_PUBLIC_CALLBACK_URL` after servers have been authorized, the IdP's stored `redirect_uri` will no longer match. Run `ark mcp auth login --force` against any previously-authorized server to re-register with the new URL.
 
 ## Verifying
 
@@ -114,6 +118,12 @@ spec:
 The redundancy is intentional: the controller reads `spec.authorization` for discovery; this header entry lets the SDK read the same token for dispatch. The default key is `access_token` unless `spec.authorization.tokenSecretRef.accessTokenKey` overrides it.
 
 This workaround becomes unnecessary once the `mcp-auth-sdk-header-resolution` capability lands; that capability will teach `_resolve_mcp_server()` to read `spec.authorization` directly.
+
+## Known limitations
+
+- **Single-user token model.** Only one set of tokens is stored per MCPServer. In multi-user clusters the last login wins; the `authorized-by` annotation surfaces who last authorized.
+- **No chainsaw e2e tests.** End-to-end tests are blocked on a TLS-capable mock MCP server. This is tracked as a follow-up.
+- **MCPServer delete+recreate.** Deleting and recreating an MCPServer leaves stale `authorized-by` / `authorized-at` annotations on the old resource. The new resource starts clean.
 
 ## Related
 

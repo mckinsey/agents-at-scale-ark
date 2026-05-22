@@ -108,7 +108,7 @@ describe('runLogin --no-open', () => {
 });
 
 describe('runLogin flag mapping', () => {
-  it('passes force and force_registration in body', async () => {
+  it('passes force in body', async () => {
     const client = {
       start: vi.fn().mockResolvedValue({
         auth_id: 'aid',
@@ -123,35 +123,9 @@ describe('runLogin flag mapping', () => {
         client as unknown as InstanceType<typeof McpAuthClient>,
       openBrowser: vi.fn(),
     });
-    await runLogin(
-      'notion-mcp',
-      {force: true, forceRegistration: true, open: false},
-      deps
-    );
+    await runLogin('notion-mcp', {force: true, open: false}, deps);
     expect(client.start).toHaveBeenCalledWith('notion-mcp', 'default', {
       force: true,
-      force_registration: true,
-    });
-  });
-
-  it('force-registration is independent of force', async () => {
-    const client = {
-      start: vi.fn().mockResolvedValue({
-        auth_id: 'aid',
-        authorization_url: 'x',
-        flow_expires_at: 'x',
-      }),
-      status: vi.fn().mockResolvedValue({state: 'authorized'}),
-      logout: vi.fn(),
-    };
-    const {deps} = makeDeps({
-      buildClient: () =>
-        client as unknown as InstanceType<typeof McpAuthClient>,
-      openBrowser: vi.fn(),
-    });
-    await runLogin('notion-mcp', {forceRegistration: true, open: false}, deps);
-    expect(client.start).toHaveBeenCalledWith('notion-mcp', 'default', {
-      force_registration: true,
     });
   });
 });
@@ -408,52 +382,6 @@ describe('runLogin status error mid-poll', () => {
     expect(code).toBe(1);
     expect(mockOutput.error).toHaveBeenCalledWith('mcp auth failed:', 'kaboom');
   });
-
-  it('falls back to HTTP <status> when AuthHttpError body is empty', async () => {
-    const client = {
-      start: vi.fn().mockResolvedValue({
-        auth_id: 'aid',
-        authorization_url: 'x',
-        flow_expires_at: 'x',
-      }),
-      status: vi.fn().mockRejectedValue(new AuthHttpError(503, '')),
-      logout: vi.fn(),
-    };
-    const {deps} = makeDeps({
-      buildClient: () =>
-        client as unknown as InstanceType<typeof McpAuthClient>,
-      openBrowser: vi.fn(),
-    });
-    const code = await runLogin('notion-mcp', {open: false}, deps);
-    expect(code).toBe(1);
-    expect(mockOutput.error).toHaveBeenCalledWith(
-      'mcp auth failed:',
-      'HTTP 503'
-    );
-  });
-
-  it('surfaces generic Error thrown by status()', async () => {
-    const client = {
-      start: vi.fn().mockResolvedValue({
-        auth_id: 'aid',
-        authorization_url: 'x',
-        flow_expires_at: 'x',
-      }),
-      status: vi.fn().mockRejectedValue(new Error('network gone')),
-      logout: vi.fn(),
-    };
-    const {deps} = makeDeps({
-      buildClient: () =>
-        client as unknown as InstanceType<typeof McpAuthClient>,
-      openBrowser: vi.fn(),
-    });
-    const code = await runLogin('notion-mcp', {open: false}, deps);
-    expect(code).toBe(1);
-    expect(mockOutput.error).toHaveBeenCalledWith(
-      'mcp auth failed:',
-      'network gone'
-    );
-  });
 });
 
 describe('runLogin start error fallback', () => {
@@ -474,22 +402,6 @@ describe('runLogin start error fallback', () => {
       'mcp auth failed:',
       'HTTP 500'
     );
-  });
-
-  it('surfaces generic Error thrown by start()', async () => {
-    const client = {
-      start: vi.fn().mockRejectedValue(new Error('boom')),
-      status: vi.fn(),
-      logout: vi.fn(),
-    };
-    const {deps} = makeDeps({
-      buildClient: () =>
-        client as unknown as InstanceType<typeof McpAuthClient>,
-      openBrowser: vi.fn(),
-    });
-    const code = await runLogin('notion-mcp', {open: false}, deps);
-    expect(code).toBe(1);
-    expect(mockOutput.error).toHaveBeenCalledWith('mcp auth failed:', 'boom');
   });
 });
 

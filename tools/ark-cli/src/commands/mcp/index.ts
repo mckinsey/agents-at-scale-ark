@@ -14,10 +14,9 @@ export function createMcpCommand(_config: ArkConfig): Command {
     .command('login <server-name>')
     .description('start an OAuth flow for an MCPServer via ark-api')
     .option('-n, --namespace <namespace>', 'namespace of the MCPServer')
-    .option('--force', 'bypass the Authorized preflight on auth/start')
     .option(
-      '--force-registration',
-      'force fresh dynamic client registration even when cached creds exist'
+      '--force',
+      'bypass the Authorized preflight and force fresh client registration'
     )
     .option('--no-open', 'do not open a browser; print the URL only')
     .option(
@@ -32,7 +31,6 @@ export function createMcpCommand(_config: ArkConfig): Command {
       const exitCode = await runLogin(serverName, {
         namespace: options.namespace,
         force: options.force,
-        forceRegistration: options.forceRegistration,
         open: options.open,
         timeout: options.timeout,
         scope: options.scope,

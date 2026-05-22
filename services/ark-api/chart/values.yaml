@@ -156,6 +156,11 @@ impersonation:
   groupsClaim: groups
   prefix: ""
 
+# Network policy configuration
+networkPolicy:
+  enabled: false
+  allowNamespaces: []
+
 # Service account configuration
 serviceAccount:
   name: ark-api-sa

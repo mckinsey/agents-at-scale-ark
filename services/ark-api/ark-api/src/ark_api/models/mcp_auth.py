@@ -12,11 +12,10 @@ FlowState = Literal["pending", "authorized", "failed", "expired"]
 class AuthStartRequest(BaseModel):
     force: Optional[bool] = Field(
         default=None,
-        description="Bypass the Authorized preflight (does NOT bypass DiscoveryFailed)",
-    )
-    force_registration: Optional[bool] = Field(
-        default=None,
-        description="Perform a fresh DCR even when the Secret carries cached client credentials",
+        description=(
+            "Bypass the Authorized preflight and force fresh DCR "
+            "even when the Secret carries cached client credentials"
+        ),
     )
     scopes: Optional[List[str]] = Field(
         default=None,
@@ -38,6 +37,14 @@ class AuthStartResponse(BaseModel):
 class AuthStatusResponse(BaseModel):
     state: FlowState
     message: Optional[str] = None
+    controller_state: Optional[str] = Field(
+        default=None,
+        description="Current MCPServer status.authorization.state from the controller",
+    )
+    controller_message: Optional[str] = Field(
+        default=None,
+        description="Latest Available condition message from the controller",
+    )
     expires_at: Optional[str] = Field(
         default=None,
         description="RFC 3339 UTC token expiry (only present once state == authorized)",

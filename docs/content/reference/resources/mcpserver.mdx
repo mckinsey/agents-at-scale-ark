@@ -94,6 +94,17 @@ shell    True        1
 | `Authorized`  | A token was successfully written to the referenced Secret by ark-api. |
 | `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. Dashboard/CLI cannot drive an OAuth flow against this server. |
 
+### Prerequisites
+
+Before running `ark mcp auth login`, `spec.authorization.tokenSecretRef.name` must be set on the MCPServer. ark-api returns `422` with an actionable message if the field is missing:
+
+```yaml
+spec:
+  authorization:
+    tokenSecretRef:
+      name: notion-mcp-oauth   # operator must declare this
+```
+
 ### Token writes go through ark-api
 
 The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The dashboard "Authorize" button and the [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI are thin clients that POST to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and poll `auth/status` — neither touches the Kubernetes Secret directly. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
