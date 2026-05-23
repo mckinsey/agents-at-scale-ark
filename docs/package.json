@@ -9,6 +9,7 @@
     "postbuild": "pagefind --site .next/server/app --output-path out/_pagefind",
     "start": "next start",
     "check-links": "node scripts/check-links.js",
+    "validate-yaml": "node scripts/validate-ark-yaml.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -30,6 +31,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^4.1.5",
     "http-server": "^14.1.1",
+    "js-yaml": "^4.1.0",
     "jsdom": "^25.0.1",
     "linkinator": "^7.6.1",
     "pagefind": "^1.3.0",

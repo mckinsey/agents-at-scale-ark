@@ -5,133 +5,124 @@ description: A step-by-step worked example of building a customer support agent
 
 # Complete Worked Example: Customer Support Workflow
 
-This guide provides a complete, hands-on example of building a functional customer support agent from scratch to deployment.
+This guide walks you through building a functional customer support agent from scratch to deployment. Every YAML snippet in this page is validated against the live Ark CRD schema in CI, so you can copy-paste with confidence.
+
+## Prerequisites
+
+Before starting, make sure you have:
+
+- Ark installed on your cluster (see the [Quickstart](/quickstart))
+- `kubectl` configured to talk to that cluster
+- A model named `default` available — `ark models create default` if you don't already have one
+- `jq` installed locally for the pretty-print steps
+
+Verify quickly:
+
+```bash
+kubectl get pods -n ark-system
+kubectl get models
+```
 
 ## What You'll Build
 
 - A customer support agent that answers password reset questions
 - A test query to verify the agent works
-- Monitoring via ARK Dashboard to see the output
+- Monitoring via the Ark Dashboard
+- A second triage agent and a team that combines both
 
-## Step 1: Generate the Project
+## Step 1: Set Up a Working Directory
+
+Ark doesn't dictate where you keep agent YAML — any directory works. Create one for this example:
 
 ```bash
-# Create a new project for customer support
-ark generate project customer-support-bot
-
-# Navigate into the project
+mkdir -p customer-support-bot/{agents,queries,teams}
 cd customer-support-bot
-
-# Review the generated structure
-ls -la
-```
-
-Expected output:
-```
-agents/         teams/          queries/        models/
-tools/          mcp-servers/    scripts/        templates/
-tests/          docs/           Chart.yaml      values.yaml
-Makefile        .env            README.md
 ```
 
 ## Step 2: Create a Support Agent
 
+Write the agent YAML directly:
+
 ```bash
-# Generate the agent
-ark generate agent support-agent
-```
-
-When prompted:
-- **Agent name**: `support-agent`
-- **Description**: `Handles customer support inquiries`
-- **Model**: Select your configured model (e.g., `gpt-4o-mini`)
-- **Create sample query**: `Yes`
-
-This creates `agents/support-agent.yaml`. Customize it:
-
-```yaml
+cat > agents/support-agent.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: support-agent
 spec:
-  model: gpt-4o-mini
   description: Handles customer support inquiries
-  systemPrompt: |
+  modelRef:
+    name: default
+  prompt: |
     You are a helpful customer support agent for a SaaS platform.
     Answer customer questions politely, professionally, and concisely.
-    
+
     Common topics:
     - Password resets
     - Account access
     - Billing questions
     - Feature inquiries
+EOF
 ```
 
-## Step 3: Deploy to ARK
+## Step 3: Deploy to Ark
 
 ```bash
-# Deploy using make (applies resources in dependency order)
-make resources-apply
-
-# Or deploy manually
 kubectl apply -f agents/support-agent.yaml
-
-# Verify the agent is ready
 kubectl get agent support-agent
+```
 
-# Expected output:
-# NAME            MODEL          STATUS    AGE
-# support-agent   gpt-4o-mini    Ready     5s
+Expected status:
+
+```
+NAME            PHASE
+support-agent   ready
 ```
 
 ## Step 4: Create a Test Query
 
-Create a test query to verify your agent works:
-
 ```bash
-# Create the query file
 cat > queries/test-password-reset.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: test-password-reset
 spec:
+  input: "How do I reset my password?"
   target:
-    agent:
+    type: agent
     name: support-agent
-  input:
-    type: message
-    message: "How do I reset my password?"
 EOF
 
-# Apply the query
 kubectl apply -f queries/test-password-reset.yaml
 ```
 
 ## Step 5: Watch the Query Execute
 
 ```bash
-# Watch the query status in real-time
 kubectl get query test-password-reset -w
-
-# Expected progression:
-# NAME                   STATUS      AGE
-# test-password-reset    Pending     0s
-# test-password-reset    Running     2s
-# test-password-reset    Completed   5s
 ```
 
-Press `Ctrl+C` to stop watching.
+Expected phase progression (lowercase, per the CRD):
+
+```
+NAME                   TYPE   PHASE      DURATION   AGE
+test-password-reset    user   pending               0s
+test-password-reset    user   running               2s
+test-password-reset    user   done       5s         5s
+```
+
+Press `Ctrl+C` to stop watching once it reaches `done`.
 
 ## Step 6: View the Output
 
 ```bash
-# Get the agent's response
-kubectl get query test-password-reset -o jsonpath='{.status.response.content}' | jq -r
+kubectl get query test-password-reset \
+  -o jsonpath='{.status.responses[0].content}'
 ```
 
-**Example output:**
+Example output:
+
 ```
 To reset your password, please follow these steps:
 
@@ -148,155 +139,133 @@ If you don't receive the email within 5 minutes, please check your spam folder.
 ## Step 7: View Detailed Information
 
 ```bash
-# Get full query details
 kubectl describe query test-password-reset
 ```
 
-**Example output:**
-```yaml
-Name:         test-password-reset
-Namespace:    default
-API Version:  ark.mckinsey.com/v1alpha1
-Kind:         Query
-Status:
-  Phase:  Completed
-  Responses:
-    Agent:  support-agent
-    Content:  To reset your password, please follow these steps...
-    Token Usage:
-      Input Tokens:   45
-      Output Tokens:  123
-      Total Tokens:   168
-  Start Time:  2025-11-27T10:00:00Z
-  End Time:    2025-11-27T10:00:05Z
-```
+You'll see the `Phase`, the response (agent name + content), `Token Usage` (input / output / total), and start/end times.
 
-## Step 8: Monitor in ARK Dashboard
+## Step 8: Monitor in the Ark Dashboard
 
-If you have ARK Dashboard running, you can view the results graphically:
+Launch the dashboard:
 
 ```bash
-# If not already running, start the dashboard
-kubectl port-forward -n default svc/ark-dashboard 3274:3274
-
-# Open in browser
-open http://localhost:3274
+ark dashboard
 ```
 
-In the dashboard:
-1. Navigate to the **Queries** tab
+The command opens it in your browser and handles port-forwarding for you. In the dashboard:
+
+1. Navigate to the **Queries** view
 2. Find `test-password-reset` in the list
-3. Click on it to view:
-   - Input message
-   - Agent response
-   - Execution timeline
+3. Open it to see:
+   - The input message
+   - The agent's response
+   - The execution timeline
    - Token usage
-   - Model used
+   - The model used
 
 ## Step 9: Test Different Scenarios
 
-Create more test queries to verify different scenarios:
-
 ```bash
-# Test billing question
 cat > queries/test-billing.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: test-billing
 spec:
+  input: "How can I upgrade my subscription plan?"
   target:
-    agent:
+    type: agent
     name: support-agent
-  input:
-    type: message
-    message: "How can I upgrade my subscription plan?"
 EOF
 
 kubectl apply -f queries/test-billing.yaml
-kubectl get query test-billing -o jsonpath='{.status.response.content}' | jq -r
+kubectl get query test-billing \
+  -o jsonpath='{.status.responses[0].content}'
 ```
 
 ## Step 10: Add a Triage Agent (Optional)
 
-Build a multi-agent team:
+Add a second agent that classifies requests before they reach the support agent.
 
 ```bash
-# Generate a triage agent
-ark generate agent triage-agent
-
-# Edit agents/triage-agent.yaml
-# Add system prompt to categorize customer inquiries
-```
-
-Example triage agent configuration:
-
-```yaml
+cat > agents/triage-agent.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: triage-agent
 spec:
-  model: gpt-4o-mini
   description: Categorizes and routes customer inquiries
-  systemPrompt: |
+  modelRef:
+    name: default
+  prompt: |
     You are a triage agent that categorizes customer inquiries.
-    
+
     Categories:
     - technical: Password resets, login issues, bugs
     - billing: Subscription, payment, invoices
     - sales: Upgrades, new features, pricing
-    
+
     Respond with just the category name.
+EOF
+
+kubectl apply -f agents/triage-agent.yaml
 ```
 
 ## Step 11: Create a Team
 
+Combine both agents into a sequential team — triage runs first, then support answers.
+
 ```bash
-# Generate a team
-ark generate team support-team
+cat > teams/support-team.yaml <<'EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: support-team
+spec:
+  description: Triage then answer
+  strategy: sequential
+  members:
+    - type: agent
+      name: triage-agent
+    - type: agent
+      name: support-agent
+EOF
 
-# When prompted:
-# - Select: triage-agent, support-agent
-# - Workflow strategy: sequential
-
-# Deploy
-kubectl apply -f agents/triage-agent.yaml
 kubectl apply -f teams/support-team.yaml
+```
 
-# Test the team
+Send a query to the team:
+
+```bash
 cat > queries/team-test.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: team-test
 spec:
+  input: "I want to upgrade my plan and my payment failed"
   target:
-    team:
+    type: team
     name: support-team
-  input:
-    type: message
-    message: "I want to upgrade my plan and my payment failed"
 EOF
 
 kubectl apply -f queries/team-test.yaml
 
-# View the response
-kubectl get query team-test -o jsonpath='{.status.response}' | jq
+kubectl get query team-test -o jsonpath='{.status.responses}' | jq
 ```
 
-## Summary: What You Learned
+## Summary
 
-1. **Generated** a new agent project with proper structure
-2. **Created** a customer support agent with custom system prompt
-3. **Deployed** the agent to ARK using `make resources-apply` or `kubectl`
-4. **Tested** with queries and viewed responses
-5. **Monitored** execution via kubectl and dashboard
-6. **Built** multi-agent teams for collaboration
+You generated, deployed, tested, and monitored a real Ark workflow:
+
+1. Wrote an Agent that answers support questions
+2. Verified it with a one-shot Query
+3. Inspected results via `kubectl` and the dashboard
+4. Added a second agent and combined the two into a sequential Team
 
 ## Next Steps
 
-- [Explore more agent configurations](/user-guide/agents)
-- [Learn about team strategies](/user-guide/teams)
-- [Add tools to agents](/user-guide/tools)
-- [Review best practices](/user-guide/tips-on-building-agentic-use-cases)
+- [Agents](/user-guide/agents) — go deeper on agent configuration
+- [Teams](/user-guide/teams) — graph, selector, and round-robin strategies
+- [Tools](/user-guide/tools) — give agents external capabilities
+- [Tips on Building Agentic Use Cases](/user-guide/tips-on-building-agentic-use-cases) — patterns that scale

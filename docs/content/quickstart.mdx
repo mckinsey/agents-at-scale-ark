@@ -35,7 +35,7 @@ ark install marketplace/services/phoenix --marketplace-version 0.1.7  # Pin mark
 
 If a version doesn't exist, installation continues with a warning. Find available versions in [GitHub releases](https://github.com/mckinsey/agents-at-scale-ark/releases).
 
-To run in local development mode, which runs all components in a local Kubernetes cluster with live-reload, prvodies DNS to all services, allows to install additional services like Minio, use:
+To run in local development mode — all components in a local Kubernetes cluster with live-reload, DNS for every service, and the ability to install extras like Minio — use:
 
 ```bash
 # Install devspace - live reload etc for services. Requires a k8s cluster, which
@@ -56,11 +56,11 @@ devspace run routes
 # minio-console : http://minio.default.127.0.0.1.nip.io:8080/ (unavailable)
 ```
 
-Detailed instructions on how to install specific componets, configure RBAC, setup CI/CD deployments and deploy to remote clusters are available in the [Deploying Ark](../operations-guide/deploying-ark) operations guide.
+Detailed instructions on how to install specific components, configure RBAC, set up CI/CD deployments and deploy to remote clusters are available in the [Deploying Ark](../operations-guide/deploying-ark) operations guide.
 
 ## Installing Fark
 
-You can also install the [Fark](../developer-guide/cli-tools.mdx) (Fast Agentic Runtime Kit) CLI tool to manage agents, run queries and more.
+You can also install the [Fark](../developer-guide/cli-tools) (Fast Agentic Runtime Kit) CLI tool to manage agents, run queries and more.
 
 ## Troubleshooting
 
