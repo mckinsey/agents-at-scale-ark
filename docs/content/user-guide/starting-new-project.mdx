@@ -5,25 +5,19 @@ description: A guide to organising and testing a new Ark agentic project
 
 # Starting a New Agentic Project
 
-This guide walks you through laying out a new agent project on top of Ark and testing it end to end. It assumes the [Quickstart](/quickstart) is done — Ark is running and `ark`, `kubectl` work against your cluster.
+This guide lays out a new agent project on top of Ark and tests it end to end. It assumes the [Quickstart](/quickstart) is done — Ark is running and `ark`, `kubectl` work against your cluster.
 
-## How Projects Relate to Ark
+## Project Layout
 
-**Ark provides the runtime, not the place where you build agents.** Your project — agents, tools, teams, queries — lives in its own directory (and usually its own git repository), separate from the Ark install. This separation lets:
+Ark provides the runtime; your project — agents, tools, teams, queries — lives in its own directory (and usually its own repository). That separation lets each team evolve its agents independently of the platform.
 
-- Multiple teams build their own agent projects against the same Ark
-- Project YAML evolve under version control independently of Ark itself
-- Platform upgrades happen without forcing agent rewrites
-
-There is no required directory layout. The conventions below are a starting point — use whatever shape your team prefers.
+There's no required layout. The convention below is a starting point.
 
 ## Prerequisites
 
-- Ark installed on your cluster
-- `kubectl` configured for that cluster
-- A model named `default` available (`ark models create default`)
-
-Verify:
+- Ark installed
+- `kubectl` configured
+- A model named `default` (`ark models create default`)
 
 ```bash
 ark --version
@@ -31,18 +25,16 @@ kubectl get pods -n ark-system
 kubectl get models
 ```
 
-## Step 1: Lay Out a Project Directory
-
-A small, conventional layout:
+## Step 1: Directory
 
 ```bash
 mkdir -p my-agents/{agents,teams,queries,tools,mcp-servers}
 cd my-agents
 ```
 
-That's all the structure you need. From here, every resource is a YAML file you write and apply with `kubectl`.
+From here, every resource is a YAML file you write and apply with `kubectl`.
 
-## Step 2: Create Your First Agent
+## Step 2: First Agent
 
 ```bash
 cat > agents/customer-support.yaml <<'EOF'
@@ -56,23 +48,17 @@ spec:
     name: default
   prompt: |
     You are a helpful customer support assistant.
-    Help users with their questions and issues professionally and efficiently.
+    Help users with their questions and issues professionally.
 EOF
 
 kubectl apply -f agents/customer-support.yaml
-kubectl get agent customer-support
-```
-
-Wait for the agent to reach `ready`:
-
-```bash
 kubectl get agent customer-support -o jsonpath='{.status.phase}'
 # ready
 ```
 
-## Step 3: Add a Tool
+## Step 3: Tool
 
-Tools give agents capabilities beyond pure text. This example wraps the National Weather Service HTTP API:
+An HTTP tool that calls the National Weather Service:
 
 ```bash
 cat > tools/get-forecast.yaml <<'EOF'
@@ -82,7 +68,7 @@ metadata:
   name: get-forecast
 spec:
   type: http
-  description: Get weather forecast for a specific location and time period
+  description: Get weather forecast for a location and time period
   inputSchema:
     type: object
     required: ["office", "gridX", "gridY"]
@@ -103,15 +89,15 @@ EOF
 kubectl apply -f tools/get-forecast.yaml
 ```
 
-See the [Tools guide](/user-guide/tools) for MCP, builtin, and agent-as-tool variants.
+See [Tools](/user-guide/tools) for MCP, builtin, and agent-as-tool variants.
 
-## Step 4: Build a Team
+## Step 4: Team
 
-Teams let multiple agents collaborate. Pick a strategy — each one expects a slightly different shape.
+Pick a strategy — each one expects a slightly different shape.
 
 ### Sequential
 
-Members run in declared order, passing context forward:
+Members run in declared order:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -181,7 +167,7 @@ spec:
 
 ### Selector
 
-A nominated agent decides which member runs next. `selector.agent` is required and refers to an Agent in the same namespace:
+A nominated agent picks the next member. `selector.agent` is required:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -202,16 +188,16 @@ spec:
     selectorPrompt: "Choose the best agent for: {{.Input}}"
 ```
 
-Apply whichever strategy fits and check the team status:
+Apply the chosen team:
 
 ```bash
 kubectl apply -f teams/support-team-sequential.yaml
 kubectl get team support-team-sequential
 ```
 
-## Step 5: Add an MCP Server (Optional)
+## Step 5: MCP Server (Optional)
 
-To expose external capabilities via the Model Context Protocol, declare an `MCPServer` resource pointing at a running MCP endpoint:
+Expose external capabilities via the Model Context Protocol:
 
 ```bash
 cat > mcp-servers/example.yaml <<'EOF'
@@ -229,9 +215,9 @@ EOF
 kubectl apply -f mcp-servers/example.yaml
 ```
 
-For a fuller example including authentication and OAuth, see [MCP Servers](/user-guide/samples/mcp-servers).
+For authentication and OAuth, see [MCP Servers](/user-guide/samples/mcp-servers).
 
-## Step 6: Test with a Query
+## Step 6: Query
 
 ```bash
 cat > queries/test-support.yaml <<'EOF'
@@ -253,21 +239,20 @@ Watch it complete and inspect the response:
 
 ```bash
 kubectl get query test-support -w
-# Phase progresses: pending -> running -> done
+# Phase: pending -> running -> done
 
 kubectl get query test-support -o jsonpath='{.status.responses[0].content}'
 ```
 
 ## Step 7: End-to-End Testing
 
-### Option 1: A Bash Smoke Script
+### Bash smoke script
 
 ```bash
 cat > test-workflow.sh <<'EOF'
 #!/bin/bash
 set -e
 
-echo "=== Smoke testing the Ark workflow ==="
 kubectl apply -f agents/
 kubectl apply -f tools/
 kubectl apply -f teams/
@@ -278,10 +263,7 @@ kubectl apply -f queries/test-support.yaml
 kubectl wait --for=jsonpath='{.status.phase}'=done query/test-support --timeout=120s
 
 RESPONSE=$(kubectl get query test-support -o jsonpath='{.status.responses[0].content}')
-if [ -z "$RESPONSE" ]; then
-  echo "FAIL: empty response"
-  exit 1
-fi
+[ -n "$RESPONSE" ] || { echo "FAIL: empty response"; exit 1; }
 
 echo "PASS"
 echo "Response: $RESPONSE"
@@ -292,9 +274,9 @@ chmod +x test-workflow.sh
 ./test-workflow.sh
 ```
 
-### Option 2: Chainsaw (Recommended)
+### Chainsaw (recommended)
 
-For declarative, repeatable tests, use [Chainsaw](https://kyverno.github.io/chainsaw/):
+Declarative, repeatable tests via [Chainsaw](https://kyverno.github.io/chainsaw/):
 
 ```yaml
 apiVersion: chainsaw.kyverno.io/v1alpha1
@@ -351,7 +333,7 @@ chainsaw test --test-file chainsaw-test.yaml
 
 ## Step 8: Iterate
 
-Add more agents the same way — one YAML per file:
+Add agents as YAML files and apply the directory:
 
 ```bash
 # agents/order-tracker.yaml, agents/product-recommender.yaml, ...
@@ -381,8 +363,6 @@ spec:
 ## Best Practices
 
 ### Organise by feature
-
-Group everything for one feature under one directory:
 
 ```
 my-agents/
@@ -463,7 +443,7 @@ kubectl describe tool get-forecast
 
 ## Next Steps
 
-- [Complete Worked Example](/user-guide/starting-new-project-example) — the end-to-end customer-support walkthrough
+- [Complete Worked Example](/user-guide/starting-new-project-example) — end-to-end customer-support walkthrough
 - [Ark Dashboard](/user-guide/dashboard)
 - [Models](/user-guide/models)
 - [Agents](/user-guide/agents)

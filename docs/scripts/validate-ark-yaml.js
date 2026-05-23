@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Validates every Ark-resource YAML block in docs/content/**\/*.mdx against the
+ * Validates every Ark-resource YAML block in docs/content (*.mdx) against the
  * CRD schemas in ark/config/crd/bases. Catches the kind of drift that breaks
- * `kubectl apply` (unknown fields, missing required fields, wrong types, bad enums).
+ * `kubectl apply` (unknown fields, missing required fields, wrong types, bad
+ * enums). Exits non-zero on any failure so it can gate CI.
  *
- * Run with: node scripts/validate-ark-yaml.js
- * Exits non-zero on any failure so it can gate CI.
+ *   node scripts/validate-ark-yaml.js [--quiet]
+ *
+ * Functions are exported for unit tests; main() only runs when invoked directly.
  */
 
 const fs = require('fs');
@@ -18,27 +20,30 @@ const CONTENT_DIR = path.join(__dirname, '..', 'content');
 const IGNORE_FILE = path.join(__dirname, 'validate-ark-yaml-ignore');
 const ARK_GROUP = 'ark.mckinsey.com';
 
-function loadIgnore() {
-  if (!fs.existsSync(IGNORE_FILE)) return new Set();
+// k8s ObjectMeta and controller-written status aren't enumerated in CRD
+// schemas, so docs examples routinely include fields like metadata.name that
+// the schema doesn't list. We skip those two top-level keys.
+const SKIP_TOP_LEVEL = new Set(['metadata', 'status']);
+
+function loadIgnore(file = IGNORE_FILE) {
+  if (!fs.existsSync(file)) return new Set();
   return new Set(
-    fs.readFileSync(IGNORE_FILE, 'utf-8')
+    fs
+      .readFileSync(file, 'utf-8')
       .split('\n')
       .map((l) => l.replace(/#.*$/, '').trim())
       .filter(Boolean),
   );
 }
 
-function loadCrdSchemas() {
+function loadCrdSchemas(dir = CRD_DIR) {
   const schemas = {};
-  for (const file of fs.readdirSync(CRD_DIR)) {
+  for (const file of fs.readdirSync(dir)) {
     if (!file.endsWith('.yaml')) continue;
-    const doc = yaml.load(fs.readFileSync(path.join(CRD_DIR, file), 'utf-8'));
+    const doc = yaml.load(fs.readFileSync(path.join(dir, file), 'utf-8'));
     if (!doc || doc.kind !== 'CustomResourceDefinition') continue;
-    const group = doc.spec.group;
-    const kind = doc.spec.names.kind;
     for (const v of doc.spec.versions || []) {
-      const key = `${group}/${v.name}/${kind}`;
-      schemas[key] = v.schema && v.schema.openAPIV3Schema;
+      schemas[`${doc.spec.group}/${v.name}/${doc.spec.names.kind}`] = v.schema?.openAPIV3Schema;
     }
   }
   return schemas;
@@ -53,154 +58,92 @@ function walkMdx(dir, out = []) {
   return out;
 }
 
-function extractYamlBlocks(file) {
-  const text = fs.readFileSync(file, 'utf-8');
-  const lines = text.split('\n');
+function extractYamlBlocks(text) {
   const blocks = [];
-  let inBlock = false;
-  let blockStart = 0;
-  let blockLines = [];
+  const lines = text.split('\n');
+  let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!inBlock) {
-      const m = /^\s*```(ya?ml)\s*$/.exec(line);
-      if (m) {
-        inBlock = true;
-        blockStart = i + 1;
-        blockLines = [];
-      }
-    } else {
-      if (/^\s*```\s*$/.test(line)) {
-        blocks.push({startLine: blockStart + 1, body: blockLines.join('\n')});
-        inBlock = false;
-      } else {
-        blockLines.push(line);
-      }
+    if (start === -1) {
+      if (/^\s*```ya?ml\s*$/.test(lines[i])) start = i;
+    } else if (/^\s*```\s*$/.test(lines[i])) {
+      blocks.push({startLine: start + 2, body: lines.slice(start + 1, i).join('\n')});
+      start = -1;
     }
   }
   return blocks;
 }
 
-function parseMultiDoc(body) {
+function parseDocs(body) {
   const docs = [];
-  try {
-    yaml.loadAll(body, (d) => {
-      if (d !== null && d !== undefined) docs.push(d);
-    });
-  } catch (err) {
-    return {error: err.message};
-  }
-  return {docs};
-}
-
-// k8s strict-decoder behavior: any field not in the schema is rejected.
-// `metadata` (ObjectMeta) and `status` (controller-written) are skipped: their
-// schemas in CRDs typically just say `{type: object}` and don't enumerate the
-// built-in k8s fields users routinely include in docs examples.
-const SKIP_TOP_LEVEL = new Set(['metadata', 'status']);
-
-function validateAgainstSchema(value, schema, pathParts, errors) {
-  if (!schema) return;
-  if (schema['x-kubernetes-preserve-unknown-fields']) return;
-  if (schema['x-kubernetes-int-or-string']) return;
-
-  const oneOf = schema.oneOf || schema.anyOf;
-  if (Array.isArray(oneOf)) {
-    let matched = false;
-    for (const sub of oneOf) {
-      const trial = [];
-      validateAgainstSchema(value, {...schema, oneOf: undefined, anyOf: undefined, ...sub}, pathParts, trial);
-      if (trial.length === 0) {
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      errors.push(`${pathParts.join('.')}: value does not satisfy any allowed shape`);
-    }
-    return;
-  }
-
-  if (schema.type === 'object' || (!schema.type && schema.properties)) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      errors.push(`${pathParts.join('.')}: expected object, got ${Array.isArray(value) ? 'array' : typeof value}`);
-      return;
-    }
-    const props = schema.properties || {};
-    const required = schema.required || [];
-    for (const r of required) {
-      if (!(r in value)) {
-        errors.push(`${pathParts.join('.')}: missing required field "${r}"`);
-      }
-    }
-    const additional = schema.additionalProperties;
-    const isTopLevel = pathParts.length === 1;
-    for (const key of Object.keys(value)) {
-      if (isTopLevel && SKIP_TOP_LEVEL.has(key)) continue;
-      if (key in props) {
-        validateAgainstSchema(value[key], props[key], [...pathParts, key], errors);
-      } else if (additional && typeof additional === 'object') {
-        validateAgainstSchema(value[key], additional, [...pathParts, key], errors);
-      } else if (additional === true) {
-        // permissive
-      } else {
-        errors.push(`${pathParts.join('.')}: unknown field "${key}"`);
-      }
-    }
-    return;
-  }
-
-  if (schema.type === 'array') {
-    if (!Array.isArray(value)) {
-      errors.push(`${pathParts.join('.')}: expected array, got ${typeof value}`);
-      return;
-    }
-    if (schema.items) {
-      value.forEach((item, idx) =>
-        validateAgainstSchema(item, schema.items, [...pathParts, `[${idx}]`], errors),
-      );
-    }
-    return;
-  }
-
-  if (schema.type === 'string') {
-    if (typeof value !== 'string') {
-      errors.push(`${pathParts.join('.')}: expected string, got ${typeof value}`);
-      return;
-    }
-    if (schema.enum && !schema.enum.includes(value)) {
-      errors.push(`${pathParts.join('.')}: "${value}" not in enum [${schema.enum.join(', ')}]`);
-    }
-    return;
-  }
-
-  if (schema.type === 'integer' || schema.type === 'number') {
-    if (typeof value !== 'number') {
-      errors.push(`${pathParts.join('.')}: expected number, got ${typeof value}`);
-    }
-    return;
-  }
-
-  if (schema.type === 'boolean') {
-    if (typeof value !== 'boolean') {
-      errors.push(`${pathParts.join('.')}: expected boolean, got ${typeof value}`);
-    }
-    return;
-  }
+  yaml.loadAll(body, (d) => d != null && docs.push(d));
+  return docs;
 }
 
 function isArkResource(doc) {
-  return doc && typeof doc === 'object' && typeof doc.apiVersion === 'string' && doc.apiVersion.startsWith(`${ARK_GROUP}/`);
+  return !!doc && typeof doc === 'object' && typeof doc.apiVersion === 'string' && doc.apiVersion.startsWith(`${ARK_GROUP}/`);
+}
+
+function validateValue(value, schema, p, errors) {
+  if (!schema || schema['x-kubernetes-preserve-unknown-fields'] || schema['x-kubernetes-int-or-string']) return;
+
+  const t = schema.type || (schema.properties ? 'object' : null);
+  const actual = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
+
+  if (t === 'object') {
+    if (actual !== 'object') return errors.push(`${p.join('.')}: expected object, got ${actual}`);
+    for (const r of schema.required || []) {
+      if (!(r in value)) errors.push(`${p.join('.')}: missing required field "${r}"`);
+    }
+    const props = schema.properties || {};
+    const additional = schema.additionalProperties;
+    const isTop = p.length === 1;
+    for (const key of Object.keys(value)) {
+      if (isTop && SKIP_TOP_LEVEL.has(key)) continue;
+      if (key in props) validateValue(value[key], props[key], [...p, key], errors);
+      else if (additional && typeof additional === 'object') validateValue(value[key], additional, [...p, key], errors);
+      else if (additional !== true) errors.push(`${p.join('.')}: unknown field "${key}"`);
+    }
+    return;
+  }
+  if (t === 'array') {
+    if (actual !== 'array') return errors.push(`${p.join('.')}: expected array, got ${actual}`);
+    if (schema.items) value.forEach((item, i) => validateValue(item, schema.items, [...p, `[${i}]`], errors));
+    return;
+  }
+  if (t === 'string') {
+    if (actual !== 'string') return errors.push(`${p.join('.')}: expected string, got ${actual}`);
+    if (schema.enum && !schema.enum.includes(value)) {
+      errors.push(`${p.join('.')}: "${value}" not in enum [${schema.enum.join(', ')}]`);
+    }
+    return;
+  }
+  if (t === 'integer' || t === 'number') {
+    if (actual !== 'number') errors.push(`${p.join('.')}: expected number, got ${actual}`);
+    return;
+  }
+  if (t === 'boolean') {
+    if (actual !== 'boolean') errors.push(`${p.join('.')}: expected boolean, got ${actual}`);
+  }
+}
+
+function validateDocAgainstSchemas(doc, schemas) {
+  const [group, version] = doc.apiVersion.split('/');
+  const key = `${group}/${version}/${doc.kind}`;
+  const schema = schemas[key];
+  if (!schema) return {key, missingSchema: true, errors: []};
+  const errors = [];
+  validateValue(doc, schema, [doc.kind], errors);
+  return {key, missingSchema: false, errors};
 }
 
 function main() {
+  const quiet = process.argv.includes('--quiet');
   const schemas = loadCrdSchemas();
   const ignore = loadIgnore();
   const files = walkMdx(CONTENT_DIR);
-  let totalBlocks = 0;
-  let totalErrors = 0;
-  let skipped = 0;
   const failures = [];
+  let blocks = 0;
+  let skipped = 0;
 
   for (const file of files) {
     const rel = path.relative(REPO_ROOT, file);
@@ -208,42 +151,50 @@ function main() {
       skipped++;
       continue;
     }
-    for (const {startLine, body} of extractYamlBlocks(file)) {
-      const parsed = parseMultiDoc(body);
-      if (parsed.error) {
+    for (const {startLine, body} of extractYamlBlocks(fs.readFileSync(file, 'utf-8'))) {
+      let docs;
+      try {
+        docs = parseDocs(body);
+      } catch (err) {
         if (!body.includes('apiVersion:')) continue;
-        failures.push(`${rel}:${startLine}: YAML parse error: ${parsed.error}`);
-        totalErrors++;
+        const offset = err.mark?.line ?? 0;
+        failures.push(`${rel}:${startLine + offset}: YAML parse error: ${err.reason || err.message}`);
         continue;
       }
-      for (const doc of parsed.docs) {
+      for (const doc of docs) {
         if (!isArkResource(doc)) continue;
-        totalBlocks++;
-        const [group, version] = doc.apiVersion.split('/');
-        const key = `${group}/${version}/${doc.kind}`;
-        const schema = schemas[key];
-        if (!schema) {
-          failures.push(`${rel}:${startLine}: no CRD schema for ${key}`);
-          totalErrors++;
+        blocks++;
+        const result = validateDocAgainstSchemas(doc, schemas);
+        if (result.missingSchema) {
+          failures.push(`${rel}:${startLine}: no CRD schema for ${result.key}`);
           continue;
         }
-        const errors = [];
-        validateAgainstSchema(doc, schema, [doc.kind], errors);
-        for (const err of errors) {
-          failures.push(`${rel}:${startLine}: ${err}`);
-          totalErrors++;
-        }
+        for (const err of result.errors) failures.push(`${rel}:${startLine}: ${err}`);
       }
     }
   }
 
+  const validated = files.length - skipped;
   if (failures.length > 0) {
     console.error('Ark YAML validation FAILED:');
     for (const f of failures) console.error(`  ${f}`);
-    console.error(`\n${totalErrors} error(s) across ${totalBlocks} Ark resource block(s) in ${files.length - skipped} validated files (${skipped} ignored)`);
+    console.error(`\n${failures.length} error(s) across ${blocks} Ark resource block(s) in ${validated} validated files (${skipped} ignored)`);
     process.exit(1);
   }
-  console.log(`Ark YAML validation OK (${totalBlocks} resource block(s) across ${files.length - skipped} validated files, ${skipped} ignored)`);
+  if (!quiet) {
+    console.log(`Ark YAML validation OK (${blocks} resource block(s) across ${validated} validated files, ${skipped} ignored)`);
+  }
 }
 
-main();
+module.exports = {
+  loadIgnore,
+  loadCrdSchemas,
+  extractYamlBlocks,
+  parseDocs,
+  isArkResource,
+  validateValue,
+  validateDocAgainstSchemas,
+  SKIP_TOP_LEVEL,
+};
+
+if (require.main === module) main();
