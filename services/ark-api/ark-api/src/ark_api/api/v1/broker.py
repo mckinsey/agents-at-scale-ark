@@ -1,9 +1,11 @@
 """Broker API endpoints for real-time streaming of traces, messages, and chunks."""
+import base64
 import json
 import logging
 import os
+import re
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
@@ -17,12 +19,39 @@ from ...auth.dependencies import get_impersonation_config
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
 from ...utils.url_validation import validate_path_segment, build_safe_url, validate_and_build_url
 
+VALID_RESOURCE_NAME = re.compile(r'^[a-z0-9]([a-z0-9\-\.]{0,251}[a-z0-9])?$')
+VALID_ID_PATTERN = re.compile(r'^[a-zA-Z0-9\-_\.]{1,256}$')
+
+
+def validate_resource_name(name: str, param_name: str) -> str:
+    """Validate Kubernetes resource name format."""
+    if not name or not VALID_RESOURCE_NAME.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {param_name}: must be a valid Kubernetes resource name"
+        )
+    return quote(name, safe='-.')
+
+
+def validate_id(value: Optional[str], param_name: str) -> Optional[str]:
+    """Validate ID parameters to prevent injection."""
+    if value is None:
+        return None
+    if not VALID_ID_PATTERN.match(value):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {param_name}: must contain only alphanumeric characters, hyphens, underscores, or dots"
+        )
+    return quote(value, safe='-_.')
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
+MEMORY_RESOURCE_NAME_DESC = "Memory resource name"
+CURSOR_PAGINATION_DESC = "Cursor for pagination"
 
 # Query parameter descriptions
 DESC_MEMORY = "Memory resource name"
@@ -45,7 +74,7 @@ async def get_broker_url(memory_name: str, impersonation: Optional[Impersonation
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
-        logger.error(f"Failed to get memory service address: {e}")
+        logger.error("Failed to get memory service address: %s", base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         return None
 
 
@@ -78,10 +107,10 @@ async def proxy_sse_stream(url: str):
                     if line.strip():
                         yield line + "\n\n"
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker at {url}: {e}")
+        logger.error("Failed to connect to broker at %s: %s", base64.b64encode(url.encode('utf-8')).decode('ascii'), base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         yield f"data: {json.dumps({'error': {'message': 'Failed to connect to broker service', 'type': 'connection_error'}})}\n\n"
     except Exception as e:
-        logger.error(f"Error proxying SSE stream: {e}")
+        logger.error("Error proxying SSE stream: %s", base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
 
 
@@ -109,7 +138,7 @@ async def proxy_broker_request(
         url = safe_url
         if query_params:
             url += f"?{urlencode(query_params)}"
-        logger.info(f"Proxying SSE stream from {url}")
+        logger.info("Proxying SSE stream from %s", base64.b64encode(url.encode('utf-8')).decode('ascii'))
         return StreamingResponse(
             proxy_sse_stream(url),
             media_type="text/event-stream",
@@ -125,13 +154,13 @@ async def proxy_broker_request(
             response = await client.get(url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
+        logger.error("Failed to connect to broker: %s", base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         return JSONResponse(
             content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
-        logger.error(f"Error fetching from broker: {e}")
+        logger.error("Error fetching from broker: %s", base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         return JSONResponse(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,
@@ -149,6 +178,8 @@ async def get_traces(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """Get or stream OTEL traces from the broker."""
+    validated_memory = validate_resource_name(memory, "memory")
+    session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
         memory, "/traces", watch,
         {"limit": limit, "cursor": cursor, "session_id": session_id},
@@ -167,6 +198,8 @@ async def get_trace(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """Get or stream a specific trace from the broker."""
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_trace_id = validate_id(trace_id, "trace_id")
     params = {"cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
@@ -185,6 +218,9 @@ async def get_messages(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """Get or stream messages from the broker."""
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_conversation_id = validate_id(conversation_id, "conversation_id")
+    validated_query_id = validate_id(query_id, "query_id")
     return await proxy_broker_request(
         memory, "/messages", watch,
         {"limit": limit, "cursor": cursor, "conversation_id": conversation_id, "query_id": query_id},
@@ -203,6 +239,8 @@ async def get_events(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """Get or stream operation events from the broker."""
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
         memory, "/events", watch,
         {"limit": limit, "cursor": cursor, "session_id": session_id},
@@ -222,6 +260,8 @@ async def get_events_by_query(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """Get or stream events for a specific query."""
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_query_id = validate_id(query_id, "query_id")
     params = {"limit": limit, "cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
@@ -243,7 +283,7 @@ async def get_chunks(
         broker_url = await get_broker_url(memory, impersonation=impersonation)
         if not broker_url:
             return JSONResponse(
-                content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+                content={"error": {"message": f"Memory service '{validated_memory}' not available", "type": "service_unavailable"}},
                 status_code=503,
             )
         # Validate query_id to prevent path traversal
@@ -322,13 +362,13 @@ async def proxy_broker_delete(memory: str, path: str, impersonation: Optional[Im
             response = await client.delete(safe_url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
+        logger.error("Failed to connect to broker: %s", base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         return JSONResponse(
             content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
-        logger.error(f"Error in DELETE request: {e}")
+        logger.error("Error in DELETE request: %s", base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         return JSONResponse(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,

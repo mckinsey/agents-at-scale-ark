@@ -33,6 +33,7 @@ Thumbs.db
 # Project specific
 *.log
 .coverage
+coverage/
 .pytest_cache/
 
 openapi.json

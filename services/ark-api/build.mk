@@ -73,6 +73,7 @@ $(ARK_API_STAMP_TEST): $(ARK_API_STAMP_DEPS)
 	uv run coverage run -m unittest discover -s tests -p 'test_*.py' -v && \
 	uv run coverage html && \
 	uv run coverage lcov && \
+	uv run coverage xml && \
 	uv run python generate_openapi.py && cp openapi.json ..
 	@touch $@
 

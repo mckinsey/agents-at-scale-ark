@@ -42,9 +42,21 @@ ark-sdk = { path = "out/ark_sdk-0.1.62-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"
+source = ["src"]
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
 
 [tool.coverage.html]
 directory = "coverage"
 
 [tool.coverage.lcov]
 output = "coverage/lcov.info"
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"
