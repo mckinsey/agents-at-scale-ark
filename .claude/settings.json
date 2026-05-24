@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "ark@agents-at-scale-ark": true
+  },
+  "extraKnownMarketplaces": {
+    "agents-at-scale-ark": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  }
+}
