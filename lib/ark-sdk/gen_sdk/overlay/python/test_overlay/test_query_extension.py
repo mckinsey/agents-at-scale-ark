@@ -11,6 +11,8 @@ from ark_sdk.extensions.query import (
     QueryRef,
     extract_query_ref,
     resolve_query,
+    _resolve_bearer_token,
+    _resolve_mcp_server,
     _resolve_value_source,
 )
 
@@ -736,6 +738,163 @@ class TestExtensionConstants(unittest.TestCase):
     def test_metadata_key_derived_from_uri(self):
         self.assertTrue(QUERY_EXTENSION_METADATA_KEY.startswith(QUERY_EXTENSION_URI))
         self.assertTrue(QUERY_EXTENSION_METADATA_KEY.endswith("/ref"))
+
+
+class TestResolveBearerToken(unittest.IsolatedAsyncioTestCase):
+    """Mirrors ark/internal/resolution/mcp_auth_test.go scenarios so the Go
+    reconciler and the Python resolver stay in lock-step on key resolution."""
+
+    async def test_returns_empty_when_authorization_unset(self):
+        spec = SimpleNamespace(authorization=None)
+        # Should not touch SecretClient at all.
+        with patch("ark_sdk.extensions.query.SecretClient") as mock_secret_cls:
+            result = await _resolve_bearer_token(spec, "default")
+        self.assertEqual(result, "")
+        mock_secret_cls.assert_not_called()
+
+    async def test_returns_empty_when_token_secret_ref_missing(self):
+        auth = SimpleNamespace(token_secret_ref=None, tokenSecretRef=None)
+        spec = SimpleNamespace(authorization=auth)
+        with patch("ark_sdk.extensions.query.SecretClient") as mock_secret_cls:
+            result = await _resolve_bearer_token(spec, "default")
+        self.assertEqual(result, "")
+        mock_secret_cls.assert_not_called()
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_returns_token_for_default_access_token_key(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(
+            return_value={"value": base64.b64encode(b"oauth-token-1").decode()}
+        )
+        mock_secret_cls.return_value = mock_sc
+
+        token_ref = SimpleNamespace(name="notion-oauth", accessTokenKey=None)
+        auth = SimpleNamespace(token_secret_ref=token_ref)
+        spec = SimpleNamespace(authorization=auth)
+
+        token = await _resolve_bearer_token(spec, "default")
+
+        self.assertEqual(token, "oauth-token-1")
+        mock_secret_cls.assert_called_with(namespace="default")
+        mock_sc.get_secret_value.assert_awaited_with("notion-oauth", "access_token")
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_honours_custom_access_token_key(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(
+            return_value={"value": base64.b64encode(b"custom-token").decode()}
+        )
+        mock_secret_cls.return_value = mock_sc
+
+        token_ref = SimpleNamespace(name="my-secret", accessTokenKey="MY_TOKEN")
+        auth = SimpleNamespace(token_secret_ref=token_ref)
+        spec = SimpleNamespace(authorization=auth)
+
+        token = await _resolve_bearer_token(spec, "ns1")
+
+        self.assertEqual(token, "custom-token")
+        mock_sc.get_secret_value.assert_awaited_with("my-secret", "MY_TOKEN")
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_returns_empty_when_secret_missing(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(side_effect=Exception("not found"))
+        mock_secret_cls.return_value = mock_sc
+
+        token_ref = SimpleNamespace(name="missing", accessTokenKey=None)
+        auth = SimpleNamespace(token_secret_ref=token_ref)
+        spec = SimpleNamespace(authorization=auth)
+
+        token = await _resolve_bearer_token(spec, "default")
+        self.assertEqual(token, "")
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_returns_empty_when_access_token_value_empty(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(return_value={"value": ""})
+        mock_secret_cls.return_value = mock_sc
+
+        token_ref = SimpleNamespace(name="empty", accessTokenKey=None)
+        auth = SimpleNamespace(token_secret_ref=token_ref)
+        spec = SimpleNamespace(authorization=auth)
+
+        token = await _resolve_bearer_token(spec, "default")
+        self.assertEqual(token, "")
+
+
+class TestResolveMcpServerBearerInjection(unittest.IsolatedAsyncioTestCase):
+    """The resolver-side counterpart to the Go controller bearer injection
+    in ark/internal/controller/mcpserver_controller.go — the resolved
+    MCPServerConfig.headers must carry Authorization when the MCPServer is
+    Authorized, and must defer to spec.headers Authorization when the
+    operator pinned a literal value."""
+
+    def _mcp_crd(self, *, with_auth=True, headers=None):
+        spec = SimpleNamespace()
+        spec.address = SimpleNamespace(value="http://example.invalid/mcp", value_from=None, valueFrom=None)
+        spec.transport = "http"
+        spec.timeout = "30s"
+        spec.headers = headers
+        if with_auth:
+            spec.authorization = SimpleNamespace(
+                token_secret_ref=SimpleNamespace(name="notion-oauth", accessTokenKey=None),
+            )
+        else:
+            spec.authorization = None
+        crd = MagicMock()
+        crd.spec = spec
+        return crd
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_authorized_mcp_server_injects_bearer(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(
+            return_value={"value": base64.b64encode(b"abc123").decode()}
+        )
+        mock_secret_cls.return_value = mock_sc
+
+        mock_ark = AsyncMock()
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._mcp_crd())
+
+        cfg = await _resolve_mcp_server(mock_ark, "notion", "default")
+
+        self.assertIsNotNone(cfg)
+        self.assertEqual(cfg.headers.get("Authorization"), "Bearer abc123")
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_spec_headers_authorization_wins_over_token_secret_ref(self, mock_secret_cls):
+        # If the secret read happens at all the test silently fails;
+        # use a side_effect that would corrupt the result so we'd notice.
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(
+            return_value={"value": base64.b64encode(b"should-not-win").decode()}
+        )
+        mock_secret_cls.return_value = mock_sc
+
+        explicit_header = SimpleNamespace(
+            name="Authorization",
+            value=SimpleNamespace(value="Bearer pinned-by-operator", value_from=None, valueFrom=None),
+        )
+
+        mock_ark = AsyncMock()
+        mock_ark.mcpservers.a_get = AsyncMock(
+            return_value=self._mcp_crd(headers=[explicit_header])
+        )
+
+        cfg = await _resolve_mcp_server(mock_ark, "notion", "default")
+
+        self.assertEqual(cfg.headers.get("Authorization"), "Bearer pinned-by-operator")
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_no_authorization_means_no_bearer(self, mock_secret_cls):
+        mock_ark = AsyncMock()
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._mcp_crd(with_auth=False))
+
+        cfg = await _resolve_mcp_server(mock_ark, "notion", "default")
+
+        self.assertIsNotNone(cfg)
+        self.assertNotIn("Authorization", cfg.headers)
+        mock_secret_cls.assert_not_called()
 
 
 if __name__ == "__main__":

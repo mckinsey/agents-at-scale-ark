@@ -17,9 +17,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
@@ -54,6 +58,12 @@ const (
 	// listed tools using a Bearer token resolved from
 	// spec.authorization.tokenSecretRef.
 	MCPServerReasonAuthorized = "Authorized"
+
+	// mcpTokenSecretRefField is the field-index path on MCPServer that
+	// points at the referenced token Secret. Used by the Secret watch to
+	// resolve "which MCPServers reference this Secret" without scanning
+	// the whole list every event.
+	mcpTokenSecretRefField = "spec.authorization.tokenSecretRef.name"
 )
 
 type MCPServerReconciler struct {
@@ -208,7 +218,7 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 
 	accessKey := ref.AccessTokenKey
 	if accessKey == "" {
-		accessKey = "access_token"
+		accessKey = resolution.DefaultAccessTokenKey
 	}
 	if raw, ok := secret.Data[accessKey]; ok {
 		material.accessToken = string(raw)
@@ -738,10 +748,70 @@ func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runt
 }
 
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &arkv1alpha1.MCPServer{}, mcpTokenSecretRefField, mcpTokenSecretRefIndexer); err != nil {
+		return fmt.Errorf("failed to register field indexer %s: %w", mcpTokenSecretRefField, err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.MCPServer{}).
+		// Token Secrets carrying MCPTokenSecretLabel trigger immediate
+		// reconcile of every MCPServer referencing them. The predicate
+		// filters at event-handler level only — the cache is left
+		// unfiltered so reconciler reads of any Secret keep working.
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.findMCPServersForSecret),
+			builder.WithPredicates(predicate.NewPredicateFuncs(hasMCPTokenSecretLabel)),
+		).
 		Named("mcpserver").
 		Complete(r)
+}
+
+func mcpTokenSecretRefIndexer(obj client.Object) []string {
+	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
+	if !ok || mcpServer.Spec.Authorization == nil {
+		return nil
+	}
+	name := mcpServer.Spec.Authorization.TokenSecretRef.Name
+	if name == "" {
+		return nil
+	}
+	return []string{name}
+}
+
+// hasMCPTokenSecretLabel filters Secret events down to those carrying
+// the opt-in real-time-reconcile label. Helm charts shipping token
+// Secrets stamp this label automatically; hand-created Secrets stamp it
+// manually. Unlabelled Secrets fall through to the periodic resync.
+func hasMCPTokenSecretLabel(obj client.Object) bool {
+	return obj.GetLabels()[labels.MCPTokenSecretLabel] == "true"
+}
+
+// findMCPServersForSecret resolves the reverse mapping from a Secret
+// event to the MCPServers that reference it via
+// spec.authorization.tokenSecretRef. Uses the field index registered
+// above so the lookup is O(1) per match instead of a full list scan.
+func (r *MCPServerReconciler) findMCPServersForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	log := logf.FromContext(ctx)
+	var mcpServers arkv1alpha1.MCPServerList
+	if err := r.List(ctx, &mcpServers,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{mcpTokenSecretRefField: obj.GetName()},
+	); err != nil {
+		log.Error(err, "failed to list MCPServers for token Secret event", "secret", obj.GetName(), "namespace", obj.GetNamespace())
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(mcpServers.Items))
+	for i := range mcpServers.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      mcpServers.Items[i].Name,
+				Namespace: mcpServers.Items[i].Namespace,
+			},
+		})
+	}
+	return requests
 }
 
 // parseTimeout returns the MCPServer spec timeout as a duration,

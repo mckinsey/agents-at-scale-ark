@@ -32,7 +32,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="agents chat cluster completion config dashboard docs export generate import install marketplace memory models queries query routes status targets teams tools uninstall help"
+      opts="agents chat cluster completion config dashboard docs export generate import install marketplace mcp memory models queries query routes status targets teams tools uninstall help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -88,6 +88,11 @@ _ark_completion() {
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
+        mcp)
+          opts="auth"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
         memory)
           opts="list ls delete reset"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
@@ -127,6 +132,15 @@ _ark_completion() {
           ;;
         queries)
           opts="get delete resubmit"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
+      esac
+      ;;
+    3)
+      case "\${COMP_WORDS[1]} \${COMP_WORDS[2]}" in
+        "mcp auth")
+          opts="login logout"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
@@ -173,6 +187,7 @@ _ark() {
         'import[Import ARK resources from a file]' \\
         'install[Install ARK services]' \\
         'marketplace[Manage marketplace services]' \\
+        'mcp[Interact with MCPServer resources]' \\
         'memory[Manage memory sessions and queries]' \\
         'models[List available models]' \\
         'queries[Manage query resources]' \\
@@ -240,6 +255,16 @@ _ark() {
           _values 'marketplace commands' \\
             'list[List available marketplace services]' \\
             'ls[List available marketplace services]'
+          ;;
+        mcp)
+          if (( CURRENT == 4 )) && [[ $words[3] == auth ]]; then
+            _values 'mcp auth commands' \\
+              'login[Authenticate against an MCPServer]' \\
+              'logout[Clear OAuth tokens for an MCPServer]'
+          else
+            _values 'mcp commands' \\
+              'auth[Manage OAuth credentials]'
+          fi
           ;;
         memory)
           _values 'memory commands' \\
