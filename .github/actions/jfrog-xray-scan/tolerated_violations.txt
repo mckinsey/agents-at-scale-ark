@@ -94,6 +94,8 @@ XRAY-987238 - CVE-2025-14930
 - Not exploitable in Ark: exploitation requires loading maliciously crafted GLM4 weights. Ark does not load externally-supplied model weights. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
 - Will upgrade immediately when a patched version is released to PyPI.
 XRAY-987239 - CVE-2024-34997
-- joblib NumpyArrayWrapper deserialization vulnerability. Severity: High (CVSS 7.8).
-- Confirmed false positive by joblib maintainers (joblib/joblib#1588). NumpyArrayWrapper only deserializes joblib's own cached content written to trusted local disk; it never processes externally-supplied data. No fix is planned because no real vulnerability exists.
+- joblib NumpyArrayWrapper deserialization vulnerability. Severity: High (CVSS 7.5-7.8). CVE status: DISPUTED by maintainers.
+- Confirmed false positive by joblib maintainers (joblib/joblib#1582, joblib/joblib#1588). The CVE record itself is tagged as "disputed" by MITRE. NumpyArrayWrapper only deserializes joblib's own cached content written to trusted local disk; it never processes externally-supplied data. The vulnerability requires loading malicious pickle files, which is explicitly documented as unsafe. No fix is planned because maintainers state no real vulnerability exists.
+- Not exploitable in Ark: joblib is only used transitively through sentence-transformers for local vector embedding in RAG samples. Ark does not load untrusted pickle files or expose joblib deserialization to user input.
 - joblib 1.5.3 is already the latest version on PyPI. joblib is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Tracked in issue #2194. No action required - maintaining latest version and documenting false positive status.
