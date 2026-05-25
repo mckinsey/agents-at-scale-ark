@@ -10,12 +10,14 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"mckinsey.com/ark/internal/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -24,6 +26,22 @@ import (
 	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
+
+const maxHTTPToolResponseSize = 10 << 20 // 10 MB
+
+var (
+	toolHTTPClient     *http.Client
+	toolHTTPClientOnce sync.Once
+)
+
+func getToolHTTPClient() *http.Client {
+	toolHTTPClientOnce.Do(func() {
+		toolHTTPClient = &http.Client{
+			Transport: common.NewLoggingTransport(nil),
+		}
+	})
+	return toolHTTPClient
+}
 
 type ToolDefinition struct {
 	Name        string         `json:"name"`
@@ -134,9 +152,10 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		req.Header.Set(header.Name, value)
 	}
 
-	// Set timeout
+	// Set timeout - clone shared client and set custom timeout
 	timeout := h.getTimeout(httpSpec.Timeout)
-	httpClient := &http.Client{Timeout: timeout}
+	httpClient := *getToolHTTPClient()
+	httpClient.Timeout = timeout
 
 	// Make the request
 	log.Info("making HTTP request", "method", method, "url", parsedURL.String())
@@ -161,8 +180,8 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		}, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body with size limit
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPToolResponseSize))
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

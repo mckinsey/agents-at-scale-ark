@@ -203,11 +203,13 @@ func (ap *AzureProvider) ensureUsageData(fullResponse *openai.ChatCompletion) {
 }
 
 func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error) {
+	initSharedHTTPClients()
+
 	var httpClient *http.Client
 	if IsProbeContext(ctx) {
-		httpClient = common.NewHTTPClientWithoutTracing()
+		httpClient = sharedProbeClient
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = sharedHTTPClient
 	}
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)

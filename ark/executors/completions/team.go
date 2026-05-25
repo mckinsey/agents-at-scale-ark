@@ -48,6 +48,22 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
+// Close closes all team members' tool registries and releases MCP connections
+func (t *Team) Close() error {
+	var errs []error
+	for _, member := range t.Members {
+		if tr := member.GetToolRegistry(); tr != nil {
+			if err := tr.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to close tools for member %s: %w", member.GetName(), err))
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing team members: %v", errs)
+	}
+	return nil
+}
+
 func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())

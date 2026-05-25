@@ -18,12 +18,12 @@ import (
 // LoggingTransport wraps an http.RoundTripper to provide optional HTTP request/response logging
 type LoggingTransport struct {
 	Transport http.RoundTripper
-	Context   context.Context
+	LogBody   bool
 }
 
-// NewLoggingTransport creates a new LoggingTransport with the given context.
+// NewLoggingTransport creates a new LoggingTransport.
 // The transport is automatically instrumented with OpenTelemetry for HTTP tracing.
-func NewLoggingTransport(ctx context.Context, transport http.RoundTripper) *LoggingTransport {
+func NewLoggingTransport(transport http.RoundTripper) *LoggingTransport {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
@@ -37,7 +37,7 @@ func NewLoggingTransport(ctx context.Context, transport http.RoundTripper) *Logg
 	)
 	return &LoggingTransport{
 		Transport: transport,
-		Context:   ctx,
+		LogBody:   true,
 	}
 }
 
@@ -48,7 +48,8 @@ func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		return lt.Transport.RoundTrip(req)
 	}
 
-	logger := logf.FromContext(lt.Context)
+	ctx := req.Context()
+	logger := logf.FromContext(ctx)
 
 	var requestBody []byte
 	if req.Body != nil {
@@ -76,9 +77,10 @@ func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 }
 
 // NewHTTPClientWithLogging creates an HTTP client with logging transport
-func NewHTTPClientWithLogging(ctx context.Context) *http.Client {
+func NewHTTPClientWithLogging() *http.Client {
 	return &http.Client{
-		Transport: NewLoggingTransport(ctx, nil),
+		Transport: NewLoggingTransport(nil),
+		Timeout:   30 * time.Second,
 	}
 }
 

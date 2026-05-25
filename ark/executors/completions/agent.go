@@ -46,6 +46,14 @@ func (a *Agent) GetToolRegistry() *ToolRegistry {
 	return a.Tools
 }
 
+// Close closes the agent's tool registry and releases MCP connections
+func (a *Agent) Close() error {
+	if a.Tools != nil {
+		return a.Tools.Close()
+	}
+	return nil
+}
+
 // Execute executes the agent with optional event emission for tool calls.
 // opts carries caller-controlled options such as forcing a tool call; pass ExecuteOptions{} for defaults.
 func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {

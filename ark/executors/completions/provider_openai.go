@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -12,6 +13,19 @@ import (
 	"mckinsey.com/ark/internal/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var (
+	sharedHTTPClient     *http.Client
+	sharedProbeClient    *http.Client
+	httpClientInitOnce   sync.Once
+)
+
+func initSharedHTTPClients() {
+	httpClientInitOnce.Do(func() {
+		sharedHTTPClient = common.NewHTTPClientWithLogging()
+		sharedProbeClient = common.NewHTTPClientWithoutTracing()
+	})
+}
 
 type OpenAIProvider struct {
 	Model        string
@@ -261,11 +275,13 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 }
 
 func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
+	initSharedHTTPClients()
+
 	var httpClient *http.Client
 	if IsProbeContext(ctx) {
-		httpClient = common.NewHTTPClientWithoutTracing()
+		httpClient = sharedProbeClient
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = sharedHTTPClient
 	}
 
 	options := []option.RequestOption{
