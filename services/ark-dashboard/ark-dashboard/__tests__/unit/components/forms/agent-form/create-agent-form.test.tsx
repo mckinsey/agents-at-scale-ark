@@ -40,10 +40,6 @@ vi.mock('@/components/common/page-header', () => ({
   ),
 }));
 
-vi.mock('@/components/ui/prompt-editor', () => ({
-  PromptEditor: () => <div data-testid="prompt-editor" />,
-}));
-
 vi.mock('@/components/ui/parameter-editor', () => ({
   ParameterEditor: () => <div data-testid="parameter-editor" />,
 }));
@@ -53,8 +49,13 @@ vi.mock('@/components/ui/form', () => ({
   FormField: ({
     render,
   }: {
-    render: (args: { field: { value: string; onChange: () => void } }) => React.ReactNode;
-  }) => <>{render({ field: { value: '', onChange: () => {} } })}</>,
+    render: (args: {
+      field: { value: string; onChange: () => void };
+      fieldState: { error?: { message?: string } };
+    }) => React.ReactNode;
+  }) => (
+    <>{render({ field: { value: '', onChange: () => {} }, fieldState: {} })}</>
+  ),
   FormItem: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormControl: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormLabel: ({ children }: { children: React.ReactNode }) => <label>{children}</label>,
@@ -107,7 +108,6 @@ describe('CreateAgentForm', () => {
     render(<CreateAgentForm mode="create" />);
     expect(screen.getByText('Create agent')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument();
-    expect(screen.getByTestId('prompt-editor')).toBeInTheDocument();
     expect(screen.getByTestId('parameter-editor')).toBeInTheDocument();
   });
 
@@ -128,14 +128,17 @@ describe('CreateAgentForm', () => {
     expect(screen.getByText('Select tools')).toBeInTheDocument();
   });
 
-  it('shows selected-count label when tools are selected', () => {
+  it('shows selected tools as tags in the trigger', () => {
     const hook = buildHook({
       availableTools: [{ name: 't1' } as Tool, { name: 't2' } as Tool],
     });
     hook.actions.isToolSelected = vi.fn((n: string): boolean => n === 't1');
     useAgentFormMock.mockReturnValue(hook);
     render(<CreateAgentForm mode="create" />);
-    expect(screen.getByText('1 tool selected')).toBeInTheDocument();
+    const trigger = document.getElementById('tools-trigger');
+    expect(trigger).not.toBeNull();
+    expect(trigger?.textContent).toContain('t1');
+    expect(screen.queryByText('Select tools')).not.toBeInTheDocument();
   });
 
   it('disables Create button when readOnlyMode is true', () => {

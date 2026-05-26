@@ -565,33 +565,33 @@ export function ParameterEditor({
   if (isCompact) {
     return (
       <div className={cn('flex flex-col gap-5', className)}>
-        {/* Header — figma 1065:55508 */}
-        <div className="flex items-center gap-2">
-          <h3 className="text-fg-secondary text-base leading-5 tracking-[-0.016px]">
-            Parameters
-          </h3>
-          <Info className="text-fg-secondary size-4" />
+        {/* Header — figma 4257:32443 */}
+        <div className="flex w-full items-start justify-between">
+          <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-fg-secondary text-base leading-6 tracking-[-0.016px]">
+                Variables
+              </h3>
+              <Info className="text-fg-secondary size-4" />
+            </div>
+            <p className="text-fg-secondary text-xs leading-4 tracking-[0.024px]">
+              {parameters.length} result{parameters.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => addParameter()}
+            disabled={disabled}>
+            <Plus className="size-4" />
+            Add new
+          </Button>
         </div>
 
         {undefinedParamsWarning}
 
-        {/* Variables block: "X results" + "Add new" + rows — figma 1065:54672 */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-start gap-2">
-            <p className="text-fg-secondary flex-1 text-xs leading-4 tracking-[0.024px]">
-              {parameters.length} result{parameters.length === 1 ? '' : 's'}
-            </p>
-            <button
-              type="button"
-              onClick={() => addParameter()}
-              disabled={disabled}
-              className="text-fg-secondary hover:text-fg-primary flex items-center gap-1 text-sm leading-4 tracking-[-0.112px] transition-colors disabled:cursor-not-allowed disabled:opacity-50">
-              <Plus className="size-4" />
-              Add new
-            </button>
-          </div>
-          {compactParameterRows}
-        </div>
+        {compactParameterRows}
       </div>
     );
   }

@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import type { Parameter } from '@/components/ui/parameter-editor';
@@ -230,12 +230,8 @@ export function useAgentForm({
         onSuccessRef.current?.();
       } catch (error) {
         const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
-        toast.error(`Failed to ${action} agent`, {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
+        console.error(`Failed to ${action} agent`, error);
+        toast.error(`Unable to ${action} agent`);
       } finally {
         setSaving(false);
       }
