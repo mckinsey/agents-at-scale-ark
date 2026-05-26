@@ -191,10 +191,13 @@ class TestAuthStart(_AuthBase):
 
     @patch("ark_api.api.v1.mcp_auth.write_flow_state", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
-    def test_start_authorized_with_force_proceeds(self, mock_read_creds, _mock_write):
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_start_authorized_with_force_proceeds(self, mock_register, mock_read_creds, _mock_write):
         from ark_api.services.mcp_auth_persistence import CachedClientCreds
+        from ark_api.services.oauth_dcr import DcrResult
 
         mock_read_creds.return_value = CachedClientCreds(client_id="cid", client_secret="csec")
+        mock_register.return_value = DcrResult(client_id="cid2", client_secret="csec2", raw_response={})
         patcher, _ = _patch_ark_client(_build_typed_mcp(state="Authorized"))
         with patcher:
             response = self.client.post(
@@ -203,6 +206,7 @@ class TestAuthStart(_AuthBase):
                 params={"namespace": "default"},
             )
         self.assertEqual(response.status_code, 200, response.text)
+        mock_register.assert_awaited_once()
 
     def test_start_discovery_failed_returns_422_even_with_force(self):
         patcher, _ = _patch_ark_client(_build_typed_mcp(state="DiscoveryFailed"))
