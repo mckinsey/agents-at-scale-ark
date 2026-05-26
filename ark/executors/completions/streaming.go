@@ -242,7 +242,12 @@ func StreamApprovalRequest(ctx context.Context, eventStream EventStreamInterface
 }
 
 // StreamApprovalResponse emits an approval response event
-func StreamApprovalResponse(ctx context.Context, eventStream EventStreamInterface, taskID string, action string) {
+func StreamApprovalResponse(
+	ctx context.Context,
+	eventStream EventStreamInterface,
+	taskID string,
+	action string,
+) {
 	if eventStream == nil {
 		return
 	}

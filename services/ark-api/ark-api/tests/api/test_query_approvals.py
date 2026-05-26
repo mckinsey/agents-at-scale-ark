@@ -277,11 +277,11 @@ class TestSubmitApproval(unittest.TestCase):
         self.assertEqual(data["action"], "approved")
         self.assertEqual(data["taskId"], "task-789")
 
-        # Verify patch was called with completed phase
+        # Verify patch was called with approved decision in spec.input
         mock_to_thread.assert_called_once()
         call_args = mock_to_thread.call_args
         patch_body = call_args.kwargs['body']
-        self.assertEqual(patch_body["status"]["phase"], "completed")
+        self.assertEqual(patch_body["spec"]["input"], '{"decision": "approved"}')
 
     @patch('ark_api.api.v1.queries.asyncio.to_thread')
     @patch('kubernetes.client.CustomObjectsApi')
@@ -328,11 +328,10 @@ class TestSubmitApproval(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["action"], "rejected")
 
-        # Verify patch was called with failed phase and error message
+        # Verify patch was called with rejected decision in spec.input
         call_args = mock_to_thread.call_args
         patch_body = call_args.kwargs['body']
-        self.assertEqual(patch_body["status"]["phase"], "failed")
-        self.assertEqual(patch_body["status"]["error"], "Tool execution rejected by user")
+        self.assertEqual(patch_body["spec"]["input"], '{"decision": "rejected"}')
 
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_submit_approval_query_not_found(self, mock_ark_client):
