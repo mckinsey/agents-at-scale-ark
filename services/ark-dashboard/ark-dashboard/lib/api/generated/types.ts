@@ -2646,14 +2646,9 @@ export interface components {
         AuthStartRequest: {
             /**
              * Force
-             * @description Bypass the Authorized preflight (does NOT bypass DiscoveryFailed)
+             * @description Bypass the Authorized preflight and force fresh DCR even when the Secret carries cached client credentials
              */
             force?: boolean | null;
-            /**
-             * Force Registration
-             * @description Perform a fresh DCR even when the Secret carries cached client credentials
-             */
-            force_registration?: boolean | null;
             /**
              * Scopes
              * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
@@ -2674,6 +2669,16 @@ export interface components {
         };
         /** AuthStatusResponse */
         AuthStatusResponse: {
+            /**
+             * Controller Message
+             * @description Latest Available condition message from the controller
+             */
+            controller_message?: string | null;
+            /**
+             * Controller State
+             * @description Current MCPServer status.authorization.state from the controller
+             */
+            controller_state?: string | null;
             /**
              * Expires At
              * @description RFC 3339 UTC token expiry (only present once state == authorized)
