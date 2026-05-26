@@ -1,8 +1,8 @@
 import {Router} from 'express';
 import type {Request, Response} from 'express';
 import express from 'express';
-import {TraceBroker, OTELSpan} from '../trace-broker.js';
-import type {Logger} from '../logging/logger.js';
+import {TraceBroker, OTELSpan} from '@ark-broker/brokers/trace-broker.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import protobuf from 'protobufjs';
 import {join} from 'path';
 

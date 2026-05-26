@@ -8,7 +8,7 @@ executor's message format (OpenAI-format messages and chunks).
 
 - **MemoryBroker** (`memory-broker.ts`) — stores chat messages, grouped by
   conversation/query ID
-- **CompletionChunkBroker** (`completion-chunk-broker.ts`) — stores streaming
+- **CompletionChunkBroker** (`chunks-broker.ts`) — stores streaming
   chunks, tracks completion with `[DONE]` markers
 - **TraceBroker** (`trace-broker.ts`) — stores OTEL spans, supports session
   filtering via `ark.session.id`
@@ -59,8 +59,8 @@ make lint && make test
 ### Dependency injection (no singletons, no module-level globals)
 
 - Never `export const logger`, `export const config`, or any other shared
-  instance from a module. Construct in `main.ts` and pass down.
-- `main.ts` is the **single composition root**. It builds the logger, parses
+  instance from a module. Construct in `index.ts` and pass down.
+- `index.ts` is the **single composition root**. It builds the logger, parses
   config, and calls `buildApp({config, logger})`.
 - `server.ts` exports `buildApp(deps)` and returns `{app, brokers}`. It holds
   no module-level state.
@@ -82,7 +82,7 @@ make lint && make test
   via `superRefine`.
 - **No `process.env` reads outside `src/config/`.** If you need a value at
   runtime, plumb it through `AppConfig`. (The two reads remaining in
-  `swagger.ts` and `main.ts` predate this rule and are scoped to boot.)
+  `swagger.ts` and `index.ts` predate this rule and are scoped to boot.)
 - Boot fails fast: invalid env → `logger.error({err}, 'invalid configuration')`
   → `process.exit(1)`. No silent defaults that mask misconfiguration.
 
@@ -149,6 +149,23 @@ The repo uses Conventional Commits (enforced by Release Please). Beyond that:
 - **No teasers** ("wired up next commit", "follow-up coming"). Each commit
   stands on its own.
 - **No `Co-Authored-By` trailers** in this repo.
+
+### Imports
+
+The `@ark-broker/` alias maps to `./src/` and is resolved at build time by `tsc-alias`.
+
+- **Cross-tree** (import crosses a top-level `src/` subdirectory boundary): use the alias — `@ark-broker/brokers/x.js`, `@ark-broker/http/sse.js`, `@ark-broker/logging/logger.js`.
+- **Intra-module** (same domain folder or adjacent sibling): use a relative path — `'./schemas.js'`, `'../errors.js'`.
+
+### Route domains
+
+Each route domain under `src/http/routes/` is a three-file module:
+
+- **`schemas.ts`** — zod schema objects and `z.infer<>` derived types. No router logic here.
+- **`handlers.ts`** — exported `handle*` functions taking `(req, res, broker, ...params)`. No Express router registration.
+- **`index.ts`** — `createXxxRouter(deps)` factory. Registers routes, calls `safeParse`, delegates to handlers.
+
+When adding a new route domain, follow this pattern — do not add a flat single-file route directly under `routes/`.
 
 ### Engineering style
 

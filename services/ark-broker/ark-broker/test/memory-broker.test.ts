@@ -1,5 +1,5 @@
 import {createLogger} from '../src/logging/logger.js';
-import {MemoryBroker} from '../src/memory-broker.js';
+import {MemoryBroker} from '../src/brokers/memory-broker.js';
 
 describe('MemoryBroker', () => {
   let broker: MemoryBroker;
