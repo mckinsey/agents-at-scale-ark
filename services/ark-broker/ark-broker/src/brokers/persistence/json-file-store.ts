@@ -1,6 +1,6 @@
 import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'fs';
 import {dirname} from 'path';
-import type {Logger} from './logging/logger.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 
 export class JsonFileStore<T> {
   constructor(

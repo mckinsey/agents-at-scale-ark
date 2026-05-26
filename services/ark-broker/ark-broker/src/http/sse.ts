@@ -1,5 +1,5 @@
 import {Request, Response} from 'express';
-import type {Logger} from './logging/logger.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 
 export const writeSSEEvent = (
   res: Response,

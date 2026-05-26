@@ -1,7 +1,7 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import {Express} from 'express';
 import swaggerUi from 'swagger-ui-express';
-import type {Logger} from './logging/logger.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 
 export type SwaggerDeps = {
   logger: Logger;
