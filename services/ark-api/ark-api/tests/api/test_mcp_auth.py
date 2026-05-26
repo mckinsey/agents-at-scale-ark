@@ -445,7 +445,7 @@ class TestAuthStatus(_AuthBase):
         self.assertEqual(response.json()["state"], "failed")
 
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_auth_id", new_callable=AsyncMock)
-    def test_controller_rejection_surfaces_as_failed(self, mock_read_flow):
+    def test_controller_not_yet_reconciled_returns_pending(self, mock_read_flow):
         from ark_api.services.mcp_auth_persistence import FlowState
 
         mock_read_flow.return_value = FlowState(
@@ -457,7 +457,7 @@ class TestAuthStatus(_AuthBase):
         )
         cond = MagicMock()
         cond.type = "Available"
-        cond.message = "TokenRejected: insufficient scope"
+        cond.message = "OAuth authorization required for Notion MCP (Beta)"
         patcher, _ = _patch_ark_client(
             _build_typed_mcp(state="Required", conditions=[cond])
         )
@@ -467,10 +467,9 @@ class TestAuthStatus(_AuthBase):
                 params={"auth_id": "aid", "namespace": "default"},
             )
         body = response.json()
-        self.assertEqual(body["state"], "failed")
-        self.assertIn("TokenRejected", body["message"])
+        self.assertEqual(body["state"], "pending")
         self.assertEqual(body["controller_state"], "Required")
-        self.assertIn("TokenRejected", body["controller_message"])
+        self.assertIn("awaiting", body["message"])
 
 
 class TestAuthLogout(_AuthBase):

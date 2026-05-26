@@ -457,13 +457,6 @@ async def get_mcp_auth_status(
                 controller_state=server_state,
                 controller_message=condition_message,
             )
-        if server_state == "Required":
-            return AuthStatusResponse(
-                state="failed",
-                message=f"Controller rejected token: {condition_message or 'state reverted to Required'}",
-                controller_state=server_state,
-                controller_message=condition_message,
-            )
         return AuthStatusResponse(
             state="pending",
             message="Token written; awaiting MCPServer status reconciliation",
