@@ -13,6 +13,9 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         """Set up test client."""
         self.client = SecretClient(namespace="test-namespace")
+        patcher = patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+        self.mock_init_k8s = patcher.start()
+        self.addCleanup(patcher.stop)
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
