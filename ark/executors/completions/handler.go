@@ -90,6 +90,7 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	}
 }
 
+//nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (h *Handler) ProcessMessage(
 	ctx context.Context,
 	message protocol.Message,
@@ -114,6 +115,7 @@ func (h *Handler) ProcessMessage(
 	defer state.targetSpan.End()
 
 	// Check if this is a resumption from HITL approval or rejection
+	//nolint:nestif // TODO: Refactor to reduce nesting complexity
 	if isResumption, a2aTask := h.checkResumption(ctx, query); isResumption {
 		decision := "approved"
 		if a2aTask.Status.Phase == arka2a.PhaseFailed {
@@ -722,6 +724,7 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 }
 
 // handleResumption handles query resumption after HITL approval or rejection
+//nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (h *Handler) handleResumption(ctx context.Context, state *executionState, a2aTask *arkv1alpha1.A2ATask) (*ExecutionResult, []Message, error) {
 	log := logf.FromContext(ctx)
 
@@ -789,6 +792,7 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 		}
 		toolCalls[i] = tc
 
+		//nolint:nestif // TODO: Refactor to reduce nesting complexity
 		if isApproved {
 			// APPROVED: Execute the tool
 			result, err := agent.executeToolCall(ctx, tc)

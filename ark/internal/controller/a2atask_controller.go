@@ -35,6 +35,7 @@ type A2ATaskReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 
+//nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -73,6 +74,7 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Check for approval timeout if task is in input-required phase
+	//nolint:nestif // TODO: Refactor to reduce nesting complexity
 	if a2aTask.Status.Phase == arka2a.PhaseInputRequired {
 		if timedOut, err := r.checkApprovalTimeout(ctx, &a2aTask); err != nil {
 			log.Error(err, "failed to check approval timeout")

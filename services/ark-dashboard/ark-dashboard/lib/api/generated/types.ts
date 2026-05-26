@@ -1328,6 +1328,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/queries/{query_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Approval Details
+         * @description Get pending approval details for a query.
+         *
+         *     Returns approval information including tool calls, timeout, and agent context.
+         *     Only available when query is in 'input-required' phase.
+         */
+        get: operations["get_approval_details_v1_queries__query_name__approval_get"];
+        put?: never;
+        /**
+         * Submit Approval
+         * @description Submit approval or rejection for a query's tool calls.
+         *
+         *     Args:
+         *         query_name: Name of the query
+         *         request: Approval action (approved/rejected)
+         *         namespace: Namespace for the query
+         *
+         *     Returns:
+         *         ApprovalResponse with status and query information
+         */
+        post: operations["submit_approval_v1_queries__query_name__approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/queries/{query_name}/cancel": {
         parameters: {
             query?: never;
@@ -1788,75 +1823,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tool-approvals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Tool Approvals */
-        get: operations["list_tool_approvals_v1_tool_approvals_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tool-approvals/pending": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Pending Approvals */
-        get: operations["list_pending_approvals_v1_tool_approvals_pending_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tool-approvals/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Tool Approval */
-        get: operations["get_tool_approval_v1_tool_approvals__name__get"];
-        put?: never;
-        post?: never;
-        /** Delete Tool Approval */
-        delete: operations["delete_tool_approval_v1_tool_approvals__name__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tool-approvals/{name}/decision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Submit Decision */
-        post: operations["submit_decision_v1_tool_approvals__name__decision_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/tools": {
         parameters: {
             query?: never;
@@ -2012,7 +1978,7 @@ export interface components {
          * @description Detailed A2ATask response model.
          */
         A2ATaskDetailResponse: {
-            a2aServerRef: components["schemas"]["A2AServerRef"];
+            a2aServerRef?: components["schemas"]["A2AServerRef"] | null;
             agentRef: components["schemas"]["AgentRef"];
             /** Contextid */
             contextId?: string | null;
@@ -2487,24 +2453,11 @@ export interface components {
          * @description Tool configuration for an agent.
          */
         AgentTool: {
-            interaction?: components["schemas"]["ToolInteractionConfig"] | null;
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
             /** Type */
             type: string;
-        };
-        /**
-         * AgentToolApproverRef
-         * @description Reference to an approver for tool interactions.
-         */
-        AgentToolApproverRef: {
-            /** Group */
-            group?: string | null;
-            /** Role */
-            role?: string | null;
-            /** User */
-            user?: string | null;
         };
         /**
          * AgentUpdateRequest
@@ -2548,34 +2501,55 @@ export interface components {
             /** Version */
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
-        /** ApprovalDecision */
-        ApprovalDecision: {
-            /** Action */
-            action: string;
-            clientContext?: components["schemas"]["ClientContext"] | null;
-            /** Reason */
-            reason?: string | null;
-            /** Respondedat */
-            respondedAt: string;
-            /** Respondedby */
-            respondedBy: string;
+        /**
+         * ApprovalAction
+         * @description Approval action enumeration.
+         * @enum {string}
+         */
+        ApprovalAction: "approved" | "rejected";
+        /**
+         * ApprovalActionRequest
+         * @description Request body for approving or rejecting tool calls.
+         */
+        ApprovalActionRequest: {
+            action: components["schemas"]["ApprovalAction"];
+            /** Toolcallid */
+            toolCallId?: string | null;
+            /** Toolcallids */
+            toolCallIds?: string[] | null;
         };
-        /** ApprovalDecisionRequest */
-        ApprovalDecisionRequest: {
-            /** Action */
-            action: string;
-            /** Reason */
-            reason?: string | null;
-        };
-        /** ApprovalDecisionResponse */
-        ApprovalDecisionResponse: {
-            decision: components["schemas"]["ApprovalDecision"];
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
+        /**
+         * ApprovalDetails
+         * @description Details about pending approval request.
+         */
+        ApprovalDetails: {
+            /** Agentname */
+            agentName?: string | null;
+            /** Ontimeout */
+            onTimeout?: string | null;
             /** Phase */
             phase: string;
+            /** Taskid */
+            taskId: string;
+            /** Timeout */
+            timeout?: string | null;
+            /** Toolcalls */
+            toolCalls: components["schemas"]["ToolCall"][];
+        };
+        /**
+         * ApprovalResponse
+         * @description Response after submitting approval action.
+         */
+        ApprovalResponse: {
+            action: components["schemas"]["ApprovalAction"];
+            /** Queryname */
+            queryName: string;
+            /** Querynamespace */
+            queryNamespace: string;
+            /** Status */
+            status: string;
+            /** Taskid */
+            taskId?: string | null;
         };
         /**
          * ArkConfigResponse
@@ -2914,13 +2888,6 @@ export interface components {
              */
             role: "user";
         };
-        /** ClientContext */
-        ClientContext: {
-            /** Ipaddress */
-            ipAddress?: string | null;
-            /** Useragent */
-            userAgent?: string | null;
-        };
         /** ContextResponse */
         ContextResponse: {
             /** Cluster */
@@ -3019,19 +2986,6 @@ export interface components {
             type: string;
             /** Uid */
             uid: string;
-        };
-        /** ExecutionContext */
-        ExecutionContext: {
-            /** Agentname */
-            agentName: string;
-            /** Agentnamespace */
-            agentNamespace: string;
-            /** Completedtoolresults */
-            completedToolResults?: string[] | null;
-            /** Conversationhistory */
-            conversationHistory: string;
-            /** Pendingtoolcallindex */
-            pendingToolCallIndex: number;
         };
         /**
          * ExecutionEngineRef
@@ -3842,13 +3796,6 @@ export interface components {
             /** Responsetarget */
             responseTarget?: string | null;
         };
-        /** QueryReference */
-        QueryReference: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-        };
         /**
          * QueryResponse
          * @description Basic query response for list operations.
@@ -4198,98 +4145,17 @@ export interface components {
             /** Strategy */
             strategy?: string | null;
         };
-        /** ToolApprovalApproverRef */
-        ToolApprovalApproverRef: {
-            /** Group */
-            group?: string | null;
-            /** Role */
-            role?: string | null;
-            /** User */
-            user?: string | null;
-        };
-        /** ToolApprovalDetailResponse */
-        ToolApprovalDetailResponse: {
-            /** Approvers */
-            approvers?: components["schemas"]["ToolApprovalApproverRef"][] | null;
-            executionContext: components["schemas"]["ExecutionContext"];
-            /** Metadata */
-            metadata?: {
+        /**
+         * ToolCall
+         * @description Tool call information for approval.
+         */
+        ToolCall: {
+            /** Function */
+            function?: {
                 [key: string]: unknown;
             } | null;
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Ontimeout */
-            onTimeout?: string | null;
-            queryRef: components["schemas"]["QueryReference"];
-            /** Reasonrequired */
-            reasonRequired?: boolean | null;
-            status?: components["schemas"]["ToolApprovalRequestStatus"] | null;
-            /** Timeout */
-            timeout?: string | null;
-            /** Toolcalls */
-            toolCalls: components["schemas"]["ToolCallInfo"][];
-        };
-        /** ToolApprovalListResponse */
-        ToolApprovalListResponse: {
-            /** Count */
-            count: number;
-            /** Items */
-            items: components["schemas"]["ToolApprovalResponse"][];
-        };
-        /** ToolApprovalRequestStatus */
-        ToolApprovalRequestStatus: {
-            /** Approvalduration */
-            approvalDuration?: string | null;
-            /** Conditions */
-            conditions?: unknown[] | null;
-            decision?: components["schemas"]["ApprovalDecision"] | null;
-            /** Observedgeneration */
-            observedGeneration?: number | null;
-            /** Phase */
-            phase?: string | null;
-            /** Requestedat */
-            requestedAt?: string | null;
-        };
-        /** ToolApprovalResponse */
-        ToolApprovalResponse: {
-            /** Creationtimestamp */
-            creationTimestamp?: string | null;
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Phase */
-            phase?: string | null;
-            queryRef: components["schemas"]["QueryReference"];
-            /** Toolcalls */
-            toolCalls: components["schemas"]["ToolCallInfo"][];
-        };
-        /** ToolCallAnnotations */
-        ToolCallAnnotations: {
-            /** Destructivehint */
-            destructiveHint?: boolean | null;
-            /** Idempotenthint */
-            idempotentHint?: boolean | null;
-            /** Openworldhint */
-            openWorldHint?: boolean | null;
-            /** Readonlyhint */
-            readOnlyHint?: boolean | null;
-        };
-        /** ToolCallInfo */
-        ToolCallInfo: {
-            /** Agentreasoning */
-            agentReasoning?: string | null;
-            annotations?: components["schemas"]["ToolCallAnnotations"] | null;
-            /** Arguments */
-            arguments: string;
-            /** Description */
-            description?: string | null;
             /** Id */
             id: string;
-            /** Name */
-            name: string;
             /** Type */
             type: string;
         };
@@ -4317,78 +4183,6 @@ export interface components {
             status?: {
                 [key: string]: unknown;
             } | null;
-        };
-        /**
-         * ToolInteractionApprovalConfig
-         * @description Approval-specific interaction configuration.
-         */
-        ToolInteractionApprovalConfig: {
-            /** Approvers */
-            approvers?: components["schemas"]["AgentToolApproverRef"][] | null;
-            /** Reasonrequired */
-            reasonRequired?: boolean | null;
-        };
-        /**
-         * ToolInteractionConfig
-         * @description Tool interaction configuration for HITL.
-         */
-        ToolInteractionConfig: {
-            approval?: components["schemas"]["ToolInteractionApprovalConfig"] | null;
-            confirmation?: components["schemas"]["ToolInteractionConfirmationConfig"] | null;
-            input?: components["schemas"]["ToolInteractionInputConfig"] | null;
-            /** Ontimeout */
-            onTimeout?: string | null;
-            selection?: components["schemas"]["ToolInteractionSelectionConfig"] | null;
-            /** Timeout */
-            timeout?: string | null;
-            /** Type */
-            type: string;
-        };
-        /**
-         * ToolInteractionConfirmationConfig
-         * @description Confirmation-specific interaction configuration.
-         */
-        ToolInteractionConfirmationConfig: {
-            /** Allowedit */
-            allowEdit?: boolean | null;
-            /** Message */
-            message?: string | null;
-        };
-        /**
-         * ToolInteractionInputConfig
-         * @description Input-specific interaction configuration.
-         */
-        ToolInteractionInputConfig: {
-            /** Prompt */
-            prompt?: string | null;
-            /** Schema */
-            schema?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        /**
-         * ToolInteractionSelectionConfig
-         * @description Selection-specific interaction configuration.
-         */
-        ToolInteractionSelectionConfig: {
-            /** Multiselect */
-            multiSelect?: boolean | null;
-            /** Options */
-            options: components["schemas"]["ToolInteractionSelectionOption"][];
-            /** Prompt */
-            prompt?: string | null;
-        };
-        /**
-         * ToolInteractionSelectionOption
-         * @description Option for selection-type interactions.
-         */
-        ToolInteractionSelectionOption: {
-            /** Description */
-            description?: string | null;
-            /** Label */
-            label: string;
-            /** Value */
-            value: string;
         };
         /** ToolListResponse */
         ToolListResponse: {
@@ -7093,6 +6887,78 @@ export interface operations {
             };
         };
     };
+    get_approval_details_v1_queries__query_name__approval_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                query_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_approval_v1_queries__query_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                query_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cancel_query_v1_queries__query_name__cancel_patch: {
         parameters: {
             query?: {
@@ -7868,176 +7734,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_tool_approvals_v1_tool_approvals_get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request */
-                namespace?: string | null;
-                /** @description Filter by phase (pending, approved, rejected, expired) */
-                phase?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolApprovalListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_pending_approvals_v1_tool_approvals_pending_get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolApprovalListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_tool_approval_v1_tool_approvals__name__get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolApprovalDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_tool_approval_v1_tool_approvals__name__delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_decision_v1_tool_approvals__name__decision_post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApprovalDecisionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApprovalDecisionResponse"];
-                };
             };
             /** @description Validation Error */
             422: {
