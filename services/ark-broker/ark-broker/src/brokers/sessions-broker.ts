@@ -1,15 +1,47 @@
 import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {EventEmitter} from 'node:events';
-import type {Logger} from './logging/logger.js';
-import type {QueryPhase, SessionEventData} from './types.js';
-import {
-  QueryPhases,
-  EventReasons,
-  ERROR_REASON_SUFFIX,
-  CANCELED_REASON_SUFFIX,
-} from './types.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import type {PaginationParams, PaginatedList} from './pagination.js';
+
+export type QueryPhase =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'error'
+  | 'canceled'
+  | 'unknown';
+
+export const QueryPhases = {
+  Pending: 'pending',
+  Running: 'running',
+  Done: 'done',
+  Error: 'error',
+  Canceled: 'canceled',
+  Unknown: 'unknown',
+} as const satisfies Record<string, QueryPhase>;
+
+export const EventReasons = {
+  QueryExecutionComplete: 'QueryExecutionComplete',
+  QueryExecutionCanceled: 'QueryExecutionCanceled',
+  AgentExecutionStart: 'AgentExecutionStart',
+} as const;
+
+export const ERROR_REASON_SUFFIX = 'Error';
+export const CANCELED_REASON_SUFFIX = 'Canceled';
+
+export interface SessionEventData {
+  sessionId: string;
+  queryName: string;
+  queryNamespace?: string;
+  conversationId?: string;
+  agent?: string;
+  team?: string;
+  tool?: string;
+  targetType?: string;
+  error?: string;
+  _reason?: string;
+}
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
 

@@ -5,21 +5,21 @@ import type {Logger} from './logging/logger.js';
 import {
   createErrorHandler,
   notFoundHandler,
-} from './middleware/error-handler.js';
-import {createHttpLogger} from './middleware/http-logger.js';
-import {requestId} from './middleware/request-id.js';
-import {MemoryBroker} from './memory-broker.js';
-import {CompletionChunkBroker} from './completion-chunk-broker.js';
-import {TraceBroker} from './trace-broker.js';
-import {EventBroker} from './event-broker.js';
-import {SessionsBroker} from './sessions-broker.js';
-import {createMemoryRouter} from './routes/memory.js';
-import {createStreamRouter} from './routes/stream.js';
-import {createTracesRouter} from './routes/traces.js';
-import {createEventsRouter} from './routes/events.js';
-import {createSessionsRouter} from './routes/sessions.js';
-import {createOTLPRouter} from './routes/otlp.js';
-import {setupSwagger} from './swagger.js';
+} from './http/middleware/error-handler.js';
+import {createHttpLogger} from './http/middleware/http-logger.js';
+import {requestId} from './http/middleware/request-id.js';
+import {MemoryBroker} from './brokers/memory-broker.js';
+import {CompletionChunkBroker} from './brokers/chunks-broker.js';
+import {TraceBroker} from './brokers/trace-broker.js';
+import {EventBroker} from './brokers/event-broker.js';
+import {SessionsBroker} from './brokers/sessions-broker.js';
+import {createMemoryRouter} from './http/routes/memory/index.js';
+import {createStreamRouter} from './http/routes/stream/index.js';
+import {createTracesRouter} from './http/routes/traces/index.js';
+import {createEventsRouter} from './http/routes/events/index.js';
+import {createSessionsRouter} from './http/routes/sessions/index.js';
+import {createOTLPRouter} from './http/routes/otlp.js';
+import {setupSwagger} from './http/swagger.js';
 
 export type Brokers = {
   memory: MemoryBroker;

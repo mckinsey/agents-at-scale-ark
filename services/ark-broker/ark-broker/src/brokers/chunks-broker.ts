@@ -1,7 +1,7 @@
 import {EventEmitter} from 'events';
-import {BrokerItem} from './broker-item.js';
-import {BrokerItemStream} from './broker-item-stream.js';
-import type {Logger} from './logging/logger.js';
+import {BrokerItem} from './stream/broker-item.js';
+import {BrokerItemStream} from './stream/broker-item-stream.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 /** Data payload for OpenAI chat completion streaming chunks */
