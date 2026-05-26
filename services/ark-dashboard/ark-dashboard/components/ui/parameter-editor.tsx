@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Info,
   Lock,
   Plus,
   RotateCcw,
@@ -10,8 +11,9 @@ import {
   Type,
   Variable,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
+import { Edit } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 import { Button } from './button';
@@ -47,6 +49,13 @@ export interface ParameterEditorProps {
   prompt?: string;
   disabled?: boolean;
   className?: string;
+  /**
+   * Visual variant.
+   * - `default` (the existing styling, used by EDIT mode)
+   * - `compact` matches Figma 1065:55508: mixed-case "Parameters" title with info
+   *   icon, "X results" + "Add new" button row, no dashed-border empty state.
+   */
+  variant?: 'default' | 'compact';
 }
 
 const TEMPLATE_REGEX = /\{\{\s*\.([\w]+)\s*\}\}/g;
@@ -66,7 +75,9 @@ export function ParameterEditor({
   prompt = '',
   disabled,
   className,
+  variant = 'default',
 }: ParameterEditorProps) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const promptParams = useMemo(() => extractPromptParameters(prompt), [prompt]);
   const definedParamNames = new Set(
     parameters.map(p => p.name).filter(Boolean),
@@ -121,70 +132,41 @@ export function ParameterEditor({
     p => p.source === 'queryParameter',
   ).length;
 
-  return (
-    <div className={cn('space-y-2', className)}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Variable className="text-muted-foreground h-4 w-4" />
-          <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Parameters
-          </h3>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => addParameter()}
-          disabled={disabled}
-          className="h-7 px-2 text-xs">
-          <Plus className="mr-1 h-3 w-3" />
-          Add
-        </Button>
-      </div>
+  const isCompact = variant === 'compact';
 
-      {/* Undefined parameters warning */}
-      {undefinedParams.length > 0 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-            <div className="flex-1">
-              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                Undefined parameters in prompt:
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {undefinedParams.map(param => (
-                  <button
-                    key={param}
-                    type="button"
-                    onClick={() => addParameter(param)}
-                    disabled={disabled}
-                    className="inline-flex items-center rounded bg-amber-500/20 px-2 py-0.5 font-mono text-xs text-amber-700 transition-colors hover:bg-amber-500/30 disabled:cursor-not-allowed dark:text-amber-400">
-                    {'{{.'}
-                    {param}
-                    {'}}'}
-                    <Plus className="ml-1 h-3 w-3" />
-                  </button>
-                ))}
-              </div>
+  const undefinedParamsWarning =
+    undefinedParams.length > 0 ? (
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              Undefined parameters in prompt:
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {undefinedParams.map(param => (
+                <button
+                  key={param}
+                  type="button"
+                  onClick={() => addParameter(param)}
+                  disabled={disabled}
+                  className="inline-flex items-center rounded bg-amber-500/20 px-2 py-0.5 font-mono text-xs text-amber-700 transition-colors hover:bg-amber-500/30 disabled:cursor-not-allowed dark:text-amber-400">
+                  {'{{.'}
+                  {param}
+                  {'}}'}
+                  <Plus className="ml-1 h-3 w-3" />
+                </button>
+              ))}
             </div>
           </div>
         </div>
-      )}
+      </div>
+    ) : null;
 
-      {/* Parameter list */}
-      {parameters.length === 0 ? (
-        <div className="rounded-md border border-dashed p-4 text-center">
-          <p className="text-muted-foreground text-xs">
-            No parameters defined. Use{' '}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
-              {'{{.name}}'}
-            </code>{' '}
-            syntax in your prompt.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {parameters.map((param, index) => {
+  const parameterRows =
+    parameters.length > 0 ? (
+      <div className="space-y-2">
+        {parameters.map((param, index) => {
             const isUsed = param.name && promptParams.includes(param.name);
             const isDuplicate =
               param.name &&
@@ -354,31 +336,304 @@ export function ParameterEditor({
               </div>
             );
           })}
+      </div>
+    ) : null;
+
+  const statsRow =
+    parameters.length > 0 || promptParams.length > 0 ? (
+      <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
+        <span>{parameters.filter(p => p.name).length} defined</span>
+        <span>·</span>
+        <span>{promptParams.length} used in prompt</span>
+        {queryParamCount > 0 && (
+          <>
+            <span>·</span>
+            <span>{queryParamCount} from query</span>
+          </>
+        )}
+        {unusedParams.length > 0 && (
+          <>
+            <span>·</span>
+            <span className="text-amber-600 dark:text-amber-400">
+              {unusedParams.length} unused
+            </span>
+          </>
+        )}
+      </div>
+    ) : null;
+
+  // Compact list view — figma 1065:54666: column headers ("Name (A-Z)" /
+  // "Actions") + rows with name input + pencil/trash icons on a single
+  // bottom-bordered line. The pencil toggles an inline expansion that exposes
+  // the source/value/override controls so the existing data model still works.
+  const compactRemoveParameter = (index: number) => {
+    if (editingIndex === index) {
+      setEditingIndex(null);
+    } else if (editingIndex !== null && editingIndex > index) {
+      setEditingIndex(editingIndex - 1);
+    }
+    removeParameter(index);
+  };
+
+  const compactParameterRows =
+    parameters.length > 0 ? (
+      <div className="flex flex-col gap-2">
+        {/* Column headers */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 flex-1 items-start border-b border-white/[0.16] pt-3">
+            <span className="text-fg-secondary text-sm leading-4 tracking-[-0.112px]">
+              Name (A-Z)
+            </span>
+          </div>
+          <div className="flex h-10 w-20 items-start border-b border-white/[0.16] pt-3">
+            <span className="text-fg-secondary text-sm leading-4 tracking-[-0.112px]">
+              Actions
+            </span>
+          </div>
         </div>
+
+        {parameters.map((param, index) => {
+          const isEditing = editingIndex === index;
+          const isDuplicate =
+            !!param.name &&
+            parameters.filter(p => p.name === param.name).length > 1;
+          const isUnsupportedSource =
+            param.source === 'configMapKeyRef' ||
+            param.source === 'secretKeyRef';
+          const isQueryParam = param.source === 'queryParameter';
+          const showOverrideField = isQueryParam && param.overrideQueryName;
+
+          return (
+            <div key={index} className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 flex-1 items-center border-b border-white/[0.16]">
+                  <input
+                    type="text"
+                    value={param.name}
+                    onChange={e =>
+                      updateParameter(index, { name: e.target.value })
+                    }
+                    placeholder="parameter_name"
+                    disabled={disabled}
+                    aria-label={`Parameter ${index + 1} name`}
+                    className={cn(
+                      'text-fg-primary placeholder:text-fg-secondary w-full bg-transparent text-sm leading-4 tracking-[-0.112px] outline-none disabled:cursor-not-allowed disabled:opacity-50',
+                      isDuplicate &&
+                        'text-status-error placeholder:text-status-error',
+                    )}
+                  />
+                </div>
+                <div className="flex h-10 w-20 items-center justify-end gap-3 border-b border-white/[0.16]">
+                  <button
+                    type="button"
+                    onClick={() => setEditingIndex(isEditing ? null : index)}
+                    disabled={disabled}
+                    aria-label={
+                      isEditing ? 'Collapse parameter editor' : 'Edit parameter'
+                    }
+                    className={cn(
+                      'transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                      isEditing
+                        ? 'text-fg-primary'
+                        : 'text-fg-secondary hover:text-fg-primary',
+                    )}>
+                    <Edit className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => compactRemoveParameter(index)}
+                    disabled={disabled}
+                    aria-label="Remove parameter"
+                    className="text-fg-secondary hover:text-status-error transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </div>
+
+              {isEditing && (
+                <div className="bg-fill-onsurface-ui-3 flex flex-col gap-3 p-3">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-fg-secondary text-[10px] tracking-wide uppercase">
+                      Source
+                    </Label>
+                    <Select
+                      value={param.source}
+                      onValueChange={value =>
+                        updateParameter(index, {
+                          source: value as ParameterSource,
+                        })
+                      }
+                      disabled={disabled || isUnsupportedSource}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="value">
+                          <span className="flex items-center gap-1.5">
+                            <Type className="h-3 w-3" />
+                            Direct value
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="queryParameter">
+                          <span className="flex items-center gap-1.5">
+                            <Variable className="h-3 w-3" />
+                            Query parameter
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {isUnsupportedSource ? (
+                    <div className="bg-status-warning/10 flex items-center gap-2 px-3 py-2">
+                      <Lock className="text-status-warning size-4 shrink-0" />
+                      <p className="text-status-warning text-xs">
+                        {param.source === 'configMapKeyRef'
+                          ? `ConfigMap: ${param.configMapRef?.name || '?'}/${param.configMapRef?.key || '?'}`
+                          : `Secret: ${param.secretRef?.name || '?'}/${param.secretRef?.key || '?'}`}
+                      </p>
+                    </div>
+                  ) : param.source === 'value' ? (
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-fg-secondary text-[10px] tracking-wide uppercase">
+                        Value
+                      </Label>
+                      <Input
+                        value={param.value || ''}
+                        onChange={e =>
+                          updateParameter(index, { value: e.target.value })
+                        }
+                        placeholder="Static value"
+                        disabled={disabled}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  ) : showOverrideField ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-fg-secondary text-[10px] tracking-wide uppercase">
+                          Query parameter name
+                        </Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => resetOverride(index)}
+                          disabled={disabled}
+                          className="text-fg-secondary hover:text-fg-primary h-5 px-1.5 text-[10px]">
+                          <RotateCcw className="mr-1 h-3 w-3" />
+                          Reset
+                        </Button>
+                      </div>
+                      <Input
+                        value={param.queryParameterName || ''}
+                        onChange={e =>
+                          updateParameter(index, {
+                            queryParameterName: e.target.value,
+                          })
+                        }
+                        placeholder="Name in query.spec.parameters"
+                        disabled={disabled}
+                        className="h-8 font-mono text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <p className="text-fg-secondary text-xs">
+                        Will use parameter name in query.spec.parameters
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => enableOverride(index)}
+                        disabled={disabled || !param.name}
+                        className="text-fg-secondary hover:text-fg-primary h-6 px-2 text-[10px]">
+                        <Settings2 className="mr-1 h-3 w-3" />
+                        Override
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    ) : null;
+
+  if (isCompact) {
+    return (
+      <div className={cn('flex flex-col gap-5', className)}>
+        {/* Header — figma 4257:32443 */}
+        <div className="flex w-full items-start justify-between">
+          <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-fg-secondary text-base leading-6 tracking-[-0.016px]">
+                Variables
+              </h3>
+              <Info className="text-fg-secondary size-4" />
+            </div>
+            <p className="text-fg-secondary text-xs leading-4 tracking-[0.024px]">
+              {parameters.length} result{parameters.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => addParameter()}
+            disabled={disabled}>
+            <Plus className="size-4" />
+            Add new
+          </Button>
+        </div>
+
+        {undefinedParamsWarning}
+
+        {compactParameterRows}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn('space-y-2', className)}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Variable className="text-muted-foreground h-4 w-4" />
+          <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+            Parameters
+          </h3>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => addParameter()}
+          disabled={disabled}
+          className="h-7 px-2 text-xs">
+          <Plus className="mr-1 h-3 w-3" />
+          Add
+        </Button>
+      </div>
+
+      {undefinedParamsWarning}
+
+      {parameters.length === 0 ? (
+        <div className="rounded-md border border-dashed p-4 text-center">
+          <p className="text-muted-foreground text-xs">
+            No parameters defined. Use{' '}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
+              {'{{.name}}'}
+            </code>{' '}
+            syntax in your prompt.
+          </p>
+        </div>
+      ) : (
+        parameterRows
       )}
 
-      {/* Stats */}
-      {(parameters.length > 0 || promptParams.length > 0) && (
-        <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
-          <span>{parameters.filter(p => p.name).length} defined</span>
-          <span>·</span>
-          <span>{promptParams.length} used in prompt</span>
-          {queryParamCount > 0 && (
-            <>
-              <span>·</span>
-              <span>{queryParamCount} from query</span>
-            </>
-          )}
-          {unusedParams.length > 0 && (
-            <>
-              <span>·</span>
-              <span className="text-amber-600 dark:text-amber-400">
-                {unusedParams.length} unused
-              </span>
-            </>
-          )}
-        </div>
-      )}
+      {statsRow}
     </div>
   );
 }

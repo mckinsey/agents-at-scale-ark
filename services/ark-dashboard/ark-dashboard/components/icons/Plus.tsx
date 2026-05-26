@@ -10,12 +10,12 @@ export function Plus({ className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       className={cn('', className)}
-      viewBox="0 0 13 13"
+      viewBox="0 -960 960 960"
       fill="currentColor"
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       {...props}>
-      <path d="M5.75 7.25H0V5.75H5.75V0H7.25V5.75H13V7.25H7.25V13H5.75V7.25Z" />
+      <path d="M457.31-457.31H220v-45.38h237.31V-740h45.38v237.31H740v45.38H502.69V-220h-45.38v-237.31Z" />
     </svg>
   );
 }

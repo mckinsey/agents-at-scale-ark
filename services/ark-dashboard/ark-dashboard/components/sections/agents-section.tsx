@@ -1,226 +1,213 @@
 'use client';
 
-import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { Search, SmartToy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { AgentCard } from '@/components/cards';
-import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
-import { AgentRow } from '@/components/rows/agent-row';
-import {
-  SortableSectionedList,
-  type SortableSectionedListHandle,
-} from '@/components/sortable-sectioned-list';
+import { AgentsTable } from '@/components/sections/agents-table';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Input } from '@/components/ui/input';
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
-import { TrackedButton } from '@/components/ui/tracked-button';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useAgentsLayout, useDelayedLoading } from '@/lib/hooks';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useDelayedLoading } from '@/lib/hooks';
 import { type Agent, agentsService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-const getAgentKey = (agent: Agent) => agent.name;
+type StatusFilter = 'All' | 'True' | 'False';
 
-interface AgentsSectionHandle {
-  openApiDialog: () => void;
+const STATUS_ITEMS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
+  { value: 'All', label: 'All' },
+  { value: 'True', label: 'Active' },
+  { value: 'False', label: 'Error' },
+];
+
+const LEARN_MORE_URL =
+  'https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/';
+
+function AgentsEmptyState() {
+  return (
+    <div className="bg-surface-primary flex flex-col items-center justify-center py-12">
+      <div className="flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-3">
+          <div className="bg-surface-secondary flex items-center p-3">
+            <IconShell size="default" variant="secondary">
+              <SmartToy />
+            </IconShell>
+          </div>
+          <p className="text-fg-primary text-xl leading-7">No agents yet</p>
+          <div className="text-fg-secondary text-center text-base leading-6 tracking-[-0.128px]">
+            <p className="mb-2">You haven&apos;t created any agents yet.</p>
+            <p>Get started by creating your first agent.</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <a
+            href={LEARN_MORE_URL}
+            target="_blank"
+            rel="noopener noreferrer">
+            <Button variant="outline">Learn more</Button>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
-  function AgentsSection({}, ref) {
-    const [agents, setAgents] = useState<Agent[]>([]);
-    const [apiDialogOpen, setApiDialogOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const showLoading = useDelayedLoading(loading);
-    const [showCompactView, setShowCompactView] = useState(false);
-    const { readOnlyMode, namespace } = useNamespace();
-    const { layout, setLayout } = useAgentsLayout(namespace);
-    const listRef = useRef<SortableSectionedListHandle>(null);
+export function AgentsSection() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const showLoading = useDelayedLoading(loading);
+  const { readOnlyMode, namespace } = useNamespace();
 
-    const viewOptions: ToggleOption[] = [
-      { id: 'compact', label: 'compact view', active: !showCompactView },
-      { id: 'card', label: 'card view', active: showCompactView },
-    ];
+  const filteredAgents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return agents.filter(agent => {
+      const matchesSearch =
+        !q ||
+        agent.name.toLowerCase().includes(q) ||
+        (agent.description?.toLowerCase().includes(q) ?? false);
+      const matchesStatus =
+        statusFilter === 'All' || (agent.available ?? 'Unknown') === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [agents, searchQuery, statusFilter]);
 
-    useImperativeHandle(ref, () => ({
-      openApiDialog: () => setApiDialogOpen(true),
-    }));
-
-    useEffect(() => {
-      const loadData = async () => {
-        setLoading(true);
-        try {
-          const agentsData = await agentsService.getAll();
-          setAgents(agentsData);
-        } catch (error) {
-          console.error('Failed to load data:', error);
-          toast.error('Failed to Load Data', {
-            description:
-              error instanceof Error
-                ? error.message
-                : 'An unexpected error occurred',
-          });
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      loadData();
-    }, [namespace]);
-
-    const handleDeleteAgent = async (id: string) => {
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
       try {
-        const agent = agents.find(a => a.id === id);
-        if (!agent) {
-          throw new Error('Agent not found');
-        }
-        await agentsService.deleteById(id);
-        toast.success('Agent Deleted', {
-          description: `Successfully deleted ${agent.name}`,
-        });
-        const updatedAgents = await agentsService.getAll();
-        setAgents(updatedAgents);
+        const agentsData = await agentsService.getAll();
+        setAgents(agentsData);
       } catch (error) {
-        toast.error('Failed to Delete Agent', {
+        console.error('Failed to load data:', error);
+        toast.error('Failed to Load Data', {
           description:
             error instanceof Error
               ? error.message
               : 'An unexpected error occurred',
         });
+      } finally {
+        setLoading(false);
       }
     };
 
-    if (showLoading) {
-      return (
-        <div className="flex h-full items-center justify-center">
+    loadData();
+  }, [namespace]);
+
+  const handleDeleteAgent = async (id: string) => {
+    try {
+      const agent = agents.find(a => a.id === id);
+      if (!agent) {
+        throw new Error('Agent not found');
+      }
+      await agentsService.deleteById(id);
+      toast.success('Agent Deleted', {
+        description: `Successfully deleted ${agent.name}`,
+      });
+      const updatedAgents = await agentsService.getAll();
+      setAgents(updatedAgents);
+    } catch (error) {
+      toast.error('Failed to Delete Agent', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    }
+  };
+
+  const isEmpty = !loading && agents.length === 0;
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <IconShell size="default" variant="primary">
+              <SmartToy />
+            </IconShell>
+            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+              Agents
+            </h1>
+          </div>
+          <p className="text-fg-secondary max-w-[414px] text-sm leading-5 tracking-[-0.028px]">
+            Create and manage agents to automate tasks
+          </p>
+        </div>
+        {readOnlyMode ? (
+          <Button disabled>Create Agent</Button>
+        ) : (
+          <NamespacedLink href="/agents/new">
+            <Button>Create Agent</Button>
+          </NamespacedLink>
+        )}
+      </div>
+
+      {showLoading ? (
+        <div className="mt-5 flex flex-1 items-center justify-center">
           <div className="py-8 text-center">Loading...</div>
         </div>
-      );
-    }
-
-    if (agents.length === 0 && !loading) {
-      return (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <DASHBOARD_SECTIONS.agents.icon />
-            </EmptyMedia>
-            <EmptyTitle>No Agents Yet</EmptyTitle>
-            <EmptyDescription>
-              You haven&apos;t created any agents yet. Get started by creating
-              your first agent.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            {readOnlyMode ? (
-              <TrackedButton
-                trackingEvent="create_agent_clicked"
-                trackingProperties={{ source: 'empty_state' }}
-                disabled>
-                <Plus className="h-4 w-4" />
-                Create Agent
-              </TrackedButton>
-            ) : (
-              <TrackedButton
-                trackingEvent="create_agent_clicked"
-                trackingProperties={{ source: 'empty_state' }}
-                asChild>
-                <NamespacedLink href="/agents/new">
-                  <Plus className="h-4 w-4" />
-                  Create Agent
-                </NamespacedLink>
-              </TrackedButton>
-            )}
-          </EmptyContent>
-          <Button
-            variant="ghost"
-            asChild
-            className="text-muted-foreground"
-            size="sm">
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
-              target="_blank">
-              Learn More <ArrowUpRightIcon />
-            </a>
-          </Button>
-        </Empty>
-      );
-    }
-
-    return (
-      <>
-        <div className="flex h-full flex-col">
-          <div className="mt-3 flex items-center justify-between gap-2">
-            {!showCompactView ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => listRef.current?.openCreateGroup()}>
-                <Plus className="mr-1 h-4 w-4" />
-                Create Group
-              </Button>
-            ) : (
-              <div />
-            )}
-            <ToggleSwitch
-              options={viewOptions}
-              onChange={id => setShowCompactView(id === 'card')}
-            />
+      ) : isEmpty ? (
+        <div className="mt-5 flex-1">
+          <AgentsEmptyState />
+        </div>
+      ) : (
+        <div className="mt-5 flex flex-col gap-2">
+          <div className="flex items-end gap-3">
+            <div className="relative w-[493px]">
+              <span className="text-fg-tertiary pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+                <IconShell size="sm" variant="secondary">
+                  <Search />
+                </IconShell>
+              </span>
+              <Input
+                type="search"
+                placeholder="Search"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex w-48 flex-col gap-2">
+              <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                Status
+              </span>
+              <Select
+                items={STATUS_ITEMS}
+                value={statusFilter}
+                onValueChange={v => setStatusFilter(v as StatusFilter)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_ITEMS.map(item => (
+                    <SelectItem key={item.value} value={item.value}>
+                      <SelectItemText>{item.label}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <main className="mt-4 flex-1 overflow-auto">
-            {showCompactView && (
-              <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
-                {agents.map(agent => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    onDelete={handleDeleteAgent}
-                  />
-                ))}
-              </div>
-            )}
-
-            {!showCompactView && (
-              <SortableSectionedList
-                ref={listRef}
-                items={agents}
-                getKey={getAgentKey}
-                layout={layout}
-                setLayout={setLayout}
-                itemNoun={{ singular: 'agent', plural: 'agents' }}
-                renderItem={(agent, { dragHandle }) => (
-                  <AgentRow
-                    agent={agent}
-                    onDelete={handleDeleteAgent}
-                    leading={dragHandle}
-                  />
-                )}
-              />
-            )}
+          <main className="flex-1 overflow-auto">
+            <AgentsTable
+              agents={filteredAgents}
+              onDelete={handleDeleteAgent}
+            />
           </main>
         </div>
-
-        <AgentsAPIDialog
-          open={apiDialogOpen}
-          onOpenChange={setApiDialogOpen}
-          agents={agents}
-        />
-      </>
-    );
-  },
-);
+      )}
+    </div>
+  );
+}

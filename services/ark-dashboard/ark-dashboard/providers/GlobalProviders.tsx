@@ -37,7 +37,12 @@ export function GlobalProviders({ children }: PropsWithChildren) {
         </AuthProvider>
         <SettingsKeyboardShortcut />
         <NavigationTracker />
-        <Toaster richColors closeButton visibleToasts={5} />
+        <Toaster
+          richColors
+          closeButton
+          visibleToasts={5}
+          position="top-right"
+        />
       </ThemeProvider>
     </JotaiProvider>
   );

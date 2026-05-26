@@ -44,6 +44,8 @@ export const inputVariantStyles = {
     error: 'aria-invalid:border-b-status-error aria-invalid:ring-0',
     disabled:
       'disabled:pointer-events-none disabled:cursor-not-allowed disabled:text-fg-disabled disabled:placeholder:text-fg-disabled',
+    autofill:
+      'autofill:[-webkit-box-shadow:0_0_0_1000px_transparent_inset] autofill:[-webkit-text-fill-color:var(--color-fg-primary)] autofill:[transition:background-color_5000s_ease-in-out_0s]',
   },
 } as const;
 
@@ -117,6 +119,8 @@ const inputVariants = cva(
           inputVariantStyles.inline.error,
           // Disabled state
           inputVariantStyles.inline.disabled,
+          // Suppress Chrome/Safari autofill yellow/teal background
+          inputVariantStyles.inline.autofill,
           'px-0!',
         ],
       },
