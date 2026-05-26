@@ -89,7 +89,7 @@ class A2ATaskDetailResponse(BaseModel):
     name: str
     namespace: str
     taskId: str
-    a2aServerRef: A2AServerRef
+    a2aServerRef: Optional[A2AServerRef] = None
     agentRef: AgentRef
     queryRef: QueryRef
     contextId: Optional[str] = None

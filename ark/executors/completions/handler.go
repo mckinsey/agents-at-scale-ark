@@ -128,6 +128,14 @@ func (h *Handler) ProcessMessage(
 			// Check if this is another approval required error (cascading approval)
 			var approvalErr *ApprovalRequiredError
 			if errors.As(err, &approvalErr) {
+				// Save any messages that were generated before the approval was required
+				if state.memory != nil && len(responseMessages) > 0 {
+					log.Info("Saving intermediate messages to memory before cascading approval", "messageCount", len(responseMessages))
+					messagesToSave := PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
+					if saveErr := state.memory.AddMessages(ctx, state.query.Name, messagesToSave); saveErr != nil {
+						log.Error(saveErr, "failed to save intermediate messages to memory")
+					}
+				}
 				return h.handleApprovalRequired(ctx, state, approvalErr), nil
 			}
 			log.Error(err, "resumption failed")
@@ -831,9 +839,10 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 		// Check if this is another approval required error (cascading approval)
 		var approvalErr *ApprovalRequiredError
 		if errors.As(err, &approvalErr) {
-			log.Info("Detected cascading approval required, creating new approval task")
-			// Return the approval error directly to be handled by the caller
-			return nil, nil, err
+			log.Info("Detected cascading approval required, returning partial result with messages")
+			// Return the partial result and messages before the approval error
+			// The caller will stream these messages first, then handle the approval
+			return result, result.Messages, err
 		}
 		log.Info("Error is not ApprovalRequiredError, wrapping", "errorType", fmt.Sprintf("%T", err))
 		return nil, nil, fmt.Errorf("failed to resume agent execution: %w", err)

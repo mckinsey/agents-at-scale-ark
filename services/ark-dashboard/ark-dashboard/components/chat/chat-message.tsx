@@ -181,10 +181,13 @@ export function ChatMessage({
     console.log('[HITL Debug] ChatMessage rendering approval request:', approvalRequest);
     console.log('[HITL Debug] ChatMessage queryName:', queryName);
     console.log('[HITL Debug] ChatMessage namespace:', namespace);
+    // Generate a unique key from tool call IDs to reset component state on new approvals
+    const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
     return (
       <div
         className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
         <ApprovalNotification
+          key={approvalKey}
           queryName={queryName || ''}
           queryNamespace={namespace}
           toolCalls={approvalRequest.toolCalls}

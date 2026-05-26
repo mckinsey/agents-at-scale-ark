@@ -927,26 +927,36 @@ export function useChatSession({
 
                   console.log('[HITL Debug] Showing cascading approval UI for task:', taskName);
 
-                  // Update the message at messageIndex with the new approval request
+                  // Append a new message for the cascading approval (don't replace existing message)
+                  const taskId = response.a2a.taskId;
                   updateChatMessages(prev => {
                     const updated = [...prev];
-                    if (updated[messageIndex] && 'ark' in updated[messageIndex]) {
-                      updated[messageIndex] = {
-                        ...updated[messageIndex],
-                        ark: {
-                          approvalRequest: {
-                            queryName,
-                            queryNamespace: query.namespace || 'default',
-                            toolCalls,
-                            timeout,
-                            onTimeout,
-                            agentName,
-                          },
-                        },
-                      } as ExtendedChatMessage;
-                    }
+                    // Add new approval message at the end
+                    updated.push({
+                      role: 'assistant',
+                      content: '',
+                      approvalRequest: {
+                        type: 'tool_approval_request',
+                        taskId,
+                        queryName,
+                        queryNamespace: query.namespace || 'default',
+                        toolCalls,
+                        timeout,
+                        onTimeout,
+                        agentName,
+                      },
+                      metadata: {
+                        queryName,
+                      },
+                    } as ExtendedChatMessage);
                     return updated;
                   });
+
+                  // Update the pending approval ref with new message index
+                  pendingApprovalQueryRef.current = {
+                    queryName,
+                    messageIndex: -1, // Use -1 to indicate the last message
+                  };
 
                   // Stop polling and wait for the next approval
                   stopPollingRef.current = null;

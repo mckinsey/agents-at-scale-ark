@@ -84,6 +84,20 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 			return ctrl.Result{}, nil
 		}
+
+		// For HITL approval tasks (no A2AServerRef), check if approval decision is in spec.Input
+		if a2aTask.Spec.A2AServerRef == nil && a2aTask.Spec.Input != "" {
+			if handled, err := r.processApprovalDecision(ctx, &a2aTask); err != nil {
+				log.Error(err, "failed to process approval decision")
+			} else if handled {
+				// Decision was processed, update status and return
+				if err := r.Status().Update(ctx, &a2aTask); err != nil {
+					log.Error(err, "unable to update A2ATask status after approval decision")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
+		}
 	}
 
 	// Fetch task status from A2A server for all non-terminal tasks
@@ -286,6 +300,53 @@ func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *a
 
 	default:
 		return false, fmt.Errorf("invalid onTimeout value: %s", onTimeout)
+	}
+
+	return true, nil
+}
+
+// processApprovalDecision processes the approval decision from spec.Input for HITL tasks.
+// Returns true if decision was processed, false otherwise.
+func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	// Parse the decision JSON from spec.Input
+	var decision struct {
+		Decision string `json:"decision"`
+	}
+
+	if err := json.Unmarshal([]byte(a2aTask.Spec.Input), &decision); err != nil {
+		log.Error(err, "failed to parse approval decision", "input", a2aTask.Spec.Input)
+		return false, fmt.Errorf("invalid approval decision format: %w", err)
+	}
+
+	if decision.Decision == "" {
+		return false, nil
+	}
+
+	log.Info("Processing approval decision",
+		"taskId", a2aTask.Spec.TaskID,
+		"decision", decision.Decision)
+
+	completionTime := metav1.Now()
+	a2aTask.Status.CompletionTime = &completionTime
+
+	switch decision.Decision {
+	case "approved":
+		log.Info("Approval granted, marking task as completed", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseCompleted
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalGranted",
+			"User approved the tool calls")
+
+	case "rejected":
+		log.Info("Approval rejected, marking task as failed", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = "User rejected the tool calls"
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalRejected",
+			"User rejected the tool calls")
+
+	default:
+		return false, fmt.Errorf("invalid decision value: %s", decision.Decision)
 	}
 
 	return true, nil

@@ -106,9 +106,11 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
             conditions=status.get("conditions")
         )
 
+    # a2aServerRef is optional (not present for HITL approval tasks)
     a2a_server_ref_data = spec.get("a2aServerRef")
-    if not a2a_server_ref_data or "name" not in a2a_server_ref_data:
-        raise ValueError("Missing required field 'a2aServerRef.name' in spec")
+    a2a_server_ref = None
+    if a2a_server_ref_data and "name" in a2a_server_ref_data:
+        a2a_server_ref = A2AServerRef(**a2a_server_ref_data)
 
     agent_ref_data = spec.get("agentRef")
     if not agent_ref_data or "name" not in agent_ref_data:
@@ -122,7 +124,7 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         taskId=spec.get("taskId", ""),
-        a2aServerRef=A2AServerRef(**a2a_server_ref_data),
+        a2aServerRef=a2a_server_ref,
         agentRef=AgentRef(**agent_ref_data),
         queryRef=QueryRef(**query_ref_data),
         contextId=spec.get("contextId"),

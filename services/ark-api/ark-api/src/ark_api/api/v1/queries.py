@@ -422,31 +422,25 @@ async def submit_approval(query_name: str, request: ApprovalActionRequest, names
 
         task_name = f"a2a-task-{task_id}"
 
-        # Get the current task to preserve existing status fields
+        # Get the current task
         current_task = await ark_client.a2atasks.a_get(task_name)
         current_task_dict = current_task.to_dict()
-        current_status = current_task_dict.get("status", {})
 
-        if request.action == ApprovalAction.APPROVED:
-            # Update phase to completed
-            current_status["phase"] = "completed"
-        else:
-            # Update phase to failed with error message
-            current_status["phase"] = "failed"
-            current_status["error"] = "Tool execution rejected by user"
+        # Set the approval decision in spec.input as JSON
+        decision_json = json.dumps({"decision": request.action.value})
 
-        # Patch the status subresource using the Kubernetes API directly
+        # Patch the spec to set the input field with the approval decision
         from kubernetes import client
         custom_api = client.CustomObjectsApi()
         actual_namespace = query_dict["metadata"]["namespace"]
         await asyncio.to_thread(
-            custom_api.patch_namespaced_custom_object_status,
+            custom_api.patch_namespaced_custom_object,
             group="ark.mckinsey.com",
             version=VERSION,
             namespace=actual_namespace,
             plural="a2atasks",
             name=task_name,
-            body={"status": current_status}
+            body={"spec": {"input": decision_json}}
         )
 
         return ApprovalResponse(
