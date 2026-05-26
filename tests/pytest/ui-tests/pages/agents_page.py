@@ -18,7 +18,7 @@ class AgentsPage(BasePage):
     SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
-    CHAT_BUTTON = "button:has(svg.lucide-message-circle)"
+    CHAT_BUTTON = "button[aria-label='Chat with agent']"
     CHAT_WINDOW = "div[data-slot='card']"
     CLOSE_CHAT_BUTTON = "button[aria-label='Close chat']"
 
@@ -63,7 +63,7 @@ class AgentsPage(BasePage):
         if self.page.locator(self.CHAT_WINDOW).is_visible(timeout=100):
             logger.error("Chat already open")
             return
-        row = self.page.locator(f"[role='link']:has(p.truncate.text-sm.font-medium:has-text('{agent_name}'))").first
+        row = self.page.locator(f"[role='link']:has(span[title='{agent_name}'])").first
         row.locator(self.CHAT_BUTTON).click()
         self.wait_for_element(self.CHAT_WINDOW)
 
