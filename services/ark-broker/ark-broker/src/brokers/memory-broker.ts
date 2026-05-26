@@ -1,6 +1,6 @@
-import {BrokerItem} from './broker-item.js';
-import {BrokerItemStream} from './broker-item-stream.js';
-import type {Logger} from './logging/logger.js';
+import {BrokerItem} from './stream/broker-item.js';
+import {BrokerItemStream} from './stream/broker-item-stream.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 /** OpenAI-format message (role, content, etc.) */
@@ -108,7 +108,7 @@ export class MemoryBroker {
     filters?: {conversationId?: string; queryId?: string}
   ): PaginatedList<BrokerItem<MessageData>> {
     const predicate = filters
-      ? (item: BrokerItem<MessageData>) => {
+      ? (item: BrokerItem<MessageData>): boolean => {
           if (
             filters.conversationId &&
             item.data.conversationId !== filters.conversationId

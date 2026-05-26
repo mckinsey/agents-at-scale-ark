@@ -1,8 +1,25 @@
-import {BrokerItem} from './broker-item.js';
-import {BrokerItemStream} from './broker-item-stream.js';
-import type {Logger} from './logging/logger.js';
+import {BrokerItem} from './stream/broker-item.js';
+import {BrokerItemStream} from './stream/broker-item-stream.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
-import {spanMatchesSessionId} from './routes/traces.js';
+
+export function spanMatchesSessionId(
+  span: OTELSpan,
+  sessionId: string
+): boolean {
+  if (span.attributes) {
+    const sessionAttr = span.attributes.find(
+      (attr) => attr.key === 'ark.session.id'
+    );
+    if (sessionAttr?.value?.stringValue === sessionId) {
+      return true;
+    }
+    if (typeof sessionAttr?.value === 'string') {
+      return sessionAttr.value === sessionId;
+    }
+  }
+  return false;
+}
 
 /** OTEL span data */
 export interface OTELSpan {

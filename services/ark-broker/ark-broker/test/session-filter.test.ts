@@ -2,8 +2,8 @@ import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
-import {OTELSpan} from '../src/trace-broker.js';
-import {EventData} from '../src/event-broker.js';
+import {OTELSpan} from '../src/brokers/trace-broker.js';
+import {EventData} from '../src/brokers/event-broker.js';
 
 const {
   app,

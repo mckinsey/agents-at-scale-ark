@@ -5,7 +5,7 @@ import pino, {
   type Logger,
   type LoggerOptions,
 } from 'pino';
-import type {LogLevel} from '../config/index.js';
+import type {LogLevel} from '@ark-broker/config/index.js';
 
 export type LoggerConfig = {
   level: LogLevel;
