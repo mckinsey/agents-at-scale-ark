@@ -3,7 +3,7 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import * as React from 'react';
 
-import { ChevronDown } from '@/components/icons/ChevronDown';
+import { ChevronDown } from '@/components/icons/chevron-down';
 import { cn } from '@/lib/utils';
 
 export type SelectSize = 'sm' | 'default' | 'lg';

@@ -10,12 +10,12 @@ import {
 } from 'sonner';
 
 import { cn } from '../../lib/utils';
-import { Cancel } from '../icons/Cancel';
-import { CheckCircle } from '../icons/CheckCircle';
-import { Close } from '../icons/Close';
-import { ErrorIcon } from '../icons/ErrorIcon';
-import { Info } from '../icons/Info';
-import { PlaylistAddCheck } from '../icons/PlaylistAddCheck';
+import { Cancel } from '../icons/cancel';
+import { CheckCircle } from '../icons/check-circle';
+import { Close } from '../icons/close';
+import { ErrorIcon } from '../icons/error-icon';
+import { Info } from '../icons/info';
+import { PlaylistAddCheck } from '../icons/playlist-add-check';
 import { Button } from './button';
 
 type ToastType = NonNullable<ToastT['type']>;

@@ -8,7 +8,7 @@ export default function SessionsConversationsPage() {
   const { push } = useNamespacedNavigation();
 
   return (
-    <div className="-m-10 flex h-full flex-col gap-5 px-12 py-10">
+    <div className="flex h-full flex-col gap-5">
       <div className="flex flex-col gap-1" data-testid="page-header">
         <div className="flex items-center gap-1">
           <Earthquake className="size-5" />

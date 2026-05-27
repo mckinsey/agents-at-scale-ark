@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ChevronRight, ErrorIcon } from '@/components/icons';
-import { SmartToy } from '@/components/icons/SmartToy';
-import { Handyman } from '@/components/icons/Handyman';
+import { SmartToy } from '@/components/icons/smart-toy';
+import { Handyman } from '@/components/icons/handyman';
 import { type ToolCallData } from '@/components/chat/tool-call';
 import { cn } from '@/lib/utils';
 

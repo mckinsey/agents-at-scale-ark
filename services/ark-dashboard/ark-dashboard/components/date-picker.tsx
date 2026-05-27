@@ -8,8 +8,8 @@ import type {
   OnSelectHandler,
 } from 'react-day-picker';
 
-import { ArrowForward } from '@/components/icons/ArrowForward';
-import { CalendarMonth } from '@/components/icons/CalendarMonth';
+import { ArrowForward } from '@/components/icons/arrow-forward';
+import { CalendarMonth } from '@/components/icons/calendar-month';
 import { Calendar } from '@/components/ui/calendar';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { IconShell } from '@/components/ui/icon-shell';
