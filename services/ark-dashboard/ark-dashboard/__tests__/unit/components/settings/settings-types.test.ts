@@ -11,11 +11,21 @@ describe('settingsSections', () => {
     const settings = settingsSections.find(s => s.sectionKey === 'settings');
     expect(settings).toBeDefined();
     expect(settings!.sectionLabel).toBe('');
-    expect(settings!.items).toHaveLength(2);
+    expect(settings!.items).toHaveLength(3);
     expect(settings!.items.map(i => i.key)).toEqual([
       'queries',
       'experimental-features',
+      'execution-engines',
     ]);
+  });
+
+  it('should mark execution-engines as experimental', () => {
+    const settings = settingsSections.find(s => s.sectionKey === 'settings');
+    const executionEngines = settings!.items.find(
+      i => i.key === 'execution-engines',
+    );
+    expect(executionEngines).toBeDefined();
+    expect(executionEngines!.experimental).toBe(true);
   });
 
   it('should have icons for all items', () => {
