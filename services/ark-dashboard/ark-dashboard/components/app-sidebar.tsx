@@ -2,33 +2,11 @@
 
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
-  Activity,
   AlertCircle,
-  Bot,
-  Check,
   ChevronDown,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronsUpDownIcon,
   Cog,
-  Cpu,
-  Database,
-  Download,
-  File,
-  HelpCircle,
-  Key,
-  LayoutGrid,
-  ListTodo,
-  Lock,
   LogOut,
-  Moon,
-  Network,
-  Plus,
-  Server,
-  Settings,
-  Store,
-  Sun,
 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -42,6 +20,31 @@ import {
 } from '@/atoms/experimental-features';
 import { NamespaceEditor } from '@/components/editors';
 import {
+  AccountTree,
+  Add,
+  Bedtime,
+  Check,
+  Dashboard,
+  Database,
+  Dns,
+  Earthquake,
+  Help,
+  InsertDriveFile,
+  KeyboardDoubleArrowLeft,
+  KeyboardDoubleArrowRight,
+  LightMode,
+  Memory,
+  PlaylistAddCheck,
+  PlugConnect,
+  SaveAlt,
+  Settings,
+  Shield,
+  SmartToy,
+  Storefront,
+  UnfoldMore,
+  VpnKey,
+} from '@/components/icons';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -54,6 +57,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
@@ -77,6 +81,7 @@ import {
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetAllNamespaces } from '@/lib/services/namespaces-hooks';
 import { proxyService } from '@/lib/services/proxy';
+import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
 
@@ -130,13 +135,14 @@ function CollapsibleSection({
                 onExpand();
               }
             }}>
-            {isOpen ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-            )}
             {icon}
             <span>{label}</span>
+            <ChevronDown
+              className={cn(
+                'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
+                isOpen && 'rotate-180',
+              )}
+            />
           </CollapsibleTrigger>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -171,7 +177,7 @@ function CollapsibleGroup({
   return (
     <SidebarGroup>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-sidebar-accent flex h-8 w-full shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-2 text-sm font-normal outline-hidden transition-colors group-data-[collapsible=icon]:hidden">
+        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-sidebar-accent flex w-full shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-3 py-2 text-sm font-normal outline-hidden transition-colors group-data-[collapsible=icon]:hidden">
           {open ? (
             <ChevronDown className="h-3.5 w-3.5" />
           ) : (
@@ -315,15 +321,15 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="bg-surface-bg-tertiary hover:bg-surface-bg-secondary relative flex h-12 flex-col items-start justify-center gap-0 px-3 py-1.5">
-                    <span className="text-sidebar-foreground/60 text-[11px]">
+                  <SidebarMenuButton className="bg-surface-bg-tertiary hover:bg-surface-bg-secondary relative flex h-auto flex-col items-start justify-center gap-0 rounded-none px-3 py-2">
+                    <span className="text-fg-secondary text-xs leading-4">
                       Namespace
                     </span>
                     <div className="flex w-full items-center justify-between">
-                      <span className="text-sidebar-foreground text-sm font-medium">
+                      <span className="text-fg-primary truncate text-sm leading-5 tracking-[-0.028px]">
                         {namespaceLabel}
                       </span>
-                      <ChevronsUpDownIcon className="text-sidebar-foreground/60 h-3.5 w-3.5" />
+                      <UnfoldMore className="text-fg-secondary h-4 w-4 shrink-0" />
                     </div>
                     {availableNamespaces.length === 0 && !loading && (
                       <AlertCircle className="absolute right-2 top-2 h-4 w-4 text-red-500" />
@@ -333,30 +339,35 @@ export function AppSidebar() {
                 <DropdownMenuContent
                   side="bottom"
                   align="start"
-                  className="bg-sidebar w-[--radix-popper-anchor-width] min-w-56">
-                  <DropdownMenuLabel className="text-sidebar-foreground/60 text-xs font-normal">
+                  className="bg-surface-bg-tertiary w-[--radix-popper-anchor-width] min-w-56 rounded-none border-0 p-1">
+                  <DropdownMenuLabel className="text-fg-tertiary px-3 py-2 text-xs font-normal leading-4">
                     Namespaces
                   </DropdownMenuLabel>
                   {namespaceOptions.map(ns => (
                     <DropdownMenuItem
                       key={ns.name}
                       onClick={() => setNamespace(ns.name)}
-                      className={
-                        ns.name === namespace
-                          ? 'bg-sidebar-accent flex items-center justify-between'
-                          : 'flex items-center justify-between'
-                      }>
-                      <span className="truncate">{ns.name}</span>
+                      className={cn(
+                        'flex items-center justify-between rounded-none py-2 pl-3 pr-2',
+                        ns.name === namespace &&
+                          'bg-stateslayer-overlay-pressed',
+                      )}>
+                      <span className="text-fg-primary truncate text-sm leading-5 tracking-[-0.028px]">
+                        {ns.name}
+                      </span>
                       {ns.name === namespace && (
-                        <Check className="text-sidebar-foreground h-4 w-4 shrink-0" />
+                        <Check className="text-fg-primary h-4 w-4 shrink-0" />
                       )}
                     </DropdownMenuItem>
                   ))}
                   {namespaceOptions.length > 0 && <DropdownMenuSeparator />}
                   <DropdownMenuItem
-                    onClick={() => setNamespaceEditorOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add namespace</span>
+                    onClick={() => setNamespaceEditorOpen(true)}
+                    className="flex h-9 items-center gap-2 rounded-none px-3 py-2">
+                    <Add className="text-fg-secondary h-4 w-4 shrink-0" />
+                    <span className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+                      Add namespace
+                    </span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -364,14 +375,16 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent className="px-2">
-          <CollapsibleGroup label="General" defaultOpen>
-            <SidebarMenu className="pl-3">
+        <SidebarContent className="overflow-hidden px-2">
+          <ScrollArea className="-mx-2 flex min-h-0 flex-1 flex-col px-2">
+            <CollapsibleGroup label="General" defaultOpen>
+            <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('')}
-                  isActive={getCurrentSection() === ''}>
-                  <LayoutGrid />
+                  isActive={getCurrentSection() === ''}
+                  tooltip="Home">
+                  <Dashboard />
                   <span>Home</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -380,7 +393,7 @@ export function AppSidebar() {
                 sections={AGENT_BUILDER_SECTIONS}
                 isOpen={agentBuilderOpen}
                 onOpenChange={setAgentBuilderOpen}
-                icon={<Bot />}
+                icon={<SmartToy />}
                 label="Agent builder"
                 isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
                 sidebarState={sidebarState}
@@ -396,8 +409,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('workflow-templates')}
-                  isActive={getCurrentSection() === 'workflow-templates'}>
-                  <Network />
+                  isActive={getCurrentSection() === 'workflow-templates'}
+                  tooltip="Workflows">
+                  <AccountTree />
                   <span>Workflows</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -405,8 +419,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('mcp')}
-                  isActive={getCurrentSection() === 'mcp'}>
-                  <Server />
+                  isActive={getCurrentSection() === 'mcp'}
+                  tooltip="MCPs">
+                  <PlugConnect />
                   <span>MCPs</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -414,7 +429,8 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('memory')}
-                  isActive={getCurrentSection() === 'memory'}>
+                  isActive={getCurrentSection() === 'memory'}
+                  tooltip="Memory">
                   <Database />
                   <span>Memory</span>
                 </SidebarMenuButton>
@@ -423,8 +439,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('models')}
-                  isActive={getCurrentSection() === 'models'}>
-                  <Cpu />
+                  isActive={getCurrentSection() === 'models'}
+                  tooltip="Models">
+                  <Memory />
                   <span>Models</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -433,7 +450,7 @@ export function AppSidebar() {
                 sections={MONITORING_SECTIONS}
                 isOpen={monitoringOpen}
                 onOpenChange={setMonitoringOpen}
-                icon={<Activity />}
+                icon={<Earthquake />}
                 label="Monitoring"
                 isActive={isAnySectionActive(MONITORING_SECTIONS)}
                 sidebarState={sidebarState}
@@ -449,8 +466,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('marketplace')}
-                  isActive={getCurrentSection() === 'marketplace'}>
-                  <Store />
+                  isActive={getCurrentSection() === 'marketplace'}
+                  tooltip="Marketplace">
+                  <Storefront />
                   <span>Marketplace</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -458,12 +476,13 @@ export function AppSidebar() {
           </CollapsibleGroup>
 
           <CollapsibleGroup label="Other" defaultOpen={false}>
-            <SidebarMenu className="pl-3">
+            <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('files')}
-                  isActive={getCurrentSection() === 'files'}>
-                  <File />
+                  isActive={getCurrentSection() === 'files'}
+                  tooltip="Files">
+                  <InsertDriveFile />
                   <span>Files</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -471,8 +490,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('a2a')}
-                  isActive={getCurrentSection() === 'a2a'}>
-                  <ListTodo />
+                  isActive={getCurrentSection() === 'a2a'}
+                  tooltip="A2A">
+                  <PlaylistAddCheck />
                   <span>A2A</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -480,8 +500,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('services')}
-                  isActive={getCurrentSection() === 'services'}>
-                  <Server />
+                  isActive={getCurrentSection() === 'services'}
+                  tooltip="ARK Services">
+                  <Dns />
                   <span>ARK Services</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -489,8 +510,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('secrets')}
-                  isActive={getCurrentSection() === 'secrets'}>
-                  <Lock />
+                  isActive={getCurrentSection() === 'secrets'}
+                  tooltip="Secrets">
+                  <Shield />
                   <span>Secrets</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -498,8 +520,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('api-keys')}
-                  isActive={getCurrentSection() === 'api-keys'}>
-                  <Key />
+                  isActive={getCurrentSection() === 'api-keys'}
+                  tooltip="API keys">
+                  <VpnKey />
                   <span>API keys</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -508,7 +531,8 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={() => navigateToSection('execution-engines')}
-                    isActive={getCurrentSection() === 'execution-engines'}>
+                    isActive={getCurrentSection() === 'execution-engines'}
+                    tooltip="Execution Engines">
                     <Cog />
                     <span>Execution Engines</span>
                   </SidebarMenuButton>
@@ -518,13 +542,15 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('export')}
-                  isActive={getCurrentSection() === 'export'}>
-                  <Download />
+                  isActive={getCurrentSection() === 'export'}
+                  tooltip="Exports">
+                  <SaveAlt />
                   <span>Exports</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </CollapsibleGroup>
+          </ScrollArea>
         </SidebarContent>
 
         <SidebarFooter>
@@ -534,19 +560,20 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('settings')}
-                  isActive={getCurrentSection() === 'settings'}>
+                  isActive={getCurrentSection() === 'settings'}
+                  tooltip="Settings">
                   <Settings className="h-4 w-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Help">
                   <a
                     href="https://mckinsey.github.io/agents-at-scale-ark/"
                     target="_blank"
                     rel="noopener noreferrer">
-                    <HelpCircle className="h-4 w-4" />
+                    <Help className="h-4 w-4" />
                     <span>Help</span>
                   </a>
                 </SidebarMenuButton>
@@ -558,11 +585,14 @@ export function AppSidebar() {
                     setStoredIsExperimentalDarkModeEnabled(
                       !isExperimentalDarkModeEnabled,
                     )
+                  }
+                  tooltip={
+                    isExperimentalDarkModeEnabled ? 'Light mode' : 'Dark mode'
                   }>
                   {isExperimentalDarkModeEnabled ? (
-                    <Sun className="h-4 w-4" />
+                    <LightMode className="h-4 w-4" />
                   ) : (
-                    <Moon className="h-4 w-4" />
+                    <Bedtime className="h-4 w-4" />
                   )}
                   <span>
                     {isExperimentalDarkModeEnabled ? 'Light mode' : 'Dark mode'}
@@ -575,16 +605,16 @@ export function AppSidebar() {
                   onClick={() =>
                     setSidebarOpen(sidebarState === 'expanded' ? false : true)
                   }
-                  className="w-8"
+                  className="w-8 px-2"
                   tooltip={
                     sidebarState === 'expanded'
                       ? 'Collapse sidebar'
                       : 'Expand sidebar'
                   }>
                   {sidebarState === 'expanded' ? (
-                    <ChevronsLeft className="h-4 w-4" />
+                    <KeyboardDoubleArrowLeft className="h-4 w-4" />
                   ) : (
-                    <ChevronsRight className="h-4 w-4" />
+                    <KeyboardDoubleArrowRight className="h-4 w-4" />
                   )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -598,7 +628,7 @@ export function AppSidebar() {
                   <DropdownMenuTrigger asChild>
                     <SidebarMenuButton className="h-12">
                       <UserDetails user={user} />
-                      <ChevronsUpDownIcon className="ml-auto" />
+                      <UnfoldMore className="ml-auto h-4 w-4" />
                     </SidebarMenuButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent

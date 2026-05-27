@@ -35,7 +35,7 @@ export default function DashboardLayout({
           } as React.CSSProperties
         }>
         <AppSidebar />
-        <SidebarInset className="h-screen min-w-0 p-10 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]">
+        <SidebarInset className="h-screen min-w-0 px-12 py-10 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]">
           {children}
         </SidebarInset>
       </SidebarProvider>
