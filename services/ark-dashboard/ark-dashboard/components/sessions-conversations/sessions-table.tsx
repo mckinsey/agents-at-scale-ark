@@ -107,7 +107,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-6">
       <div className="flex w-full flex-col items-start gap-5 border border-stroke-tertiary bg-surface-bg-secondary p-5">
         <div className="inline-flex items-center gap-3">
           <div className="flex items-end gap-6">
