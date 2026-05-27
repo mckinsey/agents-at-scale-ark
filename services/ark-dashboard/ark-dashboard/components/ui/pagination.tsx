@@ -22,45 +22,73 @@ interface PaginationProps {
 
 type PageItem = number | 'ellipsis-left' | 'ellipsis-right';
 
+const range = (start: number, end: number): number[] =>
+  Array.from({ length: end - start + 1 }, (_, i) => start + i);
+
+/**
+ * Builds the pagination item list matching the Figma design:
+ *   current=1,  total=48 → [1, 2, 3, …, 47, 48]
+ *   current=3,  total=48 → [1, 2, 3, 4, …, 47, 48]
+ *   current=24, total=48 → [1, 2, …, 23, 24, 25, …, 47, 48]
+ *   current=48, total=48 → [1, 2, …, 46, 47, 48]
+ *
+ * Always shows the first/last `boundaryCount` (default 2) pages plus a sliding
+ * window of `siblingCount` (default 1) around the current page. When the window
+ * touches a boundary the gap collapses and the inner side extends just far
+ * enough to keep the active page visible.
+ */
 function getPageItems(
   currentPage: number,
   totalPages: number,
-  siblingCount: number,
+  siblingCount = 1,
+  boundaryCount = 2,
 ): PageItem[] {
-  const totalPageNumbers = siblingCount * 2 + 5;
-
-  if (totalPages <= totalPageNumbers) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  // If everything fits without ellipses, show all pages.
+  const minSlotsForEllipsis = boundaryCount * 2 + siblingCount * 2 + 3;
+  if (totalPages <= minSlotsForEllipsis) {
+    return range(1, totalPages);
   }
 
-  const leftSiblingIndex = Math.max(currentPage - siblingCount, 1);
-  const rightSiblingIndex = Math.min(currentPage + siblingCount, totalPages);
+  const nearStart = currentPage <= boundaryCount + siblingCount + 1;
+  const nearEnd = currentPage >= totalPages - boundaryCount - siblingCount;
 
-  const showLeftEllipsis = leftSiblingIndex > 2;
-  const showRightEllipsis = rightSiblingIndex < totalPages - 1;
-
-  if (!showLeftEllipsis && showRightEllipsis) {
-    const leftRange = Array.from(
-      { length: 3 + siblingCount * 2 },
-      (_, i) => i + 1,
+  if (nearStart) {
+    // [1 .. max(boundary+1, current+sibling)] + ellipsis + last boundary
+    const leftExtent = Math.max(
+      boundaryCount + 1,
+      currentPage + siblingCount,
     );
-    return [...leftRange, 'ellipsis-right', totalPages];
+    return [
+      ...range(1, leftExtent),
+      'ellipsis-right',
+      ...range(totalPages - boundaryCount + 1, totalPages),
+    ];
   }
 
-  if (showLeftEllipsis && !showRightEllipsis) {
-    const rightRange = Array.from(
-      { length: 3 + siblingCount * 2 },
-      (_, i) => totalPages - (3 + siblingCount * 2) + 1 + i,
+  if (nearEnd) {
+    // First boundary + ellipsis + [min(totalPages-boundary, current-sibling) .. totalPages]
+    const rightStart = Math.min(
+      totalPages - boundaryCount,
+      currentPage - siblingCount,
     );
-    return [1, 'ellipsis-left', ...rightRange];
+    return [
+      ...range(1, boundaryCount),
+      'ellipsis-left',
+      ...range(rightStart, totalPages),
+    ];
   }
 
-  const middleRange = Array.from(
-    { length: rightSiblingIndex - leftSiblingIndex + 1 },
-    (_, i) => leftSiblingIndex + i,
-  );
-  return [1, 'ellipsis-left', ...middleRange, 'ellipsis-right', totalPages];
+  // Middle: boundary + ellipsis + current ± siblingCount + ellipsis + boundary
+  return [
+    ...range(1, boundaryCount),
+    'ellipsis-left',
+    ...range(currentPage - siblingCount, currentPage + siblingCount),
+    'ellipsis-right',
+    ...range(totalPages - boundaryCount + 1, totalPages),
+  ];
 }
+
+export { getPageItems };
 
 export function Pagination({
   currentPage,
