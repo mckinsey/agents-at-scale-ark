@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { TagToggle } from '@/components/ui/tag-toggle';
 import { Separator } from '@/components/ui/separator';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -200,11 +201,13 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     }
 
     return (
-      <div className="flex max-h-[420px] flex-col gap-6 overflow-y-auto pr-1">
-        {renderSection('Agents', groupedParticipants.agentsGroup)}
-        {renderSection('Teams', groupedParticipants.teamsGroup)}
-        {renderSection('Tools', groupedParticipants.toolsGroup)}
-      </div>
+      <ScrollArea className="pr-1 [&_[data-slot=scroll-area-viewport]]:max-h-[420px]">
+        <div className="flex flex-col gap-6">
+          {renderSection('Agents', groupedParticipants.agentsGroup)}
+          {renderSection('Teams', groupedParticipants.teamsGroup)}
+          {renderSection('Tools', groupedParticipants.toolsGroup)}
+        </div>
+      </ScrollArea>
     );
   };
 
