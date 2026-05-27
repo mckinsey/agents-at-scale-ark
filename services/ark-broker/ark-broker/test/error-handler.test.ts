@@ -5,9 +5,9 @@ import {createLogger} from '../src/logging/logger.js';
 import {
   createErrorHandler,
   notFoundHandler,
-} from '../src/middleware/error-handler.js';
-import {createHttpLogger} from '../src/middleware/http-logger.js';
-import {requestId} from '../src/middleware/request-id.js';
+} from '../src/http/middleware/error-handler.js';
+import {createHttpLogger} from '../src/http/middleware/http-logger.js';
+import {requestId} from '../src/http/middleware/request-id.js';
 
 class MemorySink extends Writable {
   public readonly lines: string[] = [];

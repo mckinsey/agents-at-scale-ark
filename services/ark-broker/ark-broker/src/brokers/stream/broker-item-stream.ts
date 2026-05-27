@@ -1,8 +1,12 @@
 import {EventEmitter} from 'events';
 import {BrokerItem} from './broker-item.js';
-import {JsonFileStore} from './json-file-store.js';
-import type {Logger} from './logging/logger.js';
-import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
+import {JsonFileStore} from '@ark-broker/brokers/persistence/json-file-store.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
+import {
+  PaginatedList,
+  PaginationParams,
+  DEFAULT_LIMIT,
+} from '@ark-broker/brokers/pagination.js';
 
 /**
  * An append-only stream of broker items with persistence support.

@@ -1,6 +1,6 @@
 import {pinoHttp} from 'pino-http';
 import type {RequestHandler} from 'express';
-import type {Logger} from '../logging/logger.js';
+import type {Logger} from '@ark-broker/logging/logger.js';
 
 export function createHttpLogger(logger: Logger): RequestHandler {
   return pinoHttp({
