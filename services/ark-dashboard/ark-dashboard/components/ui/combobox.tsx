@@ -3,9 +3,9 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react';
 import * as React from 'react';
 
-import { Check } from '@/components/icons/Check';
-import { ChevronDown } from '@/components/icons/ChevronDown';
-import { Close } from '@/components/icons/Close';
+import { Check } from '@/components/icons/check';
+import { ChevronDown } from '@/components/icons/chevron-down';
+import { Close } from '@/components/icons/close';
 import { Button } from '@/components/ui/button';
 import { inputVariantStyles } from '@/components/ui/input';
 import { InputGroupButton, InputGroupInput } from '@/components/ui/input-group';

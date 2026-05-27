@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search } from '@/components/icons/Search';
+import { Search } from '@/components/icons/search';
 import {
   InputGroup,
   InputGroupAddon,
