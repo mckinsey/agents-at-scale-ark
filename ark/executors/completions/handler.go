@@ -724,6 +724,7 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 }
 
 // handleResumption handles query resumption after HITL approval or rejection
+//
 //nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (h *Handler) handleResumption(ctx context.Context, state *executionState, a2aTask *arkv1alpha1.A2ATask) (*ExecutionResult, []Message, error) {
 	log := logf.FromContext(ctx)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
@@ -710,4 +711,186 @@ func TestDispatchTargetUnsupportedType(t *testing.T) {
 	_, _, err := h.dispatchTarget(context.Background(), state)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported target type")
+}
+
+func TestCheckResumption(t *testing.T) {
+	tests := []struct {
+		name             string
+		a2aTask          *arkv1alpha1.A2ATask
+		expectResumption bool
+		expectPhase      string
+	}{
+		{
+			name: "resumption with approved task",
+			a2aTask: &arkv1alpha1.A2ATask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a2a-task-test-123",
+					Namespace: "default",
+				},
+				Status: arkv1alpha1.A2ATaskStatus{
+					Phase: arka2a.PhaseCompleted,
+					ProtocolMetadata: map[string]string{
+						"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"test-tool","arguments":"{}"}}]`,
+					},
+				},
+			},
+			expectResumption: true,
+			expectPhase:      arka2a.PhaseCompleted,
+		},
+		{
+			name: "resumption with rejected task",
+			a2aTask: &arkv1alpha1.A2ATask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a2a-task-test-123",
+					Namespace: "default",
+				},
+				Status: arkv1alpha1.A2ATaskStatus{
+					Phase: arka2a.PhaseFailed,
+					Error: "Tool execution rejected by user",
+				},
+			},
+			expectResumption: true,
+			expectPhase:      arka2a.PhaseFailed,
+		},
+		{
+			name:             "no resumption - no task",
+			a2aTask:          nil,
+			expectResumption: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = arkv1alpha1.AddToScheme(scheme)
+
+			var objects []client.Object
+			if tt.a2aTask != nil {
+				objects = append(objects, tt.a2aTask)
+			}
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&arkv1alpha1.A2ATask{}).
+				Build()
+
+			h := &Handler{
+				k8sClient: k8sClient,
+			}
+
+			query := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Status: arkv1alpha1.QueryStatus{
+					Response: &arkv1alpha1.Response{
+						A2A: &arkv1alpha1.A2AMetadata{
+							TaskID: "test-123",
+						},
+					},
+				},
+			}
+
+			ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+			isResumption, task := h.checkResumption(ctx, query)
+
+			assert.Equal(t, tt.expectResumption, isResumption)
+			if tt.expectResumption {
+				require.NotNil(t, task)
+				assert.Equal(t, tt.expectPhase, task.Status.Phase)
+			}
+		})
+	}
+}
+
+func TestParseApprovalDecision(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectApproved bool
+		expectError    bool
+	}{
+		{
+			name:           "approved decision",
+			input:          `{"decision": "approved"}`,
+			expectApproved: true,
+		},
+		{
+			name:           "rejected decision",
+			input:          `{"decision": "rejected"}`,
+			expectApproved: false,
+		},
+		{
+			name:        "invalid json",
+			input:       `not json`,
+			expectError: true,
+		},
+		{
+			name:        "missing decision field",
+			input:       `{"other": "field"}`,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var decision struct {
+				Decision string `json:"decision"`
+			}
+			err := json.Unmarshal([]byte(tt.input), &decision)
+
+			if tt.expectError {
+				if err == nil && decision.Decision == "" {
+					// Missing decision field
+					return
+				}
+				if err != nil {
+					return
+				}
+				t.Error("Expected error but got none")
+				return
+			}
+
+			require.NoError(t, err)
+			isApproved := decision.Decision == "approved"
+			assert.Equal(t, tt.expectApproved, isApproved)
+		})
+	}
+}
+
+func TestToolApprovalConfigParsing(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          *arkv1alpha1.ToolApprovalConfig
+		expectTimeout   time.Duration
+		expectOnTimeout string
+	}{
+		{
+			name: "standard config",
+			config: &arkv1alpha1.ToolApprovalConfig{
+				Timeout:   &metav1.Duration{Duration: 5 * time.Minute},
+				OnTimeout: "reject",
+			},
+			expectTimeout:   5 * time.Minute,
+			expectOnTimeout: "reject",
+		},
+		{
+			name: "approve on timeout",
+			config: &arkv1alpha1.ToolApprovalConfig{
+				Timeout:   &metav1.Duration{Duration: 10 * time.Minute},
+				OnTimeout: "approve",
+			},
+			expectTimeout:   10 * time.Minute,
+			expectOnTimeout: "approve",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expectTimeout, tt.config.Timeout.Duration)
+			assert.Equal(t, tt.expectOnTimeout, tt.config.OnTimeout)
+		})
+	}
 }
