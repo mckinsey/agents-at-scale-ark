@@ -1,29 +1,19 @@
 'use client';
 
 import { useAtomValue, useSetAtom } from 'jotai';
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  Cog,
-  LogOut,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
   isExperimentalDarkModeEnabledAtom,
-  isExperimentalExecutionEngineEnabledAtom,
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
-import { NamespaceEditor } from '@/components/editors';
 import {
   AccountTree,
-  Add,
   Bedtime,
-  Check,
   Dashboard,
   Database,
   Dns,
@@ -79,7 +69,6 @@ import {
   MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { useGetAllNamespaces } from '@/lib/services/namespaces-hooks';
 import { proxyService } from '@/lib/services/proxy';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -201,27 +190,14 @@ export function AppSidebar() {
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
-  const isExperimentalExecutionEngineEnabled = useAtomValue(
-    isExperimentalExecutionEngineEnabledAtom,
-  );
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
     storedIsExperimentalDarkModeEnabledAtom,
   );
 
-  const {
-    availableNamespaces,
-    createNamespace,
-    isPending,
-    namespace,
-    isNamespaceResolved,
-    setNamespace,
-  } = useNamespace();
-  const { data: fetchedNamespaces } = useGetAllNamespaces();
-  const namespaceOptions = fetchedNamespaces ?? availableNamespaces;
+  const { namespace, isNamespaceResolved } = useNamespace();
 
   const [loading, setLoading] = useState(true);
-  const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false);
 
   const currentSection = pathname.split('/')[1];
   const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
@@ -283,15 +259,11 @@ export function AppSidebar() {
     return sections.some(item => item.key === current);
   };
 
-  const namespaceLabel = isPending
-    ? 'Loading...'
-    : availableNamespaces.length === 0
-      ? 'No namespaces'
-      : namespace;
-
   return (
     <div>
-      <Sidebar collapsible="icon" className="p-2">
+      <Sidebar
+        collapsible="icon"
+        className="border-stroke-active-inverse border-r-2">
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
@@ -319,58 +291,16 @@ export function AppSidebar() {
 
           <SidebarMenu className="mt-2 group-data-[collapsible=icon]:hidden">
             <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="bg-surface-bg-tertiary hover:bg-surface-bg-secondary relative flex h-auto flex-col items-start justify-center gap-0 rounded-none px-3 py-2">
-                    <span className="text-fg-secondary text-xs leading-4">
-                      Namespace
-                    </span>
-                    <div className="flex w-full items-center justify-between">
-                      <span className="text-fg-primary truncate text-sm leading-5 tracking-[-0.028px]">
-                        {namespaceLabel}
-                      </span>
-                      <UnfoldMore className="text-fg-secondary h-4 w-4 shrink-0" />
-                    </div>
-                    {availableNamespaces.length === 0 && !loading && (
-                      <AlertCircle className="absolute right-2 top-2 h-4 w-4 text-red-500" />
-                    )}
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  side="bottom"
-                  align="start"
-                  className="bg-surface-bg-tertiary w-[--radix-popper-anchor-width] min-w-56 rounded-none border-0 p-1">
-                  <DropdownMenuLabel className="text-fg-tertiary px-3 py-2 text-xs font-normal leading-4">
-                    Namespaces
-                  </DropdownMenuLabel>
-                  {namespaceOptions.map(ns => (
-                    <DropdownMenuItem
-                      key={ns.name}
-                      onClick={() => setNamespace(ns.name)}
-                      className={cn(
-                        'flex items-center justify-between rounded-none py-2 pl-3 pr-2',
-                        ns.name === namespace &&
-                          'bg-stateslayer-overlay-pressed',
-                      )}>
-                      <span className="text-fg-primary truncate text-sm leading-5 tracking-[-0.028px]">
-                        {ns.name}
-                      </span>
-                      {ns.name === namespace && (
-                        <Check className="text-fg-primary h-4 w-4 shrink-0" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                  {namespaceOptions.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    onClick={() => setNamespaceEditorOpen(true)}
-                    className="flex h-9 items-center gap-2 rounded-none px-3 py-2">
-                    <Add className="text-fg-secondary h-4 w-4 shrink-0" />
-                    <span className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-                      Add namespace
-                    </span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div
+                className="flex flex-col items-start justify-center gap-0 rounded-none px-3 py-2"
+                data-testid="namespace-display">
+                <span className="text-fg-secondary text-xs leading-4">
+                  Namespace
+                </span>
+                <span className="text-fg-primary truncate text-sm leading-5 tracking-[-0.028px]">
+                  {namespace}
+                </span>
+              </div>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -527,18 +457,6 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {isExperimentalExecutionEngineEnabled && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('execution-engines')}
-                    isActive={getCurrentSection() === 'execution-engines'}
-                    tooltip="Execution Engines">
-                    <Cog />
-                    <span>Execution Engines</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('export')}
@@ -651,11 +569,6 @@ export function AppSidebar() {
         </SidebarFooter>
       </Sidebar>
 
-      <NamespaceEditor
-        open={namespaceEditorOpen}
-        onOpenChange={setNamespaceEditorOpen}
-        onSave={createNamespace}
-      />
     </div>
   );
 }

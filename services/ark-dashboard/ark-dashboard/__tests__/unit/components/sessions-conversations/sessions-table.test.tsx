@@ -3,7 +3,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
-import { brokerSessionsService } from '@/lib/services/broker-sessions';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 import { toast } from 'sonner';
 
@@ -24,6 +23,28 @@ vi.mock('@/components/sessions-conversations/session-table-row', () => ({
 vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
   NewSessionDialog: ({ open }: any) => (
     open ? <div data-testid="new-session-dialog">Dialog</div> : null
+  ),
+}));
+vi.mock('@/components/ui/pagination', () => ({
+  Pagination: ({ currentPage, totalPages, onPageChange }: any) => (
+    <div
+      data-testid="pagination"
+      data-current-page={currentPage}
+      data-total-pages={totalPages}
+    >
+      <button
+        data-testid="pagination-next"
+        onClick={() => onPageChange(currentPage + 1)}
+      >
+        Next
+      </button>
+      <button
+        data-testid="pagination-prev"
+        onClick={() => onPageChange(currentPage - 1)}
+      >
+        Previous
+      </button>
+    </div>
   ),
 }));
 
@@ -186,9 +207,9 @@ describe('SessionsTable', () => {
     });
   });
 
-  it('should show load more button when hasMore', () => {
+  it('should show pagination when total exceeds page size', () => {
     vi.mocked(useListSessions).mockReturnValue({
-      data: { ...mockSessionsData, hasMore: true, nextCursor: 20 },
+      data: { ...mockSessionsData, total: 60, hasMore: true, nextCursor: 20 },
       isLoading: false,
       isError: false,
       error: null,
@@ -201,37 +222,21 @@ describe('SessionsTable', () => {
       />
     );
 
-    expect(screen.getByText('Load More')).toBeInTheDocument();
+    const pagination = screen.getByTestId('pagination');
+    expect(pagination).toBeInTheDocument();
+    expect(pagination).toHaveAttribute('data-current-page', '1');
+    expect(pagination).toHaveAttribute('data-total-pages', '3');
   });
 
-  it('should handle load more click', async () => {
+  it('should refetch with new cursor when next page is clicked', async () => {
     const user = userEvent.setup();
 
-    const mockAdditionalSessions: PaginatedSessions = {
-      items: [
-        {
-          sessionId: 'session-4',
-          name: 'Session 4',
-          status: 'active',
-          errorCount: 0,
-          participants: [],
-          conversationCount: 2,
-          createdAt: '2024-01-04T00:00:00Z',
-          lastActivity: '2024-01-04T01:00:00Z',
-        },
-      ],
-      total: 4,
-      hasMore: false,
-    };
-
     vi.mocked(useListSessions).mockReturnValue({
-      data: { ...mockSessionsData, hasMore: true, nextCursor: 20 },
+      data: { ...mockSessionsData, total: 60, hasMore: true, nextCursor: 20 },
       isLoading: false,
       isError: false,
       error: null,
     } as any);
-
-    vi.mocked(brokerSessionsService.getSessions).mockResolvedValue(mockAdditionalSessions);
 
     render(
       <SessionsTable
@@ -240,22 +245,15 @@ describe('SessionsTable', () => {
       />
     );
 
-    await user.click(screen.getByText('Load More'));
+    await user.click(screen.getByTestId('pagination-next'));
 
     await waitFor(() => {
-      expect(brokerSessionsService.getSessions).toHaveBeenCalledWith({
-        limit: 20,
-        cursor: 20,
-        status: undefined,
-        dateFrom: undefined,
-        search: undefined,
-        sort: 'date',
-        order: 'desc',
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('session-row-session-4')).toBeInTheDocument();
+      expect(useListSessions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          limit: 20,
+          cursor: 20,
+        }),
+      );
     });
   });
 
