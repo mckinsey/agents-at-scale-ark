@@ -105,6 +105,26 @@ var _ = Describe("A2ATask Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, task)).To(Succeed())
 
+			// Update status separately (status is a subresource in K8s)
+			task.Status.Phase = arka2a.PhaseInputRequired
+			task.Status.ProtocolMetadata = map[string]string{
+				"requestedInputAt": expiredTime.Format(time.RFC3339),
+				"timeout":          "5m",
+				"onTimeout":        "reject",
+			}
+			task.Status.StartTime = &expiredTime
+			task.Status.Conditions = []metav1.Condition{
+				{
+					Type:               string(arkv1alpha1.A2ATaskCompleted),
+					Status:             metav1.ConditionFalse,
+					Reason:             "TaskRunning",
+					Message:            "Task is running",
+					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: task.Generation,
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
 			By("Reconciling to handle the timeout")
 			controllerReconciler := &A2ATaskReconciler{
 				Client: k8sClient,
@@ -121,13 +141,8 @@ var _ = Describe("A2ATask Controller", func() {
 
 			By("Verifying the task was moved to failed phase")
 			updatedTask := &arkv1alpha1.A2ATask{}
-			Eventually(func() string {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: "default"}, updatedTask)
-				if err != nil {
-					return ""
-				}
-				return updatedTask.Status.Phase
-			}, time.Second*10, time.Millisecond*250).Should(Equal(arka2a.PhaseFailed))
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: "default"}, updatedTask)).To(Succeed())
+			Expect(updatedTask.Status.Phase).To(Equal(arka2a.PhaseFailed))
 
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, task)).To(Succeed())
@@ -158,6 +173,22 @@ var _ = Describe("A2ATask Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, task)).To(Succeed())
 
+			// Update status separately (status is a subresource in K8s)
+			startTime := metav1.Now()
+			task.Status.Phase = arka2a.PhaseInputRequired
+			task.Status.StartTime = &startTime
+			task.Status.Conditions = []metav1.Condition{
+				{
+					Type:               string(arkv1alpha1.A2ATaskCompleted),
+					Status:             metav1.ConditionFalse,
+					Reason:             "TaskRunning",
+					Message:            "Task is running",
+					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: task.Generation,
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
 			By("Reconciling to handle the input")
 			controllerReconciler := &A2ATaskReconciler{
 				Client: k8sClient,
@@ -174,13 +205,8 @@ var _ = Describe("A2ATask Controller", func() {
 
 			By("Verifying the task was moved to completed phase")
 			updatedTask := &arkv1alpha1.A2ATask{}
-			Eventually(func() string {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: "default"}, updatedTask)
-				if err != nil {
-					return ""
-				}
-				return updatedTask.Status.Phase
-			}, time.Second*10, time.Millisecond*250).Should(Equal(arka2a.PhaseCompleted))
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: "default"}, updatedTask)).To(Succeed())
+			Expect(updatedTask.Status.Phase).To(Equal(arka2a.PhaseCompleted))
 
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, task)).To(Succeed())
