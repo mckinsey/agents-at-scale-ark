@@ -93,11 +93,11 @@ See [Tools](/user-guide/tools) for MCP, builtin, and agent-as-tool variants.
 
 ## Step 4: Team
 
-Pick a strategy — each one expects a slightly different shape.
+Pick a strategy — each one expects a slightly different shape. See [Team Strategies](/user-guide/samples/teams/team-strategies) for the full reference.
 
 ### Sequential
 
-Members run in declared order:
+Members run in declared order, one pass each:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -107,7 +107,6 @@ metadata:
 spec:
   description: Triage, then specialist
   strategy: sequential
-  maxTurns: 5
   members:
     - type: agent
       name: customer-support
@@ -117,18 +116,19 @@ spec:
       name: escalation-handler
 ```
 
-### Round-robin
+### Sequential with Loops
 
-Members take turns until `maxTurns` is reached:
+Cycle through members until `maxTurns` is reached. `loops: true` and `maxTurns` must be set together:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
-  name: support-team-roundrobin
+  name: support-team-loops
 spec:
-  description: Each member contributes in turn
-  strategy: round-robin
+  description: Each member contributes in turn until maxTurns
+  strategy: sequential
+  loops: true
   maxTurns: 5
   members:
     - type: agent
@@ -137,37 +137,11 @@ spec:
       name: order-tracker
 ```
 
-### Graph
-
-A custom workflow defined by edges. `maxTurns` and `graph.edges` are required:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Team
-metadata:
-  name: support-team-graph
-spec:
-  description: Custom workflow
-  strategy: graph
-  maxTurns: 5
-  members:
-    - type: agent
-      name: customer-support
-    - type: agent
-      name: order-tracker
-    - type: agent
-      name: escalation-handler
-  graph:
-    edges:
-      - from: customer-support
-        to: order-tracker
-      - from: order-tracker
-        to: escalation-handler
-```
+`strategy: round-robin` is deprecated and silently migrated to `sequential` with `loops: true`. Use the form above directly.
 
 ### Selector
 
-A nominated agent picks the next member. `selector.agent` is required:
+A nominated agent picks the next member. `selector.agent` and `maxTurns` are required. Loops are not allowed on selector teams. The `selectorPrompt` should instruct the agent to use the built-in `select-next-speaker` tool:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -177,7 +151,7 @@ metadata:
 spec:
   description: Selector agent picks the right specialist
   strategy: selector
-  maxTurns: 5
+  maxTurns: 10
   members:
     - type: agent
       name: customer-support
@@ -185,8 +159,19 @@ spec:
       name: order-tracker
   selector:
     agent: planner-agent
-    selectorPrompt: "Choose the best agent for: {{.Input}}"
+    selectorPrompt: |
+      Choose the team member best suited to respond next.
+
+      Available roles:
+      {{.Roles}}
+
+      Conversation history:
+      {{.History}}
+
+      Use the select-next-speaker tool to make your selection.
 ```
+
+`strategy: graph` is deprecated and migrated to plain `sequential` with edges discarded. For graph-style routing inside a selector team, see [Team Strategies](/user-guide/samples/teams/team-strategies).
 
 Apply the chosen team:
 
@@ -350,7 +335,6 @@ metadata:
 spec:
   description: Complete customer support workflow
   strategy: sequential
-  maxTurns: 10
   members:
     - type: agent
       name: customer-support

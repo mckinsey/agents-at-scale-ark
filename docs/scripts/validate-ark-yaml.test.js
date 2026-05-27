@@ -13,6 +13,7 @@ const {
   isArkResource,
   validateValue,
   validateDocAgainstSchemas,
+  CROSS_FIELD_RULES,
   SKIP_TOP_LEVEL,
 } = require('./validate-ark-yaml.js');
 
@@ -226,5 +227,95 @@ describe('SKIP_TOP_LEVEL', () => {
     expect(SKIP_TOP_LEVEL.has('metadata')).toBe(true);
     expect(SKIP_TOP_LEVEL.has('status')).toBe(true);
     expect(SKIP_TOP_LEVEL.has('spec')).toBe(false);
+  });
+});
+
+describe('CROSS_FIELD_RULES.Team', () => {
+  const Team = (spec) => ({apiVersion: 'ark.mckinsey.com/v1alpha1', kind: 'Team', spec});
+  const run = (spec) => {
+    const errs = [];
+    CROSS_FIELD_RULES.Team(Team(spec), errs);
+    return errs;
+  };
+
+  it('accepts plain sequential with no loops and no maxTurns', () => {
+    expect(run({strategy: 'sequential', members: []})).toEqual([]);
+  });
+
+  it('accepts sequential with both loops and maxTurns', () => {
+    expect(run({strategy: 'sequential', loops: true, maxTurns: 5, members: []})).toEqual([]);
+  });
+
+  it('rejects sequential with loops but no maxTurns', () => {
+    expect(run({strategy: 'sequential', loops: true, members: []})).toContain(
+      'Team.spec: maxTurns is required when loops is enabled',
+    );
+  });
+
+  it('rejects sequential with maxTurns but no loops', () => {
+    expect(run({strategy: 'sequential', maxTurns: 5, members: []})).toContain(
+      'Team.spec: maxTurns can only be set when loops is enabled',
+    );
+  });
+
+  it('accepts selector with maxTurns + selector.agent', () => {
+    expect(run({strategy: 'selector', maxTurns: 10, selector: {agent: 'planner'}, members: []})).toEqual([]);
+  });
+
+  it('rejects selector without maxTurns', () => {
+    expect(run({strategy: 'selector', selector: {agent: 'planner'}, members: []})).toContain(
+      'Team.spec: selector strategy requires maxTurns to prevent infinite execution',
+    );
+  });
+
+  it('rejects selector with loops', () => {
+    expect(
+      run({strategy: 'selector', maxTurns: 10, loops: true, selector: {agent: 'planner'}, members: []}),
+    ).toContain("Team.spec: loops can only be used with the 'sequential' strategy");
+  });
+
+  it('rejects selector without selector.agent', () => {
+    expect(run({strategy: 'selector', maxTurns: 10, members: []})).toContain(
+      'Team.spec: selector strategy requires selector.agent to be specified',
+    );
+    expect(run({strategy: 'selector', maxTurns: 10, selector: {}, members: []})).toContain(
+      'Team.spec: selector strategy requires selector.agent to be specified',
+    );
+  });
+
+  it('flags round-robin as deprecated', () => {
+    expect(run({strategy: 'round-robin', members: []})[0]).toContain("'round-robin' is deprecated");
+  });
+
+  it('flags graph as deprecated', () => {
+    expect(run({strategy: 'graph', members: []})[0]).toContain("'graph' is deprecated");
+  });
+});
+
+describe('validateDocAgainstSchemas with cross-field rules', () => {
+  const teamSchema = {
+    type: 'object',
+    properties: {
+      apiVersion: {type: 'string'},
+      kind: {type: 'string'},
+      spec: {
+        type: 'object',
+        properties: {
+          strategy: {type: 'string'},
+          loops: {type: 'boolean'},
+          maxTurns: {type: 'integer'},
+          members: {type: 'array', items: {type: 'object'}},
+          selector: {type: 'object', properties: {agent: {type: 'string'}}},
+        },
+      },
+    },
+  };
+
+  it('layers cross-field rules on top of schema validation', () => {
+    const result = validateDocAgainstSchemas(
+      {apiVersion: 'ark.mckinsey.com/v1alpha1', kind: 'Team', spec: {strategy: 'sequential', maxTurns: 5, members: []}},
+      {'ark.mckinsey.com/v1alpha1/Team': teamSchema},
+    );
+    expect(result.errors).toContain('Team.spec: maxTurns can only be set when loops is enabled');
   });
 });

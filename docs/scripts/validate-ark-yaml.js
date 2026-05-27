@@ -133,8 +133,36 @@ function validateDocAgainstSchemas(doc, schemas) {
   if (!schema) return {key, missingSchema: true, errors: []};
   const errors = [];
   validateValue(doc, schema, [doc.kind], errors);
+  const rule = CROSS_FIELD_RULES[doc.kind];
+  if (rule) rule(doc, errors);
   return {key, missingSchema: false, errors};
 }
+
+// Mirror of webhook cross-field rules in ark/internal/validation/team.go.
+// The CRD OpenAPI schema doesn't encode these, so the live API server rejects
+// them at admission time even though the schema allows the shape. Keep this in
+// sync with team.go when those rules change.
+const CROSS_FIELD_RULES = {
+  Team(doc, errors) {
+    const spec = doc.spec || {};
+    const strategy = spec.strategy;
+    const hasMaxTurns = spec.maxTurns != null;
+    const loopsEnabled = spec.loops === true;
+
+    if (strategy === 'sequential') {
+      if (loopsEnabled && !hasMaxTurns) errors.push('Team.spec: maxTurns is required when loops is enabled');
+      if (!loopsEnabled && hasMaxTurns) errors.push('Team.spec: maxTurns can only be set when loops is enabled');
+    } else if (strategy === 'selector') {
+      if (loopsEnabled) errors.push("Team.spec: loops can only be used with the 'sequential' strategy");
+      if (!hasMaxTurns) errors.push('Team.spec: selector strategy requires maxTurns to prevent infinite execution');
+      if (!spec.selector || !spec.selector.agent) {
+        errors.push('Team.spec: selector strategy requires selector.agent to be specified');
+      }
+    } else if (strategy === 'round-robin' || strategy === 'graph') {
+      errors.push(`Team.spec.strategy: '${strategy}' is deprecated; rewrite as 'sequential'${strategy === 'round-robin' ? ' with loops: true' : ''}`);
+    }
+  },
+};
 
 function main() {
   const quiet = process.argv.includes('--quiet');
@@ -194,6 +222,7 @@ module.exports = {
   isArkResource,
   validateValue,
   validateDocAgainstSchemas,
+  CROSS_FIELD_RULES,
   SKIP_TOP_LEVEL,
 };
 
