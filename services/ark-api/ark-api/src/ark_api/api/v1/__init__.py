@@ -9,6 +9,7 @@ from .teams import router as teams_router
 from .queries import router as queries_router
 from .tools import router as tools_router
 from .mcp_servers import router as mcp_servers_router
+from .mcp_auth import router as mcp_auth_router
 from .a2a_servers import router as a2a_servers_router
 from .proxy import proxy_router
 from .memories import router as memories_router, memory_messages_router
@@ -36,6 +37,7 @@ router.include_router(teams_router)
 router.include_router(queries_router)
 router.include_router(tools_router)
 router.include_router(mcp_servers_router)
+router.include_router(mcp_auth_router)
 router.include_router(a2a_servers_router)
 router.include_router(proxy_router)
 router.include_router(a2a_tasks_router)
