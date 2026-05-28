@@ -18,7 +18,7 @@ The proposal (proposal.md) settles WHAT changes; this document settles HOW.
 - A file uploaded once can be referenced across many Queries to the same provider without re-upload.
 - Sessions inherit attachment context automatically through memory replay; switching providers mid-conversation re-projects transparently.
 - OpenAI is the first integration; Anthropic, Bedrock, and Azure can be added later with zero core changes.
-- Executors don't learn about FileBackends or projection. The completions executor's dispatch-time memory READ moves to the controller (because projection requires walking history); executor memory WRITES for assistant/tool outputs are unchanged. External executors via ark-sdk receive the projected message stream over A2A from the controller.
+- Executors don't learn about FileBackends or projection. The completions executor's dispatch-time memory READ moves to the controller (because projection requires walking history); executor memory WRITES for assistant/tool outputs are unchanged. External executors via ark-sdk receive a controller-supplied `request.history` (new optional field) containing the fully projected message stream — they may consume it or continue to use provider-side state (e.g., openai-responses' `previous_response_id`).
 
 **Non-Goals:**
 - Agent-scoped or Team-scoped attachments (every Query carries its own attachments in v1; session continuity comes from memory replay).
@@ -144,7 +144,7 @@ The FileBackend handles MIME-aware mapping internally because the right shape de
 
 ### Decision: Controller reads memory for dispatch — limited reversal of the March 2026 executor extraction
 
-The c5dc1455 refactor ("extract completions executor and promote to standalone service", PR #1357, March 2026) moved all execution logic — including memory access — out of the controller into the standalone completions executor. The principle was "memory belongs with execution, not orchestration."
+The c5dc1455 refactor ("extract completions executor and promote to standalone service", PR #1357, March 2026) moved all execution logic — including the completions executor's memory access — out of the controller into the standalone executor binary. The principle was "memory belongs with execution, not orchestration."
 
 The projection step in this change requires the controller to walk the full conversation history at dispatch time (to translate `ark.file` parts before handing the stream to the executor). That re-introduces controller-side memory access, but only for the dispatch path and only for reads.
 
@@ -152,13 +152,36 @@ The reversal is deliberately scoped:
 - **Controller WRITES**: only the new user message (in `ark.file` form, pre-projection), once per Query.
 - **Controller READS**: the full conversation history at dispatch, to project all `ark.file` parts in a single pass.
 - **Executor WRITES**: all assistant and tool responses, unchanged from today.
-- **Executor READS**: none for the dispatch path — history arrives over A2A from the controller. The executor's `memory_http.go` can drop its read-for-dispatch code; memory writes for outputs remain.
+- **Executor READS**: none for the dispatch path — history arrives over A2A from the controller. The completions executor's `memory_http.go` can drop its read-for-dispatch code; memory writes for outputs remain. The Go HTTP client to the broker can be extracted into a shared package (e.g., `ark/internal/memory/client/`) used by both controller and completions executor.
 
-Net effect: the controller orchestrates dispatch context (including history projection); the executor still owns execution-time memory writes. This preserves the spirit of c5dc1455 — execution logic stays in the executor — while acknowledging that projection is orchestration, not execution.
+Net effect: the controller orchestrates dispatch context (including history projection); the executor still owns execution-time memory writes. This preserves the spirit of c5dc1455 — execution logic stays in the executor — while acknowledging that projection is orchestration, not execution. The broker remains the unified storage layer for memory; what shifts is which callsites talk to it for dispatch reads, not where the data lives.
 
 **Alternative considered:** keep memory reads entirely in the executor; have the executor translate `ark.file` (via SDK glue). Rejected — see "single translator" decision above. Splits the path and contradicts the "executor doesn't know about backends" guarantee.
 
 **Alternative considered:** pass projection RPC capability into the executor / SDK so it can translate on read. Rejected for the same reason — the surface area we'd avoid in the executor proper just moves into the SDK, with the same coupling cost.
+
+### Decision: Executors have varying memory strategies today; controller-as-translator unifies them
+
+Inspecting the marketplace reveals that "executor reads memory" is not the universal pattern that the c5dc1455 framing implies. Each existing executor handles conversation history differently:
+
+- **completions executor (Go)** — reads broker memory via `memory_http.go`, resends full history to OpenAI Chat Completions on every turn. Multi-turn continuity is client-side.
+- **openai-responses executor (Python, marketplace)** — does NOT read broker memory at all. Uses OpenAI's Responses API `previous_response_id` (stored on a PVC by the executor) to maintain server-side state. The `request.history` field in its code is dead today because ark-sdk's `ExecutionEngineRequest` doesn't populate one.
+- **claude-agent-sdk executor (Python, marketplace)** — uses Claude's session/context-id mechanism via the Claude Agent SDK; details vary.
+- **langchain executor (Python, marketplace)** — its own pattern.
+
+There is no uniform contract today for "how does an executor know about prior turns?" Each implements its own mechanism, sometimes broker-backed, sometimes provider-backed, sometimes a mix.
+
+This change makes the controller the **primary** source of conversation history at dispatch (because projection requires walking history). To make that history visible to executor code:
+
+1. `ark-sdk` adds an optional `history: list[Message]` field on `ExecutionEngineRequest`.
+2. `resolve_query()` in `ark-sdk` populates the field from the broker when `conversationId` is set.
+3. Executor implementations may use `request.history` directly, or continue to use their own provider-backed state and ignore the supplied history (no contradiction — A2A history is what's available; the executor's strategy is its own).
+
+This unifies the controller-side story without forcing executors to abandon working patterns. An executor that uses `previous_response_id` keeps doing so; an executor that prefers replaying broker history now has a field to read.
+
+**Alternative considered:** make `request.history` mandatory and require every executor to honor it. Rejected — the openai-responses pattern (`previous_response_id`) is genuinely more efficient where it applies, and forcing executors away from it loses value. Optional field with documented semantics is enough.
+
+**Alternative considered:** keep `request.history` absent and have executors fetch from the broker themselves. Rejected — duplicates the controller's projection work, forces every executor to know how to project `ark.file` (which means knowing about FileBackends), and re-creates the inconsistency.
 
 ### Decision: FileBackend resolves its own credentials from a Model reference
 

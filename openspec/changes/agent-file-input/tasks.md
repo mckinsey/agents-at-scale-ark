@@ -33,9 +33,11 @@
 
 ## 5. Completions executor — memory split
 
-- [ ] 5.1 Remove dispatch-time memory READ from `ark/executors/completions/memory_http.go` — history arrives via A2A Task `history` field from the controller
-- [ ] 5.2 Retain memory WRITE for assistant and tool outputs (no change)
-- [ ] 5.3 Verify the executor never sees `ark.file` content parts in dispatched messages (defense-in-depth assertion: if it does, log a warning and treat as text fallback — should never happen in correct controller behavior)
+- [ ] 5.1 Extract the Go memory client from `ark/executors/completions/memory_http.go` into a shared package (e.g., `ark/internal/memory/client/`) usable by both the controller (new dispatch reader) and the completions executor (existing writer)
+- [ ] 5.2 Remove dispatch-time memory READ from the completions executor — history arrives via A2A Task `history` field from the controller
+- [ ] 5.3 Retain memory WRITE for assistant and tool outputs (no change)
+- [ ] 5.4 Verify the executor never sees `ark.file` content parts in dispatched messages (defense-in-depth assertion: if it does, log a warning and treat as text fallback — should never happen in correct controller behavior)
+- [ ] 5.5 No-op for marketplace executors that don't read broker memory today (e.g., openai-responses uses `previous_response_id`); they MAY adopt `request.history` over time but are not blocked on it for v1
 
 ## 6. ark-api — /v1/files routes
 
@@ -58,8 +60,11 @@
 
 ## 8. ark-sdk
 
-- [ ] 8.1 Document that external executors via `ExecutorApp` receive their conversation history via the A2A Task `history` field from the controller, already projected. No FileBackend awareness needed in executor code.
-- [ ] 8.2 ExecutorApp should NOT load memory directly for the dispatch path (mirror of completions executor change). Memory writes for outputs unchanged.
+- [ ] 8.1 Add optional `history: list[Message] = []` field to `ExecutionEngineRequest` in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/executor.py`
+- [ ] 8.2 Update `resolve_query()` in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/extensions/query.py` to populate `history` from the broker when `conversation_id` is set. The history SHALL be the controller-supplied projected message stream (received via A2A), NOT a direct broker read. (Implementation detail: the SDK reads what the controller put into the A2A Task `history` field; alternatively, if `resolve_query` runs in a context that has the projected stream from A2A, it uses that directly.)
+- [ ] 8.3 Document that external executors via `ExecutorApp` receive their conversation history via `request.history`, already projected by the controller. No FileBackend awareness needed in executor code.
+- [ ] 8.4 Document that executors using provider-side conversation state (e.g., openai-responses' `previous_response_id`) MAY ignore `request.history` — the field is informational, not mandatory to consume.
+- [ ] 8.5 ExecutorApp SHALL NOT load memory directly for the dispatch path (mirror of completions executor change). Memory writes for outputs via existing BrokerClient unchanged.
 
 ## 9. Dashboard
 

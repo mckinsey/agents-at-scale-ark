@@ -142,6 +142,32 @@ The controller SHALL write new user messages (with `ark.file` content parts inta
 - **THEN** the stream SHALL NOT contain any `ark.file` content parts
 - **AND** the executor SHALL forward the stream to the LLM provider with provider-native parts only
 
+### Requirement: ark-sdk exposes controller-supplied history as `request.history`
+
+The ark-sdk's `ExecutionEngineRequest` SHALL include an optional `history: list[Message] = []` field. The SDK's `resolve_query()` SHALL populate this field with the controller-supplied conversation history (received via A2A) when the Query carries a `conversationId`. The field's contents SHALL already be fully projected — `ark.file` content parts replaced with provider-native parts.
+
+Executor implementations MAY consume `request.history` directly when building LLM requests. Executors using provider-side conversation state (e.g., openai-responses' `previous_response_id`) MAY ignore the supplied history without violating this requirement.
+
+#### Scenario: SDK populates `request.history` for multi-turn
+
+- **WHEN** the controller dispatches a Query with `conversationId: "abc"` containing 3 prior messages plus a new user message
+- **AND** the dispatch arrives at an external executor built on ark-sdk
+- **THEN** the executor's `execute_agent()` SHALL receive a `request.history` list containing 3 entries (the prior turns, fully projected; `ark.file` parts replaced with provider-native parts)
+- **AND** `request.userInput` SHALL contain the new user message (also fully projected)
+
+#### Scenario: SDK leaves `request.history` empty for fresh conversations
+
+- **WHEN** a Query is dispatched with no `conversationId`
+- **THEN** `request.history` SHALL be `[]`
+- **AND** the executor SHALL operate on `request.userInput` only
+
+#### Scenario: Executor with provider-side state may ignore `request.history`
+
+- **WHEN** an executor (e.g., openai-responses) uses a provider-supplied conversation mechanism such as `previous_response_id`
+- **AND** receives a request with non-empty `request.history`
+- **THEN** the executor MAY ignore `request.history` and continue to use its provider-side state mechanism
+- **AND** this SHALL NOT violate the contract
+
 ### Requirement: ark-api exposes /v1/files endpoints
 
 ark-api SHALL expose the following endpoints under `/v1/files`. All endpoints SHALL be namespace-scoped to the caller's identity via `ImpersonationConfig`.
