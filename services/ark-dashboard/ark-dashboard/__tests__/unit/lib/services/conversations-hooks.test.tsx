@@ -274,13 +274,16 @@ describe('conversations hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(conversationsService.sendMessage).toHaveBeenCalledWith({
-        conversationId: 'conv-1',
-        message: 'Hello',
-        sessionId: 'session-1',
-        agentName: 'test-agent',
-        participantType: 'agent',
-      });
+      expect(conversationsService.sendMessage).toHaveBeenCalledWith(
+        {
+          conversationId: 'conv-1',
+          message: 'Hello',
+          sessionId: 'session-1',
+          agentName: 'test-agent',
+          participantType: 'agent',
+        },
+        expect.anything()
+      );
 
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: ['messages', 'session-1', 'conv-1'],
@@ -333,7 +336,7 @@ describe('conversations hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(conversationsService.sendMessage).toHaveBeenCalledWith(params);
+      expect(conversationsService.sendMessage).toHaveBeenCalledWith(params, expect.anything());
     });
   });
 });

@@ -19,6 +19,7 @@ describe('ApprovalNotification', () => {
   const defaultProps = {
     queryName: 'test-query',
     queryNamespace: 'default',
+    taskId: 'task-123',
     toolCalls: mockToolCalls,
     onApprove: vi.fn().mockResolvedValue(undefined),
     onReject: vi.fn().mockResolvedValue(undefined),
@@ -29,37 +30,18 @@ describe('ApprovalNotification', () => {
   });
 
   describe('Rendering', () => {
-    it('renders with tool call data', () => {
+    it('renders tool call with function name', () => {
       render(<ApprovalNotification {...defaultProps} />);
 
-      expect(screen.getByText('Approval Required')).toBeInTheDocument();
       expect(screen.getByText('write-file')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument();
     });
 
-    it('displays agent name when provided', () => {
-      render(<ApprovalNotification {...defaultProps} agentName="test-agent" />);
-
-      expect(screen.getByText(/Agent: test-agent/i)).toBeInTheDocument();
-    });
-
-    it('displays timeout badge when timeout provided', () => {
+    it('displays timeout when provided', () => {
       render(<ApprovalNotification {...defaultProps} timeout="5m" />);
 
-      expect(screen.getByText(/Timeout: 5m/i)).toBeInTheDocument();
-    });
-
-    it('displays onTimeout policy when provided', () => {
-      render(
-        <ApprovalNotification
-          {...defaultProps}
-          timeout="5m"
-          onTimeout="reject"
-        />,
-      );
-
-      expect(screen.getByText(/Timeout: 5m \(reject\)/i)).toBeInTheDocument();
+      expect(screen.getByText('5m')).toBeInTheDocument();
     });
 
     it('renders multiple tool calls correctly', () => {
@@ -84,17 +66,34 @@ describe('ApprovalNotification', () => {
 
       expect(screen.getByText('write-file')).toBeInTheDocument();
       expect(screen.getByText('delete-file')).toBeInTheDocument();
-      expect(
-        screen.getByText(/The following tools require your approval/i),
-      ).toBeInTheDocument();
     });
 
-    it('displays singular text for single tool', () => {
-      render(<ApprovalNotification {...defaultProps} />);
+    it('shows buttons only on the last tool call', () => {
+      const multipleToolCalls = [
+        mockToolCalls[0],
+        {
+          id: 'call-2',
+          type: 'function',
+          function: {
+            name: 'delete-file',
+            arguments: '{"path": "/tmp/delete.txt"}',
+          },
+        },
+      ];
 
-      expect(
-        screen.getByText(/The following tool requires your approval/i),
-      ).toBeInTheDocument();
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          toolCalls={multipleToolCalls}
+        />,
+      );
+
+      const approveButtons = screen.getAllByRole('button', { name: /approve/i });
+      const rejectButtons = screen.getAllByRole('button', { name: /reject/i });
+
+      // Only one set of buttons should be visible
+      expect(approveButtons).toHaveLength(1);
+      expect(rejectButtons).toHaveLength(1);
     });
   });
 
@@ -103,18 +102,37 @@ describe('ApprovalNotification', () => {
       render(<ApprovalNotification {...defaultProps} />);
 
       const argumentsText = screen.queryByText(/"path":/);
-      expect(argumentsText).not.toBeVisible();
+      expect(argumentsText).not.toBeInTheDocument();
     });
 
-    it('expands tool call arguments when clicked', async () => {
+    it('expands tool call arguments when Input is clicked', async () => {
       const user = userEvent.setup();
       render(<ApprovalNotification {...defaultProps} />);
 
-      const detailsButton = screen.getByText(/View arguments/i);
-      await user.click(detailsButton);
+      const inputButtons = screen.getAllByText('Input');
+      await user.click(inputButtons[0]);
 
       await waitFor(() => {
         expect(screen.getByText(/"path":/)).toBeVisible();
+      });
+    });
+
+    it('collapses arguments when Input is clicked again', async () => {
+      const user = userEvent.setup();
+      render(<ApprovalNotification {...defaultProps} />);
+
+      const inputButtons = screen.getAllByText('Input');
+
+      // Expand
+      await user.click(inputButtons[0]);
+      await waitFor(() => {
+        expect(screen.getByText(/"path":/)).toBeVisible();
+      });
+
+      // Collapse
+      await user.click(inputButtons[0]);
+      await waitFor(() => {
+        expect(screen.queryByText(/"path":/)).not.toBeInTheDocument();
       });
     });
   });
@@ -144,7 +162,7 @@ describe('ApprovalNotification', () => {
       expect(onReject).toHaveBeenCalledTimes(1);
     });
 
-    it('hides buttons when isSubmitting is true', async () => {
+    it('hides buttons while submitting', async () => {
       const user = userEvent.setup();
       let resolveApprove: () => void;
       const approvePromise = new Promise<void>((resolve) => {
@@ -171,130 +189,8 @@ describe('ApprovalNotification', () => {
     });
   });
 
-  describe('Loading States', () => {
-    it('shows approval loading message when approving', async () => {
-      const user = userEvent.setup();
-      let resolveApprove: () => void;
-      const approvePromise = new Promise<void>((resolve) => {
-        resolveApprove = resolve;
-      });
-      const onApprove = vi.fn().mockReturnValue(approvePromise);
-
-      render(<ApprovalNotification {...defaultProps} onApprove={onApprove} />);
-
-      await user.click(screen.getByRole('button', { name: /approve/i }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Approving and resuming execution/i),
-        ).toBeInTheDocument();
-      });
-
-      resolveApprove!();
-    });
-
-    it('shows rejection loading message when rejecting', async () => {
-      const user = userEvent.setup();
-      let resolveReject: () => void;
-      const rejectPromise = new Promise<void>((resolve) => {
-        resolveReject = resolve;
-      });
-      const onReject = vi.fn().mockReturnValue(rejectPromise);
-
-      render(<ApprovalNotification {...defaultProps} onReject={onReject} />);
-
-      await user.click(screen.getByRole('button', { name: /reject/i }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Rejecting and ending query/i),
-        ).toBeInTheDocument();
-      });
-
-      resolveReject!();
-    });
-
-    it('shows green loading dots for approval', async () => {
-      const user = userEvent.setup();
-      let resolveApprove: () => void;
-      const approvePromise = new Promise<void>((resolve) => {
-        resolveApprove = resolve;
-      });
-      const onApprove = vi.fn().mockReturnValue(approvePromise);
-
-      render(<ApprovalNotification {...defaultProps} onApprove={onApprove} />);
-
-      await user.click(screen.getByRole('button', { name: /approve/i }));
-
-      await waitFor(() => {
-        const loadingContainer = screen.getByText(
-          /Approving and resuming execution/i,
-        ).parentElement?.parentElement;
-        expect(loadingContainer?.className).toContain('bg-green');
-      });
-
-      resolveApprove!();
-    });
-
-    it('shows red loading dots for rejection', async () => {
-      const user = userEvent.setup();
-      let resolveReject: () => void;
-      const rejectPromise = new Promise<void>((resolve) => {
-        resolveReject = resolve;
-      });
-      const onReject = vi.fn().mockReturnValue(rejectPromise);
-
-      render(<ApprovalNotification {...defaultProps} onReject={onReject} />);
-
-      await user.click(screen.getByRole('button', { name: /reject/i }));
-
-      await waitFor(() => {
-        const loadingContainer = screen.getByText(
-          /Rejecting and ending query/i,
-        ).parentElement?.parentElement;
-        expect(loadingContainer?.className).toContain('bg-red');
-      });
-
-      resolveReject!();
-    });
-  });
-
   describe('Decision States', () => {
-    it('shows approved state with green checkmark after approval', async () => {
-      const user = userEvent.setup();
-      const onApprove = vi.fn().mockResolvedValue(undefined);
-
-      render(<ApprovalNotification {...defaultProps} onApprove={onApprove} />);
-
-      await user.click(screen.getByRole('button', { name: /approve/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Tool execution approved/i)).toBeInTheDocument();
-      });
-
-      const container = screen.getByText(/Tool execution approved/i)
-        .parentElement?.parentElement;
-      expect(container?.className).toContain('border-green');
-    });
-
-    it('shows rejected state with red X after rejection', async () => {
-      const user = userEvent.setup();
-      const onReject = vi.fn().mockResolvedValue(undefined);
-
-      render(<ApprovalNotification {...defaultProps} onReject={onReject} />);
-
-      await user.click(screen.getByRole('button', { name: /reject/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Tool execution rejected by user/i)).toBeInTheDocument();
-      });
-
-      const container = screen.getByText(/Tool execution rejected by user/i)
-        .parentElement?.parentElement;
-      expect(container?.className).toContain('border-red');
-    });
-
-    it('hides buttons after decision is made', async () => {
+    it('hides buttons after approval', async () => {
       const user = userEvent.setup();
       const onApprove = vi.fn().mockResolvedValue(undefined);
 
@@ -309,6 +205,39 @@ describe('ApprovalNotification', () => {
         expect(
           screen.queryByRole('button', { name: /reject/i }),
         ).not.toBeInTheDocument();
+      });
+    });
+
+    it('hides buttons after rejection', async () => {
+      const user = userEvent.setup();
+      const onReject = vi.fn().mockResolvedValue(undefined);
+
+      render(<ApprovalNotification {...defaultProps} onReject={onReject} />);
+
+      await user.click(screen.getByRole('button', { name: /reject/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('button', { name: /approve/i }),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', { name: /reject/i }),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('applies red styling after rejection', async () => {
+      const user = userEvent.setup();
+      const onReject = vi.fn().mockResolvedValue(undefined);
+
+      render(<ApprovalNotification {...defaultProps} onReject={onReject} />);
+
+      await user.click(screen.getByRole('button', { name: /reject/i }));
+
+      await waitFor(() => {
+        const toolName = screen.getByText('write-file');
+        const card = toolName.closest('div.border');
+        expect(card?.className).toContain('border-red');
       });
     });
   });
@@ -325,7 +254,9 @@ describe('ApprovalNotification', () => {
       await user.click(approveButton);
 
       await waitFor(() => {
-        expect(approveButton).not.toBeDisabled();
+        // Buttons should reappear after error
+        expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument();
       });
 
       consoleSpy.mockRestore();
@@ -342,10 +273,44 @@ describe('ApprovalNotification', () => {
       await user.click(rejectButton);
 
       await waitFor(() => {
-        expect(rejectButton).not.toBeDisabled();
+        // Buttons should reappear after error
+        expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument();
       });
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Existing Decision', () => {
+    it('shows tool calls in read-only mode when existingDecision is approved', () => {
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          existingDecision="approved"
+        />,
+      );
+
+      expect(screen.getByText('write-file')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /approve/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /reject/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows tool calls with red styling when existingDecision is rejected', () => {
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          existingDecision="rejected"
+        />,
+      );
+
+      expect(screen.getByText('write-file')).toBeInTheDocument();
+      const card = screen.getByText('write-file').closest('div.border');
+      expect(card?.className).toContain('border-red');
     });
   });
 });
