@@ -23,7 +23,7 @@ interface ChatMessageListProps {
   debugMode: boolean;
   isProcessing: boolean;
   processingPhase?: string;
-
+  isWaitingForApprovalResponse: boolean;
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -138,7 +138,7 @@ export function ChatMessageList({
   debugMode,
   isProcessing,
   processingPhase,
-
+  isWaitingForApprovalResponse,
   error,
   viewMode = 'markdown',
   messagesEndRef,
@@ -445,6 +445,21 @@ export function ChatMessageList({
                   Preparing new workspace...
                 </span>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {isWaitingForApprovalResponse && (
+        <div className="flex justify-start">
+          <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
+            <div className="flex space-x-1">
+              <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+              <div
+                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                style={{ animationDelay: '0.1s' }}></div>
+              <div
+                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                style={{ animationDelay: '0.2s' }}></div>
             </div>
           </div>
         </div>

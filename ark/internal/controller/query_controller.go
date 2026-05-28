@@ -203,6 +203,18 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 	case arka2a.PhaseCompleted:
 		// Task completed with approval - resume query execution
 		log.Info("A2ATask completed, resuming query execution", "taskId", taskID)
+		// Note: Don't clear taskID here - executor needs it to detect resumption
+		// The executor will clear it after processing (handler.go line 165)
+
+		// Clear operation cache to allow new execution goroutine for resumption
+		nsName := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
+		if cancel, ok := r.operations.LoadAndDelete(nsName); ok {
+			if cancelFunc, ok := cancel.(context.CancelFunc); ok {
+				cancelFunc()
+			}
+			log.Info("Cleared cached operation for resumption", "query", obj.Name)
+		}
+
 		if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -216,6 +228,18 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 		if isRejection && a2aTask.Status.Phase == arka2a.PhaseFailed {
 			// User rejected tool execution - resume query to let agent handle gracefully
 			log.Info("A2ATask rejected by user, resuming query execution for graceful handling", "taskId", taskID)
+			// Note: Don't clear taskID here - executor needs it to detect resumption
+			// The executor will clear it after processing (handler.go line 165)
+
+			// Clear operation cache to allow new execution goroutine for resumption
+			nsName := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
+			if cancel, ok := r.operations.LoadAndDelete(nsName); ok {
+				if cancelFunc, ok := cancel.(context.CancelFunc); ok {
+					cancelFunc()
+				}
+				log.Info("Cleared cached operation for resumption after rejection", "query", obj.Name)
+			}
+
 			if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -249,6 +273,26 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 			r.operations.Delete(namespacedName)
 		}
 	}()
+
+	// Re-fetch query to get latest status (may have been updated with A2A taskID for resumption)
+	if err := r.Get(opCtx, namespacedName, &obj); err != nil {
+		log.Error(err, "failed to re-fetch query for execution")
+		_ = r.updateStatus(opCtx, &obj, statusError)
+		return
+	}
+
+	// Debug: Log query status after re-fetch to verify taskID is present for resumptions
+	log.Info("Query status after re-fetch in executeQueryAsync",
+		"queryName", obj.Name,
+		"queryPhase", obj.Status.Phase,
+		"hasResponse", obj.Status.Response != nil,
+		"hasA2A", obj.Status.Response != nil && obj.Status.Response.A2A != nil,
+		"taskId", func() string {
+			if obj.Status.Response != nil && obj.Status.Response.A2A != nil {
+				return obj.Status.Response.A2A.TaskID
+			}
+			return "none"
+		}())
 
 	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
@@ -415,8 +459,13 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	userText := extractUserInput(ctx, query, r.Client)
 	var message protocol.Message
-	if query.Spec.ConversationId != "" {
-		conversationId := query.Spec.ConversationId
+	// Use conversationId from spec (user-provided) or status (from previous execution/resumption)
+	// This ensures we maintain the same conversation across approvals and resumptions
+	conversationId := query.Spec.ConversationId
+	if conversationId == "" {
+		conversationId = query.Status.ConversationId
+	}
+	if conversationId != "" {
 		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
 			protocol.NewTextPart(userText),
 		}, nil, &conversationId)
@@ -790,6 +839,10 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		tokenUsage:     query.Status.TokenUsage,
 		conversationId: query.Status.ConversationId,
 	}
+	// Note: Do NOT clear A2A taskID when transitioning from input-required to running
+	// The executor needs the taskID to detect this is a resumption after approval
+	// The executor will clear it after processing (handler.go)
+
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if ctx.Err() != nil {
 			return nil

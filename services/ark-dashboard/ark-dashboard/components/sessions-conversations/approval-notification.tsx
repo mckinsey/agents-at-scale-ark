@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Clock, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChevronDown, ChevronRight, Wrench, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { ToolCall as ToolCallComponent } from '@/components/chat/tool-call';
 
 interface ToolCall {
   id: string;
@@ -15,13 +15,117 @@ interface ToolCall {
   };
 }
 
+interface ApprovalToolCardProps {
+  readonly toolCall: ToolCall;
+  readonly showButtons: boolean;
+  readonly isSubmitting: boolean;
+  readonly timeout?: string;
+  readonly decision?: 'approved' | 'rejected' | null;
+  readonly onApprove: () => Promise<void>;
+  readonly onReject: () => Promise<void>;
+}
+
+function ApprovalToolCard({
+  toolCall,
+  showButtons,
+  isSubmitting,
+  timeout,
+  decision,
+  onApprove,
+  onReject,
+}: ApprovalToolCardProps) {
+  const [isInputExpanded, setIsInputExpanded] = useState(false);
+
+  let parsedArgs: Record<string, unknown> | null = null;
+  let parseArgsError = false;
+
+  try {
+    if (toolCall.function?.arguments) {
+      parsedArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+    }
+  } catch {
+    parseArgsError = true;
+  }
+
+  const cardClassName = decision === 'rejected'
+    ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 rounded-lg border p-3 text-sm shadow-sm"
+    : "bg-card border-border rounded-lg border p-3 text-sm shadow-sm";
+
+  return (
+    <div className={cardClassName}>
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <Wrench className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+        <span className="font-semibold">{toolCall.function?.name || toolCall.type}</span>
+        {timeout && (
+          <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="size-3" />
+            <span>{timeout}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2">
+        <button
+          onClick={() => setIsInputExpanded(!isInputExpanded)}
+          className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
+        >
+          {isInputExpanded ? (
+            <ChevronDown className="h-3 w-3 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="h-3 w-3 flex-shrink-0" />
+          )}
+          <span className="text-muted-foreground text-xs font-medium">Input</span>
+        </button>
+        {isInputExpanded && (
+          <div className="mt-1 px-2">
+            {parseArgsError ? (
+              <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
+                {toolCall.function?.arguments || '{}'}
+              </pre>
+            ) : (
+              <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
+                {JSON.stringify(parsedArgs, null, 2)}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showButtons && !isSubmitting && (
+        <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+          <Button
+            onClick={onApprove}
+            disabled={isSubmitting}
+            size="sm"
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <CheckCircle className="mr-1.5 size-3.5" />
+            Approve
+          </Button>
+          <Button
+            onClick={onReject}
+            disabled={isSubmitting}
+            size="sm"
+            variant="destructive"
+          >
+            <XCircle className="mr-1.5 size-3.5" />
+            Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ApprovalNotificationProps {
   readonly queryName: string;
   readonly queryNamespace: string;
+  readonly taskId: string;
   readonly toolCalls: ToolCall[];
   readonly timeout?: string;
   readonly onTimeout?: string;
   readonly agentName?: string;
+  readonly existingDecision?: 'approved' | 'rejected' | null;
   readonly onApprove: () => Promise<void>;
   readonly onReject: () => Promise<void>;
 }
@@ -29,25 +133,37 @@ interface ApprovalNotificationProps {
 export function ApprovalNotification({
   queryName,
   queryNamespace,
+  taskId,
   toolCalls,
   timeout,
   onTimeout,
   agentName,
+  existingDecision = null,
   onApprove,
   onReject
 }: ApprovalNotificationProps) {
   console.log('[HITL Debug] ApprovalNotification rendering with props:', {
     queryName,
     queryNamespace,
+    taskId,
     toolCalls,
     timeout,
     onTimeout,
     agentName,
+    existingDecision,
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittingAction, setSubmittingAction] = useState<'approve' | 'reject' | null>(null);
-  const [decision, setDecision] = useState<'approved' | 'rejected' | null>(null);
+  const [decision, setDecision] = useState<'approved' | 'rejected' | null>(existingDecision);
+
+  // Update decision state when existingDecision changes (e.g., after async data loads)
+  useEffect(() => {
+    if (existingDecision && !decision) {
+      console.log('[HITL Debug] existingDecision changed to:', existingDecision);
+      setDecision(existingDecision);
+    }
+  }, [existingDecision, decision]);
 
   const handleApprove = async () => {
     setIsSubmitting(true);
@@ -76,24 +192,20 @@ export function ApprovalNotification({
   };
 
   if (decision) {
+    // Show the tool calls in read-only mode (without approve/reject buttons)
     return (
-      <div className={cn(
-        'my-4 rounded-lg border p-4',
-        decision === 'approved' ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-red-500 bg-red-50 dark:bg-red-950'
-      )}>
-        <div className="flex items-center gap-2">
-          {decision === 'approved' ? (
-            <CheckCircle className="size-5 text-green-600 dark:text-green-400" />
-          ) : (
-            <XCircle className="size-5 text-red-600 dark:text-red-400" />
-          )}
-          <span className={cn(
-            'font-medium',
-            decision === 'approved' ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100'
-          )}>
-            Tool execution {decision}
-          </span>
-        </div>
+      <div className="space-y-2">
+        {toolCalls.map((toolCall) => (
+          <ApprovalToolCard
+            key={toolCall.id}
+            toolCall={toolCall}
+            showButtons={false}
+            isSubmitting={false}
+            decision={decision}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+        ))}
       </div>
     );
   }
@@ -101,136 +213,19 @@ export function ApprovalNotification({
   console.log('[HITL Debug] ApprovalNotification rendering notification UI');
 
   return (
-    <div className="my-4 rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950 p-4" style={{ minHeight: '100px' }} data-testid="approval-notification">
-      <div className="space-y-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="size-5 text-amber-600 dark:text-amber-400" />
-            <div>
-              <h3 className="font-semibold text-amber-900 dark:text-amber-100">
-                Approval Required
-              </h3>
-              {agentName && (
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Agent: {agentName}
-                </p>
-              )}
-            </div>
-          </div>
-          {timeout && (
-            <Badge variant="outline" className="flex items-center gap-1 border-amber-600 text-amber-900 dark:text-amber-100">
-              <Clock className="size-3" />
-              Timeout: {timeout}
-              {onTimeout && ` (${onTimeout})`}
-            </Badge>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-            The following tool{toolCalls.length > 1 ? 's' : ''} require{toolCalls.length === 1 ? 's' : ''} your approval:
-          </p>
-          <div className="space-y-2">
-            {toolCalls.map((toolCall) => (
-              <div
-                key={toolCall.id}
-                className="rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-amber-900/20 p-3"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-medium text-amber-900 dark:text-amber-100">
-                        {toolCall.function?.name || toolCall.type}
-                      </span>
-                      <Badge variant="secondary" className="text-xs">
-                        {toolCall.type}
-                      </Badge>
-                    </div>
-                    {toolCall.function?.arguments && (
-                      <details className="text-xs">
-                        <summary className="cursor-pointer text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100">
-                          View arguments
-                        </summary>
-                        <pre className="mt-2 overflow-x-auto rounded bg-amber-100 dark:bg-amber-900/40 p-2 text-amber-900 dark:text-amber-100">
-                          {(() => {
-                            try {
-                              return JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2);
-                            } catch (error) {
-                              console.error('[HITL Debug] Failed to parse tool call arguments:', error, toolCall.function.arguments);
-                              return toolCall.function.arguments;
-                            }
-                          })()}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {isSubmitting ? (
-          <div className="flex justify-start pt-2">
-            <div className={cn(
-              "rounded-lg px-3 py-2",
-              submittingAction === 'approve'
-                ? "bg-green-100 dark:bg-green-900/40"
-                : "bg-red-100 dark:bg-red-900/40"
-            )}>
-              <div className="flex items-center gap-2">
-                <div className="flex space-x-1">
-                  <div className={cn(
-                    "size-2 animate-bounce rounded-full [animation-delay:-0.3s]",
-                    submittingAction === 'approve'
-                      ? "bg-green-600 dark:bg-green-400"
-                      : "bg-red-600 dark:bg-red-400"
-                  )}></div>
-                  <div className={cn(
-                    "size-2 animate-bounce rounded-full [animation-delay:-0.15s]",
-                    submittingAction === 'approve'
-                      ? "bg-green-600 dark:bg-green-400"
-                      : "bg-red-600 dark:bg-red-400"
-                  )}></div>
-                  <div className={cn(
-                    "size-2 animate-bounce rounded-full",
-                    submittingAction === 'approve'
-                      ? "bg-green-600 dark:bg-green-400"
-                      : "bg-red-600 dark:bg-red-400"
-                  )}></div>
-                </div>
-                <span className={cn(
-                  "text-sm",
-                  submittingAction === 'approve'
-                    ? "text-green-900 dark:text-green-100"
-                    : "text-red-900 dark:text-red-100"
-                )}>
-                  {submittingAction === 'approve' ? 'Approving and resuming execution...' : 'Rejecting and ending query...'}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 pt-2">
-            <Button
-              onClick={handleApprove}
-              disabled={isSubmitting}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              <CheckCircle className="mr-2 size-4" />
-              Approve
-            </Button>
-            <Button
-              onClick={handleReject}
-              disabled={isSubmitting}
-              variant="destructive"
-            >
-              <XCircle className="mr-2 size-4" />
-              Reject
-            </Button>
-          </div>
-        )}
-      </div>
+    <div className="space-y-2">
+      {toolCalls.map((toolCall, index) => (
+        <ApprovalToolCard
+          key={toolCall.id}
+          toolCall={toolCall}
+          showButtons={index === toolCalls.length - 1}
+          isSubmitting={isSubmitting}
+          timeout={index === 0 ? timeout : undefined}
+          decision={null}
+          onApprove={handleApprove}
+          onReject={handleReject}
+        />
+      ))}
     </div>
   );
 }

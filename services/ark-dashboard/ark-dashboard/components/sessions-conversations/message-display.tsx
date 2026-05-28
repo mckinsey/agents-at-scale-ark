@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, memo, useMemo } from 'react';
+import { useEffect, useRef, memo, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
@@ -100,7 +100,9 @@ interface MessageContentProps {
   readonly showToolCalls: boolean;
   readonly queryName?: string;
   readonly queryNamespace?: string;
-  readonly approvalData?: ApprovalData;
+  readonly approvalData?: ApprovalData & { taskId: string };
+  readonly existingDecision?: 'approved' | 'rejected';
+  readonly isWaitingForNextMessage?: boolean;
   readonly onApprove?: () => Promise<void>;
   readonly onReject?: () => Promise<void>;
 }
@@ -115,6 +117,8 @@ const MessageContent = memo(function MessageContent({
   queryName,
   queryNamespace,
   approvalData,
+  existingDecision,
+  isWaitingForNextMessage = false,
   onApprove,
   onReject
 }: MessageContentProps) {
@@ -173,15 +177,33 @@ const MessageContent = memo(function MessageContent({
         ))}
         {approvalData && onApprove && onReject && queryName && queryNamespace && (
           <ApprovalNotification
+            key={approvalData.taskId}
             queryName={queryName}
             queryNamespace={queryNamespace}
+            taskId={approvalData.taskId}
             toolCalls={approvalData.toolCalls}
             timeout={approvalData.timeout}
             onTimeout={approvalData.onTimeout}
             agentName={approvalData.agentName}
+            existingDecision={existingDecision || null}
             onApprove={onApprove}
             onReject={onReject}
           />
+        )}
+        {isWaitingForNextMessage && (
+          <div className="flex justify-start">
+            <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
+              <div className="flex space-x-1">
+                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+                <div
+                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  style={{ animationDelay: '0.1s' }}></div>
+                <div
+                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  style={{ animationDelay: '0.2s' }}></div>
+              </div>
+            </div>
+          </div>
         )}
         {hasPendingMessages && uniquePendingMessages.map((msg, idx) => (
           <SessionMessage
@@ -226,6 +248,8 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
+  const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
+  const [messageCountWhenWaitingStarted, setMessageCountWhenWaitingStarted] = useState<number | null>(null);
 
   const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
@@ -276,6 +300,29 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     needsApproval
   );
 
+  // Track submitted task decisions in session storage to persist across refreshes
+  const getSubmittedTaskDecisions = (): Map<string, 'approved' | 'rejected'> => {
+    if (typeof window === 'undefined') return new Map();
+    const stored = sessionStorage.getItem(`submitted-approvals-${sessionId}`);
+    if (!stored) return new Map();
+    try {
+      const obj = JSON.parse(stored);
+      return new Map(Object.entries(obj));
+    } catch {
+      return new Map();
+    }
+  };
+
+  const addSubmittedTaskDecision = (taskId: string, decision: 'approved' | 'rejected') => {
+    if (typeof window === 'undefined') return;
+    const submitted = getSubmittedTaskDecisions();
+    submitted.set(taskId, decision);
+    const obj = Object.fromEntries(submitted);
+    sessionStorage.setItem(`submitted-approvals-${sessionId}`, JSON.stringify(obj));
+  };
+
+  const existingDecision = approvalDetails?.taskId ? getSubmittedTaskDecisions().get(approvalDetails.taskId) : undefined;
+
   // Approval mutation
   const { mutateAsync: submitApproval } = useSubmitApproval(
     effectiveQueryId || '',
@@ -283,10 +330,22 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   );
 
   const handleApprove = async () => {
+    if (approvalDetails?.taskId) {
+      addSubmittedTaskDecision(approvalDetails.taskId, 'approved');
+    }
+    const currentCount = messages?.length || 0;
+    console.log('[HITL Debug] Setting waiting state, current message count:', currentCount);
+    setMessageCountWhenWaitingStarted(currentCount);
+    setIsWaitingForNextMessage(true);
     await submitApproval('approved');
   };
 
   const handleReject = async () => {
+    if (approvalDetails?.taskId) {
+      addSubmittedTaskDecision(approvalDetails.taskId, 'rejected');
+    }
+    setMessageCountWhenWaitingStarted(messages?.length || 0);
+    setIsWaitingForNextMessage(true);
     await submitApproval('rejected');
   };
 
@@ -323,6 +382,30 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     }
   }, [messages, pendingMessages, isProcessing, onClearPending]);
 
+  // Clear waiting state when messages change (new message arrives) or when approval is no longer needed
+  useEffect(() => {
+    if (!isWaitingForNextMessage || messageCountWhenWaitingStarted === null) {
+      return;
+    }
+
+    const currentMessageCount = messages?.length || 0;
+    console.log('[HITL Debug] Checking waiting state:', {
+      currentMessageCount,
+      messageCountWhenWaitingStarted,
+      needsApproval,
+      isWaitingForNextMessage
+    });
+
+    // Clear waiting state if:
+    // 1. A new message arrived (count increased)
+    // 2. Approval is no longer needed
+    if (currentMessageCount > messageCountWhenWaitingStarted || !needsApproval) {
+      console.log('[HITL Debug] Clearing waiting state');
+      setIsWaitingForNextMessage(false);
+      setMessageCountWhenWaitingStarted(null);
+    }
+  }, [isWaitingForNextMessage, messageCountWhenWaitingStarted, messages, needsApproval]);
+
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;
   }
@@ -347,6 +430,8 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
           queryName={effectiveQueryId || undefined}
           queryNamespace={namespace}
           approvalData={needsApproval && approvalDetails ? approvalDetails : undefined}
+          existingDecision={existingDecision}
+          isWaitingForNextMessage={isWaitingForNextMessage}
           onApprove={handleApprove}
           onReject={handleReject}
         />

@@ -33,6 +33,7 @@ interface UseChatSessionReturn {
   sessionId: string;
   isProcessing: boolean;
   processingPhase?: string;
+  isWaitingForApprovalResponse: boolean;
 
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
@@ -150,6 +151,7 @@ export function useChatSession({
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+  const [isWaitingForApprovalResponse, setIsWaitingForApprovalResponse] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -871,6 +873,8 @@ export function useChatSession({
     const { queryName, messageIndex } = pendingApprovalQueryRef.current;
     console.log('[HITL Debug] Starting polling after approval for:', queryName);
 
+    setIsWaitingForApprovalResponse(true);
+
     let pollingStopped = false;
     stopPollingRef.current = () => {
       pollingStopped = true;
@@ -1044,11 +1048,13 @@ export function useChatSession({
       }
     }
     console.log('[HITL Debug] Polling loop ended');
+    setIsWaitingForApprovalResponse(false);
   }, [updateChatMessages, setIsProcessing]);
 
   return {
     messages: chatMessages,
     sessionId,
+    isWaitingForApprovalResponse,
     isProcessing,
     processingPhase,
     error,

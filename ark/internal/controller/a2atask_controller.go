@@ -343,9 +343,9 @@ func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask
 	case "rejected":
 		log.Info("Approval rejected, marking task as failed", "taskId", a2aTask.Spec.TaskID)
 		a2aTask.Status.Phase = arka2a.PhaseFailed
-		a2aTask.Status.Error = "User rejected the tool calls"
+		a2aTask.Status.Error = "Tool execution rejected by user"
 		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalRejected",
-			"User rejected the tool calls")
+			"Tool execution rejected by user")
 
 	default:
 		return false, fmt.Errorf("invalid decision value: %s", decision.Decision)

@@ -52,13 +52,38 @@ export function ChatMessage({
 
   const showErrorIcon = isFailed && queryName;
 
-  const [approvalSubmitted, setApprovalSubmitted] = useState(false);
+  // Track submitted task decisions in sessionStorage to persist across refreshes
+  const getSubmittedTaskDecisions = (): Map<string, 'approved' | 'rejected'> => {
+    if (typeof window === 'undefined') return new Map();
+    const stored = sessionStorage.getItem('submitted-approval-tasks');
+    if (!stored) return new Map();
+    try {
+      const obj = JSON.parse(stored);
+      return new Map(Object.entries(obj));
+    } catch {
+      return new Map();
+    }
+  };
+
+  const addSubmittedTaskDecision = (taskId: string, decision: 'approved' | 'rejected') => {
+    if (typeof window === 'undefined') return;
+    const submitted = getSubmittedTaskDecisions();
+    submitted.set(taskId, decision);
+    const obj = Object.fromEntries(submitted);
+    sessionStorage.setItem('submitted-approval-tasks', JSON.stringify(obj));
+  };
+
+  const taskDecision = approvalRequest?.taskId ? getSubmittedTaskDecisions().get(approvalRequest.taskId) : undefined;
+  const [approvalDecision, setApprovalDecision] = useState<'approved' | 'rejected' | null>(taskDecision || null);
 
   const handleApprove = async () => {
     if (!queryName) return;
     console.log('[HITL Debug] Submitting approval for query:', queryName);
+    if (approvalRequest?.taskId) {
+      addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
+    }
     await submitApproval(queryName, namespace, 'approved');
-    setApprovalSubmitted(true);
+    setApprovalDecision('approved');
     console.log('[HITL Debug] Approval submitted, starting polling');
     if (pollAfterApproval) {
       await pollAfterApproval();
@@ -68,8 +93,11 @@ export function ChatMessage({
   const handleReject = async () => {
     if (!queryName) return;
     console.log('[HITL Debug] Submitting rejection for query:', queryName);
+    if (approvalRequest?.taskId) {
+      addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
+    }
     await submitApproval(queryName, namespace, 'rejected');
-    setApprovalSubmitted(true);
+    setApprovalDecision('rejected');
     console.log('[HITL Debug] Rejection submitted, starting polling');
     if (pollAfterApproval) {
       await pollAfterApproval();
@@ -181,6 +209,7 @@ export function ChatMessage({
     console.log('[HITL Debug] ChatMessage rendering approval request:', approvalRequest);
     console.log('[HITL Debug] ChatMessage queryName:', queryName);
     console.log('[HITL Debug] ChatMessage namespace:', namespace);
+
     // Generate a unique key from tool call IDs to reset component state on new approvals
     const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
     return (
@@ -190,10 +219,12 @@ export function ChatMessage({
           key={approvalKey}
           queryName={queryName || ''}
           queryNamespace={namespace}
+          taskId={approvalRequest.taskId}
           toolCalls={approvalRequest.toolCalls}
           timeout={approvalRequest.timeout}
           onTimeout={approvalRequest.onTimeout}
           agentName={approvalRequest.agentName}
+          existingDecision={approvalDecision}
           onApprove={handleApprove}
           onReject={handleReject}
         />

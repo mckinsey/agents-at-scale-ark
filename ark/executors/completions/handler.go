@@ -114,6 +114,20 @@ func (h *Handler) ProcessMessage(
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
 
+	// Debug: Log query status before checkResumption
+	log := logf.FromContext(ctx)
+	log.Info("Query status before checkResumption",
+		"queryName", query.Name,
+		"queryPhase", query.Status.Phase,
+		"hasResponse", query.Status.Response != nil,
+		"hasA2A", query.Status.Response != nil && query.Status.Response.A2A != nil,
+		"taskId", func() string {
+			if query.Status.Response != nil && query.Status.Response.A2A != nil {
+				return query.Status.Response.A2A.TaskID
+			}
+			return "none"
+		}())
+
 	// Check if this is a resumption from HITL approval or rejection
 	//nolint:nestif // TODO: Refactor to reduce nesting complexity
 	if isResumption, a2aTask := h.checkResumption(ctx, query); isResumption {
@@ -131,11 +145,26 @@ func (h *Handler) ProcessMessage(
 			var approvalErr *ApprovalRequiredError
 			if errors.As(err, &approvalErr) {
 				// Save any messages that were generated before the approval was required
+				// For cascading approvals, only save responseMessages (no input) since the conversation
+				// history already contains the original input from the first turn
 				if state.memory != nil && len(responseMessages) > 0 {
-					log.Info("Saving intermediate messages to memory before cascading approval", "messageCount", len(responseMessages))
-					messagesToSave := PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
-					if saveErr := state.memory.AddMessages(ctx, state.query.Name, messagesToSave); saveErr != nil {
+					log.Info("Saving intermediate messages to memory before cascading approval", "messageCount", len(responseMessages), "queryName", state.query.Name)
+					for i, msg := range responseMessages {
+						msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+						role := "unknown"
+						if msgUnion.OfUser != nil {
+							role = "user"
+						} else if msgUnion.OfAssistant != nil {
+							role = "assistant"
+						} else if msgUnion.OfTool != nil {
+							role = "tool"
+						}
+						log.Info("Intermediate message to save", "index", i, "role", role)
+					}
+					if saveErr := state.memory.AddMessages(ctx, state.query.Name, responseMessages); saveErr != nil {
 						log.Error(saveErr, "failed to save intermediate messages to memory")
+					} else {
+						log.Info("Successfully saved intermediate messages to memory")
 					}
 				}
 				return h.handleApprovalRequired(ctx, state, approvalErr), nil
@@ -143,6 +172,11 @@ func (h *Handler) ProcessMessage(
 			log.Error(err, "resumption failed")
 			state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 			return nil, fmt.Errorf("resumption failed: %w", err)
+		}
+		// Clear A2A metadata from result to prevent re-processing the same completed task
+		// The old taskID should not persist in the Query status after successful resumption
+		if execResult != nil {
+			execResult.A2AResponse = nil
 		}
 		return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
 	}
@@ -152,6 +186,16 @@ func (h *Handler) ProcessMessage(
 		// Check if this is an approval required error
 		var approvalErr *ApprovalRequiredError
 		if errors.As(err, &approvalErr) {
+			// Save input messages to memory ONLY on first approval (when memory is empty)
+			// On resumptions, memory already has context, so don't save input again
+			if state.memory != nil && len(state.inputMessages) > 0 && len(state.memoryMessages) == 0 {
+				log.Info("Saving input messages to memory before first approval", "messageCount", len(state.inputMessages), "queryName", state.query.Name)
+				if saveErr := state.memory.AddMessages(ctx, state.query.Name, state.inputMessages); saveErr != nil {
+					log.Error(saveErr, "failed to save input messages to memory before approval")
+				} else {
+					log.Info("Successfully saved input messages to memory before first approval")
+				}
+			}
 			return h.handleApprovalRequired(ctx, state, approvalErr), nil
 		}
 
@@ -318,9 +362,35 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	h.telemetry.QueryRecorder().RecordSuccess(state.querySpan)
 
 	if state.memory != nil && len(responseMessages) > 0 {
-		newMessages := PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
-		if saveErr := state.memory.AddMessages(ctx, state.query.Name, newMessages); saveErr != nil {
+		// If this is a resumption (memoryMessages non-empty), only save responseMessages
+		// to avoid duplicating the original input that was already saved in the first turn
+		var messagesToSave []Message
+		isResumption := len(state.memoryMessages) > 0
+		if isResumption {
+			// Resumption: just save new response messages
+			messagesToSave = responseMessages
+			log.Info("Saving final messages (resumption)", "messageCount", len(messagesToSave), "queryName", state.query.Name)
+		} else {
+			// First execution: save input + response
+			messagesToSave = PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
+			log.Info("Saving final messages (first execution)", "messageCount", len(messagesToSave), "inputCount", len(state.inputMessages), "responseCount", len(responseMessages), "queryName", state.query.Name)
+		}
+		for i, msg := range messagesToSave {
+			msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+			role := "unknown"
+			if msgUnion.OfUser != nil {
+				role = "user"
+			} else if msgUnion.OfAssistant != nil {
+				role = "assistant"
+			} else if msgUnion.OfTool != nil {
+				role = "tool"
+			}
+			log.Info("Final message to save", "index", i, "role", role)
+		}
+		if saveErr := state.memory.AddMessages(ctx, state.query.Name, messagesToSave); saveErr != nil {
 			log.Error(saveErr, "failed to save messages to memory")
+		} else {
+			log.Info("Successfully saved final messages to memory")
 		}
 	}
 
@@ -693,24 +763,32 @@ func (h *Handler) handleApprovalRequired(
 func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
 	log := logf.FromContext(ctx)
 
+	log.Info("checkResumption called", "queryName", query.Name, "queryPhase", query.Status.Phase)
+
 	// Check if query has A2A metadata with taskID
 	if query.Status.Response == nil || query.Status.Response.A2A == nil || query.Status.Response.A2A.TaskID == "" {
+		log.Info("No A2A taskID found, not a resumption", "hasResponse", query.Status.Response != nil)
 		return false, nil
 	}
 
 	taskID := query.Status.Response.A2A.TaskID
 	taskName := fmt.Sprintf("a2a-task-%s", taskID)
+	log.Info("Found A2A taskID, checking task status", "taskId", taskID, "taskName", taskName)
 
 	var a2aTask arkv1alpha1.A2ATask
 	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: query.Namespace}, &a2aTask); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "failed to get A2ATask for resumption check")
 		}
+		log.Info("A2ATask not found or error fetching", "error", err)
 		return false, nil
 	}
 
+	log.Info("A2ATask status", "taskId", taskID, "phase", a2aTask.Status.Phase)
+
 	// Check if task is completed (approval) or failed with user rejection
 	if a2aTask.Status.Phase == arka2a.PhaseCompleted {
+		log.Info("A2ATask completed, resuming", "taskId", taskID)
 		return true, &a2aTask
 	}
 
@@ -720,6 +798,7 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 		return true, &a2aTask
 	}
 
+	log.Info("A2ATask not completed/rejected, not resuming", "taskId", taskID, "phase", a2aTask.Status.Phase)
 	return false, nil
 }
 
@@ -839,7 +918,7 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 
 	// Resume agent execution with tool results (may include approval successes or rejection errors)
 	log.Info("Resuming agent execution with tool results", "results", len(approvedResults), "decision", map[bool]string{true: "approved", false: "rejected"}[isApproved])
-	result, err := agent.ResumeFromApproval(ctx, toolCalls, approvedResults, state.memory, state.eventStream)
+	result, err := agent.ResumeFromApproval(ctx, toolCalls, approvedResults, state.memory, state.eventStream, state.inputMessages)
 	if err != nil {
 		// Check if this is another approval required error (cascading approval)
 		var approvalErr *ApprovalRequiredError
