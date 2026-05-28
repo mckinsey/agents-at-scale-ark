@@ -7,10 +7,12 @@ The change introduces an end-to-end file-input path that is composable with Ark'
 ## What Changes
 
 - A new pluggable **Workspace** resource type representing the canonical store of user-uploaded bytes. Implementations are installed via marketplace (e.g. file-gateway as S3-backed). 0 or 1 may be configured per namespace; the file-input feature is dark when none is installed.
-- A new pluggable **FileBackend** resource type representing a provider-side projection target (e.g. OpenAI Files API). 0+ may be installed; each is matched to Models that share its provider. Each backend owns its own `(workspace_uri, etag) → provider_file_id` cache.
-- **Query.spec.input** accepts A2A-shaped message parts (text + FilePart-with-URI), reusing the existing protocol primitive. URIs identify files in the configured Workspace (scheme `ark://workspace/<name>/<path>`).
-- **Memory storage** preserves FileParts faithfully so that sessions inherit attachment context automatically — replays trigger cache-hit re-projection rather than re-upload. The memory canonical shape becomes provider-agnostic; provider-formatted views are derived at executor time.
-- **Controller** translates FilePart URIs into provider-native parts at dispatch by calling the matching FileBackend. Executors receive clean provider-native messages. Failure to project rejects the Query with an actionable status condition.
+- A new pluggable **FileBackend** resource type representing a provider-side projection target (e.g. OpenAI Files API). 0+ may be installed; each is matched to Models that share its provider. Each backend owns its own `(workspace_uri, etag, destination_id) → provider_file_id` cache, where `destination_id` is the provider-specific identity (e.g., OpenAI organization id) resolved by the backend from the credentials it uses.
+- **Model.spec.fileBackend** — new optional field referencing a FileBackend by name; takes precedence over implicit provider-based matching.
+- **Query.spec.input** accepts A2A-shaped message parts (text + FilePart-with-URI), reusing the existing protocol primitive. URIs identify files in the configured Workspace (scheme `ark://workspace/<path>`).
+- **Memory FilePart preservation** — workspace references travel through memory as a custom `ark.file` content part inside the existing OpenAI message shape. The broker's storage contract is unchanged (`Message = unknown`). No persistence migration. Future v2 may adopt an A2A-parts-rich canonical memory shape when additional non-OpenAI executors need to read memory directly — see design.md for the trade-off.
+- **Controller is the single translator** — at dispatch, the controller resolves the target Model, picks the matching FileBackend, then walks every `ark.file` content part across both Query.spec.input AND the replayed memory history, calling the FileBackend for each. The fully-projected message stream is handed to the executor via A2A. Executors never see `ark.file`. This pulls memory READS for dispatch into the controller (the executor still writes assistant/tool outputs to memory unchanged — see design.md for the reversal of the c5dc1455 split's scope).
+- **Credentials never cross HTTP boundaries** — controller passes a Model reference (namespace + name) to the FileBackend; the FileBackend resolves the Model and its credentials itself using its own K8s API access, matching the existing executor pattern. No new credential exposure surface.
 - **ark-api** exposes file upload, list, and delete routes that dispatch to the configured Workspace and stitch FileBackend projection state into list responses so the dashboard can surface readiness per provider in a single call.
 - **Dashboard** chat composer gains an attach affordance backed by the workspace: pick an existing file or upload a new one (uploads land in the workspace and are referenced in the message in one motion). The attach flow eagerly triggers projection when the active agent's model provider is known.
 
@@ -24,18 +26,18 @@ The change introduces an end-to-end file-input path that is composable with Ark'
 
 ### Modified Capabilities
 
-None for v1. Query already accepts non-string input via `RawExtension`; memory storage changes are additive (richer canonical form, OpenAI-shape becomes a derived view).
+None for v1. Query already accepts non-string input via `RawExtension`; memory broker storage contract stays unchanged (the `ark.file` content part lives inside the existing message shape).
 
 ## Impact
 
-- `ark/api/v1alpha1/` — new `Workspace` and `FileBackend` types; Query input shape documented.
-- `ark/internal/controller/` — projection translation step in the dispatch path; FileBackend resolution by Model provider.
-- `ark/executors/completions/` — consume A2A FilePart inputs already translated to provider-native parts.
-- `services/ark-broker/` — memory broker stores canonical message shape; FileParts round-trip.
+- `ark/api/v1alpha1/` — new `Workspace` and `FileBackend` types; `Model.spec.fileBackend` optional field; Query input shape documented.
+- `ark/internal/controller/` — new projection step in the dispatch path: resolves Model + FileBackend, reads memory history, walks all `ark.file` parts, calls FileBackend per part, packages the projected message stream into the A2A dispatch.
+- `ark/executors/completions/` — memory READ for dispatch removed (history arrives via A2A from controller); memory WRITES for assistant/tool outputs unchanged; consumes pre-projected provider-native parts.
+- `services/ark-broker/` — broker storage contract unchanged. The `ark.file` content part travels as opaque data inside `Message = unknown`.
 - `services/ark-api/` — `/v1/files/*` routes dispatching to Workspace and stitching FileBackend state.
 - `services/ark-dashboard/` — chat composer attach UI + workspace picker.
-- `lib/ark-sdk/` — `ExecutorApp` base receives translated parts; helpers for custom executors that want to handle their own backends.
-- **Marketplace (separate repo)** — file-gateway gains a `Workspace` CR template; a new `openai-files` FileBackend service ships as the first projection backend.
+- `lib/ark-sdk/` — `ExecutorApp` base receives pre-projected messages via A2A; no FileBackend awareness needed in executor code.
+- **Marketplace (separate repo)** — file-gateway gains a `Workspace` CR template; a new `ark-openai-files` FileBackend service ships as the first projection backend, with K8s RBAC to read Models and resolve credentials in its namespace.
 
 Out of scope for v1: Agent- and Team-scoped attachments (deferred until per-message scope is real in production); cross-provider file portability beyond what falls out of memory replay; content-addressable storage.
 

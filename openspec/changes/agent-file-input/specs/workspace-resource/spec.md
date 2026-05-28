@@ -2,15 +2,15 @@
 
 ### Requirement: Workspace CRD represents a namespace's byte-store
 
-A new namespaced CRD `workspaces.ark.mckinsey.com` SHALL be defined. The CR's spec SHALL reference a service implementing the Workspace HTTP contract via a `ValueSource` `serviceRef`, and MAY include `spec.maxFileBytes` and `spec.denyList` (MIME-type security deny-list).
+A new namespaced CRD `workspaces.ark.mckinsey.com` SHALL be defined. The CR's `spec.address` SHALL be a `ValueSource` (the same shape used by `MCPServer.spec.address` and other Ark resources — accepting `value`, `valueFrom.configMapKeyRef`, `valueFrom.secretKeyRef`, or `valueFrom.serviceRef`). The spec MAY include `spec.maxFileBytes` and `spec.denyList` (MIME-type security deny-list).
 
 #### Scenario: Valid Workspace CR accepted
 
-- **WHEN** a `Workspace` is created with a valid `spec.address.valueFrom.serviceRef` pointing at a Service in the same namespace
+- **WHEN** a `Workspace` is created with a valid `spec.address` (e.g., `valueFrom.serviceRef` pointing at a Service in the same namespace, or a literal `value` URL)
 - **THEN** the webhook SHALL accept the resource
-- **AND** the controller SHALL set `status.conditions[Ready]=True` once the referenced Service is reachable
+- **AND** the controller SHALL set `status.conditions[Ready]=True` once the referenced address is reachable
 
-#### Scenario: Workspace without serviceRef rejected
+#### Scenario: Workspace without resolvable address rejected
 
 - **WHEN** a `Workspace` is created without a resolvable address
 - **THEN** the webhook SHALL reject the resource with an error naming the missing field
@@ -30,6 +30,12 @@ A validating webhook SHALL reject creation of a second `Workspace` resource in a
 - **WHEN** the existing "primary" `Workspace` is deleted
 - **AND** a new `Workspace` "secondary" is created in the same namespace
 - **THEN** the webhook SHALL accept the creation
+
+#### Scenario: Webhook race for duplicate Workspaces resolved defensively
+
+- **WHEN** two `Workspace` CRs somehow exist concurrently in the same namespace (e.g., webhook unavailable during creation, manual apply bypassing the gate)
+- **THEN** the controller SHALL select the Workspace with the oldest `creationTimestamp` as the active one
+- **AND** SHALL emit a Kubernetes Event on the loser referencing the winner and recommending deletion of the duplicate
 
 ### Requirement: Workspace HTTP contract
 
@@ -71,35 +77,27 @@ Files in a workspace SHALL be addressable using the URI form `ark://workspace/<p
 - **THEN** the controller SHALL resolve the URI against namespace "X" only
 - **AND** the controller SHALL NOT attempt to resolve URIs against other namespaces
 
-### Requirement: Built-in default workspace when no CR exists
+### Requirement: File feature requires a Workspace CR
 
-When no `Workspace` CR exists in a namespace, ark-api SHALL serve `/v1/files` requests using a built-in default workspace. The built-in SHALL be discoverable to callers via the same routes; SHALL surface a "default workspace; install file-gateway for persistent storage" banner field in list responses; AND SHALL be transparently replaced when a `Workspace` CR is later created.
+ark-api SHALL NOT provide a built-in default workspace. When no `Workspace` CR exists in a namespace, `/v1/files` endpoints SHALL return HTTP 404 with an explanatory body directing the caller to install a workspace implementation from the marketplace (e.g., file-gateway).
 
-The built-in workspace's durability characteristics (in-memory, emptyDir, or PVC) are an implementation detail; the contract guarantees only that uploads, listings, and downloads work for the lifetime of a single ark-api instance, with a small total capacity cap.
-
-#### Scenario: Files endpoint works in a namespace without Workspace CR
+#### Scenario: Files endpoint returns 404 without Workspace CR
 
 - **WHEN** a namespace has no `Workspace` CR
-- **AND** a caller POSTs to `/v1/files`
-- **THEN** ark-api SHALL accept the upload using the built-in default workspace
-- **AND** the response SHALL include a banner indicating the default workspace is in use
+- **AND** a caller requests any `/v1/files` route (LIST, POST, GET, DELETE, prewarm)
+- **THEN** ark-api SHALL return HTTP 404
+- **AND** the response body SHALL include guidance pointing at marketplace install instructions
 
-#### Scenario: Installing a Workspace CR transparently replaces the default
+#### Scenario: Installing a Workspace CR enables the file feature
 
 - **WHEN** a `Workspace` CR is created in a namespace that previously had no CR
+- **AND** the Workspace's referenced service becomes reachable (`status.conditions[Ready]=True`)
 - **AND** ark-api receives a subsequent `/v1/files` request in that namespace
-- **THEN** ark-api SHALL route the request to the new Workspace's service
-- **AND** SHALL NOT route to the built-in default workspace
-
-#### Scenario: Built-in size cap enforced
-
-- **WHEN** the built-in default workspace has reached its configured total capacity
-- **AND** a caller attempts a further upload
-- **THEN** ark-api SHALL return HTTP 507 (Insufficient Storage) with a message recommending file-gateway installation
+- **THEN** ark-api SHALL route the request to the Workspace's service
 
 ### Requirement: ark-api enforces path and size validation
 
-ark-api SHALL sanitize and validate file paths and sizes before forwarding to any workspace (built-in or external). The following rules SHALL apply:
+ark-api SHALL sanitize and validate file paths and sizes before forwarding to any workspace. The following rules SHALL apply:
 
 - Reject leading `/`
 - Reject `..` and `.` as path segments
