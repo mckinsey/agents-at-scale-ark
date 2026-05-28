@@ -300,15 +300,16 @@ func (a *Agent) ResumeFromApproval(ctx context.Context, toolCalls []openai.ChatC
 	// Debug: log message roles for visibility
 	for i, msg := range agentMessages {
 		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
-		role := "unknown"
-		if msgUnion.OfUser != nil {
-			role = "user"
-		} else if msgUnion.OfAssistant != nil {
-			role = "assistant"
-		} else if msgUnion.OfSystem != nil {
-			role = "system"
-		} else if msgUnion.OfTool != nil {
-			role = "tool"
+		role := RoleUnknown
+		switch {
+		case msgUnion.OfUser != nil:
+			role = RoleUser
+		case msgUnion.OfAssistant != nil:
+			role = RoleAssistant
+		case msgUnion.OfSystem != nil:
+			role = RoleSystem
+		case msgUnion.OfTool != nil:
+			role = RoleTool
 		}
 		log.Info("Memory message", "index", i, "role", role)
 	}

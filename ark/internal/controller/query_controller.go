@@ -206,14 +206,7 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 		// Note: Don't clear taskID here - executor needs it to detect resumption
 		// The executor will clear it after processing (handler.go line 165)
 
-		// Clear operation cache to allow new execution goroutine for resumption
-		nsName := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
-		if cancel, ok := r.operations.LoadAndDelete(nsName); ok {
-			if cancelFunc, ok := cancel.(context.CancelFunc); ok {
-				cancelFunc()
-			}
-			log.Info("Cleared cached operation for resumption", "query", obj.Name)
-		}
+		r.clearOperationCacheForResumption(ctx, obj, "task completed")
 
 		if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
 			return ctrl.Result{}, err
@@ -231,14 +224,7 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 			// Note: Don't clear taskID here - executor needs it to detect resumption
 			// The executor will clear it after processing (handler.go line 165)
 
-			// Clear operation cache to allow new execution goroutine for resumption
-			nsName := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
-			if cancel, ok := r.operations.LoadAndDelete(nsName); ok {
-				if cancelFunc, ok := cancel.(context.CancelFunc); ok {
-					cancelFunc()
-				}
-				log.Info("Cleared cached operation for resumption after rejection", "query", obj.Name)
-			}
+			r.clearOperationCacheForResumption(ctx, obj, "user rejection")
 
 			if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
 				return ctrl.Result{}, err
@@ -977,5 +963,17 @@ func (r *QueryReconciler) findQueriesForA2ATask(ctx context.Context, obj client.
 				Namespace: task.Spec.QueryRef.Namespace,
 			},
 		},
+	}
+}
+
+// clearOperationCacheForResumption clears the operation cache to allow new execution goroutine for resumption
+func (r *QueryReconciler) clearOperationCacheForResumption(ctx context.Context, obj *arkv1alpha1.Query, reason string) {
+	log := logf.FromContext(ctx)
+	nsName := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
+	if cancel, ok := r.operations.LoadAndDelete(nsName); ok {
+		if cancelFunc, ok := cancel.(context.CancelFunc); ok {
+			cancelFunc()
+		}
+		log.Info("Cleared cached operation for resumption", "query", obj.Name, "reason", reason)
 	}
 }
