@@ -286,10 +286,10 @@ describe('ApprovalNotification', () => {
       await user.click(screen.getByRole('button', { name: /reject/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/Tool execution rejected/i)).toBeInTheDocument();
+        expect(screen.getByText(/Tool execution rejected by user/i)).toBeInTheDocument();
       });
 
-      const container = screen.getByText(/Tool execution rejected/i)
+      const container = screen.getByText(/Tool execution rejected by user/i)
         .parentElement?.parentElement;
       expect(container?.className).toContain('border-red');
     });
