@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { Edit } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 import { Button } from './button';
@@ -378,35 +377,27 @@ export function ParameterEditor({
   const compactParameterRows =
     parameters.length > 0 ? (
       <div className="flex flex-col gap-2">
-        {/* Column headers */}
         <div className="flex items-center gap-3">
           <div className="flex h-10 flex-1 items-start border-b border-white/[0.16] pt-3">
             <span className="text-fg-secondary text-sm leading-4 tracking-[-0.112px]">
               Name (A-Z)
             </span>
           </div>
-          <div className="flex h-10 w-20 items-start border-b border-white/[0.16] pt-3">
-            <span className="text-fg-secondary text-sm leading-4 tracking-[-0.112px]">
-              Actions
-            </span>
-          </div>
+          <div className="flex h-10 w-8 shrink-0 items-start border-b border-white/[0.16]" />
         </div>
 
         {parameters.map((param, index) => {
-          const isEditing = editingIndex === index;
           const isDuplicate =
             !!param.name &&
             parameters.filter(p => p.name === param.name).length > 1;
           const isUnsupportedSource =
             param.source === 'configMapKeyRef' ||
             param.source === 'secretKeyRef';
-          const isQueryParam = param.source === 'queryParameter';
-          const showOverrideField = isQueryParam && param.overrideQueryName;
 
           return (
             <div key={index} className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 flex-1 items-center border-b border-white/[0.16]">
+                <div className="flex h-10 flex-1 items-center gap-2 border-b border-white/[0.16]">
                   <input
                     type="text"
                     value={param.name}
@@ -417,28 +408,27 @@ export function ParameterEditor({
                     disabled={disabled}
                     aria-label={`Parameter ${index + 1} name`}
                     className={cn(
-                      'text-fg-primary placeholder:text-fg-secondary w-full bg-transparent text-sm leading-4 tracking-[-0.112px] outline-none disabled:cursor-not-allowed disabled:opacity-50',
+                      'text-fg-primary placeholder:text-fg-secondary min-w-0 flex-1 bg-transparent text-sm leading-4 tracking-[-0.112px] outline-none disabled:cursor-not-allowed disabled:opacity-50',
                       isDuplicate &&
                         'text-status-error placeholder:text-status-error',
                     )}
                   />
+                  {isUnsupportedSource && (
+                    <span
+                      className="text-status-warning inline-flex items-center gap-1 text-xs"
+                      title={
+                        param.source === 'configMapKeyRef'
+                          ? `ConfigMap: ${param.configMapRef?.name || '?'}/${param.configMapRef?.key || '?'}`
+                          : `Secret: ${param.secretRef?.name || '?'}/${param.secretRef?.key || '?'}`
+                      }>
+                      <Lock className="size-3 shrink-0" />
+                      {param.source === 'configMapKeyRef'
+                        ? 'ConfigMap'
+                        : 'Secret'}
+                    </span>
+                  )}
                 </div>
-                <div className="flex h-10 w-20 items-center justify-end gap-3 border-b border-white/[0.16]">
-                  <button
-                    type="button"
-                    onClick={() => setEditingIndex(isEditing ? null : index)}
-                    disabled={disabled}
-                    aria-label={
-                      isEditing ? 'Collapse parameter editor' : 'Edit parameter'
-                    }
-                    className={cn(
-                      'transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-                      isEditing
-                        ? 'text-fg-primary'
-                        : 'text-fg-secondary hover:text-fg-primary',
-                    )}>
-                    <Edit className="size-4" />
-                  </button>
+                <div className="flex h-10 w-8 shrink-0 items-center justify-center border-b border-white/[0.16]">
                   <button
                     type="button"
                     onClick={() => compactRemoveParameter(index)}
@@ -449,113 +439,6 @@ export function ParameterEditor({
                   </button>
                 </div>
               </div>
-
-              {isEditing && (
-                <div className="bg-fill-onsurface-ui-3 flex flex-col gap-3 p-3">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-fg-secondary text-[10px] tracking-wide uppercase">
-                      Source
-                    </Label>
-                    <Select
-                      value={param.source}
-                      onValueChange={value =>
-                        updateParameter(index, {
-                          source: value as ParameterSource,
-                        })
-                      }
-                      disabled={disabled || isUnsupportedSource}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="value">
-                          <span className="flex items-center gap-1.5">
-                            <Type className="h-3 w-3" />
-                            Direct value
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="queryParameter">
-                          <span className="flex items-center gap-1.5">
-                            <Variable className="h-3 w-3" />
-                            Query parameter
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {isUnsupportedSource ? (
-                    <div className="bg-status-warning/10 flex items-center gap-2 px-3 py-2">
-                      <Lock className="text-status-warning size-4 shrink-0" />
-                      <p className="text-status-warning text-xs">
-                        {param.source === 'configMapKeyRef'
-                          ? `ConfigMap: ${param.configMapRef?.name || '?'}/${param.configMapRef?.key || '?'}`
-                          : `Secret: ${param.secretRef?.name || '?'}/${param.secretRef?.key || '?'}`}
-                      </p>
-                    </div>
-                  ) : param.source === 'value' ? (
-                    <div className="flex flex-col gap-1">
-                      <Label className="text-fg-secondary text-[10px] tracking-wide uppercase">
-                        Value
-                      </Label>
-                      <Input
-                        value={param.value || ''}
-                        onChange={e =>
-                          updateParameter(index, { value: e.target.value })
-                        }
-                        placeholder="Static value"
-                        disabled={disabled}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                  ) : showOverrideField ? (
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-fg-secondary text-[10px] tracking-wide uppercase">
-                          Query parameter name
-                        </Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => resetOverride(index)}
-                          disabled={disabled}
-                          className="text-fg-secondary hover:text-fg-primary h-5 px-1.5 text-[10px]">
-                          <RotateCcw className="mr-1 h-3 w-3" />
-                          Reset
-                        </Button>
-                      </div>
-                      <Input
-                        value={param.queryParameterName || ''}
-                        onChange={e =>
-                          updateParameter(index, {
-                            queryParameterName: e.target.value,
-                          })
-                        }
-                        placeholder="Name in query.spec.parameters"
-                        disabled={disabled}
-                        className="h-8 font-mono text-sm"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <p className="text-fg-secondary text-xs">
-                        Will use parameter name in query.spec.parameters
-                      </p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => enableOverride(index)}
-                        disabled={disabled || !param.name}
-                        className="text-fg-secondary hover:text-fg-primary h-6 px-2 text-[10px]">
-                        <Settings2 className="mr-1 h-3 w-3" />
-                        Override
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}

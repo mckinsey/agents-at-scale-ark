@@ -18,6 +18,7 @@ import {
   Database,
   Dns,
   Earthquake,
+  Handyman,
   Help,
   InsertDriveFile,
   KeyboardDoubleArrowLeft,
@@ -353,6 +354,16 @@ export function AppSidebar() {
                   tooltip="MCPs">
                   <PlugConnect />
                   <span>MCPs</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('tools')}
+                  isActive={getCurrentSection() === 'tools'}
+                  tooltip="Tools">
+                  <Handyman />
+                  <span>Tools</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 

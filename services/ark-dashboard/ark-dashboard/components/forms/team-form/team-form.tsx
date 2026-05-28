@@ -4,15 +4,17 @@ import { ArrowLeft, Code, Save, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
 import { YamlViewer } from '@/components/common/yaml-viewer';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { ChevronLeft } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Select,
   SelectContent,
@@ -140,7 +142,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   if (isViewing && !team) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-muted-foreground">Team not found</div>
+        <div className="text-fg-secondary">Team not found</div>
       </div>
     );
   }
@@ -149,7 +151,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     <>
       <BasicInfoSection form={form} mode={mode} disabled={saving} />
 
-      <StrategySection form={form} agents={agents} selectedMembers={selectedMembers} disabled={saving} />
+      <StrategySection
+        form={form}
+        agents={agents}
+        selectedMembers={selectedMembers}
+        disabled={saving}
+      />
 
       <MembersSection
         agents={agents}
@@ -182,16 +189,68 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         onGraphEdgesChange={setGraphEdges}
         disabled={saving}
       />
-
     </>
   );
+
+  if (isCreating) {
+    return (
+      <div className="absolute inset-0 flex flex-col gap-5 overflow-hidden px-12 pt-10">
+        <header className="flex flex-none flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <nav
+              aria-label="Breadcrumb"
+              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+              <NamespacedLink
+                href="/teams"
+                className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+                <IconShell size="sm" className="opacity-100">
+                  <ChevronLeft />
+                </IconShell>
+                Teams
+              </NamespacedLink>
+              <span aria-hidden="true" className="text-fg-secondary">
+                /
+              </span>
+              <span aria-current="page" className="text-fg-secondary">
+                Create team
+              </span>
+            </nav>
+            <div className="flex items-center gap-2">
+              <NamespacedLink href="/teams">
+                <Button variant="outline">Cancel</Button>
+              </NamespacedLink>
+              <Button
+                onClick={form.handleSubmit(onSubmit)}
+                disabled={saving}>
+                {saving && <Spinner className="mr-2 h-4 w-4" />}
+                Create
+              </Button>
+            </div>
+          </div>
+          <h1 className="text-fg-primary text-xl leading-7">
+            New team configuration
+          </h1>
+        </header>
+
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex min-h-0 flex-1 overflow-auto pb-6">
+            <div className="flex w-full max-w-[720px] flex-col gap-6">
+              {formSections}
+            </div>
+          </form>
+        </Form>
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       <div className="flex-none">
         <PageHeader
           breadcrumbs={breadcrumbs}
-          currentPage={isCreating ? 'New Team' : team?.name || 'Team'}
+          currentPage={team?.name || 'Team'}
           actions={
             isViewing ? (
               <div className="flex items-center gap-2">
@@ -218,31 +277,13 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                   Delete
                 </Button>
               </div>
-            ) : isCreating ? (
-              <div className="flex items-center gap-2">
-                <NamespacedLink href="/teams">
-                  <Button variant="outline">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back
-                  </Button>
-                </NamespacedLink>
-                <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>
-                  {saving ? (
-                    <Spinner className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Create Team
-                </Button>
-              </div>
             ) : null
           }
         />
       </div>
 
-      {isViewing ? (
+      {isViewing && (
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          {/* Left Panel - Configuration */}
           <div
             className={`flex h-full min-h-0 flex-col overflow-hidden border-r transition-all duration-300 ${
               isLeftPanelCollapsed ? 'w-0 border-r-0' : 'w-1/2'
@@ -253,7 +294,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                   <Settings className="text-muted-foreground h-4 w-4" />
                   <Select
                     value={teamName}
-                    onValueChange={(value) =>
+                    onValueChange={value =>
                       push(`/teams/${encodeURIComponent(value as string)}`)
                     }>
                     <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
@@ -303,7 +344,6 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             onToggle={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
           />
 
-          {/* Right Panel - Chat */}
           <div
             className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
               isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
@@ -317,24 +357,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             />
           </div>
         </div>
-      ) : isCreating ? (
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-              <div className="bg-muted/30 flex items-center gap-2 border-b px-4 py-3">
-                <Settings className="text-muted-foreground h-4 w-4" />
-                <span className="text-sm font-medium">Team Configuration</span>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="space-y-4 p-4">{formSections}</div>
-              </div>
-            </div>
-          </form>
-        </Form>
-      ) : null}
+      )}
 
       {team && (
         <ConfirmationDialog

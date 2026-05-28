@@ -225,6 +225,10 @@ export function useAgentForm({
 
           await agentsService.update(agent.name, updateData);
           toast.success('Agent updated successfully');
+
+          form.reset(values);
+          setInitialTools(selectedTools);
+          setInitialParameters(parameters);
         }
 
         onSuccessRef.current?.();
@@ -236,7 +240,16 @@ export function useAgentForm({
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi, queryClient, namespace],
+    [
+      mode,
+      agent,
+      selectedTools,
+      parameters,
+      mapParametersToApi,
+      queryClient,
+      namespace,
+      form,
+    ],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {

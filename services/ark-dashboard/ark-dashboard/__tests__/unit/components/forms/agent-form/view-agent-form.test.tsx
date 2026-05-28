@@ -36,21 +36,6 @@ vi.mock('@/components/namespaced-link', () => ({
   ),
 }));
 
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: ({
-    actions,
-    currentPage,
-  }: {
-    actions?: React.ReactNode;
-    currentPage?: string;
-  }) => (
-    <div data-testid="page-header">
-      <span>{currentPage}</span>
-      {actions}
-    </div>
-  ),
-}));
-
 vi.mock('@/components/common/panel-toggle-button', () => ({
   PanelToggleButton: () => <button data-testid="panel-toggle" />,
 }));
@@ -59,8 +44,8 @@ vi.mock('@/components/common/yaml-viewer', () => ({
   YamlViewer: () => <div data-testid="yaml-viewer" />,
 }));
 
-vi.mock('@/components/chat/embedded-chat-panel', () => ({
-  EmbeddedChatPanel: () => <div data-testid="embedded-chat-panel" />,
+vi.mock('@/components/chat/agent-chat-panel', () => ({
+  AgentChatPanel: () => <div data-testid="agent-chat-panel" />,
 }));
 
 vi.mock('@/components/ui/prompt-editor', () => ({
@@ -72,10 +57,7 @@ vi.mock('@/components/ui/parameter-editor', () => ({
 }));
 
 vi.mock('@/components/forms/agent-form/sections', () => ({
-  BasicInfoSection: () => <div data-testid="basic-info-section" />,
-  ModelConfigSection: () => <div data-testid="model-config-section" />,
   SkillsDisplaySection: () => <div data-testid="skills-display-section" />,
-  ToolSelectionSection: () => <div data-testid="tool-selection-section" />,
 }));
 
 vi.mock('@/components/ui/form', () => ({
@@ -83,8 +65,18 @@ vi.mock('@/components/ui/form', () => ({
   FormField: ({
     render,
   }: {
-    render: (args: { field: { value: string; onChange: () => void } }) => React.ReactNode;
-  }) => <>{render({ field: { value: '', onChange: () => {} } })}</>,
+    render: (args: {
+      field: { value: string; onChange: () => void };
+      fieldState: { error: undefined };
+    }) => React.ReactNode;
+  }) => (
+    <>
+      {render({
+        field: { value: '', onChange: () => {} },
+        fieldState: { error: undefined },
+      })}
+    </>
+  ),
   FormItem: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormControl: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormMessage: () => null,
@@ -145,11 +137,15 @@ describe('ViewAgentForm', () => {
   it('renders the form sections + chat panel for non-A2A agents', () => {
     useAgentFormMock.mockReturnValue(buildHook());
     render(<ViewAgentForm mode="view" agentName="a1" />);
-    expect(screen.getByTestId('basic-info-section')).toBeInTheDocument();
-    expect(screen.getByTestId('model-config-section')).toBeInTheDocument();
-    expect(screen.getByTestId('tool-selection-section')).toBeInTheDocument();
-    expect(screen.getByTestId('embedded-chat-panel')).toBeInTheDocument();
-    expect(screen.queryByTestId('skills-display-section')).not.toBeInTheDocument();
+    expect(screen.getByText('Description')).toBeInTheDocument();
+    expect(screen.getByText('Model')).toBeInTheDocument();
+    expect(screen.getByText('Tools')).toBeInTheDocument();
+    expect(screen.getByText('Agent Prompt')).toBeInTheDocument();
+    expect(screen.getByTestId('parameter-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-chat-panel')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('skills-display-section'),
+    ).not.toBeInTheDocument();
   });
 
   it('renders Skills section for A2A agents', () => {
@@ -158,7 +154,7 @@ describe('ViewAgentForm', () => {
     );
     render(<ViewAgentForm mode="view" agentName="a2a" />);
     expect(screen.getByTestId('skills-display-section')).toBeInTheDocument();
-    expect(screen.queryByTestId('tool-selection-section')).not.toBeInTheDocument();
+    expect(screen.queryByText('Agent Prompt')).not.toBeInTheDocument();
   });
 
   it('disables Save Changes when hasChanges is false', () => {

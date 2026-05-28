@@ -21,6 +21,8 @@ export interface PromptEditorProps {
    *   38% white placeholder, cyan `{{param}}` highlights, resize-handle footer.
    */
   variant?: 'default' | 'compact';
+  showSublabel?: boolean;
+  showFooter?: boolean;
 }
 
 export interface PromptEditorRef {
@@ -43,6 +45,8 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
       textareaClassName,
       highlightClassName,
       variant = 'default',
+      showSublabel = true,
+      showFooter = true,
     },
     ref,
   ) {
@@ -122,10 +126,11 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
             className,
           )}>
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-clip px-3 pt-3">
-            {/* "txt" sublabel */}
-            <p className="text-fg-secondary text-xs leading-4 tracking-[0.024px]">
-              txt
-            </p>
+            {showSublabel && (
+              <p className="text-fg-secondary text-xs leading-4 tracking-[0.024px]">
+                txt
+              </p>
+            )}
 
             {/* Textarea + highlight layers — overlay stack */}
             <div className="relative min-h-0 w-full flex-1">
@@ -166,32 +171,33 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
             </div>
           </div>
 
-          {/* Footer with resize-handle indicator — figma 1894:42294 */}
-          <div className="flex h-4 items-end justify-end overflow-clip pr-1 pb-1">
-            <svg
-              className="text-white/[0.38] size-2.5"
-              viewBox="0 0 10 10"
-              aria-hidden="true">
-              <line
-                x1="9.5"
-                y1="6"
-                x2="6"
-                y2="9.5"
-                stroke="currentColor"
-                strokeWidth="0.8"
-                strokeLinecap="square"
-              />
-              <line
-                x1="9.5"
-                y1="2"
-                x2="2"
-                y2="9.5"
-                stroke="currentColor"
-                strokeWidth="0.8"
-                strokeLinecap="square"
-              />
-            </svg>
-          </div>
+          {showFooter && (
+            <div className="flex h-4 items-end justify-end overflow-clip pr-1 pb-1">
+              <svg
+                className="text-white/[0.38] size-2.5"
+                viewBox="0 0 10 10"
+                aria-hidden="true">
+                <line
+                  x1="9.5"
+                  y1="6"
+                  x2="6"
+                  y2="9.5"
+                  stroke="currentColor"
+                  strokeWidth="0.8"
+                  strokeLinecap="square"
+                />
+                <line
+                  x1="9.5"
+                  y1="2"
+                  x2="2"
+                  y2="9.5"
+                  stroke="currentColor"
+                  strokeWidth="0.8"
+                  strokeLinecap="square"
+                />
+              </svg>
+            </div>
+          )}
         </div>
       );
     }
