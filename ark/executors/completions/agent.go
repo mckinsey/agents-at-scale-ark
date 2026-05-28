@@ -477,7 +477,13 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 }
 
 // reconstructMessagesForResumption fetches memory messages and appends tool call and results
-func (a *Agent) reconstructMessagesForResumption(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, approvedResults []ToolResult, memory MemoryInterface, originalInput []Message) ([]Message, []Message, error) {
+func (a *Agent) reconstructMessagesForResumption(
+	ctx context.Context,
+	toolCalls []openai.ChatCompletionMessageToolCall,
+	approvedResults []ToolResult,
+	memory MemoryInterface,
+	originalInput []Message,
+) ([]Message, []Message, error) {
 	log := logf.FromContext(ctx)
 
 	// Get existing messages from memory
@@ -525,7 +531,13 @@ func (a *Agent) reconstructMessagesForResumption(ctx context.Context, toolCalls 
 }
 
 // runAgenticLoopFromResumption continues the agentic loop after approval resumption
-func (a *Agent) runAgenticLoopFromResumption(ctx context.Context, agentMessages []Message, newMessages []Message, eventStream EventStreamInterface, tools []openai.ChatCompletionToolParam) (*ExecutionResult, error) {
+func (a *Agent) runAgenticLoopFromResumption(
+	ctx context.Context,
+	agentMessages []Message,
+	newMessages []Message,
+	eventStream EventStreamInterface,
+	tools []openai.ChatCompletionToolParam,
+) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 
 	for {

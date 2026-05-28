@@ -936,7 +936,12 @@ func (r *QueryReconciler) initializeQueryExecutionContext(ctx context.Context, o
 }
 
 // handleQueryDispatch resolves target and address, sends the query, and processes the response
-func (r *QueryReconciler) handleQueryDispatch(opCtx context.Context, obj *arkv1alpha1.Query, dispatchSpan telemetry.Span, impersonatedClient client.Client) error {
+func (r *QueryReconciler) handleQueryDispatch(
+	opCtx context.Context,
+	obj *arkv1alpha1.Query,
+	dispatchSpan telemetry.Span,
+	impersonatedClient client.Client,
+) error {
 	log := logf.FromContext(opCtx)
 	startTime := time.Now()
 
