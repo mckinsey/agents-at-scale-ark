@@ -1,11 +1,15 @@
-import { Search, Zap } from 'lucide-react';
+import { Cog, Search, Zap } from 'lucide-react';
 
-export type SettingPage = 'queries' | 'experimental-features';
+export type SettingPage =
+  | 'queries'
+  | 'experimental-features'
+  | 'execution-engines';
 
 export type SettingMenuItem = {
   key: SettingPage;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  experimental?: boolean;
 };
 
 export type SettingsSection = {
@@ -28,6 +32,12 @@ export const settingsSections: SettingsSection[] = [
         key: 'experimental-features',
         label: 'Experimental features',
         icon: Zap,
+      },
+      {
+        key: 'execution-engines',
+        label: 'Execution Engines',
+        icon: Cog,
+        experimental: true,
       },
     ],
   },

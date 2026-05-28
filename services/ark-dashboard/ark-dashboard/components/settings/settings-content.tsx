@@ -4,6 +4,7 @@ import { Suspense, useMemo } from 'react';
 
 import type { SettingPage } from './settings-types';
 
+import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { QueriesSettings } from './queries-settings';
 
@@ -26,6 +27,10 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       'experimental-features': {
         title: 'Experimental features',
         component: <ExperimentalFeaturesSettings />,
+      },
+      'execution-engines': {
+        title: 'Execution Engines',
+        component: <ExecutionEnginesSettings />,
       },
     }),
     [],

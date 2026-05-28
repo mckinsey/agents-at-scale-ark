@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,20 @@ type SettingsSidebarProps = {
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   const router = useRouter();
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
+  const isExperimentalExecutionEngineEnabled = useAtomValue(
+    isExperimentalExecutionEngineEnabledAtom,
+  );
+
+  const isExperimentalEnabled: Record<string, boolean> = {
+    'execution-engines': isExperimentalExecutionEngineEnabled,
+  };
+
+  const visibleSections = settingsSections.map(section => ({
+    ...section,
+    items: section.items.filter(
+      item => !item.experimental || isExperimentalEnabled[item.key],
+    ),
+  }));
 
   const handleSettingClick = (settingKey: SettingPage) => {
     router.replace(`/settings/${settingKey}`);
@@ -38,7 +53,7 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
       </div>
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-6">
-          {settingsSections.map(section => (
+          {visibleSections.map(section => (
             <div key={section.sectionKey} className="space-y-2">
               {section.sectionLabel && (
                 <div className="text-sidebar-foreground px-2 text-xs">
