@@ -2,8 +2,12 @@ export default {
   '---platform-ops': { type: 'separator', title: 'Platform operations' },
   provisioning: 'Cloud Infrastructure Provisioning',
   'deploying-ark': 'Deploying Ark',
+  'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
   monitoring: 'Monitoring',
+
+  '---integrations': { type: 'separator', title: 'Integrations' },
+  'mcp-oauth-callback': 'MCP OAuth Callback',
 
   '---cicd': { type: 'separator', title: 'CI/CD and supply chain' },
   'build-pipelines': 'Build Pipelines',

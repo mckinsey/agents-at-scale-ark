@@ -1,6 +1,6 @@
 'use client';
 
-import { RotateCcw, Send } from 'lucide-react';
+import { RotateCcw, Send, Square } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
@@ -47,6 +47,7 @@ export function ChatPanel({
     messagesEndRef,
     tokenUsage,
     messageTokenUsage,
+    cancelQuery,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -115,14 +116,24 @@ export function ChatPanel({
               disabled={isProcessing}
             />
           </div>
-          <Button
-            onClick={handleSendMessage}
-            disabled={!currentMessage.trim() || isProcessing}
-            size="sm"
-            variant="default"
-            aria-label="Send message">
-            <Send className="h-4 w-4" />
-          </Button>
+          {isProcessing ?
+            <Button
+              onClick={cancelQuery}
+              size="sm"
+              variant="destructive"
+              aria-label="Stop conversation"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+            : <Button
+              onClick={handleSendMessage}
+              disabled={!currentMessage.trim()}
+              size="sm"
+              variant="default"
+              aria-label="Send message">
+              <Send className="h-4 w-4" />
+            </Button>
+          }
         </div>
 
         <Separator />

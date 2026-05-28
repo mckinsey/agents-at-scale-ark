@@ -16,7 +16,7 @@ import (
 
 // SelectorAgentInterface defines the interface for selector agents (used for testing)
 type SelectorAgentInterface interface {
-	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
+	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	FullName() string
 	GetToolRegistry() *ToolRegistry
 }
@@ -48,7 +48,7 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
-func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
@@ -279,7 +279,7 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 	}
 	ctx = t.eventingRecorder.Start(ctx, "TeamMember", fmt.Sprintf("Executing member %s in team %s", member.GetName(), t.Name), operationData)
 
-	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
+	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream, ExecuteOptions{})
 	if err != nil {
 		if result != nil {
 			messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())

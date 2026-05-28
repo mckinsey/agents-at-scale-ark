@@ -1,11 +1,12 @@
-import { SessionsBroker } from '../src/sessions-broker.js';
+import {createLogger} from '../src/logging/logger.js';
+import {SessionsBroker} from '../src/brokers/sessions-broker.js';
 
 describe('SessionsBroker', () => {
   let broker: SessionsBroker;
 
   beforeEach(() => {
     jest.useFakeTimers();
-    broker = new SessionsBroker();
+    broker = new SessionsBroker(createLogger({level: 'silent', pretty: false}));
   });
 
   afterEach(() => {
@@ -91,6 +92,54 @@ describe('SessionsBroker', () => {
 
       const query = broker.getSession('sess-1')!.queries['query-1'];
       expect(query.phase).toBe('error');
+    });
+
+    test('sets canceled phase on cancellation event', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionCanceled',
+      });
+
+      const query = broker.getSession('sess-1')!.queries['query-1'];
+      expect(query.phase).toBe('canceled');
+      expect(query.completedAt).toBeDefined();
+      expect(query.error).toBeUndefined();
+    });
+
+    test('sets canceled phase on reason containing Canceled', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'AgentExecutionCanceled',
+      });
+
+      const query = broker.getSession('sess-1')!.queries['query-1'];
+      expect(query.phase).toBe('canceled');
+    });
+
+    test('does not regress error phase to canceled', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+        error: 'something broke',
+      });
+
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionCanceled',
+      });
+
+      const query = broker.getSession('sess-1')!.queries['query-1'];
+      expect(query.phase).toBe('error');
+      expect(query.error).toBe('something broke');
     });
 
     test('ignores events without sessionId', () => {
@@ -202,12 +251,12 @@ describe('SessionsBroker', () => {
   describe('getAll', () => {
     test('returns empty store initially', () => {
       const store = broker.getAll();
-      expect(store).toEqual({ sessions: {} });
+      expect(store).toEqual({sessions: {}});
     });
 
     test('returns populated store after events', () => {
-      broker.applyEvent({ sessionId: 's1', queryName: 'q1' });
-      broker.applyEvent({ sessionId: 's2', queryName: 'q2' });
+      broker.applyEvent({sessionId: 's1', queryName: 'q1'});
+      broker.applyEvent({sessionId: 's2', queryName: 'q2'});
 
       const store = broker.getAll();
       expect(Object.keys(store.sessions)).toHaveLength(2);
@@ -218,7 +267,7 @@ describe('SessionsBroker', () => {
 
   describe('getSession', () => {
     test('returns session by id', () => {
-      broker.applyEvent({ sessionId: 'sess-1', queryName: 'q1' });
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
 
       const session = broker.getSession('sess-1');
       expect(session).toBeDefined();
@@ -253,8 +302,8 @@ describe('SessionsBroker', () => {
 
   describe('delete', () => {
     test('clears all sessions', () => {
-      broker.applyEvent({ sessionId: 's1', queryName: 'q1' });
-      broker.applyEvent({ sessionId: 's2', queryName: 'q2' });
+      broker.applyEvent({sessionId: 's1', queryName: 'q1'});
+      broker.applyEvent({sessionId: 's2', queryName: 'q2'});
 
       broker.delete();
 
@@ -265,34 +314,34 @@ describe('SessionsBroker', () => {
 
   describe('subscribe', () => {
     test('emits on applyEvent', () => {
-      const received: Array<{ sessionId: string; queryName: string }> = [];
+      const received: Array<{sessionId: string; queryName: string}> = [];
       broker.subscribe((data) => received.push(data));
 
-      broker.applyEvent({ sessionId: 'sess-1', queryName: 'query-1' });
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
 
       expect(received).toHaveLength(1);
-      expect(received[0]).toEqual({ sessionId: 'sess-1', queryName: 'query-1' });
+      expect(received[0]).toEqual({sessionId: 'sess-1', queryName: 'query-1'});
     });
 
     test('cleanup unsubscribes', () => {
-      const received: Array<{ sessionId: string; queryName: string }> = [];
+      const received: Array<{sessionId: string; queryName: string}> = [];
       const unsub = broker.subscribe((data) => received.push(data));
 
-      broker.applyEvent({ sessionId: 'sess-1', queryName: 'q1' });
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
       expect(received).toHaveLength(1);
 
       unsub();
 
-      broker.applyEvent({ sessionId: 'sess-2', queryName: 'q2' });
+      broker.applyEvent({sessionId: 'sess-2', queryName: 'q2'});
       expect(received).toHaveLength(1);
     });
 
     test('does not emit for ignored events', () => {
-      const received: Array<{ sessionId: string; queryName: string }> = [];
+      const received: Array<{sessionId: string; queryName: string}> = [];
       broker.subscribe((data) => received.push(data));
 
-      broker.applyEvent({ queryName: 'q1' });
-      broker.applyEvent({ sessionId: 's1' });
+      broker.applyEvent({queryName: 'q1'});
+      broker.applyEvent({sessionId: 's1'});
 
       expect(received).toHaveLength(0);
     });

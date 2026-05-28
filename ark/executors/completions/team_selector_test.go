@@ -685,6 +685,25 @@ func TestSelectMemberEmptyCandidates(t *testing.T) {
 	assert.Contains(t, err.Error(), "no candidates available for selection")
 }
 
+func TestSelectMember_RequiresToolCall(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "selected", description: "selected member"},
+	}
+	team := &Team{Members: members}
+	mockSelector := newMockSelectorAgent()
+	team.selectorAgent = mockSelector
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	_, err = team.selectMember(ctx, []Message{}, tmpl, "selected", "selected", members)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, mockSelector.executeCalls, "selector should call Execute exactly once")
+	assert.Equal(t, ToolChoiceRequired, mockSelector.capturedOptions.ToolChoice, "selector must pass ToolChoiceRequired so the model is forced to call select-next-speaker or terminate")
+}
+
 func TestStartTurnTelemetry(t *testing.T) {
 	mockTelemetry := &mockTeamRecorder{}
 	mockEventing := &mockEventingRecorder{}
