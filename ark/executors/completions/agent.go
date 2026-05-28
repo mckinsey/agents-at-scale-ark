@@ -281,61 +281,14 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 // ResumeFromApproval resumes agent execution after tool approval is granted
 // It takes the original tool calls and their execution results
 func (a *Agent) ResumeFromApproval(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, approvedResults []ToolResult, memory MemoryInterface, eventStream EventStreamInterface, originalInput []Message) (*ExecutionResult, error) {
-	log := logf.FromContext(ctx)
+	if a.Model == nil {
+		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
+	}
 
-	// Get existing messages from memory
-	agentMessages, err := memory.GetMessages(ctx)
+	agentMessages, newMessages, err := a.reconstructMessagesForResumption(ctx, toolCalls, approvedResults, memory, originalInput)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch conversation history: %w", err)
+		return nil, err
 	}
-
-	// If memory is empty (e.g., NoopMemory or no memory configured), use the original input
-	// to provide context for the resumption
-	if len(agentMessages) == 0 && len(originalInput) > 0 {
-		log.Info("Memory returned no messages, using original input for context", "inputCount", len(originalInput))
-		agentMessages = originalInput
-	}
-
-	log.Info("Fetched messages from memory for resumption", "count", len(agentMessages))
-	// Debug: log message roles for visibility
-	for i, msg := range agentMessages {
-		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
-		role := RoleUnknown
-		switch {
-		case msgUnion.OfUser != nil:
-			role = RoleUser
-		case msgUnion.OfAssistant != nil:
-			role = RoleAssistant
-		case msgUnion.OfSystem != nil:
-			role = RoleSystem
-		case msgUnion.OfTool != nil:
-			role = RoleTool
-		}
-		log.Info("Memory message", "index", i, "role", role)
-	}
-
-	// Reconstruct the assistant message with tool_calls that triggered the approval
-	assistantMsg := openai.ChatCompletionMessage{
-		Role:      constant.Assistant("assistant"),
-		ToolCalls: toolCalls,
-	}
-	assistantMsgConverted := Message(assistantMsg.ToParam())
-	agentMessages = append(agentMessages, assistantMsgConverted)
-
-	// Append tool results as tool messages (may include approval successes or rejection errors)
-	toolResultMessages := []Message{}
-	for _, result := range approvedResults {
-		// Use error field if set (e.g., for rejections), otherwise use content
-		content := result.Content
-		if result.Error != "" {
-			content = result.Error
-		}
-		toolMsg := ToolMessage(content, result.ID)
-		agentMessages = append(agentMessages, toolMsg)
-		toolResultMessages = append(toolResultMessages, toolMsg)
-	}
-
-	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
 
 	// Prepare tools
 	var tools []openai.ChatCompletionToolParam
@@ -343,58 +296,7 @@ func (a *Agent) ResumeFromApproval(ctx context.Context, toolCalls []openai.ChatC
 		tools = a.Tools.ToOpenAITools()
 	}
 
-	if a.Model == nil {
-		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
-	}
-
-	// newMessages should contain the reconstructed messages (assistant + tool results) so they get saved
-	// to memory for the next resumption. This ensures each resumption has access to the full conversation history.
-	// If memory already has these messages, they won't be duplicated because we check len(agentMessages) == 0
-	// before using originalInput.
-	newMessages := []Message{assistantMsgConverted}
-	newMessages = append(newMessages, toolResultMessages...)
-	log.Info("Starting resumption with reconstructed messages in newMessages", "count", len(newMessages))
-
-	// Continue the agentic loop
-	for {
-		if ctx.Err() != nil {
-			return &ExecutionResult{Messages: newMessages}, ctx.Err()
-		}
-
-		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, ToolChoiceUnset)
-		if err != nil {
-			return nil, err
-		}
-
-		choice := response.Choices[0]
-		assistantMessage := a.processAssistantMessage(choice)
-
-		agentMessages = append(agentMessages, assistantMessage)
-		newMessages = append(newMessages, assistantMessage)
-
-		if len(choice.Message.ToolCalls) == 0 {
-			return &ExecutionResult{Messages: newMessages}, nil
-		}
-
-		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
-			logger := logf.FromContext(ctx)
-			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
-				logger.Error(err, "Tool execution failed during approval resumption", "agent", a.FullName())
-			}
-			// Check if this is a cascading approval error
-			var approvalErr *ApprovalRequiredError
-			if errors.As(err, &approvalErr) {
-				// Remove the last assistant message from newMessages since it contains
-				// tool_calls that haven't been executed yet. This prevents saving
-				// incomplete message sequences to memory.
-				if len(newMessages) > 0 {
-					log.Info("Removing last assistant message with pending tool_calls from result", "messageCount", len(newMessages))
-					newMessages = newMessages[:len(newMessages)-1]
-				}
-			}
-			return &ExecutionResult{Messages: newMessages}, err
-		}
-	}
+	return a.runAgenticLoopFromResumption(ctx, agentMessages, newMessages, eventStream, tools)
 }
 
 func (a *Agent) GetName() string {
@@ -572,4 +474,96 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		client:                k8sClient,
 		approvalRequiredTools: approvalMap,
 	}, nil
+}
+
+// reconstructMessagesForResumption fetches memory messages and appends tool call and results
+func (a *Agent) reconstructMessagesForResumption(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, approvedResults []ToolResult, memory MemoryInterface, originalInput []Message) ([]Message, []Message, error) {
+	log := logf.FromContext(ctx)
+
+	// Get existing messages from memory
+	agentMessages, err := memory.GetMessages(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch conversation history: %w", err)
+	}
+
+	// If memory is empty, use the original input to provide context
+	if len(agentMessages) == 0 && len(originalInput) > 0 {
+		log.Info("Memory returned no messages, using original input for context", "inputCount", len(originalInput))
+		agentMessages = originalInput
+	}
+
+	log.Info("Fetched messages from memory for resumption", "count", len(agentMessages))
+
+	// Reconstruct the assistant message with tool_calls that triggered the approval
+	assistantMsg := openai.ChatCompletionMessage{
+		Role:      constant.Assistant("assistant"),
+		ToolCalls: toolCalls,
+	}
+	assistantMsgConverted := Message(assistantMsg.ToParam())
+	agentMessages = append(agentMessages, assistantMsgConverted)
+
+	// Append tool results as tool messages
+	toolResultMessages := []Message{}
+	for _, result := range approvedResults {
+		content := result.Content
+		if result.Error != "" {
+			content = result.Error
+		}
+		toolMsg := ToolMessage(content, result.ID)
+		agentMessages = append(agentMessages, toolMsg)
+		toolResultMessages = append(toolResultMessages, toolMsg)
+	}
+
+	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
+
+	// newMessages should contain the reconstructed messages so they get saved to memory
+	newMessages := []Message{assistantMsgConverted}
+	newMessages = append(newMessages, toolResultMessages...)
+	log.Info("Starting resumption with reconstructed messages in newMessages", "count", len(newMessages))
+
+	return agentMessages, newMessages, nil
+}
+
+// runAgenticLoopFromResumption continues the agentic loop after approval resumption
+func (a *Agent) runAgenticLoopFromResumption(ctx context.Context, agentMessages []Message, newMessages []Message, eventStream EventStreamInterface, tools []openai.ChatCompletionToolParam) (*ExecutionResult, error) {
+	log := logf.FromContext(ctx)
+
+	for {
+		if ctx.Err() != nil {
+			return &ExecutionResult{Messages: newMessages}, ctx.Err()
+		}
+
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, ToolChoiceUnset)
+		if err != nil {
+			return nil, err
+		}
+
+		choice := response.Choices[0]
+		assistantMessage := a.processAssistantMessage(choice)
+
+		agentMessages = append(agentMessages, assistantMessage)
+		newMessages = append(newMessages, assistantMessage)
+
+		if len(choice.Message.ToolCalls) == 0 {
+			return &ExecutionResult{Messages: newMessages}, nil
+		}
+
+		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+			logger := logf.FromContext(ctx)
+			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
+				logger.Error(err, "Tool execution failed during approval resumption", "agent", a.FullName())
+			}
+			// Check if this is a cascading approval error
+			var approvalErr *ApprovalRequiredError
+			if errors.As(err, &approvalErr) {
+				// Remove the last assistant message from newMessages since it contains
+				// tool_calls that haven't been executed yet
+				if len(newMessages) > 0 {
+					log.Info("Removing last assistant message with pending tool_calls from result", "messageCount", len(newMessages))
+					newMessages = newMessages[:len(newMessages)-1]
+				}
+			}
+			return &ExecutionResult{Messages: newMessages}, err
+		}
+	}
 }
