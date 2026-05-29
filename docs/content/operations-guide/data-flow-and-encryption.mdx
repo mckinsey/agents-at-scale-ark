@@ -16,54 +16,54 @@ A single Query execution touches multiple storage and communication surfaces. Th
                     ┌────────────────────┐
                     │ Client / Dashboard │
                     └─────────┬──────────┘
-                              │ HTTPS (①)
+                              │ HTTPS
                     ┌─────────▼──────────┐
                     │      ark-api       │
                     └─────────┬──────────┘
                               │
-            ┌─────────────────┼─────────────────┐
-            │                 │                  │
-   ┌────────▼────────┐ ┌─────▼──────┐ ┌─────────▼─────────┐
-   │ Query CR    (②) │ │ Broker (⑥) │ │ OTel collector (⑦)│
-   │ etcd / PG       │ │ mem store  │ │                    │
-   └────────┬────────┘ └────────────┘ └────────────────────┘
-            │
-   ┌────────▼────────┐
+           ┌──────────────────┼──────────────────┐
+           │                  │                   │
+   ┌───────▼────────┐ ┌──────▼───────┐ ┌─────────▼────────┐
+   │   Query CR     │ │    Broker    │ │  OTel collector  │
+   │   etcd / PG    │ │   mem store  │ │                  │
+   └───────┬────────┘ └──────────────┘ └──────────────────┘
+           │
+   ┌───────▼─────────┐
    │   Controller    │
-   └────────┬────────┘
-            │ A2A HTTP (③)
-   ┌────────▼────────┐
-   │    Executor     │──── LLM Provider  (④) ── HTTPS
-   │  (built-in or   │──── MCP Servers   (⑤) ── HTTP(S)
-   │   external)     │──── Session files (⑧)
+   └───────┬─────────┘
+           │ A2A HTTP
+   ┌───────▼─────────┐
+   │    Executor     │──── LLM Provider  ── HTTPS
+   │  (built-in or   │──── MCP Servers   ── HTTP(S)
+   │   external)     │──── Session files
    └─────────────────┘
 ```
 
 ## Encryption at rest
 
-| # | Surface | What lands there | Encrypted by default? | How to enable |
-|---|---------|------------------|-----------------------|---------------|
-| ② | **etcd** (default storage) | All CRs: Query inputs/outputs, Agent prompts, Model secret refs, Tool configs | No. etcd stores data unencrypted unless the cluster enables `EncryptionConfiguration`. | Configure kube-apiserver `--encryption-provider-config` with an `aesgcm` or `secretbox` provider. See [K8s docs](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/). |
-| ② | **PostgreSQL** (optional storage) | Same as etcd — full `spec` and `status` JSONB columns in the `resources` table | No. | Enable Transparent Data Encryption (TDE) or use an encrypted volume for the PG data directory. |
-| ② | **Kubernetes Secrets** | API keys, credentials referenced by Models and Tools | No — Secrets are base64-encoded, not encrypted, in etcd. | Same etcd encryption config as above. Consider an external secrets operator (Vault, AWS Secrets Manager, GCP Secret Manager). |
-| ⑥ | **Broker memory store** | Conversation history, streaming chunks, OTel spans, controller events | In-memory by default (ephemeral). If `persistence.enabled: true`, stored as plaintext JSON at `/data/`. | Use an encrypted PersistentVolume or mount an encrypted filesystem. |
-| ⑧ | **Executor session files** | Conversation state, tool outputs (Claude Agent SDK: `/data/sessions/<conversationId>/`) | No. Plaintext on pod filesystem. | Use an encrypted PersistentVolume. Restrict access via Pod Security Standards. |
-| ⑦ | **OTel collector** | Span attributes: session IDs, query/target names, dispatch addresses, error messages, token counts | Depends on your collector and its backend. | Configure your collector's exporter with encryption (e.g., encrypted Elasticsearch, encrypted S3). |
-| — | **Pod logs** | Query/target names, error messages, dispatch addresses. Input/output truncated to 48 chars at info level; verbose mode (`-v 1`) adds session details. | Depends on your log aggregator. | Ensure your log pipeline encrypts at rest. Review verbose logging before enabling in production. |
+| Surface | What lands there | Encrypted by default? | How to enable |
+|---------|------------------|-----------------------|---------------|
+| **etcd** (default storage) | All CRs: Query inputs/outputs, Agent prompts, Model secret refs, Tool configs | No. etcd stores data unencrypted unless the cluster enables `EncryptionConfiguration`. | Configure kube-apiserver `--encryption-provider-config` with an `aesgcm` or `secretbox` provider. See [K8s docs](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/). |
+| **PostgreSQL** (optional storage) | Same as etcd — full `spec` and `status` JSONB columns in the `resources` table | No. | Enable Transparent Data Encryption (TDE) or use an encrypted volume for the PG data directory. |
+| **Kubernetes Secrets** | API keys, credentials referenced by Models and Tools | No — Secrets are base64-encoded, not encrypted, in etcd. | Same etcd encryption config as above. Consider an external secrets operator (Vault, AWS Secrets Manager, GCP Secret Manager). |
+| **Broker memory store** | Conversation history, streaming chunks, OTel spans, controller events | In-memory by default (ephemeral). If `persistence.enabled: true`, stored as plaintext JSON at `/data/`. | Use an encrypted PersistentVolume or mount an encrypted filesystem. |
+| **Executor session files** | Conversation state, tool outputs (Claude Agent SDK: `/data/sessions/<conversationId>/`) | No. Plaintext on pod filesystem. | Use an encrypted PersistentVolume. Restrict access via Pod Security Standards. |
+| **OTel collector** | Span attributes: session IDs, query/target names, dispatch addresses, error messages, token counts | Depends on your collector and its backend. | Configure your collector's exporter with encryption (e.g., encrypted Elasticsearch, encrypted S3). |
+| **Pod logs** | Query/target names, error messages, dispatch addresses. Input/output truncated to 48 chars at info level; verbose mode (`-v 1`) adds session details. | Depends on your log aggregator. | Ensure your log pipeline encrypts at rest. Review verbose logging before enabling in production. |
 
 ## In-transit encryption
 
-| # | Hop | Protocol | TLS by default? | Notes |
-|---|-----|----------|-----------------|-------|
-| ① | Client → ark-api | HTTPS | Depends on your Ingress / load balancer. | Configure TLS termination at the Ingress or use cert-manager. |
-| ② | ark-api → kube-apiserver | HTTPS | Yes. Kubernetes API server requires TLS. | Managed by the cluster. |
-| ③ | Controller → executor (A2A) | HTTP | No. Uses Go `http.DefaultTransport`. | Deploy a service mesh (Istio, Linkerd) for automatic mTLS between pods, or configure the executor behind a TLS-terminating sidecar. |
-| ④ | Executor → LLM provider | HTTPS | **Yes.** Ark's validating webhook rejects non-HTTPS model base URLs. | Exception: `*.svc.cluster.local` addresses are allowed over HTTP for in-cluster mock services. |
-| ⑤ | Executor → MCP servers | HTTP(S) | No enforcement. Depends on the MCP server address scheme. | Use HTTPS addresses for MCP servers that handle sensitive data. No webhook validation exists for MCP URLs today. |
-| ⑥ | Controller / API → broker | HTTP | No. | Service mesh mTLS or a TLS-terminating sidecar. |
-| ⑦ | Controller → OTel collector | HTTP | No. Uses the URL in `OTEL_EXPORTER_OTLP_ENDPOINT`. | Set an `https://` endpoint URL. Per-namespace endpoint discovery is available via the `otel-environment-variables` Secret. |
-| ② | Controller → PostgreSQL | TCP | No. `sslMode: disable` is the default. | Set `storage.postgresql.sslMode` to `require` or `verify-full` in Helm values. |
-| — | Metrics scrape | HTTPS | Yes. Controller metrics on port 8443 are TLS-protected via cert-manager. | ServiceMonitor uses `insecureSkipVerify: false` by default. |
+| Hop | Protocol | TLS by default? | Notes |
+|-----|----------|-----------------|-------|
+| Client → ark-api | HTTPS | Depends on your Ingress / load balancer. | Configure TLS termination at the Ingress or use cert-manager. |
+| ark-api → kube-apiserver | HTTPS | Yes. Kubernetes API server requires TLS. | Managed by the cluster. |
+| Controller → executor (A2A) | HTTP | No. Uses Go `http.DefaultTransport`. | Deploy a service mesh (Istio, Linkerd) for automatic mTLS between pods, or configure the executor behind a TLS-terminating sidecar. |
+| Executor → LLM provider | HTTPS | **Yes.** Ark's validating webhook rejects non-HTTPS model base URLs. | Exception: `*.svc.cluster.local` addresses are allowed over HTTP for in-cluster mock services. |
+| Executor → MCP servers | HTTP(S) | No enforcement. Depends on the MCP server address scheme. | Use HTTPS addresses for MCP servers that handle sensitive data. No webhook validation exists for MCP URLs today. |
+| Controller / API → broker | HTTP | No. | Service mesh mTLS or a TLS-terminating sidecar. |
+| Controller → OTel collector | HTTP | No. Uses the URL in `OTEL_EXPORTER_OTLP_ENDPOINT`. | Set an `https://` endpoint URL. Per-namespace endpoint discovery is available via the `otel-environment-variables` Secret. |
+| Controller → PostgreSQL | TCP | No. `sslMode: disable` is the default. | Set `storage.postgresql.sslMode` to `require` or `verify-full` in Helm values. |
+| Metrics scrape | HTTPS | Yes. Controller metrics on port 8443 are TLS-protected via cert-manager. | ServiceMonitor uses `insecureSkipVerify: false` by default. |
 
 ## Log sanitization
 
