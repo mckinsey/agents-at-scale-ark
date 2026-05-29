@@ -103,10 +103,13 @@ func performBackoff(ctx context.Context, attempt int, url string) error {
 	backoff := time.Duration(1<<uint(attempt)) * time.Second
 	log.V(1).Info("retrying MCP client connection", "attempt", attempt+1, "backoff", backoff.String(), "server", url)
 
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("%s %s: %w", ErrConnectionRetryFailed, url, ctx.Err())
-	case <-time.After(backoff):
+	case <-timer.C:
 		return nil
 	}
 }

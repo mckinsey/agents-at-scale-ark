@@ -82,8 +82,12 @@ func buildAuthServerMetadataURL(issuer string) string {
 	return base + "/.well-known/oauth-authorization-server"
 }
 
-// discoveryClient returns an http.Client bounded by the caller's
-// timeout. Indirection is via a var so tests can swap it out.
+var sharedOAuthTransport = &http.Transport{
+	MaxIdleConns:        10,
+	MaxIdleConnsPerHost: 5,
+	IdleConnTimeout:     90 * time.Second,
+}
+
 var discoveryClient = func(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout}
+	return &http.Client{Timeout: timeout, Transport: sharedOAuthTransport}
 }
