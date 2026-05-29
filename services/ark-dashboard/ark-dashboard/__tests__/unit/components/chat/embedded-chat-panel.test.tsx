@@ -131,7 +131,9 @@ describe('EmbeddedChatPanel', () => {
   it('should render chat interface', () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
-    expect(screen.getByText(/Chat with test-agent/i)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /debug/i })).toBeInTheDocument();
+    expect(screen.getByText('test-agent')).toBeInTheDocument();
   });
 
   it('should NOT clear traces and events when starting a new chat', async () => {

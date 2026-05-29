@@ -49,6 +49,7 @@ export { Settings } from './settings';
 export { Shield } from './shield';
 export { SingleTool } from './single-tool';
 export { SmartToy } from './smart-toy';
+export { Stop } from './stop';
 export { Storefront } from './storefront';
 export { SwapVert } from './swap-vert';
 export { Trash } from './trash';

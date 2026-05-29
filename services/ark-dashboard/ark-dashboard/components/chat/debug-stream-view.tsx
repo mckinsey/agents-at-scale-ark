@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
@@ -110,7 +111,10 @@ export function DebugStreamView({
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
-      containerRef.current.scrollTop = 0;
+      const viewport = containerRef.current.querySelector<HTMLElement>(
+        '[data-radix-scroll-area-viewport]',
+      );
+      if (viewport) viewport.scrollTop = 0;
     }
   }, [entries, autoScroll]);
 
@@ -202,9 +206,9 @@ export function DebugStreamView({
           {error}
         </div>
       )}
-      <div
-        ref={containerRef}
-        className="bg-surface-bg-primary flex-1 overflow-y-auto p-2 font-mono text-xs">
+      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col">
+        <ScrollArea className="bg-surface-bg-primary h-0 flex-1">
+          <div className="p-2 font-mono text-xs">
         {entries.length === 0 ? (
           <div className="text-fg-tertiary flex h-full items-center justify-center">
             Waiting for data...
@@ -299,6 +303,8 @@ export function DebugStreamView({
             )}
           </>
         )}
+          </div>
+        </ScrollArea>
       </div>
     </div>
   );

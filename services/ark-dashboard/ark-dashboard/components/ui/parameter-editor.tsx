@@ -377,15 +377,6 @@ export function ParameterEditor({
   const compactParameterRows =
     parameters.length > 0 ? (
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 flex-1 items-start border-b border-white/[0.16] pt-3">
-            <span className="text-fg-secondary text-sm leading-4 tracking-[-0.112px]">
-              Name (A-Z)
-            </span>
-          </div>
-          <div className="flex h-10 w-8 shrink-0 items-start border-b border-white/[0.16]" />
-        </div>
-
         {parameters.map((param, index) => {
           const isDuplicate =
             !!param.name &&

@@ -1,20 +1,29 @@
 'use client';
 
-import { Bug, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import { ChatPanel } from '@/components/chat/chat-panel';
 import { DebugStreamPanel } from '@/components/chat/debug-stream-panel';
+import { BugReport, ChatBubble } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import type { ParticipantType } from '@/lib/services/conversations';
 import type { GraphEdge } from '@/lib/types/chat-message';
+import { stripNamespace } from '@/lib/utils/participant';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
 type ChatType = 'model' | 'team' | 'agent';
 type TabType = 'chat' | 'debug';
+
+function toParticipantType(type: ChatType): ParticipantType | undefined {
+  if (type === 'agent' || type === 'team') return type;
+  return undefined;
+}
 
 interface EmbeddedChatPanelProps {
   name: string;
@@ -39,18 +48,32 @@ export function EmbeddedChatPanel({
         value={activeTab}
         onValueChange={v => setActiveTab(v as TabType)}
         className="flex h-full flex-col">
-        <div className="flex-shrink-0 border-b">
-          <div className="flex items-center gap-2 px-4 py-3">
-            <MessageCircle className="text-muted-foreground h-4 w-4" />
-            <span className="text-sm font-medium">Chat with {name}</span>
+        <div className="bg-surface-bg-secondary border-stroke-tertiary flex-shrink-0 border-b">
+          <div className="flex items-center gap-2 px-5 pt-4">
+            <IconShell size="sm" className="opacity-100">
+              {getParticipantIcon(toParticipantType(type), {
+                size: '4',
+                name,
+              })}
+            </IconShell>
+            <span className="text-fg-primary text-base leading-6 font-semibold">
+              {stripNamespace(name)}
+            </span>
+            <span className="text-fg-secondary text-sm leading-5 font-normal capitalize">
+              {type}
+            </span>
           </div>
-          <TabsList className="mx-4 mb-2">
+          <TabsList className="mx-5 mt-2">
             <TabsTrigger value="chat" className="gap-1.5">
-              <MessageCircle className="h-3.5 w-3.5" />
+              <IconShell size="sm">
+                <ChatBubble />
+              </IconShell>
               Chat
             </TabsTrigger>
             <TabsTrigger value="debug" className="gap-1.5">
-              <Bug className="h-3.5 w-3.5" />
+              <IconShell size="sm">
+                <BugReport />
+              </IconShell>
               Debug
             </TabsTrigger>
           </TabsList>

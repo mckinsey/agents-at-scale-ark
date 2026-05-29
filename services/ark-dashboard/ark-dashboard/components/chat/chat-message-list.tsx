@@ -2,7 +2,6 @@ import { AlertCircle } from 'lucide-react';
 import { useMemo, useEffect } from 'react';
 import type { RefObject } from 'react';
 
-import { ChatMessage } from '@/components/chat/chat-message';
 import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
@@ -11,6 +10,8 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
+import { type ToolCallData } from '@/components/chat/tool-call';
+import { SessionMessage } from '@/components/sessions-conversations/session-message';
 import type { TokenUsage } from '@/atoms/chat-history';
 import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
 
@@ -139,9 +140,7 @@ export function ChatMessageList({
   processingPhase,
 
   error,
-  viewMode = 'markdown',
   messagesEndRef,
-  messageTokenUsage,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -340,36 +339,17 @@ export function ChatMessageList({
         return (
           <div key={pm.index} className="flex flex-col gap-2">
             {transitionElement}
-            {pm.hasToolCalls &&
-              pm.toolCallsWithResults!.map((toolCall, toolIndex) => {
-                const toolKey = `${pm.index}-tool-${toolIndex}`;
-                return (
-                  <div key={toolKey}>
-                    <ChatMessage
-                      role="assistant"
-                      content=""
-                      viewMode={viewMode}
-                      toolCalls={[
-                        toolCall as {
-                          id: string;
-                          type: 'function';
-                          function: { name: string; arguments: string };
-                          result?: string;
-                        },
-                      ]}
-                    />
-                  </div>
-                );
-              })}
-            {pm.hasContent && (
-              <ChatMessage
+            {(pm.hasContent || pm.hasToolCalls) && (
+              <SessionMessage
                 role={pm.msg.role as 'user' | 'assistant' | 'system'}
-                content={pm.content}
-                viewMode={viewMode}
+                content={pm.hasContent ? pm.content : ''}
                 sender={pm.senderName}
-                status={pm.message.metadata?.status}
-                queryName={pm.message.metadata?.queryName}
-                tokenUsage={messageTokenUsage?.[pm.index]}
+                toolCalls={
+                  pm.hasToolCalls
+                    ? (pm.toolCallsWithResults as ToolCallData[])
+                    : undefined
+                }
+                showToolCalls={debugMode}
               />
             )}
             {pm.hasTermination && (
@@ -378,11 +358,11 @@ export function ChatMessageList({
                   agentName={pm.senderName || 'Unknown Agent'}
                 />
                 {pm.terminateMessage && (
-                  <ChatMessage
+                  <SessionMessage
                     role="assistant"
                     content={pm.terminateMessage}
-                    viewMode={viewMode}
                     sender={pm.senderName}
+                    showToolCalls={debugMode}
                   />
                 )}
               </div>

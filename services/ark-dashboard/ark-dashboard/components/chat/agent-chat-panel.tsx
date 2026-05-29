@@ -6,6 +6,7 @@ import { DebugStreamPanel } from '@/components/chat/debug-stream-panel';
 import {
   BugReport,
   ChatBubble,
+  RestartAlt,
   Send,
   SingleTool,
 } from '@/components/icons';
@@ -80,6 +81,7 @@ export function AgentChatPanel({ name, type }: AgentChatPanelProps) {
     messages,
     isProcessing,
     sendMessage,
+    clearChat,
     messagesEndRef,
     cancelQuery,
   } = useChatSession({ name, type });
@@ -272,6 +274,17 @@ export function AgentChatPanel({ name, type }: AgentChatPanelProps) {
                     Show tool calls
                   </span>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={clearChat}
+                  className="gap-1"
+                  disabled={isProcessing || messages.length === 0}>
+                  <IconShell size="sm">
+                    <RestartAlt />
+                  </IconShell>
+                  New Chat
+                </Button>
               </div>
             </div>
           </div>
