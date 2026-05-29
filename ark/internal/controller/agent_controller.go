@@ -282,51 +282,54 @@ func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.A
 	return err
 }
 
+func agentModelRefIndexer(obj client.Object) []string {
+	agent := obj.(*arkv1alpha1.Agent)
+	if agent.Spec.ModelRef == nil {
+		return nil
+	}
+	return []string{agent.Spec.ModelRef.Name}
+}
+
+func agentExecutionEngineIndexer(obj client.Object) []string {
+	agent := obj.(*arkv1alpha1.Agent)
+	if agent.Spec.ExecutionEngine == nil {
+		return nil
+	}
+	return []string{agent.Spec.ExecutionEngine.Name}
+}
+
+func agentToolNamesIndexer(obj client.Object) []string {
+	agent := obj.(*arkv1alpha1.Agent)
+	var names []string
+	for _, tool := range agent.Spec.Tools {
+		if tool.Type == "built-in" {
+			continue
+		}
+		if tool.Name != "" {
+			names = append(names, tool.Name)
+		}
+		if tool.Partial != nil && tool.Partial.Name != "" {
+			names = append(names, tool.Partial.Name)
+		}
+	}
+	return names
+}
+
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(), &arkv1alpha1.Agent{}, ".spec.modelRef.name",
-		func(obj client.Object) []string {
-			agent := obj.(*arkv1alpha1.Agent)
-			if agent.Spec.ModelRef == nil {
-				return nil
-			}
-			return []string{agent.Spec.ModelRef.Name}
-		},
+		context.Background(), &arkv1alpha1.Agent{}, ".spec.modelRef.name", agentModelRefIndexer,
 	); err != nil {
 		return err
 	}
 
 	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(), &arkv1alpha1.Agent{}, ".spec.executionEngine.name",
-		func(obj client.Object) []string {
-			agent := obj.(*arkv1alpha1.Agent)
-			if agent.Spec.ExecutionEngine == nil {
-				return nil
-			}
-			return []string{agent.Spec.ExecutionEngine.Name}
-		},
+		context.Background(), &arkv1alpha1.Agent{}, ".spec.executionEngine.name", agentExecutionEngineIndexer,
 	); err != nil {
 		return err
 	}
 
 	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(), &arkv1alpha1.Agent{}, ".spec.tools.name",
-		func(obj client.Object) []string {
-			agent := obj.(*arkv1alpha1.Agent)
-			var names []string
-			for _, tool := range agent.Spec.Tools {
-				if tool.Type == "built-in" {
-					continue
-				}
-				if tool.Name != "" {
-					names = append(names, tool.Name)
-				}
-				if tool.Partial != nil && tool.Partial.Name != "" {
-					names = append(names, tool.Partial.Name)
-				}
-			}
-			return names
-		},
+		context.Background(), &arkv1alpha1.Agent{}, ".spec.tools.name", agentToolNamesIndexer,
 	); err != nil {
 		return err
 	}

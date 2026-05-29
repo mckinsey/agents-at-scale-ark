@@ -136,19 +136,20 @@ func (r *TeamReconciler) updateStatus(ctx context.Context, team *arkv1alpha1.Tea
 	return err
 }
 
+func teamAgentMemberIndexer(obj client.Object) []string {
+	team := obj.(*arkv1alpha1.Team)
+	var names []string
+	for _, member := range team.Spec.Members {
+		if member.Type == "agent" && member.Name != "" {
+			names = append(names, member.Name)
+		}
+	}
+	return names
+}
+
 func (r *TeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(), &arkv1alpha1.Team{}, ".spec.members.agent.name",
-		func(obj client.Object) []string {
-			team := obj.(*arkv1alpha1.Team)
-			var names []string
-			for _, member := range team.Spec.Members {
-				if member.Type == "agent" && member.Name != "" {
-					names = append(names, member.Name)
-				}
-			}
-			return names
-		},
+		context.Background(), &arkv1alpha1.Team{}, ".spec.members.agent.name", teamAgentMemberIndexer,
 	); err != nil {
 		return err
 	}
