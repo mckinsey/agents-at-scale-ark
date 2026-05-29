@@ -1,7 +1,6 @@
 import logging
 import random
 from datetime import datetime
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -17,6 +16,8 @@ class TeamsPage(BasePage):
     MAX_TURNS_INPUT = "input[name='maxTurns'], input[placeholder*='turns' i], input[type='number'], input[name='max']"
     MEMBERS_SELECT = "button:has-text('Select'), [role='combobox']:has-text('Select'), button:has-text('Add')"
     SAVE_BUTTON = "button:has-text('Add Team'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
+    SUBMIT_TEAM_BUTTON = "button:has-text('Create Team'), button:has-text('Create'), [role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']"
+    STRATEGY_TRIGGER = "form [role='combobox'], [role='dialog'] [role='combobox'], button:has-text('Select a strategy')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
 
@@ -70,16 +71,26 @@ class TeamsPage(BasePage):
             except Exception as e2:
                 logger.warning(f"Could not select member via checkbox button: {e2}")
 
+    def _ensure_on_team_form(self) -> None:
+        """Wait for client-side navigation to the full-page /teams/new form.
+
+        Clicking "Create Team" is a Next.js client-side link, so the URL and DOM
+        change asynchronously. The teams-list search input is visible immediately,
+        so waiting on a generic input races. The form's name field only exists on
+        /teams/new, so it is the reliable gate.
+        """
+        try:
+            self.page.wait_for_url("**/teams/new**", timeout=10000)
+        except Exception:
+            logger.info("Did not observe /teams/new URL, waiting for form fields")
+        self.page.locator("input[name='name']").first.wait_for(state="visible", timeout=10000)
+
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
         logger.info(f"Creating team: {team_name}")
 
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
-        self.wait_for_load_state("domcontentloaded")
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
-
-        if "/teams/new" in self.page.url:
-            return self._create_team_full_page(team_name, description, strategy, max_turns, member_names)
-        return self._create_team_dialog(team_name, description, strategy, max_turns, member_names)
+        self._ensure_on_team_form()
+        return self._create_team_full_page(team_name, description, strategy, max_turns, member_names)
 
     def _create_team_full_page(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
         logger.info("Using full-page team creation form")
@@ -93,11 +104,7 @@ class TeamsPage(BasePage):
             desc_input.first.fill(description)
 
         try:
-            trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
-            trigger.click()
-            self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
-            self.page.locator(f"[role='option']:has-text('{strategy}')").first.click()
-            self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
+            self.select_strategy_in_form(strategy)
         except Exception as e:
             logger.warning(f"Could not select strategy: {e}")
 
@@ -109,63 +116,12 @@ class TeamsPage(BasePage):
             self._select_member(name)
 
         logger.info("Clicking Create Team button")
-        self.page.locator("button:has-text('Create Team')").first.click()
+        create_btn = self.page.locator(self.SUBMIT_TEAM_BUTTON).first
+        create_btn.scroll_into_view_if_needed()
+        create_btn.click()
         self.wait_for_load_state("domcontentloaded")
 
         popup_visible = self._check_toast_popup()
-        self.navigate_to_teams_tab()
-        in_table = self.is_team_in_table(team_name)
-
-        return {"name": team_name, "popup_visible": popup_visible, "in_table": in_table, "strategy": strategy}
-
-    def _create_team_dialog(self, team_name: str, description: str, strategy: str, max_turns: str, member_names: list) -> dict:
-        logger.info("Using dialog-based team creation")
-
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
-        self.page.locator("input").first.fill(team_name)
-
-        description_field = self.page.locator("textarea")
-        if description_field.count() > 0:
-            description_field.first.fill(description)
-        else:
-            self.page.locator("input").nth(1).fill(description)
-
-        select_dropdown = self.page.locator("select")
-        if select_dropdown.count() > 0:
-            select_dropdown.first.select_option(label=strategy)
-
-        max_turns_fields = self.page.locator("input[type='number']")
-        if max_turns_fields.count() > 0:
-            max_turns_fields.first.fill(max_turns)
-
-        for name in member_names:
-            self._select_member(name)
-
-        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
-
-        logger.info("Clicking Create button in team dialog")
-        save_button.scroll_into_view_if_needed()
-        save_button.click(force=True)
-        self.wait_for_load_state("domcontentloaded")
-
-        popup_visible = self._check_toast_popup()
-
-        try:
-            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
-        except PlaywrightTimeoutError:
-            logger.info("Dialog may still be open, pressing Escape")
-            self.page.keyboard.press("Escape")
-            try:
-                self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=3000)
-            except PlaywrightTimeoutError:
-                logger.warning("Dialog still visible after Escape")
-            try:
-                self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=3000)
-            except PlaywrightTimeoutError:
-                logger.warning("Dialog still visible after Escape")
-
         self.navigate_to_teams_tab()
         in_table = self.is_team_in_table(team_name)
 
@@ -222,14 +178,24 @@ class TeamsPage(BasePage):
             "deleted_from_table": False
         }
 
+    def _open_strategy_dropdown(self) -> None:
+        trigger = self.page.locator(self.STRATEGY_TRIGGER).first
+        trigger.scroll_into_view_if_needed()
+        trigger.wait_for(state="visible", timeout=15000)
+        for attempt in range(3):
+            trigger.click()
+            try:
+                self.wait_for_dropdown_options(timeout=5000)
+                return
+            except Exception:
+                logger.info(f"Strategy dropdown not visible on attempt {attempt + 1}, retrying")
+        self.wait_for_dropdown_options(timeout=2000)
+
     def get_strategy_options(self) -> list[str]:
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
-        self.wait_for_load_state("domcontentloaded")
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
+        self._ensure_on_team_form()
 
-        trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
-        trigger.click()
-        self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+        self._open_strategy_dropdown()
         options = [
             opt.inner_text()
             for opt in self.page.locator("[role='option']").all()
@@ -251,9 +217,8 @@ class TeamsPage(BasePage):
         return self.is_visible("input[name='maxTurns'], input[type='number']", timeout=8000)
 
     def select_strategy_in_form(self, strategy: str) -> None:
-        trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
-        trigger.click()
-        self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+        self._ensure_on_team_form()
+        self._open_strategy_dropdown()
         self.page.locator(f"[role='option']:has-text('{strategy}')").first.click()
         self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
 
@@ -270,14 +235,9 @@ class TeamsPage(BasePage):
         logger.info(f"Creating sequential+loops team: {team_name}, loops={loops}")
 
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
-        self.wait_for_load_state("domcontentloaded")
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
+        self._ensure_on_team_form()
 
-        if "/teams/new" in self.page.url:
-            name_input = self.page.locator("input[name='name']")
-        else:
-            name_input = self.page.locator("input").first
-
+        name_input = self.page.locator("input[name='name']")
         name_input.wait_for(state="visible", timeout=10000)
         name_input.fill(team_name)
 
@@ -310,9 +270,7 @@ class TeamsPage(BasePage):
             except Exception as e2:
                 logger.warning(f"Could not select member via checkbox: {e2}")
 
-        create_btn = self.page.locator(
-            "button:has-text('Create Team'), [role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']"
-        ).first
+        create_btn = self.page.locator(self.SUBMIT_TEAM_BUTTON).first
         create_btn.scroll_into_view_if_needed()
         create_btn.click(force=True)
         self.wait_for_load_state("domcontentloaded")
@@ -336,7 +294,7 @@ class TeamsPage(BasePage):
         try:
             name_el = self.page.get_by_text(team_name, exact=True).first
             name_el.wait_for(state="visible", timeout=10000)
-            row = name_el.locator("xpath=ancestor::div[contains(@class,'rounded-md') and contains(@class,'border')][1]")
+            row = name_el.locator("xpath=ancestor::*[@role='link'][1]")
             return row.inner_text()
         except Exception as e:
             logger.warning(f"Could not get row text for team {team_name}: {e}")
@@ -346,7 +304,7 @@ class TeamsPage(BasePage):
         try:
             name_el = self.page.get_by_text(team_name, exact=True).first
             name_el.wait_for(state="visible", timeout=10000)
-            row = name_el.locator("xpath=ancestor::div[contains(@class,'rounded-md') and contains(@class,'border')][1]")
+            row = name_el.locator("xpath=ancestor::*[@role='link'][1]")
             return row.locator("[data-slot='badge'], span:has-text('Deprecated'), span:has-text('deprecated')").first.is_visible()
         except Exception as e:
             logger.warning(f"Could not check deprecation badge for {team_name}: {e}")

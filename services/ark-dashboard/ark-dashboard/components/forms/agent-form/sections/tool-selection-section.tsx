@@ -18,6 +18,7 @@ import {
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Tooltip,
@@ -209,7 +210,8 @@ export function ToolSelectionSection({
             className="border-stroke-divider text-sm"
             disabled={disabled}
           />
-          <div className="border-stroke-divider max-h-[300px] space-y-1 overflow-y-auto border p-3">
+          <ScrollArea className="border-stroke-divider border [&_[data-slot=scroll-area-viewport]]:max-h-[300px]">
+            <div className="space-y-1 p-3">
             {unavailableTools.length > 0 && onDeleteClick && (
               <ToolGroup
                 toolGroup={{
@@ -240,7 +242,8 @@ export function ToolSelectionSection({
                 />
               ))
             )}
-          </div>
+            </div>
+          </ScrollArea>
         </div>
       )}
     </div>

@@ -1,8 +1,10 @@
-import { AlertCircle, Network, Trash2 } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { AccountTree, Add, ArrowForward, Trash, Warning } from '@/components/icons';
 import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -59,10 +61,6 @@ export function GraphSection({
     onGraphEdgesChange(graphEdges.filter((_, i) => i !== index));
   };
 
-  const usedFromAgents = new Set(
-    graphEdges.filter(e => e.from).map(e => e.from),
-  );
-
   const agentsWithNoOutgoing = selectedStrategy === 'selector' && graphEdges.length > 0
     ? selectedMembers
         .filter(m => m.type === 'agent')
@@ -73,8 +71,10 @@ export function GraphSection({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Network className="text-muted-foreground h-4 w-4" />
-          <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          <IconShell size="sm" variant="secondary">
+            <AccountTree />
+          </IconShell>
+          <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
             Graph Edges
           </h3>
         </div>
@@ -84,6 +84,9 @@ export function GraphSection({
           size="sm"
           onClick={addGraphEdge}
           disabled={disabled}>
+          <IconShell size="sm" variant="secondary">
+            <Add />
+          </IconShell>
           Add Edge
         </Button>
       </div>
@@ -91,7 +94,7 @@ export function GraphSection({
       {agentsWithNoOutgoing.length > 0 && (
         <Alert layout="long">
           <AlertIcon className="text-status-warning">
-            <AlertCircle className="text-[25px]" />
+            <Warning className="text-[25px]" />
           </AlertIcon>
           <AlertContent>
             <AlertDescription>
@@ -102,9 +105,10 @@ export function GraphSection({
         </Alert>
       )}
 
-      <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+      <ScrollArea className="border-stroke-tertiary border [&_[data-slot=scroll-area-viewport]]:max-h-48">
+        <div className="space-y-2 p-2">
         {graphEdges.length === 0 ? (
-          <div className="text-muted-foreground py-2 text-center text-sm">
+          <div className="text-fg-tertiary py-2 text-center text-sm">
             No edges defined. Click &quot;Add Edge&quot; to create graph
             connections.
           </div>
@@ -120,7 +124,7 @@ export function GraphSection({
               return (
                 <div
                   key={index}
-                  className="hover:bg-muted/50 flex items-center gap-2 rounded-md p-2">
+                  className="hover:bg-stateslayer-overlay-hover flex items-center gap-2 p-2">
                   <Select
                     value={edge.from || ''}
                     onValueChange={(value) =>
@@ -130,7 +134,7 @@ export function GraphSection({
                     <SelectTrigger
                       className={cn(
                         'flex-1',
-                        isFromUnavailable && 'border-red-500',
+                        isFromUnavailable && 'border-stroke-status-error',
                       )}>
                       <SelectValue placeholder="From" />
                     </SelectTrigger>
@@ -151,7 +155,11 @@ export function GraphSection({
                         ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-muted-foreground">→</span>
+                  <span className="text-fg-tertiary">
+                    <IconShell size="sm" variant="secondary">
+                      <ArrowForward />
+                    </IconShell>
+                  </span>
                   <Select
                     value={edge.to}
                     onValueChange={(value) => updateGraphEdge(index, 'to', value as string)}
@@ -159,7 +167,7 @@ export function GraphSection({
                     <SelectTrigger
                       className={cn(
                         'flex-1',
-                        isToUnavailable && 'border-red-500',
+                        isToUnavailable && 'border-stroke-status-error',
                       )}>
                       <SelectValue placeholder="To" />
                     </SelectTrigger>
@@ -181,21 +189,23 @@ export function GraphSection({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 hover:text-red-500"
+                    size="icon-sm"
                     onClick={() => removeGraphEdge(index)}
                     disabled={disabled}
                     aria-label="Remove edge">
-                    <Trash2 className="h-4 w-4" />
+                    <IconShell size="sm" variant="secondary">
+                      <Trash />
+                    </IconShell>
                   </Button>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
+        </div>
+      </ScrollArea>
 
-      <p className="text-muted-foreground text-xs">
+      <p className="text-fg-tertiary text-xs">
         Define graph constraints to limit AI selection to valid transitions.
       </p>
 

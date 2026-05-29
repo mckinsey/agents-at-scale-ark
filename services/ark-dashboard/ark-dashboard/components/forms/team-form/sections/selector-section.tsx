@@ -1,7 +1,16 @@
-import { AlertCircle, ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import {
+  Bolt,
+  ChevronDown,
+  ChevronRight,
+  CollapseContent,
+  ExpandContent,
+  RestartAlt,
+  Tune,
+  Warning,
+} from '@/components/icons';
 import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,11 +21,13 @@ import {
 } from '@/components/ui/collapsible';
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Select,
   SelectContent,
@@ -58,16 +69,12 @@ export function SelectorSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Zap className="text-muted-foreground h-4 w-4" />
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <IconShell size="sm" variant="secondary">
+          <Bolt />
+        </IconShell>
+        <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
           Selector Configuration
         </h3>
-      </div>
-
-      <div className="bg-muted/50 rounded-md border p-3">
-        <p className="text-muted-foreground mb-3 text-xs">
-          Selector strategy uses an AI agent to choose the next team member.
-        </p>
       </div>
 
       <FormField
@@ -76,7 +83,7 @@ export function SelectorSection({
         render={({ field }) => (
           <FormItem>
             <FormLabel>
-              Selector Agent <span className="text-red-500">*</span>
+              Selector Agent <span className="text-status-error">*</span>
             </FormLabel>
             <Select
               onValueChange={field.onChange}
@@ -87,14 +94,14 @@ export function SelectorSection({
                   className={cn(
                     '',
                     unavailableAgents.includes(field.value || '') &&
-                      'border-red-500',
+                      'border-stroke-status-error',
                   )}>
                   <SelectValue placeholder="Select an agent" />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
                 <SelectItem value="__none__">
-                  <span className="text-muted-foreground">None (Unset)</span>
+                  <span className="text-fg-tertiary">None (Unset)</span>
                 </SelectItem>
                 {field.value && unavailableAgents.includes(field.value) && (
                   <SelectItem key={field.value} value={field.value}>
@@ -108,20 +115,23 @@ export function SelectorSection({
                 ))}
               </SelectContent>
             </Select>
+            <FormDescription>
+              Selector strategy uses an AI agent to choose the next team member.
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
       />
 
       <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
-        <CollapsibleTrigger className="flex w-full items-center justify-start gap-2 px-0 hover:bg-transparent">
-          {isAdvancedOpen ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          )}
-          <Settings2 className="h-4 w-4 text-muted-foreground" />
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <CollapsibleTrigger className="text-fg-secondary flex w-full items-center justify-start gap-2 px-0 hover:bg-transparent">
+          <IconShell size="sm" variant="secondary">
+            {isAdvancedOpen ? <ChevronDown /> : <ChevronRight />}
+          </IconShell>
+          <IconShell size="sm" variant="secondary">
+            <Tune />
+          </IconShell>
+          <span className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
             Advanced Settings
           </span>
         </CollapsibleTrigger>
@@ -135,7 +145,7 @@ export function SelectorSection({
                   <FormLabel>Selector Prompt</FormLabel>
                   <div className="flex items-center gap-2">
                     {field.value && field.value.length > 0 && (
-                      <span className="text-muted-foreground text-xs">
+                      <span className="text-fg-tertiary text-xs">
                         {field.value.length} characters
                       </span>
                     )}
@@ -143,19 +153,11 @@ export function SelectorSection({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}
-                      className="h-8 px-2">
-                      {isPromptExpanded ? (
-                        <>
-                          <Minimize2 className="mr-1 h-4 w-4" />
-                          Collapse
-                        </>
-                      ) : (
-                        <>
-                          <Maximize2 className="mr-1 h-4 w-4" />
-                          Expand
-                        </>
-                      )}
+                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}>
+                      <IconShell size="sm" variant="secondary">
+                        {isPromptExpanded ? <CollapseContent /> : <ExpandContent />}
+                      </IconShell>
+                      {isPromptExpanded ? 'Collapse' : 'Expand'}
                     </Button>
                   </div>
                 </div>
@@ -176,14 +178,14 @@ export function SelectorSection({
                   />
                 </FormControl>
                 {isPromptExpanded && field.value && field.value.length > 0 && (
-                  <div className="text-muted-foreground text-xs">
+                  <div className="text-fg-tertiary text-xs">
                     {field.value.split('\n').length} lines
                   </div>
                 )}
                 <FormMessage />
                 <Alert layout="long" className="mt-2">
                   <AlertIcon className="text-status-warning">
-                    <AlertCircle className="text-[25px]" />
+                    <Warning className="text-[25px]" />
                   </AlertIcon>
                   <AlertContent>
                     <AlertDescription>
@@ -199,7 +201,9 @@ export function SelectorSection({
                   onClick={() => form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT, { shouldDirty: true })}
                   disabled={disabled}
                   className="mt-2">
-                  <RotateCcw className="mr-2 h-4 w-4" />
+                  <IconShell size="sm" variant="secondary">
+                    <RestartAlt />
+                  </IconShell>
                   Reset to Default Prompt
                 </Button>
               </FormItem>
@@ -219,7 +223,7 @@ export function SelectorSection({
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel>Enable Terminate Tool</FormLabel>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-fg-tertiary text-xs">
                     Allow the selector agent to use the terminate tool to end
                     the conversation early when appropriate.
                   </p>
@@ -254,7 +258,9 @@ export function SelectorSection({
                     }
                     disabled={disabled}
                     className="mt-2">
-                    <RotateCcw className="mr-2 h-4 w-4" />
+                    <IconShell size="sm" variant="secondary">
+                      <RestartAlt />
+                    </IconShell>
                     Reset to Default Prompt
                   </Button>
                 </FormItem>

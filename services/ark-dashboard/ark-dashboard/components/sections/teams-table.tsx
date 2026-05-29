@@ -69,6 +69,10 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
 
   const memberCount = team.members?.length ?? 0;
   const memberLabel = memberCount === 1 ? 'member' : 'members';
+  const strategyLabel =
+    team.strategy === 'sequential' && team.loops
+      ? 'sequential (loops)'
+      : team.strategy;
 
   return (
     <>
@@ -108,8 +112,8 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
         <div className={cn(rowCellClass, COL.members)}>
           <span
             className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={`${memberCount} ${memberLabel} · ${team.strategy}`}>
-            {memberCount} {memberLabel} · {team.strategy}
+            title={`${memberCount} ${memberLabel} · ${strategyLabel}`}>
+            {memberCount} {memberLabel} · {strategyLabel}
           </span>
         </div>
         <div className={cn(rowCellClass, COL.status)}>

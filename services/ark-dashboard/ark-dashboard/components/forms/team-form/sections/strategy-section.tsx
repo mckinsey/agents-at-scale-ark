@@ -1,7 +1,8 @@
-import { Settings } from 'lucide-react';
-import type { UseFormReturn } from 'react-hook-form';
+import { type UseFormReturn, useWatch } from 'react-hook-form';
 
+import { Settings } from '@/components/icons';
 import { Checkbox } from '@/components/ui/checkbox';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   FormControl,
   FormField,
@@ -42,14 +43,20 @@ export function StrategySection({
   selectedMembers,
   disabled,
 }: Readonly<StrategySectionProps>) {
-  const selectedStrategy = form.watch('strategy');
-  const loopsChecked = form.watch('loops');
+  const selectedStrategy = useWatch({ control: form.control, name: 'strategy' });
+  const loopsChecked = useWatch({ control: form.control, name: 'loops' });
+  const enableTerminateTool = useWatch({
+    control: form.control,
+    name: 'enableTerminateTool',
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Settings className="text-muted-foreground h-4 w-4" />
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <IconShell size="sm" variant="secondary">
+          <Settings />
+        </IconShell>
+        <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
           Strategy Configuration
         </h3>
       </div>
@@ -60,7 +67,7 @@ export function StrategySection({
         render={({ field }) => (
           <FormItem>
             <FormLabel>
-              Strategy <span className="text-red-500">*</span>
+              Strategy <span className="text-status-error">*</span>
             </FormLabel>
             <Select
               items={strategyItems}
@@ -132,7 +139,7 @@ export function StrategySection({
             <FormItem>
               <FormLabel>
                 Max Turns{' '}
-                <span className="text-red-500">*</span>
+                <span className="text-status-error">*</span>
               </FormLabel>
               <FormControl>
                 <Input
@@ -152,7 +159,7 @@ export function StrategySection({
         agents={agents}
         selectedMembers={selectedMembers}
         strategy={selectedStrategy}
-        enableTerminateTool={form.watch('enableTerminateTool')}
+        enableTerminateTool={enableTerminateTool}
       />
     </div>
   );

@@ -15,6 +15,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -235,10 +236,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex min-h-0 flex-1 overflow-auto pb-6">
-            <div className="flex w-full max-w-[720px] flex-col gap-6">
-              {formSections}
-            </div>
+            className="flex min-h-0 flex-1 flex-col">
+            <ScrollArea className="h-0 min-h-0 flex-1">
+              <div className="flex w-full max-w-[720px] flex-col gap-6 pb-6">
+                {formSections}
+              </div>
+            </ScrollArea>
           </form>
         </Form>
       </div>

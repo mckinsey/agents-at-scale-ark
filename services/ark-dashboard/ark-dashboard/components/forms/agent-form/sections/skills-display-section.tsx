@@ -1,5 +1,7 @@
 'use client';
 
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 import type { SkillsDisplaySectionProps } from '../types';
 
 export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
@@ -13,7 +15,8 @@ export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
           No skills available for this agent
         </div>
       ) : (
-        <div className="border-stroke-divider max-h-[300px] space-y-2 overflow-y-auto border p-3">
+        <ScrollArea className="border-stroke-divider border [&_[data-slot=scroll-area-viewport]]:max-h-[300px]">
+          <div className="space-y-2 p-3">
           {skills.map((skill, index) => (
             <div
               key={`${skill.id}-${index}`}
@@ -39,7 +42,8 @@ export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
               )}
             </div>
           ))}
-        </div>
+          </div>
+        </ScrollArea>
       )}
     </div>
   );

@@ -1,15 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Group, Plus, Search } from '@/components/icons';
+import { Group, Search } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { TeamTableRow } from '@/components/sections/teams-table';
-import {
-  SortableSectionedList,
-  type SortableSectionedListHandle,
-} from '@/components/sortable-sectioned-list';
+import { TeamsTable } from '@/components/sections/teams-table';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -22,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useDelayedLoading, useTeamsLayout } from '@/lib/hooks';
+import { useDelayedLoading } from '@/lib/hooks';
 import { type Team, teamsService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -36,8 +32,6 @@ const STATUS_ITEMS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
 
 const LEARN_MORE_URL =
   'https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/';
-
-const getTeamKey = (team: Team) => team.name;
 
 function TeamsEmptyState({ readOnlyMode }: { readOnlyMode: boolean }) {
   return (
@@ -79,8 +73,6 @@ export function TeamsSection() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const showLoading = useDelayedLoading(loading);
   const { readOnlyMode, namespace } = useNamespace();
-  const { layout, setLayout } = useTeamsLayout(namespace);
-  const listRef = useRef<SortableSectionedListHandle>(null);
 
   const filteredTeams = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -213,34 +205,8 @@ export function TeamsSection() {
             )}
           </div>
 
-          <div className="flex items-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => listRef.current?.openCreateGroup()}>
-              <IconShell size="sm" variant="secondary">
-                <Plus />
-              </IconShell>
-              Create Group
-            </Button>
-          </div>
-
           <ScrollArea className="h-0 min-h-0 flex-1">
-            <SortableSectionedList
-              ref={listRef}
-              items={filteredTeams}
-              getKey={getTeamKey}
-              layout={layout}
-              setLayout={setLayout}
-              itemNoun={{ singular: 'team', plural: 'teams' }}
-              renderItem={(team, { dragHandle }) => (
-                <TeamTableRow
-                  team={team}
-                  onDelete={handleDeleteTeam}
-                  leading={dragHandle}
-                />
-              )}
-            />
+            <TeamsTable teams={filteredTeams} onDelete={handleDeleteTeam} />
           </ScrollArea>
         </div>
       )}

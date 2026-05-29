@@ -100,7 +100,7 @@ describe('StrategySection', () => {
   it('should show required indicator on max turns for selector strategy', () => {
     render(<Wrapper defaultStrategy="selector" />);
     expect(
-      screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
+      screen.getByText('Max Turns').parentElement?.querySelector('.text-status-error'),
     ).toBeInTheDocument();
   });
 
@@ -112,7 +112,7 @@ describe('StrategySection', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
+        screen.getByText('Max Turns').parentElement?.querySelector('.text-status-error'),
       ).toBeInTheDocument();
     });
   });

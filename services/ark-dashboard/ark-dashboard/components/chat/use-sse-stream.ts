@@ -2,42 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export interface StreamEntry {
-  id: string;
-  timestamp: string;
-  data: unknown;
-}
+import {
+  createStreamEntryId,
+  extractItemTimestamp,
+  type PaginatedResponse,
+  type StreamEntry,
+} from '@/lib/utils/sse-stream';
 
-interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  hasMore: boolean;
-  nextCursor?: number;
-}
+export type { StreamEntry };
 
 const PAGE_SIZE = 100;
-
-function extractItemTimestamp(item: unknown): string {
-  if (!item) {
-    return new Date().toISOString();
-  }
-  const typedItem = item as Record<string, unknown>;
-  if (typedItem.timestamp) {
-    return typedItem.timestamp as string;
-  }
-  let unixTimestamp = '';
-  if (typedItem?.startTimeUnixNano) {
-    unixTimestamp = typedItem.startTimeUnixNano as string;
-  }
-  const spans = typedItem?.spans as Array<Record<string, unknown>>;
-  if (!unixTimestamp && spans && spans.length > 0) {
-    unixTimestamp = spans[0].startTimeUnixNano as string;
-  }
-  if (unixTimestamp) {
-    return new Date(parseInt(unixTimestamp.substring(0, 13))).toISOString();
-  }
-  return new Date().toISOString();
-}
 
 export function useSSEStream(
   endpoint: string,
@@ -100,7 +74,7 @@ export function useSSEStream(
           }
           if (!filterByAgent(data)) return;
           const entry: StreamEntry = {
-            id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+            id: createStreamEntryId(),
             timestamp: extractItemTimestamp(data),
             data,
           };
@@ -152,7 +126,7 @@ export function useSSEStream(
         const newEntries: StreamEntry[] = data.items
           .filter(filterByAgent)
           .map((item, i) => ({
-            id: `fetched-${cursor ?? 0}-${i}-${Math.random().toString(36).substring(2, 11)}`,
+            id: createStreamEntryId(`fetched-${cursor ?? 0}-${i}`),
             timestamp: extractItemTimestamp(item),
             data: item,
           }));
