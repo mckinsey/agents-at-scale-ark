@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -246,6 +247,57 @@ var _ = Describe("Query Controller", func() {
 
 			By("calling updateStatus on the deleted query should not error")
 			Expect(controllerReconciler.updateStatus(ctx, deletedQuery, "Running")).To(Succeed())
+		})
+	})
+})
+
+var _ = Describe("Query Controller handleRunningPhase", func() {
+	Context("TTL handling", func() {
+		It("returns immediately when the query TTL has already expired", func() {
+			r := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "expired-ttl-query",
+					Namespace: "default",
+					CreationTimestamp: metav1.Time{
+						Time: time.Now().Add(-2 * time.Hour),
+					},
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					TTL: &metav1.Duration{Duration: 1 * time.Hour},
+				},
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+		})
+
+		It("returns immediately when the query has no TTL and uses default 1h but is already 2h old", func() {
+			r := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-ttl-old-query",
+					Namespace: "default",
+					CreationTimestamp: metav1.Time{
+						Time: time.Now().Add(-2 * time.Hour),
+					},
+				},
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
 		})
 	})
 })
