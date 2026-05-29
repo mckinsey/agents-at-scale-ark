@@ -172,24 +172,33 @@ Executor implementations MAY consume `request.history` directly when building LL
 
 ark-api SHALL expose the following endpoints under `/v1/files`. All endpoints SHALL be namespace-scoped to the caller's identity via `ImpersonationConfig`.
 
-- `POST /v1/files` — multipart upload (fields: `file`, `prefix`, `prewarm`). Returns `{ uri, path, etag, size, mime, uploaded_at, compatibility, projections }`.
-- `GET /v1/files` — stitched list (workspace files + per-backend compatibility + per-backend projection state).
-- `GET /v1/files/<path>` — single-file metadata, same envelope.
+- `POST /v1/files` — multipart upload (fields: `file`, `prefix`, `prewarm_model_ref?`, `prewarm_provider?`). Returns `{ uri, path, etag, size, mime, uploaded_at, compatibility, projections }`.
+- `GET /v1/files?model_ref=<ns>/<name>` — stitched list (workspace files + per-backend compatibility + per-backend projection state). The optional `model_ref` query parameter scopes the `projections` block to that Model's destination; without it, the response shows provider-level rollup readiness (see below).
+- `GET /v1/files/<path>?model_ref=<ns>/<name>` — single-file metadata; same envelope and same optional `model_ref` semantics.
 - `GET /v1/files/<path>/content` — stream bytes.
 - `DELETE /v1/files/<path>` — delete with backend fanout.
-- `POST /v1/files/<path>/prewarm` — synchronous prewarm request (body `{ provider }`).
+- `POST /v1/files/<path>/prewarm` — synchronous prewarm request. Body MAY include `model_ref: { namespace, name }` for an account-accurate prewarm, OR `provider: "<name>"` for a best-effort, provider-level prewarm. `model_ref` takes precedence when both are set.
 
 #### Scenario: Upload returns canonical URI and projection state
 
-- **WHEN** a caller POSTs to `/v1/files` with `file=report.pdf` and `prewarm=openai`
+- **WHEN** a caller POSTs to `/v1/files` with `file=report.pdf` and `prewarm_model_ref=team-a/gpt-4-prod`
 - **THEN** ark-api SHALL store the file via the workspace
-- **AND** SHALL fire a best-effort `/v1/projections` call to the openai FileBackend
-- **AND** SHALL return `uri: "ark://workspace/report.pdf"` and `projections.openai.status: "pending"`
+- **AND** SHALL fire a best-effort `/v1/projections` call to the FileBackend matched to that Model
+- **AND** SHALL return `uri: "ark://workspace/report.pdf"` and a `projections` entry keyed by the resolved provider (e.g., `projections.openai.status: "pending"`) for the prewarmed destination
 
-#### Scenario: List returns stitched view
+#### Scenario: List returns stitched view with provider-level rollup readiness
 
-- **WHEN** a caller GETs `/v1/files`
+- **WHEN** a caller GETs `/v1/files` without a `model_ref` query parameter
 - **THEN** the response SHALL include each workspace file with `compatibility` and `projections` populated from each installed FileBackend
+- **AND** each `projections.<provider>.status` SHALL reflect provider-level rollup readiness — `"ready"` if at least one destination on that provider has projected the file, `"not-projected"` otherwise
+- **AND** the response SHALL document this semantic (e.g., a `projections_scope: "provider-rollup"` field) so callers do not misread the badge as Query-specific
+
+#### Scenario: List with `model_ref` returns destination-scoped readiness
+
+- **WHEN** a caller GETs `/v1/files?model_ref=team-a/gpt-4-prod`
+- **THEN** ark-api SHALL resolve the named Model to its FileBackend and `destination_id`
+- **AND** the response's `projections` block SHALL reflect cache state for THAT destination only — `"ready"` only when the specific destination has the file cached
+- **AND** the response SHALL include `projections_scope: "model"` and echo the resolved model_ref
 
 #### Scenario: Delete fans out to FileBackends
 
@@ -199,28 +208,45 @@ ark-api SHALL expose the following endpoints under `/v1/files`. All endpoints SH
 - **AND** SHALL return success even if individual backend deletes fail
 - **AND** SHALL include a `projections_cleaned` summary in the response
 
-#### Scenario: Prewarm endpoint waits for projection
+#### Scenario: Prewarm endpoint with `model_ref` is destination-accurate
+
+- **WHEN** a caller POSTs to `/v1/files/report.pdf/prewarm` with `{ "model_ref": { "namespace": "team-a", "name": "gpt-4-prod" } }`
+- **THEN** ark-api SHALL resolve the Model to its FileBackend
+- **AND** SHALL call the FileBackend synchronously with that `model_ref`
+- **AND** SHALL return the updated projection entry when projection completes
+
+#### Scenario: Prewarm endpoint with `provider` is best-effort
 
 - **WHEN** a caller POSTs to `/v1/files/report.pdf/prewarm` with `{ "provider": "openai" }`
-- **AND** the openai FileBackend is installed
-- **THEN** ark-api SHALL call the FileBackend synchronously
-- **AND** SHALL return the updated projection entry when projection completes
+- **AND** the namespace has multiple Models with `spec.provider: "openai"` (different accounts)
+- **THEN** ark-api SHALL select one such Model deterministically (e.g., oldest creationTimestamp) and pass its `model_ref` to the FileBackend
+- **AND** SHALL return the updated projection entry, including the resolved `model_ref` so the caller knows which destination was warmed
+- **AND** the operation is best-effort: a Query later targeting a different OpenAI account will project on its own at dispatch time (cache miss)
 
 ### Requirement: Upload supports hint-based prewarm
 
-The `prewarm` form field on `POST /v1/files`, when set to a provider name, SHALL trigger a best-effort projection call to the matching FileBackend after the workspace upload completes. The upload response SHALL NOT block on prewarm completion.
+The `prewarm_model_ref` and `prewarm_provider` form fields on `POST /v1/files` MAY be set (mutually exclusive; `prewarm_model_ref` takes precedence if both are provided) to trigger a best-effort projection call to the matching FileBackend after the workspace upload completes. The upload response SHALL NOT block on prewarm completion.
 
-#### Scenario: Prewarm with matching backend installed
+The `prewarm_model_ref` form encodes a Model reference (e.g., `"team-a/gpt-4-prod"`) for destination-accurate prewarm; the dashboard composer (which knows the active chat's Model) SHOULD prefer this form. The `prewarm_provider` form (e.g., `"openai"`) is best-effort and resolves to one Model on that provider deterministically (see prewarm endpoint scenarios); callers that don't know which Model will consume the file MAY use it but should expect occasional cache misses at dispatch when the eventual Model targets a different account.
 
-- **WHEN** a caller uploads with `prewarm=openai`
-- **AND** an `openai` FileBackend is installed
+#### Scenario: Prewarm with destination-accurate model_ref
+
+- **WHEN** a caller uploads with `prewarm_model_ref="team-a/gpt-4-prod"`
+- **AND** the named Model exists and its provider has a matching FileBackend
 - **THEN** ark-api SHALL return success immediately after the workspace upload
-- **AND** SHALL initiate the projection call without blocking the response
-- **AND** the projection state SHALL appear as "ready" in a subsequent listing once complete
+- **AND** SHALL initiate the projection call for that specific Model's destination without blocking the response
+- **AND** the projection state SHALL appear as "ready" in a subsequent listing scoped to the same Model once complete
+
+#### Scenario: Prewarm with provider hint is best-effort
+
+- **WHEN** a caller uploads with `prewarm_provider="openai"`
+- **AND** an `openai` FileBackend is installed
+- **THEN** ark-api SHALL select one Model with `spec.provider: "openai"` from the namespace deterministically (e.g., oldest creationTimestamp) and prewarm for that Model's destination
+- **AND** SHALL return success immediately after the workspace upload
 
 #### Scenario: Prewarm for missing backend silently noop
 
-- **WHEN** a caller uploads with `prewarm=anthropic`
+- **WHEN** a caller uploads with `prewarm_provider="anthropic"`
 - **AND** no `anthropic` FileBackend is installed
 - **THEN** ark-api SHALL accept the upload normally
 - **AND** SHALL NOT fail the upload

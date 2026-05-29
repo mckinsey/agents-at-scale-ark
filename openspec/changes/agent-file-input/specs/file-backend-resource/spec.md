@@ -70,8 +70,8 @@ The `Model` CRD SHALL gain an optional `spec.fileBackend` field referencing a Fi
 
 A service referenced by a `FileBackend` CR SHALL expose the following endpoints:
 
-- `POST /v1/projections` — body `{ workspace_uri, etag, mime, model_ref: { namespace, name }, target_api?: "<surface>" }`. Resolves the Model (and its credentials) via K8s API access, projects the workspace file to the provider, caches the result, returns a `{ provider_file_id, expires_at, part }` envelope where `part` is the provider-native message-part shape ready to substitute for the FilePart in the dispatched message.
-- `GET /v1/projections?workspace_uri=<uri>&etag=<e>&model_ref=<ns>/<name>` — returns cached projection if present, else 404. Read-only; does NOT trigger an upload. Used by ark-api's stitched listing endpoint to surface per-file projection state without side effects.
+- `POST /v1/projections` — body `{ workspace_uri, etag, mime, model_ref: { namespace, name }, target_api?: "<surface>" }`. Resolves the Model (and its credentials) via K8s API access, projects the workspace file to the provider, caches the result, returns a `{ provider_file_id, expires_at, part }` envelope where `part` is the provider-native message-part shape ready to substitute for the FilePart in the dispatched message. Dispatch is destination-accurate; `model_ref` is required.
+- `GET /v1/projections?workspace_uri=<uri>&etag=<e>` — returns cached projection state. Accepts either `&model_ref=<ns>/<name>` for destination-scoped state, OR no qualifier (or `&provider=<name>`) for rollup state derived from any cached destination on this backend. Read-only; does NOT trigger an upload. Used by ark-api's stitched listing endpoint.
 - `DELETE /v1/projections/<id>` — invalidates the cache entry and best-effort deletes the provider-side file.
 - `GET /v1/capabilities` — static metadata: accepted MIME types (grouped by category if useful), size limits, supported API surfaces, notes. Used by ark-api to populate `compatibility` in list responses.
 
@@ -186,7 +186,16 @@ The controller SHALL reconcile `FileBackend.status.conditions[Ready]`. If no `Wo
 
 ### Requirement: Listing endpoint exposes per-backend compatibility and projection state
 
-ark-api's `GET /v1/files` and `GET /v1/files/<path>` responses SHALL include both a static `compatibility` map (derived from each installed FileBackend's `spec.constraints` + `/v1/capabilities`) and a dynamic `projections` map (derived from each backend's cached state).
+ark-api's `GET /v1/files` and `GET /v1/files/<path>` responses SHALL include both a static `compatibility` map (derived from each installed FileBackend's `spec.constraints` + `/v1/capabilities`) and a dynamic `projections` map.
+
+The `projections` map's semantic depends on whether the request includes a `model_ref` query parameter:
+
+- **Without `model_ref` (provider-rollup, default)**: `projections.<provider>.status: "ready"` means at least one destination on that provider has cached the file. Useful as an overview but NOT Query-accurate when multiple Models on the same provider authenticate to different accounts (e.g., two `openai` Models pointing at different orgs).
+- **With `model_ref` (destination-scoped)**: `projections.<provider>.status: "ready"` reflects cache state for the specific destination the named Model resolves to. This is Query-accurate.
+
+Responses SHALL include a `projections_scope` field with value `"provider-rollup"` or `"model"` so callers cannot misread the badge.
+
+The FileBackend's `GET /v1/projections` endpoint SHALL accept either qualifier — given a `model_ref` it returns destination-scoped state; given only a `provider` (or no qualifier) it returns rollup state derived from any cached destination on that backend.
 
 #### Scenario: Listing reflects per-backend acceptance
 
@@ -195,9 +204,19 @@ ark-api's `GET /v1/files` and `GET /v1/files/<path>` responses SHALL include bot
 - **AND** a `bedrock` FileBackend does not
 - **THEN** the listing entry for `report.xlsx` SHALL include `compatibility.openai: "accepted"` and `compatibility.bedrock: "not-supported"`
 
-#### Scenario: Projection state reflects cache
+#### Scenario: Provider-rollup projection state without model_ref
 
-- **WHEN** an OpenAI FileBackend has cached a projection of `report.pdf`
-- **AND** Bedrock FileBackend has not
-- **THEN** the listing SHALL include `projections.openai.status: "ready"`
+- **WHEN** an OpenAI FileBackend has cached a projection of `report.pdf` for org-A
+- **AND** Bedrock FileBackend has not cached anything
+- **AND** a caller GETs `/v1/files` without a `model_ref` query parameter
+- **THEN** the listing SHALL include `projections.openai.status: "ready"` (rollup — at least one destination on openai has it)
 - **AND** `projections.bedrock` SHALL be absent or `"not-projected"`
+- **AND** the response SHALL include `projections_scope: "provider-rollup"`
+
+#### Scenario: Destination-scoped projection state with model_ref
+
+- **WHEN** an OpenAI FileBackend has cached a projection of `report.pdf` for org-A only
+- **AND** a caller GETs `/v1/files?model_ref=team-a/gpt-4-prod` where that Model authenticates to org-B
+- **THEN** ark-api SHALL pass the model_ref to the FileBackend, which resolves credentials to org-B and queries the cache for THAT destination
+- **AND** the listing SHALL include `projections.openai.status: "not-projected"` (the cache entry for org-A doesn't apply to org-B)
+- **AND** the response SHALL include `projections_scope: "model"` and echo the resolved model_ref

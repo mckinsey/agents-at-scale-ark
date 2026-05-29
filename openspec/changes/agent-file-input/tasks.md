@@ -45,9 +45,9 @@
 - [ ] 6.2 Workspace resolver: read Workspace CR in caller's namespace; return 404 with marketplace guidance if absent (no built-in default workspace — E5-auto-4)
 - [ ] 6.3 Multipart streaming proxy from ark-api to workspace service
 - [ ] 6.4 Path sanitization implementing the rules from spec
-- [ ] 6.5 Stitched listing: combine workspace list with each installed FileBackend's `/v1/capabilities` (compatibility) and `/v1/projections` (cached state). Per-file projection-state lookups MAY be batched per-backend; v1 accepts O(workspace_files × backends) calls for the listing.
-- [ ] 6.6 Prewarm: fire-and-forget POST to matching FileBackend after upload; do not block response
-- [ ] 6.7 Synchronous prewarm endpoint `POST /v1/files/<path>/prewarm`
+- [ ] 6.5 Stitched listing: combine workspace list with each installed FileBackend's `/v1/capabilities` (compatibility) and `/v1/projections` (cached state). Accept optional `?model_ref=<ns>/<name>` to scope `projections` to a specific Model's destination; without it, return provider-rollup state. Response includes `projections_scope` field (`"provider-rollup"` or `"model"`). Per-file projection-state lookups MAY be batched per-backend; v1 accepts O(workspace_files × backends) calls for the listing.
+- [ ] 6.6 Upload form fields: accept `prewarm_model_ref` (Model reference for destination-accurate prewarm) AND/OR `prewarm_provider` (provider name for best-effort prewarm); `prewarm_model_ref` takes precedence. Fire-and-forget POST to the resolved FileBackend after upload; do not block response.
+- [ ] 6.7 Synchronous prewarm endpoint `POST /v1/files/<path>/prewarm`. Body accepts `model_ref` (destination-accurate) or `provider` (best-effort, picks one Model on that provider deterministically — oldest creationTimestamp — and uses its credentials). Response echoes the resolved `model_ref` so callers know which destination was warmed.
 - [ ] 6.8 Delete fanout: workspace delete first; then best-effort delete to each FileBackend; return `projections_cleaned` summary
 - [ ] 6.9 Wire ark-api dependencies: ImpersonationConfig (existing), Kubernetes client for CR resolution
 
@@ -69,7 +69,8 @@
 ## 9. Dashboard
 
 - [ ] 9.1 Add chat composer attach affordance with "From workspace" picker + "Upload new" flow; show file pills before send. Composer constructs user messages with `ark.file` content parts.
-- [ ] 9.2 When active agent's Model provider is known, uploads from the composer pass `prewarm=<provider>`
+- [ ] 9.2 When active agent's Model is known, uploads from the composer pass `prewarm_model_ref=<ns>/<name>` (destination-accurate). Files page (which has no active Model context) MAY pass `prewarm_provider=<name>` as best-effort, or skip prewarm entirely.
+- [ ] 9.2a Files page calls `GET /v1/files` WITHOUT `model_ref` for the overview (provider-rollup readiness). If the page is reached from a chat context, MAY pass `?model_ref=...` for Query-accurate badges.
 - [ ] 9.3 Hide the attach affordance when no Workspace is configured in the namespace; show install guidance link
 - [ ] 9.4 Update Files page to render stitched listing with per-backend compatibility + projection state badges
 - [ ] 9.5 FileBackend list view shows `Ready` conditions; surface "NoWorkspace" state with actionable text

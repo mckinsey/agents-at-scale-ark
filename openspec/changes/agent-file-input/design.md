@@ -86,13 +86,15 @@ No forward-compat reservations in v1. If multiple workspaces ever become necessa
 
 ### Decision: Hint-based eager prewarm; lazy-at-dispatch is canonical
 
-Upload accepts a `prewarm` form field naming a provider. ark-api stores in the workspace and returns immediately, then fires a best-effort projection call to the matching FileBackend. The projection itself is canonical at Query dispatch — if the cache is cold, the controller projects synchronously before sending the message to the executor.
+Upload accepts an optional `prewarm_model_ref` form field (Model reference) for destination-accurate prewarm, or an alternative `prewarm_provider` (provider name) for best-effort prewarm. `prewarm_model_ref` is what the dashboard composer uses because it knows the active chat's Model; `prewarm_provider` exists for callers that don't know which Model will consume the file (best-effort: pick one Model on that provider deterministically — oldest creationTimestamp — and prewarm for its destination). ark-api stores in the workspace and returns immediately, then fires a best-effort projection call to the resolved FileBackend.
 
-This makes "eager" a pure optimization, removing any need for a separate projection state machine. The FileBackend cache IS the state.
+The projection itself is canonical at Query dispatch — if the cache is cold, the controller projects synchronously before sending the message to the executor. Prewarm is therefore a pure optimization; correctness never depends on it. A `prewarm_provider` request that targets a different account from the eventual Query Model is harmless — the dispatch re-projects on cache miss for the correct destination.
 
 **Alternative considered:** synchronous projection at upload time (block the response until the provider finishes ingest). Rejected — couples upload latency to provider parsing, which can be many seconds for PDFs. Best UX under failure (you find out at upload time) but worst UX under success (you wait every time).
 
 **Alternative considered:** persistent async state machine with status field per (file, provider). Rejected — invents state we don't otherwise need; introduces race resolution between "still pending" and "Query dispatched".
+
+**Alternative considered:** prewarm form field naming only a provider (no model_ref option). Rejected — when a namespace has multiple Models on the same provider authenticating to different accounts, provider-only prewarm cannot reliably target the destination the eventual Query will use. Keeping the field but documenting it as best-effort is acceptable; making model_ref the preferred shape gives composer-context callers an accurate path.
 
 ### Decision: ark-api streams uploads through to the workspace
 
@@ -194,6 +196,21 @@ This means:
 - The FileBackend marketplace chart ships a ServiceAccount + Role granting `get` on `models.ark.mckinsey.com` and on the Secrets the Models reference, in its namespace.
 
 **Alternative considered:** controller resolves credentials and passes them in the `/v1/projections` request body. Rejected because it introduces a new credential exposure surface that no other Ark service uses today. Every credential-using service in Ark (completions, file-gateway clients, memory-http) reads its own credentials directly from K8s; the FileBackend should follow the same pattern.
+
+### Decision: Listing readiness is two-tier — provider-rollup by default, destination-scoped on request
+
+ark-api's `/v1/files` listing exposes `projections.<provider>.status` to surface per-file projection state. Two viewing modes:
+
+- **Default (no `model_ref` query param)**: `projections.<provider>.status: "ready"` means at least one destination on that provider has cached the file. This is a provider-rollup — accurate as an overview ("has this file been projected anywhere on OpenAI?") but NOT Query-accurate when multiple Models on the same provider authenticate to different accounts.
+- **With `?model_ref=<ns>/<name>`**: `projections.<provider>.status` reflects cache state for the specific destination the named Model resolves to. Query-accurate.
+
+The response carries a `projections_scope` field (`"provider-rollup"` or `"model"`) so callers cannot misread the badge.
+
+This addresses the mismatch between the cache's destination-keyed identity and the listing's provider-keyed surface: the API surface honestly reflects what was asked, and gives composer-context callers (who know the active Model) a path to Query-accurate badges.
+
+**Alternative considered:** make `model_ref` mandatory on listing. Rejected — the Files page in the dashboard is reached outside of any chat context; a "this file has been projected somewhere on OpenAI" overview is genuinely useful there.
+
+**Alternative considered:** show all cached destinations per provider as separate entries. Rejected — too granular for v1 UI; per-destination accounting isn't a user-facing concept.
 
 ### Decision: FileBackend cache keyed by `(workspace_uri, etag, destination_id)`
 
