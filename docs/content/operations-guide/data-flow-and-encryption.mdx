@@ -1,0 +1,79 @@
+import { Callout } from 'nextra/components'
+
+# Data Flow and Encryption
+
+Where sensitive data lands during a Query lifecycle and what protection each surface has by default.
+
+<Callout type="warning">
+Ark runs inside your Kubernetes cluster. Encryption at rest and many in-transit protections depend on your cluster and cloud configuration, not on Ark defaults. Review every row in the tables below against your deployment before requesting InfoSec sign-off.
+</Callout>
+
+## Query lifecycle data surfaces
+
+A single Query execution touches multiple storage and communication surfaces. The diagram below shows the path from submission to response, with numbered callouts for each surface described in the tables.
+
+```
+                          ┌──────────────────────┐
+                          │   Client / Dashboard  │
+                          └──────────┬───────────┘
+                                     │ HTTPS (①)
+                          ┌──────────▼───────────┐
+                          │       ark-api         │
+                          └──────────┬───────────┘
+                                     │
+                  ┌──────────────────┼──────────────────┐
+                  │                  │                   │
+         ┌───────▼────────┐  ┌──────▼───────┐  ┌───────▼────────┐
+         │  Query CR (②)  │  │  Broker (⑥)  │  │  OTel (⑦)      │
+         │  etcd / PG     │  │  memory store │  │  collector     │
+         └───────┬────────┘  └──────────────┘  └────────────────┘
+                 │
+        ┌────────▼────────┐
+        │   Controller    │
+        └────────┬────────┘
+                 │ A2A HTTP (③)
+        ┌────────▼────────┐
+        │    Executor     │──── LLM Provider (④) ── HTTPS
+        │  (built-in or   │──── MCP Servers  (⑤) ── HTTP(S)
+        │   external)     │──── Session files (⑧)
+        └─────────────────┘
+```
+
+## Encryption at rest
+
+| # | Surface | What lands there | Encrypted by default? | How to enable |
+|---|---------|------------------|-----------------------|---------------|
+| ② | **etcd** (default storage) | All CRs: Query inputs/outputs, Agent prompts, Model secret refs, Tool configs | No. etcd stores data unencrypted unless the cluster enables `EncryptionConfiguration`. | Configure kube-apiserver `--encryption-provider-config` with an `aesgcm` or `secretbox` provider. See [K8s docs](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/). |
+| ② | **PostgreSQL** (optional storage) | Same as etcd — full `spec` and `status` JSONB columns in the `resources` table | No. | Enable Transparent Data Encryption (TDE) or use an encrypted volume for the PG data directory. |
+| ② | **Kubernetes Secrets** | API keys, credentials referenced by Models and Tools | No — Secrets are base64-encoded, not encrypted, in etcd. | Same etcd encryption config as above. Consider an external secrets operator (Vault, AWS Secrets Manager, GCP Secret Manager). |
+| ⑥ | **Broker memory store** | Conversation history, streaming chunks, OTel spans, controller events | In-memory by default (ephemeral). If `persistence.enabled: true`, stored as plaintext JSON at `/data/`. | Use an encrypted PersistentVolume or mount an encrypted filesystem. |
+| ⑧ | **Executor session files** | Conversation state, tool outputs (Claude Agent SDK: `/data/sessions/<conversationId>/`) | No. Plaintext on pod filesystem. | Use an encrypted PersistentVolume. Restrict access via Pod Security Standards. |
+| ⑦ | **OTel collector** | Span attributes: session IDs, query/target names, dispatch addresses, error messages, token counts | Depends on your collector and its backend. | Configure your collector's exporter with encryption (e.g., encrypted Elasticsearch, encrypted S3). |
+| — | **Pod logs** | Query/target names, error messages, dispatch addresses. Input/output truncated to 48 chars at info level; verbose mode (`-v 1`) adds session details. | Depends on your log aggregator. | Ensure your log pipeline encrypts at rest. Review verbose logging before enabling in production. |
+
+## In-transit encryption
+
+| # | Hop | Protocol | TLS by default? | Notes |
+|---|-----|----------|-----------------|-------|
+| ① | Client → ark-api | HTTPS | Depends on your Ingress / load balancer. | Configure TLS termination at the Ingress or use cert-manager. |
+| ② | ark-api → kube-apiserver | HTTPS | Yes. Kubernetes API server requires TLS. | Managed by the cluster. |
+| ③ | Controller → executor (A2A) | HTTP | No. Uses Go `http.DefaultTransport`. | Deploy a service mesh (Istio, Linkerd) for automatic mTLS between pods, or configure the executor behind a TLS-terminating sidecar. |
+| ④ | Executor → LLM provider | HTTPS | **Yes.** Ark's validating webhook rejects non-HTTPS model base URLs. | Exception: `*.svc.cluster.local` addresses are allowed over HTTP for in-cluster mock services. |
+| ⑤ | Executor → MCP servers | HTTP(S) | No enforcement. Depends on the MCP server address scheme. | Use HTTPS addresses for MCP servers that handle sensitive data. No webhook validation exists for MCP URLs today. |
+| ⑥ | Controller / API → broker | HTTP | No. | Service mesh mTLS or a TLS-terminating sidecar. |
+| ⑦ | Controller → OTel collector | HTTP | No. Uses the URL in `OTEL_EXPORTER_OTLP_ENDPOINT`. | Set an `https://` endpoint URL. Per-namespace endpoint discovery is available via the `otel-environment-variables` Secret. |
+| ② | Controller → PostgreSQL | TCP | No. `sslMode: disable` is the default. | Set `storage.postgresql.sslMode` to `require` or `verify-full` in Helm values. |
+| — | Metrics scrape | HTTPS | Yes. Controller metrics on port 8443 are TLS-protected via cert-manager. | ServiceMonitor uses `insecureSkipVerify: false` by default. |
+
+## Log sanitization
+
+Ark redacts sensitive data from logs in several components:
+
+- **ark-api**: `SensitiveDataFilter` redacts `access_token`, `refresh_token`, `client_secret`, `code_verifier`, and `authorization` values from MCP auth logs.
+- **ark-broker**: Pino logger auto-redacts `authorization`, `cookie`, `x-api-key`, `x-auth-token`, `x-csrf-token`, `set-cookie`, `proxy-authorization` headers and fields like `password`, `token`, `secret`, `apiKey`.
+- **Controller**: Query input/output is truncated to 48 characters in operation data. Full payloads are not logged at info level.
+
+<Callout type="info">
+Log redaction does **not** cover query inputs, agent prompts, or tool call payloads. If your workload processes PII or regulated data, configure your log aggregator to filter or mask these fields before long-term storage.
+</Callout>
+
