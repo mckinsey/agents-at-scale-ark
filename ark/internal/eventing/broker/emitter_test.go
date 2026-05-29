@@ -162,6 +162,26 @@ func TestEmitStructured_IgnoresNonQueryObjects(t *testing.T) {
 	assert.False(t, called)
 }
 
+func TestEmitStructured_DropsEventWhenSemaphoreFull(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	e := &BrokerEventEmitter{
+		httpClient: &http.Client{},
+		endpoints:  map[string]string{"test-ns": srv.URL + "/events"},
+		sem:        semaphore.NewWeighted(0),
+	}
+	query := newTestQuery("test-ns")
+
+	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", nil)
+
+	assert.False(t, called, "event should be dropped when semaphore is full")
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
