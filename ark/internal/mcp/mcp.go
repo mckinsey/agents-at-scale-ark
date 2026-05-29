@@ -205,7 +205,7 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcpsdk.Client, url str
 func createMCPClientWithRetry(ctx context.Context, url string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
 	mcpClient := createHTTPClient()
 
-	retryCtx, retryCancel := context.WithTimeout(context.Background(), httpTimeout)
+	retryCtx, retryCancel := context.WithTimeout(ctx, httpTimeout)
 	defer retryCancel()
 
 	var lastErr error
