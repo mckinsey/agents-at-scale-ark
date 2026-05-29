@@ -146,6 +146,11 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 	if err != nil {
 		return r.handleClientCreationError(ctx, &mcpServer, err)
 	}
+	defer func() {
+		if err := mcpClient.Client.Close(); err != nil {
+			logf.FromContext(ctx).Error(err, "closing MCP client")
+		}
+	}()
 
 	mcpTools, err := mcpClient.ListTools(ctx)
 	if err != nil {
