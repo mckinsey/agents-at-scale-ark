@@ -11,7 +11,6 @@ import {
   Tune,
   Warning,
 } from '@/components/icons';
-import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -165,10 +164,10 @@ export function SelectorSection({
                   <Textarea
                     placeholder="Enter the selector prompt..."
                     disabled={disabled}
-                    className={`resize-none transition-all duration-200 ${
+                    className={`scrollbar-thin resize-none transition-all duration-200 ${
                       isPromptExpanded
                         ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
-                        : 'max-h-[150px] min-h-[100px]'
+                        : 'max-h-48 min-h-48 overflow-y-auto'
                     }`}
                     style={{
                       whiteSpace: 'pre-wrap',
@@ -183,17 +182,18 @@ export function SelectorSection({
                   </div>
                 )}
                 <FormMessage />
-                <Alert layout="long" className="mt-2">
-                  <AlertIcon className="text-status-warning">
-                    <Warning className="text-[25px]" />
-                  </AlertIcon>
-                  <AlertContent>
-                    <AlertDescription>
-                      Changing the prompt will affect team turn order and can worsen performance.
-                      Use the reset button to restore the default prompt.
-                    </AlertDescription>
-                  </AlertContent>
-                </Alert>
+                <div className="mt-2 flex items-start gap-1">
+                  <IconShell
+                    size="sm"
+                    className="text-status-warning shrink-0 opacity-100">
+                    <Warning />
+                  </IconShell>
+                  <span className="text-fg-secondary text-sm leading-5">
+                    Changing the prompt will affect team turn order and can
+                    worsen performance. Use the reset button to restore the
+                    default prompt.
+                  </span>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -242,7 +242,7 @@ export function SelectorSection({
                     <Textarea
                       placeholder="Enter the terminate prompt..."
                       disabled={disabled}
-                      className="min-h-[60px] resize-none"
+                      className="scrollbar-thin min-h-[60px] resize-none"
                       {...field}
                     />
                   </FormControl>

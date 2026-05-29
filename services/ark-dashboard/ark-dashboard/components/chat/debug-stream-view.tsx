@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/tooltip';
 import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
 
-import type { StreamEntry } from './use-sse-stream';
+import type { StreamEntry } from '@/lib/utils/sse-stream';
 
 interface DebugStreamViewProps {
   entries: StreamEntry[];

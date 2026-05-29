@@ -2,24 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { DebugStreamView } from '@/components/chat/debug-stream-view';
-import { useSSEStream } from '@/components/chat/use-sse-stream';
+import { DebugStreamPanel } from '@/components/chat/debug-stream-panel';
 import {
   BugReport,
   ChatBubble,
-  ErrorIcon,
-  Info,
   Send,
   SingleTool,
 } from '@/components/icons';
 import { SessionMessage } from '@/components/sessions-conversations/session-message';
-import {
-  Alert,
-  AlertContent,
-  AlertDescription,
-  AlertIcon,
-  AlertTitle,
-} from '@/components/ui/alert';
 import { NumericBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -30,7 +20,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ChatType } from '@/lib/chat-events';
 import { useChatSession } from '@/lib/hooks';
 import type { ParticipantType } from '@/lib/services/conversations';
-import { type BrokerStatus, proxyService } from '@/lib/services/proxy';
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
@@ -80,7 +69,6 @@ function buildDisplayMessages(
 }
 
 type TabType = 'chat' | 'debug';
-type DebugStreamType = 'traces' | 'events';
 
 interface AgentChatPanelProps {
   name: string;
@@ -97,25 +85,9 @@ export function AgentChatPanel({ name, type }: AgentChatPanelProps) {
   } = useChatSession({ name, type });
 
   const [activeTab, setActiveTab] = useState<TabType>('chat');
-  const [debugStreamType, setDebugStreamType] =
-    useState<DebugStreamType>('traces');
-  const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | 'checking'>(
-    'checking',
-  );
-
   const [draft, setDraft] = useState('');
   const [showToolCalls, setShowToolCalls] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const traces = useSSEStream('/v1/broker/traces', 'default', name);
-  const events = useSSEStream('/v1/broker/events', 'default', name);
-
-  useEffect(() => {
-    proxyService
-      .checkBrokerHealth()
-      .then(setBrokerStatus)
-      .catch(() => setBrokerStatus('not-installed'));
-  }, []);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -308,86 +280,7 @@ export function AgentChatPanel({ name, type }: AgentChatPanelProps) {
         <TabsContent
           value="debug"
           className="!py-0 mt-0 flex flex-1 flex-col overflow-hidden">
-          {brokerStatus === 'checking' && (
-            <div className="text-fg-secondary flex flex-1 items-center justify-center text-sm">
-              Checking broker availability...
-            </div>
-          )}
-          {brokerStatus === 'not-installed' && (
-            <div className="p-4">
-              <Alert layout="long">
-                <AlertIcon className="text-status-information">
-                  <IconShell size="default">
-                    <Info />
-                  </IconShell>
-                </AlertIcon>
-                <AlertContent>
-                  <AlertTitle>Broker service not available</AlertTitle>
-                  <AlertDescription>
-                    For the debug view to work, install the broker service and
-                    turn on the setting in the experimental features window
-                    (Ctrl+E).
-                  </AlertDescription>
-                </AlertContent>
-              </Alert>
-            </div>
-          )}
-          {brokerStatus === 'not-running' && (
-            <div className="p-4">
-              <Alert layout="long">
-                <AlertIcon className="text-status-error">
-                  <IconShell size="default">
-                    <ErrorIcon />
-                  </IconShell>
-                </AlertIcon>
-                <AlertContent>
-                  <AlertTitle>Broker service is not running</AlertTitle>
-                  <AlertDescription>
-                    The broker service is installed but is not currently running.
-                  </AlertDescription>
-                </AlertContent>
-              </Alert>
-            </div>
-          )}
-          {brokerStatus === 'available' && (
-            <Tabs
-              value={debugStreamType}
-              onValueChange={v => setDebugStreamType(v as DebugStreamType)}
-              className="flex h-full flex-col">
-              <TabsList className="mx-2 mt-2 grid w-auto grid-cols-2">
-                <TabsTrigger value="traces" className="text-xs">
-                  Traces
-                </TabsTrigger>
-                <TabsTrigger value="events" className="text-xs">
-                  Cluster Events
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent
-                value="traces"
-                className="mt-0 flex-1 overflow-hidden">
-                <DebugStreamView
-                  entries={traces.entries}
-                  isConnected={traces.isConnected}
-                  isLoading={traces.isLoading}
-                  hasMore={traces.hasMore}
-                  error={traces.error}
-                  onLoadMore={traces.loadMore}
-                />
-              </TabsContent>
-              <TabsContent
-                value="events"
-                className="mt-0 flex-1 overflow-hidden">
-                <DebugStreamView
-                  entries={events.entries}
-                  isConnected={events.isConnected}
-                  isLoading={events.isLoading}
-                  hasMore={events.hasMore}
-                  error={events.error}
-                  onLoadMore={events.loadMore}
-                />
-              </TabsContent>
-            </Tabs>
-          )}
+          <DebugStreamPanel name={name} />
         </TabsContent>
       </Tabs>
     </div>

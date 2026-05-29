@@ -18,239 +18,17 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useSSEStream } from '@/lib/hooks/use-sse-stream';
 import { type Memory, memoriesService } from '@/lib/services/memories';
-import {
-  createStreamEntryId,
-  extractItemTimestamp,
-  type PaginatedResponse,
-  type StreamEntry,
-} from '@/lib/utils/sse-stream';
+import { type StreamEntry } from '@/lib/utils/sse-stream';
 
-export function useSSEStream(endpoint: string | null, memory: string) {
-  const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
-  const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const nextCursorRef = useRef<number | undefined>(undefined);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const initialFetchDoneRef = useRef(false);
-  const mountedRef = useRef(true);
+const PURGE_PAGE_SIZE = 1000;
 
-  const connect = useCallback(
-    (cursor?: number) => {
-      if (!endpoint) return;
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-
-      setError(null);
-      let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
-      if (cursor !== undefined && cursor !== null) {
-        url += `&cursor=${cursor}`;
-      }
-      const eventSource = new EventSource(url);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        if (!mountedRef.current) return;
-        setIsConnected(true);
-        setError(null);
-      };
-
-      eventSource.onmessage = event => {
-        if (!mountedRef.current) return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.error) {
-            setError(data.error.message || 'Stream error');
-            return;
-          }
-          const entry: StreamEntry = {
-            id: createStreamEntryId(),
-            timestamp: extractItemTimestamp(data),
-            data,
-          };
-          setStreamedEntries(prev => [entry, ...prev.slice(0, 499)]);
-        } catch {
-          console.error('Failed to parse SSE data:', event.data);
-        }
-      };
-
-      eventSource.onerror = () => {
-        if (!mountedRef.current) return;
-        setIsConnected(false);
-        eventSource.close();
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) {
-            connect(nextCursorRef.current);
-          }
-        }, 3000);
-      };
-    },
-    [endpoint, memory],
-  );
-
-  const fetchPage = useCallback(
-    async (cursor?: number) => {
-      if (!endpoint) return null;
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = new AbortController();
-
-      setIsLoading(true);
-      try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=1000`;
-        if (cursor !== undefined && cursor !== null) {
-          url += `&cursor=${cursor}`;
-        }
-        const response = await fetch(url, {
-          signal: abortControllerRef.current.signal,
-        });
-        if (!mountedRef.current) return null;
-        const data: PaginatedResponse<unknown> = await response.json();
-        if ((data as unknown as { error?: { message?: string } }).error) {
-          if (mountedRef.current) {
-            setError(
-              (data as unknown as { error: { message?: string } }).error
-                .message || 'Fetch error',
-            );
-          }
-          return null;
-        }
-        const newEntries: StreamEntry[] = data.items.map((item, i) => ({
-          id: createStreamEntryId(`fetched-${cursor ?? 0}-${i}`),
-          timestamp: extractItemTimestamp(item),
-          data: item,
-        }));
-        if (mountedRef.current) {
-          setFetchedEntries(prev => [...prev, ...newEntries]);
-          setHasMore(data.hasMore);
-        }
-        nextCursorRef.current = data.nextCursor;
-        return data;
-      } catch (e) {
-        if ((e as Error).name !== 'AbortError' && mountedRef.current) {
-          setError('Failed to fetch data');
-        }
-        return null;
-      } finally {
-        if (mountedRef.current) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [endpoint, memory],
-  );
-
-  const loadMore = useCallback(() => {
-    if (
-      !isLoading &&
-      hasMore &&
-      nextCursorRef.current !== undefined &&
-      nextCursorRef.current !== null
-    ) {
-      fetchPage(nextCursorRef.current);
-    }
-  }, [fetchPage, isLoading, hasMore]);
-
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    setIsConnected(false);
-  }, []);
-
-  const purge = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api${endpoint}?memory=${encodeURIComponent(memory)}`,
-        {
-          method: 'DELETE',
-        },
-      );
-      if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText}`);
-      }
-      setStreamedEntries([]);
-      setFetchedEntries([]);
-      nextCursorRef.current = undefined;
-      setHasMore(false);
-      trackEvent({
-        name: 'broker_data_purged',
-        properties: {
-          streamType: endpoint?.split('/').pop(),
-          memoryName: memory,
-        },
-      });
-    } catch (e) {
-      toast.error('Failed to purge data', {
-        description: (e as Error).message,
-      });
-    }
-  }, [endpoint, memory]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    if (!endpoint) {
-      disconnect();
-      setStreamedEntries([]);
-      setFetchedEntries([]);
-      nextCursorRef.current = undefined;
-      setHasMore(true);
-      setError(null);
-      initialFetchDoneRef.current = false;
-      return;
-    }
-
-    if (initialFetchDoneRef.current) return;
-    initialFetchDoneRef.current = true;
-
-    async function init() {
-      let cursor: number | undefined;
-
-      while (mountedRef.current) {
-        const result = await fetchPage(cursor);
-        if (!result || !mountedRef.current) {
-          break;
-        }
-
-        if (result.hasMore && result.nextCursor !== undefined) {
-          cursor = result.nextCursor;
-        } else {
-          break;
-        }
-      }
-
-      if (mountedRef.current) {
-        connect(cursor);
-      }
-    }
-    init();
-
-    return () => {
-      mountedRef.current = false;
-      disconnect();
-      abortControllerRef.current?.abort();
-      initialFetchDoneRef.current = false;
-    };
-  }, [endpoint, connect, disconnect, fetchPage]);
-
-  const entries = [...streamedEntries, ...fetchedEntries];
-
-  return { entries, isConnected, isLoading, hasMore, error, purge, loadMore };
+function trackPurge(streamType: string, memory: string) {
+  trackEvent({
+    name: 'broker_data_purged',
+    properties: { streamType, memoryName: memory },
+  });
 }
 
 interface StreamViewProps {
@@ -508,10 +286,42 @@ export default function BrokerPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('traces');
 
-  const traces = useSSEStream(activeTab === 'traces' ? '/v1/broker/traces' : null, selectedMemory);
-  const messages = useSSEStream(activeTab === 'messages' ? '/v1/broker/messages' : null, selectedMemory);
-  const chunks = useSSEStream(activeTab === 'chunks' ? '/v1/broker/chunks' : null, selectedMemory);
-  const events = useSSEStream(activeTab === 'events' ? '/v1/broker/events' : null, selectedMemory);
+  const traces = useSSEStream(
+    activeTab === 'traces' ? '/v1/broker/traces' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('traces', selectedMemory),
+    },
+  );
+  const messages = useSSEStream(
+    activeTab === 'messages' ? '/v1/broker/messages' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('messages', selectedMemory),
+    },
+  );
+  const chunks = useSSEStream(
+    activeTab === 'chunks' ? '/v1/broker/chunks' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('chunks', selectedMemory),
+    },
+  );
+  const events = useSSEStream(
+    activeTab === 'events' ? '/v1/broker/events' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('events', selectedMemory),
+    },
+  );
 
   useEffect(() => {
     async function fetchMemories() {

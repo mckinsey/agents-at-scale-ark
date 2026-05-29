@@ -240,7 +240,7 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                             <Tag
                               key={tool.name}
                               size="xs"
-                              variant="secondary"
+                              variant="primary"
                               onPointerDown={e => e.stopPropagation()}
                               onRemove={e => {
                                 e.preventDefault();
@@ -251,7 +251,7 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                             </Tag>
                           ))}
                           {overflowSelectedCount > 0 && (
-                            <NumericBadge size="sm" outline>
+                            <NumericBadge size="sm" variant="primary">
                               {overflowSelectedCount}
                             </NumericBadge>
                           )}

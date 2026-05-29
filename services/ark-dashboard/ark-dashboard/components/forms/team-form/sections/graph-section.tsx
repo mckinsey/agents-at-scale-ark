@@ -1,7 +1,6 @@
 import type { UseFormReturn } from 'react-hook-form';
 
 import { AccountTree, Add, ArrowForward, Trash, Warning } from '@/components/icons';
-import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -92,17 +91,17 @@ export function GraphSection({
       </div>
 
       {agentsWithNoOutgoing.length > 0 && (
-        <Alert layout="long">
-          <AlertIcon className="text-status-warning">
-            <Warning className="text-[25px]" />
-          </AlertIcon>
-          <AlertContent>
-            <AlertDescription>
-              The following agents have no outgoing edges and will end graph execution:{' '}
-              {agentsWithNoOutgoing.map(m => m.name).join(', ')}
-            </AlertDescription>
-          </AlertContent>
-        </Alert>
+        <div className="flex items-start gap-1">
+          <IconShell
+            size="sm"
+            className="text-status-warning shrink-0 opacity-100">
+            <Warning />
+          </IconShell>
+          <span className="text-fg-secondary text-sm leading-5">
+            The following agents have no outgoing edges and will end graph
+            execution: {agentsWithNoOutgoing.map(m => m.name).join(', ')}
+          </span>
+        </div>
       )}
 
       <ScrollArea className="border-stroke-tertiary border [&_[data-slot=scroll-area-viewport]]:max-h-48">

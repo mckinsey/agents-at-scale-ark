@@ -1,17 +1,11 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useSSEStream } from '@/app/(dashboard)/broker/page';
-
-vi.mock('@/lib/analytics/singleton', () => ({
-  trackEvent: vi.fn(),
-}));
+import { useSSEStream } from '@/lib/hooks/use-sse-stream';
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
-
-import { trackEvent } from '@/lib/analytics/singleton';
 
 type ESInstance = {
   url: string;
@@ -93,13 +87,24 @@ describe('useSSEStream', () => {
     const { result } = renderHook(() => useSSEStream('/v1/broker/messages', 'mem'));
     await flush();
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/broker/messages?memory=mem&limit=1000'),
+      expect.stringContaining('/api/v1/broker/messages?memory=mem&limit=100'),
       expect.any(Object),
     );
     expect(esInstances).toHaveLength(1);
     expect(latestES().url).toContain('watch=true');
     expect(result.current.entries).toHaveLength(1);
     expect(result.current.hasMore).toBe(false);
+  });
+
+  it('respects a custom pageSize', async () => {
+    renderHook(() =>
+      useSSEStream('/v1/broker/messages', 'mem', { pageSize: 1000 }),
+    );
+    await flush();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('limit=1000'),
+      expect.any(Object),
+    );
   });
 
   it('disconnects and clears state when endpoint transitions to null', async () => {
@@ -155,6 +160,21 @@ describe('useSSEStream', () => {
     expect(result.current.entries.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('filters streamed entries by agentName', async () => {
+    const { result } = renderHook(() =>
+      useSSEStream('/v1/broker/messages', 'mem', { agentName: 'keep-me' }),
+    );
+    await flush();
+    act(() => {
+      latestES().onmessage?.({ data: JSON.stringify({ timestamp: 't', who: 'other-agent' }) });
+    });
+    expect(result.current.entries).toHaveLength(0);
+    act(() => {
+      latestES().onmessage?.({ data: JSON.stringify({ timestamp: 't', who: 'keep-me' }) });
+    });
+    expect(result.current.entries).toHaveLength(1);
+  });
+
   it('sets error when SSE message contains error object', async () => {
     const { result } = renderHook(() => useSSEStream('/v1/broker/messages', 'mem'));
     await flush();
@@ -204,11 +224,14 @@ describe('useSSEStream', () => {
     expect(esInstances.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('purge DELETEs with memory param and clears state + fires trackEvent', async () => {
+  it('purge DELETEs with memory param and clears state + fires onPurge', async () => {
+    const onPurge = vi.fn();
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeFetchResponse({ items: [{ timestamp: 't' }], total: 1, hasMore: false }),
     );
-    const { result } = renderHook(() => useSSEStream('/v1/broker/messages', 'mymem'));
+    const { result } = renderHook(() =>
+      useSSEStream('/v1/broker/messages', 'mymem', { onPurge }),
+    );
     await flush();
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(makeFetchResponse({}, true));
     await act(async () => {
@@ -221,9 +244,7 @@ describe('useSSEStream', () => {
     expect(deleteCall?.[0]).toContain('memory=mymem');
     expect(result.current.entries).toEqual([]);
     expect(result.current.hasMore).toBe(false);
-    expect(trackEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'broker_data_purged' }),
-    );
+    expect(onPurge).toHaveBeenCalled();
   });
 
   it('purge failure triggers toast.error (no crash)', async () => {
@@ -243,7 +264,6 @@ describe('useSSEStream', () => {
     );
     const { result } = renderHook(() => useSSEStream('/v1/broker/messages', 'mem'));
     await flush();
-    // Init loop fetches until hasMore false; second call returns no more.
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       makeFetchResponse({ items: [{ timestamp: 't2' }], total: 2, hasMore: true, nextCursor: 10 }),
     );

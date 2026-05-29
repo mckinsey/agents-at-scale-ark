@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import {
   createStreamEntryId,
@@ -11,13 +12,31 @@ import {
 
 export type { StreamEntry };
 
-const PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 100;
+
+export interface UseSSEStreamOptions {
+  /** Only keep items whose JSON mentions this agent name. Empty = no filter. */
+  agentName?: string;
+  /** Items requested per fetch page. */
+  pageSize?: number;
+  /** Fetch every page on init before connecting to the live stream. */
+  fetchAllPages?: boolean;
+  /** Invoked after a successful purge (e.g. analytics). */
+  onPurge?: () => void;
+}
 
 export function useSSEStream(
-  endpoint: string,
+  endpoint: string | null,
   memory: string,
-  agentName: string,
+  options: UseSSEStreamOptions = {},
 ) {
+  const {
+    agentName = '',
+    pageSize = DEFAULT_PAGE_SIZE,
+    fetchAllPages = false,
+    onPurge,
+  } = options;
+
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -42,6 +61,7 @@ export function useSSEStream(
 
   const connect = useCallback(
     (cursor?: number) => {
+      if (!endpoint) return;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
@@ -100,12 +120,13 @@ export function useSSEStream(
 
   const fetchPage = useCallback(
     async (cursor?: number) => {
+      if (!endpoint) return null;
       abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
+        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${pageSize}`;
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }
@@ -147,7 +168,7 @@ export function useSSEStream(
         }
       }
     },
-    [endpoint, memory, filterByAgent],
+    [endpoint, memory, filterByAgent, pageSize],
   );
 
   const loadMore = useCallback(() => {
@@ -178,15 +199,61 @@ export function useSSEStream(
     setFetchedEntries([]);
   }, []);
 
+  const purge = useCallback(async () => {
+    if (!endpoint) return;
+    try {
+      const res = await fetch(
+        `/api${endpoint}?memory=${encodeURIComponent(memory)}`,
+        { method: 'DELETE' },
+      );
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+      setStreamedEntries([]);
+      setFetchedEntries([]);
+      nextCursorRef.current = undefined;
+      setHasMore(false);
+      onPurge?.();
+    } catch (e) {
+      toast.error('Failed to purge data', {
+        description: (e as Error).message,
+      });
+    }
+  }, [endpoint, memory, onPurge]);
+
   useEffect(() => {
-    if (initialFetchDoneRef.current) return;
-    initialFetchDoneRef.current = true;
     mountedRef.current = true;
 
+    if (!endpoint) {
+      disconnect();
+      setStreamedEntries([]);
+      setFetchedEntries([]);
+      nextCursorRef.current = undefined;
+      setHasMore(true);
+      setError(null);
+      initialFetchDoneRef.current = false;
+      return;
+    }
+
+    if (initialFetchDoneRef.current) return;
+    initialFetchDoneRef.current = true;
+
     async function init() {
-      const result = await fetchPage();
-      if (mountedRef.current) {
-        connect(result?.nextCursor);
+      if (fetchAllPages) {
+        let cursor: number | undefined;
+        while (mountedRef.current) {
+          const result = await fetchPage(cursor);
+          if (!result || !mountedRef.current) break;
+          if (result.hasMore && result.nextCursor !== undefined) {
+            cursor = result.nextCursor;
+          } else {
+            break;
+          }
+        }
+        if (mountedRef.current) connect(cursor);
+      } else {
+        const result = await fetchPage();
+        if (mountedRef.current) connect(result?.nextCursor);
       }
     }
     init();
@@ -197,9 +264,9 @@ export function useSSEStream(
       abortControllerRef.current?.abort();
       initialFetchDoneRef.current = false;
     };
-  }, [connect, disconnect, fetchPage]);
+  }, [endpoint, connect, disconnect, fetchPage, fetchAllPages]);
 
   const entries = [...streamedEntries, ...fetchedEntries];
 
-  return { entries, isConnected, isLoading, hasMore, error, clear, loadMore };
+  return { entries, isConnected, isLoading, hasMore, error, clear, purge, loadMore };
 }

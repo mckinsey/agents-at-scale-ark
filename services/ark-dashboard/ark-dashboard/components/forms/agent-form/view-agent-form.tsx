@@ -473,7 +473,7 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                                         <Tag
                                           key={tool.name}
                                           size="xs"
-                                          variant="secondary"
+                                          variant="primary"
                                           onPointerDown={e =>
                                             e.stopPropagation()
                                           }
@@ -486,7 +486,7 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                                         </Tag>
                                       ))}
                                       {overflowSelectedCount > 0 && (
-                                        <NumericBadge size="sm" outline>
+                                        <NumericBadge size="sm" variant="primary">
                                           {overflowSelectedCount}
                                         </NumericBadge>
                                       )}
