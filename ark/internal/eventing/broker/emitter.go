@@ -100,7 +100,7 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 	if e.sem.TryAcquire(1) {
 		go func() {
 			defer e.sem.Release(1)
-			e.sendEvent(ctx, endpoint, event)
+			e.sendEvent(context.WithoutCancel(ctx), endpoint, event)
 		}()
 	}
 }

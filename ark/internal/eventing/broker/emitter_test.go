@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,6 +32,7 @@ func newTestEmitter(endpoints map[string]string) *BrokerEventEmitter {
 	return &BrokerEventEmitter{
 		httpClient: &http.Client{},
 		endpoints:  endpoints,
+		sem:        semaphore.NewWeighted(64),
 	}
 }
 
