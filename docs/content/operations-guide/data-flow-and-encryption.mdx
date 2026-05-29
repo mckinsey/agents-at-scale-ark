@@ -13,30 +13,30 @@ Ark runs inside your Kubernetes cluster. Encryption at rest and many in-transit 
 A single Query execution touches multiple storage and communication surfaces. The diagram below shows the path from submission to response, with numbered callouts for each surface described in the tables.
 
 ```
-                          ┌──────────────────────┐
-                          │   Client / Dashboard  │
-                          └──────────┬───────────┘
-                                     │ HTTPS (①)
-                          ┌──────────▼───────────┐
-                          │       ark-api         │
-                          └──────────┬───────────┘
-                                     │
-                  ┌──────────────────┼──────────────────┐
-                  │                  │                   │
-         ┌───────▼────────┐  ┌──────▼───────┐  ┌───────▼────────┐
-         │  Query CR (②)  │  │  Broker (⑥)  │  │  OTel (⑦)      │
-         │  etcd / PG     │  │  memory store │  │  collector     │
-         └───────┬────────┘  └──────────────┘  └────────────────┘
-                 │
-        ┌────────▼────────┐
-        │   Controller    │
-        └────────┬────────┘
-                 │ A2A HTTP (③)
-        ┌────────▼────────┐
-        │    Executor     │──── LLM Provider (④) ── HTTPS
-        │  (built-in or   │──── MCP Servers  (⑤) ── HTTP(S)
-        │   external)     │──── Session files (⑧)
-        └─────────────────┘
+                    ┌────────────────────┐
+                    │ Client / Dashboard │
+                    └─────────┬──────────┘
+                              │ HTTPS (①)
+                    ┌─────────▼──────────┐
+                    │      ark-api       │
+                    └─────────┬──────────┘
+                              │
+            ┌─────────────────┼─────────────────┐
+            │                 │                  │
+   ┌────────▼────────┐ ┌─────▼──────┐ ┌─────────▼─────────┐
+   │ Query CR    (②) │ │ Broker (⑥) │ │ OTel collector (⑦)│
+   │ etcd / PG       │ │ mem store  │ │                    │
+   └────────┬────────┘ └────────────┘ └────────────────────┘
+            │
+   ┌────────▼────────┐
+   │   Controller    │
+   └────────┬────────┘
+            │ A2A HTTP (③)
+   ┌────────▼────────┐
+   │    Executor     │──── LLM Provider  (④) ── HTTPS
+   │  (built-in or   │──── MCP Servers   (⑤) ── HTTP(S)
+   │   external)     │──── Session files (⑧)
+   └─────────────────┘
 ```
 
 ## Encryption at rest
