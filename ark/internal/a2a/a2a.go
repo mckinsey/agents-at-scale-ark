@@ -27,6 +27,21 @@ import (
 
 const defaultA2ADiscoveryTimeoutSeconds = 30
 
+var sharedA2ABaseTransport = &http.Transport{
+	MaxIdleConns:        100,
+	MaxIdleConnsPerHost: 10,
+	IdleConnTimeout:     90 * time.Second,
+}
+
+var (
+	sharedA2ASendTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
+		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.send" }),
+	)
+	sharedA2ADiscoverTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
+		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.discover" }),
+	)
+)
+
 func getA2ADiscoveryTimeout() time.Duration {
 	if timeoutStr := os.Getenv("ARK_A2A_DISCOVERY_TIMEOUT"); timeoutStr != "" {
 		if timeoutSec, err := strconv.Atoi(timeoutStr); err == nil && timeoutSec > 0 {
@@ -111,12 +126,8 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 	}
 
 	httpClient := &http.Client{
-		Timeout: timeout,
-		Transport: otelhttp.NewTransport(http.DefaultTransport,
-			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
-				return "a2a.send"
-			}),
-		),
+		Timeout:   timeout,
+		Transport: sharedA2ASendTransport,
 	}
 
 	var clientOptions []a2aclient.Option
@@ -326,12 +337,8 @@ func createA2ARequest(ctx context.Context, agentCardURL string, headers []arkv1p
 
 func executeA2ARequest(ctx context.Context, req *http.Request, a2aRecorder eventing.A2aRecorder) (*A2AAgentCard, error) {
 	httpClient := &http.Client{
-		Timeout: getA2ADiscoveryTimeout(),
-		Transport: otelhttp.NewTransport(http.DefaultTransport,
-			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
-				return "a2a.discover"
-			}),
-		),
+		Timeout:   getA2ADiscoveryTimeout(),
+		Transport: sharedA2ADiscoverTransport,
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
