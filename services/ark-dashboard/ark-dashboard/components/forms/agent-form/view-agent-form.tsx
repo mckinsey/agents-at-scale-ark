@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { AgentChatPanel } from '@/components/chat/agent-chat-panel';
+import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
 import { YamlViewer } from '@/components/common/yaml-viewer';
 import {
@@ -608,7 +608,7 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
           className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
             isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
           }`}>
-          <AgentChatPanel name={agentName || ''} type="agent" />
+          <EmbeddedChatPanel name={agentName || ''} type="agent" />
         </div>
       </div>
     </div>

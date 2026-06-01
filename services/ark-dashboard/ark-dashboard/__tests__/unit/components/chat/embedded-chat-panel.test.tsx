@@ -131,9 +131,7 @@ describe('EmbeddedChatPanel', () => {
   it('should render chat interface', () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
-    expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /debug/i })).toBeInTheDocument();
-    expect(screen.getByText('test-agent')).toBeInTheDocument();
+    expect(screen.getByText(/Chat with test-agent/i)).toBeInTheDocument();
   });
 
   it('should NOT clear traces and events when starting a new chat', async () => {
@@ -203,13 +201,11 @@ describe('EmbeddedChatPanel', () => {
     expect(screen.getByText(/Session: session-A/i)).toBeInTheDocument();
   });
 
-  it('should fetch traces without session_id query parameter', async () => {
-    const user = userEvent.setup();
+  it('should fetch traces without session_id query parameter', () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockClear();
 
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
-    await user.click(screen.getByRole('tab', { name: /Debug/i }));
 
     expect(fetchMock).toHaveBeenCalled();
     const tracesCall = Array.from(fetchMock.mock.calls).find(call =>
@@ -219,13 +215,11 @@ describe('EmbeddedChatPanel', () => {
     expect(tracesCall![0].toString()).not.toContain('session_id');
   });
 
-  it('should fetch events without session_id query parameter', async () => {
-    const user = userEvent.setup();
+  it('should fetch events without session_id query parameter', () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockClear();
 
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
-    await user.click(screen.getByRole('tab', { name: /Debug/i }));
 
     expect(fetchMock).toHaveBeenCalled();
     const eventsCall = Array.from(fetchMock.mock.calls).find(call =>

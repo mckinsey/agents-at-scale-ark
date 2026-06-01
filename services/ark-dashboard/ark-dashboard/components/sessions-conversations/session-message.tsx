@@ -127,9 +127,7 @@ export function SessionMessage({
   // User messages - right aligned
   if (isUser) {
     return (
-      <div
-        data-testid="session-message"
-        className={cn('flex flex-col pr-3 pb-2 items-end gap-1', className)}>
+      <div className={cn('flex flex-col pr-3 pb-2 items-end gap-1', className)}>
         <div className="max-w-[56%] p-3 bg-surface-bg-tertiary">
           <div className="text-fg-primary text-sm font-normal leading-5">
             {content}
@@ -143,9 +141,7 @@ export function SessionMessage({
   if (isAssistantWithoutName) {
     if (hasContent) {
       return (
-        <div
-          data-testid="session-message"
-          className={cn('flex flex-col items-start', className)}>
+        <div className={cn('flex flex-col items-start', className)}>
           <div className="pl-4 text-sm max-w-[80%]">
             <div className="flex items-center gap-2 py-1.5">
               <IconShell size="sm" variant="secondary" className="flex-shrink-0">
@@ -167,7 +163,7 @@ export function SessionMessage({
 
   // Agent messages with sender
   return (
-    <div data-testid="session-message" className={cn('flex flex-col', className)}>
+    <div className={cn('flex flex-col', className)}>
       {/* Agent header row */}
       <div className="flex items-start gap-2">
         <IconShell size="sm" className="size-6 bg-brand-accents-qb-accent/10 text-brand-accents-qb-accent">

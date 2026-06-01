@@ -1,7 +1,9 @@
-import { AlertCircle } from 'lucide-react';
 import { useMemo, useEffect } from 'react';
 import type { RefObject } from 'react';
 
+import { ChatMessage } from '@/components/chat/chat-message';
+import { ErrorIcon } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
@@ -10,8 +12,6 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
-import { type ToolCallData } from '@/components/chat/tool-call';
-import { SessionMessage } from '@/components/sessions-conversations/session-message';
 import type { TokenUsage } from '@/atoms/chat-history';
 import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
 
@@ -140,7 +140,9 @@ export function ChatMessageList({
   processingPhase,
 
   error,
+  viewMode = 'markdown',
   messagesEndRef,
+  messageTokenUsage,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -286,14 +288,16 @@ export function ChatMessageList({
   return (
     <>
       {error && (
-        <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-md p-3 text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+        <div className="text-status-error bg-status-error/10 flex items-center gap-2 p-3 text-sm">
+          <IconShell size="sm" className="flex-shrink-0">
+            <ErrorIcon />
+          </IconShell>
           <span>{error}</span>
         </div>
       )}
 
       {messages.length === 0 && !error && (
-        <div className="text-muted-foreground py-8 text-center">
+        <div className="text-fg-secondary py-8 text-center">
           Start a conversation with the {type}
         </div>
       )}
@@ -339,17 +343,36 @@ export function ChatMessageList({
         return (
           <div key={pm.index} className="flex flex-col gap-2">
             {transitionElement}
-            {(pm.hasContent || pm.hasToolCalls) && (
-              <SessionMessage
+            {pm.hasToolCalls &&
+              pm.toolCallsWithResults!.map((toolCall, toolIndex) => {
+                const toolKey = `${pm.index}-tool-${toolIndex}`;
+                return (
+                  <div key={toolKey}>
+                    <ChatMessage
+                      role="assistant"
+                      content=""
+                      viewMode={viewMode}
+                      toolCalls={[
+                        toolCall as {
+                          id: string;
+                          type: 'function';
+                          function: { name: string; arguments: string };
+                          result?: string;
+                        },
+                      ]}
+                    />
+                  </div>
+                );
+              })}
+            {pm.hasContent && (
+              <ChatMessage
                 role={pm.msg.role as 'user' | 'assistant' | 'system'}
-                content={pm.hasContent ? pm.content : ''}
+                content={pm.content}
+                viewMode={viewMode}
                 sender={pm.senderName}
-                toolCalls={
-                  pm.hasToolCalls
-                    ? (pm.toolCallsWithResults as ToolCallData[])
-                    : undefined
-                }
-                showToolCalls={debugMode}
+                status={pm.message.metadata?.status}
+                queryName={pm.message.metadata?.queryName}
+                tokenUsage={messageTokenUsage?.[pm.index]}
               />
             )}
             {pm.hasTermination && (
@@ -358,11 +381,11 @@ export function ChatMessageList({
                   agentName={pm.senderName || 'Unknown Agent'}
                 />
                 {pm.terminateMessage && (
-                  <SessionMessage
+                  <ChatMessage
                     role="assistant"
                     content={pm.terminateMessage}
+                    viewMode={viewMode}
                     sender={pm.senderName}
-                    showToolCalls={debugMode}
                   />
                 )}
               </div>
@@ -371,7 +394,7 @@ export function ChatMessageList({
               (isGraphStrategy || isSelectorStrategy ? (
                 <MaxTurnsEvent message={pm.content} />
               ) : (
-                <div className="text-muted-foreground text-sm italic">
+                <div className="text-fg-tertiary text-sm italic">
                   {pm.content}
                 </div>
               ))}
@@ -387,19 +410,19 @@ export function ChatMessageList({
 
       {isProcessing && (
         <div className="flex justify-start">
-          <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
+          <div className="bg-surface-bg-secondary max-w-[80%] px-3 py-2">
             <div className="flex items-center gap-2">
               <div className="flex space-x-1">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+                <div className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"></div>
                 <div
-                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
                   style={{ animationDelay: '0.1s' }}></div>
                 <div
-                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
                   style={{ animationDelay: '0.2s' }}></div>
               </div>
               {processingPhase === 'provisioning' && (
-                <span className="text-xs text-foreground">
+                <span className="text-fg-secondary text-xs">
                   Preparing new workspace...
                 </span>
               )}

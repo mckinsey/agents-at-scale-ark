@@ -44,8 +44,8 @@ vi.mock('@/components/common/yaml-viewer', () => ({
   YamlViewer: () => <div data-testid="yaml-viewer" />,
 }));
 
-vi.mock('@/components/chat/agent-chat-panel', () => ({
-  AgentChatPanel: () => <div data-testid="agent-chat-panel" />,
+vi.mock('@/components/chat/embedded-chat-panel', () => ({
+  EmbeddedChatPanel: () => <div data-testid="embedded-chat-panel" />,
 }));
 
 vi.mock('@/components/ui/prompt-editor', () => ({
@@ -142,7 +142,7 @@ describe('ViewAgentForm', () => {
     expect(screen.getByText('Tools')).toBeInTheDocument();
     expect(screen.getByText('Agent Prompt')).toBeInTheDocument();
     expect(screen.getByTestId('parameter-editor')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-chat-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('embedded-chat-panel')).toBeInTheDocument();
     expect(
       screen.queryByTestId('skills-display-section'),
     ).not.toBeInTheDocument();
