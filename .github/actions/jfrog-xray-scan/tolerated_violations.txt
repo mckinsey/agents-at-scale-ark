@@ -97,3 +97,8 @@ XRAY-987239 - CVE-2024-34997
 - joblib NumpyArrayWrapper deserialization vulnerability. Severity: High (CVSS 7.8).
 - Confirmed false positive by joblib maintainers (joblib/joblib#1588). NumpyArrayWrapper only deserializes joblib's own cached content written to trusted local disk; it never processes externally-supplied data. No fix is planned because no real vulnerability exists.
 - joblib 1.5.3 is already the latest version on PyPI. joblib is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+XRAY-994002 - CVE-2026-47429
+- Vitest UI server can read/execute arbitrary files when the UI server is listening (GHSA-5xrq-8626-4rwp). Severity: Critical.
+- Patched by bumping vitest, @vitest/ui and @vitest/coverage-v8 to ^4.1.8 in services/ark-dashboard/ark-dashboard/package.json. npm audit --audit-level=critical is clean.
+- Not exploitable in Ark: vitest is a devDependency used only for local/CI testing; the Vitest UI server is never run, and vitest is not present in the production dashboard runner image (Dockerfile copies only .next standalone/static + public, no node_modules).
+- Whitelist retained in case the scanner caches the previous scan image before rebuild.
