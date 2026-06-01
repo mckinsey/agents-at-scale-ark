@@ -57,11 +57,11 @@ global.IntersectionObserver = class IntersectionObserver {
 } as any;
 
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
 
 // Mock localStorage
 const localStorageMock: Storage = {
