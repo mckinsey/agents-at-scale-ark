@@ -309,17 +309,20 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 # Get detailed query results
 kubectl get queries research-query -o yaml
 
-# Check response content
-kubectl get queries research-query -o jsonpath='{.status.responses[0].content}' | jq '.'
+# Print the final response from the team
+kubectl get query research-query -o jsonpath='{.status.response.content}'
 ```
 
 ### Access Generated Documents
-```bash
-# View files created by agents using kubectl exec
-kubectl exec deployment/file-gateway-filesystem-mcp -- ls -la /data
 
-# Or read specific files
-kubectl exec deployment/file-gateway-filesystem-mcp -- cat /data/<filename>
+The creator agent writes into the filesystem MCP's `/data/aas-files` directory:
+
+```bash
+# List documents the agents wrote
+kubectl exec deployment/file-gateway-filesystem-mcp -- ls -la /data/aas-files
+
+# Read a specific document
+kubectl exec deployment/file-gateway-filesystem-mcp -- cat /data/aas-files/<filename>
 ```
 
 ## Quick Start (Skip Tutorial)
