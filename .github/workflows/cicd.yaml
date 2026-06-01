@@ -36,6 +36,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  CHAINSAW_VERSION: v0.2.15
+
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
@@ -544,7 +547,7 @@ jobs:
 
       - name: Install chainsaw
         run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
@@ -609,7 +612,7 @@ jobs:
 
       - name: Install chainsaw and jq
         run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
