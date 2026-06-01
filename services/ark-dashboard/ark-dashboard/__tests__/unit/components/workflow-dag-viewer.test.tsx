@@ -36,16 +36,16 @@ vi.mock('@xyflow/react', () => ({
 vi.mock('dagre', () => ({
   default: {
     graphlib: {
-      Graph: vi.fn().mockImplementation(() => ({
-        setDefaultEdgeLabel: vi.fn(),
-        setGraph: vi.fn(),
-        setNode: vi.fn(),
-        setEdge: vi.fn(),
-        node: vi.fn((_id: string) => ({
+      Graph: class Graph {
+        setDefaultEdgeLabel = vi.fn();
+        setGraph = vi.fn();
+        setNode = vi.fn();
+        setEdge = vi.fn();
+        node = vi.fn((_id: string) => ({
           x: 100,
           y: 100,
-        })),
-      })),
+        }));
+      },
     },
     layout: vi.fn(),
   },

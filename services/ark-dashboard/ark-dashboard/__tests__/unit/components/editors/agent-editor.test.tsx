@@ -9,11 +9,11 @@ import { AgentEditor } from '@/components/editors/agent-editor';
 import type { Model, Team } from '@/lib/services';
 
 beforeAll(() => {
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  }));
+  global.ResizeObserver = class ResizeObserver {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  };
 });
 
 const mockNamespace = 'default';

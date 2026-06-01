@@ -160,7 +160,7 @@ describe('filesService', () => {
         addEventListener: vi.fn(),
       };
 
-      global.XMLHttpRequest = vi.fn(() => {
+      global.XMLHttpRequest = vi.fn(function () {
         xhrInstances.push(mockXHR);
         return mockXHR;
       }) as any;
