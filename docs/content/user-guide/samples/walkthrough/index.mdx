@@ -81,6 +81,35 @@ export E2E_TEST_AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/"
 
 You can obtain these credentials from your Azure OpenAI service. If you don't have Azure OpenAI access, you can still follow the tutorial to understand the concepts, but the test execution steps will not work.
 
+## Using the Dashboard
+
+Every step below uses `kubectl` so you can copy-paste, but the Ark Dashboard renders the same flow and is often the faster way to explore. Launch it once and keep it open in another tab:
+
+```bash
+ark dashboard
+```
+
+From `ark dashboard`, the home view lists every resource type and how many of each are deployed. Use it to confirm the tool, agents, and team appear as you create them.
+
+![Ark Dashboard home view](/walkthrough/home.png)
+
+The relevant sections, all reachable from the left-hand nav:
+
+- **Tools** — every built-in, MCP-discovered, and HTTP tool. The web-search tool from Step 1 shows up under **Built in**, the file-gateway tools under their MCP server group.
+  ![Tools page showing web-search](/walkthrough/tools.png)
+- **Agent Builder → Agents** — researcher, analyst, and creator after Step 2.
+  ![Agents page with the three walkthrough agents](/walkthrough/agents.png)
+- **Agent Builder → Teams** — the sequential team after Step 3.
+  ![Teams page showing the research-analysis-team](/walkthrough/teams.png)
+- **Agent Builder → Queries** — list of past runs. Use **Create Query** to start a new one; pick a target from the dropdown, type the input, hit **Execute Query**.
+  ![New query form with the team selected](/walkthrough/query-new.png)
+
+Once the query reaches `done`, open it to inspect the response, token usage, and the timeline of each member's turn.
+
+![Query detail view with the completed response](/walkthrough/query-detail.png)
+
+The `kubectl` steps below are still the source of truth — they're what the Dashboard does under the hood — but you can click instead of paste at any point.
+
 ## Step 1: Create and Test Web Search Tool
 
 ### What You'll Learn
