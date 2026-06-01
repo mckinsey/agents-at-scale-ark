@@ -108,6 +108,15 @@ Once the query reaches `done`, open it to inspect the response, token usage, and
 
 ![Query detail view with the completed response](/walkthrough/query-detail.png)
 
+### Other ways to start a query
+
+The **Queries** tab isn't the only entry point — both of these create the same `Query` resource under the hood:
+
+- **Agent Studio** — click an agent on the **Agents** page to open Agent Studio. The right-hand pane is a live chat with that agent, so you can iterate on the prompt and tools while sending messages. Switch the toggle to **Debug** to see the underlying request and tool calls.
+  ![Agent Studio with the researcher agent and its chat panel](/walkthrough/agent-studio.png)
+- **Chat bubble** — the speech-bubble icon on any agent or team row pops out a floating chat window in the corner. Useful for a quick one-off question without leaving the list view; you can keep several bubbles open at once.
+  ![Floating chat bubble against the Teams page](/walkthrough/chat-bubble.png)
+
 The `kubectl` steps below are still the source of truth — they're what the Dashboard does under the hood — but you can click instead of paste at any point.
 
 ## Step 1: Create and Test Web Search Tool
