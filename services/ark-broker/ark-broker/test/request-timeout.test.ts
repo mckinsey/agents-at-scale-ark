@@ -1,27 +1,35 @@
 import http from 'http';
 import express from 'express';
-import { CompletionChunkBroker } from '../src/completion-chunk-broker';
-import { createStreamRouter } from '../src/routes/stream';
-import { createTextChunk, createFinishChunk } from '../src/testing/chunk-helpers';
+import {CompletionChunkBroker} from '../src/brokers/chunks-broker';
+import {createLogger} from '../src/logging/logger';
+import {createHttpLogger} from '../src/http/middleware/http-logger';
+import {requestId} from '../src/http/middleware/request-id';
+import {createStreamRouter} from '../src/http/routes/stream';
+import {createTextChunk, createFinishChunk} from '../src/testing/chunk-helpers';
 
-function createBrokerServer(opts: { requestTimeout?: number; timeout?: number } = {}): {
+function createBrokerServer(
+  opts: {requestTimeout?: number; timeout?: number} = {}
+): {
   server: http.Server;
   chunks: CompletionChunkBroker;
 } {
-  const chunks = new CompletionChunkBroker();
+  const logger = createLogger({level: 'silent', pretty: false});
+  const chunks = new CompletionChunkBroker(logger);
   const app = express();
   app.use(express.json());
+  app.use(requestId);
+  app.use(createHttpLogger(logger));
   app.use('/stream', createStreamRouter(chunks));
   const server = http.createServer(app);
   server.requestTimeout = opts.requestTimeout ?? 0;
   server.timeout = opts.timeout ?? 0;
-  return { server, chunks };
+  return {server, chunks};
 }
 
 function listenOnRandomPort(server: http.Server): Promise<number> {
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
-      resolve((server.address() as { port: number }).port);
+      resolve((server.address() as {port: number}).port);
     });
   });
 }
@@ -29,8 +37,8 @@ function listenOnRandomPort(server: http.Server): Promise<number> {
 function slowChunkedPost(
   port: number,
   queryId: string,
-  delayMs: number,
-): Promise<{ statusCode: number; body: any } | { error: string }> {
+  delayMs: number
+): Promise<{statusCode: number; body: unknown} | {error: string}> {
   return new Promise((resolve) => {
     const req = http.request(
       {
@@ -45,19 +53,21 @@ function slowChunkedPost(
       },
       (res) => {
         let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
         res.on('end', () => {
           try {
-            resolve({ statusCode: res.statusCode!, body: JSON.parse(data) });
+            resolve({statusCode: res.statusCode!, body: JSON.parse(data)});
           } catch {
-            resolve({ statusCode: res.statusCode!, body: data });
+            resolve({statusCode: res.statusCode!, body: data});
           }
         });
-      },
+      }
     );
 
-    req.on('error', (err: any) => {
-      resolve({ error: err.code || err.message });
+    req.on('error', (err: Error & {code?: string}) => {
+      resolve({error: err.code ?? err.message});
     });
 
     req.write(JSON.stringify(createTextChunk('hello')) + '\n');
@@ -85,7 +95,7 @@ describe('Request Timeout Behavior', () => {
   });
 
   test('inactivity timeout kills slow chunked streams with ECONNRESET', async () => {
-    const created = createBrokerServer({ timeout: 2000 });
+    const created = createBrokerServer({timeout: 2000});
     server = created.server;
     const port = await listenOnRandomPort(server);
 
@@ -98,7 +108,7 @@ describe('Request Timeout Behavior', () => {
   }, 15000);
 
   test('disabled timeouts allow slow chunked streams to complete', async () => {
-    const created = createBrokerServer({ requestTimeout: 0, timeout: 0 });
+    const created = createBrokerServer({requestTimeout: 0, timeout: 0});
     server = created.server;
     const port = await listenOnRandomPort(server);
 

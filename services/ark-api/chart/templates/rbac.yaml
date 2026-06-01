@@ -20,7 +20,11 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
-  # Core resources for Helm releases and events
+  # Core resources for Helm releases and events.
+  # MCP auth endpoints (/api/v1/mcp-servers/{name}/auth/start|callback|logout)
+  # write OAuth tokens to the Secret named in spec.authorization.tokenSecretRef
+  # and require get/create/update/patch/delete on secrets in the served
+  # namespaces. list/watch are not required for the auth endpoints.
   - apiGroups: [""]
     resources: ["secrets", "events"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
@@ -45,7 +49,9 @@ rules:
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]
     verbs: ["get", "list"]
-  # Ark resources
+  # Ark resources.
+  # MCP auth endpoints use get/update on mcpservers to read
+  # status.authorization and stamp authorized-by/authorized-at annotations.
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -87,6 +93,12 @@ rules:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["arkconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- if .Values.impersonation.enabled }}
+  # User impersonation for SSO-authenticated requests (must be cluster-scoped)
+  - apiGroups: [""]
+    resources: ["users", "groups"]
+    verbs: ["impersonate"]
+  {{- end }}
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -1,0 +1,131 @@
+---
+title: MCP OAuth Callback
+description: Configuring ark-api as the OAuth callback target for MCP server authorization
+---
+
+# MCP OAuth Callback
+
+When a user authorizes an MCP server through the dashboard or `ark mcp auth login`, the IdP redirects the browser back to ark-api with the authorization code. ark-api exchanges the code for tokens, writes the result to the MCPServer's referenced Secret, and stamps the parent MCPServer with an annotation that records who triggered the flow.
+
+The redirect target is a single externally reachable URL that ark-api must own. This page covers configuring `ARK_API_PUBLIC_CALLBACK_URL` for both public ingress and air-gapped clusters.
+
+## Env vars
+
+| Env var | Default | Description |
+|---|---|---|
+| `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four `auth/*` endpoints return `503`. |
+| `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries stored in the Secret. After this window a late callback returns "unknown state". |
+| `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
+| `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
+
+ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected.
+
+## Public ingress
+
+For clusters with an Ingress in front of ark-api, set the env var to the public HTTPS URL:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: https://ark.example.com/v1/mcp/auth/callback
+```
+
+The same URL MUST be one of the redirect URIs registered with the IdP (ark-api enforces this against the RFC 7591 DCR response).
+
+## Air-gapped port-forward
+
+Clusters without public ingress can run the flow through `kubectl port-forward`. The IdP redirects to a loopback URL on the operator's workstation, where `kubectl` forwards the connection into the cluster:
+
+```bash
+kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80
+```
+
+The `--address 127.0.0.1,::1` flag binds the listener to both IPv4 and IPv6 loopback. This avoids a class of bugs where the OS resolves `localhost` to `::1` but kubectl only listens on `127.0.0.1` (or vice versa) and the IdP redirect times out.
+
+Configure ark-api to advertise the same loopback URL:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: http://127.0.0.1:8080/v1/mcp/auth/callback
+```
+
+Use bracketed IPv6 if the cluster prefers v6:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: http://[::1]:8080/v1/mcp/auth/callback
+```
+
+The loopback carve-out also accepts the literal `localhost`:
+
+```yaml
+env:
+  - name: ARK_API_PUBLIC_CALLBACK_URL
+    value: http://localhost:8080/v1/mcp/auth/callback
+```
+
+Register the chosen URL with the IdP as a redirect URI before running the flow.
+
+## RBAC
+
+ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/update` on `mcpservers` (for reading `status.authorization` and stamping auth annotations). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
+
+## Callback URL changes
+
+If you change `ARK_API_PUBLIC_CALLBACK_URL` after servers have been authorized, the IdP's stored `redirect_uri` will no longer match. Run `ark mcp auth login --force` against any previously-authorized server to re-register with the new URL.
+
+## Verifying
+
+A successful login leaves two visible side-effects on the MCPServer:
+
+```bash
+kubectl get mcpserver notion-mcp -o jsonpath='{.metadata.annotations}'
+```
+
+```json
+{
+  "ark.mckinsey.com/mcp-auth-authorized-by": "cli",
+  "ark.mckinsey.com/mcp-auth-authorized-at": "2026-05-19T14:32:11Z"
+}
+```
+
+The referenced Secret holds the token material; ark-api never logs token bodies, refresh tokens, client secrets, or PKCE verifiers.
+
+## External executor header-resolution workaround
+
+When an agent targets an external `ExecutionEngine` (claude-agent-sdk, LangChain, or any marketplace executor) **and** uses `ark mcp auth login` against an MCPServer that is configured solely via `spec.authorization.tokenSecretRef`, the SDK's `_resolve_mcp_server()` will not inject the Bearer token on tool calls.
+
+**Why this happens:** the controller already reads `spec.authorization.tokenSecretRef` for tool *discovery* and injects the token on each MCP call. External executors build their `MCPServerConfig` at query *dispatch* time and read only `spec.headers[]` — they do not read `spec.authorization`. So the MCPServer discovers tools correctly, but the executor's tool calls will 401.
+
+**Workaround:** add a redundant `spec.headers[]` entry pointing at the same Secret and key:
+
+```yaml
+spec:
+  authorization:
+    tokenSecretRef:
+      name: notion-mcp-oauth        # set by ark mcp auth login
+  headers:
+    - name: Authorization
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: notion-mcp-oauth  # same Secret as tokenSecretRef.name
+            key: access_token       # or the accessTokenKey override if set
+```
+
+The redundancy is intentional: the controller reads `spec.authorization` for discovery; this header entry lets the SDK read the same token for dispatch. The default key is `access_token` unless `spec.authorization.tokenSecretRef.accessTokenKey` overrides it.
+
+This workaround becomes unnecessary once the `mcp-auth-sdk-header-resolution` capability lands; that capability will teach `_resolve_mcp_server()` to read `spec.authorization` directly.
+
+## Known limitations
+
+- **Single-user token model.** Only one set of tokens is stored per MCPServer. In multi-user clusters the last login wins; the `authorized-by` annotation surfaces who last authorized.
+- **No chainsaw e2e tests.** End-to-end tests are blocked on a TLS-capable mock MCP server. This is tracked as a follow-up.
+- **MCPServer delete+recreate.** Deleting and recreating an MCPServer leaves stale `authorized-by` / `authorized-at` annotations on the old resource. The new resource starts clean.
+
+## Related
+
+- [`ark mcp auth login` / `logout`](/developer-guide/cli-tools#ark-mcp-auth) — CLI reference
+- [MCPServer reference](/reference/resources/mcpserver) — `status.authorization` state machine

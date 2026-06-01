@@ -43,3 +43,57 @@ XRAY-944492 - CVE-2026-26996
 - Not exploitable in our context: swagger-jsdoc only uses glob at startup to scan for JSDoc annotations using hardcoded patterns (`./dist/**/*.js`, `./src/**/*.ts`). No user-controlled input reaches the minimatch pattern argument. The CVE requires attacker-controlled patterns with many consecutive `*` wildcards.
 - Cannot upgrade: swagger-jsdoc@6.x depends on glob@7.x which requires minimatch@3.x API. minimatch@10.x is a complete rewrite with breaking API changes and cannot be used as a drop-in replacement. swagger-jsdoc has not released a version compatible with minimatch@10.x.
 - Used in services/ark-broker/ark-broker only.
+XRAY-973334 - CVE-2026-4538
+- PyTorch pt2 Loading Handler deserialization vulnerability. Severity: High.
+- torch 2.12.0 is already the latest version on PyPI. No patched version exists. The upstream PR (pytorch/pytorch#176791) was closed unmerged; the PyTorch project has not acknowledged the report. NVD originally scoped the CVE to 2.10.0.
+- Not exploitable in Ark: this CVE requires loading an untrusted .pt2 file. Ark does not load user-supplied PyTorch model files. torch is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt, used only for local vector embedding during sample ingestion.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-946138 - CVE-2025-2148
+- PyTorch Tuple Handler memory corruption vulnerability. Severity: High (CVSS 7.5 NVD, 5.0 MEDIUM per CNA).
+- torch 2.12.0 is already the latest version on PyPI. No patched version exists. The upstream issue (pytorch/pytorch#147722) remains open with no fix PR. NVD originally scoped the CVE to 2.6.0+cu124 (a specific CUDA build variant).
+- Not exploitable in Ark: the affected profiler JIT callback code path requires crafted JIT future objects not reachable from Ark's usage of torch (sentence embedding only). torch is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-987255 - CVE-2025-14920
+- Hugging Face Transformers Perceiver Model deserialization RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-25-1150).
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists and no upstream security advisory has been published. Snyk confirms "no fixed version."
+- Not exploitable in Ark: exploitation requires loading a maliciously crafted Perceiver model file from an untrusted source. Ark does not load externally-supplied model weights. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt, used only for local embedding.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-987256 - CVE-2025-14921
+- Hugging Face Transformers Transformer-XL deserialization RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-25424).
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists. Maintainers rejected the report. Snyk confirms "no fixed version, rejected by maintainers."
+- Not exploitable in Ark: exploitation requires loading a maliciously crafted Transformer-XL model file. Ark does not load externally-supplied model weights. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Will upgrade immediately if a patched version is released to PyPI.
+XRAY-987234 - CVE-2025-14924
+- Hugging Face Transformers megatron_gpt2 checkpoint deserialization RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-27984).
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists. Red Hat Bugzilla entry remains in NEW status with no fixed version.
+- Not exploitable in Ark: exploitation requires loading a maliciously crafted megatron_gpt2 checkpoint. Ark does not load externally-supplied model checkpoints. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-987235 - CVE-2025-14926
+- Hugging Face Transformers SEW convert_config code injection RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-28251). Vendor rejected the report.
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists; Hugging Face rejected this as won't-fix.
+- Not exploitable in Ark: exploitation requires converting a malicious SEW checkpoint via convert_config. Ark does not perform model checkpoint conversion. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- No upgrade path available; vendor will not fix.
+XRAY-987236 - CVE-2025-14927
+- Hugging Face Transformers SEW-D convert_config code injection RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-28252). Vendor rejected the report.
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists; Hugging Face rejected this as won't-fix.
+- Not exploitable in Ark: exploitation requires converting a malicious SEW-D checkpoint via convert_config. Ark does not perform model checkpoint conversion. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- No upgrade path available; vendor will not fix.
+XRAY-987257 - CVE-2025-14928
+- Hugging Face Transformers HuBERT convert_config code injection RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-28253).
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists and no upstream security advisory has been published.
+- Not exploitable in Ark: exploitation requires converting a malicious HuBERT checkpoint via convert_config. Ark does not perform model checkpoint conversion. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-987237 - CVE-2025-14929
+- Hugging Face Transformers X-CLIP checkpoint deserialization RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-28308).
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists and no upstream security advisory has been published.
+- Not exploitable in Ark: exploitation requires loading a maliciously crafted X-CLIP checkpoint. Ark does not load externally-supplied model weights. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-987238 - CVE-2025-14930
+- Hugging Face Transformers GLM4 deserialization RCE. Severity: High. Disclosed as 0-day by Trend Micro ZDI on 2025-12-18 (ZDI-CAN-28309).
+- transformers 5.8.1 is already the latest version on PyPI. No patched version exists and no upstream security advisory has been published.
+- Not exploitable in Ark: exploitation requires loading maliciously crafted GLM4 weights. Ark does not load externally-supplied model weights. transformers is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.
+- Will upgrade immediately when a patched version is released to PyPI.
+XRAY-987239 - CVE-2024-34997
+- joblib NumpyArrayWrapper deserialization vulnerability. Severity: High (CVSS 7.8).
+- Confirmed false positive by joblib maintainers (joblib/joblib#1588). NumpyArrayWrapper only deserializes joblib's own cached content written to trusted local disk; it never processes externally-supplied data. No fix is planned because no real vulnerability exists.
+- joblib 1.5.3 is already the latest version on PyPI. joblib is a transitive dependency of sentence-transformers in samples/rag-external-vectordb/ingestion/requirements.txt.

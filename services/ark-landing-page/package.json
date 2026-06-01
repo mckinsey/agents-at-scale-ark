@@ -45,6 +45,7 @@
     "@tootallnate/once": "^3.0.1",
     "http-proxy-agent": "^7.0.0",
     "jsdom": "^25.0.0",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "ws": "^8.20.1"
   }
 }

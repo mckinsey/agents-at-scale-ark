@@ -7,6 +7,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - docs/**
+      - ark/config/crd/bases/**
   workflow_dispatch:
 
 permissions:
@@ -39,6 +40,10 @@ jobs:
         env:
           # Set basePath for GitHub Pages deployment using configurable variable
           NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
+
+      - name: Validate Ark YAML in Docs
+        run: npm run validate-yaml
+        working-directory: docs
 
       - name: Validate Internal Documentation Links
         run: |
