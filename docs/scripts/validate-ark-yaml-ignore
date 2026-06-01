@@ -1,0 +1,28 @@
+# Files in this list are skipped by docs/scripts/validate-ark-yaml.js.
+# Each entry is a path relative to the repo root.
+# Add a file here when you discover broken Ark YAML examples that are out of
+# scope for the current change; remove it again once the YAML is fixed.
+
+# Known drift not addressed in the docs quickstart rewrite (May 2026).
+# Each of these contains Ark resource YAML that the CRD strict decoder rejects.
+docs/content/developer-guide/building-a2a-servers.mdx
+docs/content/developer-guide/crd-design-guide.mdx
+docs/content/developer-guide/queries/a2a-queries.mdx
+docs/content/developer-guide/queries/mcp-configuration.mdx
+docs/content/developer-guide/queries/streaming.mdx
+docs/content/reference/relationships.mdx
+docs/content/reference/resources/a2atask.mdx
+docs/content/reference/resources/memory.mdx
+docs/content/reference/resources/models.mdx
+docs/content/reference/resources/query.mdx
+docs/content/reference/upgrading.mdx
+docs/content/user-guide/samples/mcp-servers.mdx
+
+# Team cross-field rule drift (surfaced by the cross-field validator added in
+# this PR — schemas allow the shape but the API server's admission webhook
+# rejects it). Out of scope for the quickstart rewrite; follow-up PR can fix.
+#   - team.mdx, team-selector-strategy.mdx: selector strategy without maxTurns
+#   - team-strategies.mdx: still documents the deprecated `strategy: graph`
+docs/content/reference/resources/team.mdx
+docs/content/user-guide/samples/teams/team-selector-strategy.mdx
+docs/content/user-guide/samples/teams/team-strategies.mdx
