@@ -167,7 +167,7 @@ function CollapsibleGroup({
   return (
     <SidebarGroup>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-sidebar-accent flex w-full shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-3 py-2 text-sm font-normal outline-hidden transition-colors group-data-[collapsible=icon]:hidden">
+        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-stateslayer-overlay-hover flex w-full shrink-0 cursor-pointer select-none items-center gap-1.5 px-3 py-2 text-sm font-normal outline-hidden transition-colors group-data-[collapsible=icon]:hidden">
           {open ? (
             <ChevronDown className="h-3.5 w-3.5" />
           ) : (

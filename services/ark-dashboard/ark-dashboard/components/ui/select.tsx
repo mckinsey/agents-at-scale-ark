@@ -3,6 +3,7 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import * as React from 'react';
 
+import { Check } from '@/components/icons/check';
 import { ChevronDown } from '@/components/icons/chevron-down';
 import { cn } from '@/lib/utils';
 
@@ -101,9 +102,8 @@ function SelectTrigger({
 
         'hover:bg-stateslayer-overlay-hover',
 
-        'focus-visible:bg-stateslayer-overlay-active-inverse focus-visible:border-stroke-status-focus',
-        'data-[popup-open]:bg-stateslayer-overlay-active-inverse data-[popup-open]:border-stroke-status-focus',
-        'data-[popup-open]:shadow-elevation-0',
+        'focus-visible:border-stroke-status-focus',
+        'data-[popup-open]:border-stroke-status-focus',
 
         size === 'sm' && 'paragraph-regular-primary gap-1 px-2 py-1',
         size === 'default' && 'paragraph-regular-primary gap-2 p-2',
@@ -216,12 +216,16 @@ function SelectItem({
 
         'data-highlighted:bg-stateslayer-overlay-hover data-highlighted:text-fg-primary cursor-pointer',
         'active:bg-stateslayer-overlay-pressed',
+        'data-[selected]:text-fg-primary data-[selected]:font-medium',
 
         'data-disabled:text-fg-disabled data-disabled:cursor-not-allowed',
         className,
       )}
       {...props}>
       {children}
+      <SelectItemIndicator className="text-fg-primary ml-auto">
+        <Check className="size-4" />
+      </SelectItemIndicator>
     </SelectPrimitive.Item>
   );
 }

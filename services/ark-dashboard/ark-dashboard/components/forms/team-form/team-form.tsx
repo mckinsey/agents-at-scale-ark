@@ -4,20 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
+import { ResourceSwitcherBar } from '@/components/common/resource-switcher-bar';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import { ChevronLeft, Code, Warning } from '@/components/icons';
+import { ChevronLeft, Warning } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
@@ -276,40 +270,17 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
           }`}>
           {!isLeftPanelCollapsed && (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="bg-surface-secondary border-stroke-divider flex items-center gap-2 border-b px-5 py-2">
-                <Select
-                  value={teamName}
-                  onValueChange={value =>
-                    push(`/teams/${encodeURIComponent(value as string)}`)
-                  }>
-                  <SelectTrigger className="!h-8 !w-auto !gap-1 !border-0 !bg-transparent !p-0 text-sm font-medium !shadow-none hover:!bg-transparent focus:!ring-0 focus-visible:!bg-transparent focus-visible:!ring-0 data-[popup-open]:!bg-transparent">
-                    <SelectValue placeholder="Select team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamsLoading ? (
-                      <SelectItem value="loading" disabled>
-                        Loading...
-                      </SelectItem>
-                    ) : (
-                      allTeams.map(t => (
-                        <SelectItem key={t.name} value={t.name}>
-                          {t.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant={showYaml ? 'secondary' : 'ghost'}
-                  size="xs"
-                  onClick={() => setShowYaml(!showYaml)}
-                  className="gap-1">
-                  <IconShell size="sm">
-                    <Code />
-                  </IconShell>
-                  YAML
-                </Button>
-              </div>
+              <ResourceSwitcherBar
+                value={teamName}
+                placeholder="Select team"
+                items={allTeams}
+                loading={teamsLoading}
+                onSelect={value =>
+                  push(`/teams/${encodeURIComponent(value)}`)
+                }
+                showYaml={showYaml}
+                onToggleYaml={() => setShowYaml(!showYaml)}
+              />
               <ScrollArea className="h-0 min-h-0 flex-1">
                 {showYaml ? (
                   <YamlViewer yaml={teamYaml} fileName={team?.name || 'team'} />

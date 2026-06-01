@@ -4,11 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
+import { ResourceSwitcherBar } from '@/components/common/resource-switcher-bar';
 import { YamlViewer } from '@/components/common/yaml-viewer';
 import {
   ChevronDown,
   ChevronLeft,
-  Code,
   ExpandContent,
   Warning,
 } from '@/components/icons';
@@ -224,38 +224,15 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
           }`}>
           {!isLeftPanelCollapsed && (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="bg-surface-secondary border-stroke-divider flex items-center gap-2 border-b px-5 py-2">
-                <Select
-                  value={agentName}
-                  onValueChange={value => push(`/agents/${value}`)}>
-                  <SelectTrigger className="!h-8 !w-auto !gap-1 !border-0 !bg-transparent !p-0 text-sm font-medium !shadow-none hover:!bg-transparent focus:!ring-0 focus-visible:!ring-0 focus-visible:!bg-transparent data-[popup-open]:!bg-transparent">
-                    <SelectValue placeholder="Select agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {agentsLoading ? (
-                      <SelectItem value="loading" disabled>
-                        Loading...
-                      </SelectItem>
-                    ) : (
-                      allAgents.map(a => (
-                        <SelectItem key={a.name} value={a.name}>
-                          {a.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant={showYaml ? 'secondary' : 'ghost'}
-                  size="xs"
-                  onClick={() => setShowYaml(!showYaml)}
-                  className="gap-1">
-                  <IconShell size="sm">
-                    <Code />
-                  </IconShell>
-                  YAML
-                </Button>
-              </div>
+              <ResourceSwitcherBar
+                value={agentName}
+                placeholder="Select agent"
+                items={allAgents}
+                loading={agentsLoading}
+                onSelect={value => push(`/agents/${value}`)}
+                showYaml={showYaml}
+                onToggleYaml={() => setShowYaml(!showYaml)}
+              />
               <ScrollArea className="h-0 min-h-0 flex-1">
                 {showYaml ? (
                   <YamlViewer
@@ -380,7 +357,7 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                           render={({ field }) => (
                             <FormItem className="gap-0 space-y-0">
                               <FormControl>
-                                <div className="border-stroke-divider flex flex-col border">
+                                <div className="border-stroke-divider focus-within:border-stroke-status-focus flex flex-col border transition-colors">
                                   <div className="bg-surface-secondary border-stroke-divider flex h-12 items-center justify-between border-b px-3">
                                     <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
                                       Agent Prompt
@@ -460,6 +437,7 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                                 className={cn(
                                   'flex min-h-9 w-full cursor-pointer items-center justify-between gap-2',
                                   inlineFieldTriggerClass,
+                                  'data-[state=open]:border-stroke-status-focus',
                                   'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
                                 )}>
                                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -505,8 +483,10 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                               </div>
                             </PopoverTrigger>
                             <PopoverContent
+                              side="bottom"
                               align="start"
                               sideOffset={4}
+                              avoidCollisions={false}
                               role="listbox"
                               aria-multiselectable="true"
                               className="bg-fill-onsurface-ui-2 shadow-elevation-2 max-h-[320px] w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-none border-0 p-1">

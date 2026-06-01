@@ -226,7 +226,7 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                     }}
                     className={cn(
                       'flex min-h-9 w-full cursor-pointer items-center justify-between gap-2 border-0 border-b border-white/[0.24] bg-transparent px-0 py-1 text-left transition-colors',
-                      'hover:border-b-white/40 focus-visible:border-b-stroke-status-focus focus-visible:outline-none',
+                      'hover:border-b-white/40 focus-visible:border-b-stroke-status-focus data-[state=open]:border-b-stroke-status-focus focus-visible:outline-none',
                       'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
                     )}>
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -267,8 +267,10 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                   </div>
                 </PopoverTrigger>
                 <PopoverContent
+                  side="bottom"
                   align="start"
                   sideOffset={4}
+                  avoidCollisions={false}
                   role="listbox"
                   aria-multiselectable="true"
                   className="bg-fill-onsurface-ui-2 shadow-elevation-2 max-h-[320px] w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-none border-0 p-1">

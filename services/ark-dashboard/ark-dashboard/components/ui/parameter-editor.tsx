@@ -388,7 +388,7 @@ export function ParameterEditor({
           return (
             <div key={index} className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 flex-1 items-center gap-2 border-b border-white/[0.16]">
+                <div className="focus-within:border-b-stroke-status-focus flex h-10 flex-1 items-center gap-2 border-b border-white/[0.16]">
                   <input
                     type="text"
                     value={param.name}
