@@ -1,20 +1,22 @@
 'use client';
 
-import { type ReactNode, useState } from 'react';
+import { type ComponentType, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { ChatBubble, Trash } from '@/components/icons';
+import { Anthropic, Azure, Bedrock, OpenAI, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
-import { useChatState } from '@/lib/chat-context';
-import { toggleFloatingChat } from '@/lib/chat-events';
-import type { Team } from '@/lib/services';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
+import { getModelProviderDisplayName } from '@/lib/constants/model-types';
+import type { Model } from '@/lib/services';
 import { cn } from '@/lib/utils';
+import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-interface TeamsTableProps {
-  readonly teams: readonly Team[];
+interface ModelsTableProps {
+  readonly models: readonly Model[];
   readonly onDelete: (id: string) => void;
 }
 
@@ -24,12 +26,21 @@ const STATUS_CONFIG = {
   Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
 } as const;
 
+const PROVIDER_ICONS: Partial<
+  Record<Model['provider'], ComponentType<{ className?: string }>>
+> = {
+  openai: OpenAI,
+  azure: Azure,
+  bedrock: Bedrock,
+  anthropic: Anthropic,
+};
+
 const COL = {
-  name: 'w-[240px] shrink-0',
-  description: 'flex-1 min-w-0',
-  members: 'w-[180px] shrink-0',
+  name: 'w-[260px] shrink-0',
+  model: 'flex-1 min-w-0',
+  provider: 'w-[200px] shrink-0',
   status: 'w-[120px] shrink-0',
-  action: 'w-[100px] shrink-0',
+  action: 'w-[72px] shrink-0',
 };
 
 const headerCellClass =
@@ -37,7 +48,7 @@ const headerCellClass =
 
 const rowCellClass = 'flex h-[60px] items-center px-3';
 
-function TeamStatus({ status }: { status?: Team['available'] | null }) {
+function ModelStatus({ status }: { status?: Model['available'] | null }) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -50,87 +61,71 @@ function TeamStatus({ status }: { status?: Team['available'] | null }) {
   );
 }
 
-interface TeamTableRowProps {
-  readonly team: Team;
+interface ModelTableRowProps {
+  readonly model: Model;
   readonly onDelete: (id: string) => void;
-  readonly leading?: ReactNode;
 }
 
-export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
-  const { isOpen } = useChatState();
-  const isChatOpen = isOpen(team.name);
+function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const memberCount = team.members?.length ?? 0;
-  const memberLabel = memberCount === 1 ? 'member' : 'members';
-  const strategyLabel =
-    team.strategy === 'sequential' && team.loops
-      ? 'sequential (loops)'
-      : team.strategy;
+  const customIcon = model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON];
+  const CustomImg = customIcon ? getCustomIcon(customIcon) : null;
+  const ProviderIcon =
+    PROVIDER_ICONS[model.provider] ?? DASHBOARD_SECTIONS.models.icon;
 
   return (
     <>
       <div
         role="row"
         className="hover:bg-stateslayer-overlay-hover border-stroke-tertiary relative flex cursor-pointer items-center border-b transition-colors">
-        {leading && (
-          <span
-            className="relative z-10 flex shrink-0 items-center"
-            onClick={e => e.stopPropagation()}
-            onKeyDown={e => e.stopPropagation()}>
-            {leading}
-          </span>
-        )}
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+        <div role="cell" className={cn(rowCellClass, COL.name, 'gap-2')}>
+          {CustomImg ? (
+            <CustomImg className="size-4 shrink-0 object-contain" />
+          ) : (
+            <IconShell size="sm" variant="secondary">
+              <ProviderIcon className="size-4" />
+            </IconShell>
+          )}
           <NamespacedLink
-            href={`/teams/${encodeURIComponent(team.name)}`}
-            title={team.name}
+            href={`/models/${encodeURIComponent(model.id)}/update`}
+            title={model.name}
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
-            {team.name}
+            {model.name}
           </NamespacedLink>
         </div>
-        <div role="cell" className={cn(rowCellClass, COL.description)}>
+        <div role="cell" className={cn(rowCellClass, COL.model)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={team.description || ''}>
-            {team.description || 'No description'}
+            title={model.model}>
+            {model.model}
           </span>
         </div>
-        <div role="cell" className={cn(rowCellClass, COL.members)}>
+        <div role="cell" className={cn(rowCellClass, COL.provider)}>
           <span
-            className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={`${memberCount} ${memberLabel} · ${strategyLabel}`}>
-            {memberCount} {memberLabel} · {strategyLabel}
+            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
+            title={getModelProviderDisplayName(model.provider)}>
+            {getModelProviderDisplayName(model.provider)}
           </span>
         </div>
         <div role="cell" className={cn(rowCellClass, COL.status)}>
-          <TeamStatus status={team.available} />
+          <ModelStatus status={model.available} />
         </div>
         <div
           role="cell"
           className={cn(
             rowCellClass,
             COL.action,
-            'relative z-10 justify-center gap-2',
+            'relative z-10 justify-center',
           )}>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Chat with team"
-            className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
-            onClick={() => toggleFloatingChat(team.name, 'team')}>
-            <IconShell size="sm" variant="secondary">
-              <ChatBubble />
-            </IconShell>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete team"
-            disabled={isChatOpen || readOnlyMode}
+            aria-label="Delete model"
+            disabled={readOnlyMode}
             onClick={() => {
-              if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
+              if (!readOnlyMode) setDeleteConfirmOpen(true);
             }}>
             <IconShell size="sm" variant="secondary">
               <Trash />
@@ -141,36 +136,31 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
-        title="Delete Team"
-        description={`Do you want to delete "${team.name}" team? This action cannot be undone.`}
+        title="Delete Model"
+        description={`Do you want to delete "${model.name}" model? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
-        onConfirm={() => onDelete(team.id)}
+        onConfirm={() => onDelete(model.id)}
         variant="destructive"
       />
     </>
   );
 }
 
-export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
+export function ModelsTable({ models, onDelete }: ModelsTableProps) {
   return (
-    <div
-      role="table"
-      aria-label="Teams"
-      className="flex w-full flex-col">
+    <div role="table" aria-label="Models" className="flex w-full flex-col">
       <div
         role="row"
         className="border-stroke-tertiary flex items-center border-b">
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
-        <div
-          role="columnheader"
-          className={cn(headerCellClass, COL.description)}>
-          Description
+        <div role="columnheader" className={cn(headerCellClass, COL.model)}>
+          Model
         </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.members)}>
-          Members
+        <div role="columnheader" className={cn(headerCellClass, COL.provider)}>
+          Provider
         </div>
         <div role="columnheader" className={cn(headerCellClass, COL.status)}>
           Status
@@ -180,8 +170,8 @@ export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
         </div>
       </div>
       <div role="rowgroup" className="flex flex-col">
-        {teams.map(team => (
-          <TeamTableRow key={team.id} team={team} onDelete={onDelete} />
+        {models.map(model => (
+          <ModelTableRow key={model.id} model={model} onDelete={onDelete} />
         ))}
       </div>
     </div>
