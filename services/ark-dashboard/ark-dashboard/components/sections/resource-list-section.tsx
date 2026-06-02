@@ -123,7 +123,12 @@ export function ResourceListSection<T extends ResourceListItem>({
       toast.success(`${entityLabel} Deleted`, {
         description: `Successfully deleted ${item.name}`,
       });
-      setItems(await loadItemsRef.current());
+      setLoading(true);
+      try {
+        setItems(await loadItemsRef.current());
+      } finally {
+        setLoading(false);
+      }
     } catch (error) {
       toast.error(`Failed to Delete ${entityLabel}`, {
         description:
@@ -190,7 +195,7 @@ export function ResourceListSection<T extends ResourceListItem>({
         <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
           <div className="flex flex-none items-end justify-between gap-3">
             <div className="flex items-end gap-3">
-              <div className="relative w-[493px]">
+              <div className="relative w-full max-w-[493px]">
                 <span className="text-fg-tertiary pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
                   <IconShell size="sm" variant="secondary">
                     <Search />

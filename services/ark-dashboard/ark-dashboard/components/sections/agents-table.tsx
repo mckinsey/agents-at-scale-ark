@@ -4,11 +4,11 @@ import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -56,60 +56,47 @@ interface AgentTableRowProps {
 }
 
 function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
-  const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const handleNavigate = () =>
-    push(`/agents/${encodeURIComponent(agent.name)}`);
-
   return (
     <>
       <div
-        role="link"
-        tabIndex={0}
-        className="hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-3 transition-colors"
-        onClick={handleNavigate}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleNavigate();
-          }
-        }}>
-        <div className={cn(rowCellClass, COL.name)}>
-          <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={agent.name}>
+        role="row"
+        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-3 transition-colors">
+        <div role="cell" className={cn(rowCellClass, COL.name)}>
+          <NamespacedLink
+            href={`/agents/${encodeURIComponent(agent.name)}`}
+            title={agent.name}
+            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {agent.name}
-          </span>
+          </NamespacedLink>
         </div>
-        <div className={cn(rowCellClass, COL.description)}>
+        <div role="cell" className={cn(rowCellClass, COL.description)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={agent.description || ''}>
             {agent.description || 'No description'}
           </span>
         </div>
-        <div className={cn(rowCellClass, COL.status)}>
+        <div role="cell" className={cn(rowCellClass, COL.status)}>
           <AgentStatus status={agent.available} />
         </div>
         <div
+          role="cell"
           className={cn(
             rowCellClass,
             COL.action,
-            'justify-center gap-2',
+            'relative z-10 justify-center gap-2',
           )}>
           <Button
             variant="ghost"
             size="icon-sm"
             aria-label="Chat with agent"
             className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
-            onClick={e => {
-              e.stopPropagation();
-              toggleFloatingChat(agent.name, 'agent');
-            }}>
+            onClick={() => toggleFloatingChat(agent.name, 'agent')}>
             <IconShell size="sm" variant="secondary">
               <ChatBubble />
             </IconShell>
@@ -119,8 +106,7 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             size="icon-sm"
             aria-label="Delete agent"
             disabled={isChatOpen || readOnlyMode}
-            onClick={e => {
-              e.stopPropagation();
+            onClick={() => {
               if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
             }}>
             <IconShell size="sm" variant="secondary">

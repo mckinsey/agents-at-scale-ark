@@ -72,7 +72,7 @@ export function useSSEStream(
 
       setError(null);
       let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
-      if (cursor !== undefined && cursor !== null) {
+      if (cursor !== undefined) {
         url += `&cursor=${cursor}`;
       }
       const eventSource = new EventSource(url);
@@ -127,7 +127,7 @@ export function useSSEStream(
       setIsLoading(true);
       try {
         let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${pageSize}`;
-        if (cursor !== undefined && cursor !== null) {
+        if (cursor !== undefined) {
           url += `&cursor=${cursor}`;
         }
         const response = await fetch(url, {
@@ -175,8 +175,7 @@ export function useSSEStream(
     if (
       !isLoading &&
       hasMore &&
-      nextCursorRef.current !== undefined &&
-      nextCursorRef.current !== null
+      nextCursorRef.current !== undefined
     ) {
       fetchPage(nextCursorRef.current);
     }

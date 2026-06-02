@@ -116,7 +116,6 @@ function DebugStreamView({
   const extractSessionId = (data: unknown): string => {
     const item = data as Record<string, unknown>;
 
-    // CASE: Trace - Try to extract session ID from spans
     if (Array.isArray(item.spans)) {
       for (const span of item.spans) {
         if (!span || typeof span !== 'object') continue;
@@ -128,11 +127,9 @@ function DebugStreamView({
       }
     }
 
-    // CASE: Trace Span - Try to extract session ID from attributes
     const fromTop = findAttrValue(item.attributes, 'ark.session.id');
     if (fromTop) return fromTop;
 
-    // CASE: Event - Try to extract session ID from event data
     if (item.data && typeof item.data === 'object' && item.data !== null) {
       const eventData = item.data as Record<string, unknown>;
       if (eventData.sessionId && typeof eventData.sessionId === 'string') {

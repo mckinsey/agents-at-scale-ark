@@ -1,12 +1,13 @@
 'use client';
 
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { PageHeader } from '@/components/common/page-header';
+import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Select,
   SelectContent,
@@ -116,13 +117,20 @@ function StreamView({
                     className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
                     <div className="flex min-w-0 items-center gap-1">
                       <span
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isExpanded}
                         className="flex shrink-0 cursor-pointer items-center gap-1"
-                        onClick={() => toggleExpanded(entry.id)}>
-                        {isExpanded ? (
-                          <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
-                        ) : (
-                          <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                        )}
+                        onClick={() => toggleExpanded(entry.id)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleExpanded(entry.id);
+                          }
+                        }}>
+                        <IconShell size="sm" className="shrink-0">
+                          {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                        </IconShell>
                         <span>{entry.timestamp}</span>
                       </span>
                       {!isExpanded && (
@@ -178,6 +186,7 @@ export function SessionsView({ memory }: { memory: string }) {
           setStore({ sessions: { ...sessions } });
         }
       } catch {
+        console.error('Failed to parse session data:', event.data);
       }
     };
     es.onerror = () => setIsConnected(false);
@@ -211,7 +220,10 @@ export function SessionsView({ memory }: { memory: string }) {
     try {
       await fetch(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`, { method: 'DELETE' });
       setStore({ sessions: {} });
-    } catch {
+    } catch (e) {
+      toast.error('Failed to purge sessions', {
+        description: (e as Error).message,
+      });
     }
   };
 
@@ -252,11 +264,9 @@ export function SessionsView({ memory }: { memory: string }) {
                       aria-expanded={isExpanded}
                       className="flex shrink-0 cursor-pointer items-center gap-1 bg-transparent p-0"
                       onClick={() => toggleExpanded(sid)}>
-                      {isExpanded ? (
-                        <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
-                      ) : (
-                        <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                      )}
+                      <IconShell size="sm" className="shrink-0">
+                        {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                      </IconShell>
                     </button>
                     {(sessions[sid] as { lastActivity?: string })?.lastActivity && (
                       <span className="text-muted-foreground shrink-0">
@@ -285,6 +295,9 @@ export default function BrokerPage() {
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('traces');
+
+  const selectedMemoryRef = useRef(selectedMemory);
+  selectedMemoryRef.current = selectedMemory;
 
   const traces = useSSEStream(
     activeTab === 'traces' ? '/v1/broker/traces' : null,
@@ -328,7 +341,10 @@ export default function BrokerPage() {
       try {
         const data = await memoriesService.getAll();
         setMemories(data);
-        if (data.length > 0 && !data.find(m => m.name === selectedMemory)) {
+        if (
+          data.length > 0 &&
+          !data.find(m => m.name === selectedMemoryRef.current)
+        ) {
           setSelectedMemory(data[0].name);
         }
       } catch (err) {
@@ -338,7 +354,7 @@ export default function BrokerPage() {
       }
     }
     fetchMemories();
-  }, [selectedMemory]);
+  }, []);
 
   return (
     <>

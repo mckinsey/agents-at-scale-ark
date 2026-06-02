@@ -21,10 +21,6 @@ interface ResourceSwitcherBarProps {
   onToggleYaml: () => void;
 }
 
-/**
- * Left-panel header bar shared by the agent and team view/edit forms: a
- * borderless resource picker plus a YAML toggle.
- */
 export function ResourceSwitcherBar({
   value,
   placeholder,

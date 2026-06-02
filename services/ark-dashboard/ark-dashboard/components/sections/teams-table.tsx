@@ -4,11 +4,11 @@ import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -58,14 +58,10 @@ interface TeamTableRowProps {
 }
 
 export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
-  const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-
-  const handleNavigate = () =>
-    push(`/teams/${encodeURIComponent(team.name)}`);
 
   const memberCount = team.members?.length ?? 0;
   const memberLabel = memberCount === 1 ? 'member' : 'members';
@@ -77,63 +73,54 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
   return (
     <>
       <div
-        role="link"
-        tabIndex={0}
-        className="hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-3 transition-colors"
-        onClick={handleNavigate}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleNavigate();
-          }
-        }}>
+        role="row"
+        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-3 transition-colors">
         {leading && (
           <span
-            className="flex shrink-0 items-center"
+            className="relative z-10 flex shrink-0 items-center"
             onClick={e => e.stopPropagation()}
             onKeyDown={e => e.stopPropagation()}>
             {leading}
           </span>
         )}
-        <div className={cn(rowCellClass, COL.name)}>
-          <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={team.name}>
+        <div role="cell" className={cn(rowCellClass, COL.name)}>
+          <NamespacedLink
+            href={`/teams/${encodeURIComponent(team.name)}`}
+            title={team.name}
+            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {team.name}
-          </span>
+          </NamespacedLink>
         </div>
-        <div className={cn(rowCellClass, COL.description)}>
+        <div role="cell" className={cn(rowCellClass, COL.description)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={team.description || ''}>
             {team.description || 'No description'}
           </span>
         </div>
-        <div className={cn(rowCellClass, COL.members)}>
+        <div role="cell" className={cn(rowCellClass, COL.members)}>
           <span
             className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={`${memberCount} ${memberLabel} · ${strategyLabel}`}>
             {memberCount} {memberLabel} · {strategyLabel}
           </span>
         </div>
-        <div className={cn(rowCellClass, COL.status)}>
+        <div role="cell" className={cn(rowCellClass, COL.status)}>
           <TeamStatus status={team.available} />
         </div>
         <div
+          role="cell"
           className={cn(
             rowCellClass,
             COL.action,
-            'justify-center gap-2',
+            'relative z-10 justify-center gap-2',
           )}>
           <Button
             variant="ghost"
             size="icon-sm"
             aria-label="Chat with team"
             className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
-            onClick={e => {
-              e.stopPropagation();
-              toggleFloatingChat(team.name, 'team');
-            }}>
+            onClick={() => toggleFloatingChat(team.name, 'team')}>
             <IconShell size="sm" variant="secondary">
               <ChatBubble />
             </IconShell>
@@ -143,8 +130,7 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
             size="icon-sm"
             aria-label="Delete team"
             disabled={isChatOpen || readOnlyMode}
-            onClick={e => {
-              e.stopPropagation();
+            onClick={() => {
               if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
             }}>
             <IconShell size="sm" variant="secondary">
