@@ -6,7 +6,7 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   readonly className?: string;
 }
 
-export function Edit({ className, ...props }: Readonly<IconProps>) {
+export function Tune({ className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       className={cn('size-full', className)}
@@ -15,7 +15,7 @@ export function Edit({ className, ...props }: Readonly<IconProps>) {
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       {...props}>
-      <path d="M185.39-185.39h40.92l468.54-467.92-40.93-40.92-468.53 467.92v40.92ZM140-140v-104.54l593.54-593.69 105.69 105.31L244.54-140H140Zm634-593.92L734.54-773 774-733.92Zm-99.37 60.29-20.71-20.6 40.93 40.92-20.22-20.32Z" />
+      <path d="M440.46-130v-209.23h45.39V-257H830v45.38H485.85V-130h-45.39ZM130-211.62V-257h225.08v45.38H130Zm179.69-164.07v-81.62H130v-45.38h179.69v-82.85h45.39v209.85h-45.39Zm130.77-81.62v-45.38H830v45.38H440.46Zm164.46-163.84V-830h45.39v81.62H830V-703H650.31v81.85h-45.39ZM130-703v-45.38h389.54V-703H130Z" />
     </svg>
   );
 }

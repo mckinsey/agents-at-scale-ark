@@ -1,6 +1,6 @@
-import { FileText } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { InsertDriveFile } from '@/components/icons';
 import {
   FormControl,
   FormField,
@@ -8,6 +8,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 
 import { TeamFormMode } from '../types';
@@ -29,8 +30,10 @@ export function BasicInfoSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <FileText className="text-muted-foreground h-4 w-4" />
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <IconShell size="sm" variant="secondary">
+          <InsertDriveFile />
+        </IconShell>
+        <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
           Basic Information
         </h3>
       </div>
@@ -41,7 +44,7 @@ export function BasicInfoSection({
         render={({ field }) => (
           <FormItem>
             <FormLabel>
-              Name {!isViewing && <span className="text-red-500">*</span>}
+              Name {!isViewing && <span className="text-status-error">*</span>}
             </FormLabel>
             <FormControl>
               <Input

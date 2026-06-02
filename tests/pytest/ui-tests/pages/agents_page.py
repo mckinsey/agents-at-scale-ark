@@ -63,7 +63,7 @@ class AgentsPage(BasePage):
         if self.page.locator(self.CHAT_WINDOW).is_visible(timeout=100):
             logger.error("Chat already open")
             return
-        row = self.page.locator(f"[role='link']:has(span[title='{agent_name}'])").first
+        row = self.page.locator(f"[role='row']:has(a[title='{agent_name}'])").first
         row.locator(self.CHAT_BUTTON).click()
         self.wait_for_element(self.CHAT_WINDOW)
 

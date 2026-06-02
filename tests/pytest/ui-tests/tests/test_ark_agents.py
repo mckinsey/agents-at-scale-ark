@@ -81,7 +81,7 @@ class TestArkAgents:
         # Use the input placeholder text to determine when the agent response is done processing
         expect(chat_input).to_have_attribute("placeholder", "Processing...", timeout=5000)
         expect(chat_input).not_to_have_attribute("placeholder", "Processing...", timeout=90000)
-        assistant_message = chat_window.locator("div.bg-muted").last
+        assistant_message = chat_window.locator("[data-testid='chat-message']").last
         expect(assistant_message).to_contain_text(agent_name, timeout=5000)
         assistant_text = assistant_message.inner_text()
 
@@ -92,7 +92,7 @@ class TestArkAgents:
         assert new_chat_window.is_visible(), "Chat window should still be open after reload"
         assert new_chat_window.locator(f"text={message}").first.is_visible(), \
             "User message should be visible in chat history after reload"
-        new_assistant_message = new_chat_window.locator("div.bg-muted").last
+        new_assistant_message = new_chat_window.locator("[data-testid='chat-message']").last
         new_assistant_message.wait_for(state="visible", timeout=15000)
         assert new_assistant_message.inner_text() == assistant_text, "Assistant messages should be visible in chat after reload"
         agents.close_agent_chat()
@@ -103,7 +103,7 @@ class TestArkAgents:
             pytest.skip("Agent was not created, skipping chat test")
         agents = AgentsPage(page)
         agents.navigate_to_agents_tab()
-        agents.wait_for_element(f"[role='link']:has(span[title='{agent_name}'])", timeout=15000)
+        agents.wait_for_element(f"[role='row']:has(a[title='{agent_name}'])", timeout=15000)
         agents.open_agent_chat(agent_name)
         agents.close_agent_chat()
 

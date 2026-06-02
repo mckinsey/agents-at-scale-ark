@@ -1,26 +1,31 @@
 'use client';
 
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 import type { SkillsDisplaySectionProps } from '../types';
 
 export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
   return (
     <div className="space-y-4">
-      <h3 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+      <h3 className="text-fg-secondary text-sm font-semibold tracking-wide uppercase">
         Skills
       </h3>
       {skills.length === 0 ? (
-        <div className="text-muted-foreground text-sm">
+        <div className="text-fg-secondary text-sm">
           No skills available for this agent
         </div>
       ) : (
-        <div className="max-h-[300px] space-y-2 overflow-y-auto rounded-md border p-3">
+        <ScrollArea className="border-stroke-divider border [&_[data-slot=scroll-area-viewport]]:max-h-[300px]">
+          <div className="space-y-2 p-3">
           {skills.map((skill, index) => (
             <div
               key={`${skill.id}-${index}`}
-              className="space-y-1 rounded border-l-2 border-blue-500/50 bg-blue-500/5 p-3">
-              <div className="text-sm font-medium">{skill.name}</div>
+              className="border-brand-accents-qb-accent/50 bg-brand-accents-qb-accent/5 space-y-1 border-l-2 p-3">
+              <div className="text-fg-primary text-sm font-medium">
+                {skill.name}
+              </div>
               {skill.description && (
-                <div className="text-muted-foreground text-xs">
+                <div className="text-fg-tertiary text-xs">
                   {skill.description}
                 </div>
               )}
@@ -29,7 +34,7 @@ export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
                   {skill.tags.map((tag, tagIndex) => (
                     <span
                       key={`${tag}-${tagIndex}`}
-                      className="inline-block rounded bg-blue-500/10 px-2 py-0.5 text-xs text-blue-600 dark:text-blue-400">
+                      className="bg-brand-accents-qb-accent/10 text-brand-accents-qb-accent inline-block px-2 py-0.5 text-xs">
                       {tag}
                     </span>
                   ))}
@@ -37,7 +42,8 @@ export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
               )}
             </div>
           ))}
-        </div>
+          </div>
+        </ScrollArea>
       )}
     </div>
   );

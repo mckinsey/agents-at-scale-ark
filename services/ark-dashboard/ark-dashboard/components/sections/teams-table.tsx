@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
@@ -9,12 +9,12 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
-import type { Agent } from '@/lib/services';
+import type { Team } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-interface AgentsTableProps {
-  readonly agents: readonly Agent[];
+interface TeamsTableProps {
+  readonly teams: readonly Team[];
   readonly onDelete: (id: string) => void;
 }
 
@@ -27,6 +27,7 @@ const STATUS_CONFIG = {
 const COL = {
   name: 'w-[240px] shrink-0',
   description: 'flex-1 min-w-0',
+  members: 'w-[180px] shrink-0',
   status: 'w-[120px] shrink-0',
   action: 'w-[100px] shrink-0',
 };
@@ -37,7 +38,7 @@ const headerCellClass =
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
 
-function AgentStatus({ status }: { status?: Agent['available'] | null }) {
+function TeamStatus({ status }: { status?: Team['available'] | null }) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -50,39 +51,62 @@ function AgentStatus({ status }: { status?: Agent['available'] | null }) {
   );
 }
 
-interface AgentTableRowProps {
-  readonly agent: Agent;
+interface TeamTableRowProps {
+  readonly team: Team;
   readonly onDelete: (id: string) => void;
+  readonly leading?: ReactNode;
 }
 
-function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
+export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
   const { isOpen } = useChatState();
-  const isChatOpen = isOpen(agent.name);
+  const isChatOpen = isOpen(team.name);
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const memberCount = team.members?.length ?? 0;
+  const memberLabel = memberCount === 1 ? 'member' : 'members';
+  const strategyLabel =
+    team.strategy === 'sequential' && team.loops
+      ? 'sequential (loops)'
+      : team.strategy;
 
   return (
     <>
       <div
         role="row"
         className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-3 transition-colors">
+        {leading && (
+          <span
+            className="relative z-10 flex shrink-0 items-center"
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => e.stopPropagation()}>
+            {leading}
+          </span>
+        )}
         <div role="cell" className={cn(rowCellClass, COL.name)}>
           <NamespacedLink
-            href={`/agents/${encodeURIComponent(agent.name)}`}
-            title={agent.name}
+            href={`/teams/${encodeURIComponent(team.name)}`}
+            title={team.name}
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
-            {agent.name}
+            {team.name}
           </NamespacedLink>
         </div>
         <div role="cell" className={cn(rowCellClass, COL.description)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={agent.description || ''}>
-            {agent.description || 'No description'}
+            title={team.description || ''}>
+            {team.description || 'No description'}
+          </span>
+        </div>
+        <div role="cell" className={cn(rowCellClass, COL.members)}>
+          <span
+            className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]"
+            title={`${memberCount} ${memberLabel} · ${strategyLabel}`}>
+            {memberCount} {memberLabel} · {strategyLabel}
           </span>
         </div>
         <div role="cell" className={cn(rowCellClass, COL.status)}>
-          <AgentStatus status={agent.available} />
+          <TeamStatus status={team.available} />
         </div>
         <div
           role="cell"
@@ -94,9 +118,9 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Chat with agent"
+            aria-label="Chat with team"
             className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
-            onClick={() => toggleFloatingChat(agent.name, 'agent')}>
+            onClick={() => toggleFloatingChat(team.name, 'team')}>
             <IconShell size="sm" variant="secondary">
               <ChatBubble />
             </IconShell>
@@ -104,7 +128,7 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Delete agent"
+            aria-label="Delete team"
             disabled={isChatOpen || readOnlyMode}
             onClick={() => {
               if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
@@ -118,22 +142,22 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
-        title="Delete Agent"
-        description={`Do you want to delete "${agent.name}" agent? This action cannot be undone.`}
+        title="Delete Team"
+        description={`Do you want to delete "${team.name}" team? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
-        onConfirm={() => onDelete(agent.id)}
+        onConfirm={() => onDelete(team.id)}
         variant="destructive"
       />
     </>
   );
 }
 
-export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
+export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
   return (
     <div
       role="table"
-      aria-label="Agents"
+      aria-label="Teams"
       className="flex w-full flex-col">
       <div role="row" className="flex items-center gap-3">
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
@@ -144,6 +168,9 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
           className={cn(headerCellClass, COL.description)}>
           Description
         </div>
+        <div role="columnheader" className={cn(headerCellClass, COL.members)}>
+          Members
+        </div>
         <div role="columnheader" className={cn(headerCellClass, COL.status)}>
           Status
         </div>
@@ -152,12 +179,8 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
         </div>
       </div>
       <div role="rowgroup" className="flex flex-col gap-2">
-        {agents.map(agent => (
-          <AgentTableRow
-            key={agent.id}
-            agent={agent}
-            onDelete={onDelete}
-          />
+        {teams.map(team => (
+          <TeamTableRow key={team.id} team={team} onDelete={onDelete} />
         ))}
       </div>
     </div>

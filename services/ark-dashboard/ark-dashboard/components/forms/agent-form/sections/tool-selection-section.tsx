@@ -1,8 +1,13 @@
 'use client';
 
-import { ChevronRight, CircleAlert, Trash2, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import {
+  ChevronRight,
+  ErrorIcon,
+  Handyman,
+  Trash,
+} from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -10,8 +15,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Tooltip,
@@ -48,7 +55,12 @@ function ToolItem({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger className="text-left" tabIndex={-1}>
-                <CircleAlert className="text-destructive mt-0.5 h-4 w-4" />
+                <IconShell
+                  size="sm"
+                  variant="primary"
+                  className="text-status-error mt-0.5">
+                  <ErrorIcon />
+                </IconShell>
               </TooltipTrigger>
               <TooltipContent>
                 <p>This tool is unavailable in the system</p>
@@ -69,7 +81,7 @@ function ToolItem({
           className="flex flex-1 cursor-pointer flex-col items-start gap-0.5 text-sm font-normal">
           <span className="font-medium">{tool.name}</span>
           {tool.description && (
-            <span className="text-muted-foreground text-xs">
+            <span className="text-fg-tertiary text-xs">
               {tool.description}
             </span>
           )}
@@ -79,10 +91,13 @@ function ToolItem({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="hover:text-destructive h-6 w-6 p-0"
+          size="icon-xs"
+          aria-label={`Remove ${tool.name}`}
+          className="hover:text-status-error"
           onClick={() => onDeleteClick(tool)}>
-          <Trash2 className="h-3 w-3" />
+          <IconShell size="sm">
+            <Trash />
+          </IconShell>
         </Button>
       )}
     </div>
@@ -110,7 +125,12 @@ function ToolGroup({
     <Collapsible defaultOpen className="group/collapsible">
       <CollapsibleTrigger className="flex w-full items-center justify-between py-2">
         <Label className="cursor-pointer text-sm">{toolGroup.groupName}</Label>
-        <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+        <IconShell
+          size="sm"
+          variant="secondary"
+          className="transition-transform group-data-[state=open]/collapsible:rotate-90">
+          <ChevronRight />
+        </IconShell>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="flex flex-col gap-1 pb-2 pl-2">
@@ -156,11 +176,13 @@ export function ToolSelectionSection({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Wrench className="text-muted-foreground h-4 w-4" />
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <IconShell size="sm" variant="secondary">
+          <Handyman />
+        </IconShell>
+        <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
           Tools
         </h3>
-        <span className="text-muted-foreground ml-auto text-xs">
+        <span className="text-fg-tertiary ml-auto text-xs">
           {
             [...availableTools, ...unavailableTools].filter(t =>
               isToolSelected(t.name),
@@ -171,12 +193,12 @@ export function ToolSelectionSection({
       </div>
 
       {toolsLoading ? (
-        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+        <div className="text-fg-secondary flex items-center gap-2 text-sm">
           <Spinner className="h-4 w-4" />
           Loading tools...
         </div>
       ) : availableTools.length === 0 && unavailableTools.length === 0 ? (
-        <div className="text-muted-foreground text-sm">
+        <div className="text-fg-secondary text-sm">
           No tools available in this namespace
         </div>
       ) : (
@@ -185,10 +207,11 @@ export function ToolSelectionSection({
             placeholder="Filter tools..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="text-sm"
+            className="border-stroke-divider text-sm"
             disabled={disabled}
           />
-          <div className="max-h-[300px] space-y-1 overflow-y-auto rounded-md border p-3">
+          <ScrollArea className="border-stroke-divider border [&_[data-slot=scroll-area-viewport]]:max-h-[300px]">
+            <div className="space-y-1 p-3">
             {unavailableTools.length > 0 && onDeleteClick && (
               <ToolGroup
                 toolGroup={{
@@ -203,7 +226,7 @@ export function ToolSelectionSection({
               />
             )}
             {filteredTools.length === 0 && searchQuery ? (
-              <div className="text-muted-foreground py-4 text-center text-sm">
+              <div className="text-fg-secondary py-4 text-center text-sm">
                 No tools found matching &quot;{searchQuery}&quot;
               </div>
             ) : (
@@ -219,7 +242,8 @@ export function ToolSelectionSection({
                 />
               ))
             )}
-          </div>
+            </div>
+          </ScrollArea>
         </div>
       )}
     </div>

@@ -5,10 +5,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(() => new URLSearchParams('namespace=test-ns')),
 }));
 
-vi.mock('@/components/ui/sidebar', () => ({
-  SidebarTrigger: () => <button>sidebar</button>,
-}));
-
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => (

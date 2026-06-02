@@ -248,7 +248,9 @@ describe('SelectorSection', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox')).toHaveClass('border-red-500');
+      expect(screen.getByRole('combobox')).toHaveClass(
+        'border-stroke-status-error',
+      );
     });
 
     it('should not apply red border when selected agent is available', () => {
@@ -259,7 +261,7 @@ describe('SelectorSection', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox')).not.toHaveClass('border-red-500');
+      expect(screen.getByRole('combobox')).not.toHaveClass('border-stroke-status-error');
     });
 
     it('should show unavailable agent with (Unavailable) label in the dropdown', async () => {

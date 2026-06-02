@@ -20,8 +20,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Separator } from '@/components/ui/separator';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
 import { Button } from '../ui/button';
@@ -98,7 +96,6 @@ type PageHeaderProps = {
   breadcrumbs?: BreadcrumbElement[];
   currentPage?: string;
   actions?: ReactNode;
-  hideSidebarTrigger?: boolean;
   customBreadcrumb?: ReactNode;
   className?: string;
 };
@@ -107,7 +104,6 @@ export function PageHeader({
   breadcrumbs,
   currentPage,
   actions,
-  hideSidebarTrigger,
   customBreadcrumb,
   className,
 }: PageHeaderProps) {
@@ -124,15 +120,6 @@ export function PageHeader({
         'flex h-16 shrink-0 items-center gap-2 px-4',
         className,
       )}>
-      {!hideSidebarTrigger && (
-        <>
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-2 data-[orientation=vertical]:h-4"
-          />
-        </>
-      )}
       {customBreadcrumb}
       {/* Mobile */}
       {!customBreadcrumb && currentPage && (

@@ -1,11 +1,13 @@
 'use client';
 
-import { RotateCcw, Send, Square } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
+import { RestartAlt, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -82,8 +84,8 @@ export function ChatPanel({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
-        <div className="space-y-4">
+      <ScrollArea className="h-0 min-h-0 flex-1">
+        <div className="space-y-4 p-4">
           <ChatMessageList
             messages={messages}
             type={type}
@@ -93,16 +95,15 @@ export function ChatPanel({
             debugMode={debugMode}
             isProcessing={isProcessing}
             processingPhase={processingPhase}
-
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
             messageTokenUsage={messageTokenUsage}
           />
         </div>
-      </div>
+      </ScrollArea>
 
-      <div className="flex-shrink-0 border-t">
+      <div className="border-stroke-divider flex-shrink-0 border-t">
         <div className="flex gap-2 p-4">
           <div className="relative flex-1">
             <Input
@@ -116,24 +117,28 @@ export function ChatPanel({
               disabled={isProcessing}
             />
           </div>
-          {isProcessing ?
+          {isProcessing ? (
             <Button
               onClick={cancelQuery}
               size="sm"
               variant="destructive"
-              aria-label="Stop conversation"
-            >
-              <Square className="h-4 w-4" />
+              aria-label="Stop conversation">
+              <IconShell size="sm">
+                <Stop />
+              </IconShell>
             </Button>
-            : <Button
+          ) : (
+            <Button
               onClick={handleSendMessage}
               disabled={!currentMessage.trim()}
               size="sm"
               variant="default"
               aria-label="Send message">
-              <Send className="h-4 w-4" />
+              <IconShell size="sm">
+                <Send />
+              </IconShell>
             </Button>
-          }
+          )}
         </div>
 
         <Separator />
@@ -157,14 +162,14 @@ export function ChatPanel({
             />
             <label
               htmlFor={switchId}
-              className="text-muted-foreground cursor-pointer text-sm">
+              className="text-fg-secondary cursor-pointer text-sm">
               Show tool calls
             </label>
             {tokenUsage && tokenUsage.total_tokens > 0 && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="text-muted-foreground ml-2 flex items-center gap-1 text-xs">
+                    <div className="text-fg-tertiary ml-2 flex items-center gap-1 text-xs">
                       <span className="font-mono">
                         {tokenUsage.total_tokens.toLocaleString()} tokens
                       </span>
@@ -173,16 +178,14 @@ export function ChatPanel({
                   <TooltipContent>
                     <div className="space-y-1 text-xs">
                       <div>
-                        Prompt:{' '}
-                        {tokenUsage.prompt_tokens.toLocaleString()}
+                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
                       </div>
                       <div>
                         Completion:{' '}
                         {tokenUsage.completion_tokens.toLocaleString()}
                       </div>
                       <div className="border-t pt-1 font-medium">
-                        Total:{' '}
-                        {tokenUsage.total_tokens.toLocaleString()}
+                        Total: {tokenUsage.total_tokens.toLocaleString()}
                       </div>
                     </div>
                   </TooltipContent>
@@ -195,7 +198,9 @@ export function ChatPanel({
               onClick={clearChat}
               className="ml-auto h-7 gap-1 px-2 text-xs"
               disabled={isProcessing || messages.length === 0}>
-              <RotateCcw className="h-3 w-3" />
+              <IconShell size="sm">
+                <RestartAlt />
+              </IconShell>
               New Chat
             </Button>
           </div>

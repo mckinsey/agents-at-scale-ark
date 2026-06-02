@@ -1,9 +1,11 @@
-import { AlertCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
+import { Warning } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
+import { cn } from '@/lib/utils';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
 interface ChatMessageProps {
@@ -147,7 +149,12 @@ export function ChatMessage({
   if (!hasContent && hasToolCalls) {
     return (
       <div
-        className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
+        data-testid="chat-message"
+        className={cn(
+          'flex flex-col gap-2',
+          isUser ? 'items-end' : 'items-start',
+          className,
+        )}>
         {toolCalls.map(toolCall => (
           <ToolCall key={toolCall.id} toolCall={toolCall} />
         ))}
@@ -157,16 +164,23 @@ export function ChatMessage({
 
   return (
     <div
-      className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
+      data-testid="chat-message"
+      className={cn(
+        'flex flex-col gap-2',
+        isUser ? 'items-end' : 'items-start',
+        className,
+      )}>
       {hasContent && (
         <div
-          className={`${needsExpansion ? '' : 'max-w-[80%]'} rounded-lg px-3 py-2 ${
+          className={cn(
+            'px-3 py-2',
+            needsExpansion ? '' : 'max-w-[80%]',
             isUser
-              ? 'bg-primary text-primary-foreground'
+              ? 'bg-surface-bg-tertiary text-fg-primary'
               : isFailed
-                ? 'bg-destructive/10 text-destructive'
-                : 'bg-muted'
-          }`}
+                ? 'bg-status-error/10 text-status-error'
+                : 'bg-surface-bg-secondary text-fg-primary',
+          )}
           style={
             needsExpansion && expandedWidth
               ? { minWidth: `${expandedWidth}px` }
@@ -174,7 +188,7 @@ export function ChatMessage({
           }>
           <div className="flex flex-col gap-2">
             {sender && !isUser && (
-              <div className="text-muted-foreground text-xs font-medium">
+              <div className="text-fg-tertiary text-xs font-medium">
                 {sender}
               </div>
             )}
@@ -191,14 +205,16 @@ export function ChatMessage({
               {showErrorIcon && (
                 <button
                   onClick={handleErrorIconClick}
-                  className="hover:bg-destructive/20 flex-shrink-0 rounded p-1 transition-colors"
+                  className="text-status-error hover:bg-status-error/10 flex-shrink-0 p-1 transition-colors"
                   title="View events for this query">
-                  <AlertCircle className="h-4 w-4" />
+                  <IconShell size="sm">
+                    <Warning />
+                  </IconShell>
                 </button>
               )}
             </div>
             {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
-              <div className="text-muted-foreground text-xs opacity-60">
+              <div className="text-fg-tertiary text-xs opacity-60">
                 {tokenUsage.total_tokens.toLocaleString()} tokens (
                 {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
                 {tokenUsage.completion_tokens.toLocaleString()} out)

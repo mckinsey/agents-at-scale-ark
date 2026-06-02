@@ -13,6 +13,10 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: () => ({ push: mockPush }),
 }));
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock('@/lib/chat-context', () => ({
   useChatState: () => ({ isOpen: mockIsOpen }),
 }));
@@ -82,24 +86,16 @@ describe('AgentsTable', () => {
     expect(screen.getByText('Unknown')).toBeInTheDocument();
   });
 
-  it('navigates to agent detail when row is clicked', async () => {
-    const user = userEvent.setup();
+  it('renders a link to the agent detail for each row', () => {
     render(<AgentsTable agents={agents} onDelete={vi.fn()} />);
-    await user.click(screen.getAllByRole('link')[0]);
-    expect(mockPush).toHaveBeenCalledWith('/agents/agent-one');
-  });
-
-  it('navigates on Enter and Space keys', async () => {
-    const user = userEvent.setup();
-    render(<AgentsTable agents={agents} onDelete={vi.fn()} />);
-    const row = screen.getAllByRole('link')[0];
-    row.focus();
-    await user.keyboard('{Enter}');
-    expect(mockPush).toHaveBeenCalledWith('/agents/agent-one');
-
-    mockPush.mockClear();
-    await user.keyboard(' ');
-    expect(mockPush).toHaveBeenCalledWith('/agents/agent-one');
+    expect(screen.getByRole('link', { name: 'agent-one' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/agents/agent-one'),
+    );
+    expect(screen.getByRole('link', { name: 'agent-two' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/agents/agent-two'),
+    );
   });
 
   it('chat button triggers toggleFloatingChat and does not navigate', async () => {
