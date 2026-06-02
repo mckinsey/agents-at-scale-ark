@@ -81,6 +81,44 @@ export E2E_TEST_AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/"
 
 You can obtain these credentials from your Azure OpenAI service. If you don't have Azure OpenAI access, you can still follow the tutorial to understand the concepts, but the test execution steps will not work.
 
+## Using the Dashboard
+
+Every step below uses `kubectl` so you can copy-paste, but the Ark Dashboard renders the same flow and is often the faster way to explore. Launch it once and keep it open in another tab:
+
+```bash
+ark dashboard
+```
+
+From `ark dashboard`, the home view lists every resource type and how many of each are deployed. Use it to confirm the tool, agents, and team appear as you create them.
+
+![Ark Dashboard home view](/walkthrough/home.png)
+
+The relevant sections, all reachable from the left-hand nav:
+
+- **Tools** — every built-in, MCP-discovered, and HTTP tool. The web-search tool from Step 1 shows up under **Built in**, the file-gateway tools under their MCP server group.
+  ![Tools page showing web-search](/walkthrough/tools.png)
+- **Agent Builder → Agents** — researcher, analyst, and creator after Step 2.
+  ![Agents page with the three walkthrough agents](/walkthrough/agents.png)
+- **Agent Builder → Teams** — the sequential team after Step 3.
+  ![Teams page showing the research-analysis-team](/walkthrough/teams.png)
+- **Agent Builder → Queries** — list of past runs. Use **Create Query** to start a new one; pick a target from the dropdown, type the input, hit **Execute Query**.
+  ![New query form with the team selected](/walkthrough/query-new.png)
+
+Once the query reaches `done`, open it to inspect the response, token usage, and the timeline of each member's turn.
+
+![Query detail view with the completed response](/walkthrough/query-detail.png)
+
+### Other ways to start a query
+
+The **Queries** tab isn't the only entry point — both of these create the same `Query` resource under the hood:
+
+- **Agent Studio** — click an agent on the **Agents** page to open Agent Studio. The right-hand pane is a live chat with that agent, so you can iterate on the prompt and tools while sending messages. Switch the toggle to **Debug** to see the underlying request and tool calls.
+  ![Agent Studio with the researcher agent and its chat panel](/walkthrough/agent-studio.png)
+- **Chat bubble** — the speech-bubble icon on any agent or team row pops out a floating chat window in the corner. Useful for a quick one-off question without leaving the list view; you can keep several bubbles open at once.
+  ![Floating chat bubble against the Teams page](/walkthrough/chat-bubble.png)
+
+The `kubectl` steps below are still the source of truth — they're what the Dashboard does under the hood — but you can click instead of paste at any point.
+
 ## Step 1: Create and Test Web Search Tool
 
 ### What You'll Learn
@@ -229,8 +267,7 @@ cat samples/walkthrough/teams/research-team.yaml
 
 Features:
 - Sequential execution: Researcher → Analyst → Creator
-- Automatic data passing between agents
-- Maximum 3 turns for completion
+- Automatic data passing between agents (one pass through each member)
 
 ### Test the Team
 ```bash
@@ -256,11 +293,12 @@ chainsaw test samples/walkthrough/teams/tests/
 
 ### Deploy the Complete Workflow
 
-First, install the MCP filesystem server from the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace):
-```bash
-ark install marketplace/mcps/filesystem-mcp-server
+First, install the file-gateway service from the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace) — it provides the `file-gateway` MCPServer the creator agent uses:
 
-# Verify it's ready (should show READY=True)
+```bash
+ark install marketplace/services/file-gateway
+
+# Verify the MCPServer is ready (Available: True)
 kubectl get mcpservers
 ```
 
@@ -309,17 +347,20 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 # Get detailed query results
 kubectl get queries research-query -o yaml
 
-# Check response content
-kubectl get queries research-query -o jsonpath='{.status.response.content}' | jq '.'
+# Print the final response from the team
+kubectl get query research-query -o jsonpath='{.status.response.content}'
 ```
 
 ### Access Generated Documents
-```bash
-# View files created by agents using kubectl exec
-kubectl exec -it deployment/mcp-filesystem -- ls -la /data/
 
-# Or read specific files
-kubectl exec -it deployment/mcp-filesystem -- cat /data/path/to/file.txt
+The creator agent writes into the filesystem MCP's `/data/aas-files` directory:
+
+```bash
+# List documents the agents wrote
+kubectl exec deployment/file-gateway-filesystem-mcp -- ls -la /data/aas-files
+
+# Read a specific document
+kubectl exec deployment/file-gateway-filesystem-mcp -- cat /data/aas-files/<filename>
 ```
 
 ## Quick Start (Skip Tutorial)
@@ -327,8 +368,8 @@ kubectl exec -it deployment/mcp-filesystem -- cat /data/path/to/file.txt
 If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
-# 1. Install MCP filesystem server from marketplace
-ark install marketplace/mcps/filesystem-mcp-server
+# 1. Install file-gateway from marketplace (provides the filesystem MCPServer)
+ark install marketplace/services/file-gateway
 
 # 2. Deploy complete workflow using kustomization.yaml
 kubectl apply -k samples/walkthrough/
@@ -364,8 +405,8 @@ spec:
 # Remove the research workflow using kustomization.yaml
 kubectl delete -k samples/walkthrough/
 
-# Remove the MCP filesystem server  
-helm uninstall mcp-filesystem
+# Remove the file-gateway service (which provided the filesystem MCPServer)
+ark uninstall marketplace/services/file-gateway
 
 # Remove any test resources
 kubectl delete queries --all
@@ -374,7 +415,7 @@ kubectl delete queries --all
 ## Next Steps
 
 - Explore other ARK samples in the `samples/` directory
-- Learn about different team strategies (round-robin, graph-based)
+- Learn about different team strategies (sequential with loops, selector)
 - Integrate custom MCP servers for specialized tools
 - Build more complex multi-agent workflows
 

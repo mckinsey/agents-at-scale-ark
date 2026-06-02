@@ -226,7 +226,7 @@ Watch it complete and inspect the response:
 kubectl get query test-support -w
 # Phase: pending -> running -> done
 
-kubectl get query test-support -o jsonpath='{.status.responses[0].content}'
+kubectl get query test-support -o jsonpath='{.status.response.content}'
 ```
 
 ## Step 7: End-to-End Testing
@@ -247,7 +247,7 @@ kubectl wait --for=jsonpath='{.status.phase}'=ready agent/customer-support --tim
 kubectl apply -f queries/test-support.yaml
 kubectl wait --for=jsonpath='{.status.phase}'=done query/test-support --timeout=120s
 
-RESPONSE=$(kubectl get query test-support -o jsonpath='{.status.responses[0].content}')
+RESPONSE=$(kubectl get query test-support -o jsonpath='{.status.response.content}')
 [ -n "$RESPONSE" ] || { echo "FAIL: empty response"; exit 1; }
 
 echo "PASS"

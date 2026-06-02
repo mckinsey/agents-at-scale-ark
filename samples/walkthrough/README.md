@@ -260,7 +260,7 @@ chainsaw test samples/walkthrough/teams/tests/
 
 First, install the MCP filesystem server from the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace):
 ```bash
-ark install marketplace/mcps/filesystem-mcp-server
+ark install marketplace/services/file-gateway
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -318,25 +318,23 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 # Get detailed query results
 kubectl get queries research-query -o yaml
 
-# Check response content
-kubectl get queries research-query -o jsonpath='{.status.response.content}'
+# Print the final response from the team
+kubectl get query research-query -o jsonpath='{.status.response.content}'
 
-# Or view the full response structure (JSON format)
-kubectl get queries research-query -o jsonpath='{.status.response}' | jq '.'
+# Or view the whole response object (JSON format)
+kubectl get query research-query -o jsonpath='{.status.response}' | jq '.'
 ```
 
 ### Access Generated Documents
+
+The creator agent writes into the filesystem MCP's `/data/aas-files` directory:
+
 ```bash
-# Port forward to file browser
-kubectl port-forward svc/mcp-filesystem-filebrowser 8080:8080
+# List documents the agents wrote
+kubectl exec deployment/file-gateway-filesystem-mcp -- ls -la /data/aas-files
 
-# Open in browser and check the logs for credentials
-kubectl logs deployment/mcp-filesystem-filebrowser | grep "User 'admin' initialized"
-open http://localhost:8080
-
-# Default credentials (check logs for actual password):
-# Username: admin
-# Password: [randomly generated - check logs above]
+# Read a specific document
+kubectl exec deployment/file-gateway-filesystem-mcp -- cat /data/aas-files/<filename>
 ```
 
 ## Quick Start (Skip Tutorial)
@@ -345,7 +343,7 @@ If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
 # 1. Install MCP filesystem server from marketplace
-ark install marketplace/mcps/filesystem-mcp-server
+ark install marketplace/services/file-gateway
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -387,8 +385,8 @@ spec:
 # Remove the research workflow using kustomization.yaml
 kubectl delete -k samples/walkthrough/
 
-# Remove the MCP filesystem server  
-helm uninstall mcp-filesystem
+# Remove the file-gateway service (provides the filesystem MCPServer)
+ark uninstall marketplace/services/file-gateway
 
 # Remove any test resources
 kubectl delete queries --all
@@ -397,7 +395,7 @@ kubectl delete queries --all
 ## Next Steps
 
 - Explore other ARK samples in the `samples/` directory
-- Learn about different team strategies (round-robin, graph-based)
+- Learn about different team strategies (sequential with loops, selector)
 - Integrate custom MCP servers for specialized tools
 - Build more complex multi-agent workflows
 

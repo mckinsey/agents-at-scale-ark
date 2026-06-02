@@ -6,7 +6,7 @@ const { mockSpawn } = vi.hoisted(() => {
   return { mockSpawn };
 });
 
-vi.mock('child_process', () => {
+vi.mock('node:child_process', () => {
   const mod = { spawn: mockSpawn };
   return { default: mod, ...mod };
 });
