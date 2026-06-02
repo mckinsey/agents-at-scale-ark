@@ -24,11 +24,10 @@ The example below creates an OpenAI `gpt-4o-mini` model called `default`. You ca
 | Field | Value |
 | --- | --- |
 | **Name** | `default` |
-| **Type** | Locked — `Chat Completions (OpenAI V1)` |
 | **Provider** | `OpenAI` |
 | **Model** | `gpt-4o-mini` |
 | **API Key** | Pick an existing secret from the dropdown, or hit **Add New** to create one inline |
-| **Base URL** | Leave blank to use `https://api.openai.com/v1` |
+| **Base URL** | Add the model URL |
 
 4. Hit **Create Model**.
 
@@ -130,6 +129,22 @@ The Dashboard's **Add Model** form covers the common case for each provider. The
 - **Azure Workload Identity `clientId` / `tenantId`** — selectable in the form's Authentication dropdown but the values themselves still come from YAML.
 
 If you need any of the above, write the Model YAML directly and apply with `kubectl`. You can still inspect and delete it from the Dashboard afterwards.
+
+## Troubleshooting
+
+**Probes fail with `invalid header field value for "Authorization"`.** The API key in your Secret almost certainly ends with a newline. Go's HTTP client rejects newlines in header values, so the controller can't probe the model and `ModelAvailable` flips to `False`. Re-create the Secret with `--from-literal` (no newline) or strip whitespace before writing:
+
+```bash
+# Safer than --from-file when copy-pasting a key
+kubectl create secret generic my-model-token \
+  --from-literal=token='YOUR_API_KEY'
+
+# Or strip any trailing whitespace from a file
+tr -d '\n\r' < key.txt | kubectl create secret generic my-model-token \
+  --from-file=token=/dev/stdin
+```
+
+`kubectl describe model <name>` shows the underlying probe error in the `ModelAvailable` condition.
 
 ## Next steps
 
