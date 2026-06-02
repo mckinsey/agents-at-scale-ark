@@ -249,15 +249,10 @@ func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *a
 	}
 
 	// Parse timeout duration
-	var timeoutDuration time.Duration
-	if err := json.Unmarshal([]byte(timeoutStr), &timeoutDuration); err != nil {
-		// Try parsing as duration string
-		parsed, parseErr := time.ParseDuration(timeoutStr)
-		if parseErr != nil {
-			log.Error(parseErr, "failed to parse approval timeout", "timeout", timeoutStr)
-			return false, fmt.Errorf("invalid timeout format: %w", parseErr)
-		}
-		timeoutDuration = parsed
+	timeoutDuration, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		log.Error(err, "failed to parse approval timeout", "timeout", timeoutStr)
+		return false, fmt.Errorf("invalid timeout format: %w", err)
 	}
 
 	// Check if task has started
@@ -287,7 +282,7 @@ func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *a
 		a2aTask.Status.Phase = arka2a.PhaseCompleted
 		completionTime := metav1.Now()
 		a2aTask.Status.CompletionTime = &completionTime
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalTimeoutProceeded",
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalTimeoutProceeded,
 			"Approval timeout exceeded, proceeding per onTimeout policy")
 
 	case "reject", "":
@@ -297,7 +292,7 @@ func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *a
 		a2aTask.Status.Error = fmt.Sprintf("Approval timeout exceeded after %s", timeoutDuration)
 		completionTime := metav1.Now()
 		a2aTask.Status.CompletionTime = &completionTime
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalTimeoutRejected",
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalTimeoutRejected,
 			"Approval timeout exceeded, rejecting per onTimeout policy")
 
 	default:
@@ -319,7 +314,14 @@ func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask
 
 	if err := json.Unmarshal([]byte(a2aTask.Spec.Input), &decision); err != nil {
 		log.Error(err, "failed to parse approval decision", "input", a2aTask.Spec.Input)
-		return false, fmt.Errorf("invalid approval decision format: %w", err)
+		// Treat parse failure as terminal - don't retry indefinitely
+		completionTime := metav1.Now()
+		a2aTask.Status.CompletionTime = &completionTime
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = fmt.Sprintf("Invalid approval decision format: %v", err)
+		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "InvalidApprovalDecision",
+			fmt.Sprintf("Failed to parse approval decision: %v", err))
+		return true, nil
 	}
 
 	if decision.Decision == "" {
@@ -337,18 +339,24 @@ func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask
 	case "approved":
 		log.Info("Approval granted, marking task as completed", "taskId", a2aTask.Spec.TaskID)
 		a2aTask.Status.Phase = arka2a.PhaseCompleted
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalGranted",
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalGranted,
 			"User approved the tool calls")
 
 	case "rejected":
 		log.Info("Approval rejected, marking task as failed", "taskId", a2aTask.Spec.TaskID)
 		a2aTask.Status.Phase = arka2a.PhaseFailed
 		a2aTask.Status.Error = "Tool execution rejected by user"
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "ApprovalRejected",
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalRejected,
 			"Tool execution rejected by user")
 
 	default:
-		return false, fmt.Errorf("invalid decision value: %s", decision.Decision)
+		// Treat unknown decision as terminal - don't retry indefinitely
+		log.Error(fmt.Errorf("invalid decision value: %s", decision.Decision), "unknown approval decision")
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = fmt.Sprintf("Invalid decision value: %s", decision.Decision)
+		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "InvalidApprovalDecision",
+			fmt.Sprintf("Unknown decision value: %s", decision.Decision))
+		return true, nil
 	}
 
 	return true, nil

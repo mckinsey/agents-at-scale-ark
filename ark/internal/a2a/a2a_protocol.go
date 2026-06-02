@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -21,6 +22,13 @@ const (
 	PhaseFailed        = "failed"
 	PhaseCancelled     = "cancelled"
 	PhaseUnknown       = "unknown"
+)
+
+const (
+	ConditionReasonApprovalRejected         = "ApprovalRejected"
+	ConditionReasonApprovalGranted          = "ApprovalGranted"
+	ConditionReasonApprovalTimeoutRejected  = "ApprovalTimeoutRejected"
+	ConditionReasonApprovalTimeoutProceeded = "ApprovalTimeoutProceeded"
 )
 
 const (
@@ -281,4 +289,11 @@ func parseProtocolTimestamp(rfc3339Timestamp string) *metav1.Time {
 	}
 	timestamp := metav1.NewTime(parsedTime)
 	return &timestamp
+}
+
+// IsUserRejection checks if an A2ATask was explicitly rejected by a user.
+// Returns true if the task has a Completed condition with reason ApprovalRejected.
+func IsUserRejection(task *arkv1alpha1.A2ATask) bool {
+	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+	return cond != nil && cond.Reason == ConditionReasonApprovalRejected
 }

@@ -747,6 +747,13 @@ func TestCheckResumption(t *testing.T) {
 				Status: arkv1alpha1.A2ATaskStatus{
 					Phase: arka2a.PhaseFailed,
 					Error: "Tool execution rejected by user",
+					Conditions: []metav1.Condition{
+						{
+							Type:   string(arkv1alpha1.A2ATaskCompleted),
+							Status: metav1.ConditionTrue,
+							Reason: arka2a.ConditionReasonApprovalRejected,
+						},
+					},
 				},
 			},
 			expectResumption: true,

@@ -216,9 +216,9 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 
 	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
 		// Check if this is a user rejection (should resume) vs actual failure (should error)
-		isRejection := a2aTask.Status.Error == "Tool execution rejected by user"
+		isRejection := arka2a.IsUserRejection(&a2aTask)
 
-		if isRejection && a2aTask.Status.Phase == arka2a.PhaseFailed {
+		if isRejection {
 			// User rejected tool execution - resume query to let agent handle gracefully
 			log.Info("A2ATask rejected by user, resuming query execution for graceful handling", "taskId", taskID)
 			// Note: Don't clear taskID here - executor needs it to detect resumption

@@ -114,19 +114,7 @@ func (h *Handler) ProcessMessage(
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
 
-	// Debug: Log query status before checkResumption
 	log := logf.FromContext(ctx)
-	log.Info("Query status before checkResumption",
-		"queryName", query.Name,
-		"queryPhase", query.Status.Phase,
-		"hasResponse", query.Status.Response != nil,
-		"hasA2A", query.Status.Response != nil && query.Status.Response.A2A != nil,
-		"taskId", func() string {
-			if query.Status.Response != nil && query.Status.Response.A2A != nil {
-				return query.Status.Response.A2A.TaskID
-			}
-			return "none"
-		}())
 
 	// Check if this is a resumption from HITL approval or rejection
 	//nolint:nestif // TODO: Refactor to reduce nesting complexity
@@ -746,7 +734,7 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 	}
 
 	// Check if this is a user rejection (not timeout or other failure)
-	if a2aTask.Status.Phase == arka2a.PhaseFailed && a2aTask.Status.Error == "Tool execution rejected by user" {
+	if arka2a.IsUserRejection(&a2aTask) {
 		log.Info("Detected user rejection, will resume to let agent handle gracefully", "taskId", taskID)
 		return true, &a2aTask
 	}
