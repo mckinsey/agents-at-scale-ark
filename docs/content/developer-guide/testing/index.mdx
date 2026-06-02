@@ -53,7 +53,7 @@ export E2E_TEST_AZURE_OPENAI_KEY="your-key"
 export E2E_TEST_AZURE_OPENAI_BASE_URL="your-endpoint"
 
 # Run any specific tests.
-chainsaw test ./tests/models --fail-fast
+chainsaw test ./tests --selector '!llm' --config ./tests/.chainsaw.yaml
 ```
 
 ### Test Execution Details
@@ -168,19 +168,16 @@ Structure tests by component:
 
 ## Debugging Tests
 
-### Verbose Output
+### Chainsaw options
 
-Run chainsaw with verbose flags for debugging:
+Run chainsaw with various flags for debugging:
 
 ```bash
-# Detailed output
-chainsaw test ./tests/models --verbose
-
 # Keep test namespaces for inspection
-chainsaw test ./tests/models --cleanup=false
+chainsaw test ./tests --selector '!llm' --config ./tests/.chainsaw.yaml --skip-delete
 
 # Run specific test steps
-chainsaw test ./tests/models --test-dir=specific-test
+chainsaw test ./tests --config ./tests/.chainsaw.yaml
 ```
 
 ### Inspecting Resources
