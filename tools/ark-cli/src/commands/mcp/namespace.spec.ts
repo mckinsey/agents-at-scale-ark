@@ -7,7 +7,9 @@ const mockKubeConfig = {
 };
 
 vi.mock('@kubernetes/client-node', () => ({
-  KubeConfig: vi.fn(() => mockKubeConfig),
+  KubeConfig: vi.fn(function () {
+    return mockKubeConfig;
+  }),
 }));
 
 const {resolveNamespace} = await import('./namespace.js');
