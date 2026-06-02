@@ -10,7 +10,9 @@ const mockPrompt = vi.fn();
 vi.mock('inquirer', () => ({
   default: {
     prompt: mockPrompt,
-    Separator: vi.fn().mockImplementation((text) => ({type: 'separator', line: text})),
+    Separator: vi.fn().mockImplementation(function(text) {
+      return {type: 'separator', line: text};
+    }),
   },
 }));
 

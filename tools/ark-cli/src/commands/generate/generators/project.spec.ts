@@ -35,22 +35,26 @@ vi.mock('ora', () => ({
 }));
 
 vi.mock('../templateEngine.js', () => ({
-  TemplateEngine: vi.fn().mockImplementation(() => ({
-    processDirectory: vi.fn(),
-    processFile: vi.fn(),
-    setVariables: vi.fn(),
-    getVariables: vi.fn().mockReturnValue({}),
-    processTemplate: vi.fn().mockResolvedValue(undefined),
-    processString: vi.fn().mockImplementation((str: string) => str),
-  })),
+  TemplateEngine: vi.fn().mockImplementation(function() {
+    return {
+      processDirectory: vi.fn(),
+      processFile: vi.fn(),
+      setVariables: vi.fn(),
+      getVariables: vi.fn().mockReturnValue({}),
+      processTemplate: vi.fn().mockResolvedValue(undefined),
+      processString: vi.fn().mockImplementation((str: string) => str),
+    };
+  }),
 }));
 
 vi.mock('../templateDiscovery.js', () => ({
-  TemplateDiscovery: vi.fn().mockImplementation(() => ({
-    findTemplate: vi.fn().mockResolvedValue('/templates/project'),
-    listTemplates: vi.fn().mockResolvedValue([]),
-    getTemplatePath: vi.fn().mockReturnValue('/templates'),
-  })),
+  TemplateDiscovery: vi.fn().mockImplementation(function() {
+    return {
+      findTemplate: vi.fn().mockResolvedValue('/templates/project'),
+      listTemplates: vi.fn().mockResolvedValue([]),
+      getTemplatePath: vi.fn().mockReturnValue('/templates'),
+    };
+  }),
 }));
 
 vi.mock('../../../lib/security.js', () => ({

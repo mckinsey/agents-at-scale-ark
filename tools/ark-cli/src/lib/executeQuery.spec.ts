@@ -15,23 +15,29 @@ const mockSpinner = {
   isSpinning: false,
 };
 
-const mockOra = vi.fn(() => mockSpinner);
+const mockOra = vi.fn(function() {
+  return mockSpinner;
+});
 vi.mock('ora', () => ({
   default: mockOra,
 }));
 
 let mockSendMessage = vi.fn() as any;
 
-const mockChatClient = vi.fn(() => ({
-  sendMessage: mockSendMessage,
-})) as any;
+const mockChatClient = vi.fn(function() {
+  return {
+    sendMessage: mockSendMessage,
+  };
+}) as any;
 
 let mockArkApiProxyInstance: any = {
   start: vi.fn(),
   stop: vi.fn(),
 };
 
-const mockArkApiProxy = vi.fn(() => mockArkApiProxyInstance) as any;
+const mockArkApiProxy = vi.fn(function() {
+  return mockArkApiProxyInstance;
+}) as any;
 
 vi.mock('./arkApiProxy.js', () => ({
   ArkApiProxy: mockArkApiProxy,
@@ -63,14 +69,18 @@ describe('executeQuery', () => {
     mockSpinner.start.mockReturnValue(mockSpinner);
     mockSpinner.isSpinning = false;
     mockSendMessage = vi.fn() as any;
-    mockChatClient.mockReturnValue({sendMessage: mockSendMessage});
+    mockChatClient.mockImplementation(function() {
+      return {sendMessage: mockSendMessage};
+    });
     const startMock = vi.fn() as any;
     startMock.mockResolvedValue({});
     mockArkApiProxyInstance = {
       start: startMock,
       stop: vi.fn(),
     };
-    mockArkApiProxy.mockReturnValue(mockArkApiProxyInstance);
+    mockArkApiProxy.mockImplementation(function() {
+      return mockArkApiProxyInstance;
+    });
   });
 
   describe('parseTarget', () => {
