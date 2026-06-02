@@ -5,7 +5,9 @@ const mockChatClient = {
 };
 
 vi.mock('../../lib/chatClient.js', () => ({
-  ChatClient: vi.fn().mockImplementation(() => mockChatClient),
+  ChatClient: vi.fn(function () {
+    return mockChatClient;
+  }),
 }));
 
 const {createConnectingToArkOperation} = await import('./connectingToArk.js');

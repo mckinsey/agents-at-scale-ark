@@ -1,254 +1,77 @@
 ---
 title: Starting a New Agentic Project
-description: A complete guide to bootstrapping and testing a new ARK agentic project
+description: A guide to organising and testing a new Ark agentic project
 ---
 
 # Starting a New Agentic Project
 
-This guide walks you through creating a new agentic project from scratch using ARK's code generation tools and testing the complete workflow end-to-end.
+This guide lays out a new agent project on top of Ark and tests it end to end. It assumes the [Quickstart](/quickstart) is done — Ark is running and `ark`, `kubectl` work against your cluster.
 
-## Important: Project Structure
+## Project Layout
 
-**Ark provides the runtime, not where you build agents.** This guide shows you how to create a new agent project in its own repository, separate from the Ark repository.
+Ark provides the runtime; your project — agents, tools, teams, queries — lives in its own directory (and usually its own repository). That separation lets each team evolve its agents independently of the platform.
 
-- **Ark Repository**: Contains the runtime code (controllers, APIs, services)
-- **Your Agent Project**: A separate repository with agents, teams, queries, and tools
-
-Multiple teams can build their own agent projects, each with their own repository, all using the same ARK platform. This separation allows:
-
-- Teams to work independently on their agents
-- Version control for agent configurations
-- Different deployment lifecycles for platform vs. agents
-- Sharing agent projects across teams
+There's no required layout. The convention below is a starting point.
 
 ## Prerequisites
 
-Before starting, ensure you have:
-
-- ARK installed and running on your cluster
-- ARK CLI installed (`ark` command available)
-- `kubectl` configured to access your cluster
-- At least one model configured in ARK
-
-Verify your setup:
+- Ark installed
+- `kubectl` configured
+- A model named `default` (`ark models create default`)
 
 ```bash
-# Check ARK CLI is installed
 ark --version
-
-# Verify cluster connection
 kubectl get pods -n ark-system
-
-# Check available models
 kubectl get models
 ```
 
-## Step 1: Generate a New Project
-
-Use the ARK CLI to bootstrap a new project with a structured directory layout:
+## Step 1: Directory
 
 ```bash
-# Create a new project
-ark generate project my-agents
-
-# Navigate to the project directory
+mkdir -p my-agents/{agents,teams,queries,tools,mcp-servers}
 cd my-agents
 ```
 
-Now you can find a defalut model configuration in the `models/` directory. Alternatively, you can copy a model configuration template from the `samples/models/` directory of the ARK repository.
+From here, every resource is a YAML file you write and apply with `kubectl`.
 
-Then, edit the `.env` file to add your API keys and other model related variables and make sure to source it.
-
-You can finalize you initial setup through one of the following ways:
+## Step 2: First Agent
 
 ```bash
-# Just apply model config with environment variable substitution
-make models-apply
-
-# Apply model configurations and also deploy to ARK
-make quickstart
-
-### Interactive Prompts
-
-The generator will ask you several questions to customize your project:
-
-**1. Project Type:**
-- `Project with samples (recommended for getting started)` - Includes example agents, teams, queries, and tools
-- `Empty project (just the structure)` - Creates only the directory structure
-
-**2. Namespace:**
-- Kubernetes namespace for deployment (default: project name)
-
-**3. Model Configuration (optional):**
-- Choose which LLM providers to configure:
-  - `Default OpenAI` - Standard OpenAI models
-  - `AI Gateway` - Custom AI gateway endpoint
-  - `All providers` - Configure multiple providers
-  - `None` - Skip model configuration
-
-**4. Git Setup (optional):**
-- Initialize git repository
-- Create initial commit
-- Configure git user name and email
-
-### Non-Interactive Mode
-
-To skip prompts and use defaults:
-
-```bash
-ark generate project my-agents --no-interactive --skip-models --skip-git
-```
-
-This creates a project structure with:
-
-```
-my-agents/
-├── agents/          # Agent definitions
-├── teams/           # Team configurations
-├── queries/         # Query examples
-├── models/          # Model configurations
-├── tools/           # Tool definitions
-├── mcp-servers/     # MCP server configurations
-├── scripts/         # Utility scripts
-├── templates/       # Component templates
-├── tests/           # Test configurations
-├── docs/            # Project documentation
-├── Chart.yaml       # Helm chart definition
-├── values.yaml      # Helm chart values
-├── Makefile         # Build and deployment targets
-├── .env             # Environment configuration
-└── README.md        # Project README
-```
-
-## Deploying Your Project to ARK
-
-After generating your project, deploy it to your ARK cluster:
-
-### Using Make (Recommended)
-
-```bash
-# Deploy using Helm with custom resources
-make install
-
-# Or deploy to a specific namespace
-make install NAMESPACE=my-team-agents
-
-# Apply only custom resources (agents, teams, queries)
-make resources-apply
-```
-
-### Using Helm Directly
-
-```bash
-# Install as a Helm chart
-helm install my-agents . --namespace my-team-agents --create-namespace
-
-# Upgrade an existing deployment
-helm upgrade my-agents . --namespace my-team-agents
-```
-
-### Using kubectl
-
-```bash
-# Apply individual resources
-kubectl apply -f agents/
-kubectl apply -f teams/
-kubectl apply -f queries/
-
-# Or apply all YAML files
-kubectl apply -f . -R
-```
-
-### Verify Deployment
-
-```bash
-# Check deployed resources
-kubectl get agents,teams,queries -n my-team-agents
-
-# Check agent status
-kubectl get agents -n my-team-agents -o wide
-
-# View agent logs
-kubectl logs -l app=ark-api -n my-team-agents --tail=100
-```
-
-## Step 2: Generate Your First Agent
-
-Now use the generator to create an agent:
-
-```bash
-# Generate an agent (interactive)
-ark generate agent customer-support
-```
-
-### Interactive Prompts
-
-The agent generator will ask:
-
-**1. Agent Name:**
-- Name for your agent (e.g., `customer-support`)
-
-**2. Generate Test Query:**
-- Option to create a sample query for testing
-
-### Non-Interactive Mode
-
-```bash
-# Skip prompts
-ark generate agent customer-support --no-interactive
-```
-
-This creates `agents/customer-support-agent.yaml` with dummy description and prompt, and the reference to default model. Edit the generated agent configuration:
-Remember to set the `namespace` field to match the namespace of the project.
-
-```yaml
+cat > agents/customer-support.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
-  name: customer-support-agent
-  namespace: my-agents
+  name: customer-support
 spec:
   description: Handles customer inquiries and support tickets
   modelRef:
-    name: default  # Reference to your model
+    name: default
   prompt: |
     You are a helpful customer support assistant.
-    Help users with their questions and issues professionally and efficiently.
+    Help users with their questions and issues professionally.
+EOF
+
+kubectl apply -f agents/customer-support.yaml
+kubectl get agent customer-support -o jsonpath='{.status.phase}'
+# ready
 ```
 
-Apply the agent to your cluster:
+## Step 3: Tool
+
+An HTTP tool that calls the National Weather Service:
 
 ```bash
-kubectl apply -f agents/customer-support-agent.yaml
-```
-
-Verify the agent is ready:
-
-```bash
-kubectl get agents customer-support-agent
-
-# Expected output shows Ready status
-kubectl get agents customer-support-agent -o jsonpath='{.status.phase}'
-# Should output: ready
-```
-
-## Step 3: Generate Additional Resources
-
-### Create Tools
-
-Tools extend agent capabilities but there's no generator for them. Create tools manually:
-
-```bash
-# Create a tool definition
-cat > tools/get-forecast.yaml <<EOF
+cat > tools/get-forecast.yaml <<'EOF'
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
   name: get-forecast
 spec:
   type: http
+  description: Get weather forecast for a location and time period
   inputSchema:
     type: object
+    required: ["office", "gridX", "gridY"]
     properties:
       office:
         type: string
@@ -259,266 +82,186 @@ spec:
       gridY:
         type: integer
         description: "Grid Y coordinate"
-    required: ["office", "gridX", "gridY"]
-  description: "Get weather forecast for a specific location and time period"
   http:
     url: https://api.weather.gov/gridpoints/{office}/{gridX},{gridY}/forecast
 EOF
-```
 
-Apply and verify:
-
-```bash
 kubectl apply -f tools/get-forecast.yaml
-kubectl get tools get-forecast
 ```
 
-For more details on creating tools, see the [Tools guide](/user-guide/tools).
+See [Tools](/user-guide/tools) for MCP, builtin, and agent-as-tool variants.
 
-### Generate a Team
+## Step 4: Team
 
-Create a team of agents:
+Pick a strategy — each one expects a slightly different shape. See [Team Strategies](/user-guide/samples/teams/team-strategies) for the full reference.
 
-```bash
-ark generate team support-team
-```
+### Sequential
 
-**Prompts:**
-- Team name
-- Strategy, choose from:
-  - Round-robin, members take turns
-  - Sequential, members execute in order
-  - Graph, custom workflow defined by graph edges.
-  Max turns and graph edges are mandatory.
-  - Selector, AI-powered member selection (can be combined with graph constraints). 
-  Selector agent specification is mandatory.
-- Select member agents from your project
-
-Edit `teams/support-team.yaml`:
+Members run in declared order, one pass each:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
-  name: support-team
-spec: 
-  description: Customer support team
-  members:
-    - kind: Agent
-      name: customer-support
-    - kind: Agent
-      name: order-tracker
-    - kind: Agent
-      name: escalation-handler
-  # Strategy-related specs:
+  name: support-team-sequential
+spec:
+  description: Triage, then specialist
   strategy: sequential
-  [...]
-  strategy: round-robin
-  maxTurns: 5
-  [...]
-  strategy: graph
-  maxTurns: 5
-  [...]
-  strategy: selector
-  selector:
-    agent: planner-agent
-    selectorPrompt: "Choose the best agent for: {{.Input}}"
-  [...]
-  strategy: graph
-  maxTurns: 5
-  graph:
-    edges:
-      - from: customer-support
-        to: order-tracker
-      - from: order-tracker
-        to: escalation-handler
+  members:
+    - type: agent
+      name: customer-support
+    - type: agent
+      name: order-tracker
+    - type: agent
+      name: escalation-handler
 ```
 
-Apply and verify:
+### Sequential with Loops
 
-```bash
-kubectl apply -f teams/support-team.yaml
-kubectl get teams support-team
-```
-
-### Generate an MCP Server
-
-Create an MCP (Model Context Protocol) server with Kubernetes deployment:
-
-```bash
-ark generate mcp-server filesystem-server
-```
-
-**Prompts:**
-- **Server Name:** Name for your MCP server
-- **Technology:** Choose the implementation language:
-  - `node` - Node.js with NPM packages or local development
-  - `deno` - Deno with JSR packages or local development
-  - `go` - Go with go install packages or local development
-  - `python` - Python with pip packages or local development
-- **Package/Repository:** NPM package name, JSR package, Go package path, or pip package (depending on technology)
-- **Authentication:** Whether to enable authentication for secured APIs
-- **Custom Configuration:** Whether to add custom configuration options
-- **Generate Examples:** Whether to create example agent and query files
-
-This creates a complete MCP server project with:
-- `chart/` - Helm chart with Kubernetes manifests (Deployment, Service, MCPServer CRD)
-- `examples/` - Example agent and query YAML files
-- `Dockerfile` - Container image with mcp-proxy
-- `Makefile` - Build and deployment targets
-- `README.md` - Setup and usage documentation
-- Technology-specific files (package.json, go.mod, requirements.txt, etc.)
-
-For more details, see the [MCP Servers guide](/user-guide/samples/mcp-servers).
-
-### Generate a Marketplace
-
-Create a central repository for sharing reusable ARK components:
-
-```bash
-ark generate marketplace
-```
-
-**Note:** The marketplace is always named `ark-marketplace` (the name argument is ignored).
-
-**Prompts:**
-- Destination directory
-- Git repository initialization
-
-This creates a structured repository with directories for:
-- `agents/` - Reusable agent definitions
-- `teams/` - Multi-agent workflow configurations
-- `models/` - Model configurations by provider
-- `queries/` - Query templates and patterns
-- `tools/` - Tool definitions and implementations
-- `mcp-servers/` - MCP server configurations
-- `projects/` - Complete end-to-end project templates
-- `docs/` - Documentation and guides
-- `.github/` - CI/CD workflows
-
-Perfect for organizations sharing components across teams or building a community marketplace.
-
-## Step 4: Test with Queries
-
-### Generate a Query
-
-Create a test query:
-
-```bash
-ark generate query test-support-query
-```
-
-**Prompts:**
-- Query name
-- Input message/text
-- Target selection (agent or team)
-- Choose target from available resources
-
-Edit `queries/test-support-query.yaml`:
+Cycle through members until `maxTurns` is reached. `loops: true` and `maxTurns` must be set together:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: support-team-loops
+spec:
+  description: Each member contributes in turn until maxTurns
+  strategy: sequential
+  loops: true
+  maxTurns: 5
+  members:
+    - type: agent
+      name: customer-support
+    - type: agent
+      name: order-tracker
+```
+
+`strategy: round-robin` is deprecated and silently migrated to `sequential` with `loops: true`. Use the form above directly.
+
+### Selector
+
+A nominated agent picks the next member. `selector.agent` and `maxTurns` are required. Loops are not allowed on selector teams. The `selectorPrompt` should instruct the agent to use the built-in `select-next-speaker` tool:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: support-team-selector
+spec:
+  description: Selector agent picks the right specialist
+  strategy: selector
+  maxTurns: 10
+  members:
+    - type: agent
+      name: customer-support
+    - type: agent
+      name: order-tracker
+  selector:
+    agent: planner-agent
+    selectorPrompt: |
+      Choose the team member best suited to respond next.
+
+      Available roles:
+      {{.Roles}}
+
+      Conversation history:
+      {{.History}}
+
+      Use the select-next-speaker tool to make your selection.
+```
+
+`strategy: graph` is deprecated and migrated to plain `sequential` with edges discarded. For graph-style routing inside a selector team, see [Team Strategies](/user-guide/samples/teams/team-strategies).
+
+Apply the chosen team:
+
+```bash
+kubectl apply -f teams/support-team-sequential.yaml
+kubectl get team support-team-sequential
+```
+
+## Step 5: MCP Server (Optional)
+
+Expose external capabilities via the Model Context Protocol:
+
+```bash
+cat > mcp-servers/example.yaml <<'EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: example-mcp
+spec:
+  address:
+    value: "http://example-mcp.default.svc.cluster.local:8080/mcp"
+  transport: http
+  timeout: 1m
+EOF
+
+kubectl apply -f mcp-servers/example.yaml
+```
+
+For authentication and OAuth, see [MCP Servers](/user-guide/samples/mcp-servers).
+
+## Step 6: Query
+
+```bash
+cat > queries/test-support.yaml <<'EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: test-support-query
+  name: test-support
 spec:
   input: "I need help with my order #12345"
   target:
-    - kind: Agent
+    type: agent
     name: customer-support
+EOF
+
+kubectl apply -f queries/test-support.yaml
 ```
 
-### Execute and Monitor
-
-Apply the query:
+Watch it complete and inspect the response:
 
 ```bash
-kubectl apply -f queries/test-support-query.yaml
+kubectl get query test-support -w
+# Phase: pending -> running -> done
+
+kubectl get query test-support -o jsonpath='{.status.responses[0].content}'
 ```
 
-Monitor query execution:
+## Step 7: End-to-End Testing
+
+### Bash smoke script
 
 ```bash
-# Watch query status
-kubectl get query test-support-query -w
-
-# View query details
-kubectl describe query test-support-query
-
-# Get the response
-kubectl get query test-support-query -o jsonpath='{.status.response.content}'
-```
-
-## Step 5: End-to-End Testing
-
-### Option 1: Manual Test Script (Optional)
-
-You can create a custom test script for manual E2E testing. This is not generated by ARK - it's an example you can customize.
-
-Create `test-workflow.sh` in your project root:
-
-```bash
+cat > test-workflow.sh <<'EOF'
 #!/bin/bash
 set -e
 
-echo "=== Testing Complete ARK Workflow ==="
-
-# Apply all resources
-echo "Applying agents..."
 kubectl apply -f agents/
-
-echo "Applying tools..."
 kubectl apply -f tools/
-
-echo "Applying teams..."
 kubectl apply -f teams/
 
-# Wait for resources to be ready
-echo "Waiting for agent to be ready..."
-kubectl wait --for=condition=Ready agent/customer-support --timeout=60s
+kubectl wait --for=jsonpath='{.status.phase}'=ready agent/customer-support --timeout=60s
 
-echo "Waiting for team to be ready..."
-kubectl wait --for=condition=Ready team/support-team --timeout=60s
+kubectl apply -f queries/test-support.yaml
+kubectl wait --for=jsonpath='{.status.phase}'=done query/test-support --timeout=120s
 
-# Run test query
-echo "Executing test query..."
-kubectl apply -f queries/test-support-query.yaml
+RESPONSE=$(kubectl get query test-support -o jsonpath='{.status.responses[0].content}')
+[ -n "$RESPONSE" ] || { echo "FAIL: empty response"; exit 1; }
 
-# Wait for query completion
-echo "Waiting for query to complete..."
-kubectl wait --for=jsonpath='{.status.phase}'=done query/test-support-query --timeout=120s
-
-# Verify response
-echo "Verifying query response..."
-RESPONSE=$(kubectl get query test-support-query -o jsonpath='{.status.response.content}')
-
-if [ -z "$RESPONSE" ]; then
-  echo "FAIL Test failed: No response received"
-  exit 1
-fi
-
-echo "PASS Test passed: Response received"
+echo "PASS"
 echo "Response: $RESPONSE"
+kubectl delete query test-support
+EOF
 
-# Cleanup
-echo "Cleaning up test resources..."
-kubectl delete query test-support-query
-
-echo "=== Test Complete ==="
-```
-
-Make it executable and run:
-
-```bash
 chmod +x test-workflow.sh
 ./test-workflow.sh
 ```
 
-### Option 2: Chainsaw Tests (Recommended)
+### Chainsaw (recommended)
 
-For more robust, declarative testing, create Chainsaw test files in your `tests/` directory:
-
-Create `chainsaw-test.yaml`:
+Declarative, repeatable tests via [Chainsaw](https://kyverno.github.io/chainsaw/):
 
 ```yaml
 apiVersion: chainsaw.kyverno.io/v1alpha1
@@ -532,9 +275,9 @@ spec:
         - apply:
             file: agents/customer-support.yaml
         - apply:
-            file: queries/test-support-query.yaml
+            file: queries/test-support.yaml
 
-    - name: wait-for-ready
+    - name: wait-for-agent-ready
       try:
         - assert:
             resource:
@@ -545,14 +288,14 @@ spec:
               status:
                 phase: ready
 
-    - name: verify-query-completion
+    - name: verify-query-done
       try:
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Query
               metadata:
-                name: test-support-query
+                name: test-support
               status:
                 phase: done
                 (length(responses) > `0`): true
@@ -564,27 +307,25 @@ spec:
             ref:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Query
-              name: test-support-query
+              name: test-support
 ```
 
-Run the Chainsaw test:
+Run it:
 
 ```bash
 chainsaw test --test-file chainsaw-test.yaml
 ```
 
-## Step 6: Iterate and Expand
+## Step 8: Iterate
 
-### Add More Agents
+Add agents as YAML files and apply the directory:
 
 ```bash
-# Generate specialized agents
-ark generate agent order-tracker
-ark generate agent product-recommender
-ark generate agent escalation-handler
+# agents/order-tracker.yaml, agents/product-recommender.yaml, ...
+kubectl apply -f agents/
 ```
 
-### Create Complex Teams
+Wire them into a richer team:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -594,21 +335,18 @@ metadata:
 spec:
   description: Complete customer support workflow
   strategy: sequential
-  maxTurns: 10
   members:
-    - kind: Agent
+    - type: agent
       name: customer-support
-    - kind: Agent
+    - type: agent
       name: order-tracker
-    - kind: Agent
+    - type: agent
       name: escalation-handler
 ```
 
 ## Best Practices
 
-### 1. Organize by Feature
-
-Structure your project by feature or use case:
+### Organise by feature
 
 ```
 my-agents/
@@ -624,220 +362,74 @@ my-agents/
 │       └── tests/
 ```
 
-### 2. Version Control
-
-Initialize git and commit your project:
+### Version control
 
 ```bash
 git init
 git add .
-git commit -m "feat: initial ARK project setup"
+git commit -m "feat: initial Ark project setup"
 ```
 
-### 3. Environment-Specific Configurations
-
-Use Kustomize for different environments:
+### Per-environment overlays with Kustomize
 
 ```yaml
-# kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - agents/
   - tools/
   - teams/
-
 namespace: my-agents-prod
 ```
 
-### 4. Continuous Testing
-
-Set up automated testing in your CI/CD pipeline:
+### Continuous testing in CI
 
 ```yaml
-# .github/workflows/test.yml
-name: Test ARK Agents
-
+name: Test Ark Agents
 on: [push, pull_request]
-
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup K3s
-        run: |
-          curl -sfL https://get.k3s.io | sh -
-      - name: Install ARK
-        run: |
-          ark install -y
+        run: curl -sfL https://get.k3s.io | sh -
+      - name: Install Ark
+        run: ark install -y
       - name: Run Tests
-        run: |
-          chainsaw test --test-dir tests/
+        run: chainsaw test --test-dir tests/
 ```
 
 ## Troubleshooting
 
-### Agent Not Ready
+### Agent stuck before `ready`
 
 ```bash
-# Check agent status
 kubectl describe agent customer-support
-
-# Check controller logs
 kubectl logs -n ark-system -l app=ark-controller
-
-# Verify model is available
 kubectl get models
 ```
 
-### Query Stuck
+### Query stuck
 
 ```bash
-# Check query status
-kubectl get query test-support-query -o yaml
-
-# Check for errors
-kubectl get query test-support-query -o jsonpath='{.status.error}'
-
-# View query events
-kubectl get events --field-selector involvedObject.name=test-support-query
+kubectl get query test-support -o yaml
+kubectl get query test-support -o jsonpath='{.status.error}'
+kubectl get events --field-selector involvedObject.name=test-support
 ```
 
-### Tool Not Working
+### Tool returns nothing
 
 ```bash
-# Verify tool is ready
 kubectl get tool get-forecast
-
-# Check tool configuration
 kubectl describe tool get-forecast
-
-# Test tool endpoint
-kubectl run curl-test --image=curlimages/curl:latest --rm -it -- \
-  curl http://weather-service/api
 ```
 
 ## Next Steps
 
-- [ARK Dashboard](/user-guide/dashboard) - Learn to use the dashboard
-- [Creating Models](/user-guide/models) - Configure LLM models
-- [Creating Agents](/user-guide/agents) - Deep dive into agent configuration
-- [Creating Teams](/user-guide/teams) - Advanced team patterns
-- [End-to-End Testing](/developer-guide/testing) - Learn comprehensive testing strategies
-- [UI Testing](/developer-guide/testing/ui-testing) - Test the ARK Dashboard
-
-## Complete E2E Test Suite Example
-
-Here's a complete example combining all concepts:
-
-```yaml
-# e2e-test.yaml
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: complete-workflow-test
-spec:
-  steps:
-    # Setup phase
-    - name: setup
-      try:
-        - apply:
-            file: agents/
-        - apply:
-            file: tools/
-        - apply:
-            file: teams/
-
-    # Verify readiness
-    - name: verify-ready
-      try:
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Agent
-              metadata:
-                name: customer-support
-              status:
-                phase: ready
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Team
-              metadata:
-                name: support-team
-              status:
-                phase: ready
-
-    # Test agent query
-    - name: test-agent
-      try:
-        - apply:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: test-agent-query
-              spec:
-                input: "Test agent functionality"
-                targets:
-                  - kind: Agent
-                    name: customer-support
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: test-agent-query
-              status:
-                phase: done
-                (length(responses)): 1
-                (length(responses[0].content) > `10`): true
-
-    # Test team query
-    - name: test-team
-      try:
-        - apply:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: test-team-query
-              spec:
-                input: "Test team collaboration"
-                targets:
-                  - kind: Team
-                    name: support-team
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: test-team-query
-              status:
-                phase: done
-                (length(responses) > `0`): true
-
-    # Cleanup
-    - name: cleanup
-      try:
-        - delete:
-            ref:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              name: test-agent-query
-        - delete:
-            ref:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              name: test-team-query
-```
-
-Run this comprehensive test:
-
-```bash
-chainsaw test --test-file e2e-test.yaml
-```
-
-This guide provides a complete workflow for starting, developing, and testing a new agentic project with ARK!
+- [Complete Worked Example](/user-guide/starting-new-project-example) — end-to-end customer-support walkthrough
+- [Ark Dashboard](/user-guide/dashboard)
+- [Models](/user-guide/models)
+- [Agents](/user-guide/agents)
+- [Teams](/user-guide/teams)
+- [End-to-End Testing](/developer-guide/testing)

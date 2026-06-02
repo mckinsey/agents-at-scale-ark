@@ -6,6 +6,9 @@ export default {
   'tenant-namespace-management': 'Tenant and Namespace Management',
   monitoring: 'Monitoring',
 
+  '---integrations': { type: 'separator', title: 'Integrations' },
+  'mcp-oauth-callback': 'MCP OAuth Callback',
+
   '---cicd': { type: 'separator', title: 'CI/CD and supply chain' },
   'build-pipelines': 'Build Pipelines',
 

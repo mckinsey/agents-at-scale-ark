@@ -75,6 +75,21 @@ app:
     # Read-only mode - set to "true" to disable write operations
     - name: READ_ONLY_MODE
       value: "false"
+    # MCP authorization endpoints. Leave ARK_API_PUBLIC_CALLBACK_URL unset to
+    # disable the four /api/v1/mcp-servers/{name}/auth/* endpoints (they will
+    # return 503). When set, the URL MUST be https unless the host is a
+    # loopback literal (127.0.0.1, [::1] bracketed per RFC 3986 §3.2.2, or
+    # localhost). The path /v1/mcp/auth/callback is appended automatically
+    # if the configured URL has no path.
+    - name: ARK_API_PUBLIC_CALLBACK_URL
+      value: "http://localhost:8088/v1/mcp/auth/callback"
+    # Optional tuning knobs (defaults shown). All accept positive integers.
+    # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
+    #   value: "600"
+    # - name: ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS
+    #   value: "15"
+    # - name: ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS
+    #   value: "15"
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:
@@ -140,6 +155,11 @@ impersonation:
   usernameClaim: email
   groupsClaim: groups
   prefix: ""
+
+# Network policy configuration
+networkPolicy:
+  enabled: false
+  allowNamespaces: []
 
 # Service account configuration
 serviceAccount:
