@@ -9,7 +9,7 @@ ARK uses [Chainsaw](https://github.com/kyverno/chainsaw) to declaratively create
 
 ## Setup
 
-Eusure you [installed Ark](../../quickstart.mdx).
+Ensure you [installed Ark](../../quickstart.mdx).
 
 ### Install Chainsaw CLI
 
@@ -247,7 +247,7 @@ These environment variables are available on GitHub runners for your tests:
 | `E2E_TEST_AZURE_OPENAI_KEY` | Azure OpenAI API key for testing model deployments |
 | `E2E_TEST_AZURE_OPENAI_BASE_URL` | Azure OpenAI endpoint URL (e.g., `https://your-instance.openai.azure.com`) |
 
-## Testign with Mocked LLMs, Mocked A2A Servers, or Mocked MCP Servers
+## Testing with Mocked LLMs, Mocked A2A Servers, or Mocked MCP Servers
 
 We have built and used [`mock-llm`](https://github.com/dwmkerr/mock-llm) to allow us to define how LLMs, A2A servers, and MCP servers should behave, this allows for deterministic testing of behaviours that rely on models.
 
@@ -282,7 +282,7 @@ ark:
 
 # Specify rules - how the model will respond to specific inputs.
 config:
-  # On any incoming completions request, echo the messaege.
+  # On any incoming completions request, echo the message.
   rules:
   - path: "/v1/chat/completions"
     match: "@"
