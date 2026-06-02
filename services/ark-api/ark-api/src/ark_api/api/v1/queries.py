@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from typing import Optional
+from kubernetes_asyncio import client as k8s_client
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
@@ -332,14 +333,18 @@ async def delete_query(request: Request, query_name: str, namespace: Optional[st
 
 @router.get("/{query_name}/approval", response_model=ApprovalDetails)
 @handle_k8s_errors(operation="get", resource_type="query approval")
-async def get_approval_details(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> ApprovalDetails:
+async def get_approval_details(
+    query_name: str,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> ApprovalDetails:
     """
     Get pending approval details for a query.
 
     Returns approval information including tool calls, timeout, and agent context.
     Only available when query is in 'input-required' phase.
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         query = await ark_client.queries.a_get(query_name)
         query_dict = query.to_dict()
 
@@ -385,7 +390,12 @@ async def get_approval_details(query_name: str, namespace: Optional[str] = Query
 
 @router.post("/{query_name}/approval", response_model=ApprovalResponse)
 @handle_k8s_errors(operation="update", resource_type="query approval")
-async def submit_approval(query_name: str, request: ApprovalActionRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> ApprovalResponse:
+async def submit_approval(
+    query_name: str,
+    request: ApprovalActionRequest,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> ApprovalResponse:
     """
     Submit approval or rejection for a query's tool calls.
 
@@ -393,11 +403,12 @@ async def submit_approval(query_name: str, request: ApprovalActionRequest, names
         query_name: Name of the query
         request: Approval action (approved/rejected)
         namespace: Namespace for the query
+        impersonation: Impersonation configuration for RBAC enforcement
 
     Returns:
         ApprovalResponse with status and query information
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         query = await ark_client.queries.a_get(query_name)
         query_dict = query.to_dict()
 
@@ -430,11 +441,10 @@ async def submit_approval(query_name: str, request: ApprovalActionRequest, names
         decision_json = json.dumps({"decision": request.action.value})
 
         # Patch the spec to set the input field with the approval decision
-        from kubernetes import client
-        custom_api = client.CustomObjectsApi()
+        # Use the ark_client's underlying api_client to preserve impersonation
         actual_namespace = query_dict["metadata"]["namespace"]
-        await asyncio.to_thread(
-            custom_api.patch_namespaced_custom_object,
+        custom_api = k8s_client.CustomObjectsApi(ark_client._api_client)
+        await custom_api.patch_namespaced_custom_object(
             group="ark.mckinsey.com",
             version=VERSION,
             namespace=actual_namespace,
