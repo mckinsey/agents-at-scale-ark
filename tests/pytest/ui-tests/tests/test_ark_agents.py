@@ -103,7 +103,7 @@ class TestArkAgents:
             pytest.skip("Agent was not created, skipping chat test")
         agents = AgentsPage(page)
         agents.navigate_to_agents_tab()
-        agents.wait_for_element(f"[role='link']:has(span[title='{agent_name}'])", timeout=15000)
+        agents.wait_for_element(f"[role='row']:has(a[title='{agent_name}'])", timeout=15000)
         agents.open_agent_chat(agent_name)
         agents.close_agent_chat()
 

@@ -294,7 +294,7 @@ class TeamsPage(BasePage):
         try:
             name_el = self.page.get_by_text(team_name, exact=True).first
             name_el.wait_for(state="visible", timeout=10000)
-            row = name_el.locator("xpath=ancestor::*[@role='link'][1]")
+            row = name_el.locator("xpath=ancestor::*[@role='row'][1]")
             return row.inner_text()
         except Exception as e:
             logger.warning(f"Could not get row text for team {team_name}: {e}")
@@ -304,7 +304,7 @@ class TeamsPage(BasePage):
         try:
             name_el = self.page.get_by_text(team_name, exact=True).first
             name_el.wait_for(state="visible", timeout=10000)
-            row = name_el.locator("xpath=ancestor::*[@role='link'][1]")
+            row = name_el.locator("xpath=ancestor::*[@role='row'][1]")
             return row.locator("[data-slot='badge'], span:has-text('Deprecated'), span:has-text('deprecated')").first.is_visible()
         except Exception as e:
             logger.warning(f"Could not check deprecation badge for {team_name}: {e}")
