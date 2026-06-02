@@ -4,6 +4,6 @@ metadata:
   name: web-search-tool-test
 spec:
   input: "Search for information about Kubernetes container orchestration benefits"
-  targets:
-    - type: tool
-      name: web-search
+  target:
+    type: tool
+    name: web-search

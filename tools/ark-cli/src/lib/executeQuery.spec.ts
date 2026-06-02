@@ -1,4 +1,6 @@
-import {vi} from 'vitest';
+import {vi, type MockedClass} from 'vitest';
+import type {ChatClient} from './chatClient.js';
+import type {ArkApiProxy} from './arkApiProxy.js';
 
 const mockExeca = vi.fn() as any;
 vi.mock('execa', () => ({
@@ -15,23 +17,23 @@ const mockSpinner = {
   isSpinning: false,
 };
 
-const mockOra = vi.fn(() => mockSpinner);
+const mockOra = vi.fn(function () {
+  return mockSpinner;
+});
 vi.mock('ora', () => ({
   default: mockOra,
 }));
 
-let mockSendMessage = vi.fn() as any;
+let mockSendMessage = vi.fn();
 
-const mockChatClient = vi.fn(() => ({
-  sendMessage: mockSendMessage,
-})) as any;
+const mockChatClient = vi.fn() as MockedClass<typeof ChatClient>;
 
-let mockArkApiProxyInstance: any = {
+let mockArkApiProxyInstance: {start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>} = {
   start: vi.fn(),
   stop: vi.fn(),
 };
 
-const mockArkApiProxy = vi.fn(() => mockArkApiProxyInstance) as any;
+const mockArkApiProxy = vi.fn() as MockedClass<typeof ArkApiProxy>;
 
 vi.mock('./arkApiProxy.js', () => ({
   ArkApiProxy: mockArkApiProxy,
@@ -62,15 +64,18 @@ describe('executeQuery', () => {
     vi.clearAllMocks();
     mockSpinner.start.mockReturnValue(mockSpinner);
     mockSpinner.isSpinning = false;
-    mockSendMessage = vi.fn() as any;
-    mockChatClient.mockReturnValue({sendMessage: mockSendMessage});
-    const startMock = vi.fn() as any;
-    startMock.mockResolvedValue({});
+    mockSendMessage = vi.fn();
+    mockChatClient.mockImplementation(function () {
+      return {sendMessage: mockSendMessage};
+    });
+    const startMock = vi.fn().mockResolvedValue({});
     mockArkApiProxyInstance = {
       start: startMock,
       stop: vi.fn(),
     };
-    mockArkApiProxy.mockReturnValue(mockArkApiProxyInstance);
+    mockArkApiProxy.mockImplementation(function () {
+      return mockArkApiProxyInstance;
+    });
   });
 
   describe('parseTarget', () => {
@@ -328,8 +333,7 @@ describe('executeQuery', () => {
 
     it('should handle errors and exit with CliError', async () => {
       mockSpinner.isSpinning = true;
-      const startMock = vi.fn() as any;
-      startMock.mockRejectedValue(new Error('Connection failed'));
+      const startMock = vi.fn().mockRejectedValue(new Error('Connection failed'));
       mockArkApiProxyInstance.start = startMock;
 
       await expect(
