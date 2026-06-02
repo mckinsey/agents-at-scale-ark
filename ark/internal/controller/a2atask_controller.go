@@ -89,10 +89,8 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		// For HITL approval tasks (no A2AServerRef), check if approval decision is in spec.Input
 		if a2aTask.Spec.A2AServerRef == nil && a2aTask.Spec.Input != "" {
-			if handled, err := r.processApprovalDecision(ctx, &a2aTask); err != nil {
-				log.Error(err, "failed to process approval decision")
-			} else if handled {
-				// Decision was processed, update status and return
+			if handled := r.processApprovalDecision(ctx, &a2aTask); handled {
+				// Decision was processed (or invalid input was handled as terminal failure), update status and return
 				if err := r.Status().Update(ctx, &a2aTask); err != nil {
 					log.Error(err, "unable to update A2ATask status after approval decision")
 					return ctrl.Result{}, err
@@ -303,8 +301,8 @@ func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *a
 }
 
 // processApprovalDecision processes the approval decision from spec.Input for HITL tasks.
-// Returns true if decision was processed, false otherwise.
-func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+// Returns true if decision was processed (or if bad input was handled as terminal failure), false otherwise.
+func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) bool {
 	log := logf.FromContext(ctx)
 
 	// Parse the decision JSON from spec.Input
@@ -321,11 +319,11 @@ func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask
 		a2aTask.Status.Error = fmt.Sprintf("Invalid approval decision format: %v", err)
 		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "InvalidApprovalDecision",
 			fmt.Sprintf("Failed to parse approval decision: %v", err))
-		return true, nil
+		return true
 	}
 
 	if decision.Decision == "" {
-		return false, nil
+		return false
 	}
 
 	log.Info("Processing approval decision",
@@ -356,8 +354,8 @@ func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask
 		a2aTask.Status.Error = fmt.Sprintf("Invalid decision value: %s", decision.Decision)
 		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "InvalidApprovalDecision",
 			fmt.Sprintf("Unknown decision value: %s", decision.Decision))
-		return true, nil
+		return true
 	}
 
-	return true, nil
+	return true
 }
