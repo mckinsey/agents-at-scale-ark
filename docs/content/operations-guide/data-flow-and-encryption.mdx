@@ -77,3 +77,32 @@ Ark redacts sensitive data from logs in several components:
 Log redaction does **not** cover query inputs, agent prompts, or tool call payloads. If your workload processes PII or regulated data, configure your log aggregator to filter or mask these fields before long-term storage.
 </Callout>
 
+## Data retention and disposal
+
+Ark does not manage data lifecycle. Retention periods, automated purging, and secure disposal are deployment-level concerns configured through your Kubernetes cluster, storage layer, and external backends.
+
+| Surface | What Ark does | What you configure |
+|---------|---------------|--------------------|
+| **etcd / PostgreSQL** (Query CRs) | Query resources persist indefinitely. Completed Queries are not automatically deleted. | Set up a CronJob or operator policy to garbage-collect completed Query CRs after your retention window. For PostgreSQL, configure row-level retention or partition management. |
+| **Kubernetes Secrets** | Secrets persist until explicitly deleted. | Rotate secrets on a schedule. If using an external secrets operator, configure its TTL and rotation policies. |
+| **Broker memory store** | In-memory data is lost on pod restart. If persistence is enabled, JSON files grow until the configured limits (`maxMessages`, `maxChunks`, etc.) are reached. | Size the limits to your retention needs. For persistent storage, schedule cleanup of the data volume or rely on pod restarts to flush in-memory state. |
+| **Executor session files** | Session directories accumulate on the PVC. No built-in TTL or cleanup. | Schedule a CronJob to prune `/data/sessions/` directories older than your retention period. In scheduler mode, set `shutdownPolicy: Delete` and `sessionIdleTTL` to bound sandbox lifetime. |
+| **OTel traces** | Ark exports spans but does not control downstream storage. | Configure retention and deletion policies in your collector backend (e.g., Elasticsearch ILM, S3 lifecycle rules). |
+| **Pod logs** | Ark writes to stdout/stderr. Retention depends on the node and log aggregator. | Configure your log pipeline's retention and rotation policies. |
+
+<Callout type="warning">
+Ark does not perform secure erasure (zero-fill, cryptographic wipe) on any surface. If your compliance framework requires secure disposal, use encrypted volumes — deleting the encryption key is the standard approach for certified media sanitization on shared storage.
+</Callout>
+
+## Data loss prevention
+
+Ark does not inspect, filter, or classify data content at any point in the Query lifecycle. Prompts, tool inputs, agent outputs, and MCP payloads flow through the platform without content-level scanning.
+
+DLP controls are a deployment responsibility. Common integration points:
+
+- **Egress proxy** — Route LLM provider traffic through a DLP-aware proxy that inspects request/response bodies before they leave the cluster. The Model CRD `baseUrl` field can point to the proxy.
+- **LLM provider policies** — Most providers offer content filtering, usage policies, and data retention controls at the API level. Configure these in your provider account.
+- **Admission webhooks** — A Kubernetes validating webhook can inspect Query CRD `.spec.input` at creation time to block or flag content that matches DLP rules.
+- **MCP server layer** — MCP servers can implement input validation and output filtering before returning tool results to the executor.
+- **Log aggregator** — Configure field-level masking in your log pipeline to prevent PII from reaching long-term storage.
+
