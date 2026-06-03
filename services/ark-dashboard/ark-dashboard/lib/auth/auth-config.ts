@@ -92,11 +92,19 @@ const debug = process.env.AUTH_DEBUG === 'true';
 
 // Since we are using custom cookie names we have to manage these settings ourselfs.
 // https://authjs.dev/reference/nextjs#cookies
-const useSecureCookies = process.env.AUTH_URL?.startsWith('https://') || false;
+export const useSecureCookies =
+  process.env.AUTH_URL?.startsWith('https://') || false;
 const cookiePrefix = useSecureCookies ? '__Secure-' : '';
+
+// Resolved session cookie name. getToken() in middleware and federated
+// signout MUST read by this exact name — Auth.js derives its decryption
+// salt from cookieName, so a bare-name read against a __Secure- cookie
+// returns null and every proxied call 401s. See issue #2318.
+export const SESSION_COOKIE_NAME = `${cookiePrefix}${COOKIE_SESSION_TOKEN}`;
+
 const cookies: NextAuthConfig['cookies'] = {
   sessionToken: {
-    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`,
+    name: SESSION_COOKIE_NAME,
   },
   callbackUrl: {
     name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`,

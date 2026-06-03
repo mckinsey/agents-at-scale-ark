@@ -2,14 +2,14 @@ import { getToken } from 'next-auth/jwt';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import { SESSION_COOKIE_NAME } from '@/lib/auth/auth-config';
 import { openidConfigManager } from '@/lib/auth/openid-config-manager';
-import { COOKIE_SESSION_TOKEN } from '@/lib/constants/auth';
 
 export async function GET(request: NextRequest) {
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
-    cookieName: COOKIE_SESSION_TOKEN,
+    cookieName: SESSION_COOKIE_NAME,
   });
 
   const baseURL = process.env.BASE_URL;
