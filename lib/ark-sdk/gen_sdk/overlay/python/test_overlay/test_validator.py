@@ -278,5 +278,83 @@ class TestTokenValidator(unittest.TestCase):
         self.assertEqual(self.config.jwks_url, "https://test.okta.com/.well-known/jwks.json")
 
 
+class TestJwksDiscoveryFromEnv(unittest.TestCase):
+    """JWKS URL resolution from env vars + OIDC discovery (issue: hardcoded
+    Keycloak path 404'd against Dex / Auth0 / Okta / etc.)."""
+
+    @patch.dict('os.environ', {
+        'OIDC_ISSUER_URL': 'https://dex.example.com',
+        'OIDC_APPLICATION_ID': 'ark-dashboard',
+    }, clear=True)
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_uses_oidc_discovery_for_jwks_url(self, mock_get):
+        """jwks_uri comes from the well-known discovery doc, not a hardcoded path."""
+        mock_get.return_value = Mock(
+            json=lambda: {"jwks_uri": "https://dex.example.com/keys"},
+            raise_for_status=lambda: None,
+        )
+        validator = TokenValidator()
+        self.assertEqual(validator.config.jwks_url, 'https://dex.example.com/keys')
+        mock_get.assert_called_once_with(
+            'https://dex.example.com/.well-known/openid-configuration', timeout=10,
+        )
+
+    @patch.dict('os.environ', {
+        'OIDC_ISSUER_URL': 'https://keycloak.example.com/realms/demo',
+    }, clear=True)
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_discovery_handles_keycloak_path(self, mock_get):
+        """Discovery still works for Keycloak — it advertises the same path the
+        previous hardcode used."""
+        mock_get.return_value = Mock(
+            json=lambda: {
+                "jwks_uri": "https://keycloak.example.com/realms/demo/protocol/openid-connect/certs",
+            },
+            raise_for_status=lambda: None,
+        )
+        validator = TokenValidator()
+        self.assertEqual(
+            validator.config.jwks_url,
+            'https://keycloak.example.com/realms/demo/protocol/openid-connect/certs',
+        )
+
+    @patch.dict('os.environ', {
+        'OIDC_ISSUER_URL': 'https://dex.example.com',
+        'OIDC_JWKS_URL': 'https://override.example.com/jwks',
+    }, clear=True)
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_oidc_jwks_url_env_override_wins(self, mock_get):
+        """OIDC_JWKS_URL skips discovery entirely (escape hatch for air-gapped
+        IdPs / unconventional layouts)."""
+        validator = TokenValidator()
+        self.assertEqual(validator.config.jwks_url, 'https://override.example.com/jwks')
+        mock_get.assert_not_called()
+
+    @patch.dict('os.environ', {
+        'OIDC_ISSUER_URL': 'https://broken.example.com',
+    }, clear=True)
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_discovery_failure_returns_none(self, mock_get):
+        """A broken discovery endpoint logs a warning and leaves jwks_url unset
+        — the previous behaviour silently fell through to a hardcoded path."""
+        import requests
+        mock_get.side_effect = requests.RequestException('boom')
+        validator = TokenValidator()
+        self.assertIsNone(validator.config.jwks_url)
+
+    @patch.dict('os.environ', {
+        'OIDC_ISSUER_URL': 'https://noisy.example.com',
+    }, clear=True)
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_discovery_missing_jwks_uri_returns_none(self, mock_get):
+        """Discovery doc without a jwks_uri field is treated as a non-result."""
+        mock_get.return_value = Mock(
+            json=lambda: {"issuer": "https://noisy.example.com"},
+            raise_for_status=lambda: None,
+        )
+        validator = TokenValidator()
+        self.assertIsNone(validator.config.jwks_url)
+
+
 if __name__ == '__main__':
     unittest.main()
