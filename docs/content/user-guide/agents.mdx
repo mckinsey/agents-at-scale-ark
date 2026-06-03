@@ -43,6 +43,24 @@ That's enough to apply. With no `modelRef`, the agent uses the model named `defa
 
 ![Create Agent form filled in for a support agent](/agents/add-form.png)
 
+#### Parameters in the prompt
+
+Use `{{.paramName}}` placeholders in the prompt and the form picks them up automatically. Try a prompt like:
+
+```text
+You are a {{.role}} for the {{.company}} team. Be {{.tone}} in your replies.
+```
+
+The PARAMETERS section flags every placeholder under **Undefined parameters in prompt**. Click each token to add a row, then choose the **SOURCE** for each:
+
+- **`Direct Value`** — bake a default into the agent. Useful for values that don't change per query (e.g. company name).
+- **(empty, the default)** — the value must be supplied by the caller via `query.spec.parameters[]`. Useful for per-query variation (e.g. tone, language, customer name).
+- **Override** — opens a "Name in query.spec.parameters" field so the agent's `{{.tone}}` can be sourced from a differently-named query parameter (e.g. `voiceStyle`).
+
+The counter under the parameter list — *N defined · N used in prompt · N from query* — tells you at a glance whether anything is left undefined.
+
+![Parameters section with role + company baked as defaults and tone coming from the query](/agents/parameters.png)
+
 ### Via kubectl
 
 ```bash
@@ -65,25 +83,28 @@ kubectl wait --for=condition=Available agent/support-agent --timeout=60s
 kubectl get agent support-agent
 ```
 
-## Add tools and parameters
+## A richer example: tools + parameters
 
-The same `Agent` with a tool attachment and a parameter-driven prompt:
+The full YAML behind the Dashboard form above — three template parameters (`role` + `company` baked into the agent, `tone` supplied per query), plus a mix of tool types:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
-  name: support-agent
+  name: demo-agent
 spec:
-  description: Handles customer support questions for {{.product}}
+  description: Demonstrates parameter substitution
   prompt: |
-    You are a helpful assistant for the {{.product}} team.
-    Respond in {{.tone}} tone. Use the available tools when relevant.
+    You are a {{.role}} for the {{.company}} team. Be {{.tone}} in your replies.
   parameters:
-    - name: product
-      value: "Ark"
+    - name: role
+      value: "support engineer"     # default baked into the agent
+    - name: company
+      value: "Ark"                  # default baked into the agent
     - name: tone
-      value: "friendly and concise"
+      valueFrom:                    # supplied by the caller at query time
+        queryParameterRef:
+          name: tone
   tools:
     - type: built-in
       name: terminate
@@ -127,6 +148,29 @@ kubectl get query support-q1 -w
 kubectl get query support-q1 -o jsonpath='{.status.response.content}'
 ```
 
+### Pass parameter values at query time
+
+If the agent declared parameters that must be supplied by the caller (`valueFrom.queryParameterRef`), the value comes from `Query.spec.parameters[]`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: demo-q1
+spec:
+  input: "Who are you and where do you work?"
+  parameters:
+    - name: tone
+      value: "shakespearean prose"
+  target:
+    type: agent
+    name: demo-agent
+```
+
+In the **Dashboard's** Create Query form, once you pick the target the **Parameters** section shows a **Required by agent** badge for every parameter the agent expects from the query. Click the badge to add a row, fill in the value, and **Execute Query**. Defaults baked into the agent (`role`, `company` in the example above) do not appear — only the ones the caller must supply.
+
+> **Heads up:** query-supplied parameters work via `kubectl` and the Dashboard's **Queries** tab today. Other surfaces will catch up soon.
+
 ## Modify an agent
 
 ### Edit interactively
@@ -145,9 +189,14 @@ kubectl patch agent support-agent --type='merge' -p='{"spec":{"prompt":"You are 
 kubectl patch agent support-agent --type='merge' -p='{"spec":{"modelRef":{"name":"gpt-4o-model"}}}'
 ```
 
-> **Note:** Patching `spec.tools` with `--type='merge'` **replaces** the entire tools array — it does not append. To append one tool, use a JSON patch:
+> **Note:** Patching `spec.tools` with `--type='merge'` **replaces** the entire tools array — it does not append. To append one tool, use a JSON patch. The `/spec/tools/-` path only works if `spec.tools` already exists on the agent; if the field is unset, seed it with an empty array first:
 >
 > ```bash
+> # One-time: create spec.tools if the agent was applied without it.
+> kubectl patch agent support-agent --type='json' \
+>   -p='[{"op":"add","path":"/spec/tools","value":[]}]'
+>
+> # Then append individual tools.
 > kubectl patch agent support-agent --type='json' \
 >   -p='[{"op":"add","path":"/spec/tools/-","value":{"type":"http","name":"get-forecast"}}]'
 > ```
@@ -186,11 +235,10 @@ kubectl delete agents --all
 
 The Dashboard's **Create Agent** form covers prompt, model, parameters, and tool selection. These features are only configurable via the `Agent` YAML for now:
 
-- **`spec.executionEngine`** — route execution to a custom executor (e.g., a Claude Agent SDK or LangChain executor from the marketplace) instead of the built-in completions engine. See [Execution engines](/developer-guide/building-execution-engines).
+- **`spec.executionEngine`** — route execution to a custom executor (e.g., a Claude Agent SDK or LangChain executor) instead of the built-in completions engine. See the [marketplace executors](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/executors) for ready-to-install options.
 - **`spec.outputSchema`** — supply a JSON schema and the executor will return structured output instead of free-form text.
 - **`spec.overrides`** — inject HTTP headers when the agent calls its model or any MCP server. Useful for upstream API gateways. See [Overrides](/user-guide/overrides).
 - **`spec.tools[].partial` + `tools[].functions`** — for MCP-server tools that expose many functions, list a subset so the agent only sees specific operations instead of the whole server.
-- **Cross-namespace `modelRef.namespace` / `executionEngine.namespace`** — the Dashboard's Model picker only lists resources in the agent's namespace.
 
 For any of these, write the `Agent` YAML directly. You can still inspect and delete it from the Dashboard afterwards.
 
