@@ -1,19 +1,23 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
-import React from 'react';
-
+import { Trash } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import type { Secret } from '@/lib/services';
+import { cn } from '@/lib/utils';
 
 import { Button } from './button';
+
+const GHOST_TRIGGER =
+  'rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40 focus-visible:border-b-stroke-status-focus';
 
 type RowData = {
   name: string;
@@ -40,48 +44,54 @@ export function ConditionalInputRow({
   valueError,
 }: ConditionalInputRowProps) {
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-      <div style={{ flex: 1 }}>
+    <div className="flex items-start gap-3">
+      <div className="flex-1">
         <Input
           id="name"
+          variant="inline"
           value={data.name}
           onChange={e => onChange({ name: e.target.value })}
           placeholder="e.g., gpt-4-turbo"
           aria-invalid={!!nameError}
         />
         {nameError && (
-          <p className="text-destructive mt-1 text-sm font-medium">
+          <p className="text-status-error mt-1 text-sm font-normal">
             {nameError}
           </p>
         )}
       </div>
-      <div style={{ flex: 1 }}>
+      <div className="flex-1">
         <Select
           value={data.type}
           onValueChange={value =>
             onChange({ type: value as 'direct' | 'secret', value: '' })
           }>
-          <SelectTrigger id="type">
+          <SelectTrigger id="type" className={cn(GHOST_TRIGGER, 'w-full')}>
             <SelectValue placeholder="Select a type" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="direct">direct</SelectItem>
-            <SelectItem value="secret">secret</SelectItem>
+          <SelectContent className="bg-fill-onsurface-ui-2">
+            <SelectItem value="direct">
+              <SelectItemText>direct</SelectItemText>
+            </SelectItem>
+            <SelectItem value="secret">
+              <SelectItemText>secret</SelectItemText>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
-      <div style={{ flex: 1 }}>
+      <div className="flex-1">
         {data.type === 'direct' ? (
           <>
             <Input
               id="value"
+              variant="inline"
               value={data.value}
               onChange={e => onChange({ value: e.target.value })}
               placeholder="e.g., gpt-4-turbo"
               aria-invalid={!!valueError}
             />
             {valueError && (
-              <p className="text-destructive mt-1 text-sm font-medium">
+              <p className="text-status-error mt-1 text-sm font-normal">
                 {valueError}
               </p>
             )}
@@ -90,20 +100,23 @@ export function ConditionalInputRow({
           <>
             <Select
               value={data.value}
-              onValueChange={(value) => onChange({ value: value as string })}>
-              <SelectTrigger id="thirdValue" aria-invalid={!!valueError}>
+              onValueChange={value => onChange({ value: value as string })}>
+              <SelectTrigger
+                id="thirdValue"
+                className={cn(GHOST_TRIGGER, 'w-full')}
+                aria-invalid={!!valueError}>
                 <SelectValue placeholder="Select a secret" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-fill-onsurface-ui-2">
                 {secrets.map(secret => (
                   <SelectItem key={secret.name} value={secret.name}>
-                    {secret.name}
+                    <SelectItemText>{secret.name}</SelectItemText>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {valueError && (
-              <p className="text-destructive mt-1 text-sm font-medium">
+              <p className="text-status-error mt-1 text-sm font-normal">
                 {valueError}
               </p>
             )}
@@ -113,9 +126,12 @@ export function ConditionalInputRow({
       <Button
         type="button"
         onClick={() => deleteRow(data.key)}
-        variant="outline"
-        size="icon">
-        <Trash2 className="h-2 w-2" />
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Delete header">
+        <IconShell size="sm" variant="secondary">
+          <Trash />
+        </IconShell>
       </Button>
     </div>
   );
