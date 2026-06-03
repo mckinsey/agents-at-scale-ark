@@ -6,6 +6,7 @@ import * as z from 'zod';
 import type {
   DirectHeader,
   MCPHeader,
+  MCPServerSpec,
   SecretHeader,
 } from '@/lib/services/mcp-servers';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
@@ -72,6 +73,18 @@ export function mapDetailHeaders(
         : (header as DirectHeader).value.value || '',
     };
   });
+}
+
+export function buildSpec(
+  values: FormValues,
+  headers: HeaderData[],
+): MCPServerSpec {
+  return {
+    description: values.description,
+    transport: values.transport,
+    address: { value: values.baseUrl.trim() },
+    headers: headers.map(buildHeader),
+  };
 }
 
 export function validateHeaders(headers: HeaderData[]): {
@@ -149,6 +162,12 @@ export function useHeaderRows(initial: HeaderData[] = [EMPTY_HEADER_ROW]) {
     });
   };
 
+  const validate = (): HeaderData[] | null => {
+    const { errors, hasErrors, nonEmptyHeaders } = validateHeaders(headers);
+    setHeaderErrors(errors);
+    return hasErrors ? null : nonEmptyHeaders;
+  };
+
   return {
     headers,
     setHeaders,
@@ -158,6 +177,7 @@ export function useHeaderRows(initial: HeaderData[] = [EMPTY_HEADER_ROW]) {
     addRow,
     deleteRow,
     clearRowError,
+    validate,
   };
 }
 
