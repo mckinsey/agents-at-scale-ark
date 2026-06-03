@@ -1,6 +1,5 @@
 export { AccountTree } from './account-tree';
 export { Add } from './add';
-export { Anthropic } from './anthropic';
 export { ArrowBack } from './arrow-back';
 export { ArrowDownwardAlt } from './arrow-downward-alt';
 export { ArrowForward } from './arrow-forward';

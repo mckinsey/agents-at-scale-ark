@@ -9,13 +9,13 @@ export function getModelTypeDisplayName(type: string | undefined): string {
   return MODEL_TYPE_DISPLAY_NAMES[type] ?? type;
 }
 
-// Model provider display names
-// Maps API provider values to user-friendly display names
 export const MODEL_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   openai: 'OpenAI',
   azure: 'Azure OpenAI',
   bedrock: 'AWS Bedrock',
   anthropic: 'Anthropic',
+  google: 'Google',
+  meta: 'Meta',
 };
 
 export function getModelProviderDisplayName(

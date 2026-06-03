@@ -433,6 +433,7 @@ function AzureSpecificFields({
               If your instance is opted in to the{' '}
               <a
                 rel="noreferrer"
+                className="text-primary underline-offset-4 hover:underline"
                 href="https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle?tabs=python"
                 target="_blank">
                 next-generation v1 Azure OpenAI APIs
