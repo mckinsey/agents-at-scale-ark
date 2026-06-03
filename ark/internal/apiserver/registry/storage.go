@@ -166,6 +166,12 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		accessor.SetCreationTimestamp(metav1.Now())
 	}
 
+	// Handle generateName: if name is empty but generateName is set, generate a unique name
+	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
+		generatedName := accessor.GetGenerateName() + uuid.New().String()[:5]
+		accessor.SetName(generatedName)
+	}
+
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	if err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
