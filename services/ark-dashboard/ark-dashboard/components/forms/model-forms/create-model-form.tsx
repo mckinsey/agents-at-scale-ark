@@ -4,6 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { ChevronLeft } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
@@ -72,34 +75,52 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         onSubmit,
         isSubmitPending: isPending,
       }}>
-      <div className="shrink-0 space-y-4 md:w-md md:max-w-md">
-        <section>
-          <div className="text-lg leading-none font-semibold">
-            Add New Model
+      <div className="absolute inset-0 flex flex-col gap-5 overflow-hidden px-12 pt-10">
+        <header className="flex flex-none flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <nav
+              aria-label="Breadcrumb"
+              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+              <ChevronLeft className="size-4 text-white/30" />
+              <NamespacedLink
+                href="/models"
+                className="text-white/30 transition-colors hover:text-white/60">
+                Models
+              </NamespacedLink>
+              <span aria-hidden="true" className="text-white/60">
+                /
+              </span>
+              <span aria-current="page" className="text-white/60">
+                New model
+              </span>
+            </nav>
+            <div className="flex items-center gap-2">
+              <NamespacedLink href="/models">
+                <Button variant="outline">Cancel</Button>
+              </NamespacedLink>
+              <TrackedButton
+                type="submit"
+                form={formId}
+                disabled={isPending || readOnlyMode}
+                trackingEvent="create_model_clicked"
+                trackingProperties={{ modelType: provider }}>
+                {isPending && <Spinner className="mr-2 h-4 w-4" />}
+                {isPending ? 'Creating Model...' : 'Create Model'}
+              </TrackedButton>
+            </div>
           </div>
-          <span className="text-muted-foreground text-sm text-pretty">
-            Fill in the information for the new model.
-          </span>
-        </section>
-        <section>
-          <ModelConfiguratorForm />
-          <TrackedButton
-            type="submit"
-            form={formId}
-            disabled={isPending || readOnlyMode}
-            className="mt-8 w-full"
-            trackingEvent="create_model_clicked"
-            trackingProperties={{ modelType: provider }}>
-            {isPending ? (
-              <>
-                <Spinner size="sm" />
-                <span>Creating Model...</span>
-              </>
-            ) : (
-              <span>Create Model</span>
-            )}
-          </TrackedButton>
-        </section>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-fg-primary text-xl leading-7">Add New Model</h1>
+            <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+              Fill in the information for the new model.
+            </p>
+          </div>
+        </header>
+        <div className="flex min-h-0 flex-1 overflow-auto pb-2 pl-px">
+          <div className="flex w-[576px] flex-col">
+            <ModelConfiguratorForm />
+          </div>
+        </div>
       </div>
     </ModelConfigurationFormContext.Provider>
   );

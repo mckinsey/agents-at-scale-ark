@@ -10,7 +10,7 @@ export function TeamsSection() {
     <ResourceListSection
       icon={<Group />}
       title="Teams"
-      subtitle="Compose and manage teams of agents to coordinate tasks"
+      subtitle="Create and manage teams of agents"
       createHref="/teams/new"
       createLabel="Create Team"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/"

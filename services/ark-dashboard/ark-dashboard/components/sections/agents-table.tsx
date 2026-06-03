@@ -32,7 +32,7 @@ const COL = {
 };
 
 const headerCellClass =
-  'border-stroke-tertiary text-fg-secondary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
@@ -65,7 +65,7 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
     <>
       <div
         role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-3 transition-colors">
+        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
         <div role="cell" className={cn(rowCellClass, COL.name)}>
           <NamespacedLink
             href={`/agents/${encodeURIComponent(agent.name)}`}
@@ -135,7 +135,9 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
       role="table"
       aria-label="Agents"
       className="flex w-full flex-col">
-      <div role="row" className="flex items-center gap-3">
+      <div
+        role="row"
+        className="flex items-center gap-x-4">
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
@@ -151,7 +153,7 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
           <span className="sr-only">Action</span>
         </div>
       </div>
-      <div role="rowgroup" className="flex flex-col gap-2">
+      <div role="rowgroup" className="flex flex-col">
         {agents.map(agent => (
           <AgentTableRow
             key={agent.id}

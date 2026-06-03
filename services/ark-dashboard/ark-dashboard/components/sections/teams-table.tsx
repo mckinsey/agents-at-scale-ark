@@ -33,7 +33,7 @@ const COL = {
 };
 
 const headerCellClass =
-  'border-stroke-tertiary text-fg-secondary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
@@ -74,7 +74,7 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
     <>
       <div
         role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-3 transition-colors">
+        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
         {leading && (
           <span
             className="relative z-10 flex shrink-0 items-center"
@@ -159,7 +159,9 @@ export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
       role="table"
       aria-label="Teams"
       className="flex w-full flex-col">
-      <div role="row" className="flex items-center gap-3">
+      <div
+        role="row"
+        className="flex items-center gap-x-4">
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
@@ -178,7 +180,7 @@ export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
           <span className="sr-only">Action</span>
         </div>
       </div>
-      <div role="rowgroup" className="flex flex-col gap-2">
+      <div role="rowgroup" className="flex flex-col">
         {teams.map(team => (
           <TeamTableRow key={team.id} team={team} onDelete={onDelete} />
         ))}
