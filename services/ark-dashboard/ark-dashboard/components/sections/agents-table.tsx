@@ -32,9 +32,10 @@ const COL = {
 };
 
 const headerCellClass =
-  'text-fg-secondary flex h-12 items-end px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
 
-const rowCellClass = 'flex h-[60px] items-center px-3';
+const rowCellClass =
+  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
 
 function AgentStatus({ status }: { status?: Agent['available'] | null }) {
   const value = status ?? 'Unknown';
@@ -64,7 +65,7 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
     <>
       <div
         role="row"
-        className="hover:bg-stateslayer-overlay-hover border-stroke-tertiary relative flex cursor-pointer items-center border-b transition-colors">
+        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
         <div role="cell" className={cn(rowCellClass, COL.name)}>
           <NamespacedLink
             href={`/agents/${encodeURIComponent(agent.name)}`}
@@ -136,7 +137,7 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
       className="flex w-full flex-col">
       <div
         role="row"
-        className="border-stroke-tertiary flex items-center border-b">
+        className="flex items-center gap-x-4">
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
