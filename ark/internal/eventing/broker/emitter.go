@@ -102,6 +102,8 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 			defer e.sem.Release(1)
 			e.sendEvent(context.WithoutCancel(ctx), endpoint, event)
 		}()
+	} else {
+		log.V(1).Info("semaphore full, dropping event", "namespace", query.Namespace, "reason", reason)
 	}
 }
 
