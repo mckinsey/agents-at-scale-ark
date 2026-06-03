@@ -938,6 +938,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mcp-servers/{mcp_server_name}/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout Mcp Auth */
+        post: operations["logout_mcp_auth_v1_mcp_servers__mcp_server_name__auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp-servers/{mcp_server_name}/auth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Mcp Auth */
+        post: operations["start_mcp_auth_v1_mcp_servers__mcp_server_name__auth_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp-servers/{mcp_server_name}/auth/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Mcp Auth Status */
+        get: operations["get_mcp_auth_status_v1_mcp_servers__mcp_server_name__auth_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mcp Auth Callback */
+        get: operations["mcp_auth_callback_v1_mcp_auth_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/memories": {
         parameters: {
             query?: never;
@@ -2551,6 +2619,78 @@ export interface components {
         Audio: {
             /** Id */
             id: string;
+        };
+        /** AuthLogoutRequest */
+        AuthLogoutRequest: {
+            /** Delete Secret */
+            delete_secret?: boolean | null;
+            /** Keep Client */
+            keep_client?: boolean | null;
+        };
+        /** AuthLogoutResponse */
+        AuthLogoutResponse: {
+            /** Cleared Keys */
+            cleared_keys?: string[];
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /**
+             * Noop
+             * @default false
+             */
+            noop: boolean;
+        };
+        /** AuthStartRequest */
+        AuthStartRequest: {
+            /**
+             * Force
+             * @description Bypass the Authorized preflight and force fresh DCR even when the Secret carries cached client credentials
+             */
+            force?: boolean | null;
+            /**
+             * Scopes
+             * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
+             */
+            scopes?: string[] | null;
+        };
+        /** AuthStartResponse */
+        AuthStartResponse: {
+            /** Auth Id */
+            auth_id: string;
+            /** Authorization Url */
+            authorization_url: string;
+            /**
+             * Flow Expires At
+             * @description RFC 3339 UTC cache-entry deadline; distinct from the token expiry returned by auth/status
+             */
+            flow_expires_at: string;
+        };
+        /** AuthStatusResponse */
+        AuthStatusResponse: {
+            /**
+             * Controller Message
+             * @description Latest Available condition message from the controller
+             */
+            controller_message?: string | null;
+            /**
+             * Controller State
+             * @description Current MCPServer status.authorization.state from the controller
+             */
+            controller_state?: string | null;
+            /**
+             * Expires At
+             * @description RFC 3339 UTC token expiry (only present once state == authorized)
+             */
+            expires_at?: string | null;
+            /** Message */
+            message?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "authorized" | "failed" | "expired";
         };
         /**
          * AvailabilityStatus
@@ -5781,6 +5921,152 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_mcp_auth_v1_mcp_servers__mcp_server_name__auth_logout_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                mcp_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthLogoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthLogoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_mcp_auth_v1_mcp_servers__mcp_server_name__auth_start_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                mcp_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mcp_auth_status_v1_mcp_servers__mcp_server_name__auth_status_get: {
+        parameters: {
+            query: {
+                /** @description auth_id returned by auth/start */
+                auth_id: string;
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                mcp_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mcp_auth_callback_v1_mcp_auth_callback_get: {
+        parameters: {
+            query?: {
+                state?: string | null;
+                code?: string | null;
+                error?: string | null;
+                error_description?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

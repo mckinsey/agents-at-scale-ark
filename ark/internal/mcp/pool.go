@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type MCPClientConfig struct {
 }
 
 type MCPClientPool struct {
+	mu      sync.Mutex
 	clients map[string]*MCPClient
 }
 
@@ -27,6 +29,10 @@ func NewMCPClientPool() *MCPClientPool {
 
 func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConfig, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
 	key := fmt.Sprintf("%s/%s", cfg.ServerNamespace, cfg.ServerName)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if mcpClient, exists := p.clients[key]; exists {
 		return mcpClient, nil
 	}
@@ -43,6 +49,9 @@ func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConf
 }
 
 func (p *MCPClientPool) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	var lastErr error
 	for key, mcpClient := range p.clients {
 		if mcpClient != nil && mcpClient.Client != nil {

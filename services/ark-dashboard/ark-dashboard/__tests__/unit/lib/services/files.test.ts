@@ -160,10 +160,10 @@ describe('filesService', () => {
         addEventListener: vi.fn(),
       };
 
-      global.XMLHttpRequest = vi.fn(() => {
+      global.XMLHttpRequest = vi.fn(function () {
         xhrInstances.push(mockXHR);
         return mockXHR;
-      }) as any;
+      }) as unknown as typeof XMLHttpRequest;
     });
 
     it('should upload file with FormData', async () => {

@@ -1,10 +1,10 @@
 import http from 'http';
 import express from 'express';
-import {CompletionChunkBroker} from '../src/completion-chunk-broker';
+import {CompletionChunkBroker} from '../src/brokers/chunks-broker';
 import {createLogger} from '../src/logging/logger';
-import {createHttpLogger} from '../src/middleware/http-logger';
-import {requestId} from '../src/middleware/request-id';
-import {createStreamRouter} from '../src/routes/stream';
+import {createHttpLogger} from '../src/http/middleware/http-logger';
+import {requestId} from '../src/http/middleware/request-id';
+import {createStreamRouter} from '../src/http/routes/stream';
 import {createTextChunk, createFinishChunk} from '../src/testing/chunk-helpers';
 
 function createBrokerServer(
@@ -38,7 +38,7 @@ function slowChunkedPost(
   port: number,
   queryId: string,
   delayMs: number
-): Promise<{statusCode: number; body: any} | {error: string}> {
+): Promise<{statusCode: number; body: unknown} | {error: string}> {
   return new Promise((resolve) => {
     const req = http.request(
       {
@@ -66,8 +66,8 @@ function slowChunkedPost(
       }
     );
 
-    req.on('error', (err: any) => {
-      resolve({error: err.code || err.message});
+    req.on('error', (err: Error & {code?: string}) => {
+      resolve({error: err.code ?? err.message});
     });
 
     req.write(JSON.stringify(createTextChunk('hello')) + '\n');

@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-inject-ttl
+spec:
+  input: "test ttl injected from arkconfig"
+  target:
+    type: agent
+    name: placeholder-agent
