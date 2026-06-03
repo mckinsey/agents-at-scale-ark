@@ -17,6 +17,7 @@ export default {
   upgrading: 'Upgrading',
   troubleshooting: 'Troubleshooting',
   'utility-images': 'Utility Images',
+  'secure-sdlc': 'Secure Software Development Lifecycle',
 
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors',

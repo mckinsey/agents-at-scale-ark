@@ -1,0 +1,177 @@
+---
+title: Secure Software Development Lifecycle
+description: How security is built into Ark across design, code review, testing, change management, and risk assessment
+---
+
+# Secure Software Development Lifecycle
+
+This page describes the secure development lifecycle (sSDLC) used to build Ark. It consolidates practices that already exist across `CONTRIBUTING.md`, CI workflows, the testing guide, design principles, and the operations-guide security reports, and is intended as both a contributor reference and a citable statement of practice for audits.
+
+Ark is open source and runs in customer-controlled Kubernetes clusters. Security is a shared responsibility — see the [Disclaimer](/disclaimer) — but the engineering process described here is what the Ark project itself applies to every change.
+
+## sSDLC overview
+
+Each change to Ark moves through six stages. Some gates are mechanically enforced; others are project policy applied by reviewers. The split is called out explicitly in [Enforcement model](#enforcement-model) below.
+
+1. **Design** — non-trivial changes start with a design proposal in the ticket or an RFC pull request (`CONTRIBUTING.md` → "Ways of Working", Principle 2). Designs are reviewed against the [Design Principles](/developer-guide/design-principles) — in particular *Secure by Default* (4.3), *Observable Operations* (4.2), and *Protective by Default* (4.5).
+2. **Spec & test-driven development** — APIs and end-to-end tests are proposed alongside the change (Principle 3).
+3. **Implementation** — code is expected to stay within ticket scope; out-of-scope work becomes new tickets (Principle 4).
+4. **Local checks** — project policy in `CLAUDE.md` is that `make lint` and `make test` should pass locally before pushing (see [Error Checking Procedures](#error-checking-procedures)). The mechanical re-check happens in CI.
+5. **Review & CI** — pull request with required CODEOWNERS approval plus CI/CD pipeline runs (lint, unit, E2E, SonarQube, JFrog Xray).
+6. **Release** — conventional commits drive Release Please to generate the changelog and synchronise versions across the monorepo ([Build Pipelines](/operations-guide/build-pipelines)).
+
+The same process applies to downstream executors and services in the [Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace) repository, which depends on Ark core.
+
+### Enforcement model
+
+The repository's main-branch ruleset (`gh api repos/mckinsey/agents-at-scale-ark/rulesets`) mechanically enforces, for every change reaching `main`:
+
+- A pull request is required — no direct pushes.
+- At least one approving review.
+- Approval from a [CODEOWNER](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CODEOWNERS) for every modified path.
+- All review threads resolved.
+- Squash-merge only; linear history; no force-push; deletion blocked.
+
+Other checks described on this page — CI test/lint runs, SonarQube quality gate, JFrog Xray scan, `validate_pr_title`, the PR template checklist, pre-push gates, and applying the Design Principles — are **not** currently configured as required status checks in the ruleset. They run on every PR, surface results visibly on the PR, and reviewers (especially CODEOWNERS) withhold approval when they are red. The merge gate is therefore CODEOWNERS judgement informed by these checks, not the checks themselves.
+
+## Test approach
+
+Ark uses language-idiomatic frameworks per stack, with a shared end-to-end layer built on Chainsaw and deterministic mocks.
+
+| Stack | Components | Frameworks |
+|---|---|---|
+| Go | `ark/` controller, `services/ark-broker` (Node), `tools/fark` | Standard `testing`, Ginkgo linter, `go test` with coverage; configured in `ark/Makefile` |
+| Python | `services/ark-api`, `services/ark-mcp`, `lib/ark-sdk` | `pytest`, `pytest-asyncio`; ruff for lint; pyright for type checks (`services/*/pyproject.toml`) |
+| TypeScript / Node | `services/ark-dashboard`, `tools/ark-cli`, `docs/` | `vitest` (with `@vitest/coverage-v8`), ESLint, Prettier |
+| End-to-end | `tests/` (50 `chainsaw-test.yaml` suites at time of writing) | [Chainsaw](https://github.com/kyverno/chainsaw) for declarative resource/assert flows; [`mock-llm`](https://github.com/dwmkerr/mock-llm) for deterministic LLM/A2A/MCP behaviour; [Hurl](https://hurl.dev/) for HTTP API checks |
+| UI | `tests/pytest/ui-tests/` | Playwright driven from pytest using the Page Object Model |
+
+Tests are selected via labels in `chainsaw-test.yaml` metadata — `standard`, `llm`, `postgresql`, `etcd-only`, `requires-images` — so each CI job can run only the suites that match its dependencies. The label taxonomy is defined in [`tests/CLAUDE.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/tests/CLAUDE.md).
+
+Detailed authoring guidance lives in the [End-to-End Testing](/developer-guide/testing) and [UI Testing](/developer-guide/testing/ui-testing) developer guides.
+
+## Code review process
+
+Every change reaches `main` through a reviewed pull request.
+
+**Roles and ownership.** [`.github/CODEOWNERS`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CODEOWNERS) defines the reviewers per area, and the main-branch ruleset requires their approval before merge:
+
+- Root and Kubernetes CRDs (`/ark/config/crd/`, `/ark/api/`) — technical leads, product manager, and senior engineers.
+- Dashboard (`/services/ark-dashboard/`) — UI lead, with TL/PM fallback.
+- Each subsystem inherits root owners as a backstop.
+
+**PR workflow.** The [pull request template](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/pull_request_template.md) is a checklist for contributors covering:
+
+- Follow the [contributor guide](https://github.com/mckinsey/agents-at-scale-ark/blob/main/CONTRIBUTING.md).
+- End-to-end tests pass.
+- Unit tests for essential surfaces (SDK and endpoint APIs).
+- Update `./docs`.
+- Recognise contributors via the all-contributors bot.
+- Link related issues.
+
+**Title format.** `.github/workflows/validate_pr_title.yml` runs on every PR and fails when the title does not match [Conventional Commits](https://www.conventionalcommits.org). The failed check is visible to reviewers, who hold approval until it is fixed. Supported types (`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `build`, `perf`) and the `!` / `BREAKING CHANGE:` suffix for breaking changes are listed in `CONTRIBUTING.md`.
+
+**Resolution.** Review threads must be resolved before merge (enforced by the ruleset). CI checks (lint, unit, E2E, SonarQube, JFrog Xray) are visible on the PR; reviewers withhold CODEOWNERS approval when they are red. CODEOWNERS approval itself is required by the ruleset.
+
+## Testing procedures
+
+Ark's testing strategy is multifaceted, not a single tier:
+
+- **Requirements / acceptance** — chainsaw suites under `tests/` exercise documented end-user flows: agent + model + query lifecycles, team behaviours, MCP, A2A, memory, and dashboard scenarios.
+- **Security-function tests** — admission webhook and validation tests, e.g. `tests/admission-failures/`, exercise the Kubernetes admission path that rejects invalid or unsafe resource specs. CRD validation rules and reference-handling patterns are documented in the [CRD Design Guide](/developer-guide/crd-design-guide).
+- **Misuse / abuse cases** — RBAC scoping is tested through chainsaw flows that assume namespace-scoped service accounts; the cluster role posture is tracked in the [Penetration Testing Reports](/operations-guide/penetration-testing-reports) (see M1).
+- **Determinism** — `mock-llm` provides reproducible model, A2A, and MCP behaviour so test failures point to Ark code rather than upstream model drift.
+- **Coverage reporting** — Go, Python, and Node test runs emit coverage that is uploaded to SonarQube as part of the CI quality gate (`.github/workflows/sonar_scan.yaml`).
+- **Result summarisation** — `scripts/chainsaw_summary.py` reduces a Chainsaw JSON report to a concise pass/fail table for triage.
+
+For test authoring patterns, including the standard test directory layout, see [`tests/CLAUDE.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/tests/CLAUDE.md) and the [End-to-End Testing](/developer-guide/testing) guide.
+
+## Integration of security requirements
+
+Security is considered from the earliest design stage rather than bolted on at review time.
+
+- **Design Principles.** The [Design Principles](/developer-guide/design-principles) state that secure configurations should be the default state (4.3 *Secure by Default*), options should default to the safest setting with explicit nudges away from unsafe choices (4.5 *Protective by Default*), and behaviour should be measurable, traceable, and auditable (4.2 *Observable Operations*). The principles are a stated philosophy applied during design review; they are not encoded in an automated gate.
+- **Design Before Code.** Non-trivial work begins with a design in the ticket or an RFC pull request (`CONTRIBUTING.md`, Principle 2), so security considerations are discussed before implementation. This is a stated way-of-working, not a mechanically enforced gate.
+- **CRD design rules.** The [CRD Design Guide](/developer-guide/crd-design-guide) documents validation rules, reference-handling patterns, and how to document breaking changes. CRD validation itself is enforced by the Kubernetes admission webhook at runtime.
+- **Threat surface awareness.** Operators of Ark have a documented threat-surface reference in [Model URL Security](/operations-guide/model-url-security) and the [Penetration Testing Reports](/operations-guide/penetration-testing-reports); contributors changing security-relevant components are expected to read these before designing changes.
+
+## Error checking procedures
+
+Errors are caught at three boundaries: local pre-push, pre-commit hooks, and CI. Only the CI boundary runs error-detection mechanically for every change (the main-branch ruleset is a *merge* gate, not an error-detection one). The pre-push policy depends on the developer following project guidance; the pre-commit hooks ship in the repository but Ark does not currently document or automate `pre-commit install`, so they only run for contributors who set them up themselves.
+
+**Pre-push (developer machine).** Project policy in `CLAUDE.md` is that `make lint` and `make test` should pass in every directory a change touches before pushing. There is no harness that blocks the push itself — CI re-runs the same checks and reviewers see the results. Specific tooling per stack:
+
+- **Go** — `golangci-lint` with 24+ linters enabled in [`ark/.golangci.yml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/.golangci.yml) (e.g. `errcheck`, `govet`, `staticcheck`, `gocyclo`, `cyclop`, `gosec`-style checks via `gocritic`, `bodyclose`), plus `gofumpt`, `goimports`, and `go vet`. Targets: `make lint`, `make lint-fix`, `make fmt`, `make vet`.
+- **Python** — `ruff` (configured per-service) and `pyright` for type checks.
+- **TypeScript / Node** — ESLint and Prettier (`npm run lint` / `npm run lint:check`).
+
+**Pre-commit hooks.** [`.pre-commit-config.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.pre-commit-config.yaml) defines:
+
+- Whitespace, line-ending, YAML, and JSON validators.
+- `no-commit-to-branch` for the `main` branch — protects against accidental local commits; the main-branch ruleset is the authoritative server-side block.
+- [`gitleaks`](https://github.com/gitleaks/gitleaks) secret scanning.
+- Terraform `fmt`, `validate`, `tflint`, and `terraform-docs`.
+
+These hooks only run if the contributor has installed the [`pre-commit`](https://pre-commit.com/) tool and run `pre-commit install` in their clone. Ark does not currently document this step in `CONTRIBUTING.md`, the root `README.md`, or in `make` targets, so it is a contributor practice rather than a project-defined gate. None of these hooks have a CI-side equivalent today, so a contributor who has not installed pre-commit gets no local linting from this file and no secret-scanning step from the project pipeline.
+
+**CI.** The [CI/CD workflow](/operations-guide/build-pipelines) runs lint and tests for every stack and runs the SonarQube quality gate (`.github/workflows/sonar_scan.yaml`) and JFrog Xray scan. These workflows fail and surface red on the PR when an issue is found; the merge gate is CODEOWNERS approval rather than the status check itself (see [Enforcement model](#enforcement-model)).
+
+Hook bypass (`--no-verify`, `--no-gpg-sign`) is documented as out-of-policy in `CLAUDE.md` unless explicitly requested by a maintainer. It cannot be technically prevented at push time, but the same lint and test processes run again in CI.
+
+## Change management process
+
+Changes are tracked, reviewed, versioned, and released through a single automated pipeline.
+
+**Tracking.** Work is captured as GitHub issues and planned per sprint by the team (`CONTRIBUTING.md`, Principle 1). Implementation stays within ticket scope; expansions become new tickets linked back to the original (Principle 4).
+
+**Versioning.** PR titles use Conventional Commits, checked by `.github/workflows/validate_pr_title.yml` on every PR. [Release Please](https://github.com/googleapis/release-please) (configured in [`.github/release-please-config.json`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/release-please-config.json)) analyses commits on `main` and:
+
+- Determines the next semantic version (with `bump-patch-for-minor-pre-major: true` during the `0.x` line).
+- Opens a *release PR* updating [`.github/CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md) and synchronising versions across the monorepo — `version.txt`, Python `pyproject.toml` files, Helm `Chart.yaml` files, Node `package.json` files, and Kubernetes manifests (25+ artefacts in total).
+- Triggers downstream release jobs (docs, libraries, charts, Ark CLI) when the release PR merges.
+
+The full release flow is documented in [Build Pipelines → Release Management](/operations-guide/build-pipelines#release-management). The semantic-versioning policy users rely on is described in [Upgrading](/reference/upgrading).
+
+**Dependency updates.** [`.github/dependabot.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/dependabot.yaml) opens weekly PRs for GitHub Actions, Terraform providers, NPM, Python, and Docker base images. Each Dependabot PR runs through the same review and CI process as a human-authored change.
+
+**Direct commits to `main` are blocked** server-side by the main-branch ruleset, which requires a pull request and CODEOWNERS approval. The `no-commit-to-branch` pre-commit hook is a local belt-and-braces check available to developers who have installed pre-commit themselves.
+
+## Risk assessment procedures
+
+Risk is assessed continuously via automated scanning, periodic penetration testing, and a documented CVE workflow.
+
+**CI-side scanning (runs on every PR and main build; see [Enforcement model](#enforcement-model) for how results gate merges).**
+
+- **JFrog Xray** — supply-chain and container vulnerability scanning, invoked from `.github/workflows/cicd.yaml` against the `ark-20863-security-watch` watch. New violations relative to the last successful main scan fail the workflow run; a whitelist of accepted findings is maintained at [`.github/actions/jfrog-xray-scan/tolerated_violations.txt`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/actions/jfrog-xray-scan/tolerated_violations.txt).
+- **SonarQube** — static code analysis with a quality gate (`.github/workflows/sonar_scan.yaml`). Security severity findings fail the workflow run; reliability and maintainability findings are tracked with a downward-trend expectation (see [Code Analysis Reports](/operations-guide/code-analysis-reports)).
+- **Go linters** include `gocritic`, `bodyclose`, and `errcheck`, which catch a subset of common security-relevant bugs at lint time.
+
+**Configured but not in the CI pipeline.**
+
+- **Gitleaks** — secret scanning, configured in [`.pre-commit-config.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.pre-commit-config.yaml) and **not run in any CI workflow**. It executes only for contributors who have independently installed `pre-commit` and run `pre-commit install`, which Ark does not currently instruct them to do. Server-side GitHub secret-scanning alerts (a platform feature, not a pipeline step) are the only mechanical backstop and depend on org-level settings.
+
+**Periodic assessment.**
+
+- **Penetration tests** — third-party assessments are summarised in [Penetration Testing Reports](/operations-guide/penetration-testing-reports), with risk levels, remediation status, and dates.
+- **Static code analysis snapshots** — per-stack issue counts are published in [Code Analysis Reports](/operations-guide/code-analysis-reports).
+- **Artifact analysis snapshots** — per-image vulnerability counts are published in [Artifact Analysis Reports](/operations-guide/artifact-analysis-reports).
+
+**CVE and vulnerability handling.** Security-relevant issues are triaged using the [`ark-security-patcher`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.claude/agents/ark-security-patcher.md) agent flow, supported by the `vulnerability-fixer` and `pentest-issue-resolver` skills. A typical CVE patch:
+
+1. Researches the advisory and impact in Ark.
+2. Proposes a mitigation or version bump.
+3. Implements the change in the affected service.
+4. Opens a `fix:` PR that runs the same lint / test / Xray / SonarQube workflows.
+
+Dependabot PRs feed the same workflow for routine dependency CVEs.
+
+**Risk decisions.** Where a finding cannot be remediated immediately, it is recorded in the relevant operations-guide report or in `tolerated_violations.txt`, with the trend expected to move downwards over successive scans. This is the citable record of accepted residual risk.
+
+## See also
+
+- [Design Principles](/developer-guide/design-principles) — the principles that drive secure-by-default and observable design decisions.
+- [End-to-End Testing](/developer-guide/testing) and [UI Testing](/developer-guide/testing/ui-testing) — test authoring guides.
+- [Build Pipelines](/operations-guide/build-pipelines) — full CI/CD and release-management flow.
+- [Penetration Testing Reports](/operations-guide/penetration-testing-reports), [Code Analysis Reports](/operations-guide/code-analysis-reports), [Artifact Analysis Reports](/operations-guide/artifact-analysis-reports) — security assurance evidence.
+- [Model URL Security](/operations-guide/model-url-security) — operator-side threat surface for model endpoints.
+- [Upgrading](/reference/upgrading) — semantic-versioning policy and version-specific migration steps.

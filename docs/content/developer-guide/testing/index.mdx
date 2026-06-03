@@ -9,7 +9,7 @@ ARK uses [Chainsaw](https://github.com/kyverno/chainsaw) to declaratively create
 
 ## Setup
 
-Eusure you [installed Ark](../../quickstart.mdx).
+Ensure you [installed Ark](../../quickstart.mdx).
 
 ### Install Chainsaw CLI
 
@@ -53,7 +53,7 @@ export E2E_TEST_AZURE_OPENAI_KEY="your-key"
 export E2E_TEST_AZURE_OPENAI_BASE_URL="your-endpoint"
 
 # Run any specific tests.
-chainsaw test ./tests/models --fail-fast
+chainsaw test ./tests --selector '!llm' --config ./tests/.chainsaw.yaml
 ```
 
 ### Test Execution Details
@@ -168,19 +168,16 @@ Structure tests by component:
 
 ## Debugging Tests
 
-### Verbose Output
+### Chainsaw options
 
-Run chainsaw with verbose flags for debugging:
+Run chainsaw with various flags for debugging:
 
 ```bash
-# Detailed output
-chainsaw test ./tests/models --verbose
-
 # Keep test namespaces for inspection
-chainsaw test ./tests/models --cleanup=false
+chainsaw test ./tests --selector '!llm' --config ./tests/.chainsaw.yaml --skip-delete
 
 # Run specific test steps
-chainsaw test ./tests/models --test-dir=specific-test
+chainsaw test ./tests --config ./tests/.chainsaw.yaml
 ```
 
 ### Inspecting Resources
@@ -250,7 +247,7 @@ These environment variables are available on GitHub runners for your tests:
 | `E2E_TEST_AZURE_OPENAI_KEY` | Azure OpenAI API key for testing model deployments |
 | `E2E_TEST_AZURE_OPENAI_BASE_URL` | Azure OpenAI endpoint URL (e.g., `https://your-instance.openai.azure.com`) |
 
-## Testign with Mocked LLMs, Mocked A2A Servers, or Mocked MCP Servers
+## Testing with Mocked LLMs, Mocked A2A Servers, or Mocked MCP Servers
 
 We have built and used [`mock-llm`](https://github.com/dwmkerr/mock-llm) to allow us to define how LLMs, A2A servers, and MCP servers should behave, this allows for deterministic testing of behaviours that rely on models.
 
@@ -285,7 +282,7 @@ ark:
 
 # Specify rules - how the model will respond to specific inputs.
 config:
-  # On any incoming completions request, echo the messaege.
+  # On any incoming completions request, echo the message.
   rules:
   - path: "/v1/chat/completions"
     match: "@"
