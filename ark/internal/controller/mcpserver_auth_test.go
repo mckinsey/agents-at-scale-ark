@@ -143,9 +143,10 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		})
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -193,9 +194,10 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		})
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -229,9 +231,10 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		})
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -270,9 +273,10 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		})
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -425,9 +429,10 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -485,9 +490,10 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -520,9 +526,10 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
 
 		r := &MCPServerReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Eventing: eventnoop.NewProvider(),
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
 		}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
@@ -575,7 +582,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
 
 		evtProvider := newMCPEventProvider()
-		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		r := &MCPServerReconciler{Client: k8sClient, APIReader: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
 
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 		out := &arkv1alpha1.MCPServer{}
@@ -615,7 +622,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		createEmptyAuthSecretAndMCPServer(ctx, name, secretName, srv.URL+"/mcp")
 
 		evtProvider := newMCPEventProvider()
-		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		r := &MCPServerReconciler{Client: k8sClient, APIReader: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		for _, e := range evtProvider.emitter.GetEvents() {
@@ -644,7 +651,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
 
 		evtProvider := newMCPEventProvider()
-		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		r := &MCPServerReconciler{Client: k8sClient, APIReader: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		var found *eventmock.Event
@@ -697,7 +704,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
 
 		evtProvider := newMCPEventProvider()
-		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		r := &MCPServerReconciler{Client: k8sClient, APIReader: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		var found *eventmock.Event
@@ -723,7 +730,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		createEmptyAuthSecretAndMCPServer(ctx, name, secretName, srv.URL+"/mcp")
 
 		evtProvider := newMCPEventProvider()
-		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		r := &MCPServerReconciler{Client: k8sClient, APIReader: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
 		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		for _, e := range evtProvider.emitter.GetEvents() {
