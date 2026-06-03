@@ -9,6 +9,7 @@ import { FieldError, FieldSet, FieldTitle } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
@@ -20,9 +21,6 @@ import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
 import { cn } from '@/lib/utils';
 
 import type { FormValues, HeaderRows } from './utils';
-
-const GHOST_TRIGGER =
-  'rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40 focus-visible:border-b-stroke-status-focus';
 
 interface McpServerFieldsProps {
   readonly form: UseFormReturn<FormValues>;

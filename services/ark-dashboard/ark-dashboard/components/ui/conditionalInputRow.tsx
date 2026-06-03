@@ -4,6 +4,7 @@ import { Trash } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
@@ -15,9 +16,6 @@ import type { Secret } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
 import { Button } from './button';
-
-const GHOST_TRIGGER =
-  'rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40 focus-visible:border-b-stroke-status-focus';
 
 type RowData = {
   name: string;

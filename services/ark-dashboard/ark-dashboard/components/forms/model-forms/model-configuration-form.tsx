@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
@@ -63,9 +64,6 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
-
-const GHOST_TRIGGER =
-  'rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40 focus-visible:border-b-stroke-status-focus';
 
 export function ModelConfiguratorForm() {
   const { form, formId, onSubmit, provider, disabledFields } =
