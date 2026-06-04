@@ -17,6 +17,7 @@ export default {
   upgrading: 'Upgrading',
   troubleshooting: 'Troubleshooting',
   'utility-images': 'Utility Images',
+  'release-process': 'Release Process and Artifacts',
   'secure-sdlc': 'Secure Software Development Lifecycle',
   'vulnerability-management': 'Vulnerability Management',
 
