@@ -45,8 +45,11 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly learnMoreUrl: string;
   /** Capitalised singular for toasts, e.g. "Team" or "Agent". */
   readonly entityLabel: string;
+  /** Lowercase plural for filter messages, e.g. "agents" or "MCP servers". */
+  readonly entityPluralLabel?: string;
   readonly emptyTitle: string;
   readonly emptyDescription: ReactNode;
+  readonly headerActions?: ReactNode;
   readonly loadItems: () => Promise<T[]>;
   readonly deleteItem: (id: string) => Promise<unknown>;
   readonly renderTable: (
@@ -63,8 +66,10 @@ export function ResourceListSection<T extends ResourceListItem>({
   createLabel,
   learnMoreUrl,
   entityLabel,
+  entityPluralLabel,
   emptyTitle,
   emptyDescription,
+  headerActions,
   loadItems,
   deleteItem,
   renderTable,
@@ -87,7 +92,8 @@ export function ResourceListSection<T extends ResourceListItem>({
         item.name.toLowerCase().includes(q) ||
         (item.description?.toLowerCase().includes(q) ?? false);
       const matchesStatus =
-        statusFilter === 'All' || (item.available ?? 'Unknown') === statusFilter;
+        statusFilter === 'All' ||
+        (item.available ?? 'Unknown') === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [items, searchQuery, statusFilter]);
@@ -141,6 +147,13 @@ export function ResourceListSection<T extends ResourceListItem>({
 
   const isEmpty = !loading && items.length === 0;
 
+  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
+  const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
+  const noResultsMessage =
+    statusFilter === 'All'
+      ? `No ${pluralLabel} match your search.`
+      : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-col gap-1">
@@ -171,7 +184,9 @@ export function ResourceListSection<T extends ResourceListItem>({
                     {icon}
                   </IconShell>
                 </div>
-                <p className="text-fg-primary text-xl leading-7">{emptyTitle}</p>
+                <p className="text-fg-primary text-xl leading-7">
+                  {emptyTitle}
+                </p>
                 <div className="text-fg-secondary text-center text-base leading-6 tracking-[-0.128px]">
                   {emptyDescription}
                 </div>
@@ -184,7 +199,10 @@ export function ResourceListSection<T extends ResourceListItem>({
                     <Button>{createLabel}</Button>
                   </NamespacedLink>
                 )}
-                <a href={learnMoreUrl} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={learnMoreUrl}
+                  target="_blank"
+                  rel="noopener noreferrer">
                   <Button variant="outline">Learn more</Button>
                 </a>
               </div>
@@ -230,18 +248,34 @@ export function ResourceListSection<T extends ResourceListItem>({
                 </Select>
               </div>
             </div>
-            {readOnlyMode ? (
-              <Button disabled>{createLabel}</Button>
-            ) : (
-              <NamespacedLink href={createHref}>
-                <Button>{createLabel}</Button>
-              </NamespacedLink>
-            )}
+            <div className="flex items-center gap-3">
+              {headerActions}
+              {readOnlyMode ? (
+                <Button disabled>{createLabel}</Button>
+              ) : (
+                <NamespacedLink href={createHref}>
+                  <Button>{createLabel}</Button>
+                </NamespacedLink>
+              )}
+            </div>
           </div>
 
-          <ScrollArea className="h-0 min-h-0 flex-1">
-            {renderTable(filteredItems, handleDelete)}
-          </ScrollArea>
+          {filteredItems.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12">
+              <div className="bg-surface-secondary flex items-center p-3">
+                <IconShell size="default" variant="secondary">
+                  {icon}
+                </IconShell>
+              </div>
+              <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">
+                {noResultsMessage}
+              </p>
+            </div>
+          ) : (
+            <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+              {renderTable(filteredItems, handleDelete)}
+            </ScrollArea>
+          )}
         </div>
       )}
     </div>

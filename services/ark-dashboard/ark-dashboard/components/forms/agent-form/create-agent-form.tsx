@@ -21,6 +21,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { PromptEditor } from '@/components/ui/prompt-editor';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -31,8 +33,11 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Tag } from '@/components/ui/tag';
-import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -125,9 +130,9 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex min-h-0 flex-1 items-start gap-20 overflow-auto pb-2 pl-px">
+          className="flex min-h-0 flex-1 items-start gap-20 overflow-hidden pb-2 pl-px">
           {/* Left column — form fields (576px) */}
-          <div className="flex w-[576px] flex-col gap-6">
+          <div className="flex max-h-full min-h-0 w-[576px] flex-col gap-6 overflow-y-auto">
             <FormField
               control={form.control}
               name="name"
@@ -185,7 +190,7 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                       onValueChange={field.onChange}
                       value={field.value}
                       disabled={isDisabled}>
-                      <SelectTrigger className="w-full rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40 focus-visible:border-b-stroke-status-focus">
+                      <SelectTrigger className="focus-visible:border-b-stroke-status-focus w-full rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40">
                         <SelectValue placeholder="Select a model" />
                       </SelectTrigger>
                       <SelectContent className="bg-fill-onsurface-ui-2">
@@ -226,7 +231,7 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                     }}
                     className={cn(
                       'flex min-h-9 w-full cursor-pointer items-center justify-between gap-2 border-0 border-b border-white/[0.24] bg-transparent px-0 py-1 text-left transition-colors',
-                      'hover:border-b-white/40 focus-visible:border-b-stroke-status-focus data-[state=open]:border-b-stroke-status-focus focus-visible:outline-none',
+                      'focus-visible:border-b-stroke-status-focus data-[state=open]:border-b-stroke-status-focus hover:border-b-white/40 focus-visible:outline-none',
                       'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
                     )}>
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -271,57 +276,63 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                   align="start"
                   sideOffset={4}
                   avoidCollisions={false}
+                  collisionPadding={8}
                   role="listbox"
                   aria-multiselectable="true"
-                  className="bg-fill-onsurface-ui-2 shadow-elevation-2 max-h-[320px] w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-none border-0 p-1">
+                  className="bg-fill-onsurface-ui-2 shadow-elevation-2 w-[var(--radix-popover-trigger-width)] rounded-none border-0 p-1">
                   {availableTools.length === 0 ? (
                     <p className="text-fg-secondary px-3 py-2 text-sm">
                       No tools available in this namespace.
                     </p>
                   ) : (
-                    <ul className="flex flex-col">
-                      {availableTools.map(tool => {
-                        const checked = isToolSelected(tool.name);
-                        const description = tool.description?.trim();
-                        const labelNode = (
-                          <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
-                            {tool.name}
-                          </span>
-                        );
-                        return (
-                          <li key={tool.name} role="option" aria-selected={checked}>
-                            <label
-                              className={cn(
-                                'flex h-9 cursor-pointer items-center gap-2 px-1',
-                                'hover:bg-stateslayer-overlay-hover',
-                              )}>
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={value =>
-                                  handleToolToggle(tool, value === true)
-                                }
-                                disabled={isDisabled}
-                                aria-label={tool.name}
-                              />
-                              {description ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="text-fg-primary cursor-pointer text-sm leading-5 tracking-[-0.028px]">
-                                      {tool.name}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="bottom" align="start">
-                                    {description}
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : (
-                                labelNode
-                              )}
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
+                      <ul className="flex flex-col">
+                        {availableTools.map(tool => {
+                          const checked = isToolSelected(tool.name);
+                          const description = tool.description?.trim();
+                          const labelNode = (
+                            <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
+                              {tool.name}
+                            </span>
+                          );
+                          return (
+                            <li
+                              key={tool.name}
+                              role="option"
+                              aria-selected={checked}>
+                              <label
+                                className={cn(
+                                  'flex h-9 cursor-pointer items-center gap-2 px-1',
+                                  'hover:bg-stateslayer-overlay-hover',
+                                )}>
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={value =>
+                                    handleToolToggle(tool, value === true)
+                                  }
+                                  disabled={isDisabled}
+                                  aria-label={tool.name}
+                                />
+                                {description ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="text-fg-primary cursor-pointer text-sm leading-5 tracking-[-0.028px]">
+                                        {tool.name}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" align="start">
+                                      {description}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  labelNode
+                                )}
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </ScrollArea>
                   )}
                 </PopoverContent>
               </Popover>
@@ -335,12 +346,19 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
                   <FieldTitle>
                     Prompt <RequiredMarker />
                   </FieldTitle>
-                  <Textarea
+                  <PromptEditor
+                    variant="compact"
+                    showSublabel={false}
+                    showFooter={false}
+                    value={field.value || ''}
+                    onChange={field.onChange}
                     placeholder="Hint the agent objective here..."
                     disabled={isDisabled}
-                    aria-invalid={!!fieldState.error}
-                    className="min-h-[248px] resize-none"
-                    {...field}
+                    parameters={parameters}
+                    className={cn(
+                      'border-stroke-divider focus-within:border-stroke-status-focus min-h-[248px] border bg-transparent pb-3 transition-colors',
+                      fieldState.error && 'border-status-error',
+                    )}
                   />
                   <FieldError>{fieldState.error?.message}</FieldError>
                 </FieldSet>
@@ -349,13 +367,14 @@ export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
           </div>
 
           {/* Right column — Variables panel (figma 4257:26496, 464px fixed) */}
-          <div className="bg-surface-primary flex w-[464px] flex-none flex-col p-5">
+          <div className="bg-surface-primary flex max-h-full min-h-0 w-[464px] flex-none flex-col overflow-y-auto p-5">
             <ParameterEditor
               variant="compact"
               parameters={parameters}
               onChange={setParameters}
               prompt={promptValue}
               disabled={isDisabled}
+              compactRowsClassName="[&_[data-slot=scroll-area-viewport]]:max-h-[480px]"
             />
           </div>
         </form>

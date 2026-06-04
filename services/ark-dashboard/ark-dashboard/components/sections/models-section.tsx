@@ -15,6 +15,7 @@ export function ModelsSection() {
       createLabel="Add Model"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/models/"
       entityLabel="Model"
+      entityPluralLabel="models"
       emptyTitle="No models yet"
       emptyDescription={
         <>

@@ -1,5 +1,6 @@
 'use client';
 
+import { AgentsApiAccess } from '@/components/dialogs/agents-api-access';
 import { SmartToy } from '@/components/icons';
 import { AgentsTable } from '@/components/sections/agents-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
@@ -15,6 +16,7 @@ export function AgentsSection() {
       createLabel="Create Agent"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
       entityLabel="Agent"
+      entityPluralLabel="agents"
       emptyTitle="No agents yet"
       emptyDescription={
         <>
@@ -22,6 +24,7 @@ export function AgentsSection() {
           <p>Get started by creating your first agent.</p>
         </>
       }
+      headerActions={<AgentsApiAccess />}
       loadItems={() => agentsService.getAll()}
       deleteItem={id => agentsService.deleteById(id)}
       renderTable={(agents, onDelete) => (

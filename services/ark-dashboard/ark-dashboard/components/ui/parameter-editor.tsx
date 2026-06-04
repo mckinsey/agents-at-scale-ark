@@ -18,6 +18,8 @@ import { cn } from '@/lib/utils';
 import { Button } from './button';
 import { Input } from './input';
 import { Label } from './label';
+import { ScrollArea } from './scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import {
   Select,
   SelectContent,
@@ -55,9 +57,13 @@ export interface ParameterEditorProps {
    *   icon, "X results" + "Add new" button row, no dashed-border empty state.
    */
   variant?: 'default' | 'compact';
+  compactRowsClassName?: string;
 }
 
 const TEMPLATE_REGEX = /\{\{\s*\.([\w]+)\s*\}\}/g;
+
+const VARIABLES_TOOLTIP_TEXT =
+  'Use {{.parameterName}} to add variables. Example: You are a {{.role}} assistant for {{.company}}. Environment: {{.environment}}';
 
 function extractPromptParameters(prompt: string): string[] {
   const matches = prompt.matchAll(TEMPLATE_REGEX);
@@ -75,6 +81,7 @@ export function ParameterEditor({
   disabled,
   className,
   variant = 'default',
+  compactRowsClassName,
 }: ParameterEditorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const promptParams = useMemo(() => extractPromptParameters(prompt), [prompt]);
@@ -446,7 +453,17 @@ export function ParameterEditor({
               <h3 className="text-fg-secondary text-base leading-6 tracking-[-0.016px]">
                 Variables
               </h3>
-              <Info className="text-fg-secondary size-4" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    tabIndex={0}
+                    aria-label="How to use variables"
+                    className="text-fg-secondary inline-flex cursor-help">
+                    <Info className="size-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{VARIABLES_TOOLTIP_TEXT}</TooltipContent>
+              </Tooltip>
             </div>
             <p className="text-fg-secondary text-xs leading-4 tracking-[0.024px]">
               {parameters.length} result{parameters.length === 1 ? '' : 's'}
@@ -465,7 +482,13 @@ export function ParameterEditor({
 
         {undefinedParamsWarning}
 
-        {compactParameterRows}
+        {compactRowsClassName && parameters.length > 0 ? (
+          <ScrollArea className={compactRowsClassName}>
+            {compactParameterRows}
+          </ScrollArea>
+        ) : (
+          compactParameterRows
+        )}
       </div>
     );
   }
