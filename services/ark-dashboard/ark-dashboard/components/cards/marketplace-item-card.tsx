@@ -1,9 +1,17 @@
 'use client';
 
-import { Bot, Check, Copy, ExternalLink, Loader2, Server, Terminal } from 'lucide-react';
+import copyToClipboard from 'copy-to-clipboard';
+import {
+  Bot,
+  Check,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Server,
+  Terminal,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import copyToClipboard from 'copy-to-clipboard';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,6 +39,7 @@ import {
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 interface MarketplaceItemCardProps {
   item: MarketplaceItem;
@@ -133,6 +142,8 @@ export function MarketplaceItemCard({
     return null;
   };
 
+  const originIcon = getOriginIcon(item.repository, 'repository');
+
   return (
     <Card
       className={cn(
@@ -160,9 +171,7 @@ export function MarketplaceItemCard({
 
         {/* Title and Description */}
         <div>
-          <CardTitle className="text-xl font-semibold">
-            {item.name}
-          </CardTitle>
+          <CardTitle className="text-xl font-semibold">{item.name}</CardTitle>
           <CardDescription className="mt-2 line-clamp-2">
             {item.shortDescription}
           </CardDescription>
@@ -175,9 +184,9 @@ export function MarketplaceItemCard({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="text-xs text-muted-foreground cursor-default">
+                <div className="text-muted-foreground cursor-default text-xs">
                   <span>Source: </span>
-                  <span className="truncate inline-block max-w-[calc(100%-60px)] align-bottom">
+                  <span className="inline-block max-w-[calc(100%-60px)] truncate align-bottom">
                     {item.source}
                   </span>
                 </div>
@@ -201,9 +210,7 @@ export function MarketplaceItemCard({
               </Badge>
             ))}
             {item.tags.length > 4 && (
-              <Badge
-                variant="secondary"
-                className="px-2 py-0.5 text-xs">
+              <Badge variant="secondary" className="px-2 py-0.5 text-xs">
                 +{item.tags.length - 4}
               </Badge>
             )}
@@ -216,7 +223,7 @@ export function MarketplaceItemCard({
           {/* UI URLs */}
           {localStatus === 'installed' && item.uis && item.uis.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {item.uis.map((ui) => (
+              {item.uis.map(ui => (
                 <Button
                   key={ui.url}
                   variant="secondary"
@@ -232,7 +239,10 @@ export function MarketplaceItemCard({
 
           {/* Version and Install/View Button */}
           <div className="flex w-full items-center justify-between">
-            <div className="text-xs text-muted-foreground">v{item.version}</div>
+            <div className="flex items-center gap-x-1.5">
+              <p className="text-muted-foreground text-xs">v{item.version}</p>
+              <span>{originIcon}</span>
+            </div>
 
             {item.type === 'demo' ? (
               <Button

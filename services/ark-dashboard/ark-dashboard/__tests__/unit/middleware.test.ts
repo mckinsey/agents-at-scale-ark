@@ -184,6 +184,33 @@ describe('middleware default export', () => {
       expect(headers.get('Authorization')).toBe('Bearer test-token-123');
     });
 
+    it('should pass the configured SESSION_COOKIE_NAME to getToken (issue #2318)', async () => {
+      const { getToken } = await import('next-auth/jwt');
+      const { SESSION_COOKIE_NAME } = await import('@/lib/auth/auth-config');
+
+      const request = createMockRequest('/api/v1/queries');
+      request.auth = {
+        user: { id: 'user123', email: 'test@example.com' },
+        expires: '',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        body: new ReadableStream(),
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      // Auth.js derives the decryption salt from cookieName, so the
+      // resolved (possibly __Secure--prefixed) name must reach getToken.
+      expect(getToken).toHaveBeenCalledWith(
+        expect.objectContaining({ cookieName: SESSION_COOKIE_NAME }),
+      );
+    });
+
     it('should preserve request body for POST requests', async () => {
       const mockBody = new ReadableStream();
       const request = createMockRequest('/api/v1/queries', {

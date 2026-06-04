@@ -8,9 +8,10 @@ import { AvailabilityStatusBadge } from '@/components/ui/availability-status-bad
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type { Agent } from '@/lib/services';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import type { Agent } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
@@ -34,6 +35,8 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
     agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     Bot,
   );
+
+  const originIcon = getOriginIcon(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
 
   const actions: BaseCardAction[] = [
     {
@@ -71,6 +74,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
         footer={
           <div className="flex w-full flex-row items-end justify-between">
             <div className="text-muted-foreground flex items-center gap-2 text-sm">
+              {originIcon}
               <Bot className="h-4 w-4" />
               {!isA2A && <span>Model: {modelName}</span>}
               {isA2A && <span>A2A Agent</span>}
