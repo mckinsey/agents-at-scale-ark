@@ -7,12 +7,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
+	"mckinsey.com/ark/internal/common"
 )
 
 const defaultAnthropicVersion = "2023-06-01"
+
+var anthropicHTTPClient = &http.Client{
+	Timeout:   60 * time.Second,
+	Transport: common.NewSharedTransport(),
+}
 
 type AnthropicProvider struct {
 	Model      string
@@ -62,13 +69,13 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 		httpReq.Header.Set(k, v)
 	}
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := anthropicHTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic API request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Anthropic response: %w", err)
 	}
