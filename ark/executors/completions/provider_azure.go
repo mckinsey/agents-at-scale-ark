@@ -207,7 +207,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error
 	if IsProbeContext(ctx) {
 		httpClient = common.NewHTTPClientWithoutTracing()
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = common.NewHTTPClientWithLogging()
 	}
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)

@@ -265,7 +265,7 @@ func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
 	if IsProbeContext(ctx) {
 		httpClient = common.NewHTTPClientWithoutTracing()
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = common.NewHTTPClientWithLogging()
 	}
 
 	options := []option.RequestOption{
