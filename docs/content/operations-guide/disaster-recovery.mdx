@@ -1,0 +1,127 @@
+# Disaster Recovery
+
+This guide covers what to back up, what to consider before a restore, and the steps to bring Ark back to a working state after a data loss event.
+
+Ark runs on Kubernetes and stores its state in etcd (via CRDs), Kubernetes Secrets, and optionally an external database for conversation memory. The recovery process focuses on restoring these layers in the right order.
+
+## What to back up
+
+| Component | Where it lives | What it contains |
+|-----------|---------------|-----------------|
+| CRDs | etcd (K8s API) | Agent, Team, Tool, Model, Memory, MCPServer, ExecutionEngine definitions |
+| Queries | etcd (K8s API) | Query history and status |
+| Secrets | etcd (K8s API) | API keys, model credentials, OIDC client secrets |
+| RBAC bindings | etcd (K8s API) | RoleBindings and ClusterRoleBindings for user access |
+| Helm values | Your deployment repo / CI | Configuration for Ark and its dependencies |
+| Memory backend | External database (if configured) | Conversation history |
+
+The Ark operator, API, dashboard, and broker are stateless — they can be redeployed from their Helm charts without data loss.
+
+## Pre-restore checklist
+
+Before restoring from a backup:
+
+1. **Verify the target cluster is healthy** — Nodes are ready, networking works, and the Kubernetes API is responsive.
+2. **Check CRD versions** — The Ark CRD versions in your backup must match the operator version you are deploying. If you upgraded Ark between the backup and the restore, apply the newer CRDs first.
+3. **Confirm external dependencies** — If you use an external memory backend (PostgreSQL, etc.), verify it is accessible from the cluster.
+4. **Review namespace structure** — Ensure target namespaces exist before restoring namespace-scoped resources.
+
+## Recovery steps
+
+### 1. Reinstall the Ark operator
+
+Deploy the operator using your Helm chart and values. This re-creates the CRDs, controller, and webhook configurations.
+
+```bash
+helm install ark ark/ark --namespace ark-system --values your-values.yaml
+```
+
+Wait for the operator pod to be ready before proceeding:
+
+```bash
+kubectl wait --for=condition=ready pod -l app=ark-controller-manager -n ark-system --timeout=120s
+```
+
+### 2. Restore CRD resources
+
+Apply your backed-up resources. Order matters — restore dependencies before dependents:
+
+1. **Models** — No dependencies on other Ark resources.
+2. **Tools and MCPServers** — May reference Secrets but not other Ark CRDs.
+3. **Memory** — Standalone resource.
+4. **ExecutionEngines** — Standalone resource.
+5. **Agents** — Reference Models, Tools, MCPServers, Memory, and ExecutionEngines.
+6. **Teams** — Reference Agents.
+
+```bash
+kubectl apply -f backup/models/
+kubectl apply -f backup/tools/
+kubectl apply -f backup/mcpservers/
+kubectl apply -f backup/memory/
+kubectl apply -f backup/executionengines/
+kubectl apply -f backup/agents/
+kubectl apply -f backup/teams/
+```
+
+### 3. Restore Secrets
+
+Re-apply Kubernetes Secrets that hold API keys and model credentials. These are namespace-scoped, so ensure you apply them to the correct namespaces.
+
+```bash
+kubectl apply -f backup/secrets/
+```
+
+### 4. Restore RBAC bindings
+
+If you use user impersonation, restore the RoleBindings and ClusterRoleBindings that grant users access to Ark resources.
+
+```bash
+kubectl apply -f backup/rbac/
+```
+
+### 5. Redeploy supporting services
+
+Reinstall the API, dashboard, broker, and any marketplace components (executors, MCP servers) using their Helm charts. These services are stateless and will reconnect to the operator on startup.
+
+### 6. Restore the memory backend
+
+If you use an external database for conversation memory, restore it using your database-specific backup and restore tooling. Ark does not manage the memory backend lifecycle — refer to your database provider's documentation.
+
+### 7. Verify the restore
+
+Run a basic health check:
+
+```bash
+# Confirm the operator is reconciling
+kubectl get agents,teams,models,tools --all-namespaces
+
+# Submit a test query
+kubectl apply -f - <<EOF
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: dr-test
+spec:
+  agentName: <your-agent>
+  payload: "health check"
+EOF
+
+# Check query status
+kubectl get query dr-test -w
+```
+
+## Partial failures
+
+If only some components are affected:
+
+- **Operator pod crash** — The deployment will restart it automatically. No data loss occurs because state lives in etcd.
+- **API / Dashboard / Broker down** — Redeploy from Helm. These are stateless.
+- **Single namespace lost** — Restore only that namespace's resources and Secrets. Other namespaces are unaffected.
+- **Memory backend lost** — Agents continue to function but lose conversation history. Restore the database independently.
+
+## Tips
+
+- **Automate backups** — Use tools like [Velero](https://velero.io/) to schedule regular backups of Kubernetes resources and volumes.
+- **Back up Helm values** — Store your `values.yaml` files in version control so you can redeploy without guessing configuration.
+- **Test restores** — Periodically restore to a staging cluster to verify your backups are complete and the process works end to end.
+- **Label Ark resources** — All Ark CRDs carry the `ark.mckinsey.com` API group, making it straightforward to filter them during backup and restore.
