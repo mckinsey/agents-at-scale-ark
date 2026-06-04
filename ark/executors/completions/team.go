@@ -48,6 +48,17 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
+func (t *Team) Close() {
+	for _, member := range t.Members {
+		switch m := member.(type) {
+		case *Agent:
+			m.Close()
+		case *Team:
+			m.Close()
+		}
+	}
+}
+
 func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
