@@ -62,12 +62,12 @@ class TokenValidator:
         )
 
     @staticmethod
-    def _discover_jwks_url(issuer: str) -> Optional[str]:
+    def _discover_jwks_url(issuer: str) -> str:
         """Resolve ``jwks_uri`` from the issuer's OIDC discovery document.
 
-        Returns ``None`` (with a warning) when discovery is unreachable
-        or malformed — callers can still proceed with an explicit
-        ``OIDC_JWKS_URL`` override on a later configuration pass.
+        Raises ``TokenValidationError`` when discovery is unreachable or
+        the document does not contain ``jwks_uri``. Use ``OIDC_JWKS_URL``
+        to bypass discovery for air-gapped IdPs.
         """
         discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
         try:
@@ -75,18 +75,18 @@ class TokenValidator:
             response.raise_for_status()
             jwks_uri = response.json().get("jwks_uri")
             if not jwks_uri:
-                logger.warning(
-                    "OIDC discovery document at %s did not include jwks_uri",
-                    discovery_url,
+                raise TokenValidationError(
+                    f"OIDC discovery document at {discovery_url} did not include jwks_uri. "
+                    f"Set OIDC_JWKS_URL to override."
                 )
-                return None
             return jwks_uri
+        except TokenValidationError:
+            raise
         except (requests.RequestException, ValueError) as exc:
-            logger.warning(
-                "OIDC discovery failed for %s: %s. Set OIDC_JWKS_URL to override.",
-                discovery_url, exc,
-            )
-            return None
+            raise TokenValidationError(
+                f"OIDC discovery failed for {discovery_url}: {exc}. "
+                f"Set OIDC_JWKS_URL to override."
+            ) from exc
     
     def _fetch_jwks(self) -> Dict[str, Any]:
         """Fetch JWKS from the configured URL."""
