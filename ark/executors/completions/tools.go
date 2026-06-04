@@ -174,6 +174,9 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 			Error: fmt.Sprintf("failed to read response: %v", err),
 		}, fmt.Errorf("failed to read response: %w", err)
 	}
+	if len(body) == 10<<20 {
+		log.Info("HTTP tool response may have been truncated", "url", parsedURL.String(), "limit", "10MB")
+	}
 
 	log.Info("HTTP request completed", "status", resp.StatusCode, "responseSize", len(body))
 
