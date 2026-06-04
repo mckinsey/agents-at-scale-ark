@@ -28,6 +28,8 @@ linters:
     - cyclop
     - nestif
     - usestdlibvars
+    - contextcheck
+    - noctx
   settings:
     cyclop:
       max-complexity: 30
@@ -44,6 +46,20 @@ linters:
       - third_party$
       - builtin$
       - examples$
+    rules:
+      - linters:
+          - contextcheck
+        path: "executors/completions/"
+      - linters:
+          - contextcheck
+        path: "internal/apiserver/"
+      - linters:
+          - contextcheck
+        path: "internal/telemetry/"
+      - linters:
+          - staticcheck
+        text: "SA5011"
+        path: "_test\\.go$"
 formatters:
   enable:
     - gofmt

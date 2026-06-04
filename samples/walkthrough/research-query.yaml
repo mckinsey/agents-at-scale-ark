@@ -7,6 +7,6 @@ metadata:
     use-case: walkthrough
 spec:
   input: "Research the latest trends in artificial intelligence and machine learning for 2024, focusing on enterprise applications and business impact."
-  targets:
-    - type: team
-      name: research-analysis-team
+  target:
+    type: team
+    name: research-analysis-team

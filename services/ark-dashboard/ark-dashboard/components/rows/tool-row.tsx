@@ -11,11 +11,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Tool } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 type ToolRowProps = {
   readonly tool: Tool;
@@ -48,14 +49,18 @@ export function ToolRow(props: ToolRowProps) {
     push(`/query/new?target_tool=${tool.name}`);
   };
 
+  const originIcon = getOriginIcon(tool.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
+
   return (
     <>
       <div className="bg-card hover:bg-accent/5 flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3 shadow-sm transition-colors">
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={tool.name}>
-              {tool.name}
+            <p
+              className="flex items-center gap-x-1.5 truncate text-sm font-medium"
+              title={tool.name}>
+              {tool.name} <span>{originIcon}</span>
             </p>
             <p
               className="text-muted-foreground truncate text-xs"
