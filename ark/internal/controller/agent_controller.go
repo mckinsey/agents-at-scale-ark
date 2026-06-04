@@ -282,6 +282,7 @@ func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.A
 	return err
 }
 
+// agentModelRefIndexer returns the model reference name for field-based Agent lookups.
 func agentModelRefIndexer(obj client.Object) []string {
 	agent := obj.(*arkv1alpha1.Agent)
 	if agent.Spec.ModelRef == nil {
@@ -290,6 +291,7 @@ func agentModelRefIndexer(obj client.Object) []string {
 	return []string{agent.Spec.ModelRef.Name}
 }
 
+// agentExecutionEngineIndexer returns the execution engine name for field-based Agent lookups.
 func agentExecutionEngineIndexer(obj client.Object) []string {
 	agent := obj.(*arkv1alpha1.Agent)
 	if agent.Spec.ExecutionEngine == nil {
@@ -298,6 +300,7 @@ func agentExecutionEngineIndexer(obj client.Object) []string {
 	return []string{agent.Spec.ExecutionEngine.Name}
 }
 
+// agentToolNamesIndexer returns indexed tool names for field-based Agent lookups, skipping built-in tools.
 func agentToolNamesIndexer(obj client.Object) []string {
 	agent := obj.(*arkv1alpha1.Agent)
 	var names []string

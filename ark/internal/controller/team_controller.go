@@ -136,6 +136,7 @@ func (r *TeamReconciler) updateStatus(ctx context.Context, team *arkv1alpha1.Tea
 	return err
 }
 
+// teamAgentMemberIndexer returns agent member names for field-based Team lookups.
 func teamAgentMemberIndexer(obj client.Object) []string {
 	team := obj.(*arkv1alpha1.Team)
 	var names []string
