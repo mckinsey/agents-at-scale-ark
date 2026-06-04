@@ -106,10 +106,21 @@ func TestAgentToolNamesIndexer(t *testing.T) {
 			}},
 			expected: []string{"weather-api"},
 		},
+		{
+			name: "multiple tools, built-in interleaved, all non-built-in are indexed",
+			agent: &arkv1alpha1.Agent{Spec: arkv1alpha1.AgentSpec{
+				Tools: []arkv1alpha1.AgentTool{
+					{Type: "custom", Name: "tool-a"},
+					{Type: "built-in", Name: "terminate"},
+					{Type: "custom", Name: "tool-b"},
+				},
+			}},
+			expected: []string{"tool-a", "tool-b"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, agentToolNamesIndexer(tt.agent))
+			assert.ElementsMatch(t, tt.expected, agentToolNamesIndexer(tt.agent))
 		})
 	}
 }
