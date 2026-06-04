@@ -168,9 +168,9 @@ metadata:
   name: chicago-weather
 spec:
   input: "What is the weather forecast for Chicago?"
-  targets:
-    - type: agent
-      name: langchain-weather-agent
+  target:
+    type: agent
+    name: langchain-weather-agent
 ```
 
 ### Cleanup

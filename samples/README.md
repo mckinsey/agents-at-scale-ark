@@ -288,21 +288,15 @@ Basic query targeting a single agent.
 - **Query**: Simple math calculation
 - **Use case**: Basic agent interaction
 
-#### `queries/query-multiple-targets.yaml` - Multi-Target Queries
-Querying multiple agents and teams.
-- **Targets**: Multiple agents and teams
-- **Query**: Single input to multiple processors
-- **Use case**: Parallel processing
-
 #### `queries/query-with-label-selectors.yaml` - Label Selector Queries
 Dynamic target selection using label selectors.
 - **Selector**: Label-based target discovery
-- **Mixed mode**: Explicit targets + label selector
+- **Mixed mode**: Explicit target + label selector
 - **Query**: Selects agents and teams by labels
 - **Use case**: Dynamic resource discovery
 
 #### `queries/query-selectors-only.yaml` - Selector-Only Query
-Query using only label selectors (no explicit targets).
+Query using only label selectors (no explicit target).
 - **Selector**: `matchLabels` for analyst role
 - **Query**: Market trend analysis
 - **Use case**: Pure label-based targeting
@@ -324,16 +318,14 @@ Enterprise customer onboarding with comprehensive parameters.
 
 ### 📋 Query Target Selection
 
-Queries support three ways to select targets:
+Queries support three ways to select a target:
 
-#### 1. Explicit Targets
+#### 1. Explicit Target
 ```yaml
 spec:
-  targets:
-    - type: agent
-      name: specific-agent
-    - type: team
-      name: specific-team
+  target:
+    type: agent
+    name: specific-agent
 ```
 
 #### 2. Label Selectors
@@ -348,9 +340,9 @@ spec:
 #### 3. Mixed Mode (Both)
 ```yaml
 spec:
-  targets:
-    - type: agent
-      name: backup-agent
+  target:
+    type: agent
+    name: backup-agent
   selector:
     matchExpressions:
       - key: category

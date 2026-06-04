@@ -7,6 +7,6 @@ metadata:
 spec:
   input: "Write a haiku about streaming data through the internet"
   memory: ark-broker
-  targets:
-    - name: test-model
-      type: model
+  target:
+    name: test-model
+    type: model

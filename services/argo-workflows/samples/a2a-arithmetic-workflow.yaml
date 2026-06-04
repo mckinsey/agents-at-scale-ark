@@ -126,9 +126,9 @@ spec:
           parameters:
             - name: number
               value: "{{inputs.parameters.final-number}}"
-          targets:
-            - name: number-curiosa
-              type: agent
+          target:
+            name: number-curiosa
+            type: agent
           timeout: 2m
           ttl: 1h
         EOF
@@ -163,9 +163,9 @@ spec:
           parameters:
             - name: seconds
               value: "{{inputs.parameters.countdown-seconds}}"
-          targets:
-            - name: countdown-agent
-              type: agent
+          target:
+            name: countdown-agent
+            type: agent
           timeout: 2m
           ttl: 1h
         EOF

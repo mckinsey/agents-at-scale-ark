@@ -7,6 +7,6 @@ metadata:
 spec:
   input: "What is the capital of France? Give a one sentence answer."
   memory: ark-broker
-  targets:
-    - name: test-model
-      type: model
+  target:
+    name: test-model
+    type: model

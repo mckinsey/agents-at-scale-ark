@@ -22,6 +22,6 @@ spec:
     Provide a quick summary of the current market conditions.
     This should be a brief overview that can be completed quickly.
   timeout: "30s"
-  targets:
-    - type: agent
+  target:
+    type: agent
     name: market-analyst

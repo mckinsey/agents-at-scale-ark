@@ -154,9 +154,9 @@ spec:
   parameters:
     - name: your_name
       value: "QueryAgent123"
-  targets:
-    - type: agent
-      name: test-agent
+  target:
+    type: agent
+    name: test-agent
 ```
 
 ## Key Patterns

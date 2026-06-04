@@ -7,5 +7,5 @@ metadata:
     ark.mckinsey.com/streaming-enabled: "true"
 spec:
   input: "Tell me a short story about AI"
-  targets:
-    - name: model/gpt-4
+  target:
+    name: model/gpt-4

@@ -41,7 +41,7 @@ class QueryCreate(BaseModel):
     name: str
     input: str
     namespace: str = DEFAULT_NAMESPACE
-    targets: Optional[List[QueryTarget]] = None
+    target: Optional[QueryTarget] = None
     selector: Optional[Dict[str, Any]] = None
 
 
@@ -89,9 +89,9 @@ async def create_query_sdk(query: QueryCreate) -> Dict[str, Any]:
         async with with_ark_client(query.namespace, VERSION) as ark_client:
             spec = {"input": query.input}
             
-            # Add targets if specified
-            if query.targets:
-                spec["targets"] = [{"type": target.type, "name": target.name} for target in query.targets]
+            # Add target if specified
+            if query.target:
+                spec["target"] = {"type": query.target.type, "name": query.target.name}
             
             # Add selector if specified
             if query.selector:
@@ -203,7 +203,7 @@ def register_tools(mcp: FastMCP):
             name=query_name,
             input=input,
             namespace=namespace,
-            targets=[target]
+            target=target
         )
         
         logger.info(f"Querying agent '{agent}' with input: {input}")

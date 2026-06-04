@@ -18,6 +18,6 @@ spec:
             values: ["meteorology", "climate"]
           - key: active
             operator: Exists
-  targets:
-    - type: agent
-      name: weather-agent-backup
+  target:
+    type: agent
+    name: weather-agent-backup
