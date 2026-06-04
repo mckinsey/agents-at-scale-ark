@@ -216,6 +216,15 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		return nil, false, fmt.Errorf("failed to get updated object: %w", err)
 	}
 
+	// Preserve resourceVersion from existing object if patch didn't include it.
+	// kubectl strategic merge patches may send resourceVersion: null, but PostgreSQL
+	// backend requires a non-zero resourceVersion for optimistic concurrency control.
+	existingAccessor, _ := meta.Accessor(existing)
+	updatedAccessor, _ := meta.Accessor(updated)
+	if updatedAccessor.GetResourceVersion() == "" && existingAccessor.GetResourceVersion() != "" {
+		updatedAccessor.SetResourceVersion(existingAccessor.GetResourceVersion())
+	}
+
 	if updateValidation != nil {
 		if err := updateValidation(ctx, updated, existing); err != nil {
 			metrics.RecordStorageOperation("update", s.config.Kind, "validation_error")

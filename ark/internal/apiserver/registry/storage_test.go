@@ -338,6 +338,78 @@ func TestGenericStorage_Update_ForceCreate(t *testing.T) {
 	}
 }
 
+func TestGenericStorage_Update_PreservesResourceVersion(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.ResourceVersion = "123"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updatedAgent := &arkv1alpha1.Agent{}
+	updatedAgent.Name = testAgentName
+	updatedAgent.Namespace = testNS()
+	updatedAgent.ResourceVersion = ""
+
+	updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
+	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if created {
+		t.Error("expected created to be false")
+	}
+
+	storedObj := backend.objects["Agent/default/test-agent"]
+	storedAgent, ok := storedObj.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", storedObj)
+	}
+
+	if storedAgent.ResourceVersion != "123" {
+		t.Errorf("expected resourceVersion to be preserved as '123', got '%s'", storedAgent.ResourceVersion)
+	}
+}
+
+func TestGenericStorage_Update_DoesNotOverwriteExplicitResourceVersion(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.ResourceVersion = "123"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updatedAgent := &arkv1alpha1.Agent{}
+	updatedAgent.Name = testAgentName
+	updatedAgent.Namespace = testNS()
+	updatedAgent.ResourceVersion = "456"
+
+	updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
+	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if created {
+		t.Error("expected created to be false")
+	}
+
+	storedObj := backend.objects["Agent/default/test-agent"]
+	storedAgent, ok := storedObj.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", storedObj)
+	}
+
+	if storedAgent.ResourceVersion != "456" {
+		t.Errorf("expected resourceVersion to be '456' from patch, got '%s'", storedAgent.ResourceVersion)
+	}
+}
+
 func TestGenericStorage_Delete(t *testing.T) {
 	t.Parallel()
 	gs, backend := newTestStorage()
