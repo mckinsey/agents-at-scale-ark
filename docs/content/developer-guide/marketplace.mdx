@@ -128,17 +128,16 @@ Beyond that, populate the optional fields for a good catalog entry:
 
 ## What needs to be publicly reachable?
 
-The fields in the manifest are fetched from three different places. Only the manifest itself sits on a critical path.
+Only the manifest itself sits on a critical path.
 
 | Field | Fetched by | Hosting requirement |
 | --- | --- | --- |
 | The manifest URL | **Dashboard pod**, server-side, no `Authorization` header | Must be reachable anonymously from inside the cluster. Public HTTPS (e.g. `raw.githubusercontent.com`) is the easy default. A private GitHub repo won't work unless you front it with an anonymously-readable URL. |
 | `ark.chartPath` (OCI) | **The user's local `helm` CLI** | Doesn't have to be public. If the registry is private, users run `helm registry login` first. Public OCI registries just remove that step. |
-| `icon` | **Not fetched.** Rendered as plain text in the item detail view. | Designed for emoji strings like `"🔥"`. A URL here will render as literal text, not as an image. Image hosting is not required today. |
-| `screenshots` | **Not rendered.** Accepted by the schema but no UI consumes the field. | Image hosting is not required today. |
-| `homepage`, `documentation`, `repository`, `support.url` | **The user's browser** when they click the link | Should be reachable from your users' networks, like any external link. |
 
-Practical implication: for a fully-internal marketplace, you need exactly one publicly-fetchable URL — the manifest. Charts can live in your private OCI registry; icons can stay as emoji.
+> `raw.githubusercontent.com` is GitHub's host for raw file contents in **public** repos. A file at `https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}` is fetchable by anyone over HTTPS with no auth, which makes it a low-effort way to publish a manifest without setting up GitHub Pages or a CDN. Private repos return 404 from this host because the dashboard doesn't authenticate.
+
+Practical implication: for a fully-internal marketplace, you need exactly one publicly-fetchable URL — the manifest. Charts can live in your private OCI registry.
 
 ## Publish your own marketplace items
 
@@ -159,6 +158,5 @@ Things the Marketplace tab does **not** do today. Track these before relying on 
 - **The "Marketplace" sources UI is experimental.** It's hidden until you flip the toggle under **Settings → Experimental Features → Marketplace**. Until that lands as a default, document the toggle for your users.
 - **No authentication for source URLs.** The dashboard fetches manifests with no `Authorization` header (see [What needs to be publicly reachable?](#what-needs-to-be-publicly-reachable)). Private GitHub repos and authenticated endpoints can't host a manifest unless you front them with an anonymously-readable URL.
 - **No version selector.** Each item card shows a single advertised version from the manifest, and `ark install` uses whatever tag the OCI chart reference resolves to. To pin to an older version, use the Helm command form with an explicit `--version`.
-- **No per-source status indicator.** If a source URL becomes unreachable, its items silently drop out of the grid. The error surfaces in the browser console, not the UI.
 - **"Installed" detection matches by helm release name.** The badge compares `ark.helmReleaseName` against helm releases in the cluster. If you installed the chart under a different release name, the card still says **Get**.
 - **No client-side schema enforcement.** The validate endpoint checks only that `version`, `marketplace`, and `items[].name` exist. Items missing `ark.chartPath` show in the grid but produce a broken install command; missing `type`/`category` produce a card with no badge or filter membership.
