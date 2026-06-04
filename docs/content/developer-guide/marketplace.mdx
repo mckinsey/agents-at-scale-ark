@@ -82,26 +82,28 @@ A minimal valid manifest looks like this:
   "marketplace": "my-team-marketplace",
   "items": [
     {
-      "name": "my-mcp-server",
-      "type": "mcp",
-      "displayName": "My MCP Server",
-      "description": "Adds X capability to Ark agents",
+      "name": "support-agent",
+      "type": "agent",
+      "displayName": "Support Agent",
+      "description": "Demo customer-support agent with FAQ retrieval tooling",
       "version": "0.1.0",
-      "category": "mcp-servers",
-      "tags": ["mcp", "internal"],
+      "category": "agents",
+      "tags": ["agent", "support", "demo"],
       "license": "Apache-2.0",
-      "homepage": "https://github.com/my-org/my-mcp",
-      "documentation": "https://my-org.github.io/my-mcp/",
+      "homepage": "https://github.com/my-org/support-agent",
+      "documentation": "https://my-org.github.io/support-agent/",
       "ark": {
-        "chartPath": "oci://ghcr.io/my-org/charts/my-mcp-server",
+        "chartPath": "oci://ghcr.io/my-org/charts/support-agent",
         "namespace": "default",
-        "helmReleaseName": "my-mcp-server",
+        "helmReleaseName": "support-agent",
         "installArgs": ["--create-namespace"]
       }
     }
   ]
 }
 ```
+
+The chart this points at should bundle the `Agent` CRD (and any `Model`, `Tool`, or `MCPServer` resources the agent depends on) so that one `helm install` produces a working, queryable agent.
 
 The dashboard's manifest validator (`/api/marketplace/validate`) enforces three rules:
 
