@@ -131,6 +131,46 @@ func TestScheme_CanCreateInternalVersionObjects(t *testing.T) {
 	}
 }
 
+func applyStrategicMergePatch(t *testing.T, original runtime.Object, patchBytes []byte) runtime.Object {
+	t.Helper()
+
+	originalJSON, err := runtime.Encode(Codecs.LegacyCodec(arkv1alpha1.GroupVersion), original)
+	if err != nil {
+		t.Fatalf("failed to encode original: %v", err)
+	}
+
+	patchedJSON, err := strategicpatch.StrategicMergePatch(originalJSON, patchBytes, original)
+	if err != nil {
+		t.Fatalf("StrategicMergePatch() error = %v", err)
+	}
+
+	patched, err := runtime.Decode(Codecs.UniversalDecoder(arkv1alpha1.GroupVersion), patchedJSON)
+	if err != nil {
+		t.Fatalf("failed to decode patched object: %v", err)
+	}
+
+	return patched
+}
+
+func verifyInternalVersionRegistered(t *testing.T, obj runtime.Object) {
+	t.Helper()
+
+	internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
+
+	gvks, _, err := Scheme.ObjectKinds(obj)
+	if err != nil {
+		t.Fatalf("ObjectKinds() error = %v", err)
+	}
+
+	for _, gvk := range gvks {
+		if gvk.Group == internalGV.Group && gvk.Version == runtime.APIVersionInternal {
+			return
+		}
+	}
+
+	t.Errorf("internal version not recognized after patch, got GVKs: %v", gvks)
+}
+
 func TestScheme_StrategicMergePatch(t *testing.T) {
 	t.Parallel()
 
@@ -184,41 +224,8 @@ func TestScheme_StrategicMergePatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
-
-			originalJSON, err := runtime.Encode(Codecs.LegacyCodec(arkv1alpha1.GroupVersion), tt.original)
-			if err != nil {
-				t.Fatalf("failed to encode original: %v", err)
-			}
-
-			patchedJSON, err := strategicpatch.StrategicMergePatch(originalJSON, tt.patchBytes, tt.original)
-			if err != nil {
-				t.Fatalf("StrategicMergePatch() error = %v", err)
-			}
-
-			internalGVK := internalGV.WithKind(tt.original.GetObjectKind().GroupVersionKind().Kind)
-			patched, err := runtime.Decode(Codecs.UniversalDecoder(arkv1alpha1.GroupVersion), patchedJSON)
-			if err != nil {
-				t.Fatalf("failed to decode patched object: %v", err)
-			}
-
-			gvks, _, err := Scheme.ObjectKinds(patched)
-			if err != nil {
-				t.Fatalf("ObjectKinds() error = %v", err)
-			}
-
-			foundInternal := false
-			for _, gvk := range gvks {
-				if gvk.Group == internalGVK.Group && gvk.Version == runtime.APIVersionInternal {
-					foundInternal = true
-					break
-				}
-			}
-
-			if !foundInternal {
-				t.Errorf("internal version not recognized after patch, got GVKs: %v", gvks)
-			}
-
+			patched := applyStrategicMergePatch(t, tt.original, tt.patchBytes)
+			verifyInternalVersionRegistered(t, patched)
 			tt.validateFunc(t, patched)
 		})
 	}
