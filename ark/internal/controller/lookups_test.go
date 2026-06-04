@@ -105,10 +105,18 @@ func TestFindTeamsForAgent_ReturnsMatchingTeam(t *testing.T) {
 			},
 		},
 	}
+	otherTeam := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Members: []arkv1alpha1.TeamMember{
+				{Type: "agent", Name: "other-agent"},
+			},
+		},
+	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(s).
 		WithIndex(&arkv1alpha1.Team{}, ".spec.members.agent.name", teamAgentMemberIndexer).
-		WithObjects(team).
+		WithObjects(team, otherTeam).
 		Build()
 
 	r := &TeamReconciler{Client: fakeClient}
