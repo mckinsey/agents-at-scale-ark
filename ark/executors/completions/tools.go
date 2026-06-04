@@ -99,19 +99,14 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		method = "GET"
 	}
 
-	// Handle request body for POST/PUT/PATCH requests
-	var requestBody io.Reader
-	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
-		if err != nil {
-			log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
-			return ToolResult{
-				ID:    call.ID,
-				Name:  call.Function.Name,
-				Error: fmt.Sprintf("failed to resolve body template: %v", err),
-			}, fmt.Errorf("failed to resolve body template: %w", err)
-		}
-		requestBody = strings.NewReader(bodyContent)
+	requestBody, err := h.resolveRequestBody(ctx, httpSpec, method, tool.Namespace, arguments)
+	if err != nil {
+		log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to resolve body template: %v", err),
+		}, fmt.Errorf("failed to resolve body template: %w", err)
 	}
 
 	// Create HTTP request
@@ -185,6 +180,17 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		Name:    call.Function.Name,
 		Content: string(body),
 	}, nil
+}
+
+func (h *HTTPExecutor) resolveRequestBody(ctx context.Context, httpSpec *arkv1alpha1.HTTPSpec, method, namespace string, arguments map[string]any) (io.Reader, error) {
+	if httpSpec.Body == "" || (method != "POST" && method != "PUT" && method != "PATCH") {
+		return nil, nil
+	}
+	bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
+	if err != nil {
+		return nil, err
+	}
+	return strings.NewReader(bodyContent), nil
 }
 
 type ToolRegistry struct {
