@@ -338,75 +338,67 @@ func TestGenericStorage_Update_ForceCreate(t *testing.T) {
 	}
 }
 
-func TestGenericStorage_Update_PreservesResourceVersion(t *testing.T) {
+func TestGenericStorage_Update_ResourceVersionHandling(t *testing.T) {
 	t.Parallel()
-	gs, backend := newTestStorage()
-	ctx := contextWithNamespace(testNS())
 
-	agent := &arkv1alpha1.Agent{}
-	agent.Name = testAgentName
-	agent.Namespace = testNS()
-	agent.ResourceVersion = "123"
-	backend.objects["Agent/default/test-agent"] = agent
-
-	updatedAgent := &arkv1alpha1.Agent{}
-	updatedAgent.Name = testAgentName
-	updatedAgent.Namespace = testNS()
-	updatedAgent.ResourceVersion = ""
-
-	updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
-	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-	if created {
-		t.Error("expected created to be false")
-	}
-
-	storedObj := backend.objects["Agent/default/test-agent"]
-	storedAgent, ok := storedObj.(*arkv1alpha1.Agent)
-	if !ok {
-		t.Fatalf("expected *Agent, got %T", storedObj)
+	tests := []struct {
+		name                       string
+		existingResourceVersion    string
+		updatedResourceVersion     string
+		expectedResourceVersion    string
+		expectedResourceVersionMsg string
+	}{
+		{
+			name:                       "preserves resourceVersion when empty",
+			existingResourceVersion:    "123",
+			updatedResourceVersion:     "",
+			expectedResourceVersion:    "123",
+			expectedResourceVersionMsg: "expected resourceVersion to be preserved as '123', got '%s'",
+		},
+		{
+			name:                       "does not overwrite explicit resourceVersion",
+			existingResourceVersion:    "123",
+			updatedResourceVersion:     "456",
+			expectedResourceVersion:    "456",
+			expectedResourceVersionMsg: "expected resourceVersion to be '456' from patch, got '%s'",
+		},
 	}
 
-	if storedAgent.ResourceVersion != "123" {
-		t.Errorf("expected resourceVersion to be preserved as '123', got '%s'", storedAgent.ResourceVersion)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gs, backend := newTestStorage()
+			ctx := contextWithNamespace(testNS())
 
-func TestGenericStorage_Update_DoesNotOverwriteExplicitResourceVersion(t *testing.T) {
-	t.Parallel()
-	gs, backend := newTestStorage()
-	ctx := contextWithNamespace(testNS())
+			agent := &arkv1alpha1.Agent{}
+			agent.Name = testAgentName
+			agent.Namespace = testNS()
+			agent.ResourceVersion = tt.existingResourceVersion
+			backend.objects["Agent/default/test-agent"] = agent
 
-	agent := &arkv1alpha1.Agent{}
-	agent.Name = testAgentName
-	agent.Namespace = testNS()
-	agent.ResourceVersion = "123"
-	backend.objects["Agent/default/test-agent"] = agent
+			updatedAgent := &arkv1alpha1.Agent{}
+			updatedAgent.Name = testAgentName
+			updatedAgent.Namespace = testNS()
+			updatedAgent.ResourceVersion = tt.updatedResourceVersion
 
-	updatedAgent := &arkv1alpha1.Agent{}
-	updatedAgent.Name = testAgentName
-	updatedAgent.Namespace = testNS()
-	updatedAgent.ResourceVersion = "456"
+			updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
+			_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+			if err != nil {
+				t.Fatalf("Update() error = %v", err)
+			}
+			if created {
+				t.Error("expected created to be false")
+			}
 
-	updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
-	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-	if created {
-		t.Error("expected created to be false")
-	}
+			storedObj := backend.objects["Agent/default/test-agent"]
+			storedAgent, ok := storedObj.(*arkv1alpha1.Agent)
+			if !ok {
+				t.Fatalf("expected *Agent, got %T", storedObj)
+			}
 
-	storedObj := backend.objects["Agent/default/test-agent"]
-	storedAgent, ok := storedObj.(*arkv1alpha1.Agent)
-	if !ok {
-		t.Fatalf("expected *Agent, got %T", storedObj)
-	}
-
-	if storedAgent.ResourceVersion != "456" {
-		t.Errorf("expected resourceVersion to be '456' from patch, got '%s'", storedAgent.ResourceVersion)
+			if storedAgent.ResourceVersion != tt.expectedResourceVersion {
+				t.Errorf(tt.expectedResourceVersionMsg, storedAgent.ResourceVersion)
+			}
+		})
 	}
 }
 
