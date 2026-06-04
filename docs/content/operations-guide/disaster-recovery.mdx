@@ -1,16 +1,17 @@
 # Disaster Recovery
 
-Ark runs on Kubernetes and stores its state in three places: custom resources in etcd, Kubernetes Secrets, and optionally an external database for conversation memory. All runtime services (operator, API, dashboard, broker) are stateless and can be redeployed from their Helm charts without data loss.
+Ark runs on Kubernetes and stores its state in custom resources (backed by etcd), Kubernetes Secrets, and optionally external backends for conversation memory and broker persistence. All runtime services (operator, API, dashboard, broker) are stateless by default and can be redeployed from their Helm charts without data loss.
 
 This guide outlines what needs to be protected and the general approach to recovery.
 
 ## What to back up
 
-- **Ark custom resources** — All resources under the `ark.mckinsey.com` API group. These define your agents, teams, tools, models, and other platform configuration.
+- **Ark custom resources** — All resources under the `ark.mckinsey.com` API group. These define your agents, teams, tools, models, and other platform configuration. If you use a [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) instead of etcd, back up the database using your provider's tooling.
 - **Kubernetes Secrets** — API keys, model credentials, and OIDC client secrets referenced by Ark resources.
 - **RBAC bindings** — Any RoleBindings or ClusterRoleBindings that grant users access to Ark resources (relevant if you use [user impersonation](/developer-guide/authentication#user-impersonation)).
 - **Helm values** — The configuration used to deploy Ark and its dependencies. Store these in version control.
 - **Memory backend** — If you use an external database for conversation memory, back it up using your database provider's tooling. Ark does not manage the memory backend lifecycle.
+- **Broker persistence** — The broker stores messages, streaming chunks, traces, events, and sessions in memory by default. If you have enabled file-based persistence (`persistence.enabled: true` in the broker Helm values), the backing PVC should be included in your backup.
 
 ## Recovery approach
 
@@ -21,6 +22,8 @@ Install the Ark Helm chart with your stored values. This re-creates the CRDs, co
 ### 2. Restore custom resources
 
 Apply your backed-up Ark resources. Restore dependencies before dependents — standalone resources (models, tools, memory backends) first, then resources that reference them (agents), then resources that reference those (teams).
+
+If you use a PostgreSQL storage backend, restore the database before deploying the operator.
 
 ### 3. Restore Secrets and RBAC
 
@@ -37,18 +40,5 @@ If applicable, restore your external conversation memory database independently.
 ### 6. Verify
 
 Confirm the operator is reconciling resources, supporting services are healthy, and a test query executes successfully.
-
-## Partial failures
-
-- **Operator pod crash** — Kubernetes restarts it automatically. State lives in etcd, so no data is lost.
-- **Stateless services down** (API, dashboard, broker) — Redeploy from Helm.
-- **Single namespace lost** — Restore only that namespace's resources and Secrets. Other namespaces are unaffected.
-- **Memory backend lost** — Agents continue to function but lose conversation history. Restore the database independently.
-
-## Recommendations
-
-- **Automate backups** — Tools like [Velero](https://velero.io/) can schedule regular backups of Kubernetes resources and volumes. All Ark resources share the `ark.mckinsey.com` API group, making them easy to filter.
-- **Version-control your Helm values** — Ensures you can redeploy without guessing configuration.
-- **Test restores regularly** — Restore to a staging cluster periodically to verify backups are complete.
 
 For general Kubernetes backup and restore patterns, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/cluster-administration/).
