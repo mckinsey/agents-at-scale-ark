@@ -1,0 +1,108 @@
+import { Callout } from 'nextra/components'
+
+# Data Flow and Encryption
+
+Where sensitive data lands during a Query lifecycle and what protection each surface has by default.
+
+<Callout type="warning">
+Ark runs inside your Kubernetes cluster. Encryption at rest and many in-transit protections depend on your cluster and cloud configuration, not on Ark defaults. Review every row in the tables below against your deployment before requesting InfoSec sign-off.
+</Callout>
+
+## Query lifecycle data surfaces
+
+A single Query execution touches multiple storage and communication surfaces. The diagram below shows the path from submission to response, with numbered callouts for each surface described in the tables.
+
+```
+                    ┌────────────────────┐
+                    │ Client / Dashboard │
+                    └─────────┬──────────┘
+                              │ HTTPS
+                    ┌─────────▼──────────┐
+                    │      ark-api       │
+                    └─────────┬──────────┘
+                              │
+           ┌──────────────────┼──────────────────┐
+           │                  │                   │
+   ┌───────▼────────┐ ┌──────▼───────┐ ┌─────────▼────────┐
+   │   Query CR     │ │    Broker    │ │  OTel collector  │
+   │   etcd / PG    │ │   mem store  │ │                  │
+   └───────┬────────┘ └──────────────┘ └──────────────────┘
+           │
+   ┌───────▼─────────┐
+   │   Controller    │
+   └───────┬─────────┘
+           │ A2A HTTP
+   ┌───────▼─────────┐
+   │    Executor     │──── LLM Provider  ── HTTPS
+   │  (built-in or   │──── MCP Servers   ── HTTP(S)
+   │   external)     │──── Session files
+   └─────────────────┘
+```
+
+## Encryption at rest
+
+| Surface | What lands there | Encrypted by default? | How to enable |
+|---------|------------------|-----------------------|---------------|
+| **etcd** (default storage) | All CRs: Query inputs/outputs, Agent prompts, Model secret refs, Tool configs | No. etcd stores data unencrypted unless the cluster enables `EncryptionConfiguration`. | Configure kube-apiserver `--encryption-provider-config` with an `aesgcm` or `secretbox` provider. See [K8s docs](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/). |
+| **PostgreSQL** (optional storage) | Same as etcd — full `spec` and `status` JSONB columns in the `resources` table | No. | Enable Transparent Data Encryption (TDE) or use an encrypted volume for the PG data directory. |
+| **Kubernetes Secrets** | API keys, credentials referenced by Models and Tools | No — Secrets are base64-encoded, not encrypted, in etcd. | Same etcd encryption config as above. Consider an external secrets operator (Vault, AWS Secrets Manager, GCP Secret Manager). |
+| **Broker memory store** | Conversation history, streaming chunks, OTel spans, controller events | In-memory by default (ephemeral). If `persistence.enabled: true`, stored as plaintext JSON at `/data/`. | Use an encrypted PersistentVolume or mount an encrypted filesystem. |
+| **Executor session files** | Conversation state, tool outputs (Claude Agent SDK: `/data/sessions/<conversationId>/`) | No. Plaintext on pod filesystem. | Use an encrypted PersistentVolume. Restrict access via Pod Security Standards. |
+| **OTel collector** | Span attributes: session IDs, query/target names, dispatch addresses, error messages, token counts | Depends on your collector and its backend. | Configure your collector's exporter with encryption (e.g., encrypted Elasticsearch, encrypted S3). |
+| **Pod logs** | Query/target names, error messages, dispatch addresses. Input/output truncated to 48 chars at info level; verbose mode (`-v 1`) adds session details. | Depends on your log aggregator. | Ensure your log pipeline encrypts at rest. Review verbose logging before enabling in production. |
+
+## In-transit encryption
+
+| Hop | Protocol | TLS by default? | Notes |
+|-----|----------|-----------------|-------|
+| Client → ark-api | HTTPS | Depends on your Ingress / load balancer. | Configure TLS termination at the Ingress or use cert-manager. |
+| ark-api → kube-apiserver | HTTPS | Yes. Kubernetes API server requires TLS. | Managed by the cluster. |
+| Controller → executor (A2A) | HTTP | No. Uses Go `http.DefaultTransport`. | Deploy a service mesh (Istio, Linkerd) for automatic mTLS between pods, or configure the executor behind a TLS-terminating sidecar. |
+| Executor → LLM provider | HTTPS | **Yes.** Ark's validating webhook rejects non-HTTPS model base URLs. | Exception: `*.svc.cluster.local` addresses are allowed over HTTP for in-cluster mock services. |
+| Executor → MCP servers | HTTP(S) | No enforcement. Depends on the MCP server address scheme. | Use HTTPS addresses for MCP servers that handle sensitive data. No webhook validation exists for MCP URLs today. |
+| Controller / API → broker | HTTP | No. | Service mesh mTLS or a TLS-terminating sidecar. |
+| Controller → OTel collector | HTTP | No. Uses the URL in `OTEL_EXPORTER_OTLP_ENDPOINT`. | Set an `https://` endpoint URL. Per-namespace endpoint discovery is available via the `otel-environment-variables` Secret. |
+| Controller → PostgreSQL | TCP | No. `sslMode: disable` is the default. | Set `storage.postgresql.sslMode` to `require` or `verify-full` in Helm values. |
+| Metrics scrape | HTTPS | Yes. Controller metrics on port 8443 are TLS-protected via cert-manager. | ServiceMonitor uses `insecureSkipVerify: false` by default. |
+
+## Log sanitization
+
+Ark redacts sensitive data from logs in several components:
+
+- **ark-api**: `SensitiveDataFilter` redacts `access_token`, `refresh_token`, `client_secret`, `code_verifier`, and `authorization` values from MCP auth logs.
+- **ark-broker**: Pino logger auto-redacts `authorization`, `cookie`, `x-api-key`, `x-auth-token`, `x-csrf-token`, `set-cookie`, `proxy-authorization` headers and fields like `password`, `token`, `secret`, `apiKey`.
+- **Controller**: Query input/output is truncated to 48 characters in operation data. Full payloads are not logged at info level.
+
+<Callout type="info">
+Log redaction does **not** cover query inputs, agent prompts, or tool call payloads. If your workload processes PII or regulated data, configure your log aggregator to filter or mask these fields before long-term storage.
+</Callout>
+
+## Data retention and disposal
+
+Ark does not manage data lifecycle. Retention periods, automated purging, and secure disposal are deployment-level concerns configured through your Kubernetes cluster, storage layer, and external backends.
+
+| Surface | What Ark does | What you configure |
+|---------|---------------|--------------------|
+| **etcd / PostgreSQL** (Query CRs) | Query resources persist indefinitely. Completed Queries are not automatically deleted. | Set up a CronJob or operator policy to garbage-collect completed Query CRs after your retention window. For PostgreSQL, configure row-level retention or partition management. |
+| **Kubernetes Secrets** | Secrets persist until explicitly deleted. | Rotate secrets on a schedule. If using an external secrets operator, configure its TTL and rotation policies. |
+| **Broker memory store** | In-memory data is lost on pod restart. If persistence is enabled, JSON files grow until the configured limits (`maxMessages`, `maxChunks`, etc.) are reached. | Size the limits to your retention needs. For persistent storage, schedule cleanup of the data volume or rely on pod restarts to flush in-memory state. |
+| **Executor session files** | Session directories accumulate on the PVC. No built-in TTL or cleanup. | Schedule a CronJob to prune `/data/sessions/` directories older than your retention period. In scheduler mode, set `shutdownPolicy: Delete` and `sessionIdleTTL` to bound sandbox lifetime. |
+| **OTel traces** | Ark exports spans but does not control downstream storage. | Configure retention and deletion policies in your collector backend (e.g., Elasticsearch ILM, S3 lifecycle rules). |
+| **Pod logs** | Ark writes to stdout/stderr. Retention depends on the node and log aggregator. | Configure your log pipeline's retention and rotation policies. |
+
+<Callout type="warning">
+Ark does not perform secure erasure (zero-fill, cryptographic wipe) on any surface. If your compliance framework requires secure disposal, use encrypted volumes — deleting the encryption key is the standard approach for certified media sanitization on shared storage.
+</Callout>
+
+## Data loss prevention
+
+Ark does not inspect, filter, or classify data content at any point in the Query lifecycle. Prompts, tool inputs, agent outputs, and MCP payloads flow through the platform without content-level scanning.
+
+DLP controls are a deployment responsibility. Common integration points:
+
+- **Egress proxy** — Route LLM provider traffic through a DLP-aware proxy that inspects request/response bodies before they leave the cluster. The Model CRD `baseUrl` field can point to the proxy.
+- **LLM provider policies** — Most providers offer content filtering, usage policies, and data retention controls at the API level. Configure these in your provider account.
+- **Admission webhooks** — A Kubernetes validating webhook can inspect Query CRD `.spec.input` at creation time to block or flag content that matches DLP rules.
+- **MCP server layer** — MCP servers can implement input validation and output filtering before returning tool results to the executor.
+- **Log aggregator** — Configure field-level masking in your log pipeline to prevent PII from reaching long-term storage.
+

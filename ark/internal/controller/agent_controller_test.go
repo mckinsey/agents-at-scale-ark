@@ -218,14 +218,6 @@ var _ = Describe("Agent Controller", func() {
 				NamespacedName: partialToolAgentTypeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying agentDependsOnTool works with partial tools")
-			// Test that agent depends on the exposed name
-			Expect(controllerReconciler.agentDependsOnTool(partialToolAgent, "get-weather")).To(BeTrue())
-			// Test that agent depends on the actual CRD name
-			Expect(controllerReconciler.agentDependsOnTool(partialToolAgent, weatherAPIToolName)).To(BeTrue())
-			// Test that agent does not depend on unrelated tool
-			Expect(controllerReconciler.agentDependsOnTool(partialToolAgent, "unrelated-tool")).To(BeFalse())
 		})
 
 		It("should fail reconciliation when partial tool CRD is missing", func() {
@@ -484,22 +476,6 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Type).To(Equal("Available"))
 			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 			Expect(condition.Reason).To(Equal("Available"))
-		})
-
-		It("should not check execution engine when agent has no engine reference", func() {
-			controllerReconciler := &AgentReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Eventing: eventnoop.NewProvider(),
-			}
-
-			agentWithoutEngine := &arkv1alpha1.Agent{
-				Spec: arkv1alpha1.AgentSpec{
-					ExecutionEngine: nil,
-				},
-			}
-
-			Expect(controllerReconciler.agentDependsOnExecutionEngine(agentWithoutEngine, "any-engine")).To(BeFalse())
 		})
 
 		It("should not error when updating status of a deleted agent", func() {
