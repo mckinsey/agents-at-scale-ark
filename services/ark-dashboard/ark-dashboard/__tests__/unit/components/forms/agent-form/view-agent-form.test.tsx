@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ViewAgentForm } from '@/components/forms/agent-form/view-agent-form';
 import type { Agent } from '@/lib/services';
 
 const useAgentFormMock = vi.fn();
@@ -82,8 +83,6 @@ vi.mock('@/components/ui/form', () => ({
   FormMessage: () => null,
 }));
 
-import { ViewAgentForm } from '@/components/forms/agent-form/view-agent-form';
-
 function buildHook(overrides: Record<string, unknown> = {}) {
   return {
     form: {
@@ -140,7 +139,7 @@ describe('ViewAgentForm', () => {
     expect(screen.getByText('Description')).toBeInTheDocument();
     expect(screen.getByText('Model')).toBeInTheDocument();
     expect(screen.getByText('Tools')).toBeInTheDocument();
-    expect(screen.getByText('Agent Prompt')).toBeInTheDocument();
+    expect(screen.getByText('Prompt')).toBeInTheDocument();
     expect(screen.getByTestId('parameter-editor')).toBeInTheDocument();
     expect(screen.getByTestId('embedded-chat-panel')).toBeInTheDocument();
     expect(
@@ -154,13 +153,15 @@ describe('ViewAgentForm', () => {
     );
     render(<ViewAgentForm mode="view" agentName="a2a" />);
     expect(screen.getByTestId('skills-display-section')).toBeInTheDocument();
-    expect(screen.queryByText('Agent Prompt')).not.toBeInTheDocument();
+    expect(screen.queryByText('Prompt')).not.toBeInTheDocument();
   });
 
   it('disables Save Changes when hasChanges is false', () => {
     useAgentFormMock.mockReturnValue(buildHook({ hasChanges: false }));
     render(<ViewAgentForm mode="view" agentName="a1" />);
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /save changes/i }),
+    ).toBeDisabled();
   });
 
   it('toggles the YAML viewer when the YAML button is clicked', async () => {
