@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/apiserver/pkg/storage/names"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
@@ -26,8 +27,9 @@ import (
 )
 
 const (
-	columnTypeDate   = "date"
-	defaultNamespace = "default"
+	columnTypeDate          = "date"
+	defaultNamespace        = "default"
+	maxGenerateNameAttempts = 100
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -167,9 +169,33 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	}
 
 	// Handle generateName: if name is empty but generateName is set, generate a unique name
+	// Retry on name collisions up to maxGenerateNameAttempts
 	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
-		generatedName := accessor.GetGenerateName() + uuid.New().String()[:5]
-		accessor.SetName(generatedName)
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
+			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
+			accessor.SetName(generatedName)
+
+			sctx, cancel := storageContext(ctx)
+			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
+			cancel()
+
+			if err == nil {
+				metrics.RecordStorageOperation("create", s.config.Kind, "success")
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+			}
+
+			if !errors.Is(err, storage.ErrAlreadyExists) {
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				metrics.RecordStorageOperation("create", s.config.Kind, "error")
+				return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
+			}
+		}
+
+		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
+		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		return nil, apierrors.NewServerTimeout(gr, "create", 1)
 	}
 
 	sctx, cancel := storageContext(ctx)

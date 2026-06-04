@@ -5,8 +5,10 @@ package apiserver
 import (
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
@@ -125,6 +127,99 @@ func TestScheme_CanCreateInternalVersionObjects(t *testing.T) {
 			if obj == nil {
 				t.Error("expected non-nil object")
 			}
+		})
+	}
+}
+
+func TestScheme_StrategicMergePatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		original     runtime.Object
+		patchBytes   []byte
+		validateFunc func(t *testing.T, patched runtime.Object)
+	}{
+		{
+			name: "Agent patch with null resourceVersion",
+			original: &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-agent",
+					Namespace:       "default",
+					ResourceVersion: "123",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Description: "original",
+				},
+			},
+			patchBytes: []byte(`{"spec":{"description":"patched"},"metadata":{"resourceVersion":null}}`),
+			validateFunc: func(t *testing.T, patched runtime.Object) {
+				agent := patched.(*arkv1alpha1.Agent)
+				if agent.Spec.Description != "patched" {
+					t.Errorf("expected description 'patched', got '%s'", agent.Spec.Description)
+				}
+			},
+		},
+		{
+			name: "Model patch with null resourceVersion",
+			original: &arkv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-model",
+					Namespace:       "default",
+					ResourceVersion: "456",
+				},
+				Spec: arkv1alpha1.ModelSpec{
+					Provider: "openai",
+				},
+			},
+			patchBytes: []byte(`{"spec":{"provider":"anthropic"},"metadata":{"resourceVersion":null}}`),
+			validateFunc: func(t *testing.T, patched runtime.Object) {
+				model := patched.(*arkv1alpha1.Model)
+				if model.Spec.Provider != "anthropic" {
+					t.Errorf("expected provider 'anthropic', got '%s'", model.Spec.Provider)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
+
+			originalJSON, err := runtime.Encode(Codecs.LegacyCodec(arkv1alpha1.GroupVersion), tt.original)
+			if err != nil {
+				t.Fatalf("failed to encode original: %v", err)
+			}
+
+			patchedJSON, err := strategicpatch.StrategicMergePatch(originalJSON, tt.patchBytes, tt.original)
+			if err != nil {
+				t.Fatalf("StrategicMergePatch() error = %v", err)
+			}
+
+			internalGVK := internalGV.WithKind(tt.original.GetObjectKind().GroupVersionKind().Kind)
+			patched, err := runtime.Decode(Codecs.UniversalDecoder(arkv1alpha1.GroupVersion), patchedJSON)
+			if err != nil {
+				t.Fatalf("failed to decode patched object: %v", err)
+			}
+
+			gvks, _, err := Scheme.ObjectKinds(patched)
+			if err != nil {
+				t.Fatalf("ObjectKinds() error = %v", err)
+			}
+
+			foundInternal := false
+			for _, gvk := range gvks {
+				if gvk.Group == internalGVK.Group && gvk.Version == runtime.APIVersionInternal {
+					foundInternal = true
+					break
+				}
+			}
+
+			if !foundInternal {
+				t.Errorf("internal version not recognized after patch, got GVKs: %v", gvks)
+			}
+
+			tt.validateFunc(t, patched)
 		})
 	}
 }
