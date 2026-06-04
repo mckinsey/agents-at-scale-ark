@@ -65,6 +65,7 @@ updates:
       - "services/ark-api/ark-api"
       - "services/ark-mcp/ark-mcp"
       - "lib/ark-sdk"
+      - "lib/ark-sdk/gen_sdk/overlay/python"
       - "lib/executor-common"
     commit-message:
       prefix: 'chore(python): '
