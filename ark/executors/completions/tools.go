@@ -20,10 +20,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
+
+var toolHTTPClient = &http.Client{Transport: common.NewSharedTransport()}
 
 type ToolDefinition struct {
 	Name        string         `json:"name"`
@@ -134,9 +137,10 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		req.Header.Set(header.Name, value)
 	}
 
-	// Set timeout
+	// Set timeout — shallow-copy the shared client to override only Timeout.
 	timeout := h.getTimeout(httpSpec.Timeout)
-	httpClient := &http.Client{Timeout: timeout}
+	httpClient := *toolHTTPClient
+	httpClient.Timeout = timeout
 
 	// Make the request
 	log.Info("making HTTP request", "method", method, "url", parsedURL.String())
@@ -161,8 +165,8 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		}, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body — limit to 10 MB to prevent unbounded allocation.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
