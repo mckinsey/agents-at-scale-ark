@@ -490,6 +490,15 @@
       "contributions": [
         "doc"
       ]
+    },
+    {
+      "login": "vabarnabas",
+      "name": "Barnabas Varga",
+      "avatar_url": "https://avatars.githubusercontent.com/u/92641199?v=4",
+      "profile": "http://barnabasvarga.com",
+      "contributions": [
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,

@@ -523,6 +523,11 @@ Available ClusterRoles follow the pattern `{resource}-{viewer|editor|admin}-role
 
 See `samples/rbac-test-bindings.yaml` for a complete example covering all resource types with two groups.
 
+> **Custom roles**: The default ClusterRoles above are a starting point. You can combine them, create entirely
+> new roles with fine-grained permissions, or scope them per namespace to match your organization's needs.
+> See the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) for
+> details on creating custom Roles, ClusterRoles, and bindings.
+
 ### Migration path
 
 1. **Deploy with defaults** — `impersonation.enabled: false`. No behavioral change.
