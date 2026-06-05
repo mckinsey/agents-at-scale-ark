@@ -33,13 +33,6 @@ The Ark API service has a namespace-scoped Role granting access to Ark resources
 
 The dashboard and broker are stateless services with no Kubernetes API permissions beyond their own service account identity. They do not read or write Ark custom resources directly.
 
-### MCP service
-
-The MCP service has read-only access to Agents and Namespaces, plus create/manage access to Queries — the minimum required to expose Ark resources as MCP tools.
-
-### Deployer role
-
-An optional `ark-deployer` ClusterRole is provided for CI/CD systems. It grants create and update permissions for Ark resources, CRDs, RBAC, and cert-manager objects, but intentionally excludes delete permissions for most resource types to follow the principle of least privilege in deployment automation.
 
 ## Input validation and error handling
 
