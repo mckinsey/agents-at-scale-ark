@@ -92,8 +92,7 @@ jobs:
                      services/ark-mcp/ark-mcp \
                      lib/ark-sdk \
                      lib/ark-sdk/gen_sdk/overlay/python \
-                     templates/tool \
-                     tools/ark-cli/templates/tool; do
+                     templates/tool; do
             if [ ! -f "$dir/uv.lock" ]; then
               echo "Skipping $dir (no uv.lock)"
               continue
