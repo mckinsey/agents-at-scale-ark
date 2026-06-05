@@ -161,6 +161,33 @@ func TestConsumeA2AStreamEvents_IdleTimeout(t *testing.T) {
 	assert.Contains(t, err.Error(), "idle timeout")
 }
 
+func TestConsumeA2AStreamEvents_IdleTimeoutReset(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
+		Spec:       arkv1prealpha1.A2AServerSpec{Timeout: "150ms"},
+	}
+	events := make(chan protocol.StreamingMessageEvent)
+	stream := &mockEventStream{}
+
+	go func() {
+		for range 3 {
+			time.Sleep(50 * time.Millisecond)
+			events <- protocol.StreamingMessageEvent{
+				Result: &protocol.Message{
+					Role:  protocol.MessageRoleAgent,
+					Parts: []protocol.Part{protocol.NewTextPart("chunk")},
+				},
+			}
+		}
+		close(events)
+	}()
+
+	result, err := consumeA2AStreamEvents(context.Background(), nil, events, stream, "agent/test", "comp-1", "test", "default", "", a2aServer)
+	require.NoError(t, err)
+	assert.Equal(t, "chunkchunkchunk", result.A2AResponse.Content)
+	assert.Len(t, stream.chunks, 3)
+}
+
 func TestEffectiveIdleTimeout_Default(t *testing.T) {
 	assert.Equal(t, defaultA2AStreamIdleTimeout, effectiveIdleTimeout(nil))
 }

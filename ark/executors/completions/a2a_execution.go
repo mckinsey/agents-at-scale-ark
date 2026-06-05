@@ -194,7 +194,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-idleTimer.C:
-			return nil, fmt.Errorf("a2a streaming idle timeout: no events received for %s", idleTimeout)
+			return nil, fmt.Errorf("a2a streaming idle timeout: no events received for %s (agent=%s, namespace=%s)", idleTimeout, agentName, namespace)
 		case event, ok := <-events:
 			if !ok {
 				if !received {
