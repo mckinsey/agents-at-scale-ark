@@ -53,8 +53,11 @@ function sessionCallback({
   session,
   token,
 }: Parameters<SessionCallback>['0']): ReturnType<SessionCallback> {
-  if (session?.user && token?.id) {
-    session.user.id = String(token.id);
+  // NextAuth stores the subject on token.sub, not token.id
+  // Fall back to token.id for compatibility if it exists
+  const userId = token?.id ?? token?.sub;
+  if (session?.user && userId) {
+    session.user.id = String(userId);
   }
   return session;
 }

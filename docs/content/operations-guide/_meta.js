@@ -5,6 +5,7 @@ export default {
   'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
   monitoring: 'Monitoring',
+  'disaster-recovery': 'Disaster Recovery',
 
   '---integrations': { type: 'separator', title: 'Integrations' },
   'mcp-oauth-callback': 'MCP OAuth Callback',

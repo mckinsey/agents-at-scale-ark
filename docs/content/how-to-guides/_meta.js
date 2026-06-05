@@ -40,6 +40,10 @@ export default {
     title: 'Build and run locally',
     href: '/developer-guide/local-development'
   },
+  marketplace: {
+    title: 'Publish to the Marketplace',
+    href: '/developer-guide/marketplace'
+  },
   build: {
     title: 'Build system overview',
     href: '/developer-guide/build'
