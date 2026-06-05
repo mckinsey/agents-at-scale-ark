@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +88,28 @@ func setupModelTestClient(objects []client.Object) client.Client {
 	_ = corev1.AddToScheme(scheme)
 	_ = arkv1alpha1.AddToScheme(scheme)
 	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+}
+
+func TestLoadModelCRD_ConcurrentAccess(t *testing.T) {
+	name, ns := "concurrent-model", "default"
+	cacheKey := ns + "/" + name
+	modelCRDCache.Delete(cacheKey)
+	t.Cleanup(func() { modelCRDCache.Delete(cacheKey) })
+
+	model := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+	fakeClient := setupModelTestClient([]client.Object{model})
+
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got, err := loadModelCRD(context.Background(), fakeClient, name, ns)
+			require.NoError(t, err)
+			require.Equal(t, name, got.Name)
+		}()
+	}
+	wg.Wait()
 }
 
 func TestResolveModelHeaders_DirectValue(t *testing.T) {
