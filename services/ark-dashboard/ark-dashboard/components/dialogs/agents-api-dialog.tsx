@@ -63,7 +63,7 @@ export function AgentsAPIDialog({ open, onOpenChange }: AgentsAPIDialogProps) {
   const apiPath = '/api/v1/queries/';
   const externalBaseUrl =
     typeof window !== 'undefined' ? window.location.origin : '';
-  const internalBaseUrl = 'http://ark-api.<namespace>.svc.cluster.local';
+  const internalBaseUrl = 'http://ark-api.<namespace>.svc.cluster.local'; // NOSONAR - in-cluster service DNS; display-only example, never fetched; TLS terminates at ingress
   const fullEndpoint = isInternalEndpoint
     ? `${internalBaseUrl}${apiPath}`
     : `${externalBaseUrl}${apiPath}`;
