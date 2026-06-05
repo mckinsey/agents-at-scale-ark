@@ -283,10 +283,13 @@ spec:
 EOF
 
 kubectl get query team-q1 -w
-kubectl get query team-q1 -o jsonpath='{.status.responses[*].content}'
+kubectl get query team-q1 -o jsonpath='{.status.response.content}'   # final assistant message
+kubectl get query team-q1 -o jsonpath='{.status.response.raw}'       # full conversation (JSON array)
 ```
 
-In the dashboard, opening a team also opens an embedded chat panel on the right — type into it to query the team interactively. The chat panel has a **Stop** button to cancel a running conversation.
+In the dashboard, opening a team also opens an embedded chat panel on the right — type into it to query the team interactively. While a turn is in flight the **Send** button becomes a **Stop** button that cancels the conversation. The panel also surfaces selector decisions inline (`<selector-agent> chose <speaker>`) and a `Maximum turns reached (N)` badge when `maxTurns` is hit.
+
+The team form's Strategy section also shows live warnings about configuration choices that may cause runtime issues — for example, "Neither the agents nor the selector have access to the terminate tool, which may prevent the conversation from terminating gracefully" when nothing on the team can call `terminate`.
 
 ## Modify a team
 
@@ -334,9 +337,21 @@ The `Available` condition flips to `False` when the team is misconfigured — `k
 
 ## Team as a tool
 
-A Team can be wired into an agent the same way an MCP server tool would be — the agent sees the team as a callable tool with the team's `description` as the tool description:
+A Team can be wired into an agent via the `Tool` CRD — create a Tool of `type: team` pointing at the team, then reference that Tool from the agent's `spec.tools`:
 
 ```yaml
+# 1. The bridge: a Tool of type team that references the team.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: consulting-team           # the Tool's name — this is what the agent references
+spec:
+  type: team
+  description: AI consulting team — research, strategy, and technical review
+  team:
+    name: consulting-team         # the Team to delegate to (same namespace)
+---
+# 2. The agent references the Tool by name (not the Team directly).
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
@@ -346,10 +361,10 @@ spec:
     You are an orchestrator. Delegate research tasks to the consulting-team tool.
   tools:
     - type: team
-      name: consulting-team
+      name: consulting-team       # resolves to the Tool above, which routes to the Team
 ```
 
-When the agent calls the tool, the team executes a normal run and returns its final message back to the agent.
+When the agent calls the tool, the team executes a normal run and returns its final message back to the agent. The Tool's `description` is what the LLM sees when deciding whether to call the team — keep it task-oriented.
 
 ## Features only available in YAML
 
@@ -387,6 +402,6 @@ Most common cause is `Agent member 'X' is not available` — the team's Availabl
 
 **Selector team terminates immediately with no response.** The selector agent returned text instead of calling the `select-next-speaker` tool. Either reset the prompt (the dashboard has a button) or make sure your custom prompt instructs the agent to use the tool. The mutating webhook also stamps an `ark.mckinsey.com/migration-warning-selector-prompt` annotation when your custom prompt doesn't reference the tool — check for that on the team.
 
-**`TeamMaxTurnsReached` event but the work isn't done.** Increase `maxTurns`, or give a member the `terminate` built-in tool so the team can exit cleanly earlier.
+**Conversation hit `maxTurns` but the work isn't done.** The team appends a system message `Team conversation reached maximum turns limit (N)` to the conversation, the query still completes with `phase: done`, and the dashboard chat panel shows a `Maximum turns reached (N)` badge. To detect this case in YAML/kubectl flows, grep `.status.response.raw` for `maximum turns limit`. To fix: increase `maxTurns`, or give a member (or the selector) the `terminate` built-in tool so the team can exit cleanly earlier.
 
 **Ready for the next step?** Move on to [Queries](/user-guide/queries) for parameter passing, streaming, and session management.
