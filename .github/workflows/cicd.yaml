@@ -75,6 +75,29 @@ jobs:
           mkdir -p ark/internal/apiserver/crds
           cp ark/config/crd/bases/*.yaml ark/internal/apiserver/crds/
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Export uv lockfiles to requirements.txt for Xray
+        shell: bash
+        run: |
+          # jf audit only reads requirements.txt for Python; without this it
+          # resolves uv projects fresh from PyPI and misses the locked versions.
+          for dir in services/ark-api/ark-api \
+                     services/ark-mcp/ark-mcp \
+                     lib/ark-sdk \
+                     lib/ark-sdk/gen_sdk/overlay/python \
+                     lib/executor-common \
+                     templates/tool \
+                     tools/ark-cli/templates/tool; do
+            if [ -f "$dir/uv.lock" ]; then
+              echo "Exporting $dir"
+              (cd "$dir" && uv export --format requirements-txt --no-hashes --no-dev > requirements.txt)
+            else
+              echo "Skipping $dir (no uv.lock)"
+            fi
+          done
+
       - name: Run JFrog Xray scan
         id: xray-scan
         uses: ./.github/actions/jfrog-xray-scan
