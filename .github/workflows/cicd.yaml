@@ -68,7 +68,13 @@ jobs:
       SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
       - uses: actions/checkout@v6
-      
+
+      - name: Materialize embedded CRDs for Go scan
+        shell: bash
+        run: |
+          mkdir -p ark/internal/apiserver/crds
+          cp ark/config/crd/bases/*.yaml ark/internal/apiserver/crds/
+
       - name: Run JFrog Xray scan
         id: xray-scan
         uses: ./.github/actions/jfrog-xray-scan
