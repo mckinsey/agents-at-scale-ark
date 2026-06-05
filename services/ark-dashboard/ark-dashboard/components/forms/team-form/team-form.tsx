@@ -202,7 +202,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             onSubmit={form.handleSubmit(onSubmit)}
             className="flex min-h-0 flex-1 flex-col">
             <ScrollArea type="scroll" className="h-0 min-h-0 flex-1">
-              <div className="flex w-full max-w-[720px] flex-col gap-6 pb-6">
+              <div className="flex w-full max-w-[576px] flex-col gap-6 pb-6 pl-px pr-2">
                 {formSections}
               </div>
             </ScrollArea>

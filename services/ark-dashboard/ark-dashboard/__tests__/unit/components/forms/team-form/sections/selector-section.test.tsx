@@ -83,11 +83,6 @@ describe('SelectorSection', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('should render selector configuration for selector strategy', () => {
-    render(<Wrapper />);
-    expect(screen.getByText('Selector Configuration')).toBeInTheDocument();
-  });
-
   it('should render selector agent dropdown', () => {
     render(<Wrapper />);
     expect(screen.getByText('Selector Agent')).toBeInTheDocument();
@@ -249,7 +244,7 @@ describe('SelectorSection', () => {
       );
 
       expect(screen.getByRole('combobox')).toHaveClass(
-        'border-stroke-status-error',
+        'border-b-stroke-status-error',
       );
     });
 
@@ -261,7 +256,7 @@ describe('SelectorSection', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox')).not.toHaveClass('border-stroke-status-error');
+      expect(screen.getByRole('combobox')).not.toHaveClass('border-b-stroke-status-error');
     });
 
     it('should show unavailable agent with (Unavailable) label in the dropdown', async () => {

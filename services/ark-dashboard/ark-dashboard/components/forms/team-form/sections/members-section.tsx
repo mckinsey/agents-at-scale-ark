@@ -1,24 +1,30 @@
-import { useCallback } from 'react';
+'use client';
 
-import { Group, Trash, Warning } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { useCallback, useState } from 'react';
+
+import { ChevronDown, Warning } from '@/components/icons';
+import { NumericBadge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  FieldDescription,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
 import { IconShell } from '@/components/ui/icon-shell';
-import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tag } from '@/components/ui/tag';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { Agent, TeamMember } from '@/lib/services';
+import { cn } from '@/lib/utils';
 
 interface MembersSectionProps {
   agents: Agent[];
@@ -29,34 +35,7 @@ interface MembersSectionProps {
   disabled?: boolean;
 }
 
-function MemberRow({
-  agent,
-  isSelected,
-  onToggle,
-}: {
-  agent: Agent;
-  isSelected: boolean;
-  onToggle: (agent: Agent) => void;
-}) {
-  return (
-    <div className="hover:bg-stateslayer-overlay-hover flex items-start space-x-2 p-2">
-      <Checkbox
-        id={`agent-${agent.id}`}
-        checked={isSelected}
-        onCheckedChange={() => onToggle(agent)}
-        className="mt-1"
-      />
-      <Label
-        htmlFor={`agent-${agent.id}`}
-        className="flex-1 cursor-pointer text-sm font-normal">
-        <div className="font-medium">{agent.name}</div>
-        {agent.description && (
-          <div className="text-fg-tertiary text-xs">{agent.description}</div>
-        )}
-      </Label>
-    </div>
-  );
-}
+const MAX_VISIBLE_TAGS = 4;
 
 export function MembersSection({
   agents,
@@ -64,14 +43,14 @@ export function MembersSection({
   unavailableMembers,
   onMembersChange,
   onDeleteUnavailable,
-  disabled: _disabled,
+  disabled = false,
 }: Readonly<MembersSectionProps>) {
-  const orderedAgents = [
-    ...selectedMembers
-      .map(m => agents.find(a => a.name === m.name))
-      .filter((a): a is Agent => a !== undefined),
-    ...agents.filter(a => !selectedMembers.some(m => m.name === a.name)),
-  ];
+  const [open, setOpen] = useState(false);
+
+  const isUnavailable = useCallback(
+    (name: string) => unavailableMembers.some(u => u.name === name),
+    [unavailableMembers],
+  );
 
   const toggleMember = useCallback(
     (agent: Agent) => {
@@ -89,111 +68,148 @@ export function MembersSection({
   );
 
   const removeMember = useCallback(
-    (name: string) => {
-      onMembersChange(selectedMembers.filter(m => m.name !== name));
+    (member: TeamMember) => {
+      if (isUnavailable(member.name)) {
+        onDeleteUnavailable(member);
+      } else {
+        onMembersChange(selectedMembers.filter(m => m.name !== member.name));
+      }
     },
-    [selectedMembers, onMembersChange],
+    [isUnavailable, onDeleteUnavailable, onMembersChange, selectedMembers],
   );
 
-  const selectedTags = selectedMembers.filter(
-    m => !unavailableMembers.some(u => u.name === m.name),
-  );
+  const visibleMembers = selectedMembers.slice(0, MAX_VISIBLE_TAGS);
+  const overflowCount = selectedMembers.length - visibleMembers.length;
+  const triggerDisabled = disabled;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <IconShell size="sm" variant="secondary">
-          <Group />
-        </IconShell>
-        <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
-          Team Members
-        </h3>
-      </div>
-
-      <div className="space-y-2">
-        {selectedTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {selectedTags.map(member => (
-              <Tag
-                key={member.name}
-                size="xs"
-                variant="primary"
-                onRemove={() => removeMember(member.name)}>
-                {member.name}
-              </Tag>
-            ))}
+    <FieldSet className="gap-2">
+      <FieldTitle>Team Members</FieldTitle>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <div
+            role="combobox"
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            aria-disabled={triggerDisabled || undefined}
+            tabIndex={triggerDisabled ? -1 : 0}
+            onKeyDown={e => {
+              if ((e.key === 'Enter' || e.key === ' ') && !triggerDisabled) {
+                e.preventDefault();
+                setOpen(o => !o);
+              }
+            }}
+            className={cn(
+              'flex min-h-9 w-full cursor-pointer items-center justify-between gap-2 border-0 border-b border-white/[0.24] bg-transparent px-0 py-1 text-left transition-colors',
+              'focus-visible:border-b-stroke-status-focus data-[state=open]:border-b-stroke-status-focus hover:border-b-white/40 focus-visible:outline-none',
+              'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+            )}>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              {selectedMembers.length === 0 ? (
+                <span className="text-fg-tertiary text-sm leading-5 tracking-[-0.028px]">
+                  Select members
+                </span>
+              ) : (
+                <>
+                  {visibleMembers.map(member => {
+                    const unavailable = isUnavailable(member.name);
+                    return (
+                      <Tag
+                        key={member.name}
+                        size="xs"
+                        variant={unavailable ? 'outline' : 'primary'}
+                        onPointerDown={e => e.stopPropagation()}
+                        onRemove={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          removeMember(member);
+                        }}>
+                        {unavailable && (
+                          <IconShell
+                            size="sm"
+                            className="text-status-warning opacity-100">
+                            <Warning />
+                          </IconShell>
+                        )}
+                        {member.name}
+                      </Tag>
+                    );
+                  })}
+                  {overflowCount > 0 && (
+                    <NumericBadge size="sm" variant="primary">
+                      {overflowCount}
+                    </NumericBadge>
+                  )}
+                </>
+              )}
+            </div>
+            <ChevronDown
+              className={cn(
+                'text-fg-secondary size-4 shrink-0 transition-transform',
+                open && 'rotate-180',
+              )}
+            />
           </div>
-        )}
-        <ScrollArea className="border-stroke-tertiary border [&_[data-slot=scroll-area-viewport]]:max-h-48">
-          <div className="space-y-2 p-2">
-            {unavailableMembers.length > 0 && (
-              <Collapsible defaultOpen className="group/collapsible">
-                <div className="p-2">
-                  <CollapsibleTrigger className="w-full">
-                    <div className="flex w-full flex-row items-center justify-between">
-                      <Label>Unavailable Members</Label>
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="flex flex-col gap-y-2 pt-2">
-                      {unavailableMembers.map(member => (
-                        <div
-                          key={member.name}
-                          className="flex flex-row justify-between">
-                          <div className="flex w-fit items-start space-x-2">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger
-                                  className="text-left"
-                                  tabIndex={-1}>
-                                  <span className="text-status-error mt-1 block">
-                                    <IconShell size="sm" variant="primary">
-                                      <Warning />
-                                    </IconShell>
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>
-                                    This member is unavailable in the system
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <Label className="flex-1 cursor-pointer text-sm font-normal">
-                              <div className="font-medium">{member.name}</div>
-                            </Label>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => onDeleteUnavailable(member)}
-                            aria-label="Delete member">
-                            <IconShell size="sm" variant="secondary">
-                              <Trash />
-                            </IconShell>
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
-            )}
-            {orderedAgents.map(agent => (
-              <MemberRow
-                key={agent.name}
-                agent={agent}
-                isSelected={selectedMembers.some(m => m.name === agent.name)}
-                onToggle={toggleMember}
-              />
-            ))}
-          </div>
-        </ScrollArea>
-        <p className="text-fg-tertiary text-xs">
-          {selectedMembers.length} member
-          {selectedMembers.length !== 1 ? 's' : ''} selected
-        </p>
-      </div>
-    </div>
+        </PopoverTrigger>
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          avoidCollisions={false}
+          collisionPadding={8}
+          role="listbox"
+          aria-multiselectable="true"
+          className="bg-fill-onsurface-ui-2 shadow-elevation-2 w-[var(--radix-popover-trigger-width)] rounded-none border-0 p-1">
+          {agents.length === 0 ? (
+            <p className="text-fg-secondary px-3 py-2 text-sm">
+              No agents available in this namespace.
+            </p>
+          ) : (
+            <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
+              <ul className="flex flex-col">
+                {agents.map(agent => {
+                  const checked = selectedMembers.some(
+                    m => m.name === agent.name,
+                  );
+                  const description = agent.description?.trim();
+                  return (
+                    <li key={agent.name} role="option" aria-selected={checked}>
+                      <label className="hover:bg-stateslayer-overlay-hover flex h-9 cursor-pointer items-center gap-2 px-1">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleMember(agent)}
+                          disabled={disabled}
+                          aria-label={agent.name}
+                        />
+                        {description ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-fg-primary cursor-pointer text-sm leading-5 tracking-[-0.028px]">
+                                {agent.name}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="start">
+                              {description}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
+                            {agent.name}
+                          </span>
+                        )}
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </ScrollArea>
+          )}
+        </PopoverContent>
+      </Popover>
+      <FieldDescription>
+        {selectedMembers.length} member
+        {selectedMembers.length !== 1 ? 's' : ''} selected
+      </FieldDescription>
+    </FieldSet>
   );
 }

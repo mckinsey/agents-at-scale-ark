@@ -1,10 +1,12 @@
 import type { UseFormReturn } from 'react-hook-form';
 
-import { AccountTree, Add, ArrowForward, Trash, Warning } from '@/components/icons';
+import { Add, ArrowForward, Trash, Warning } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { FieldTitle } from '@/components/ui/field';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
@@ -69,14 +71,7 @@ export function GraphSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <IconShell size="sm" variant="secondary">
-            <AccountTree />
-          </IconShell>
-          <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
-            Graph Edges
-          </h3>
-        </div>
+        <FieldTitle>Graph Edges</FieldTitle>
         <Button
           type="button"
           variant="outline"
@@ -132,8 +127,9 @@ export function GraphSection({
                     disabled={disabled}>
                     <SelectTrigger
                       className={cn(
+                        GHOST_TRIGGER,
                         'flex-1',
-                        isFromUnavailable && 'border-stroke-status-error',
+                        isFromUnavailable && 'border-b-stroke-status-error',
                       )}>
                       <SelectValue placeholder="From" />
                     </SelectTrigger>
@@ -165,8 +161,9 @@ export function GraphSection({
                     disabled={disabled}>
                     <SelectTrigger
                       className={cn(
+                        GHOST_TRIGGER,
                         'flex-1',
-                        isToUnavailable && 'border-stroke-status-error',
+                        isToUnavailable && 'border-b-stroke-status-error',
                       )}>
                       <SelectValue placeholder="To" />
                     </SelectTrigger>

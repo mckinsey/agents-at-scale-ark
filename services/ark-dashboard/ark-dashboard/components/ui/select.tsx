@@ -217,9 +217,9 @@ function SelectItem({
 
         'text-fg-secondary',
 
-        'data-highlighted:bg-stateslayer-overlay-hover data-highlighted:text-fg-primary cursor-pointer',
+        'not-data-[selected]:data-highlighted:bg-stateslayer-overlay-hover not-data-[selected]:data-highlighted:text-fg-primary cursor-pointer',
         'active:bg-stateslayer-overlay-pressed',
-        'data-[selected]:text-fg-primary data-[selected]:font-medium',
+        'data-[selected]:bg-stateslayer-overlay-pressed data-[selected]:text-fg-primary data-[selected]:font-medium',
 
         'data-disabled:text-fg-disabled data-disabled:cursor-not-allowed',
         className,
