@@ -92,7 +92,6 @@ jobs:
                      services/ark-mcp/ark-mcp \
                      lib/ark-sdk \
                      lib/ark-sdk/gen_sdk/overlay/python \
-                     lib/executor-common \
                      templates/tool \
                      tools/ark-cli/templates/tool; do
             if [ ! -f "$dir/uv.lock" ]; then
