@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -28,12 +29,6 @@ type A2ATaskReconciler struct {
 	Eventing eventing.Provider
 }
 
-// pollFailureTracker tracks consecutive failures for exponential backoff
-type pollFailureTracker struct {
-	consecutiveFailures int
-	lastFailureTime     time.Time
-}
-
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2atasks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2atasks/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2atasks/status,verbs=get;update;patch
@@ -49,7 +44,34 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// TTL cleanup: delete task if it has exceeded its time-to-live since creation
+	if done, err := r.handleTTL(ctx, &a2aTask); done {
+		return ctrl.Result{}, err
+	}
+
+	if a2aTask.Status.Phase == "" {
+		a2aTask.Status.Phase = arka2a.PhasePending
+	}
+
+	if len(a2aTask.Status.Conditions) == 0 {
+		r.setConditionCompleted(&a2aTask, metav1.ConditionFalse, "TaskNotStarted", "Task has not been started yet")
+		return ctrl.Result{}, r.Status().Update(ctx, &a2aTask)
+	}
+
+	if arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
+		return ctrl.Result{}, nil
+	}
+
+	if done, err := r.handleTimeout(ctx, &a2aTask); done {
+		return ctrl.Result{}, err
+	}
+
+	return r.pollTaskStatus(ctx, &a2aTask)
+}
+
+// handleTTL deletes the task once it has exceeded its time-to-live since creation.
+func (r *A2ATaskReconciler) handleTTL(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	log := logf.FromContext(ctx)
+
 	ttl := a2aTask.Spec.TTL
 	if ttl == nil {
 		// Default TTL to 720h (30 days) to prevent orphaned tasks
@@ -57,32 +79,22 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ttl = &defaultTTL
 	}
 	expiry := a2aTask.CreationTimestamp.Add(ttl.Duration)
-	if time.Now().After(expiry) {
-		log.Info("deleting A2ATask after TTL expiry", "ttl", ttl.Duration, "expiry", expiry)
-		if err := r.Delete(ctx, &a2aTask); err != nil {
-			log.Error(err, "unable to delete A2ATask after TTL expiry")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+	if !time.Now().After(expiry) {
+		return false, nil
 	}
 
-	// Initialize phase if not set
-	if a2aTask.Status.Phase == "" {
-		a2aTask.Status.Phase = arka2a.PhasePending
+	log.Info("deleting A2ATask after TTL expiry", "ttl", ttl.Duration, "expiry", expiry)
+	if err := r.Delete(ctx, a2aTask); err != nil {
+		log.Error(err, "unable to delete A2ATask after TTL expiry")
+		return true, err
 	}
+	return true, nil
+}
 
-	// Initialize Completed condition if not set
-	if len(a2aTask.Status.Conditions) == 0 {
-		r.setConditionCompleted(&a2aTask, metav1.ConditionFalse, "TaskNotStarted", "Task has not been started yet")
-		return ctrl.Result{}, r.Status().Update(ctx, &a2aTask)
-	}
+// handleTimeout fails the task once it has exceeded its timeout since creation.
+func (r *A2ATaskReconciler) handleTimeout(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	log := logf.FromContext(ctx)
 
-	// Handle terminal states
-	if arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
-		return ctrl.Result{}, nil
-	}
-
-	// Check timeout: fail task if it has exceeded the timeout since creation
 	timeout := a2aTask.Spec.Timeout
 	if timeout == nil {
 		// Default timeout to 12h
@@ -90,94 +102,98 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		timeout = &defaultTimeout
 	}
 	deadline := a2aTask.CreationTimestamp.Add(timeout.Duration)
-	if time.Now().After(deadline) {
-		log.Info("A2ATask exceeded timeout, marking as failed", "timeout", timeout.Duration, "deadline", deadline)
-		a2aTask.Status.Phase = arka2a.PhaseFailed
-		a2aTask.Status.Error = fmt.Sprintf("Task polling timeout after %v", timeout.Duration)
-		r.setConditionCompleted(&a2aTask, metav1.ConditionTrue, "TaskTimeout", fmt.Sprintf("Task did not reach terminal state within %v", timeout.Duration))
-		now := metav1.NewTime(time.Now())
-		a2aTask.Status.CompletionTime = &now
-		if err := r.Status().Update(ctx, &a2aTask); err != nil {
-			log.Error(err, "unable to update A2ATask status after timeout")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+	if !time.Now().After(deadline) {
+		return false, nil
 	}
 
-	// Capture old status for comparison
+	log.Info("A2ATask exceeded timeout, marking as failed", "timeout", timeout.Duration, "deadline", deadline)
+	a2aTask.Status.Phase = arka2a.PhaseFailed
+	a2aTask.Status.Error = fmt.Sprintf("Task polling timeout after %v", timeout.Duration)
+	r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskTimeout", fmt.Sprintf("Task did not reach terminal state within %v", timeout.Duration))
+	now := metav1.NewTime(time.Now())
+	a2aTask.Status.CompletionTime = &now
+	if err := r.Status().Update(ctx, a2aTask); err != nil {
+		log.Error(err, "unable to update A2ATask status after timeout")
+		return true, err
+	}
+	return true, nil
+}
+
+// pollTaskStatus fetches the latest task status, applies backoff on failure, and requeues non-terminal tasks.
+func (r *A2ATaskReconciler) pollTaskStatus(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
 	oldPhase := a2aTask.Status.Phase
 	oldProtocolState := a2aTask.Status.ProtocolState
 	oldArtifactsLen := len(a2aTask.Status.Artifacts)
 	oldHistoryLen := len(a2aTask.Status.History)
 
-	// Track poll failures for exponential backoff
-	failureCount := r.getFailureCount(&a2aTask)
+	failureCount := r.getFailureCount(a2aTask)
 
-	// Fetch task status from A2A server for all non-terminal tasks
-	if err := r.fetchA2ATaskStatus(ctx, &a2aTask); err != nil {
-		log.Error(err, "failed to fetch A2A task status", "taskId", a2aTask.Spec.TaskID, "failureCount", failureCount+1)
-		r.Eventing.A2aRecorder().TaskPollingFailed(ctx, &a2aTask, fmt.Sprintf("Failed to fetch task status: %v", err))
-
-		// Increment failure count
-		failureCount++
-		r.recordFailure(&a2aTask, failureCount)
-
-		// Persist the failure count annotation
-		if err := r.Update(ctx, &a2aTask); err != nil {
-			log.Error(err, "unable to update A2ATask annotations for failure tracking")
-		}
-
-		// Calculate exponential backoff (5s * 2^failures, capped at 5 minutes)
-		basePollInterval := time.Second * 5
-		if a2aTask.Spec.PollInterval != nil {
-			basePollInterval = a2aTask.Spec.PollInterval.Duration
-		}
-		backoffMultiplier := 1 << failureCount // 2^failures
-		if backoffMultiplier > 60 {            // cap at 60x base interval
-			backoffMultiplier = 60
-		}
-		requeueAfter := basePollInterval * time.Duration(backoffMultiplier)
-		if requeueAfter > 5*time.Minute {
-			requeueAfter = 5 * time.Minute
-		}
-
-		log.Info("applying exponential backoff after poll failure", "failureCount", failureCount, "requeueAfter", requeueAfter)
-		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	if err := r.fetchA2ATaskStatus(ctx, a2aTask); err != nil {
+		return r.handlePollFailure(ctx, a2aTask, failureCount, err)
 	}
 
-	// Reset failure count on success
 	if failureCount > 0 {
 		log.Info("poll succeeded, resetting failure count", "previousFailures", failureCount)
-		r.recordFailure(&a2aTask, 0)
-		// Persist the reset
-		if err := r.Update(ctx, &a2aTask); err != nil {
+		r.recordFailure(a2aTask, 0)
+		if err := r.Update(ctx, a2aTask); err != nil {
 			log.Error(err, "unable to update A2ATask annotations after resetting failure count")
 		}
 	}
 
-	// Only update status if it actually changed
 	statusChanged := oldPhase != a2aTask.Status.Phase ||
 		oldProtocolState != a2aTask.Status.ProtocolState ||
 		oldArtifactsLen != len(a2aTask.Status.Artifacts) ||
 		oldHistoryLen != len(a2aTask.Status.History)
 
 	if statusChanged {
-		if err := r.Status().Update(ctx, &a2aTask); err != nil {
+		if err := r.Status().Update(ctx, a2aTask); err != nil {
 			log.Error(err, "unable to update A2ATask status")
 			return ctrl.Result{}, err
 		}
 	}
 
-	// Requeue for non-terminal tasks using the configured poll interval
 	if !arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
-		pollInterval := time.Second * 5 // default fallback
-		if a2aTask.Spec.PollInterval != nil {
-			pollInterval = a2aTask.Spec.PollInterval.Duration
-		}
-		return ctrl.Result{RequeueAfter: pollInterval}, nil
+		return ctrl.Result{RequeueAfter: r.pollInterval(a2aTask)}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// handlePollFailure records the failure and requeues with exponential backoff.
+func (r *A2ATaskReconciler) handlePollFailure(ctx context.Context, a2aTask *arkv1alpha1.A2ATask, failureCount int, pollErr error) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	log.Error(pollErr, "failed to fetch A2A task status", "taskId", a2aTask.Spec.TaskID, "failureCount", failureCount+1)
+	r.Eventing.A2aRecorder().TaskPollingFailed(ctx, a2aTask, fmt.Sprintf("Failed to fetch task status: %v", pollErr))
+
+	failureCount++
+	r.recordFailure(a2aTask, failureCount)
+	if err := r.Update(ctx, a2aTask); err != nil {
+		log.Error(err, "unable to update A2ATask annotations for failure tracking")
+	}
+
+	// Exponential backoff (base * 2^failures, capped at 60x base and 5 minutes)
+	backoffMultiplier := 1 << failureCount
+	if backoffMultiplier > 60 {
+		backoffMultiplier = 60
+	}
+	requeueAfter := r.pollInterval(a2aTask) * time.Duration(backoffMultiplier)
+	if requeueAfter > 5*time.Minute {
+		requeueAfter = 5 * time.Minute
+	}
+
+	log.Info("applying exponential backoff after poll failure", "failureCount", failureCount, "requeueAfter", requeueAfter)
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// pollInterval returns the configured poll interval, defaulting to 5s.
+func (r *A2ATaskReconciler) pollInterval(a2aTask *arkv1alpha1.A2ATask) time.Duration {
+	if a2aTask.Spec.PollInterval != nil {
+		return a2aTask.Spec.PollInterval.Duration
+	}
+	return time.Second * 5
 }
 
 func (r *A2ATaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -282,8 +298,7 @@ func (r *A2ATaskReconciler) getFailureCount(a2aTask *arkv1alpha1.A2ATask) int {
 	if !ok {
 		return 0
 	}
-	count := 0
-	fmt.Sscanf(countStr, "%d", &count)
+	count, _ := strconv.Atoi(countStr)
 	return count
 }
 
