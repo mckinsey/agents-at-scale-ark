@@ -158,7 +158,16 @@ type a2aStreamContext struct {
 	queryName    string
 }
 
-var a2aStreamIdleTimeout = 2 * time.Minute
+var defaultA2AStreamIdleTimeout = 8 * time.Minute
+
+func effectiveIdleTimeout(a2aServer *arkv1prealpha1.A2AServer) time.Duration {
+	if a2aServer != nil && a2aServer.Spec.Timeout != "" {
+		if d, err := time.ParseDuration(a2aServer.Spec.Timeout); err == nil && d < defaultA2AStreamIdleTimeout {
+			return d
+		}
+	}
+	return defaultA2AStreamIdleTimeout
+}
 
 func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
 	var content strings.Builder
@@ -176,7 +185,8 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 		queryName:    queryName,
 	}
 
-	idleTimer := time.NewTimer(a2aStreamIdleTimeout)
+	idleTimeout := effectiveIdleTimeout(a2aServer)
+	idleTimer := time.NewTimer(idleTimeout)
 	defer idleTimer.Stop()
 
 	for {
@@ -184,7 +194,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-idleTimer.C:
-			return nil, fmt.Errorf("a2a streaming idle timeout: no events received for %s", a2aStreamIdleTimeout)
+			return nil, fmt.Errorf("a2a streaming idle timeout: no events received for %s", idleTimeout)
 		case event, ok := <-events:
 			if !ok {
 				if !received {
@@ -192,7 +202,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				}
 				return buildA2AStreamResult(&content, &response), nil
 			}
-			idleTimer.Reset(a2aStreamIdleTimeout)
+			idleTimer.Reset(idleTimeout)
 			received = true
 			if event.Result == nil {
 				continue
