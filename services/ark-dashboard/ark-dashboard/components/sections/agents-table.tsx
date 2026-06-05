@@ -14,9 +14,12 @@ import {
 } from '@/components/ui/tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface AgentsTableProps {
   readonly agents: readonly Agent[];
@@ -79,6 +82,7 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             {agent.name}
           </NamespacedLink>
         </div>
+        <OriginCell origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
         <div
           role="cell"
           className={cn(rowCellClass, COL.description, 'relative z-10')}>
@@ -157,6 +161,7 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
+        <OriginColumnHeader tooltip="Where the agent was first created" />
         <div
           role="columnheader"
           className={cn(headerCellClass, COL.description)}>

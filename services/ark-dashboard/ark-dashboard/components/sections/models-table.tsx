@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { OriginCell, OriginColumnHeader } from './origin-column';
+
 interface ModelsTableProps {
   readonly models: readonly Model[];
   readonly onDelete: (id: string) => void;
@@ -108,6 +110,7 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
             {model.name}
           </NamespacedLink>
         </div>
+        <OriginCell origin={model.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
         <div role="cell" className={cn(rowCellClass, COL.model)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
@@ -169,6 +172,7 @@ export function ModelsTable({ models, onDelete }: ModelsTableProps) {
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
+        <OriginColumnHeader tooltip="Where the model was first created" />
         <div role="columnheader" className={cn(headerCellClass, COL.model)}>
           Model
         </div>
