@@ -40,18 +40,7 @@ The dashboard and broker are stateless services with no Kubernetes API permissio
 
 Ark registers validating and mutating webhooks for its core resource types. All webhooks are configured with `failurePolicy: Fail` — invalid resources are rejected, never silently accepted.
 
-**Validating webhooks** enforce:
-
-- **Referential integrity** — Agents, Teams, and Queries must reference resources that exist in the same namespace.
-- **Structural correctness** — Tool input schemas must be valid JSON Schema; Team strategies must have valid configurations (e.g., selector strategy requires `maxTurns`); ArkConfig must use valid duration syntax.
-- **Security constraints** — Model base URLs must use HTTPS (with an exception for `*.svc.cluster.local`), and are blocked from targeting loopback addresses, cloud metadata endpoints (169.254.0.0/16), and private IP ranges (configurable via `ALLOWED_PRIVATE_IP_RANGES`). Domain whitelisting is available via `WHITELISTED_MODEL_DOMAINS`.
-- **Self-reference prevention** — Teams cannot reference themselves.
-
-**Mutating webhooks** apply defaults and handle migrations:
-
-- Assign a default model when none is specified on an Agent.
-- Migrate deprecated resource configurations (e.g., deprecated team strategies) and annotate resources with migration warnings so users can update their manifests.
-- Inject default TTL from ArkConfig on Queries that don't specify one.
+Validating webhooks check referential integrity, structural correctness, and security constraints (e.g., HTTPS enforcement and private IP blocking for model URLs). Mutating webhooks apply defaults and migrate deprecated configurations, annotating resources with warnings so users can update their manifests.
 
 ### API-level validation
 
@@ -65,14 +54,7 @@ Webhook validation errors are returned to the user with context: field paths, ar
 
 ### TLS
 
-The controller uses [cert-manager](https://cert-manager.io/) to generate TLS certificates for two internal endpoints:
-
-- **Webhook serving** — Mutating and validating webhooks are served over TLS with certificates issued by a self-signed Issuer scoped to the Ark namespace.
-- **Metrics** — The controller metrics endpoint (port 8443) is TLS-protected using a separate certificate from the same Issuer.
-
-Both certificates use a private key rotation policy of `Always` (rotated on every renewal). Custom CA certificates can be mounted from a Kubernetes Secret for environments using internal certificate authorities.
-
-For inter-service communication beyond webhooks and metrics, Ark relies on cluster-level controls. See the in-transit encryption table in [Data Flow and Encryption](/operations-guide/data-flow-and-encryption#in-transit-encryption) for the TLS status of each hop and recommendations for enabling mTLS via a service mesh.
+Webhook and metrics endpoints are served over TLS. The default Helm chart uses [cert-manager](https://cert-manager.io/) with a self-signed Issuer, but production deployments can substitute any certificate provisioning mechanism. For inter-service communication beyond these endpoints, Ark relies on cluster-level controls — see [Data Flow and Encryption](/operations-guide/data-flow-and-encryption#in-transit-encryption) for the TLS status of each hop.
 
 ### Secret storage
 
