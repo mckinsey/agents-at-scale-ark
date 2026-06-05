@@ -15,6 +15,7 @@ export function TeamsSection() {
       createLabel="Create Team"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/"
       entityLabel="Team"
+      entityPluralLabel="teams"
       emptyTitle="No teams yet"
       emptyDescription={
         <>

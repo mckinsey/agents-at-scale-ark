@@ -15,6 +15,7 @@ export function McpServersSection() {
       createLabel="Add MCP Server"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/"
       entityLabel="MCP Server"
+      entityPluralLabel="MCP servers"
       emptyTitle="No MCP Servers Yet"
       emptyDescription={
         <>

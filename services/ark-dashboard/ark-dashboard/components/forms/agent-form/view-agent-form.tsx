@@ -6,12 +6,7 @@ import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
 import { ResourceSwitcherBar } from '@/components/common/resource-switcher-bar';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import {
-  ChevronDown,
-  ChevronLeft,
-  ExpandContent,
-  Warning,
-} from '@/components/icons';
+import { ChevronDown, ChevronLeft, Warning } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { NumericBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,13 +17,7 @@ import {
   FieldSet,
   FieldTitle,
 } from '@/components/ui/field';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from '@/components/ui/form';
+import { Form, FormField } from '@/components/ui/form';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
@@ -77,7 +66,6 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
   const [agentYaml, setAgentYaml] = useState('');
-  const [promptExpanded, setPromptExpanded] = useState(false);
   const [toolsPopoverOpen, setToolsPopoverOpen] = useState(false);
 
   useEffect(() => {
@@ -354,50 +342,27 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                         <FormField
                           control={form.control}
                           name="prompt"
-                          render={({ field }) => (
-                            <FormItem className="gap-0 space-y-0">
-                              <FormControl>
-                                <div className="border-stroke-divider focus-within:border-stroke-status-focus flex flex-col border transition-colors">
-                                  <div className="bg-surface-secondary border-stroke-divider flex h-12 items-center justify-between border-b px-3">
-                                    <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
-                                      Agent Prompt
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      aria-label={
-                                        promptExpanded
-                                          ? 'Collapse prompt'
-                                          : 'Expand prompt'
-                                      }
-                                      onClick={() =>
-                                        setPromptExpanded(v => !v)
-                                      }>
-                                      <IconShell size="sm" variant="secondary">
-                                        <ExpandContent />
-                                      </IconShell>
-                                    </Button>
-                                  </div>
-                                  <PromptEditor
-                                    variant="compact"
-                                    showSublabel={false}
-                                    showFooter={false}
-                                    value={field.value || ''}
-                                    onChange={field.onChange}
-                                    disabled={isDisabled}
-                                    parameters={parameters}
-                                    className={cn(
-                                      'bg-transparent transition-[min-height] duration-200',
-                                      promptExpanded
-                                        ? 'min-h-[600px]'
-                                        : 'min-h-[350px]',
-                                    )}
-                                  />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
+                          render={({ field, fieldState }) => (
+                            <FieldSet className="gap-2">
+                              <FieldTitle>Prompt</FieldTitle>
+                              <PromptEditor
+                                variant="compact"
+                                showSublabel={false}
+                                showFooter={false}
+                                value={field.value || ''}
+                                onChange={field.onChange}
+                                placeholder="Hint the agent objective here..."
+                                disabled={isDisabled}
+                                parameters={parameters}
+                                className={cn(
+                                  'border-stroke-divider focus-within:border-stroke-status-focus min-h-[248px] border bg-transparent pb-3 transition-colors',
+                                  fieldState.error && 'border-status-error',
+                                )}
+                              />
+                              <FieldError>
+                                {fieldState.error?.message}
+                              </FieldError>
+                            </FieldSet>
                           )}
                         />
                       )}
@@ -423,7 +388,9 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                                 role="combobox"
                                 aria-expanded={toolsPopoverOpen}
                                 aria-haspopup="listbox"
-                                aria-disabled={toolsTriggerDisabled || undefined}
+                                aria-disabled={
+                                  toolsTriggerDisabled || undefined
+                                }
                                 tabIndex={toolsTriggerDisabled ? -1 : 0}
                                 onKeyDown={e => {
                                   if (
@@ -464,7 +431,9 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                                         </Tag>
                                       ))}
                                       {overflowSelectedCount > 0 && (
-                                        <NumericBadge size="sm" variant="primary">
+                                        <NumericBadge
+                                          size="sm"
+                                          variant="primary">
                                           {overflowSelectedCount}
                                         </NumericBadge>
                                       )}
@@ -487,61 +456,65 @@ export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
                               align="start"
                               sideOffset={4}
                               avoidCollisions={false}
+                              collisionPadding={8}
                               role="listbox"
                               aria-multiselectable="true"
-                              className="bg-fill-onsurface-ui-2 shadow-elevation-2 max-h-[320px] w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-none border-0 p-1">
+                              className="bg-fill-onsurface-ui-2 shadow-elevation-2 w-[var(--radix-popover-trigger-width)] rounded-none border-0 p-1">
                               {availableTools.length === 0 ? (
                                 <p className="text-fg-secondary px-3 py-2 text-sm">
                                   No tools available in this namespace.
                                 </p>
                               ) : (
-                                <ul className="flex flex-col">
-                                  {availableTools.map(tool => {
-                                    const checked = isToolSelected(tool.name);
-                                    const description = tool.description?.trim();
-                                    const labelNode = (
-                                      <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
-                                        {tool.name}
-                                      </span>
-                                    );
-                                    return (
-                                      <li
-                                        key={tool.name}
-                                        role="option"
-                                        aria-selected={checked}>
-                                        <label className="hover:bg-stateslayer-overlay-hover flex h-9 cursor-pointer items-center gap-2 px-1">
-                                          <Checkbox
-                                            checked={checked}
-                                            onCheckedChange={value =>
-                                              handleToolToggle(
-                                                tool,
-                                                value === true,
-                                              )
-                                            }
-                                            disabled={isDisabled}
-                                            aria-label={tool.name}
-                                          />
-                                          {description ? (
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <span className="text-fg-primary cursor-pointer text-sm leading-5 tracking-[-0.028px]">
-                                                  {tool.name}
-                                                </span>
-                                              </TooltipTrigger>
-                                              <TooltipContent
-                                                side="bottom"
-                                                align="start">
-                                                {description}
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          ) : (
-                                            labelNode
-                                          )}
-                                        </label>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
+                                <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
+                                  <ul className="flex flex-col">
+                                    {availableTools.map(tool => {
+                                      const checked = isToolSelected(tool.name);
+                                      const description =
+                                        tool.description?.trim();
+                                      const labelNode = (
+                                        <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
+                                          {tool.name}
+                                        </span>
+                                      );
+                                      return (
+                                        <li
+                                          key={tool.name}
+                                          role="option"
+                                          aria-selected={checked}>
+                                          <label className="hover:bg-stateslayer-overlay-hover flex h-9 cursor-pointer items-center gap-2 px-1">
+                                            <Checkbox
+                                              checked={checked}
+                                              onCheckedChange={value =>
+                                                handleToolToggle(
+                                                  tool,
+                                                  value === true,
+                                                )
+                                              }
+                                              disabled={isDisabled}
+                                              aria-label={tool.name}
+                                            />
+                                            {description ? (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <span className="text-fg-primary cursor-pointer text-sm leading-5 tracking-[-0.028px]">
+                                                    {tool.name}
+                                                  </span>
+                                                </TooltipTrigger>
+                                                <TooltipContent
+                                                  side="bottom"
+                                                  align="start">
+                                                  {description}
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            ) : (
+                                              labelNode
+                                            )}
+                                          </label>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </ScrollArea>
                               )}
                             </PopoverContent>
                           </Popover>

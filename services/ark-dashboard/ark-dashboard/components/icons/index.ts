@@ -22,6 +22,7 @@ export { ChevronLeft } from './chevron-left';
 export { ChevronRight } from './chevron-right';
 export { Close } from './close';
 export { CollapseContent } from './collapse-content';
+export { ContentCopy } from './content-copy';
 export { Dashboard } from './dashboard';
 export { Database } from './database';
 export { Dns } from './dns';

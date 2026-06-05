@@ -7,6 +7,11 @@ import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import type { Agent } from '@/lib/services';
@@ -74,12 +79,23 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             {agent.name}
           </NamespacedLink>
         </div>
-        <div role="cell" className={cn(rowCellClass, COL.description)}>
-          <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={agent.description || ''}>
-            {agent.description || 'No description'}
-          </span>
+        <div
+          role="cell"
+          className={cn(rowCellClass, COL.description, 'relative z-10')}>
+          {agent.description ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+                  {agent.description}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{agent.description}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+              No description
+            </span>
+          )}
         </div>
         <div role="cell" className={cn(rowCellClass, COL.status)}>
           <AgentStatus status={agent.available} />
