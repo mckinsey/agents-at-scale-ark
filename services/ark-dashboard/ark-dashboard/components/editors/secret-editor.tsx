@@ -82,9 +82,9 @@ export function SecretEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{secret ? 'Edit Secret' : 'Add Secret'}</DialogTitle>
+          <DialogTitle>{secret ? 'Edit secret' : 'Add secret'}</DialogTitle>
           <DialogDescription>
             {secret
               ? 'Update the password for this secret. The name cannot be changed.'
@@ -94,71 +94,61 @@ export function SecretEditor({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 py-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <FormLabel className="text-right">
-                        Name <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <div className="col-span-3 space-y-1">
-                        <FormControl>
-                          <Input
-                            placeholder="e.g. api-key-production"
-                            disabled={!!secret || form.formState.isSubmitting}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </div>
-                    </div>
-                  </FormItem>
-                )}
-              />
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name *</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g. api-key-production"
+                      disabled={!!secret || form.formState.isSubmitting}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <FormLabel className="text-right">
-                        Password <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <div className="col-span-3">
-                        <FormControl>
-                          <Input
-                            type="password"
-                            placeholder="Enter the secret password"
-                            disabled={form.formState.isSubmitting}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </div>
-                    </div>
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password *</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="Enter the secret password"
+                      disabled={form.formState.isSubmitting}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={form.formState.isSubmitting}>
+                disabled={form.formState.isSubmitting}
+                className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting}
+                className="w-full sm:w-auto">
                 {form.formState.isSubmitting
                   ? 'Saving...'
                   : secret
-                    ? 'Update Secret'
-                    : 'Add Secret'}
+                    ? 'Update secret'
+                    : 'Add secret'}
               </Button>
             </DialogFooter>
           </form>

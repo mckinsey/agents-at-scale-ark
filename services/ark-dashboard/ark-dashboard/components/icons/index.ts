@@ -43,6 +43,7 @@ export { KeyboardDoubleArrowRight } from './keyboard-double-arrow-right';
 export { LightMode } from './light-mode';
 export { Memory } from './memory';
 export { Meta } from './meta';
+export { MoreVert } from './more-vert';
 export { OpenAI } from './openai';
 export { PlaylistAddCheck } from './playlist-add-check';
 export { PlugConnect } from './plug-connect';
