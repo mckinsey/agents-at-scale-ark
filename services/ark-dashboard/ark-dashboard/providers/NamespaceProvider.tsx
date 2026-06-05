@@ -35,22 +35,26 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const namespaceFromQueryParams = searchParams.get('namespace') || 'default';
+  const namespaceFromQueryParams = searchParams.get('namespace');
 
   const [availableNamespaces] = useState<Namespace[]>([
     {
-      name: namespaceFromQueryParams,
+      name: namespaceFromQueryParams || 'default',
       id: 0,
     },
   ]);
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
+  const [currentNamespace, setCurrentNamespace] = useState<string>('default');
 
-  const { data, isPending, error } = useGetContext(namespaceFromQueryParams);
+  // 1. If ?namespace is provided, try to validate it by passing to API
+  // 2. If no ?namespace OR validation fails, API will return pod's default namespace
+  // 3. Final fallback is 'default' if API call fails entirely
+  const { data, isPending, error } = useGetContext(namespaceFromQueryParams || undefined);
 
   useEffect(() => {
-    apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
-  }, [namespaceFromQueryParams]);
+    apiClient.setDefaultParam('namespace', currentNamespace);
+  }, [currentNamespace]);
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
@@ -83,36 +87,36 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (error) {
-      // Try to extract default_namespace from the 404 error response
-      // APIError has: { message, status, data: { detail: { default_namespace } } }
-      let defaultNamespace: string | null = null;
+      // Try to extract default_namespace from error response (API returns this for 404)
+      let fallbackNamespace: string | null = null;
 
       if (error && typeof error === 'object' && 'data' in error) {
         const errorData = (error as { data?: { detail?: { default_namespace?: string } } }).data;
-        defaultNamespace = errorData?.detail?.default_namespace || null;
+        fallbackNamespace = errorData?.detail?.default_namespace || null;
       }
 
-      if (defaultNamespace && namespaceFromQueryParams !== defaultNamespace) {
-        toast.error(`Namespace "${namespaceFromQueryParams}" not found`, {
-          description: `Redirecting to ${defaultNamespace}...`,
-        });
-        setNamespace(defaultNamespace);
-      } else if (!defaultNamespace && namespaceFromQueryParams !== 'default') {
-        // Fallback to 'default' if we couldn't parse the default namespace
-        toast.error(`Namespace "${namespaceFromQueryParams}" not found`, {
-          description: 'Redirecting to default namespace...',
-        });
-        setNamespace('default');
+      if (fallbackNamespace) {
+        // Use the fallback namespace from API error response
+        setCurrentNamespace(fallbackNamespace);
+        setIsNamespaceResolved(true);
+
+        // Only show error if we had a query param that failed
+        if (namespaceFromQueryParams) {
+          toast.error(`Namespace "${namespaceFromQueryParams}" not accessible`, {
+            description: `Using ${fallbackNamespace} instead`,
+          });
+        }
       } else {
-        toast.error('Failed to get namespace', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
+        // No fallback available, use 'default' as final fallback
+        setCurrentNamespace('default');
+        setIsNamespaceResolved(true);
+
+        toast.error('Failed to get namespace context', {
+          description: 'Using default namespace',
         });
       }
     }
-  }, [error, namespaceFromQueryParams, setNamespace]);
+  }, [error, namespaceFromQueryParams]);
 
   useEffect(() => {
     if (!data && !isPending && !error) {
@@ -127,8 +131,13 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       setIsNamespaceResolved(true);
       const newReadOnlyMode = data.read_only_mode ?? false;
       setReadOnlyMode(newReadOnlyMode);
+
+      // Use the namespace returned by the API
+      // This will be the validated query param namespace OR the pod's default namespace
+      if (data.namespace) {
+        setCurrentNamespace(data.namespace);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   const context = useMemo<NamespaceContext>(
@@ -136,7 +145,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       availableNamespaces,
       createNamespace,
       isPending,
-      namespace: namespaceFromQueryParams,
+      namespace: currentNamespace,
       isNamespaceResolved: isNamespaceResolved,
       setNamespace,
       readOnlyMode,
@@ -145,7 +154,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       availableNamespaces,
       createNamespace,
       isPending,
-      namespaceFromQueryParams,
+      currentNamespace,
       isNamespaceResolved,
       setNamespace,
       readOnlyMode,
