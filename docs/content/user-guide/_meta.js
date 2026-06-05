@@ -8,7 +8,7 @@ export default {
   models: 'Creating and Managing Models',
   agents: 'Creating and Managing Agents',
   teams: 'Creating and Managing Teams',
-  queries: 'Creating Queries',
+  queries: 'Run queries / chat with agents and teams',
   tools: 'Creating Tools and MCP Servers',
   'workflow-templates': 'Workflow Templates',
   files: 'Managing Files',
