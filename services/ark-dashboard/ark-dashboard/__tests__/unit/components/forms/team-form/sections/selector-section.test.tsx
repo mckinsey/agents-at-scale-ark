@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as z from 'zod';
 
 import { SelectorSection } from '@/components/forms/team-form/sections/selector-section';
@@ -78,6 +78,12 @@ function Wrapper({
 }
 
 describe('SelectorSection', () => {
+  afterEach(async () => {
+    if (document.querySelector('[role="option"]')) {
+      await userEvent.keyboard('{Escape}');
+    }
+  });
+
   it('should render nothing when strategy is not selector', () => {
     const { container } = render(<Wrapper strategy="round-robin" />);
     expect(container.innerHTML).toBe('');
