@@ -10,6 +10,7 @@ metadata:
     "helm.sh/resource-policy": keep
     {{- end }}
     controller-gen.kubebuilder.io/version: v0.18.0
+    {{- include "ark.originAnnotations" . | nindent 4 }}
   name: mcpservers.ark.mckinsey.com
 spec:
   group: ark.mckinsey.com

@@ -8,9 +8,10 @@ import { AvailabilityStatusBadge } from '@/components/ui/availability-status-bad
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelTypeDisplayName } from '@/lib/constants/model-types';
-import type { Model } from '@/lib/services';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import type { Model } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
@@ -29,6 +30,8 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
     model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     DASHBOARD_SECTIONS.models.icon,
   );
+
+  const originIcon = getOriginIcon(model.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
 
   const actions: BaseCardAction[] = [
     {
@@ -64,7 +67,10 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
         actions={actions}
         footer={
           <div className="flex w-full flex-row items-end justify-between">
-            <div className="w-full">{description}</div>
+            <div className="flex w-full items-baseline gap-x-2">
+              <span className="shrink-0">{originIcon}</span>
+              {description}
+            </div>
             <AvailabilityStatusBadge
               status={model.available}
               eventsLink={`/events?kind=Model&name=${model.name}&page=1`}
