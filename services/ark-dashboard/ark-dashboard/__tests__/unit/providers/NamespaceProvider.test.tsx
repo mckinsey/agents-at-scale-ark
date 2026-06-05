@@ -235,8 +235,8 @@ describe('NamespaceProvider', () => {
       renderHook(() => useNamespace(), { wrapper });
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Failed to get namespace', {
-          description: 'Failed to fetch context',
+        expect(toast.error).toHaveBeenCalledWith('Failed to get namespace context', {
+          description: 'Using default namespace',
         });
       });
     });
