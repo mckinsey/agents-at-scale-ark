@@ -186,7 +186,7 @@ The admission webhook (`ark/internal/validation/team.go`) enforces these rules a
 
 ## Deprecated strategies and migration
 
-Two strategies are accepted on create/update but get rewritten by the mutating webhook (`ark/internal/validation/defaults.go`) and removed in `v1.0.0`. Both rewrites stamp a `ark.mckinsey.com/migration-warning/<key>` annotation on the team for visibility.
+Two strategies are accepted on create/update but get rewritten by the mutating webhook (`ark/internal/validation/defaults.go`) and removed in `v1.0.0`. Both rewrites stamp a `ark.mckinsey.com/migration-warning-<key>` annotation on the team for visibility (e.g. `migration-warning-round-robin`, `migration-warning-graph`).
 
 | Original | Rewritten to | Notes |
 | --- | --- | --- |

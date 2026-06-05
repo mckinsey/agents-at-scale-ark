@@ -36,7 +36,7 @@ That's enough to apply, given two existing agents named `researcher` and `writer
 | **`selector`** | An LLM-powered **selector agent** picks the next member each turn. Required `maxTurns`. | Free-form coordination where the next speaker depends on context. |
 | **`selector` + `graph`** | Selector still chooses, but only from members the graph says are reachable. | Workflows that need structure (researcher must come before writer) but allow AI flexibility within those rails. |
 
-`round-robin` and standalone `graph` are deprecated and **migrated automatically by the mutating webhook** when you apply them — `round-robin` becomes `sequential + loops: true`; `graph` becomes `sequential` (the graph edges are discarded). Both stamp a `ark.mckinsey.com/migration-warning/...` annotation on the Team. New configs should use the strategies in the table.
+`round-robin` and standalone `graph` are deprecated and **migrated automatically by the mutating webhook** when you apply them — `round-robin` becomes `sequential + loops: true`; `graph` becomes `sequential` (the graph edges are discarded). Both stamp a `ark.mckinsey.com/migration-warning-<key>` annotation on the Team (e.g. `migration-warning-round-robin`, `migration-warning-graph`). New configs should use the strategies in the table.
 
 ## Create a team
 
@@ -363,24 +363,29 @@ For any of these, write the `Team` YAML directly. You can still inspect, edit, a
 
 ## Troubleshooting
 
-**`AVAILABLE: False` after apply.** Check the `Available` condition:
+**`kubectl apply` rejected by the admission webhook.** Failures from the validation webhook happen *before* the team exists, so the error comes back in the `apply` output rather than the `Available` condition. The exact messages and how to fix them:
+
+- **`selector strategy requires maxTurns to prevent infinite execution`** — add `spec.maxTurns: <n>` (e.g. 10).
+- **`selector strategy requires selector.agent to be specified`** — every selector team needs a `selector.agent` pointing at an existing Agent in the same namespace.
+- **`selector agent 'X' not found in namespace Y`** — the agent name in `selector.agent` doesn't exist; apply it first.
+- **`maxTurns is required when loops is enabled`** — sequential + loops needs an upper bound.
+- **`maxTurns can only be set when loops is enabled`** — drop `maxTurns` if you don't want a loop, or set `loops: true`.
+- **`loops can only be used with the 'sequential' strategy`** — selector teams loop via the selector's choices, not via `loops`.
+- **`graph constraint requires at least one edge`** — drop the `graph:` block entirely or add edges.
+- **`graph edge N: 'from'/'to' member 'X' not found in team members`** — every endpoint in `graph.edges` must reference a member of the team.
+- **`mixed teams are not allowed`** — one or more members use an external execution engine while others use the built-in completions engine; split into two teams.
+- **`team member N references agent: agent 'X' does not exist in namespace 'Y'`** — apply the referenced Agent first.
+- **`team 'X' cannot reference itself`** — `members[].name` cannot equal `metadata.name` when `type: team`.
+
+**`AVAILABLE: False` after the team was accepted.** The webhook passed but a runtime dependency is unavailable. Read the condition:
 
 ```bash
 kubectl get team my-team -o jsonpath='{.status.conditions[?(@.type=="Available")].message}'
 ```
 
-Common causes the webhook surfaces:
+Most common cause is `Agent member 'X' is not available` — the team's Available rolls up the Available status of its members, so fix the member first (often a model that can't reach its provider).
 
-- **`selector strategy requires maxTurns`** — add `spec.maxTurns: <n>` (e.g. 10).
-- **`selector strategy requires selector.agent`** — every selector team needs a `selector.agent` pointing at an existing Agent in the same namespace.
-- **`maxTurns is required when loops is enabled`** — sequential + loops needs an upper bound.
-- **`maxTurns can only be set when loops is enabled`** — drop `maxTurns` if you don't want a loop, or set `loops: true`.
-- **`loops can only be used with the 'sequential' strategy`** — selector teams loop via the selector's choices, not via `loops`.
-- **`graph edge N: 'from' member 'X' not found in team members`** — every `from`/`to` in `graph.edges` must reference a member of the team.
-- **`mixed teams are not allowed`** — one or more members use an external execution engine while others use the built-in completions engine; split into two teams.
-- **`team member N: agent 'X' not found in namespace 'Y'`** — apply the referenced Agent first.
-
-**Selector team terminates immediately with no response.** The selector agent returned text instead of calling the `select-next-speaker` tool. Either reset the prompt (the dashboard has a button) or make sure your custom prompt instructs the agent to use the tool. The team will surface a warning event with the offending output.
+**Selector team terminates immediately with no response.** The selector agent returned text instead of calling the `select-next-speaker` tool. Either reset the prompt (the dashboard has a button) or make sure your custom prompt instructs the agent to use the tool. The mutating webhook also stamps an `ark.mckinsey.com/migration-warning-selector-prompt` annotation when your custom prompt doesn't reference the tool — check for that on the team.
 
 **`TeamMaxTurnsReached` event but the work isn't done.** Increase `maxTurns`, or give a member the `terminate` built-in tool so the team can exit cleanly earlier.
 
