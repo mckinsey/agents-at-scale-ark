@@ -1,6 +1,6 @@
 # Disaster Recovery
 
-Ark runs on Kubernetes and stores its state in custom resources (backed by etcd), Kubernetes Secrets, and optionally external backends for conversation memory and broker persistence. All runtime services (operator, API, dashboard, broker) are stateless by default and can be redeployed from their Helm charts without data loss.
+Ark runs on Kubernetes and stores its state in custom resources (backed by etcd), Kubernetes Secrets, and optionally external backends for conversation memory and broker persistence. All runtime services (controller, API, dashboard, broker) are stateless by default and can be redeployed from their Helm charts without data loss.
 
 This guide outlines what needs to be protected and the general approach to recovery.
 
@@ -15,30 +15,26 @@ This guide outlines what needs to be protected and the general approach to recov
 
 ## Recovery approach
 
-### 1. Redeploy the operator
+### 1. Redeploy Ark
 
-Install the Ark Helm chart with your stored values. This re-creates the CRDs, controller, webhooks, and supporting services. Wait for the operator to become ready before restoring data.
+Install the Ark Helm charts with your stored values. This re-creates the CRDs, controller, webhooks, API, dashboard, broker, and any marketplace components (executors, MCP servers). Wait for all services to become ready before restoring data.
+
+If you use a PostgreSQL storage backend, restore the database before deploying Ark.
 
 ### 2. Restore custom resources
 
 Apply your backed-up Ark resources. Restore dependencies before dependents — standalone resources (models, tools, memory backends) first, then resources that reference them (agents), then resources that reference those (teams).
 
-If you use a PostgreSQL storage backend, restore the database before deploying the operator.
-
 ### 3. Restore Secrets and RBAC
 
 Re-apply Kubernetes Secrets and any RBAC bindings to their original namespaces.
 
-### 4. Redeploy supporting services
-
-Reinstall the API, dashboard, broker, and any marketplace components (executors, MCP servers). These are stateless and reconnect to the operator on startup.
-
-### 5. Restore the memory backend
+### 4. Restore the memory backend
 
 If applicable, restore your external conversation memory database independently.
 
-### 6. Verify
+### 5. Verify
 
-Confirm the operator is reconciling resources, supporting services are healthy, and a test query executes successfully.
+Confirm the controller is reconciling resources, services are healthy, and a test query executes successfully.
 
 For general Kubernetes backup and restore patterns, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/cluster-administration/).
