@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,6 +145,18 @@ func TestConsumeA2AStreamEventsTask(t *testing.T) {
 	assert.Equal(t, "task result", result.A2AResponse.Content)
 	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
 	assert.Len(t, stream.chunks, 1)
+}
+
+func TestConsumeA2AStreamEvents_IdleTimeout(t *testing.T) {
+	old := a2aStreamIdleTimeout
+	a2aStreamIdleTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { a2aStreamIdleTimeout = old })
+
+	events := make(chan protocol.StreamingMessageEvent)
+
+	_, err := consumeA2AStreamEvents(context.Background(), nil, events, nil, "agent/test", "comp-1", "test", "default", "", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "idle timeout")
 }
 
 func TestStreamContentChunkSkipsEmpty(t *testing.T) {
