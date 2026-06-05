@@ -3,23 +3,19 @@
 import { type ComponentType, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Azure, Bedrock, Claude, Gemini, Info, Meta, OpenAI, Trash } from '@/components/icons';
+import { Azure, Bedrock, Claude, Gemini, Meta, OpenAI, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelProviderDisplayName } from '@/lib/constants/model-types';
 import type { Model } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
-import { getOriginLabel } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface ModelsTableProps {
   readonly models: readonly Model[];
@@ -51,7 +47,6 @@ const DEFAULT_PROVIDER_ICON = {
 
 const COL = {
   name: 'w-[260px] shrink-0',
-  origin: 'w-[160px] shrink-0',
   model: 'flex-1 min-w-0',
   provider: 'w-[200px] shrink-0',
   status: 'w-[120px] shrink-0',
@@ -115,11 +110,7 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
             {model.name}
           </NamespacedLink>
         </div>
-        <div role="cell" className={cn(rowCellClass, COL.origin)}>
-          <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
-            {getOriginLabel(model.annotations?.[ARK_ANNOTATIONS.ORIGIN])}
-          </span>
-        </div>
+        <OriginCell origin={model.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
         <div role="cell" className={cn(rowCellClass, COL.model)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
@@ -181,26 +172,7 @@ export function ModelsTable({ models, onDelete }: ModelsTableProps) {
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.origin)}>
-          <span className="flex items-center gap-1">
-            Origin
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="About Origin"
-                  className="inline-flex">
-                  <IconShell size="sm" className="opacity-100">
-                    <Info />
-                  </IconShell>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Where the model was first created
-              </TooltipContent>
-            </Tooltip>
-          </span>
-        </div>
+        <OriginColumnHeader tooltip="Where the model was first created" />
         <div role="columnheader" className={cn(headerCellClass, COL.model)}>
           Model
         </div>

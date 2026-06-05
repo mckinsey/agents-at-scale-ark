@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { ChatBubble, Info, Trash } from '@/components/icons';
+import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -17,8 +17,9 @@ import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
-import { getOriginLabel } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface AgentsTableProps {
   readonly agents: readonly Agent[];
@@ -33,7 +34,6 @@ const STATUS_CONFIG = {
 
 const COL = {
   name: 'w-[240px] shrink-0',
-  origin: 'w-[160px] shrink-0',
   description: 'flex-1 min-w-0',
   status: 'w-[120px] shrink-0',
   action: 'w-[100px] shrink-0',
@@ -82,11 +82,7 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             {agent.name}
           </NamespacedLink>
         </div>
-        <div role="cell" className={cn(rowCellClass, COL.origin)}>
-          <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
-            {getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN])}
-          </span>
-        </div>
+        <OriginCell origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
         <div
           role="cell"
           className={cn(rowCellClass, COL.description, 'relative z-10')}>
@@ -165,26 +161,7 @@ export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.origin)}>
-          <span className="flex items-center gap-1">
-            Origin
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="About Origin"
-                  className="inline-flex">
-                  <IconShell size="sm" className="opacity-100">
-                    <Info />
-                  </IconShell>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Where the agent was first created
-              </TooltipContent>
-            </Tooltip>
-          </span>
-        </div>
+        <OriginColumnHeader tooltip="Where the agent was first created" />
         <div
           role="columnheader"
           className={cn(headerCellClass, COL.description)}>
