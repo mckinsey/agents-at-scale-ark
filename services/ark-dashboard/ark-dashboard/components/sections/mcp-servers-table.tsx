@@ -3,12 +3,19 @@
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Trash } from '@/components/icons';
+import { Info, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServer } from '@/lib/services/mcp-servers';
 import { cn } from '@/lib/utils';
+import { getOriginLabel } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface McpServersTableProps {
@@ -24,6 +31,7 @@ const STATUS_CONFIG = {
 
 const COL = {
   name: 'w-[260px] shrink-0',
+  origin: 'w-[160px] shrink-0',
   address: 'flex-1 min-w-0',
   transport: 'w-[160px] shrink-0',
   tools: 'w-[100px] shrink-0',
@@ -71,6 +79,11 @@ function McpServerTableRow({ server, onDelete }: McpServerTableRowProps) {
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {server.name}
           </NamespacedLink>
+        </div>
+        <div role="cell" className={cn(rowCellClass, COL.origin)}>
+          <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+            {getOriginLabel(server.annotations?.[ARK_ANNOTATIONS.ORIGIN])}
+          </span>
         </div>
         <div role="cell" className={cn(rowCellClass, COL.address)}>
           <span
@@ -135,6 +148,26 @@ export function McpServersTable({ servers, onDelete }: McpServersTableProps) {
       <div role="row" className="flex items-center gap-x-4">
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
+        </div>
+        <div role="columnheader" className={cn(headerCellClass, COL.origin)}>
+          <span className="flex items-center gap-1">
+            Origin
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="About Origin"
+                  className="inline-flex">
+                  <IconShell size="sm" className="opacity-100">
+                    <Info />
+                  </IconShell>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Where the MCP server was first created
+              </TooltipContent>
+            </Tooltip>
+          </span>
         </div>
         <div role="columnheader" className={cn(headerCellClass, COL.address)}>
           Address
