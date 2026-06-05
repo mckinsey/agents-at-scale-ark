@@ -334,26 +334,29 @@ class TestJwksDiscoveryFromEnv(unittest.TestCase):
         'OIDC_ISSUER_URL': 'https://broken.example.com',
     }, clear=True)
     @patch('ark_sdk.auth.validator.requests.get')
-    def test_discovery_failure_returns_none(self, mock_get):
-        """A broken discovery endpoint logs a warning and leaves jwks_url unset
-        — the previous behaviour silently fell through to a hardcoded path."""
+    def test_discovery_failure_raises(self, mock_get):
+        """A broken discovery endpoint fails fast with a clear error rather than
+        silently leaving jwks_url unset and 404'ing later."""
         import requests
         mock_get.side_effect = requests.RequestException('boom')
-        validator = TokenValidator()
-        self.assertIsNone(validator.config.jwks_url)
+        with self.assertRaises(TokenValidationError) as context:
+            TokenValidator()
+        self.assertIn('OIDC discovery failed', str(context.exception))
+        self.assertIn('OIDC_JWKS_URL', str(context.exception))
 
     @patch.dict('os.environ', {
         'OIDC_ISSUER_URL': 'https://noisy.example.com',
     }, clear=True)
     @patch('ark_sdk.auth.validator.requests.get')
-    def test_discovery_missing_jwks_uri_returns_none(self, mock_get):
-        """Discovery doc without a jwks_uri field is treated as a non-result."""
+    def test_discovery_missing_jwks_uri_raises(self, mock_get):
+        """A discovery doc without jwks_uri fails fast with a clear error."""
         mock_get.return_value = Mock(
             json=lambda: {"issuer": "https://noisy.example.com"},
             raise_for_status=lambda: None,
         )
-        validator = TokenValidator()
-        self.assertIsNone(validator.config.jwks_url)
+        with self.assertRaises(TokenValidationError) as context:
+            TokenValidator()
+        self.assertIn('did not include jwks_uri', str(context.exception))
 
 
 if __name__ == '__main__':
