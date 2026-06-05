@@ -11,26 +11,9 @@ Ark runs inside customer-controlled Kubernetes clusters. Many of the controls de
 
 ## Access control
 
-### Authentication modes
+Ark supports OIDC-based SSO, API key authentication, and a hybrid mode combining both. When user impersonation is enabled, Kubernetes RBAC is enforced against the authenticated user's identity rather than the Ark service account. Ark ships viewer / editor / admin ClusterRoles for each resource type that can be combined or extended.
 
-The Ark API supports four authentication modes, configured via `AUTH_MODE`:
-
-- **`sso`** — OIDC/JWT authentication. Users authenticate with an external identity provider.
-- **`basic`** — API key authentication only (HTTP Basic). Designed for headless and service-to-service access.
-- **`hybrid`** (recommended) — Both OIDC and API key authentication. Dashboard users authenticate via OIDC; services use API keys.
-- **`open`** — No authentication. Intended for development only.
-
-See the [Authentication](/developer-guide/authentication) guide for configuration details, OIDC provider setup, and API key management.
-
-### User impersonation
-
-When enabled, the Ark API forwards the authenticated user's identity to Kubernetes via `Impersonate-User` and `Impersonate-Group` headers. This means Kubernetes RBAC applies to the actual user rather than the Ark API service account.
-
-Impersonation applies to SSO and hybrid (JWT path) modes. API key and open modes do not carry a user identity.
-
-### User-facing RBAC roles
-
-Ark ships a set of ClusterRoles for each resource type, following a viewer / editor / admin tier pattern. These are role definitions — cluster administrators create namespace-scoped RoleBindings to grant access to specific users or groups. The roles can be combined, extended, or replaced entirely to match your organization's needs. See the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) for details on creating custom roles and bindings.
+See the [Authentication](/developer-guide/authentication) guide for full details on authentication modes, impersonation, RBAC roles, and API key management.
 
 ## Segregation of duties
 
