@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -153,6 +154,59 @@ func TestResolveModelHeaders_FromQueryParameter(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "user-123", got["X-User-ID"])
+}
+
+func TestLoadModelCRD_CacheHit(t *testing.T) {
+	cacheKey := "default/cached-model"
+	cached := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: "cached-model", Namespace: "default"}}
+	modelCRDCache.Store(cacheKey, &modelCRDCacheEntry{
+		crd:       cached,
+		expiresAt: time.Now().Add(modelCRDCacheTTL),
+	})
+	t.Cleanup(func() { modelCRDCache.Delete(cacheKey) })
+
+	fakeClient := setupModelTestClient(nil)
+
+	got, err := loadModelCRD(context.Background(), fakeClient, "cached-model", "default")
+	require.NoError(t, err)
+	require.Same(t, cached, got)
+}
+
+func TestLoadModelCRD_CacheMiss(t *testing.T) {
+	name, ns := "miss-model", "default"
+	cacheKey := ns + "/" + name
+	modelCRDCache.Delete(cacheKey)
+	t.Cleanup(func() { modelCRDCache.Delete(cacheKey) })
+
+	model := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+	fakeClient := setupModelTestClient([]client.Object{model})
+
+	got, err := loadModelCRD(context.Background(), fakeClient, name, ns)
+	require.NoError(t, err)
+	require.Equal(t, name, got.Name)
+
+	v, ok := modelCRDCache.Load(cacheKey)
+	require.True(t, ok)
+	require.Equal(t, name, v.(*modelCRDCacheEntry).crd.Name)
+}
+
+func TestLoadModelCRD_ExpiredEntry(t *testing.T) {
+	name, ns := "expired-model", "default"
+	cacheKey := ns + "/" + name
+
+	stale := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+	modelCRDCache.Store(cacheKey, &modelCRDCacheEntry{
+		crd:       stale,
+		expiresAt: time.Now().Add(-time.Second),
+	})
+	t.Cleanup(func() { modelCRDCache.Delete(cacheKey) })
+
+	fresh := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+	fakeClient := setupModelTestClient([]client.Object{fresh})
+
+	got, err := loadModelCRD(context.Background(), fakeClient, name, ns)
+	require.NoError(t, err)
+	require.NotSame(t, stale, got)
 }
 
 func TestResolveModelHeaders_QueryParameterWithoutContext(t *testing.T) {
