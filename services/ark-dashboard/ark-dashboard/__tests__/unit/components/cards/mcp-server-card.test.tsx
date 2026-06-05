@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { McpServerCard } from '@/components/cards/mcp-server-card';
@@ -6,6 +6,18 @@ import type { MCPServer } from '@/lib/services/mcp-servers';
 
 vi.mock('@/lib/utils/icon-resolver', () => ({
   getCustomIcon: vi.fn(() => () => <div>IconMock</div>),
+}));
+
+const mockStartMutate = vi.fn();
+const mockLogoutMutate = vi.fn();
+
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  useStartMcpAuth: vi.fn(() => ({ mutate: mockStartMutate })),
+  useLogoutMcpAuth: vi.fn(() => ({ mutate: mockLogoutMutate })),
+}));
+
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
 
 vi.mock('@/components/dialogs/confirmation-dialog', () => ({
@@ -271,6 +283,154 @@ describe('McpServerCard', () => {
         return element?.textContent === 'Tools: 10';
       })).toBeInTheDocument();
       expect(screen.queryByText(/status_message/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Authorization badge and actions', () => {
+    beforeEach(() => {
+      mockStartMutate.mockReset();
+      mockLogoutMutate.mockReset();
+    });
+
+    const withAuth = (
+      authorization: NonNullable<MCPServer['authorization']>,
+    ): MCPServer => ({ ...mockMcpServer, authorization });
+
+    it('renders no auth badge or actions when authorization is absent', () => {
+      render(<McpServerCard mcpServer={mockMcpServer} namespace="default" />);
+      expect(screen.queryByText('Auth required')).not.toBeInTheDocument();
+      expect(screen.queryByText('Authorized')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /authenticate mcp server/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders Required badge and Authenticate action', () => {
+      render(
+        <McpServerCard
+          mcpServer={withAuth({ state: 'Required' })}
+          namespace="default"
+        />,
+      );
+      expect(screen.getByText('Auth required')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /^authenticate mcp server$/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('renders DiscoveryFailed badge with no authenticate action', () => {
+      render(
+        <McpServerCard
+          mcpServer={withAuth({ state: 'DiscoveryFailed' })}
+          namespace="default"
+        />,
+      );
+      expect(screen.getByText('Auth discovery failed')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /authenticate mcp server/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /re-authenticate mcp server/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders Authorized badge with Re-authenticate and Sign out actions', () => {
+      render(
+        <McpServerCard
+          mcpServer={withAuth({
+            state: 'Authorized',
+            expiresAt: '2999-01-01T00:00:00Z',
+          })}
+          namespace="default"
+        />,
+      );
+      expect(screen.getByText('Authorized')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /re-authenticate mcp server/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /sign out mcp server/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('flags near-expiry authorizations', () => {
+      const soon = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      render(
+        <McpServerCard
+          mcpServer={withAuth({ state: 'Authorized', expiresAt: soon })}
+          namespace="default"
+        />,
+      );
+      expect(screen.getByText('Auth expiring')).toBeInTheDocument();
+    });
+
+    it('Authenticate calls startAuth and navigates on success', async () => {
+      const assign = vi.fn();
+      const original = window.location;
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...original, assign },
+      });
+      mockStartMutate.mockImplementation((_vars, opts) =>
+        opts.onSuccess({ authorization_url: 'https://idp.example.com/authorize' }),
+      );
+      render(
+        <McpServerCard
+          mcpServer={withAuth({ state: 'Required' })}
+          namespace="team-a"
+        />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /^authenticate mcp server$/i }),
+      );
+      expect(mockStartMutate).toHaveBeenCalledWith(
+        { name: 'test-server', namespace: 'team-a', force: false },
+        expect.any(Object),
+      );
+      expect(assign).toHaveBeenCalledWith('https://idp.example.com/authorize');
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: original,
+      });
+    });
+
+    it('Re-authenticate sends force: true', async () => {
+      mockStartMutate.mockImplementation(() => {});
+      render(
+        <McpServerCard
+          mcpServer={withAuth({ state: 'Authorized' })}
+          namespace="team-a"
+        />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /re-authenticate mcp server/i }),
+      );
+      expect(mockStartMutate).toHaveBeenCalledWith(
+        { name: 'test-server', namespace: 'team-a', force: true },
+        expect.any(Object),
+      );
+    });
+
+    it('Sign out requires confirmation before calling logout', async () => {
+      const onAuthChanged = vi.fn();
+      mockLogoutMutate.mockImplementation((_vars, opts) => opts.onSuccess());
+      render(
+        <McpServerCard
+          mcpServer={withAuth({ state: 'Authorized' })}
+          namespace="team-a"
+          onAuthChanged={onAuthChanged}
+        />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /sign out mcp server/i }),
+      );
+      expect(mockLogoutMutate).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByText('Sign out'));
+      expect(mockLogoutMutate).toHaveBeenCalledWith(
+        { name: 'test-server', namespace: 'team-a' },
+        expect.any(Object),
+      );
+      expect(onAuthChanged).toHaveBeenCalled();
     });
   });
 });

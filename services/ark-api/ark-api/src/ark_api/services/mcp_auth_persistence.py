@@ -36,6 +36,7 @@ FLOW_CALLER_IDENTITY_KEY = "_flow_caller_identity"
 FLOW_TOKEN_EXPIRES_AT_KEY = "_flow_token_expires_at"
 FLOW_SERVER_NAME_KEY = "_flow_server_name"
 FLOW_NAMESPACE_KEY = "_flow_namespace"
+FLOW_REDIRECT_ON_COMPLETE_KEY = "_flow_redirect_on_complete"
 
 FLOW_KEYS = [
     FLOW_AUTH_ID_KEY,
@@ -48,6 +49,7 @@ FLOW_KEYS = [
     FLOW_TOKEN_EXPIRES_AT_KEY,
     FLOW_SERVER_NAME_KEY,
     FLOW_NAMESPACE_KEY,
+    FLOW_REDIRECT_ON_COMPLETE_KEY,
 ]
 
 
@@ -118,6 +120,7 @@ class FlowState:
     client_id: str
     client_secret: str
     secret_name: str = ""
+    redirect_on_complete: bool = False
 
     @property
     def is_expired(self) -> bool:
@@ -177,6 +180,7 @@ async def write_flow_state(
     client_id: str,
     client_secret: str,
     keys: SecretKeys,
+    redirect_on_complete: bool = False,
 ) -> None:
     string_data = {
         FLOW_AUTH_ID_KEY: auth_id,
@@ -189,6 +193,7 @@ async def write_flow_state(
         FLOW_TOKEN_EXPIRES_AT_KEY: "",
         FLOW_SERVER_NAME_KEY: server_name,
         FLOW_NAMESPACE_KEY: namespace,
+        FLOW_REDIRECT_ON_COMPLETE_KEY: "true" if redirect_on_complete else "false",
         keys.client_id: client_id,
         keys.client_secret: client_secret,
     }
@@ -286,6 +291,9 @@ def _extract_flow_state(secret) -> Optional[FlowState]:
         namespace=_decode_b64_or_empty(data.get(FLOW_NAMESPACE_KEY)),
         client_id=_decode_b64_or_empty(data.get(keys.client_id)),
         client_secret=_decode_b64_or_empty(data.get(keys.client_secret)),
+        redirect_on_complete=(
+            _decode_b64_or_empty(data.get(FLOW_REDIRECT_ON_COMPLETE_KEY)) == "true"
+        ),
     )
 
 

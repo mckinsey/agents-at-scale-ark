@@ -47,6 +47,46 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def _validate_dashboard_url(raw: str) -> str:
+    """Validate ARK_API_DASHBOARD_URL and return it without a trailing slash.
+
+    Accepts a well-formed absolute https URL, or http when the host is a
+    loopback literal (127.0.0.1, [::1], or localhost), matching the
+    ARK_API_PUBLIC_CALLBACK_URL carve-out. Any path prefix is preserved so the
+    post-callback redirect can target `<value>/mcp`.
+    """
+    parts = urlsplit(raw)
+    if parts.scheme not in {"http", "https"}:
+        raise McpAuthConfigError(
+            f"ARK_API_DASHBOARD_URL scheme must be http or https (got {parts.scheme!r})"
+        )
+
+    netloc = parts.netloc
+    if not netloc:
+        raise McpAuthConfigError("ARK_API_DASHBOARD_URL is missing host")
+
+    host_in_netloc = netloc.split("@", 1)[-1]
+    if "[" not in host_in_netloc and host_in_netloc.count(":") >= 2:
+        raise McpAuthConfigError(
+            "ARK_API_DASHBOARD_URL must bracket IPv6 host literals "
+            "per RFC 3986 §3.2.2 (e.g. http://[::1]:8080)"
+        )
+
+    host = parts.hostname or ""
+    if not host:
+        raise McpAuthConfigError("ARK_API_DASHBOARD_URL is missing host")
+
+    if parts.scheme == "http" and not _is_loopback_host(host):
+        raise McpAuthConfigError(
+            "ARK_API_DASHBOARD_URL must be https unless host is a "
+            "loopback literal (127.0.0.1, [::1], or localhost); got host "
+            f"{host!r}"
+        )
+
+    path = (parts.path or "").rstrip("/")
+    return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
 def _validate_callback_url(raw: str) -> str:
     """Validate and normalise ARK_API_PUBLIC_CALLBACK_URL.
 
@@ -117,11 +157,13 @@ class McpAuthConfig:
         cache_ttl_seconds: int,
         dcr_timeout_seconds: int,
         token_timeout_seconds: int,
+        dashboard_url: str | None = None,
     ):
         self._public_callback_url = public_callback_url
         self.cache_ttl_seconds = cache_ttl_seconds
         self.dcr_timeout_seconds = dcr_timeout_seconds
         self.token_timeout_seconds = token_timeout_seconds
+        self._dashboard_url = dashboard_url
 
     @property
     def public_callback_url(self) -> str:
@@ -135,6 +177,14 @@ class McpAuthConfig:
     def is_callback_url_set(self) -> bool:
         return self._public_callback_url is not None
 
+    @property
+    def dashboard_url(self) -> str | None:
+        return self._dashboard_url
+
+    @property
+    def is_dashboard_url_set(self) -> bool:
+        return self._dashboard_url is not None
+
 
 def load_mcp_auth_config() -> McpAuthConfig:
     raw_callback = os.environ.get("ARK_API_PUBLIC_CALLBACK_URL", "").strip()
@@ -146,6 +196,18 @@ def load_mcp_auth_config() -> McpAuthConfig:
         callback_url = None
         logger.info("ARK_API_PUBLIC_CALLBACK_URL is unset; MCP auth endpoints will return 503")
 
+    raw_dashboard = os.environ.get("ARK_API_DASHBOARD_URL", "").strip()
+    dashboard_url: str | None
+    if raw_dashboard:
+        dashboard_url = _validate_dashboard_url(raw_dashboard)
+        logger.info("MCP auth dashboard redirect URL: %s", dashboard_url)
+    else:
+        dashboard_url = None
+        logger.info(
+            "ARK_API_DASHBOARD_URL is unset; dashboard-initiated MCP auth flows "
+            "fall back to the HTML completion page"
+        )
+
     return McpAuthConfig(
         public_callback_url=callback_url,
         cache_ttl_seconds=_read_int("ARK_API_MCP_AUTH_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS),
@@ -153,6 +215,7 @@ def load_mcp_auth_config() -> McpAuthConfig:
         token_timeout_seconds=_read_int(
             "ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS", DEFAULT_TOKEN_TIMEOUT_SECONDS
         ),
+        dashboard_url=dashboard_url,
     )
 
 

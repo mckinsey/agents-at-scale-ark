@@ -20,6 +20,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from .api import router
 from .core.config import setup_logging
+from .core.mcp_auth_config import get_mcp_auth_config
 from .auth.middleware import AuthMiddleware
 from .auth.constants import AuthMode
 from .auth.config import get_public_routes
@@ -92,7 +93,11 @@ async def lifespan(app: FastAPI):
 
     await init_k8s()
     logger.info("Kubernetes clients initialized")
-    
+
+    # Validate MCP auth configuration eagerly so a malformed
+    # ARK_API_PUBLIC_CALLBACK_URL / ARK_API_DASHBOARD_URL fails at startup.
+    get_mcp_auth_config()
+
     # Initialize A2A manager and mount dynamic agent routes under /a2a
     a2a_manager = get_a2a_manager()
     await a2a_manager.initialize()

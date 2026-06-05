@@ -3294,6 +3294,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
@@ -3336,6 +3337,19 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** MCPServerAuthorization */
+        MCPServerAuthorization: {
+            /** State */
+            state?: string | null;
+            /** Resourcename */
+            resourceName?: string | null;
+            /** Authorizedby */
+            authorizedBy?: string | null;
+            /** Authorizedat */
+            authorizedAt?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+        };
         /** MCPServerResponse */
         MCPServerResponse: {
             /** Address */
@@ -3344,6 +3358,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Name */
             name: string;

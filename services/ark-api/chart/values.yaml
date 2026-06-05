@@ -83,6 +83,15 @@ app:
     # if the configured URL has no path.
     - name: ARK_API_PUBLIC_CALLBACK_URL
       value: "http://localhost:8088/v1/mcp/auth/callback"
+    # Base URL of the dashboard, used to build the post-callback redirect for
+    # dashboard-initiated auth flows. The redirect target is <value>/mcp, so the
+    # value MUST include any path prefix the dashboard is served under (e.g.
+    # https://ark.example.com/dashboard behind an X-Forwarded-Prefix). Same
+    # scheme rules as ARK_API_PUBLIC_CALLBACK_URL. Required only for the
+    # dashboard redirect-completion path; when unset, dashboard flows fall back
+    # to the HTML completion page and the CLI flow is unaffected.
+    # - name: ARK_API_DASHBOARD_URL
+    #   value: "https://ark.example.com"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"

@@ -17,8 +17,21 @@ The redirect target is a single externally reachable URL that ark-api must own. 
 | `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries stored in the Secret. After this window a late callback returns "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
+| `ARK_API_DASHBOARD_URL` | _unset_ | Base URL of the dashboard, used to build the post-callback redirect for dashboard-initiated flows. The redirect target is `<value>/mcp`, so the value MUST include any path prefix the dashboard is served under (e.g. `https://ark.example.com/dashboard` behind an `X-Forwarded-Prefix`). Same scheme rules as `ARK_API_PUBLIC_CALLBACK_URL` (HTTPS, or HTTP for loopback). Required only for the dashboard redirect-completion path; when unset, dashboard flows fall back to the HTML completion page and the CLI flow is unaffected. |
 
-ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected.
+ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` or `ARK_API_DASHBOARD_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected.
+
+## Authenticate an MCP server from the dashboard
+
+The MCP servers page surfaces each server's authorization state on its card and exposes the lifecycle actions. No token material ever reaches the browser — the dashboard only drives the same ark-api `auth/*` endpoints the CLI uses.
+
+- **Authenticate** (state `Required`) — starts the flow and navigates the browser to the IdP. After login, the IdP redirects to ark-api's callback, which redirects back to `<ARK_API_DASHBOARD_URL>/mcp`.
+- **Re-authenticate** (state `Authorized`) — same flow with `force`, to refresh or replace an expiring authorization. The card flags an authorization that is near expiry.
+- **Sign out** (state `Authorized`) — confirms, then clears the stored tokens (the Secret is retained), returning the server to `Required`.
+
+On return, the dashboard confirms the outcome by polling `auth/status` for the flow's `auth_id`, then shows a success/failure toast and strips the auth query parameters from the URL. Set `ARK_API_DASHBOARD_URL` to enable the redirect; without it, dashboard-initiated flows fall back to the HTML completion page.
+
+The single-user token model applies to the dashboard exactly as to the CLI: the last login wins, and the `authorized-by` annotation records the authenticated user (or `cli` for CLI flows). Dashboard users targeting external executors hit the same [header-resolution workaround](#external-executor-header-resolution-workaround) described below.
 
 ## Public ingress
 

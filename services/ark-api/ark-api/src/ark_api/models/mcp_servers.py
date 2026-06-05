@@ -57,6 +57,18 @@ class MCPServerHeader(BaseModel):
     value: MCPServerValueSource
 
 
+class MCPServerAuthorization(BaseModel):
+    """Authorization state surfaced from status.authorization and annotations.
+
+    Never carries token or Secret material.
+    """
+    state: Optional[str] = None
+    resourceName: Optional[str] = None
+    authorizedBy: Optional[str] = None
+    authorizedAt: Optional[str] = None
+    expiresAt: Optional[str] = None
+
+
 class MCPServerResponse(BaseModel):
     name: str
     namespace: str
@@ -66,6 +78,7 @@ class MCPServerResponse(BaseModel):
     available: Optional[AvailabilityStatus] = None
     status_message: Optional[str] = None
     tool_count: Optional[int] = None
+    authorization: Optional[MCPServerAuthorization] = None
 
 
 class MCPServerListResponse(BaseModel):
@@ -84,6 +97,7 @@ class MCPServerDetailResponse(BaseModel):
     transport: Optional[str] = None
     headers: Optional[List[MCPServerHeader]]
     tool_count: Optional[int] = None
+    authorization: Optional[MCPServerAuthorization] = None
 
 
 class MCPTransport(BaseModel):

@@ -9,8 +9,51 @@ from ark_api.core.mcp_auth_config import (
     McpAuthConfigError,
     _read_int,
     _validate_callback_url,
+    _validate_dashboard_url,
     load_mcp_auth_config,
 )
+
+
+class TestValidateDashboardUrl(unittest.TestCase):
+    def test_https_public_host_is_accepted(self):
+        self.assertEqual(
+            _validate_dashboard_url("https://ark.example.com"),
+            "https://ark.example.com",
+        )
+
+    def test_trailing_slash_is_stripped(self):
+        self.assertEqual(
+            _validate_dashboard_url("https://ark.example.com/"),
+            "https://ark.example.com",
+        )
+
+    def test_path_prefix_is_preserved(self):
+        self.assertEqual(
+            _validate_dashboard_url("https://ark.example.com/dashboard"),
+            "https://ark.example.com/dashboard",
+        )
+
+    def test_http_loopback_is_accepted(self):
+        self.assertEqual(
+            _validate_dashboard_url("http://localhost:3000"),
+            "http://localhost:3000",
+        )
+
+    def test_http_public_host_is_rejected(self):
+        with self.assertRaises(McpAuthConfigError):
+            _validate_dashboard_url("http://ark.example.com")
+
+    def test_bad_scheme_is_rejected(self):
+        with self.assertRaises(McpAuthConfigError):
+            _validate_dashboard_url("ftp://example.com")
+
+    def test_invalid_dashboard_url_fails_config_load(self):
+        with patch.dict(
+            "os.environ",
+            {"ARK_API_DASHBOARD_URL": "ftp://example.com"},
+        ):
+            with self.assertRaises(McpAuthConfigError):
+                load_mcp_auth_config()
 
 
 class TestValidateCallbackUrl(unittest.TestCase):

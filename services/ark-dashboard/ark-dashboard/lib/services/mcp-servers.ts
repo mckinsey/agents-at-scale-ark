@@ -11,6 +11,10 @@ export type MCPServerCreateRequest =
   components['schemas']['MCPServerCreateRequest'];
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
 export type MCPHeader = components['schemas']['MCPServerHeader-Output'];
+export type MCPServerAuthorization =
+  components['schemas']['MCPServerAuthorization'];
+export type AuthStartResponse = components['schemas']['AuthStartResponse'];
+export type AuthStatusResponse = components['schemas']['AuthStatusResponse'];
 
 export type MCPServer = MCPServerResponse & { id: string };
 export type MCPServerDetail = MCPServerDetailResponse & { id: string };
@@ -114,5 +118,42 @@ export const mcpServersService = {
       ...response,
       id: response.name,
     };
+  },
+
+  // Start an MCP authorization flow. Returns the IdP authorization URL the
+  // browser must be navigated to. redirect_on_complete is always true so the
+  // callback redirects back to the dashboard.
+  async startAuth(
+    mcpServerName: string,
+    { namespace, force }: { namespace: string; force?: boolean },
+  ): Promise<AuthStartResponse> {
+    return apiClient.post<AuthStartResponse>(
+      `/api/v1/mcp-servers/${mcpServerName}/auth/start`,
+      { redirect_on_complete: true, ...(force ? { force: true } : {}) },
+      { params: { namespace } },
+    );
+  },
+
+  // Poll the terminal state of an in-flight authorization.
+  async getAuthStatus(
+    mcpServerName: string,
+    { namespace, authId }: { namespace: string; authId: string },
+  ): Promise<AuthStatusResponse> {
+    return apiClient.get<AuthStatusResponse>(
+      `/api/v1/mcp-servers/${mcpServerName}/auth/status`,
+      { params: { namespace, auth_id: authId } },
+    );
+  },
+
+  // Revoke an authorization (default clear: tokens cleared, Secret retained).
+  async logoutAuth(
+    mcpServerName: string,
+    { namespace }: { namespace: string },
+  ): Promise<void> {
+    await apiClient.post(
+      `/api/v1/mcp-servers/${mcpServerName}/auth/logout`,
+      {},
+      { params: { namespace } },
+    );
   },
 };

@@ -24,6 +24,14 @@ class AuthStartRequest(BaseModel):
             "omit the field entirely to fall back to status.authorization.scopesSupported."
         ),
     )
+    redirect_on_complete: bool = Field(
+        default=False,
+        description=(
+            "When true, auth/callback redirects the browser to the dashboard on completion "
+            "(requires ARK_API_DASHBOARD_URL); when false (default), it renders the HTML "
+            "completion page. Used by the dashboard flow."
+        ),
+    )
 
 
 class AuthStartResponse(BaseModel):

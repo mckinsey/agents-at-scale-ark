@@ -678,6 +678,349 @@ class TestAuthLogoutNoTokenRef(_AuthBase):
         mock_strip.assert_awaited_once()
 
 
+class TestResolveCallerIdentity(unittest.TestCase):
+    def test_authenticated_request_resolves_username(self):
+        from ark_api.api.v1.mcp_auth import _resolve_caller_identity
+
+        request = MagicMock()
+        request.state.user_identity.username = "alice@example.com"
+        self.assertEqual(_resolve_caller_identity(request), "alice@example.com")
+
+    def test_unauthenticated_request_resolves_cli(self):
+        from ark_api.api.v1.mcp_auth import _resolve_caller_identity
+
+        request = MagicMock()
+        request.state.user_identity = None
+        self.assertEqual(_resolve_caller_identity(request), "cli")
+
+
+class TestAuthStartIdentityAndRedirect(_AuthBase):
+    def _run_start(self, json_body):
+        with patch(
+            "ark_api.api.v1.mcp_auth.write_flow_state", new_callable=AsyncMock
+        ) as mock_write, patch(
+            "ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock
+        ) as mock_read_creds, patch(
+            "ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock
+        ) as mock_register:
+            from ark_api.services.mcp_auth_persistence import CachedClientCreds
+            from ark_api.services.oauth_dcr import DcrResult
+
+            mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+            mock_register.return_value = DcrResult(
+                client_id="cid", client_secret="csec", raw_response={}
+            )
+            patcher, _ = _patch_ark_client(_build_typed_mcp())
+            with patcher:
+                response = self.client.post(
+                    "/v1/mcp-servers/notion-mcp/auth/start",
+                    json=json_body,
+                    params={"namespace": "default"},
+                )
+            return response, mock_write
+
+    def test_unauthenticated_start_stores_cli_and_default_flag(self):
+        response, mock_write = self._run_start({})
+        self.assertEqual(response.status_code, 200, response.text)
+        kwargs = mock_write.await_args.kwargs
+        self.assertEqual(kwargs["caller_identity"], "cli")
+        self.assertEqual(kwargs["redirect_on_complete"], False)
+        body = response.json()
+        self.assertNotIn("caller_identity", body)
+        self.assertNotIn("redirect_on_complete", body)
+
+    def test_redirect_on_complete_round_trips(self):
+        response, mock_write = self._run_start({"redirect_on_complete": True})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(mock_write.await_args.kwargs["redirect_on_complete"], True)
+
+    def test_force_and_redirect_on_complete_accepted_together(self):
+        with patch(
+            "ark_api.api.v1.mcp_auth.write_flow_state", new_callable=AsyncMock
+        ) as mock_write, patch(
+            "ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock
+        ) as mock_read_creds, patch(
+            "ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock
+        ) as mock_register:
+            from ark_api.services.mcp_auth_persistence import CachedClientCreds
+            from ark_api.services.oauth_dcr import DcrResult
+
+            mock_read_creds.return_value = CachedClientCreds(client_id="cid", client_secret="csec")
+            mock_register.return_value = DcrResult(
+                client_id="cid2", client_secret="csec2", raw_response={}
+            )
+            patcher, _ = _patch_ark_client(_build_typed_mcp(state="Authorized"))
+            with patcher:
+                response = self.client.post(
+                    "/v1/mcp-servers/notion-mcp/auth/start",
+                    json={"force": True, "redirect_on_complete": True},
+                    params={"namespace": "default"},
+                )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(mock_write.await_args.kwargs["redirect_on_complete"], True)
+
+    def test_start_wires_resolved_identity_into_flow(self):
+        with patch(
+            "ark_api.api.v1.mcp_auth._resolve_caller_identity",
+            return_value="alice@example.com",
+        ), patch(
+            "ark_api.api.v1.mcp_auth.write_flow_state", new_callable=AsyncMock
+        ) as mock_write, patch(
+            "ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock
+        ) as mock_read_creds, patch(
+            "ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock
+        ) as mock_register:
+            from ark_api.services.mcp_auth_persistence import CachedClientCreds
+            from ark_api.services.oauth_dcr import DcrResult
+
+            mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+            mock_register.return_value = DcrResult(
+                client_id="cid", client_secret="csec", raw_response={}
+            )
+            patcher, _ = _patch_ark_client(_build_typed_mcp())
+            with patcher:
+                response = self.client.post(
+                    "/v1/mcp-servers/notion-mcp/auth/start",
+                    json={},
+                    params={"namespace": "default"},
+                )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(mock_write.await_args.kwargs["caller_identity"], "alice@example.com")
+
+
+def _dashboard_flow(*, redirect_on_complete=True, caller_identity="cli", auth_id="aid"):
+    from ark_api.services.mcp_auth_persistence import FlowState
+
+    return FlowState(
+        auth_id=auth_id, state_param="st1", verifier="v" * 64,
+        status="pending", message="", expires_at="2030-01-01T00:00:00Z",
+        caller_identity=caller_identity, token_expires_at="",
+        server_name="notion-mcp", namespace="team-a",
+        client_id="cid", client_secret="csec",
+        secret_name="notion-mcp-tokens",
+        redirect_on_complete=redirect_on_complete,
+    )
+
+
+class TestAuthCallbackDashboard(_AuthBase):
+    DASHBOARD_URL = "https://ark.example.com"
+
+    def setUp(self):
+        super().setUp()
+        os.environ["ARK_API_DASHBOARD_URL"] = self.DASHBOARD_URL
+        mcp_auth_config.reset_mcp_auth_config()
+
+    def tearDown(self):
+        os.environ.pop("ARK_API_DASHBOARD_URL", None)
+        mcp_auth_config.reset_mcp_auth_config()
+        super().tearDown()
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_success_redirects_with_auth_id(
+        self, mock_read_flow, mock_exchange, mock_write, mock_annotate, mock_mark
+    ):
+        from ark_api.services.oauth_token import TokenResponse
+
+        mock_read_flow.return_value = _dashboard_flow(caller_identity="alice@example.com")
+        mock_exchange.return_value = TokenResponse(
+            access_token="at", refresh_token="rt", expires_in=3600, raw={}
+        )
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "team-a.st1", "code": "the-code"},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 302, response.text)
+        location = response.headers["location"]
+        self.assertTrue(location.startswith("https://ark.example.com/mcp?"))
+        self.assertIn("authorized=notion-mcp", location)
+        self.assertIn("namespace=team-a", location)
+        self.assertIn("auth_id=aid", location)
+        self.assertNotIn("auth_error", location)
+        mock_annotate.assert_awaited_once()
+        self.assertEqual(mock_annotate.await_args.args[2], "alice@example.com")
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_idp_error_redirects_with_capped_desc(self, mock_read_flow, mock_mark_failed):
+        mock_read_flow.return_value = _dashboard_flow()
+        long_desc = "x" * 500
+        response = self.client.get(
+            "/v1/mcp/auth/callback",
+            params={
+                "state": "team-a.st1",
+                "error": "access_denied",
+                "error_description": long_desc,
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302, response.text)
+        location = response.headers["location"]
+        self.assertIn("auth_error=access_denied", location)
+        self.assertIn("auth_error_desc=", location)
+        self.assertNotIn("auth_id=", location)
+        from urllib.parse import parse_qs, urlsplit
+
+        desc = parse_qs(urlsplit(location).query)["auth_error_desc"][0]
+        self.assertLessEqual(len(desc), 200)
+        mock_mark_failed.assert_awaited_once()
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_token_exchange_failure_redirects(
+        self, mock_read_flow, mock_exchange, mock_mark_failed
+    ):
+        from ark_api.services.oauth_token import TokenExchangeError
+
+        mock_read_flow.return_value = _dashboard_flow()
+        mock_exchange.side_effect = TokenExchangeError("token endpoint said no")
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "team-a.st1", "code": "the-code"},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertIn("auth_error=token_exchange_failed", response.headers["location"])
+        mock_mark_failed.assert_awaited_once()
+
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_cache_miss_redirects_expired(self, mock_read_flow):
+        mock_read_flow.return_value = None
+        response = self.client.get(
+            "/v1/mcp/auth/callback",
+            params={"state": "team-a.unknown", "code": "x"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302, response.text)
+        location = response.headers["location"]
+        self.assertEqual(location, "https://ark.example.com/mcp?auth_error=expired")
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_redirect_ignores_client_supplied_url(
+        self, mock_read_flow, mock_exchange, mock_write, mock_annotate, mock_mark
+    ):
+        from ark_api.services.oauth_token import TokenResponse
+
+        mock_read_flow.return_value = _dashboard_flow()
+        mock_exchange.return_value = TokenResponse(
+            access_token="at", refresh_token="rt", expires_in=3600, raw={}
+        )
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={
+                    "state": "team-a.st1",
+                    "code": "the-code",
+                    "redirect_uri": "https://evil.example.com",
+                    "next": "https://evil.example.com/phish",
+                },
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 302, response.text)
+        location = response.headers["location"]
+        self.assertTrue(location.startswith("https://ark.example.com/mcp?"))
+        self.assertNotIn("evil.example.com", location)
+
+
+class TestAuthCallbackDashboardPrefix(_AuthBase):
+    DASHBOARD_URL = "https://ark.example.com/dashboard"
+
+    def setUp(self):
+        super().setUp()
+        os.environ["ARK_API_DASHBOARD_URL"] = self.DASHBOARD_URL
+        mcp_auth_config.reset_mcp_auth_config()
+
+    def tearDown(self):
+        os.environ.pop("ARK_API_DASHBOARD_URL", None)
+        mcp_auth_config.reset_mcp_auth_config()
+        super().tearDown()
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_prefix_preserved_in_redirect(
+        self, mock_read_flow, mock_exchange, mock_write, mock_annotate, mock_mark
+    ):
+        from ark_api.services.oauth_token import TokenResponse
+
+        mock_read_flow.return_value = _dashboard_flow()
+        mock_exchange.return_value = TokenResponse(
+            access_token="at", refresh_token="rt", expires_in=3600, raw={}
+        )
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "team-a.st1", "code": "the-code"},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertTrue(
+            response.headers["location"].startswith(
+                "https://ark.example.com/dashboard/mcp?"
+            )
+        )
+
+
+class TestAuthCallbackHtmlFallback(_AuthBase):
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_cli_flow_renders_html_when_dashboard_url_set(
+        self, mock_read_flow, mock_exchange, mock_write, mock_annotate, mock_mark
+    ):
+        from ark_api.services.oauth_token import TokenResponse
+
+        os.environ["ARK_API_DASHBOARD_URL"] = "https://ark.example.com"
+        mcp_auth_config.reset_mcp_auth_config()
+        try:
+            mock_read_flow.return_value = _dashboard_flow(redirect_on_complete=False)
+            mock_exchange.return_value = TokenResponse(
+                access_token="at", refresh_token="rt", expires_in=3600, raw={}
+            )
+            patcher, _ = _patch_ark_client(_build_typed_mcp())
+            with patcher:
+                response = self.client.get(
+                    "/v1/mcp/auth/callback",
+                    params={"state": "team-a.st1", "code": "the-code"},
+                    follow_redirects=False,
+                )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertIn("Authorization complete", response.text)
+        finally:
+            os.environ.pop("ARK_API_DASHBOARD_URL", None)
+            mcp_auth_config.reset_mcp_auth_config()
+
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_cache_miss_no_dashboard_url_renders_html(self, mock_read_flow):
+        mock_read_flow.return_value = None
+        response = self.client.get(
+            "/v1/mcp/auth/callback",
+            params={"state": "default.unknown", "code": "x"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("Unknown or expired state", response.text)
+
+
 class TestAuthIdEntropy(unittest.TestCase):
     def test_auth_id_decodes_to_at_least_16_bytes(self):
         import base64

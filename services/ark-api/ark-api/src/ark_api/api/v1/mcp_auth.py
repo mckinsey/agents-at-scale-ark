@@ -7,7 +7,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ark_sdk.client import with_ark_client
 
@@ -54,6 +54,8 @@ router = APIRouter(tags=["mcp-auth"])
 
 VERSION = "v1alpha1"
 DEFAULT_AUTHORIZED_BY = "cli"
+MAX_AUTH_ERROR_DESC_LEN = 200
+TOKEN_EXCHANGE_FAILED_CODE = "token_exchange_failed"
 
 
 def _get_config_or_503():
@@ -67,6 +69,18 @@ def _get_config_or_503():
             detail="MCP auth endpoints are disabled: ARK_API_PUBLIC_CALLBACK_URL is not set",
         )
     return cfg
+
+
+def _resolve_caller_identity(request: Request) -> str:
+    """Resolve the caller identity from the impersonation middleware.
+
+    Returns the authenticated user's resolved username when present, else the
+    literal `cli` (in-cluster Service path or impersonation disabled). Never
+    derived from request headers directly.
+    """
+    identity = getattr(request.state, "user_identity", None)
+    username = getattr(identity, "username", None) if identity is not None else None
+    return username or DEFAULT_AUTHORIZED_BY
 
 
 def _read_authorization_status(mcp_server):
@@ -124,6 +138,7 @@ def _build_authorization_url(
 )
 @handle_k8s_errors(operation="start auth", resource_type="mcp_server")
 async def start_mcp_auth(
+    request: Request,
     mcp_server_name: str,
     body: AuthStartRequest,
     namespace: Optional[str] = Query(
@@ -133,6 +148,7 @@ async def start_mcp_auth(
     cfg = _get_config_or_503()
     redirect_uri = cfg.public_callback_url
     force = bool(body.force)
+    caller_identity = _resolve_caller_identity(request)
 
     async with with_ark_client(namespace, VERSION) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
@@ -237,11 +253,12 @@ async def start_mcp_auth(
             state_param=state_random,
             verifier=verifier,
             expires_at=flow_expires,
-            caller_identity=DEFAULT_AUTHORIZED_BY,
+            caller_identity=caller_identity,
             server_name=mcp_server_name,
             client_id=client_id,
             client_secret=client_secret,
             keys=keys,
+            redirect_on_complete=body.redirect_on_complete,
         )
 
         authorization_url = _build_authorization_url(
@@ -273,6 +290,63 @@ def _html_response(*, title: str, body: str, status_code: int = 200) -> HTMLResp
     return HTMLResponse(content=page, status_code=status_code)
 
 
+def _dashboard_redirect(cfg, params: list[tuple[str, str]]) -> RedirectResponse:
+    """Build a 302 to <ARK_API_DASHBOARD_URL>/mcp with the given query params.
+
+    The host and path come solely from configuration; only trusted cache values
+    are placed in the query string. Values are URL-encoded by urlencode.
+    """
+    query = urlencode(params)
+    return RedirectResponse(url=f"{cfg.dashboard_url}/mcp?{query}", status_code=302)
+
+
+def _callback_cache_miss(cfg, *, html_body: str = "Unknown or expired state") -> Response:
+    """Handle an unknown/expired/unparseable state where the client is unknown.
+
+    The client cannot be determined, so dashboard-vs-CLI is indistinguishable:
+    redirect to the dashboard when configured, otherwise render the HTML page.
+    """
+    if cfg.is_dashboard_url_set:
+        return _dashboard_redirect(cfg, [("auth_error", "expired")])
+    return _html_response(
+        title="Authorization failed",
+        body=html_body,
+        status_code=400,
+    )
+
+
+def _callback_failure(cfg, flow, *, code: str, description: Optional[str]) -> Response:
+    """Render the failure outcome, redirecting for dashboard flows."""
+    if flow.redirect_on_complete and cfg.is_dashboard_url_set:
+        params = [
+            ("authorized", flow.server_name),
+            ("namespace", flow.namespace),
+            ("auth_error", code),
+        ]
+        if description:
+            params.append(("auth_error_desc", description[:MAX_AUTH_ERROR_DESC_LEN]))
+        return _dashboard_redirect(cfg, params)
+    body = f"{code}: {description}" if description else code
+    return _html_response(title="Authorization failed", body=body, status_code=400)
+
+
+def _callback_success(cfg, flow) -> Response:
+    """Render the success outcome, redirecting for dashboard flows."""
+    if flow.redirect_on_complete and cfg.is_dashboard_url_set:
+        return _dashboard_redirect(
+            cfg,
+            [
+                ("authorized", flow.server_name),
+                ("namespace", flow.namespace),
+                ("auth_id", flow.auth_id),
+            ],
+        )
+    return _html_response(
+        title="Authorization complete",
+        body=f"Authorization for {flow.server_name} succeeded.",
+    )
+
+
 @router.get("/mcp/auth/callback")
 async def mcp_auth_callback(
     request: Request,
@@ -280,33 +354,21 @@ async def mcp_auth_callback(
     code: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     error_description: Optional[str] = Query(None),
-) -> HTMLResponse:
+) -> Response:
     cfg = _get_config_or_503()
 
     if not state:
-        return _html_response(
-            title="Authorization failed",
-            body="Missing state parameter",
-            status_code=400,
-        )
+        return _callback_cache_miss(cfg, html_body="Missing state parameter")
 
     dot = state.find(".")
     if dot < 1:
-        return _html_response(
-            title="Authorization failed",
-            body="Unknown or expired state",
-            status_code=400,
-        )
+        return _callback_cache_miss(cfg)
     cb_namespace = state[:dot]
     state_random = state[dot + 1:]
 
     flow = await read_flow_state_by_state_param(cb_namespace, state_random)
     if flow is None or flow.is_expired or not flow.secret_name:
-        return _html_response(
-            title="Authorization failed",
-            body="Unknown or expired state",
-            status_code=400,
-        )
+        return _callback_cache_miss(cfg)
 
     secret_ns = flow.namespace
     secret_name_for_flow = flow.secret_name
@@ -314,18 +376,12 @@ async def mcp_auth_callback(
     if error:
         message = f"{error}: {error_description}" if error_description else error
         await mark_flow_failed(secret_ns, secret_name_for_flow, message)
-        return _html_response(
-            title="Authorization failed",
-            body=message,
-            status_code=400,
-        )
+        return _callback_failure(cfg, flow, code=error, description=error_description)
 
     if not code:
         await mark_flow_failed(secret_ns, secret_name_for_flow, "missing authorization code")
-        return _html_response(
-            title="Authorization failed",
-            body="Missing authorization code",
-            status_code=400,
+        return _callback_failure(
+            cfg, flow, code="invalid_request", description="missing authorization code"
         )
 
     async with with_ark_client(secret_ns, VERSION) as ark_client:
@@ -341,10 +397,11 @@ async def mcp_auth_callback(
             or not token_ref.name
         ):
             await mark_flow_failed(secret_ns, secret_name_for_flow, "MCPServer authorization metadata went missing")
-            return _html_response(
-                title="Authorization failed",
-                body="MCPServer authorization metadata went missing",
-                status_code=400,
+            return _callback_failure(
+                cfg,
+                flow,
+                code=TOKEN_EXCHANGE_FAILED_CODE,
+                description="MCPServer authorization metadata went missing",
             )
         secret_name = token_ref.name
         keys = SecretKeys.from_typed_ref(token_ref)
@@ -362,10 +419,8 @@ async def mcp_auth_callback(
             )
         except TokenExchangeError as exc:
             await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
-            return _html_response(
-                title="Authorization failed",
-                body=str(exc),
-                status_code=400,
+            return _callback_failure(
+                cfg, flow, code=TOKEN_EXCHANGE_FAILED_CODE, description=str(exc)
             )
 
         expires_at = compute_expires_at(token.expires_in)
@@ -386,10 +441,7 @@ async def mcp_auth_callback(
         )
         await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
 
-    return _html_response(
-        title="Authorization complete",
-        body=f"Authorization for {flow.server_name} succeeded.",
-    )
+    return _callback_success(cfg, flow)
 
 
 @router.get(

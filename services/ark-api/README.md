@@ -174,6 +174,7 @@ server.
 | Env var | Default | Description |
 |---|---|---|
 | `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL that the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four auth endpoints return `503`. |
+| `ARK_API_DASHBOARD_URL` | _unset_ | Base URL of the dashboard used to build the post-callback redirect for dashboard-initiated flows. The redirect target is `<value>/mcp`, so the value MUST include any path prefix under which the dashboard is served (e.g. `https://ark.example.com/dashboard` behind an `X-Forwarded-Prefix`). Same scheme rules as `ARK_API_PUBLIC_CALLBACK_URL` (HTTPS, or HTTP for loopback). Required only for the dashboard redirect-completion path; when unset, dashboard flows fall back to the HTML completion page and the CLI flow is unaffected. |
 | `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries. After this window the cache reaps the entry; in-flight callbacks will fail with "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
