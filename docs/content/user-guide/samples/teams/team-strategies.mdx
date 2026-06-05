@@ -4,7 +4,6 @@ import { Callout } from 'nextra/components'
 
 Teams coordinate multiple agents through execution strategies. Each strategy defines how team members interact and process messages.
 
-
 ```mermaid
 graph TD
     subgraph "Sequential Strategy"
@@ -40,7 +39,7 @@ graph TD
 
 ## Sequential Strategy
 
-Executes team members in defined order, passing message history between members.
+Executes team members in declared order, passing message history between members. A single pass — every member runs once and the team returns.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -50,20 +49,20 @@ metadata:
 spec:
   strategy: sequential
   members:
-  - name: agent1
-    type: agent
-  - name: agent2
-    type: agent
+    - name: agent1
+      type: agent
+    - name: agent2
+      type: agent
 ```
 
 **Implementation**: `ark/executors/completions/team.go`
-- Processes members one by one in array order
-- Each member receives complete message history from previous members
-- Execution stops on first error or termination
+- Processes members in `members[]` order.
+- Each member receives the full message history from previous members.
+- Execution stops after the last member, on error, or when a member calls the `terminate` built-in tool.
 
 ## Sequential with Loops
 
-Cycles through team members repeatedly until `maxTurns` limit or team termination.
+Cycles through team members repeatedly until `maxTurns` is reached or the team terminates early.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -75,25 +74,25 @@ spec:
   loops: true
   maxTurns: 10
   members:
-  - name: agent1
-    type: agent
-  - name: agent2
-    type: agent
+    - name: agent1
+      type: agent
+    - name: agent2
+      type: agent
 ```
 
 **Implementation**: `ark/executors/completions/team.go`
-- Continuously cycles through all members in order
-- Requires `maxTurns` to prevent infinite loops
-- Maintains message history across cycles
-- Use terminate tool to end execution early
+- Cycles through all members in order.
+- Requires `maxTurns` to prevent infinite loops (the admission webhook rejects the team without it).
+- Maintains message history across cycles.
+- Give one or more members the `terminate` built-in tool so the loop can exit early when the conversation is done.
 
 <Callout type="warning">
-`strategy: round-robin` is deprecated. Use `strategy: sequential` with `loops: true` instead. Existing round-robin teams are automatically migrated.
+`strategy: round-robin` is deprecated and will be removed in v1.0.0. Apply teams with `strategy: sequential` + `loops: true` instead. The mutating webhook auto-migrates existing round-robin teams on create/update and stamps a migration-warning annotation.
 </Callout>
 
 ## Selector Strategy
 
-AI agent chooses next participant based on conversation context.
+An LLM-powered selector agent chooses the next participant each turn based on the conversation so far.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -111,60 +110,27 @@ spec:
       History: {{.History}}
       Use the select-next-speaker tool to make your selection.
   members:
-  - name: researcher
-    type: agent
-  - name: writer
-    type: agent
+    - name: researcher
+      type: agent
+    - name: writer
+      type: agent
 ```
 
 **Implementation**: `ark/executors/completions/team_selector.go`
-- Uses AI agent to select next participant
-- Template-based prompts with conversation history
-- Uses `select-next-speaker` tool with enum-constrained candidates
-- Use terminate tool to end execution early
+- Calls the selector agent each turn with the conversation, available participants, and a `select-next-speaker` tool.
+- The tool's `name` parameter is an enum of valid candidates — the selector is forced (via `tool_choice: required`) to call the tool with a valid name.
+- Supports the optional `terminate` tool (via `selector.enableTerminateTool`) so the selector can end the conversation early.
+- Template-based prompts with conversation history.
 
 ### Selector Template Variables
-- `{{.Participants}}`: Comma-separated member names
-- `{{.Roles}}`: Member names with descriptions
-- `{{.History}}`: Formatted conversation history
 
-## Graph Strategy
-
-Directed workflow execution following defined transitions.
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Team
-metadata:
-  name: graph-team
-spec:
-  strategy: graph
-  maxTurns: 5
-  members:
-  - name: researcher
-    type: agent
-  - name: analyzer
-    type: agent
-  - name: writer
-    type: agent
-  graph:
-    edges:
-    - from: researcher
-      to: analyzer
-    - from: analyzer
-      to: writer
-```
-
-**Implementation**: `ark/executors/completions/team_graph.go`
-- Follows directed graph edges for member transitions
-- Starts with first member in members array
-- Execution stops when no outgoing edge exists or team termination
-- Requires `maxTurns` to prevent infinite cycles
-- Use terminate tool to end execution early
+- `{{.Participants}}`: Comma-separated member names.
+- `{{.Roles}}`: Member names with descriptions.
+- `{{.History}}`: Formatted conversation history.
 
 ## Graph-Constrained Selector Strategy
 
-Combines AI-driven selection with workflow constraints. The selector agent chooses the next participant, but only from members allowed by the graph edges.
+Combines the selector strategy with graph constraints. The selector still chooses the next participant, but only from members reachable from the current one via `graph.edges`.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -194,32 +160,32 @@ spec:
 ```
 
 **Implementation**: `ark/executors/completions/team_selector.go`
-- Uses selector agent to choose next participant
-- Graph constraints limit available candidates
-- Single legal transition: skips selector agent (optimization)
-- Multiple legal transitions: selector agent chooses from candidates
-- No legal transitions: falls back to first member
-- Combines flexibility of AI selection with structure of graph workflows
+- Uses the selector agent to choose the next participant.
+- Graph constraints filter the candidates the selector sees.
+- Single legal transition: skips the selector and follows the edge directly (optimisation).
+- Multiple legal transitions: the selector picks from those candidates.
+- Combines AI-driven flexibility with workflow structure.
 
 ### How It Works
 
-1. **Graph Constraint Lookup**: After each member executes, system looks up legal transitions from that member
-2. **Candidate Filtering**: If multiple transitions exist, selector agent chooses from only those candidates
-3. **Optimization**: If only one legal transition exists, system uses it directly without calling selector agent
-4. **AI Selection**: Selector agent analyzes conversation and chooses best candidate from filtered list
-5. **Execution**: Selected member processes messages and adds response
+1. **Graph lookup**: After each member runs, the system looks up legal transitions from that member.
+2. **Candidate filtering**: If multiple transitions exist, the selector chooses from just those candidates.
+3. **Optimisation**: If only one legal transition exists, the system uses it directly without calling the selector.
+4. **AI selection**: The selector analyses the conversation and picks the best candidate from the filtered list.
+5. **Execution**: The selected member processes the messages and adds its response.
 
 ### Use Cases
 
-- **Workflow with Flexibility**: Define required workflow structure but allow AI to choose between valid options
-- **Branching Workflows**: Multiple valid paths where AI selects the best route
-- **Quality Gates**: Ensure certain steps happen in order while allowing flexibility elsewhere
+- **Required ordering with flexibility** — define the order steps must happen in but let the AI fill the gaps.
+- **Branching workflows** — multiple valid paths where the AI picks the best route.
+- **Quality gates** — ensure certain steps always happen in sequence while allowing flexibility elsewhere.
 
 ### Example: Research Workflow
 
 ```yaml
 spec:
   strategy: selector
+  maxTurns: 10
   selector:
     agent: coordinator
   members:
@@ -233,15 +199,10 @@ spec:
       type: agent
   graph:
     edges:
-      # Coordinator can start with researcher or analyzer
-      - from: coordinator
-        to: researcher
-      - from: coordinator
-        to: analyzer
       # Researcher must go to analyzer
       - from: researcher
         to: analyzer
-      # Analyzer can go to reviewer or writer
+      # Analyzer can go to reviewer or writer (flexible)
       - from: analyzer
         to: reviewer
       - from: analyzer
@@ -252,53 +213,57 @@ spec:
 ```
 
 In this example:
-- Coordinator AI chooses initial path (researcher or analyzer)
-- Researcher always flows to analyzer (required step)
-- Analyzer AI chooses between reviewer or writer (flexibility)
-- Reviewer always flows to writer (required step)
+
+- The team starts with `researcher` (first member).
+- `researcher` always flows to `analyzer` (required step — single legal transition).
+- `analyzer` flows to either `reviewer` or `writer` — the selector picks based on the conversation.
+- `reviewer` always flows to `writer`.
+
+## Deprecated: standalone `graph` strategy
+
+`strategy: graph` (with edges but no selector) is deprecated and will be removed in `v1.0.0`. The mutating webhook rewrites it to `strategy: sequential` and **discards your edges**, so an existing graph team applied today loses its graph topology silently.
+
+To preserve graph-shaped flow with the new model, switch to `strategy: selector` + `graph.edges` — see the [Graph-Constrained Selector](#graph-constrained-selector-strategy) section above.
 
 ## Team Composition
 
 ### Nested Teams
+
 Teams can contain other teams as members:
 
 ```yaml
 spec:
   members:
-  - name: sub-team
-    type: team
-  - name: agent1
-    type: agent
+    - name: sub-team
+      type: team
+    - name: agent1
+      type: agent
 ```
 
 ### Member Types
-- `agent`: Individual AI agent
-- `team`: Nested team with its own strategy
 
-## Configuration Options
+- `agent` — individual AI agent.
+- `team` — nested team with its own strategy.
 
-### Common Settings
-- `loops`: Enable cycling through members (sequential strategy only)
-- `maxTurns`: Maximum execution cycles (required for sequential+loops, selector, graph)
-- `description`: Team description used in selector templates
-- `members`: Array of TeamMember objects
+A team cannot reference itself, and you cannot mix agents whose execution engines are external (e.g. Claude Agent SDK, LangChain) with built-in completion agents in one team.
 
-### Strategy-Specific Settings
-- **Sequential**: `loops` (optional, enables cycling)
-- **Selector**: `selector.agent`, `selector.selectorPrompt`
-- **Graph**: `graph.edges` array with `from`/`to` references
+## Configuration Reference
 
-## Error Handling
+### Strategy-specific fields
 
-All strategies support:
-- Graceful termination via `TerminateTeam` error
-- Message history preservation on errors
-- Turn tracking and limits
-- Event recording for observability
+- **Sequential**: `loops` (optional, enables cycling).
+- **Sequential + loops**: `maxTurns` required.
+- **Selector**: `selector.agent` (required), `selector.selectorPrompt`, `selector.enableTerminateTool`, `selector.terminatePrompt`, `maxTurns` (required).
+- **Selector + graph**: same as selector plus `graph.edges`.
+
+### Common fields
+
+- `description` — surfaces in selector prompts as part of `{{.Roles}}`.
+- `members[]` — required, at least one entry.
 
 ## Early Termination
 
-Agents can use the terminate tool to end team execution early:
+Any team member (or the selector agent itself) can use the built-in `terminate` tool to end execution early:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -306,17 +271,16 @@ kind: Agent
 metadata:
   name: coordinator
 spec:
-  prompt: "You coordinate the team. Use terminate tool when task is complete."
+  prompt: "You coordinate the team. Use terminate when the task is complete."
   tools:
-  - name: terminate
-    type: builtin
+    - name: terminate
+      type: built-in
 ```
 
-The terminate tool stops team execution and returns current results without processing remaining members or turns.
+The `terminate` tool stops the team and returns the current results without processing remaining members or turns.
 
-## Sample Files
+## Sample files
 
 - Basic sequential: `samples/teams/sequential.yaml`
 - Sequential with loops: `samples/teams/sequential-with-loops.yaml`
-- Graph workflow: `samples/teams/graph-strategy.yaml`
 - Selector strategy: `samples/teams/selector-strategy.yaml`
