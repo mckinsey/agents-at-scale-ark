@@ -23,27 +23,7 @@
         },
         {
           "type": "toml",
-          "path": "services/arkpy/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
-          "path": "services/postgres-eventsink/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
-          "path": "services/autogen-execution-engine/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
           "path": "services/ark-api/ark-api/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
-          "path": "services/a2agw-python/pyproject.toml",
           "jsonpath": "project.version"
         },
         {
@@ -106,11 +86,6 @@
         },
         {
           "type": "yaml",
-          "path": "samples/agent-hosting/hosted-langchain-agents/chart/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        },
-        {
-          "type": "yaml",
           "path": "ark/executors/completions/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
@@ -137,16 +112,6 @@
         {
           "type": "yaml",
           "path": "services/ark-mcp/chart/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        },
-        {
-          "type": "yaml",
-          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
         },
         {
