@@ -89,16 +89,22 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
           {agent.description ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+                <NamespacedLink
+                  href={`/agents/${encodeURIComponent(agent.name)}`}
+                  tabIndex={-1}
+                  className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
                   {agent.description}
-                </span>
+                </NamespacedLink>
               </TooltipTrigger>
               <TooltipContent>{agent.description}</TooltipContent>
             </Tooltip>
           ) : (
-            <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+            <NamespacedLink
+              href={`/agents/${encodeURIComponent(agent.name)}`}
+              tabIndex={-1}
+              className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
               No description
-            </span>
+            </NamespacedLink>
           )}
         </div>
         <div role="cell" className={cn(rowCellClass, COL.status)}>

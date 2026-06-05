@@ -3,9 +3,9 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import * as z from 'zod';
 
+import { toast } from '@/components/ui/sonner';
 import type { components } from '@/lib/api/generated/types';
 import type { Agent, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
@@ -233,7 +233,6 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
-          toast.success('Team created successfully');
           onSuccessRef.current?.();
         }
       } catch (error) {

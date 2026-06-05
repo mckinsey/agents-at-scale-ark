@@ -7,6 +7,11 @@ import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import type { Team } from '@/lib/services';
@@ -91,12 +96,29 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
             {team.name}
           </NamespacedLink>
         </div>
-        <div role="cell" className={cn(rowCellClass, COL.description)}>
-          <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={team.description || ''}>
-            {team.description || 'No description'}
-          </span>
+        <div
+          role="cell"
+          className={cn(rowCellClass, COL.description, 'relative z-10')}>
+          {team.description ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <NamespacedLink
+                  href={`/teams/${encodeURIComponent(team.name)}`}
+                  tabIndex={-1}
+                  className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                  {team.description}
+                </NamespacedLink>
+              </TooltipTrigger>
+              <TooltipContent>{team.description}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <NamespacedLink
+              href={`/teams/${encodeURIComponent(team.name)}`}
+              tabIndex={-1}
+              className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+              No description
+            </NamespacedLink>
+          )}
         </div>
         <div role="cell" className={cn(rowCellClass, COL.members)}>
           <span

@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as z from 'zod';
 
 import { SelectorSection } from '@/components/forms/team-form/sections/selector-section';
@@ -78,14 +78,15 @@ function Wrapper({
 }
 
 describe('SelectorSection', () => {
+  afterEach(async () => {
+    if (document.querySelector('[role="option"]')) {
+      await userEvent.keyboard('{Escape}');
+    }
+  });
+
   it('should render nothing when strategy is not selector', () => {
     const { container } = render(<Wrapper strategy="round-robin" />);
     expect(container.innerHTML).toBe('');
-  });
-
-  it('should render selector configuration for selector strategy', () => {
-    render(<Wrapper />);
-    expect(screen.getByText('Selector Configuration')).toBeInTheDocument();
   });
 
   it('should render selector agent dropdown', () => {
@@ -249,7 +250,7 @@ describe('SelectorSection', () => {
       );
 
       expect(screen.getByRole('combobox')).toHaveClass(
-        'border-stroke-status-error',
+        'border-b-stroke-status-error',
       );
     });
 
@@ -261,7 +262,7 @@ describe('SelectorSection', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox')).not.toHaveClass('border-stroke-status-error');
+      expect(screen.getByRole('combobox')).not.toHaveClass('border-b-stroke-status-error');
     });
 
     it('should show unavailable agent with (Unavailable) label in the dropdown', async () => {

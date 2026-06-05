@@ -364,7 +364,7 @@ export function EmbeddedChatPanel({
         value={activeTab}
         onValueChange={v => setActiveTab(v as TabType)}
         className="flex h-full flex-col">
-        <div className="border-stroke-divider flex-shrink-0 border-b">
+        <div className="flex-shrink-0">
           <div className="flex items-center gap-2 px-4 py-3">
             <IconShell size="sm" variant="secondary">
               <ChatBubble />

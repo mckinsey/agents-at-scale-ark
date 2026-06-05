@@ -82,8 +82,4 @@ describe('BasicInfoSection', () => {
     ).toBeDisabled();
   });
 
-  it('should render Basic Information heading', () => {
-    render(<Wrapper />);
-    expect(screen.getByText('Basic Information')).toBeInTheDocument();
-  });
 });

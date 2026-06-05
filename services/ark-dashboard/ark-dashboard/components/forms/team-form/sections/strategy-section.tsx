@@ -1,18 +1,16 @@
 import { type UseFormReturn, useWatch } from 'react-hook-form';
 
-import { Settings } from '@/components/icons';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconShell } from '@/components/ui/icon-shell';
 import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+  FieldError,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
+import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Agent, TeamMember } from '@/lib/services';
+import { cn } from '@/lib/utils';
 
 import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
 import { WarningsSection } from './warnings-section';
@@ -37,6 +36,12 @@ interface StrategySectionProps {
   disabled?: boolean;
 }
 
+const RequiredMarker = () => (
+  <span aria-hidden="true" className="text-fg-secondary">
+    *
+  </span>
+);
+
 export function StrategySection({
   form,
   agents,
@@ -51,24 +56,15 @@ export function StrategySection({
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <IconShell size="sm" variant="secondary">
-          <Settings />
-        </IconShell>
-        <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
-          Strategy Configuration
-        </h3>
-      </div>
-
+    <>
       <FormField
         control={form.control}
         name="strategy"
         render={({ field }) => (
-          <FormItem>
-            <FormLabel>
-              Strategy <span className="text-status-error">*</span>
-            </FormLabel>
+          <FieldSet className="gap-2">
+            <FieldTitle>
+              Strategy <RequiredMarker />
+            </FieldTitle>
             <Select
               items={strategyItems}
               onValueChange={value => {
@@ -82,16 +78,14 @@ export function StrategySection({
               }}
               value={field.value}
               disabled={disabled}>
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a strategy">
-                    {(value: string) => {
-                      const item = strategyItems.find(i => i.value === value);
-                      return item?.label ?? value;
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-              </FormControl>
+              <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
+                <SelectValue placeholder="Select a strategy">
+                  {(value: string) => {
+                    const item = strategyItems.find(i => i.value === value);
+                    return item?.label ?? value;
+                  }}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 {strategyItems.map(item => (
                   <SelectItem key={item.value} value={item.value}>
@@ -100,8 +94,7 @@ export function StrategySection({
                 ))}
               </SelectContent>
             </Select>
-            <FormMessage />
-          </FormItem>
+          </FieldSet>
         )}
       />
 
@@ -110,23 +103,21 @@ export function StrategySection({
           control={form.control}
           name="loops"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-center space-y-0 gap-2">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={checked => {
-                    field.onChange(checked);
-                    if (!checked) {
-                      form.setValue('maxTurns', '');
-                    }
-                  }}
-                  disabled={disabled}
-                />
-              </FormControl>
+            <div className="flex flex-row items-center gap-2">
+              <Checkbox
+                checked={field.value}
+                onCheckedChange={checked => {
+                  field.onChange(checked);
+                  if (!checked) {
+                    form.setValue('maxTurns', '');
+                  }
+                }}
+                disabled={disabled}
+              />
               <Label className="text-sm font-normal">
                 Enable loops (cycle through members repeatedly)
               </Label>
-            </FormItem>
+            </div>
           )}
         />
       )}
@@ -135,22 +126,21 @@ export function StrategySection({
         <FormField
           control={form.control}
           name="maxTurns"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                Max Turns{' '}
-                <span className="text-status-error">*</span>
-              </FormLabel>
-              <FormControl>
-                <Input
-                  type="number"
-                  placeholder="e.g., 10"
-                  disabled={disabled}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          render={({ field, fieldState }) => (
+            <FieldSet className="gap-2">
+              <FieldTitle>
+                Max Turns <RequiredMarker />
+              </FieldTitle>
+              <Input
+                variant="inline"
+                type="number"
+                placeholder="e.g., 10"
+                disabled={disabled}
+                aria-invalid={!!fieldState.error}
+                {...field}
+              />
+              <FieldError>{fieldState.error?.message}</FieldError>
+            </FieldSet>
           )}
         />
       )}
@@ -161,6 +151,6 @@ export function StrategySection({
         strategy={selectedStrategy}
         enableTerminateTool={enableTerminateTool}
       />
-    </div>
+    </>
   );
 }

@@ -15,6 +15,8 @@ class TeamsPage(BasePage):
     STRATEGY_SELECT = "select, [role='combobox']"
     MAX_TURNS_INPUT = "input[name='maxTurns'], input[placeholder*='turns' i], input[type='number'], input[name='max']"
     MEMBERS_SELECT = "button:has-text('Select'), [role='combobox']:has-text('Select'), button:has-text('Add')"
+    MEMBERS_TRIGGER = "div[role='combobox'][aria-haspopup='listbox']"
+    MEMBERS_LISTBOX = "[role='listbox'][aria-multiselectable='true']"
     SAVE_BUTTON = "button:has-text('Add Team'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
     SUBMIT_TEAM_BUTTON = "button:has-text('Create Team'), button:has-text('Create'), [role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']"
     STRATEGY_TRIGGER = "form [role='combobox'], [role='dialog'] [role='combobox'], button:has-text('Select a strategy')"
@@ -53,18 +55,60 @@ class TeamsPage(BasePage):
                     self.wait_for_element(self.ADD_TEAM_BUTTON, timeout=10000)
         return False
 
+    def _open_members_dropdown(self) -> None:
+        """Open the Team Members multi-select popover if it is not already open.
+
+        Members live inside a closed Popover; their checkboxes/labels only exist
+        in the DOM while it is open. The popover content is the multi-selectable
+        listbox - scope to it specifically, since base-ui Select fields (strategy,
+        model) also render hidden ``[role='listbox']`` elements that would
+        otherwise be matched first. Idempotent so it can be called once per member
+        without toggling an already-open popover shut.
+        """
+        listbox = self.page.locator(self.MEMBERS_LISTBOX).first
+        if listbox.is_visible():
+            return
+        trigger = self.page.locator(self.MEMBERS_TRIGGER).first
+        trigger.wait_for(state="visible", timeout=10000)
+        trigger.scroll_into_view_if_needed()
+        for attempt in range(3):
+            trigger.click()
+            try:
+                listbox.wait_for(state="visible", timeout=5000)
+                return
+            except Exception:
+                logger.info(
+                    f"Members popover not visible on attempt {attempt + 1}, retrying"
+                )
+        listbox.wait_for(state="visible", timeout=2000)
+
+    def _close_members_dropdown(self) -> None:
+        """Dismiss the Team Members popover so it does not overlay the submit button."""
+        listbox = self.page.locator(self.MEMBERS_LISTBOX).first
+        if not listbox.is_visible():
+            return
+        self.page.keyboard.press("Escape")
+        try:
+            listbox.wait_for(state="hidden", timeout=5000)
+        except Exception:
+            logger.warning("Members popover did not close after Escape")
+
     def _select_member(self, member_name: str) -> None:
         logger.info(f"Selecting member: {member_name}")
+        self._open_members_dropdown()
         try:
-            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label = self.page.locator(
+                f"{self.MEMBERS_LISTBOX} label:has-text('{member_name}')"
+            ).first
             member_label.wait_for(state="visible", timeout=10000)
             member_label.click()
             logger.info(f"Selected member via label click: {member_name}")
         except Exception as e:
             logger.warning(f"Could not select member via label: {e}")
             try:
-                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
-                checkbox = member_row.locator("button[role='checkbox']").first
+                checkbox = self.page.locator(
+                    f"{self.MEMBERS_LISTBOX} [role='option']:has-text('{member_name}') button[role='checkbox']"
+                ).first
                 checkbox.wait_for(state="visible", timeout=5000)
                 checkbox.click()
                 logger.info(f"Selected member via checkbox button: {member_name}")
@@ -114,6 +158,8 @@ class TeamsPage(BasePage):
 
         for name in member_names:
             self._select_member(name)
+        if member_names:
+            self._close_members_dropdown()
 
         logger.info("Clicking Create Team button")
         create_btn = self.page.locator(self.SUBMIT_TEAM_BUTTON).first
@@ -258,17 +304,8 @@ class TeamsPage(BasePage):
         if loops and max_turns_visible:
             self.page.locator("input[name='maxTurns'], input[type='number']").first.fill(max_turns)
 
-        try:
-            member_label = self.page.locator(f"label:has-text('{member_name}')").first
-            member_label.wait_for(state="visible", timeout=10000)
-            member_label.click()
-        except Exception as e:
-            logger.warning(f"Could not select member via label: {e}")
-            try:
-                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
-                member_row.locator("button[role='checkbox']").first.click()
-            except Exception as e2:
-                logger.warning(f"Could not select member via checkbox: {e2}")
+        self._select_member(member_name)
+        self._close_members_dropdown()
 
         create_btn = self.page.locator(self.SUBMIT_TEAM_BUTTON).first
         create_btn.scroll_into_view_if_needed()
