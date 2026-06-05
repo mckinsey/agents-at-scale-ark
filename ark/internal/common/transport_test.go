@@ -49,12 +49,12 @@ func TestLoggingTransport_RoundTrip(t *testing.T) {
 	defer srv.Close()
 
 	lt := NewLoggingTransport(http.DefaultTransport)
-	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
 	require.NoError(t, err)
 
 	resp, err := lt.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -67,12 +67,12 @@ func TestLoggingTransport_RoundTrip_WithLogging(t *testing.T) {
 	t.Setenv("ENABLE_HTTP_LOGGING", "true")
 
 	lt := NewLoggingTransport(http.DefaultTransport)
-	req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader("body"))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader("body"))
 	require.NoError(t, err)
 
 	resp, err := lt.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
