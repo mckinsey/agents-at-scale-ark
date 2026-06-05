@@ -7,7 +7,7 @@ export interface Tool {
   name: string;
   type?: string;
   description?: string;
-  annotations?: unknown;
+  annotations?: Record<string, string>;
   labels?: unknown;
 }
 

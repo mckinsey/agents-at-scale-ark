@@ -7,9 +7,12 @@ import { Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServer } from '@/lib/services/mcp-servers';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface McpServersTableProps {
   readonly servers: readonly MCPServer[];
@@ -72,6 +75,7 @@ function McpServerTableRow({ server, onDelete }: McpServerTableRowProps) {
             {server.name}
           </NamespacedLink>
         </div>
+        <OriginCell origin={server.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
         <div role="cell" className={cn(rowCellClass, COL.address)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
@@ -136,6 +140,7 @@ export function McpServersTable({ servers, onDelete }: McpServersTableProps) {
         <div role="columnheader" className={cn(headerCellClass, COL.name)}>
           Name
         </div>
+        <OriginColumnHeader tooltip="Where the MCP server was first created" />
         <div role="columnheader" className={cn(headerCellClass, COL.address)}>
           Address
         </div>

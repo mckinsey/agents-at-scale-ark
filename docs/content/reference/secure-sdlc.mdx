@@ -132,40 +132,23 @@ Changes are tracked, reviewed, versioned, and released through a single automate
 
 The full release flow is documented in [Build Pipelines → Release Management](/operations-guide/build-pipelines#release-management). The semantic-versioning policy users rely on is described in [Upgrading](/reference/upgrading).
 
-**Dependency updates.** [`.github/dependabot.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/dependabot.yaml) opens weekly PRs for GitHub Actions, Terraform providers, NPM, Python, and Docker base images. Each Dependabot PR runs through the same review and CI process as a human-authored change.
+**Dependency updates.** Dependabot opens weekly PRs across the project's package ecosystems; each PR runs through the same CI and review process as a human-authored change. The full ecosystem and directory table is in [Vulnerability Management → Dependency updates](/reference/vulnerability-management#dependency-updates--dependabot).
 
 **Direct commits to `main` are blocked** server-side by the main-branch ruleset, which requires a pull request and CODEOWNERS approval. The `no-commit-to-branch` pre-commit hook is a local belt-and-braces check available to developers who have installed pre-commit themselves.
 
 ## Risk assessment procedures
 
-Risk is assessed continuously via automated scanning, periodic penetration testing, and a documented CVE workflow.
+Risk is assessed continuously through CI-side scanning, periodic external assessment, and a documented CVE-handling workflow. The dedicated treatment — including the full list of scanning tools, the baseline/whitelist prioritisation model, the action plan and reporting outputs, asset grouping, intelligence sources, and known process gaps — is in [Vulnerability Management](/reference/vulnerability-management); this section is the lifecycle-level summary.
 
-**CI-side scanning (runs on every PR and main build; see [Enforcement model](#enforcement-model) for how results gate merges).**
+**CI-side scanning** runs on every PR and main build: JFrog Xray (build + container), SonarQube, and Go linters with some security-relevant rules (`gocritic`, `bodyclose`, `errcheck`). Results surface on the PR but are not required status checks — see the [Enforcement model](#enforcement-model) above for how that gates merges. Gitleaks is configured as a pre-commit hook only and is not run in CI; the contributor-side install gap is described in [Error checking procedures](#error-checking-procedures) above.
 
-- **JFrog Xray** — supply-chain and container vulnerability scanning, invoked from `.github/workflows/cicd.yaml` against the `ark-20863-security-watch` watch. New violations relative to the last successful main scan fail the workflow run; a whitelist of accepted findings is maintained at [`.github/actions/jfrog-xray-scan/tolerated_violations.txt`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/actions/jfrog-xray-scan/tolerated_violations.txt).
-- **SonarQube** — static code analysis with a quality gate (`.github/workflows/sonar_scan.yaml`). Security severity findings fail the workflow run; reliability and maintainability findings are tracked with a downward-trend expectation (see [Code Analysis Reports](/operations-guide/code-analysis-reports)).
-- **Go linters** include `gocritic`, `bodyclose`, and `errcheck`, which catch a subset of common security-relevant bugs at lint time.
+**Periodic external assessment** is published in the dated security-assurance report pages:
 
-**Configured but not in the CI pipeline.**
+- [Penetration Testing Reports](/operations-guide/penetration-testing-reports) — third-party assessment findings, risk levels, remediation status, and dates.
+- [Code Analysis Reports](/operations-guide/code-analysis-reports) — per-stack SonarQube issue counts.
+- [Artifact Analysis Reports](/operations-guide/artifact-analysis-reports) — per-image vulnerability counts.
 
-- **Gitleaks** — secret scanning, configured in [`.pre-commit-config.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.pre-commit-config.yaml) and **not run in any CI workflow**. It executes only for contributors who have independently installed `pre-commit` and run `pre-commit install`, which Ark does not currently instruct them to do. Server-side GitHub secret-scanning alerts (a platform feature, not a pipeline step) are the only mechanical backstop and depend on org-level settings.
-
-**Periodic assessment.**
-
-- **Penetration tests** — third-party assessments are summarised in [Penetration Testing Reports](/operations-guide/penetration-testing-reports), with risk levels, remediation status, and dates.
-- **Static code analysis snapshots** — per-stack issue counts are published in [Code Analysis Reports](/operations-guide/code-analysis-reports).
-- **Artifact analysis snapshots** — per-image vulnerability counts are published in [Artifact Analysis Reports](/operations-guide/artifact-analysis-reports).
-
-**CVE and vulnerability handling.** Security-relevant issues are triaged using the [`ark-security-patcher`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.claude/agents/ark-security-patcher.md) agent flow, supported by the `vulnerability-fixer` and `pentest-issue-resolver` skills. A typical CVE patch:
-
-1. Researches the advisory and impact in Ark.
-2. Proposes a mitigation or version bump.
-3. Implements the change in the affected service.
-4. Opens a `fix:` PR that runs the same lint / test / Xray / SonarQube workflows.
-
-Dependabot PRs feed the same workflow for routine dependency CVEs.
-
-**Risk decisions.** Where a finding cannot be remediated immediately, it is recorded in the relevant operations-guide report or in `tolerated_violations.txt`, with the trend expected to move downwards over successive scans. This is the citable record of accepted residual risk.
+**CVE and vulnerability handling.** Routine dependency CVEs flow through Dependabot. New unwhitelisted Xray violations auto-create GitHub issues. Manual CVE work and pentest findings follow the [`ark-security-patcher`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.claude/agents/ark-security-patcher.md) agent workflow, supported by the `vulnerability-fixer` and `pentest-issue-resolver` skills. Compensating controls and accepted residual risk are recorded inline in `tolerated_violations.txt`, which doubles as the citable record. Full process in [Vulnerability Management → Action plan and patch management](/reference/vulnerability-management#action-plan-and-patch-management).
 
 ## See also
 

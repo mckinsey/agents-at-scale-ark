@@ -17,7 +17,10 @@ export default {
   upgrading: 'Upgrading',
   troubleshooting: 'Troubleshooting',
   'utility-images': 'Utility Images',
+  'release-process': 'Release Process and Artifacts',
   'secure-sdlc': 'Secure Software Development Lifecycle',
+  'secure-software-architecture': 'Secure Software Architecture',
+  'vulnerability-management': 'Vulnerability Management',
 
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors',

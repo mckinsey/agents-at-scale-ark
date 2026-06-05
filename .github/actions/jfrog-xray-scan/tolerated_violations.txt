@@ -12,7 +12,7 @@ XRAY-962422 - CVE-2026-39883
 - Not exploitable in Ark: all Ark Go components run in Linux containers (alpine/bookworm). The `kenv` code path is only invoked on BSD/Solaris hosts. No BSD/Solaris runtime targets exist in Ark deployment.
 XRAY-97724 - CVE-2018-20225
 - An issue was discovered in pip (all versions) because it installs the version with the highest version number, even if the user had intended to obtain a private package from a private index. This only affects use of the --extra-index-url option, and exploitation requires that the package does not already exist in the public index (and thus the attacker can put the package there with an arbitrary version number). NOTE: it has been reported that this is intended functionality and the user is responsible for using --extra-index-url securely.
-- NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, langchain-weather-agent, simple-agent, retrieval-service, tool templates).
+- NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, simple-agent, retrieval-service, tool templates).
 - Evidence: All Python Dockerfiles use "uv sync --frozen" for dependency installation. pip is only present in base images and used to bootstrap uv itself ("pip install uv"), never for --extra-index-url operations.
 - No fix available: This is considered intended pip functionality per official response. Using uv eliminates the attack vector entirely.
 XRAY-913110 - CVE-2026-0621
@@ -24,8 +24,8 @@ XRAY-934751 - CVE-2024-58340
 XRAY-935637 - CVE-2026-0994
 - A denial-of-service vulnerability exists in google.protobuf (Python) versions up to 6.33.4 where json_format.ParseDict() allows max_recursion_depth bypass via nested google.protobuf.Any messages, causing Python recursion stack exhaustion. Severity: High (CVSS 8.2).
 - No patched version is available yet. The fix is merged to protobuf master (PR #25239) but not released to PyPI. Latest available version is 6.33.4 (still vulnerable).
-- Mitigations applied: (1) Pinned protobuf>=6.33.4 in ark-api and langchain-weather-agent, (2) Updated langchain-weather-agent from 6.33.0 to 6.33.4, (3) Documented vulnerability and upgrade path in CVE-2026-0994.md.
-- Used in services/ark-api/ark-api and samples/a2a/langchain-weather-agent via a2a-sdk dependency.
+- Mitigations applied: (1) Pinned protobuf>=6.33.4 in ark-api (2) Documented vulnerability and upgrade path in CVE-2026-0994.md.
+- Used in services/ark-api/ark-api via a2a-sdk dependency.
 - Will upgrade immediately when patched version is released to PyPI.
 XRAY-937734 - CVE-2026-23864
 - Resource exhaustion in React allows attackers to perform denial of service by sending crafted HTTP requests.
