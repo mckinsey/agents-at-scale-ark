@@ -28,13 +28,13 @@ Ark uses [Release Please](https://github.com/googleapis/release-please) with dua
 
 **Version synchronization** ensures consistency across all artifacts. Release Please updates versions in:
 - Root `version.txt` and `ark/version.txt`
-- Python packages: 8 `pyproject.toml` files (ark-sdk, ark-api, ark-mcp, arkpy, postgres-eventsink, autogen-execution-engine, a2agw-python, overlay)
-- Helm charts: 10 `Chart.yaml` files with both `version` and `appVersion` fields
+- Python packages: 3 `pyproject.toml` files (ark-sdk, ark-api, overlay)
+- Helm charts: 8 `Chart.yaml` files with both `version` and `appVersion` fields
 - Node.js packages: `package.json` for ark-cli, ark-broker, docs site
 - Kubernetes manifests: `ark/config/manager/manager.yaml`
 - Marketplace metadata: `.claude-plugin/marketplace.json`
 
-Total: 58+ tracked files across the monorepo.
+Total: 42+ tracked files across the monorepo.
 
 ## RC Release Cycle
 
@@ -95,8 +95,8 @@ sequenceDiagram
    - `check-release` job detects that the merge was a Release Please PR
    - Creates GitHub release with tag (e.g., `v0.1.61-rc`)
    - Attaches artifacts to the GitHub release:
-     - **Python wheels** — 8 packages built from `lib/` and `services/` (job: `release-libs`)
-     - **Helm charts** — 10 packaged charts as `.tgz` files (job: `release-charts`)
+     - **Python wheels** — 3 packages built from `lib/` and `services/` (job: `release-libs`)
+     - **Helm charts** — 8 packaged charts as `.tgz` files (job: `release-charts`)
      - **ark-cli package** — npm tarball (job: `release-ark-cli`)
      - **fark binaries** — Linux/macOS/Windows builds with checksums (job: `release-fark`)
    - **Does NOT** publish to public registries (npm, PyPI) or deploy documentation site
@@ -226,30 +226,6 @@ sequenceDiagram
    - Merge the bootstrap PR (requires CODEOWNERS approval)
    - **Next RC cycle begins** — Release Please will now create `v0.1.62-rc` from conventional commits
 
-## Version Determination Logic
-
-Release Please determines version bumps based on conventional commit types and the current version. Ark uses `bump-patch-for-minor-pre-major: true`, which affects how versions are bumped before reaching 1.0.0.
-
-### For versions < 1.0.0 (current state)
-
-Current version example: `0.1.63` {/* x-release-please-version */}
-
-| Commit Type | Example | Version Bump | Result |
-|-------------|---------|--------------|--------|
-| `feat:` | `feat: add new executor` | Patch | `0.1.63` → `0.1.64` |
-| `fix:` | `fix: resolve memory leak` | Patch | `0.1.63` → `0.1.64` |
-| `feat!:` or `BREAKING CHANGE:` | `feat!: remove deprecated API` | Minor | `0.1.63` → `0.2.0` |
-| Other (`docs:`, `chore:`, etc.) | `docs: update README` | None | Included in changelog only |
-
-### For versions ≥ 1.0.0 (future state)
-
-| Commit Type | Example | Version Bump | Result |
-|-------------|---------|--------------|--------|
-| `feat:` | `feat: add new executor` | Minor | `1.0.0` → `1.1.0` |
-| `fix:` | `fix: resolve memory leak` | Patch | `1.0.0` → `1.0.1` |
-| `feat!:` or `BREAKING CHANGE:` | `feat!: remove deprecated API` | Major | `1.0.0` → `2.0.0` |
-| Other (`docs:`, `chore:`, etc.) | `docs: update README` | None | Included in changelog only |
-
 ### RC Version Sequences
 
 RC versions follow a specific pattern:
@@ -314,11 +290,6 @@ Built and published via `.github/workflows/cicd.yaml` (build-and-test-services j
 | ark-sdk | `ark_sdk` | `lib/ark-sdk/` | Generated SDK from CRDs + hand-written overlay |
 | ark-sdk overlay | `ark_sdk` | `lib/ark-sdk/gen_sdk/overlay/python/` | Hand-written executor interfaces |
 | ark-api | `ark-api` | `services/ark-api/ark-api/` | FastAPI service for REST gateway |
-| ark-mcp | `ark-mcp` | `services/ark-mcp/ark-mcp/` | MCP server host |
-| arkpy | `arkpy` | `services/arkpy/` | Python utilities |
-| postgres-eventsink | `postgres-eventsink` | `services/postgres-eventsink/` | PostgreSQL event storage backend |
-| autogen-execution-engine | `autogen-execution-engine` | `services/autogen-execution-engine/` | AutoGen executor implementation |
-| a2agw-python | `a2agw-python` | `services/a2agw-python/` | Agent-to-Agent gateway (Python) |
 
 **Registry**: PyPI (production). TestPyPI used for validation before production publish.
 
@@ -372,15 +343,10 @@ All version strings are synchronized atomically by Release Please on every relea
 - `version.txt` (root)
 - `ark/version.txt` (controller)
 
-**Python packages** (8 locations):
+**Python packages** (3 locations):
 - `lib/ark-sdk/pyproject.toml`
 - `lib/ark-sdk/gen_sdk/overlay/python/pyproject.toml`
-- `services/arkpy/pyproject.toml`
 - `services/ark-api/ark-api/pyproject.toml`
-- `services/ark-mcp/ark-mcp/pyproject.toml`
-- `services/postgres-eventsink/pyproject.toml`
-- `services/autogen-execution-engine/pyproject.toml`
-- `services/a2agw-python/pyproject.toml`
 
 **Helm charts** (10 locations, both `version` and `appVersion` fields):
 - `ark/dist/chart/Chart.yaml` (ark-controller)
