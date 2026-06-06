@@ -22,7 +22,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         from ark_api.main import app
         self.client = TestClient(app)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -52,7 +52,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["kind"], "Pod")
         self.assertEqual(data["metadata"]["name"], "test-pod")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -85,7 +85,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["kind"], "PodList")
         self.assertEqual(len(data["items"]), 2)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -115,7 +115,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["kind"], "WorkflowTemplate")
         self.assertEqual(data["metadata"]["name"], "test-workflow")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -148,7 +148,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["kind"], "WorkflowTemplateList")
         self.assertEqual(len(data["items"]), 2)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_resource_with_namespace_param(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -178,7 +178,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["metadata"]["namespace"], "custom-namespace")
         mock_api_resource.get.assert_called_once_with(name="test-pod", namespace="custom-namespace")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_resource_namespace_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -199,7 +199,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_core_resource_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -233,7 +233,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("kind: Pod", response.text)
         self.assertIn("name: test-pod", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -268,7 +268,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("application/yaml", response.headers["content-type"])
         self.assertIn("kind: PodList", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -300,7 +300,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("application/yaml", response.headers["content-type"])
         self.assertIn("kind: WorkflowTemplate", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -335,7 +335,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("application/yaml", response.headers["content-type"])
         self.assertIn("kind: WorkflowTemplateList", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_core_resource_api_lookup_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -354,7 +354,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_api_lookup_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -373,7 +373,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -394,7 +394,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -415,7 +415,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -437,7 +437,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         mock_api_resource.delete.assert_called_once_with(name="test-pod", namespace="default")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -459,7 +459,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="default")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_core_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -481,7 +481,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         mock_api_resource.delete.assert_called_once_with(name="test-pod", namespace="custom-namespace")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -503,7 +503,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="custom-namespace")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_core_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -524,7 +524,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -545,7 +545,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_with_filters(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -594,7 +594,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 1)
         self.assertEqual(data["items"][0]["metadata"]["name"], "test-workflow-123")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_name(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -635,7 +635,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 1)
         self.assertEqual(data["items"][0]["metadata"]["name"], "my-test-workflow")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_template(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -676,7 +676,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 1)
         self.assertEqual(data["items"][0]["metadata"]["name"], "workflow1")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_failed_status(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -724,7 +724,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("Failed", phases)
         self.assertIn("Error", phases)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_succeeded_status(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -765,7 +765,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 1)
         self.assertEqual(data["items"][0]["status"]["phase"], "Succeeded")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_create_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -798,7 +798,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.json(), resource_body)
         mock_api_resource.create.assert_called_once()
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_create_core_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -826,7 +826,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         mock_api_resource.create.assert_called_once_with(body=resource_body, namespace="custom-ns")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_create_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -859,7 +859,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.json(), resource_body)
         mock_api_resource.create.assert_called_once()
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_create_grouped_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -891,7 +891,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         mock_api_resource.create.assert_called_once_with(body=resource_body, namespace="prod")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_get_pod_logs_success(self, mock_core_v1_cls, mock_api_client):
         """Test successful retrieval of pod logs."""
@@ -908,7 +908,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.text, "Log line 1\nLog line 2\n")
         mock_core_v1.read_namespaced_pod_log.assert_called_once()
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_get_pod_logs_with_params(self, mock_core_v1_cls, mock_api_client):
         """Test retrieval of pod logs with container and tail parameters."""
@@ -934,7 +934,7 @@ class TestResourcesEndpoint(unittest.TestCase):
             follow=False
         )
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_get_pod_logs_failure(self, mock_core_v1_cls, mock_api_client):
         """Test pod logs retrieval handles errors."""
@@ -950,7 +950,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn("Error fetching logs", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_get_workflow_logs_direct_lookup(self, mock_core_v1_cls, mock_api_client):
         """Test workflow logs retrieval with direct node ID lookup."""
@@ -969,7 +969,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.text, "Workflow log output\n")
         mock_core_v1.read_namespaced_pod_log.assert_called_once()
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_get_workflow_logs_fallback_lookup(self, mock_core_v1_cls, mock_api_client):
         """Test workflow logs retrieval with fallback pod search."""
@@ -1001,7 +1001,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(mock_core_v1.read_namespaced_pod_log.call_count, 2)
         mock_core_v1.list_namespaced_pod.assert_called_once()
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_get_workflow_logs_no_logs_available(self, mock_core_v1_cls, mock_api_client):
         """Test workflow logs when pod has no logs."""
@@ -1019,7 +1019,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "No logs available.")
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     @patch('ark_api.api.v1.resources.DynamicClient')
     def test_get_workflow_logs_pod_not_found(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
@@ -1059,7 +1059,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("Pod has been deleted", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     @patch('ark_api.api.v1.resources.DynamicClient')
     def test_get_workflow_logs_node_not_in_workflow(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
@@ -1094,7 +1094,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("Node missing-node not found", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     @patch('ark_api.api.v1.resources.DynamicClient')
     def test_get_workflow_logs_workflow_query_fails(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
@@ -1123,7 +1123,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn("Failed to fetch logs", response.text)
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -1167,7 +1167,7 @@ class TestResourcesEndpoint(unittest.TestCase):
             label_selector="app.kubernetes.io/instance=phoenix"
         )
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
@@ -1215,7 +1215,7 @@ class TestResourcesEndpoint(unittest.TestCase):
             label_selector="app.kubernetes.io/instance=phoenix"
         )
 
-    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_without_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
