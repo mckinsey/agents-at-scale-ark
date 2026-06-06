@@ -1,9 +1,7 @@
-from datetime import datetime
 import base64
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from .dummy import DummyRevision, DummyRelease
+from .dummy import DummyRelease
 import pytest
 
 from ark_api.utils.ark_services import (

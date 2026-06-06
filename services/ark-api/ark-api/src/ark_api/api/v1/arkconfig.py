@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from kubernetes_asyncio.client import CustomObjectsApi
 from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.impersonation import ImpersonationConfig

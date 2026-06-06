@@ -1,17 +1,12 @@
 """A2A Proxy routes for making agent to agent comunication accesible from outside """
 import logging
 import os
-from multiprocessing import get_context
-from token import OP
 from ark_api.utils.ark_services import get_headers
 from ark_sdk.k8s import get_context
 from ark_sdk.client import with_ark_client
-from datetime import datetime
 from kubernetes_asyncio import client
-from posix import preadv
 from typing import Optional
 import httpx
-import resource
 
 from fastapi import APIRouter, Depends, Query, Request, Response, HTTPException
 from ark_sdk.impersonation import ImpersonationConfig
@@ -19,7 +14,6 @@ from ark_sdk.impersonation import ImpersonationConfig
 from ....auth.dependencies import get_impersonation_config
 
 from ..client_utils import get_impersonating_api_client
-from ..exceptions import handle_k8s_errors
 from ....models.models import ServiceListResponse
 from .proxy_resources import Resource
 

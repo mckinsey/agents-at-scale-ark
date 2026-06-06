@@ -7,7 +7,7 @@ import io
 import json
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
-from fastapi import APIRouter, Depends, Query, Request, Response, HTTPException
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from kubernetes import client
 from kubernetes.client import CustomObjectsApi
@@ -51,7 +51,7 @@ async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consist
             return {}
         raise
     except json.JSONDecodeError:
-        logger.warning(f"Invalid JSON in export history ConfigMap, returning empty history")
+        logger.warning("Invalid JSON in export history ConfigMap, returning empty history")
         return {}
 
 
