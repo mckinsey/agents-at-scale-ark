@@ -165,7 +165,7 @@ class TestARKResourceClient(BaseTestCase):
     
     def test_delete_resource(self):
         """Test deleting a resource"""
-        
+
         # Setup
         client = ARKResourceClient(
             api_version="test.io/v1",
@@ -174,10 +174,10 @@ class TestARKResourceClient(BaseTestCase):
             model_class=MockModel,
             namespace="default"
         )
-        
+
         # Delete resource
         client.delete("test-resource")
-        
+
         # Verify
         self.mock_api_client.delete_namespaced_custom_object.assert_called_once_with(
             group="test.io",
@@ -186,4 +186,170 @@ class TestARKResourceClient(BaseTestCase):
             plural="testresources",
             name="test-resource"
         )
+
+    # ApiException Propagation Tests - Issue #2373
+    # These tests ensure Kubernetes ApiException is propagated with status codes intact,
+    # allowing SDK consumers to distinguish 404 (not found) from 403 (RBAC) from 5xx (cluster issues)
+
+    def test_get_resource_404_propagates_apiexception(self):
+        """Test that 404 errors propagate as ApiException with status=404"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 404
+        self.mock_api_client.get_namespaced_custom_object.side_effect = ApiException(status=404, reason="Not Found")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates with status intact
+        with self.assertRaises(ApiException) as ctx:
+            client.get("missing-resource")
+
+        self.assertEqual(ctx.exception.status, 404)
+
+    def test_get_resource_403_propagates_apiexception(self):
+        """Test that 403 RBAC errors propagate as ApiException with status=403"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 403
+        self.mock_api_client.get_namespaced_custom_object.side_effect = ApiException(status=403, reason="Forbidden")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates with status intact
+        with self.assertRaises(ApiException) as ctx:
+            client.get("forbidden-resource")
+
+        self.assertEqual(ctx.exception.status, 403)
+
+    def test_get_resource_500_propagates_apiexception(self):
+        """Test that 500 cluster errors propagate as ApiException with status=500"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 500
+        self.mock_api_client.get_namespaced_custom_object.side_effect = ApiException(status=500, reason="Internal Server Error")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates with status intact
+        with self.assertRaises(ApiException) as ctx:
+            client.get("error-resource")
+
+        self.assertEqual(ctx.exception.status, 500)
+
+    def test_list_resource_403_propagates_apiexception(self):
+        """Test that list operations propagate 403 ApiException"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 403
+        self.mock_api_client.list_namespaced_custom_object.side_effect = ApiException(status=403, reason="Forbidden")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates
+        with self.assertRaises(ApiException) as ctx:
+            client.list()
+
+        self.assertEqual(ctx.exception.status, 403)
+
+    def test_create_resource_409_propagates_apiexception(self):
+        """Test that create conflict errors propagate as ApiException with status=409"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 409
+        self.mock_api_client.create_namespaced_custom_object.side_effect = ApiException(status=409, reason="Conflict")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates
+        resource = MockModel(**self.sample_resource_data)
+        with self.assertRaises(ApiException) as ctx:
+            client.create(resource)
+
+        self.assertEqual(ctx.exception.status, 409)
+
+    def test_update_resource_404_propagates_apiexception(self):
+        """Test that update operations propagate 404 ApiException"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 404
+        self.mock_api_client.replace_namespaced_custom_object.side_effect = ApiException(status=404, reason="Not Found")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates
+        resource = MockModel(**self.sample_resource_data)
+        with self.assertRaises(ApiException) as ctx:
+            client.update(resource)
+
+        self.assertEqual(ctx.exception.status, 404)
+
+    def test_patch_resource_422_propagates_apiexception(self):
+        """Test that patch validation errors propagate as ApiException with status=422"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 422
+        self.mock_api_client.patch_namespaced_custom_object.side_effect = ApiException(status=422, reason="Unprocessable Entity")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates
+        with self.assertRaises(ApiException) as ctx:
+            client.patch("test-resource", {"invalid": "patch"})
+
+        self.assertEqual(ctx.exception.status, 422)
+
+    def test_delete_resource_404_propagates_apiexception(self):
+        """Test that delete operations propagate 404 ApiException"""
+        from kubernetes.client.rest import ApiException
+
+        # Setup: Mock API raises 404
+        self.mock_api_client.delete_namespaced_custom_object.side_effect = ApiException(status=404, reason="Not Found")
+        client = ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+        # Verify: ApiException propagates
+        with self.assertRaises(ApiException) as ctx:
+            client.delete("missing-resource")
+
+        self.assertEqual(ctx.exception.status, 404)
     

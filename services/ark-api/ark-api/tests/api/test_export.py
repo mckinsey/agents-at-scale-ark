@@ -9,18 +9,15 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from fastapi.testclient import TestClient
-from kubernetes.client.rest import ApiException
 
 os.environ["AUTH_MODE"] = "open"
 
-import ark_api.api.v1.export as export_module
 from ark_api.main import app
 from ark_api.api.v1.export import (
     _collect_workflows,
     collect_resources,
     get_export_history,
     update_export_history,
-    EXPORT_CONFIGMAP_NAMESPACE,
 )
 
 
