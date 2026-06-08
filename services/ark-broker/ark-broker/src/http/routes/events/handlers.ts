@@ -22,16 +22,16 @@ export function handleStreamingAllEvents(
 
   const getReplay =
     cursor !== undefined
-      ? (): Promise<EventData[]> => {
-          let items = events
-            .all()
-            .filter((item) => item.sequenceNumber > cursor);
+      ? async (): Promise<EventData[]> => {
+          let items = (await events.all()).filter(
+            (item) => item.sequenceNumber > cursor
+          );
           if (sessionId) {
             items = items.filter(
               (item) => item.data.data.sessionId === sessionId
             );
           }
-          return Promise.resolve(items.map((item) => item.data));
+          return items.map((item) => item.data);
         }
       : undefined;
 
@@ -51,17 +51,17 @@ export function handleStreamingAllEvents(
   });
 }
 
-export function handlePaginatedAllEvents(
+export async function handlePaginatedAllEvents(
   req: Request,
   res: Response,
   events: EventBroker,
   sessionId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
     const result = sessionId
-      ? events.paginateBySessionId(sessionId, params)
-      : events.paginate(params);
+      ? await events.paginateBySessionId(sessionId, params)
+      : await events.paginate(params);
 
     const response: PaginatedList<EventData> = {
       items: result.items.map((item) => item.data),
@@ -93,16 +93,13 @@ export function handleStreamingQueryEvents(
 
   const getReplay =
     fromBeginning || cursor !== undefined
-      ? (): Promise<EventData[]> => {
+      ? async (): Promise<EventData[]> => {
           if (fromBeginning) {
-            return Promise.resolve(events.getEventsByQuery(queryId));
+            return events.getEventsByQuery(queryId);
           }
-          return Promise.resolve(
-            events
-              .getByQuery(queryId)
-              .filter((item) => item.sequenceNumber > cursor!)
-              .map((item) => item.data)
-          );
+          return (await events.getByQuery(queryId))
+            .filter((item) => item.sequenceNumber > cursor!)
+            .map((item) => item.data);
         }
       : undefined;
 
@@ -119,15 +116,15 @@ export function handleStreamingQueryEvents(
   });
 }
 
-export function handlePaginatedQueryEvents(
+export async function handlePaginatedQueryEvents(
   req: Request,
   res: Response,
   events: EventBroker,
   queryId: string
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
-    const result = events.paginateByQuery(queryId, params);
+    const result = await events.paginateByQuery(queryId, params);
 
     const response: PaginatedList<EventData> = {
       items: result.items.map((item) => item.data),
