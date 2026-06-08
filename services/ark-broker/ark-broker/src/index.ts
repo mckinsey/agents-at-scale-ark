@@ -36,12 +36,21 @@ server.requestTimeout = config.server.requestTimeoutMs;
 const gracefulShutdown = async (): Promise<void> => {
   logger.info('shutting down gracefully');
   sessions.save();
-  await Promise.all([
+  const results = await Promise.allSettled([
     memory.save(),
     chunks.save(),
     traces.save(),
     events.save(),
   ]);
+  const brokerNames = ['memory', 'chunks', 'traces', 'events'];
+  results.forEach((result, idx) => {
+    if (result.status === 'rejected') {
+      logger.error(
+        {broker: brokerNames[idx], err: result.reason},
+        'save failed during shutdown'
+      );
+    }
+  });
   server.close(() => {
     logger.info('process terminated');
     process.exit(0);
