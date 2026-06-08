@@ -1,10 +1,9 @@
 'use client';
 
-import { Lock } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { SecretEditor } from '@/components/editors';
-import { Search } from '@/components/icons';
+import { Search, Shield } from '@/components/icons';
 import { SecretsTable } from '@/components/sections/secrets-table';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -102,7 +101,7 @@ export function SecretsSection() {
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-1">
           <IconShell size="default" variant="primary">
-            <Lock className="size-full" />
+            <Shield className="size-full" />
           </IconShell>
           <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
             Secrets
@@ -124,7 +123,7 @@ export function SecretsSection() {
               <div className="flex flex-col items-center gap-3">
                 <div className="bg-surface-secondary flex items-center p-3">
                   <IconShell size="default" variant="secondary">
-                    <Lock className="size-full" />
+                    <Shield className="size-full" />
                   </IconShell>
                 </div>
                 <p className="text-fg-primary text-xl leading-7">
@@ -172,7 +171,7 @@ export function SecretsSection() {
             <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12">
               <div className="bg-surface-secondary flex items-center p-3">
                 <IconShell size="default" variant="secondary">
-                  <Lock className="size-full" />
+                  <Shield className="size-full" />
                 </IconShell>
               </div>
               <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">

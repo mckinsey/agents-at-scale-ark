@@ -3,14 +3,8 @@
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Edit, MoreVert, Trash } from '@/components/icons';
+import { Edit, Trash } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Tag } from '@/components/ui/tag';
 import {
@@ -37,7 +31,7 @@ const COL = {
   usedBy: 'w-[120px] shrink-0',
   models: 'flex-1 min-w-0',
   status: 'w-[140px] shrink-0',
-  action: 'w-[72px] shrink-0',
+  action: 'w-[100px] shrink-0',
 };
 
 const headerCellClass =
@@ -182,37 +176,31 @@ function SecretTableRow({
         </div>
         <div
           role="cell"
-          className={cn(rowCellClass, COL.action, 'justify-center')}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Secret actions"
-                disabled={readOnlyMode}>
-                <IconShell size="sm" variant="secondary">
-                  <MoreVert />
-                </IconShell>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => onEdit(secret)}>
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  <Edit />
-                </span>
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={isInUse}
-                onSelect={() => setDeleteConfirmOpen(true)}>
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  <Trash />
-                </span>
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          className={cn(rowCellClass, COL.action, 'justify-center gap-2')}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Edit secret"
+            disabled={readOnlyMode}
+            onClick={() => {
+              if (!readOnlyMode) onEdit(secret);
+            }}>
+            <IconShell size="sm" variant="secondary">
+              <Edit />
+            </IconShell>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Delete secret"
+            disabled={isInUse || readOnlyMode}
+            onClick={() => {
+              if (!isInUse && !readOnlyMode) setDeleteConfirmOpen(true);
+            }}>
+            <IconShell size="sm" variant="secondary">
+              <Trash />
+            </IconShell>
+          </Button>
         </div>
       </div>
       <ConfirmationDialog

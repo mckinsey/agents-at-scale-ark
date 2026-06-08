@@ -115,9 +115,7 @@ describe('secrets-hooks', () => {
         'test-secret',
         'password123',
       );
-      expect(toast.success).toHaveBeenCalledWith('Secret Created', {
-        description: 'Successfully created secret test-secret',
-      });
+      expect(toast.success).toHaveBeenCalledWith('Secret created');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
     });
 
@@ -211,9 +209,7 @@ describe('secrets-hooks', () => {
         'updated-secret',
         'newpassword123',
       );
-      expect(toast.success).toHaveBeenCalledWith('Secret Updated', {
-        description: 'Successfully updated secret updated-secret',
-      });
+      expect(toast.success).toHaveBeenCalledWith('Secret updated');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
     });
 
@@ -304,9 +300,7 @@ describe('secrets-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(secretsService.delete).toHaveBeenCalledWith('delete-me');
-      expect(toast.success).toHaveBeenCalledWith('Secret Deleted', {
-        description: 'Successfully deleted the secret',
-      });
+      expect(toast.success).toHaveBeenCalledWith('Secret deleted');
       expect(onSuccess).toHaveBeenCalled();
     });
 

@@ -52,9 +52,7 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       return { previousTodos };
     },
     onSuccess: data => {
-      toast.success('Secret Created', {
-        description: `Successfully created secret ${data.name}`,
-      });
+      toast.success('Secret created');
 
       if (props.onSuccess) {
         props.onSuccess(data);
@@ -102,9 +100,7 @@ export const useUpdateSecret = (props: UseUpdateSecretProps) => {
       return secretsService.update(name, password);
     },
     onSuccess: data => {
-      toast.success('Secret Updated', {
-        description: `Successfully updated secret ${data.name}`,
-      });
+      toast.success('Secret updated');
 
       if (props.onSuccess) {
         props.onSuccess(data);
@@ -144,9 +140,7 @@ export const useDeleteSecret = (props?: UseDeleteSecretProps) => {
       return secretsService.delete(name);
     },
     onSuccess: () => {
-      toast.success('Secret Deleted', {
-        description: 'Successfully deleted the secret',
-      });
+      toast.success('Secret deleted');
 
       if (props?.onSuccess) {
         props.onSuccess();
