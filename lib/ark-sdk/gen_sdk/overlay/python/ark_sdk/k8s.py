@@ -114,11 +114,20 @@ async def init_k8s():
 class SecretClient:
     """Kubernetes Secret management client."""
 
-    def __init__(self, namespace: Optional[str] = None):
+    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
-    
+        self.impersonation = impersonation
+
+    def _get_api_client(self, api: ApiClient) -> ApiClient:
+        """Configure API client with impersonation headers if needed."""
+        if self.impersonation:
+            api.set_default_header("Impersonate-User", self.impersonation.username)
+            if self.impersonation.groups:
+                api.set_default_header("Impersonate-Group", ",".join(self.impersonation.groups))
+        return api
+
     def validate_and_encode_token(self, string_data: dict) -> dict:
         """Validate token field. Kubernetes will handle base64 encoding via string_data."""
         if not string_data:
@@ -146,6 +155,7 @@ class SecretClient:
     async def list_secrets(self, label_selector: Optional[str] = None):
         """List all secrets in namespace."""
         async with ApiClient() as api:
+            self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secrets = await v1.list_namespaced_secret(
                 namespace=self.namespace,
@@ -168,8 +178,9 @@ class SecretClient:
     async def create_secret(self, name: str, string_data: Dict[str, str], secret_type: str = "Opaque"):
         """Create a new secret."""
         validated_data = self.validate_and_encode_token(string_data)
-        
+
         async with ApiClient() as api:
+            self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             
             secret = client.V1Secret(
@@ -196,6 +207,7 @@ class SecretClient:
     async def get_secret(self, name: str):
         """Get a specific secret."""
         async with ApiClient() as api:
+            self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secret = await v1.read_namespaced_secret(
                 name=name, 
@@ -213,6 +225,7 @@ class SecretClient:
     async def get_secret_value(self, name: str, key: str):
         """Get a specific secret."""
         async with ApiClient() as api:
+            self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secret = await v1.read_namespaced_secret(
                 name=name, 
@@ -232,8 +245,9 @@ class SecretClient:
     async def update_secret(self, name: str, string_data: Dict[str, str]):
         """Update an existing secret."""
         validated_data = self.validate_and_encode_token(string_data)
-        
+
         async with ApiClient() as api:
+            self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             
             existing_secret = await v1.read_namespaced_secret(
@@ -260,6 +274,7 @@ class SecretClient:
     async def delete_secret(self, name: str) -> bool:
         """Delete a secret."""
         async with ApiClient() as api:
+            self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             await v1.delete_namespaced_secret(
                 name=name,

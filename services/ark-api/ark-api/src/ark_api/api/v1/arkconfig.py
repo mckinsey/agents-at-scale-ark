@@ -1,12 +1,15 @@
 """API routes for the singleton ArkConfig resource."""
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from kubernetes_asyncio.client import CustomObjectsApi
-from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ...auth.dependencies import get_impersonation_config
 from ...models.arkconfig import ArkConfigResponse, ArkConfigUpdateRequest
+from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -29,9 +32,9 @@ def _to_response(cr: dict) -> ArkConfigResponse:
 
 @router.get("", response_model=ArkConfigResponse)
 @handle_k8s_errors(operation="get", resource_type="arkconfig")
-async def get_arkconfig() -> ArkConfigResponse:
+async def get_arkconfig(impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ArkConfigResponse:
     """Return the singleton ArkConfig. If it does not exist, return defaults with exists=false."""
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         try:
             cr = await custom_api.get_cluster_custom_object(
@@ -49,13 +52,13 @@ async def get_arkconfig() -> ArkConfigResponse:
 
 @router.put("", response_model=ArkConfigResponse)
 @handle_k8s_errors(operation="update", resource_type="arkconfig")
-async def upsert_arkconfig(body: ArkConfigUpdateRequest) -> ArkConfigResponse:
+async def upsert_arkconfig(body: ArkConfigUpdateRequest, impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ArkConfigResponse:
     """Create or update the singleton ArkConfig with the supplied defaults."""
     spec: dict = {}
     if body.queryTTL is not None and body.queryTTL != "":
         spec["queryTTL"] = body.queryTTL
 
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         try:
             existing = await custom_api.get_cluster_custom_object(
@@ -103,9 +106,9 @@ async def upsert_arkconfig(body: ArkConfigUpdateRequest) -> ArkConfigResponse:
 
 @router.delete("", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="arkconfig")
-async def delete_arkconfig() -> None:
+async def delete_arkconfig(impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """Delete the singleton ArkConfig, restoring hardcoded defaults."""
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         try:
             await custom_api.delete_cluster_custom_object(
