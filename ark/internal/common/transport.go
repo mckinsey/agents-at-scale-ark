@@ -4,7 +4,6 @@ package common
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net"
 	"net/http"
@@ -15,40 +14,31 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// LoggingTransport wraps an http.RoundTripper to provide optional HTTP request/response logging
+// LoggingTransport wraps an http.RoundTripper to provide optional HTTP request/response logging.
 type LoggingTransport struct {
 	Transport http.RoundTripper
-	Context   context.Context
 }
 
-// NewLoggingTransport creates a new LoggingTransport with the given context.
-// The transport is automatically instrumented with OpenTelemetry for HTTP tracing.
-func NewLoggingTransport(ctx context.Context, transport http.RoundTripper) *LoggingTransport {
+// NewLoggingTransport creates a new LoggingTransport instrumented with OpenTelemetry.
+func NewLoggingTransport(transport http.RoundTripper) *LoggingTransport {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	// Wrap with OpenTelemetry HTTP instrumentation for automatic HTTP span creation.
-	// The otelhttp.NewTransport will automatically extract the trace context from the
-	// request's context and create child spans for HTTP calls.
 	transport = otelhttp.NewTransport(transport,
 		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 			return "HTTP"
 		}),
 	)
-	return &LoggingTransport{
-		Transport: transport,
-		Context:   ctx,
-	}
+	return &LoggingTransport{Transport: transport}
 }
 
-// RoundTrip implements the http.RoundTripper interface with optional logging
-// Logging is enabled when ENABLE_HTTP_LOGGING environment variable is set to "true"
+// RoundTrip implements http.RoundTripper with optional logging (ENABLE_HTTP_LOGGING=true).
 func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if os.Getenv("ENABLE_HTTP_LOGGING") != "true" {
 		return lt.Transport.RoundTrip(req)
 	}
 
-	logger := logf.FromContext(lt.Context)
+	logger := logf.FromContext(req.Context())
 
 	var requestBody []byte
 	if req.Body != nil {
@@ -75,10 +65,20 @@ func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return resp, nil
 }
 
-// NewHTTPClientWithLogging creates an HTTP client with logging transport
-func NewHTTPClientWithLogging(ctx context.Context) *http.Client {
+// NewHTTPClientWithLogging creates an HTTP client with OTel-instrumented logging transport.
+func NewHTTPClientWithLogging() *http.Client {
 	return &http.Client{
-		Transport: NewLoggingTransport(ctx, nil),
+		Transport: NewLoggingTransport(nil),
+	}
+}
+
+// NewSharedTransport returns an http.Transport with a connection pool suitable for reuse
+// across the lifetime of a provider or executor component.
+func NewSharedTransport() *http.Transport {
+	return &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
 	}
 }
 

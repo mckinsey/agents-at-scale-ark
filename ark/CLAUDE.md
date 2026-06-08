@@ -19,10 +19,10 @@ The controller watches CRDs (Agent, Model, Query, Team, MCPServer, ExecutionEngi
 
 ### Executor Dispatch
 When a Query arrives, the controller checks the target Agent's `executionEngine` field:
-- **Not set** → built-in completions executor (`executors/completions/`)
+- **Not set** → default completions executor (`executors/completions/`), a separate deployment that the controller reaches via A2A
 - **Named executor** → fetches the ExecutionEngine CR, dispatches to its resolved address via A2A
 
-The ExecutionEngine CRD (`api/v1prealpha1/`) defines external executors with an `address` (ValueSource). Custom executors implement `BaseExecutor` from the Python SDK (`lib/ark-sdk/`) and are hosted as A2A-compliant servers.
+All executors — including the default completions executor — run as separate deployments and communicate with the controller over A2A. The ExecutionEngine CRD (`api/v1prealpha1/`) defines additional executors with an `address` (ValueSource). Custom executors implement `BaseExecutor` from the Python SDK (`lib/ark-sdk/`).
 
 ### Key CRD Types
 - `api/v1alpha1/` — Agent, Model, Query, Team, Tool, MCPServer, A2AServer, A2ATask, Memory
