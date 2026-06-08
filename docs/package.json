@@ -22,7 +22,7 @@
     "next": "16.2.6",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
-    "react": "^19.2.4",
+    "react": "^19.2.7",
     "react-dom": "^19.2.5",
     "sharp": "^0.34.2"
   },
