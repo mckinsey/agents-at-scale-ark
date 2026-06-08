@@ -1,6 +1,5 @@
 export { ExecutionEngineCard } from './execution-engine-card';
 export { TeamCard } from './team-card';
-export { SecretCard } from './secret-card';
 export { A2AServerCard } from './a2a-server-card';
 export { ToolCard } from './tool-card';
 export { HomepageModelsCard } from './homepage-models-card';
