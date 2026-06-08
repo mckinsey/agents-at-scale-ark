@@ -287,6 +287,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 			Error: fmt.Sprintf("failed to create agent %s: %v", a.AgentName, err),
 		}, err
 	}
+	defer agent.Close()
 
 	// Prepare user input. No conversation history is ever provided
 	userInput := NewUserMessage(inputStr)
@@ -369,6 +370,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 			Error: fmt.Sprintf("failed to create team %s: %v", t.TeamName, err),
 		}, err
 	}
+	defer team.Close()
 
 	// Prepare user input. No conversation history is ever provided
 	userInput := NewUserMessage(inputStr)
