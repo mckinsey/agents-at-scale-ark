@@ -75,29 +75,50 @@ ark-api SHALL expose REST CRUD endpoints under `/api/v1/namespaces/{namespace}/m
 
 ### Requirement: Marketplace items aggregator endpoint
 
-ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-items` returning the marketplace items aggregated across every `MarketplaceSource` the requesting user can read in that namespace. The endpoint SHALL fetch each source's `marketplace.json` server-side, with the same 1-hour cache semantics as the legacy dashboard route. Per-source fetch failures SHALL NOT fail the whole response — failed sources SHALL appear with an `error` field while successful sources return their items.
+ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-items` returning marketplace items aggregated across every `MarketplaceSource` the requesting user can read. Each source's `marketplace.json` is fetched server-side and cached for 1 hour, keyed on `(namespace, source-name, url)`.
 
-The response SHALL include the source identity for each entry so the dashboard can group items by source.
+The response SHALL be a JSON array with one entry per source in the grouped shape:
+
+```jsonc
+{ "source": "<metadata.name>", "displayName": "<spec.displayName | metadata.name>", "items": [ /* ... */ ] }
+{ "source": "<metadata.name>", "displayName": "<...>", "error": { "message": "<...>", "code": "<...>" } }
+```
+
+`error.code` SHALL be one of: `fetch_timeout`, `aggregator_timeout`, `http_error`, `parse_error`, `network_error`. The endpoint SHALL return HTTP 200 even when every source fails — per-source state is conveyed by the entry shape.
 
 #### Scenario: All sources reachable
-- **WHEN** the user calls `GET /api/v1/namespaces/team-a/marketplace-items`
-- **AND** every `MarketplaceSource` in `team-a` returns a valid `marketplace.json`
-- **THEN** ark-api returns HTTP 200 with all aggregated items grouped by source
+- **WHEN** every `MarketplaceSource` in `team-a` returns a valid `marketplace.json`
+- **AND** the user calls `GET /api/v1/namespaces/team-a/marketplace-items`
+- **THEN** ark-api returns HTTP 200 with one entry per source, each containing `source`, `displayName`, and `items`
 
 #### Scenario: One source unreachable
-- **WHEN** the user calls `GET /api/v1/namespaces/team-a/marketplace-items`
-- **AND** one source URL returns HTTP 404 while others succeed
+- **WHEN** one source URL returns HTTP 404 while others succeed
 - **THEN** ark-api returns HTTP 200
-- **AND** the failed source appears in the response with an `error` field
-- **AND** all other sources return their items normally
+- **AND** the failed source entry contains an `error` field with `code: "http_error"`
+- **AND** other sources return their items normally
 
 #### Scenario: User cannot list sources
 - **WHEN** a user without `list marketplacesources` permission calls `GET /api/v1/namespaces/team-a/marketplace-items`
 - **THEN** ark-api returns HTTP 403
 
+### Requirement: Aggregator timeout guards
+
+The aggregator endpoint SHALL enforce two independent timeouts: per-source HTTP fetch ≤ **10 seconds** and aggregator total wall-clock ≤ **30 seconds**. Sources exceeding the per-source budget SHALL return `error.code: "fetch_timeout"`. Sources still in-flight when the aggregator budget expires SHALL return `error.code: "aggregator_timeout"`. The endpoint SHALL return HTTP 200 in both cases.
+
+#### Scenario: Slow source times out individually
+- **WHEN** one source takes 15s to respond and two others return within 1s
+- **THEN** the slow source returns `error.code: "fetch_timeout"`
+- **AND** the other two sources return their items in the same HTTP 200 response
+
+#### Scenario: Aggregator total budget exhausted
+- **WHEN** more sources are pending than the 30s aggregator budget allows
+- **THEN** sources completing within 30s return their items
+- **AND** still-pending sources return `error.code: "aggregator_timeout"`
+- **AND** the response is HTTP 200
+
 ### Requirement: Marketplace permission probe endpoint
 
-ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-sources/permissions` returning whether the requesting user has edit permission on `marketplacesources` in that namespace. The endpoint SHALL issue a `SelfSubjectAccessReview` for the verb `update` on resource `marketplacesources` and return `{"canEdit": <bool>}`.
+ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-sources/permissions` issuing a `SelfSubjectAccessReview` for verb `update` on `marketplacesources` and returning `{"canEdit": <bool>}`. If the SSAR call itself fails (e.g. ark-api ServiceAccount lacks `create selfsubjectaccessreviews`, kube-apiserver 5xx), the endpoint SHALL fail closed — return HTTP 200 with `{"canEdit": false}` and log the underlying error. The dashboard SHALL never see a 5xx from this endpoint.
 
 #### Scenario: User can edit
 - **WHEN** user `alice` (bound to `marketplace-source-editor` in `team-a`) calls `GET /api/v1/namespaces/team-a/marketplace-sources/permissions`
@@ -106,6 +127,11 @@ ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-sources/per
 #### Scenario: User cannot edit
 - **WHEN** user `bob` (no edit binding) calls the same endpoint
 - **THEN** ark-api returns `{"canEdit": false}`
+
+#### Scenario: SSAR call itself fails — fail closed
+- **WHEN** the SSAR call to kube-apiserver fails (e.g. ark-api SA missing `create selfsubjectaccessreviews`, or kube-apiserver returns 5xx)
+- **THEN** ark-api returns HTTP 200 with `{"canEdit": false}`
+- **AND** the underlying error is logged at warn level
 
 ### Requirement: Helm-seeded default sources
 

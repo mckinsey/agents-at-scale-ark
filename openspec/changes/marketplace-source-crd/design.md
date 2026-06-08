@@ -65,11 +65,29 @@ No `status` subresource in v1alpha1 — there is no controller. URL validation i
 
 Two endpoint groups, both impersonated:
 
-- **`/api/v1/namespaces/{namespace}/marketplace-sources`** — REST CRUD over the CRD. List/get/create/update/delete map 1:1 to `client.list_marketplacesources(...)` etc. Errors from kube-apiserver (403, 404, 422) bubble through unmodified — the dashboard handles them generically.
-- **`/api/v1/namespaces/{namespace}/marketplace-items`** — the aggregator. Lists `MarketplaceSource` CRs in the namespace (impersonated, so RBAC filters), fetches every `spec.url` with the existing 1-hour revalidate cache, and returns `{ source: <name>, items: [...] }` per source. Per-source fetch failures degrade gracefully (one entry returns `{ source: <name>, error: "..." }`, others succeed) — matches today's Next.js behaviour.
+- **`/api/v1/namespaces/{namespace}/marketplace-sources`** — REST CRUD over the CRD. Errors from kube-apiserver (403, 404, 422) bubble through unmodified.
+- **`/api/v1/namespaces/{namespace}/marketplace-items`** — aggregator. Lists `MarketplaceSource` CRs (impersonated), fetches every `spec.url` concurrently, returns a grouped response: one entry per source, with `items` on success or `error` on failure. Always HTTP 200; partial failure is conveyed per entry.
+
+```jsonc
+[
+  { "source": "agents-at-scale-marketplace", "displayName": "Ark Marketplace",
+    "items": [ /* ... */ ] },
+  { "source": "internal-mirror", "displayName": "Internal",
+    "error": { "message": "fetch timed out after 10s", "code": "fetch_timeout" } }
+]
+```
+
+The grouped shape matches `manage-marketplace-settings.tsx` directly; the browse page flattens cheaply at the call site. Errors are first-class — every consumer handles the `error` variant.
+
+**Cache**: 1-hour TTL keyed on `(namespace, source-name, url)`, in-process per ark-api replica. Per-namespace keying matters once #2346 lands and the same URL can resolve under different `Authorization` headers.
+
+**Timeouts**: per-source HTTP fetch ≤ 10s (`error.code: "fetch_timeout"`); aggregator total wall-clock ≤ 30s (un-fetched sources get `error.code: "aggregator_timeout"`). Guards bound dashboard latency against slow or attacker-controlled URLs.
+
+**Permission probe**: `GET .../marketplace-sources/permissions` returns `{canEdit: false}` if the SSAR call itself fails (e.g. ark-api SA lacks `create selfsubjectaccessreviews`). Fail-closed — the dashboard never sees a 500 nor accidentally renders editable controls.
 
 **Alternatives considered**:
-- *Single endpoint that fans out CRUD over the CRD via subpath routing*: less code, but ark-api already has a per-resource module pattern (`agents.py`, `models.py`); the CRUD module would feel out of place if it diverged.
+- *Flat response shape* (`{items: [...]}` with `source` per item): no natural place for per-source errors; forces the Manage page to reconstruct grouping client-side; harder to extend when #2347 adds per-source policy.
+- *Default HTTP client timeouts*: defaults are minutes — an attacker-controlled URL would block the page indefinitely.
 
 ### 6. URL validation: kubebuilder + validating webhook
 
@@ -144,4 +162,3 @@ This shape lets a single `helm install` seed different catalogues for different 
 
 - **Read access binding**: should the default install bind read-only access on `marketplacesources` to `system:authenticated`, to a specific dashboard role, or only to the namespaces granted via Helm values? Leaning toward per-namespace binding scoped to the install namespace + any in `marketplaceSources[].namespace` — defer the final answer to the implementation review.
 - **CRD short name / categories**: `mps` short name and `ark-config` category? Worth a 30-second consistency check against existing Ark CRDs at impl time.
-- **Aggregator response shape**: should per-source results be flat (`{ items: [...] }` with source name on each item) or grouped (`[{source, items}]`)? The dashboard's `manage-marketplace-settings.tsx` UI groups by source, which favours the grouped shape; the marketplace browse page is flat. Decide at impl time based on which call site is more expensive to refactor.
