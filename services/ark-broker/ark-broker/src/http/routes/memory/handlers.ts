@@ -30,24 +30,22 @@ export function handleStreamingMessages(
 
   const getReplay =
     cursor !== undefined
-      ? (): Promise<MessageItem[]> => {
-          let items = memory
-            .all()
-            .filter((item) => item.sequenceNumber > cursor);
+      ? async (): Promise<MessageItem[]> => {
+          let items = (await memory.all()).filter(
+            (item) => item.sequenceNumber > cursor
+          );
           if (conversationId) {
             items = items.filter(
               (item) => item.data.conversationId === conversationId
             );
           }
-          return Promise.resolve(
-            items.map((item) => ({
-              timestamp: item.timestamp.toISOString(),
-              conversation_id: item.data.conversationId,
-              query_id: item.data.queryId,
-              message: item.data.message,
-              sequence: item.sequenceNumber,
-            }))
-          );
+          return items.map((item) => ({
+            timestamp: item.timestamp.toISOString(),
+            conversation_id: item.data.conversationId,
+            query_id: item.data.queryId,
+            message: item.data.message,
+            sequence: item.sequenceNumber,
+          }));
         }
       : undefined;
 
@@ -77,13 +75,13 @@ export function handleStreamingMessages(
   });
 }
 
-export function handlePaginatedMessages(
+export async function handlePaginatedMessages(
   req: Request,
   res: Response,
   memory: MemoryBroker,
   conversationId: string | undefined,
   queryId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
 
@@ -92,7 +90,7 @@ export function handlePaginatedMessages(
       queryId: queryId || undefined,
     };
 
-    const result = memory.paginate(params, filters);
+    const result = await memory.paginate(params, filters);
 
     const response: PaginatedList<MessageItem> = {
       items: result.items.map((item) => ({
