@@ -7,7 +7,7 @@ description: Capacity management, resource monitoring, and capacity planning for
 
 This page describes how Ark scales, what to monitor, and how to plan capacity for production deployments. It complements the [Core Architecture](/reference/core-architecture) and [Monitoring](/operations-guide/monitoring) guides.
 
-Ark's control plane runs on Kubernetes and inherits its scaling primitives. The controller is the single stateful coordination point; all other services (API, dashboard, broker) are stateless and can be horizontally scaled.
+Ark's control plane runs on Kubernetes and inherits its scaling primitives. The controller coordinates reconciliation via leader election. The API and dashboard are stateless and can be horizontally scaled. The broker holds data in memory, so it runs as a single replica by default.
 
 ## Capacity management
 
@@ -17,9 +17,13 @@ The controller reconciles all Ark custom resources across the cluster. It runs w
 
 The controller's default resource allocation is intentionally conservative. Production deployments with a high volume of concurrent queries or large numbers of resources should increase CPU and memory limits based on observed usage.
 
-### Stateless services
+### API and dashboard
 
-The API, dashboard, and broker are stateless and can be scaled horizontally by increasing replica counts in their Helm values. The broker stores messages, streaming chunks, and traces in memory by default, so each replica maintains its own state — consider enabling file-based persistence or a sticky session strategy if scaling the broker beyond a single replica.
+The API and dashboard are stateless and can be scaled horizontally by increasing replica counts in their Helm values.
+
+### Broker
+
+The broker stores messages, streaming chunks, traces, events, and sessions in memory. It is not stateless — each replica maintains its own state, so it runs as a single replica by default. If scaling beyond a single replica is needed, consider enabling file-based persistence or a sticky session strategy.
 
 ### Storage backend
 
@@ -27,7 +31,7 @@ When using the default etcd-backed storage, scalability is bounded by the cluste
 
 ### Executors
 
-Executors run as separate deployments and scale independently from the Ark control plane. Each executor type can define its own HPA, resource limits, and replica strategy. The MCP server template includes an optional HorizontalPodAutoscaler configuration that scales on CPU utilization.
+All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The default completions executor uses an in-memory A2A task manager that holds conversation history, active tasks, and streaming subscribers, so it runs as a single replica by default. Scaling it to multiple replicas would require sticky sessions or a shared task store. Marketplace and custom executors can define their own HPA, resource limits, and replica strategy depending on their state management approach.
 
 ## Resource monitoring
 
@@ -70,7 +74,7 @@ Node capacity should account for executor workloads, which are typically the mos
 
 1. **Start with defaults** — Deploy with the default Helm values and a single replica per service.
 2. **Monitor under load** — Use Prometheus metrics and pod resource usage to identify bottlenecks.
-3. **Scale stateless services** — Increase replica counts for the API, dashboard, and executors as needed.
+3. **Scale horizontally** — Increase replica counts for the API, dashboard, and executors as needed.
 4. **Tune the controller** — Increase CPU and memory limits based on observed reconciliation load.
 5. **Consider PostgreSQL** — Switch from etcd to PostgreSQL if resource volume or query history exceeds etcd's practical limits.
 6. **Add autoscaling** — Configure HPA for executors and stateless services based on CPU or custom metrics.

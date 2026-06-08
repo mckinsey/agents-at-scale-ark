@@ -27,10 +27,10 @@ in every directory the change touches. Exact commands per stack live in
 
 ## Core Folders
 
-- **`ark/`** - Kubernetes operator and default executor (Go)
+- **`ark/`** - Kubernetes operator (Go)
   - Controller reconciles CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer
   - Webhooks for validation and mutation (including migration warnings)
-  - `executors/completions/` - Built-in default execution engine
+  - `executors/completions/` - Default executor (separate deployment, communicates with controller via A2A)
   - The controller dispatches queries to the appropriate executor via A2A protocol
 
 - **`lib/ark-sdk/`** - Python SDK (generated + overlay)
