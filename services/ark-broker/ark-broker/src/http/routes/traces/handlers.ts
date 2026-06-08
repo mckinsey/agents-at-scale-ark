@@ -26,16 +26,16 @@ export function handleStreamingAllTraces(
 
   const getReplay =
     cursor !== undefined
-      ? (): Promise<OTELSpan[]> => {
-          let items = traces
-            .all()
-            .filter((item) => item.sequenceNumber > cursor);
+      ? async (): Promise<OTELSpan[]> => {
+          let items = (await traces.all()).filter(
+            (item) => item.sequenceNumber > cursor
+          );
           if (sessionId) {
             items = items.filter((item) =>
               spanMatchesSessionId(item.data, sessionId)
             );
           }
-          return Promise.resolve(items.map((item) => item.data));
+          return items.map((item) => item.data);
         }
       : undefined;
 
@@ -55,15 +55,15 @@ export function handleStreamingAllTraces(
   });
 }
 
-export function handlePaginatedAllTraces(
+export async function handlePaginatedAllTraces(
   req: Request,
   res: Response,
   traces: TraceBroker,
   sessionId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
-    const result = traces.paginateTraces(params, sessionId);
+    const result = await traces.paginateTraces(params, sessionId);
 
     const response: PaginatedList<{traceId: string; spans: OTELSpan[]}> = {
       items: result.items,
@@ -95,16 +95,13 @@ export function handleStreamingTrace(
 
   const getReplay =
     fromBeginning || cursor !== undefined
-      ? (): Promise<OTELSpan[]> => {
+      ? async (): Promise<OTELSpan[]> => {
           if (fromBeginning) {
-            return Promise.resolve(traces.getSpansByTraceId(traceId));
+            return traces.getSpansByTraceId(traceId);
           }
-          return Promise.resolve(
-            traces
-              .getByTraceId(traceId)
-              .filter((item) => item.sequenceNumber > cursor!)
-              .map((item) => item.data)
-          );
+          return (await traces.getByTraceId(traceId))
+            .filter((item) => item.sequenceNumber > cursor!)
+            .map((item) => item.data);
         }
       : undefined;
 
@@ -121,15 +118,15 @@ export function handleStreamingTrace(
   });
 }
 
-export function handlePaginatedTrace(
+export async function handlePaginatedTrace(
   req: Request,
   res: Response,
   traces: TraceBroker,
   traceId: string
-): void {
+): Promise<void> {
   try {
-    const spans = traces.getSpansByTraceId(traceId);
-    if (spans.length === 0 && !traces.hasTrace(traceId)) {
+    const spans = await traces.getSpansByTraceId(traceId);
+    if (spans.length === 0 && !(await traces.hasTrace(traceId))) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
