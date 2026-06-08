@@ -1,0 +1,73 @@
+---
+title: Secure Software Architecture
+description: Runtime security architecture of Ark — access control, segregation of duties, input validation, error handling, and cryptographic practices
+---
+
+# Secure Software Architecture
+
+This page describes the runtime security architecture of Ark. It complements the [Secure Software Development Lifecycle](/reference/secure-sdlc), which covers the engineering process, and the [Data Flow and Encryption](/operations-guide/data-flow-and-encryption) guide, which details per-surface encryption status and log sanitization.
+
+Ark runs inside customer-controlled Kubernetes clusters. Many of the controls described here depend on correct cluster and cloud configuration — see the [Disclaimer](/disclaimer).
+
+## Access control
+
+Ark supports OIDC-based SSO, API key authentication, and a hybrid mode combining both. When user impersonation is enabled, Kubernetes RBAC is enforced against the authenticated user's identity rather than the Ark service account. Ark ships viewer / editor / admin ClusterRoles for each resource type that can be combined or extended.
+
+See the [Authentication](/developer-guide/authentication) guide for full details on authentication modes, impersonation, RBAC roles, and API key management.
+
+## Segregation of duties
+
+Each Ark service runs under its own Kubernetes service account with permissions scoped to what that service needs. All service accounts set `automountServiceAccountToken: false` — tokens are mounted explicitly only where required.
+
+### Controller
+
+The controller manages the full lifecycle of Ark custom resources across all namespaces. Its ClusterRole grants create, read, update, and delete access to all `ark.mckinsey.com` resources, plus read access to Secrets and ConfigMaps it needs to resolve references. When RBAC impersonation is enabled, the controller can impersonate service accounts to execute queries under tenant-specific identities.
+
+A separate leader-election Role, scoped to the controller's own namespace, manages ConfigMap and Lease resources for HA leader election.
+
+### API
+
+The Ark API service has a namespace-scoped Role granting access to Ark resources, Secrets, and supporting Kubernetes objects within its deployment namespace. A separate ClusterRole covers cluster-scoped resources (ArkConfig) and, when impersonation is enabled, the ability to impersonate users and groups.
+
+### Dashboard and broker
+
+The dashboard and broker are stateless services with no Kubernetes API permissions beyond their own service account identity. They do not read or write Ark custom resources directly.
+
+
+## Input validation and error handling
+
+### Admission webhooks
+
+Ark registers validating and mutating webhooks for its core resource types. All webhooks are configured with `failurePolicy: Fail` — invalid resources are rejected, never silently accepted.
+
+Validating webhooks check referential integrity, structural correctness, and security constraints (e.g., HTTPS enforcement and private IP blocking for model URLs). Mutating webhooks apply defaults and migrate deprecated configurations, annotating resources with warnings so users can update their manifests.
+
+### API-level validation
+
+The Ark API (FastAPI) validates inbound requests using Pydantic models with field constraints. Path segments are validated against traversal attacks (`..`, `/`, `\`), and URLs are constructed with proper encoding.
+
+### Error handling
+
+Webhook validation errors are returned to the user with context: field paths, array indices, and specific violation descriptions. Errors are never swallowed — the `failurePolicy: Fail` configuration ensures the API server rejects requests when webhooks are unreachable. Mutation webhooks return non-blocking warnings for deprecated configurations, allowing the request to proceed while surfacing the migration path.
+
+## Cryptographic practices
+
+### TLS
+
+Webhook and metrics endpoints are served over TLS. The default Helm chart uses [cert-manager](https://cert-manager.io/) with a self-signed Issuer, but production deployments can substitute any certificate provisioning mechanism. For inter-service communication beyond these endpoints, Ark relies on cluster-level controls — see [Data Flow and Encryption](/operations-guide/data-flow-and-encryption#in-transit-encryption) for the TLS status of each hop.
+
+### Secret storage
+
+Model credentials and other sensitive values are stored as Kubernetes Secrets. Secrets are base64-encoded but not encrypted by default in etcd — encryption at rest requires configuring the Kubernetes API server's `EncryptionConfiguration`. See the [Kubernetes encryption-at-rest documentation](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/) for setup instructions.
+
+### API key hashing
+
+API key secret components are hashed using bcrypt with an automatically generated salt before storage. The plaintext secret is shown only once at creation time and is never stored or returned again. Verification uses bcrypt's constant-time comparison.
+
+### OIDC token validation
+
+JWT tokens are validated by fetching the issuer's JWKS endpoint via OIDC discovery (RFC 8414). The Ark API verifies the token signature, expiration, audience, and issuer. RSA and EC key types are supported. No signing keys are stored locally — they are fetched from the identity provider.
+
+### OAuth for MCP authorization
+
+When MCP servers require OAuth, Ark implements the authorization code flow with PKCE (RFC 7636, S256 method). The code verifier is generated with 64 cryptographically random characters, and the challenge is derived via SHA-256. Callback URLs enforce HTTPS for non-loopback hosts per RFC 8252.
