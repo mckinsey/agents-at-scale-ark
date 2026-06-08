@@ -48,12 +48,12 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       200:
    *         description: Paginated chunks or SSE stream
    */
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const watch = req.query['watch'] === 'true';
 
     if (watch) {
       req.log.info('starting SSE stream for all chunks');
-      streamSSE({
+      await streamSSE({
         res,
         req,
         logger: req.log,
@@ -67,7 +67,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         const params = parsePaginationParams(
           req.query as Record<string, unknown>
         );
-        const result = chunks.paginate(params);
+        const result = await chunks.paginate(params);
         res.json(result);
       } catch (error) {
         if (error instanceof PaginationError) {
@@ -123,7 +123,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    */
   router.get<{query_name: string}, unknown, unknown, GetStreamQueryRaw>(
     '/:query_name',
-    (req, res) => {
+    async (req, res) => {
       const parse = getStreamQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id, 'query');
@@ -132,7 +132,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       const streamQuery: GetStreamQuery = parse.data;
       const {query_name} = req.params;
       try {
-        handleQueryStream(
+        await handleQueryStream(
           req,
           res,
           chunks,
@@ -219,13 +219,25 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           finish_reason: 0,
           other: 0,
         },
+        appendChain: Promise.resolve(), // Serialize appends per-request
       };
 
-      req.on('data', (chunk: Buffer) =>
-        processNDJSONData(chunk, state, query_id, chunks, req.log)
-      );
+      req.on('data', (chunk: Buffer) => {
+        // Fire-and-forget the async processing (serialization is internal)
+        processNDJSONData(chunk, state, query_id, chunks, req.log).catch(
+          (err) => {
+            req.log.error({err, queryId: query_id}, 'failed to process chunk');
+          }
+        );
+      });
 
-      req.on('end', () => {
+      req.on('end', async () => {
+        // Wait for all appends to finish before responding
+        try {
+          await state.appendChain;
+        } catch (err) {
+          req.log.error({err, queryId: query_id}, 'append chain error');
+        }
         req.log.info(
           {
             queryId: query_id,
@@ -292,7 +304,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       400:
    *         description: Invalid request
    */
-  router.post<{query_id: string}>('/:query_id/complete', (req, res) => {
+  router.post<{query_id: string}>('/:query_id/complete', async (req, res) => {
     try {
       const {query_id} = req.params;
 
@@ -309,7 +321,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
       req.log.info({queryId: query_id}, 'marking query as complete');
 
-      if (!chunks.hasQuery(query_id)) {
+      if (!(await chunks.hasQuery(query_id))) {
         res.status(404).json({
           error: {
             code: 'NOT_FOUND',
@@ -320,7 +332,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      if (chunks.isComplete(query_id)) {
+      if (await chunks.isComplete(query_id)) {
         res.json({
           status: 'already_completed',
           query: query_id,
@@ -328,7 +340,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      chunks.completeQuery(query_id);
+      await chunks.completeQuery(query_id);
 
       res.json({
         status: 'completed',
@@ -365,9 +377,9 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       500:
    *         description: Failed to purge streams
    */
-  router.delete('/', (req, res) => {
+  router.delete('/', async (req, res) => {
     try {
-      chunks.delete();
+      await chunks.delete();
       res.json({status: 'success', message: 'Stream data purged'});
     } catch (error) {
       req.log.error({err: error}, 'stream purge failed');

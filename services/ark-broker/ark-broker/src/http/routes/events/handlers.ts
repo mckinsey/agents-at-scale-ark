@@ -11,25 +11,25 @@ import {
   sendInternalError,
 } from '@ark-broker/http/routes/errors.js';
 
-export function handleStreamingAllEvents(
+export async function handleStreamingAllEvents(
   req: Request,
   res: Response,
   events: EventBroker,
   sessionId: string | undefined,
   cursor: number | undefined
-): void {
+): Promise<void> {
   req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
 
   let replayItems: EventData[] | undefined;
   if (cursor !== undefined) {
-    let items = events.all().filter((item) => item.sequenceNumber > cursor);
+    let items = (await events.all()).filter((item) => item.sequenceNumber > cursor);
     if (sessionId) {
       items = items.filter((item) => item.data.data.sessionId === sessionId);
     }
     replayItems = items.map((item) => item.data);
   }
 
-  streamSSE({
+  await streamSSE({
     res,
     req,
     logger: req.log,
@@ -45,17 +45,17 @@ export function handleStreamingAllEvents(
   });
 }
 
-export function handlePaginatedAllEvents(
+export async function handlePaginatedAllEvents(
   req: Request,
   res: Response,
   events: EventBroker,
   sessionId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
     const result = sessionId
-      ? events.paginateBySessionId(sessionId, params)
-      : events.paginate(params);
+      ? await events.paginateBySessionId(sessionId, params)
+      : await events.paginate(params);
 
     const response: PaginatedList<EventData> = {
       items: result.items.map((item) => item.data),
@@ -75,27 +75,26 @@ export function handlePaginatedAllEvents(
   }
 }
 
-export function handleStreamingQueryEvents(
+export async function handleStreamingQueryEvents(
   req: Request,
   res: Response,
   events: EventBroker,
   queryId: string,
   fromBeginning: boolean | undefined,
   cursor: number | undefined
-): void {
+): Promise<void> {
   req.log.info({queryId}, 'starting SSE stream for query');
 
   let replayItems: EventData[] | undefined;
   if (fromBeginning) {
-    replayItems = events.getEventsByQuery(queryId);
+    replayItems = await events.getEventsByQuery(queryId);
   } else if (cursor !== undefined) {
-    replayItems = events
-      .getByQuery(queryId)
+    replayItems = (await events.getByQuery(queryId))
       .filter((item) => item.sequenceNumber > cursor)
       .map((item) => item.data);
   }
 
-  streamSSE({
+  await streamSSE({
     res,
     req,
     logger: req.log,
@@ -108,15 +107,15 @@ export function handleStreamingQueryEvents(
   });
 }
 
-export function handlePaginatedQueryEvents(
+export async function handlePaginatedQueryEvents(
   req: Request,
   res: Response,
   events: EventBroker,
   queryId: string
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
-    const result = events.paginateByQuery(queryId, params);
+    const result = await events.paginateByQuery(queryId, params);
 
     const response: PaginatedList<EventData> = {
       items: result.items.map((item) => item.data),

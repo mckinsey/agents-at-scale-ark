@@ -1,5 +1,9 @@
 import type {Request, Response} from 'express';
-import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker.js';
+import {
+  CompletionChunkBroker,
+  CompletionChunkData,
+} from '@ark-broker/brokers/chunks-broker.js';
+import {BrokerItem} from '@ark-broker/brokers/stream/broker-item.js';
 import {writeSSEEvent} from '@ark-broker/http/sse.js';
 import {sendInternalError} from '@ark-broker/http/routes/errors.js';
 import {StreamError} from './schemas.js';
@@ -27,7 +31,7 @@ function classifyChunk(
   }
 }
 
-export function handleQueryStream(
+export async function handleQueryStream(
   req: Request,
   res: Response,
   chunks: CompletionChunkBroker,
@@ -35,7 +39,7 @@ export function handleQueryStream(
   fromBeginning: boolean,
   waitForQuerySeconds: number | undefined,
   maxChunkSize: number
-): void {
+): Promise<void> {
   const waitForQuery = waitForQuerySeconds !== undefined;
   const timeout =
     waitForQuerySeconds === undefined
@@ -64,7 +68,18 @@ export function handleQueryStream(
     other: 0,
   };
 
+  // Catch-up buffer: collect live items during replay to avoid the race
+  const catchUpBuffer: BrokerItem<CompletionChunkData>[] = [];
+  let lastReplayedSeq = 0;
+  let isReplaying = fromBeginning;
+
   const unsubscribeChunks = chunks.subscribeToQuery(queryName, (item) => {
+    // If we're still replaying, buffer live items
+    if (isReplaying) {
+      catchUpBuffer.push(item);
+      return;
+    }
+
     const chunk = item.data.chunk as ChunkPayload | string;
     hasReceivedChunks = true;
 
@@ -162,13 +177,17 @@ export function handleQueryStream(
   }
 
   if (fromBeginning) {
-    const existingChunks = chunks.getChunksByQuery(queryName);
+    // Await the async replay
+    const existingItems = await chunks.getByQuery(queryName);
     req.log.info(
-      {queryName, count: existingChunks.length},
+      {queryName, count: existingItems.length},
       'sending existing chunks for replay'
     );
 
-    for (const chunk of existingChunks) {
+    for (const item of existingItems) {
+      const chunk = item.data.chunk;
+      lastReplayedSeq = item.sequenceNumber;
+
       if (chunk === '[DONE]') {
         req.log.info({queryName}, 'found [DONE] during replay, closing stream');
         res.write('data: [DONE]\n\n');
@@ -185,6 +204,27 @@ export function handleQueryStream(
         return;
       }
     }
+
+    // Replay complete; flush catch-up buffer (only items after lastReplayedSeq)
+    isReplaying = false;
+    const newItems = catchUpBuffer.filter(
+      (item) => item.sequenceNumber > lastReplayedSeq
+    );
+    req.log.debug(
+      {queryName, buffered: catchUpBuffer.length, flushing: newItems.length},
+      'flushing catch-up buffer'
+    );
+
+    for (const item of newItems) {
+      const chunk = item.data.chunk as ChunkPayload | string;
+      if (typeof chunk !== 'string' && !writeSSEEvent(res, chunk, req.log)) {
+        req.log.warn({queryName}, 'error flushing buffered chunk');
+        unsubscribeChunks();
+        unsubscribeComplete();
+        return;
+      }
+    }
+    catchUpBuffer.length = 0;
   }
 
   req.on('close', () => {
@@ -210,26 +250,34 @@ export function handleQueryStream(
   });
 }
 
-export function processNDJSONData(
+export async function processNDJSONData(
   rawChunk: Buffer,
   state: {
     buffer: string;
     chunkCount: number;
     lastLogTime: number;
     chunkTypeCounts: Record<string, number>;
+    appendChain: Promise<void>;
   },
   queryId: string,
   chunks: CompletionChunkBroker,
   log: Request['log']
-): void {
+): Promise<void> {
   state.buffer += rawChunk.toString('utf-8');
 
+  const lines: string[] = [];
   while (state.buffer.includes('\n')) {
     const newlineIndex = state.buffer.indexOf('\n');
     const line = state.buffer.slice(0, newlineIndex).trim();
     state.buffer = state.buffer.slice(newlineIndex + 1);
-
     if (line) {
+      lines.push(line);
+    }
+  }
+
+  // Serialize appends to preserve arrival order
+  for (const line of lines) {
+    state.appendChain = state.appendChain.then(async () => {
       try {
         const streamChunk = JSON.parse(line);
         state.chunkCount++;
@@ -248,10 +296,13 @@ export function processNDJSONData(
           state.lastLogTime = now;
         }
 
-        chunks.addChunk(queryId, streamChunk);
+        await chunks.addChunk(queryId, streamChunk);
       } catch (parseError) {
         log.error({err: parseError, queryId}, 'failed to parse chunk');
       }
-    }
+    });
   }
+
+  // Wait for all appends in this batch to complete before returning
+  await state.appendChain;
 }

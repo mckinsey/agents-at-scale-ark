@@ -15,18 +15,18 @@ import {
   sendInternalError,
 } from '@ark-broker/http/routes/errors.js';
 
-export function handleStreamingAllTraces(
+export async function handleStreamingAllTraces(
   req: Request,
   res: Response,
   traces: TraceBroker,
   sessionId: string | undefined,
   cursor: number | undefined
-): void {
+): Promise<void> {
   req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
 
   let replayItems: OTELSpan[] | undefined;
   if (cursor !== undefined) {
-    let items = traces.all().filter((item) => item.sequenceNumber > cursor);
+    let items = (await traces.all()).filter((item) => item.sequenceNumber > cursor);
     if (sessionId) {
       items = items.filter((item) =>
         spanMatchesSessionId(item.data, sessionId)
@@ -35,7 +35,7 @@ export function handleStreamingAllTraces(
     replayItems = items.map((item) => item.data);
   }
 
-  streamSSE({
+  await streamSSE({
     res,
     req,
     logger: req.log,
@@ -51,15 +51,15 @@ export function handleStreamingAllTraces(
   });
 }
 
-export function handlePaginatedAllTraces(
+export async function handlePaginatedAllTraces(
   req: Request,
   res: Response,
   traces: TraceBroker,
   sessionId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
-    const result = traces.paginateTraces(params, sessionId);
+    const result = await traces.paginateTraces(params, sessionId);
 
     const response: PaginatedList<{traceId: string; spans: OTELSpan[]}> = {
       items: result.items,
@@ -79,27 +79,26 @@ export function handlePaginatedAllTraces(
   }
 }
 
-export function handleStreamingTrace(
+export async function handleStreamingTrace(
   req: Request,
   res: Response,
   traces: TraceBroker,
   traceId: string,
   fromBeginning: boolean | undefined,
   cursor: number | undefined
-): void {
+): Promise<void> {
   req.log.info({traceId}, 'starting SSE stream for trace');
 
   let replayItems: OTELSpan[] | undefined;
   if (fromBeginning) {
-    replayItems = traces.getSpansByTraceId(traceId);
+    replayItems = await traces.getSpansByTraceId(traceId);
   } else if (cursor !== undefined) {
-    replayItems = traces
-      .getByTraceId(traceId)
+    replayItems = (await traces.getByTraceId(traceId))
       .filter((item) => item.sequenceNumber > cursor)
       .map((item) => item.data);
   }
 
-  streamSSE({
+  await streamSSE({
     res,
     req,
     logger: req.log,
@@ -112,15 +111,15 @@ export function handleStreamingTrace(
   });
 }
 
-export function handlePaginatedTrace(
+export async function handlePaginatedTrace(
   req: Request,
   res: Response,
   traces: TraceBroker,
   traceId: string
-): void {
+): Promise<void> {
   try {
-    const spans = traces.getSpansByTraceId(traceId);
-    if (spans.length === 0 && !traces.hasTrace(traceId)) {
+    const spans = await traces.getSpansByTraceId(traceId);
+    if (spans.length === 0 && !(await traces.hasTrace(traceId))) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',

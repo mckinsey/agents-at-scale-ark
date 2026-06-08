@@ -1,5 +1,6 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {BrokerItemStream} from './stream/broker-item-stream.js';
+import {Stream} from './stream/stream.js';
+import {InMemoryStream} from './stream/in-memory-stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
@@ -27,10 +28,10 @@ export interface EventData {
  * Events are grouped by query ID.
  */
 export class EventBroker {
-  private stream: BrokerItemStream<EventData>;
+  private stream: Stream<EventData>;
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<EventData>(
+    this.stream = new InMemoryStream<EventData>(
       logger,
       'Event',
       path,
@@ -38,28 +39,29 @@ export class EventBroker {
     );
   }
 
-  addEvent(event: EventData): BrokerItem<EventData> {
+  async addEvent(event: EventData): Promise<BrokerItem<EventData>> {
     return this.stream.append(event);
   }
 
-  getByQuery(queryId: string): BrokerItem<EventData>[] {
+  async getByQuery(queryId: string): Promise<BrokerItem<EventData>[]> {
     return this.stream.filter((item) => item.data.data.queryId === queryId);
   }
 
-  getEventsByQuery(queryId: string): EventData[] {
-    return this.getByQuery(queryId).map((item) => item.data);
+  async getEventsByQuery(queryId: string): Promise<EventData[]> {
+    const items = await this.getByQuery(queryId);
+    return items.map((item) => item.data);
   }
 
-  all(): BrokerItem<EventData>[] {
+  async all(): Promise<BrokerItem<EventData>[]> {
     return this.stream.all();
   }
 
-  save(): void {
-    this.stream.save();
+  async save(): Promise<void> {
+    return this.stream.save();
   }
 
-  delete(): void {
-    this.stream.delete();
+  async delete(): Promise<void> {
+    return this.stream.delete();
   }
 
   subscribe(callback: (item: BrokerItem<EventData>) => void): () => void {
@@ -77,31 +79,31 @@ export class EventBroker {
     });
   }
 
-  paginate(params: PaginationParams): PaginatedList<BrokerItem<EventData>> {
+  async paginate(params: PaginationParams): Promise<PaginatedList<BrokerItem<EventData>>> {
     return this.stream.paginate(params);
   }
 
-  paginateByQuery(
+  async paginateByQuery(
     queryId: string,
     params: PaginationParams
-  ): PaginatedList<BrokerItem<EventData>> {
+  ): Promise<PaginatedList<BrokerItem<EventData>>> {
     return this.stream.paginate(
       params,
       (item) => item.data.data.queryId === queryId
     );
   }
 
-  paginateBySessionId(
+  async paginateBySessionId(
     sessionId: string,
     params: PaginationParams
-  ): PaginatedList<BrokerItem<EventData>> {
+  ): Promise<PaginatedList<BrokerItem<EventData>>> {
     return this.stream.paginate(
       params,
       (item) => item.data.data.sessionId === sessionId
     );
   }
 
-  getCurrentSequence(): number {
+  async getCurrentSequence(): Promise<number> {
     return this.stream.getCurrentSequence();
   }
 }

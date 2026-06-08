@@ -4,12 +4,12 @@ import {streamSSE} from '@ark-broker/http/sse.js';
 import {parsePaginationParams} from '@ark-broker/brokers/pagination.js';
 import {GetSessionsQuery} from './schemas.js';
 
-export function handleStreamingSessions(
+export async function handleStreamingSessions(
   req: Request,
   res: Response,
   sessionsBroker: SessionsBroker,
   filterSessionId: string | undefined
-): void {
+): Promise<void> {
   const store = sessionsBroker.getAll();
   let initialSessions = store.sessions;
   if (filterSessionId) {
@@ -22,7 +22,7 @@ export function handleStreamingSessions(
     session,
   }));
 
-  streamSSE({
+  await streamSSE({
     res,
     req,
     logger: req.log,

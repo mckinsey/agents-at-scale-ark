@@ -1,5 +1,6 @@
 import {EventEmitter} from 'events';
 import {BrokerItem} from './broker-item.js';
+import {Stream, Predicate} from './stream.js';
 import {JsonFileStore} from '@ark-broker/brokers/persistence/json-file-store.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {
@@ -9,12 +10,18 @@ import {
 } from '@ark-broker/brokers/pagination.js';
 
 /**
- * An append-only stream of broker items with persistence support.
- * Provides sequencing, timestamping, filtering, and optional file-based storage.
+ * In-memory implementation of the Stream<T> interface.
+ *
+ * This is a faithful port of BrokerItemStream with async method signatures.
+ * Maintains the same:
+ * - Sequencing behavior (monotonic sequence numbers starting from 1)
+ * - JsonFileStore persistence with maxItems eviction
+ * - Synchronous subscription via EventEmitter
+ * - Synchronous 'item' event emission on append
  *
  * @template T - The type of data being stored in each item
  */
-export class BrokerItemStream<T> {
+export class InMemoryStream<T> implements Stream<T> {
   private items: BrokerItem<T>[] = [];
   private nextSequence = 1;
   private maxItems?: number;
@@ -53,7 +60,7 @@ export class BrokerItemStream<T> {
     }
   }
 
-  append(data: T): BrokerItem<T> {
+  async append(data: T): Promise<BrokerItem<T>> {
     const item: BrokerItem<T> = {
       sequenceNumber: this.nextSequence++,
       timestamp: new Date(),
@@ -63,30 +70,31 @@ export class BrokerItemStream<T> {
     if (this.maxItems && this.items.length > this.maxItems) {
       this.items = this.items.slice(-this.maxItems);
     }
+    // Emit synchronously to maintain existing subscription behavior
     this.eventEmitter.emit('item', item);
     return item;
   }
 
-  all(): BrokerItem<T>[] {
+  async all(): Promise<BrokerItem<T>[]> {
     return this.items;
   }
 
-  filter(predicate: (item: BrokerItem<T>) => boolean): BrokerItem<T>[] {
+  async filter(predicate: Predicate<T>): Promise<BrokerItem<T>[]> {
     return this.items.filter(predicate);
   }
 
-  save(): void {
+  async save(): Promise<void> {
     this.fileStore.save(this.items, this.nextSequence);
   }
 
-  delete(predicate?: (item: BrokerItem<T>) => boolean): void {
+  async delete(predicate?: Predicate<T>): Promise<void> {
     if (predicate) {
       this.items = this.items.filter((item) => !predicate(item));
     } else {
       this.items = [];
       this.nextSequence = 1;
     }
-    this.save();
+    this.fileStore.save(this.items, this.nextSequence);
   }
 
   subscribe(callback: (item: BrokerItem<T>) => void): () => void {
@@ -94,17 +102,10 @@ export class BrokerItemStream<T> {
     return () => this.eventEmitter.off('item', callback);
   }
 
-  /**
-   * Get a paginated slice of items.
-   *
-   * @param params - Pagination parameters (limit and optional cursor)
-   * @param predicate - Optional filter to apply before pagination
-   * @returns Paginated list with items, total count, and next cursor
-   */
-  paginate(
+  async paginate(
     params: PaginationParams,
-    predicate?: (item: BrokerItem<T>) => boolean
-  ): PaginatedList<BrokerItem<T>> {
+    predicate?: Predicate<T>
+  ): Promise<PaginatedList<BrokerItem<T>>> {
     const limit = params.limit ?? DEFAULT_LIMIT;
     const cursor = params.cursor;
 
@@ -128,11 +129,7 @@ export class BrokerItemStream<T> {
     };
   }
 
-  /**
-   * Get the current highest sequence number.
-   * Useful for starting a watch stream from the current position.
-   */
-  getCurrentSequence(): number {
+  async getCurrentSequence(): Promise<number> {
     return this.nextSequence - 1;
   }
 }

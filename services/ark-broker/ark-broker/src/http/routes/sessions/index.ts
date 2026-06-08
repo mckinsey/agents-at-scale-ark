@@ -21,7 +21,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
 
   router.get<Record<string, string>, unknown, unknown, GetSessionsQueryRaw>(
     '/',
-    (req, res) => {
+    async (req, res) => {
       const parse = getSessionsQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id, 'query');
@@ -30,7 +30,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       const query: GetSessionsQuery = parse.data;
 
       if (query.watch) {
-        handleStreamingSessions(req, res, sessionsBroker, query.session_id);
+        await handleStreamingSessions(req, res, sessionsBroker, query.session_id);
         return;
       }
 

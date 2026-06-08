@@ -19,18 +19,18 @@ interface MessageItem {
   sequence: number;
 }
 
-export function handleStreamingMessages(
+export async function handleStreamingMessages(
   req: Request,
   res: Response,
   memory: MemoryBroker,
   conversationId: string | undefined,
   cursor: number | undefined
-): void {
+): Promise<void> {
   req.log.info({cursor}, 'starting SSE stream for all messages');
 
   let replayItems: MessageItem[] | undefined;
   if (cursor !== undefined) {
-    let items = memory.all().filter((item) => item.sequenceNumber > cursor);
+    let items = (await memory.all()).filter((item) => item.sequenceNumber > cursor);
     if (conversationId) {
       items = items.filter(
         (item) => item.data.conversationId === conversationId
@@ -45,7 +45,7 @@ export function handleStreamingMessages(
     }));
   }
 
-  streamSSE({
+  await streamSSE({
     res,
     req,
     logger: req.log,
@@ -69,13 +69,13 @@ export function handleStreamingMessages(
   });
 }
 
-export function handlePaginatedMessages(
+export async function handlePaginatedMessages(
   req: Request,
   res: Response,
   memory: MemoryBroker,
   conversationId: string | undefined,
   queryId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
 
@@ -84,7 +84,7 @@ export function handlePaginatedMessages(
       queryId: queryId || undefined,
     };
 
-    const result = memory.paginate(params, filters);
+    const result = await memory.paginate(params, filters);
 
     const response: PaginatedList<MessageItem> = {
       items: result.items.map((item) => ({

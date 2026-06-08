@@ -44,7 +44,7 @@ interface SSEStreamOptions {
   identifier?: string;
 }
 
-export const streamSSE = (options: SSEStreamOptions): void => {
+export const streamSSE = async (options: SSEStreamOptions): Promise<void> => {
   const {
     res,
     req,
@@ -69,23 +69,18 @@ export const streamSSE = (options: SSEStreamOptions): void => {
   let itemCount = 0;
   let lastLogTime = Date.now();
 
-  if (replayItems && replayItems.length > 0) {
-    logger.info(
-      {tag, itemName, identifier, count: replayItems.length},
-      'sending existing items'
-    );
-    for (const item of replayItems) {
-      if (!writeSSEEvent(res, item, logger)) {
-        logger.warn({tag, itemName, identifier}, 'error writing existing item');
-        clearInterval(heartbeat);
-        return;
-      }
-      itemCount++;
-    }
-  }
+  // Catch-up buffer to avoid race during async replay
+  const catchUpBuffer: unknown[] = [];
+  let isReplaying = !!(replayItems && replayItems.length > 0);
 
   const unsubscribe = subscribe((item: unknown) => {
     if (filter && !filter(item)) {
+      return;
+    }
+
+    // Buffer items during replay
+    if (isReplaying) {
+      catchUpBuffer.push(item);
       return;
     }
 
@@ -109,6 +104,40 @@ export const streamSSE = (options: SSEStreamOptions): void => {
       lastLogTime = now;
     }
   });
+
+  if (replayItems && replayItems.length > 0) {
+    logger.info(
+      {tag, itemName, identifier, count: replayItems.length},
+      'sending existing items'
+    );
+    for (const item of replayItems) {
+      if (!writeSSEEvent(res, item, logger)) {
+        logger.warn({tag, itemName, identifier}, 'error writing existing item');
+        clearInterval(heartbeat);
+        unsubscribe();
+        return;
+      }
+      itemCount++;
+    }
+
+    // Replay complete; flush catch-up buffer
+    isReplaying = false;
+    logger.debug(
+      {tag, itemName, identifier, buffered: catchUpBuffer.length},
+      'flushing catch-up buffer'
+    );
+
+    for (const item of catchUpBuffer) {
+      if (!writeSSEEvent(res, item, logger)) {
+        logger.warn({tag, itemName, identifier}, 'error flushing buffered item');
+        clearInterval(heartbeat);
+        unsubscribe();
+        return;
+      }
+      itemCount++;
+    }
+    catchUpBuffer.length = 0;
+  }
 
   req.on('close', () => {
     logger.info(
