@@ -51,7 +51,22 @@ def init_k8s():
             raise
 
 class ARKResourceClient(Generic[T]):
-    """Generic client for ARK custom resources"""
+    """Generic client for ARK custom resources
+
+    Error Handling Contract:
+        All CRUD methods propagate kubernetes.client.rest.ApiException unchanged,
+        preserving the status code and exception type. This allows SDK consumers
+        to programmatically distinguish between error conditions:
+        - 404: Resource not found
+        - 403: RBAC/permission denied
+        - 409: Resource conflict (already exists)
+        - 422: Validation error
+        - 5xx: Cluster/server errors
+
+        SDK consumers should catch ApiException and inspect the .status attribute
+        to implement error-specific handling (retries, fallbacks, user messaging).
+        See issue #2373 for rationale.
+    """
 
     def __init__(
         self,
@@ -78,7 +93,15 @@ class ARKResourceClient(Generic[T]):
         self.custom_api = client.CustomObjectsApi(self.api_client)
     
     def create(self, resource: T, namespace: Optional[str] = None) -> T:
-        """Create a new resource"""
+        """Create a new resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 409: Resource already exists
+                - 403: Permission denied (RBAC)
+                - 422: Validation error
+        """
         ns = namespace or self.namespace
 
         # Convert the typed model to dict
@@ -98,7 +121,14 @@ class ARKResourceClient(Generic[T]):
         return self._dict_to_model(result)
     
     def get(self, name: str, namespace: Optional[str] = None) -> T:
-        """Get a resource by name"""
+        """Get a resource by name
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+        """
         ns = namespace or self.namespace
 
         result = self.custom_api.get_namespaced_custom_object(
@@ -111,7 +141,14 @@ class ARKResourceClient(Generic[T]):
         return self._dict_to_model(result)
     
     def list(self, namespace: Optional[str] = None, label_selector: Optional[str] = None) -> List[T]:
-        """List all resources"""
+        """List all resources
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 403: Permission denied (RBAC)
+                - 404: Namespace not found
+        """
         ns = namespace or self.namespace
 
         kwargs = {}
@@ -130,7 +167,16 @@ class ARKResourceClient(Generic[T]):
         return [self._dict_to_model(item) for item in items]
     
     def update(self, resource: T, namespace: Optional[str] = None) -> T:
-        """Update an existing resource"""
+        """Update an existing resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+                - 409: Resource conflict (concurrent modification)
+                - 422: Validation error
+        """
         ns = namespace or self.namespace
         
         # Convert the typed model to dict
@@ -156,7 +202,15 @@ class ARKResourceClient(Generic[T]):
         return self._dict_to_model(result)
     
     def patch(self, name: str, patch_data: Dict[str, Any], namespace: Optional[str] = None) -> T:
-        """Patch a resource"""
+        """Patch a resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+                - 422: Validation error
+        """
         ns = namespace or self.namespace
 
         result = self.custom_api.patch_namespaced_custom_object(
@@ -170,7 +224,14 @@ class ARKResourceClient(Generic[T]):
         return self._dict_to_model(result)
     
     def delete(self, name: str, namespace: Optional[str] = None) -> None:
-        """Delete a resource"""
+        """Delete a resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+        """
         ns = namespace or self.namespace
 
         self.custom_api.delete_namespaced_custom_object(

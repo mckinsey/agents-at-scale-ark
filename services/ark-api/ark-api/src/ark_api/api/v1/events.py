@@ -2,13 +2,15 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.k8s import get_context
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ...auth.dependencies import get_impersonation_config
 from ...models.events import EventListResponse, EventResponse, event_to_response
+from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -63,7 +65,8 @@ async def list_events(
     kind_filter: Optional[str] = Query(None, alias="kind", description="Filter by involved object kind"),
     name_filter: Optional[str] = Query(None, alias="name", description="Filter by involved object name"),
     limit: Optional[int] = Query(500, description="Maximum number of events to return"),
-    page: Optional[int] = Query(1, description="Page number for pagination (1-based)")
+    page: Optional[int] = Query(1, description="Page number for pagination (1-based)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> EventListResponse:
     """
     List all Kubernetes events in a namespace with optional filtering.
@@ -82,7 +85,7 @@ async def list_events(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         v1 = client.CoreV1Api(api_client)
         
         try:
@@ -116,7 +119,8 @@ async def list_events(
 @handle_k8s_errors(operation="get", resource_type="event")
 async def get_event(
     event_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> EventResponse:
     """
     Get a specific Kubernetes event by name.
@@ -131,7 +135,7 @@ async def get_event(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         v1 = client.CoreV1Api(api_client)
         
         try:

@@ -68,7 +68,43 @@ jobs:
       SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
       - uses: actions/checkout@v6
-      
+
+      - name: Materialize embedded CRDs for Go scan
+        shell: bash
+        run: |
+          mkdir -p ark/internal/apiserver/crds
+          cp ark/config/crd/bases/*.yaml ark/internal/apiserver/crds/
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Export uv lockfiles to requirements.txt for Xray
+        shell: bash
+        run: |
+          # jf audit only reads requirements.txt for Python; without this it
+          # resolves uv projects fresh from PyPI and misses the locked versions.
+          # --no-sources skips [tool.uv.sources] overrides (e.g. local ark-sdk
+          # wheels built later in the pipeline) so the export works at checkout.
+          # Failures fall back to jf audit's pre-existing pyproject.toml mode
+          # for that one project — no worse than today — so don't fail the job.
+          set +e
+          for dir in services/ark-api/ark-api \
+                     services/ark-mcp/ark-mcp \
+                     lib/ark-sdk \
+                     lib/ark-sdk/gen_sdk/overlay/python \
+                     templates/tool; do
+            if [ ! -f "$dir/uv.lock" ]; then
+              echo "Skipping $dir (no uv.lock)"
+              continue
+            fi
+            echo "Exporting $dir"
+            err=$( (cd "$dir" && uv export --format requirements-txt --no-hashes --no-dev --no-sources > requirements.txt) 2>&1 )
+            if [ $? -ne 0 ]; then
+              echo "::warning::uv export failed for $dir, jf audit will fall back to scanning pyproject.toml as pip: ${err//$'\n'/ | }"
+            fi
+          done
+          exit 0
+
       - name: Run JFrog Xray scan
         id: xray-scan
         uses: ./.github/actions/jfrog-xray-scan

@@ -1,7 +1,6 @@
-import asyncio
 import time
 import unittest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 
 from ark_sdk.impersonation import ImpersonationConfig
 from ark_api.auth.client_pool import ImpersonatingClientPool

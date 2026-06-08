@@ -1,7 +1,6 @@
 from typing import Dict, Any, List, Optional
 import base64
 import io
-import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
@@ -174,11 +173,11 @@ async def preview_spreadsheet(request: FilePreviewRequest = Body(...)) -> Spread
             try:
                 # Try Excel first
                 return parse_excel_file(content_bytes, request.filename)
-            except:
+            except Exception:
                 try:
                     # Try CSV
                     return parse_delimited_file(content_bytes, request.filename, separator=',', file_type='csv')
-                except:
+                except Exception:
                     # Try TSV
                     return parse_delimited_file(content_bytes, request.filename, separator='\t', file_type='tsv')
 
