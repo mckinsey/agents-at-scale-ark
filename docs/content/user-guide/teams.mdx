@@ -183,12 +183,11 @@ The selector's prompt has three template variables. The default looks like this:
 ```text
 You are in a role play game. The following roles are available:
 {{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
-Make sure to choose the role which is best suited to respond to the most recent message.
+Read the following conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
 
 {{.History}}
 
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
 ```
 
 If you override `selector.selectorPrompt`, **include an instruction to use the `select-next-speaker` tool**. The mutating webhook will stamp a migration warning on the team if your custom prompt doesn't mention it, because without that instruction the model will return free-form text and the selector will time out.
