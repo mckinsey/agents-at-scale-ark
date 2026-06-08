@@ -27,7 +27,7 @@ That's enough to apply. The controller validates that the target exists, sends t
 
 ### Via Dashboard
 
-The dashboard has two surfaces for queries — an embedded **chat panel** that lives next to every agent and team page, and a top-level **Queries** tab for creating named, parametric, multi-turn queries you want to keep around.
+The dashboard has two surfaces for queries — an embedded **chat panel** next to every agent and team page, and a top-level **Queries** tab with a **New Query** form. Both create `Query` resources: every message you send in the chat panel, and every form submission, shows up as a `Query` in the Queries list and in `kubectl get queries`.
 
 #### Embedded chat (fastest path)
 
@@ -35,46 +35,54 @@ The dashboard has two surfaces for queries — an embedded **chat panel** that l
 2. Go to **Agent Builder → Agents** (or **Teams**) in the left nav and open any resource.
 3. Type into the chat panel on the right and hit **Send**.
 
-The panel streams the response inline. While a turn is in flight the **Send** button becomes a **Stop** button you can use to cancel. For teams, the panel also surfaces selector choices (`<selector> chose <speaker>`) and a `Maximum turns reached (N)` badge when `maxTurns` is hit. Each conversation has a **New Chat** action that starts a fresh `conversationId`.
+![Embedded chat panel on an agent page](/queries/chat-panel.png)
+
+While a turn is in flight the **Send** button becomes a **Stop** button you can use to cancel. For teams, the panel also surfaces selector choices (`<selector> chose <speaker>`) and a `Maximum turns reached (N)` badge when `maxTurns` is hit.
+
+> **Streaming is gated behind an experimental feature.** The chat panel streams the response token-by-token only when **Chat Streaming** is enabled under **Settings → Experimental Features** (it's on by default). With it off, the panel waits for the full response and shows it in one go.
+>
+> ![Chat Streaming toggle in Experimental Features](/queries/streaming-toggle.png)
+
+Each conversation has a **New Chat** action (bottom-right of the panel) that starts a fresh `conversationId` — click it to drop the current context and begin a new conversation with the same agent or team.
+
+![New Chat button starts a fresh conversation](/queries/new-chat.png)
 
 #### Create Query form
 
 1. Go to **Agent Builder → Queries** in the left nav and click **New Query**.
-2. Fill the three columns:
+2. Fill the editable fields, grouped into **Query** and **Configuration** columns:
 
 | Column | Field | Notes |
 | --- | --- | --- |
 | **Query** | **Name** | Optional. Auto-generated if blank. |
-| | **Svc. Account** | Optional Kubernetes ServiceAccount for RBAC during execution. |
-| | **Target** | Required (unless you use a Selector). Pick an agent, team, model, or tool. |
-| | **Session ID** | Optional. Groups related queries for tracking and telemetry. |
-| | **Conversation ID** | Optional. Threads multiple queries into one conversation; auto-generated when memory is set and you don't provide one. |
+| | **Target** | Required. Pick an agent, team, model, or tool. |
+| | **Session ID** | Optional. Groups related queries for tracking and telemetry. **Auto-generated** if you leave it blank. |
+| | **Conversation ID** | Optional. Threads multiple queries into one conversation. **Auto-generated** if you leave it blank. |
 | **Configuration** | **Timeout** | Default `5m`. Format: `30s`, `5m`, `1h`. |
 | | **TTL** | How long the Query resource sticks around after completing. Default comes from `ArkConfig/default.spec.queryTTL` (720h fallback). |
 | | **Memory** | Optional. Pick a `Memory` resource so the conversation history is persisted under `conversationId`. |
-| | **Streaming** | When the agent/team supports streaming, the chat panel streams partial chunks. |
+| | **Streaming** | Stream the response into the **Status & Results** panel instead of waiting for the final message. |
 | | **Parameters** | Free-form `name → value` pairs that fill `{{.name}}` placeholders in the input (and in agent prompts that declare a `queryParameterRef`). |
-| **Advanced Settings** | **Selector** | Optional label selector — alternative to **Target** for fan-out across multiple resources matching labels. |
-| | **Cancel** | Yes/No toggle that patches `spec.cancel: true` to stop a running query (also see [Cancel a running query](#cancel-a-running-query) below). |
 
 3. Type the **Input** in the bottom panel, then hit **Execute Query**.
 
-The right side shows the **Status & Results** column with Phase, the assistant Response, and Token Usage. The embedded chat panel on every agent / team page (covered in the previous section) is the equivalent surface for unnamed conversational queries.
+![Create Query form with Query, Configuration, Advanced Settings, and Status & Results columns](/queries/create-form.png)
+
+The **Status & Results** column on the right shows Phase, the assistant Response, and Token Usage once the query runs. The **Advanced Settings** column (Selector) and a few fields like **Svc. Account** and **Cancel** are shown but **read-only** in this form — they're display-only views of `Query` fields you set via YAML (see [Features only available in YAML](#features-only-available-in-yaml)).
 
 ### Via kubectl
 
-For a one-off query that runs immediately:
+For a one-off query that runs immediately, use `ark query <target> <message>` where the target is `agent/<name>`, `team/<name>`, `model/<name>`, or `tool/<name>`:
 
 ```bash
 ark query agent/my-agent "What is the capital of France?"
-
-# Or the longer subcommand form (also works for teams, models, tools)
-ark agents query my-agent "What is the capital of France?"
-ark teams query my-team "Summarise the news on EVs."
+ark query team/my-team "Summarise the news on EVs."
 ark query model/default "Explain rate limiting."
 ```
 
-For a query you want to persist (resource lifecycle, status fields, multi-turn memory), apply a `Query` resource:
+`ark agents query <name> <message>` is an equivalent shorthand for the agent case.
+
+To author a query as a named resource (so you control its name, parameters, TTL, and can re-inspect it later), apply a `Query`:
 
 ```bash
 cat <<'EOF' | kubectl apply -f -
@@ -103,7 +111,7 @@ kubectl get query hello-q1 -o jsonpath='{.status.response.raw}'
 
 ## Templated input + parameters
 
-You can templatise the input with Go template syntax and pass values inline or from a ConfigMap / Secret:
+The input is a Go template. `spec.parameters` supply the values — inline, or pulled from a `ConfigMap` or `Secret`:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -114,18 +122,18 @@ spec:
   input: "What's the weather in {{.city}}?"
   parameters:
     - name: city
-      value: "Boston"
-    - name: api_key
+      value: "Boston"                 # inline value
+    - name: region
       valueFrom:
-        secretKeyRef:
-          name: weather-api
-          key: token
+        configMapKeyRef:              # or pull from a ConfigMap
+          name: geo-config
+          key: default-region
   target:
     type: agent
     name: weather-agent
 ```
 
-Parameters are resolved server-side before the input reaches the target. If the agent's own prompt or system message declares a `queryParameterRef`, the same parameter values flow through there too — see [Agents → Parameters in the prompt](/user-guide/agents#parameters-in-the-prompt) for that wiring.
+Parameters are resolved server-side before the input reaches the target — the agent sees `What's the weather in Boston?`, not the template. `valueFrom` also supports `secretKeyRef` (be deliberate: a secret resolved into the input becomes part of the prompt text the model receives). If the agent's own prompt or system message declares a `queryParameterRef`, the same parameter values flow through there too — see [Agents → Parameters in the prompt](/user-guide/agents#parameters-in-the-prompt) for that wiring.
 
 ## Multi-turn conversations
 
@@ -155,13 +163,11 @@ spec:
     name: assistant
 ```
 
-The second query sees the first one's exchange and answers "Alice". The dashboard chat panel handles this for you — every message you send in the same chat reuses the same `conversationId` until you click **New Chat**.
+The second query sees the first one's exchange and answers "Alice". The dashboard chat panel handles this for you — every message you send in the same chat reuses the same `conversationId` until you click **New Chat** (highlighted in the screenshot above), which starts a fresh conversation.
 
-The completions executor resolves history through a `Memory` resource. **If you don't set `spec.memory`, it tries to use a `Memory` named `default` in the same namespace**, falling back to a no-op store if that doesn't exist. Most Ark installs ship a `default` Memory backed by the in-cluster broker, which is why the example above works without setting `memory` explicitly. Set `spec.memory.name` only when you want to pin to a non-default store.
+## Pick a target by label
 
-## Fan-out with a label selector
-
-Use `selector` instead of `target` to broadcast the same input to every matching resource. Each match produces a response.
+Instead of naming a `target`, you can select one by label. This is useful when the concrete resource name varies by environment but a stable label doesn't.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -175,7 +181,9 @@ spec:
       role: reviewer
 ```
 
-The admission webhook requires **either** `target` **or** `selector` — applying neither is rejected.
+The selector resolves to a **single** target, not a fan-out. The controller looks for matching resources in this order and uses the **first match it finds**: Agents → Teams → Models → Tools. So if two agents carry `role: reviewer`, the query runs against whichever the controller lists first — it does **not** broadcast to both. To run the same input against several resources, create one query per target (or target a `Team` that coordinates them).
+
+The admission webhook requires **either** `target` **or** `selector` — applying neither is rejected. If a selector matches nothing, the query fails with `no matching resources found for selector`.
 
 ## Cancel a running query
 
@@ -197,17 +205,24 @@ kubectl describe query hello-q1        # conditions + token usage
 kubectl get query hello-q1 -o yaml     # everything
 
 kubectl delete query hello-q1
-kubectl delete queries --field-selector=status.phase=done   # bulk-delete completed queries
+kubectl delete queries --all                          # delete every query in the namespace
+
+# Bulk-delete only completed queries (status.phase isn't a field-selector, so filter with jq):
+kubectl get queries -o json \
+  | jq -r '.items[] | select(.status.phase=="done") | .metadata.name' \
+  | xargs -r kubectl delete query
 ```
 
 Token usage lands at `.status.tokenUsage.{promptTokens,completionTokens,totalTokens}` — handy for spot-checking costs.
 
 ## Features only available in YAML
 
-The dashboard's Create Query form covers name, target, session/conversation IDs, timeout/TTL, memory, parameters, and selectors. These features are only configurable via the `Query` YAML for now:
+The dashboard's Create Query form lets you set name, target, session/conversation IDs, timeout/TTL, memory, parameters, and the input. A few `Query` fields appear in the form as **read-only / dimmed** rows — you can see their value but not edit them there, so set them via YAML:
 
-- **`spec.overrides`** — inject HTTP headers when the query's target calls its model or any MCP server. Useful for upstream API gateways. See [Overrides](/user-guide/overrides).
-- **`spec.cancel: true`** — programmatic cancellation. The dashboard exposes Stop on the embedded chat; explicit Query resources require a patch.
+- **`spec.serviceAccount`** (shown as **Svc. Account**) — the Kubernetes ServiceAccount used for RBAC during execution. Display-only in the form.
+- **`spec.selector`** (shown under **Advanced Settings → Selector** as `Configured` / `—`) — pick the target by label instead of by name (see [Pick a target by label](#pick-a-target-by-label)). Display-only in the form.
+- **`spec.cancel`** (shown under **Status & Results → Cancel** as `Requested` / `No`) — a read-only view of the cancellation flag; the embedded chat exposes **Stop**, but setting it on a named Query is a YAML/patch operation (see [Cancel a running query](#cancel-a-running-query)).
+- **`spec.overrides`** — inject HTTP headers when the query's target calls its model or any MCP server. Useful for upstream API gateways. Not shown in the form at all. See [Overrides](/user-guide/overrides).
 
 ## Troubleshooting
 
@@ -230,7 +245,7 @@ Common causes:
 
 **Query never starts (`phase: pending` forever).** The controller couldn't dispatch — usually because the controller pod is restarting or the ark-completions executor isn't reachable. `kubectl get pods -n ark-system` and check `ark-controller` + `ark-completions` are both `Running`.
 
-**Want streaming chunks instead of one final message?** The chat panel streams natively when streaming is enabled on the agent. For external clients see [Developer Guide → Streaming queries](/developer-guide/queries/streaming).
+**Chat panel isn't streaming token-by-token.** Streaming is gated behind the **Chat Streaming** experimental feature (**Settings → Experimental Features**, on by default). If it's off the panel waits for the full response. For external clients see [Developer Guide → Streaming queries](/developer-guide/queries/streaming).
 
 **Need to debug what the agent actually saw?** `kubectl get query <name> -o jsonpath='{.status.response.raw}'` returns the full message array (system prompt + user + assistant + any tool calls and results), which is what the dashboard's **Debug** tab renders.
 

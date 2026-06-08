@@ -15,7 +15,7 @@ export default {
     href: '/user-guide/teams'
   },
   queries: {
-    title: 'Run work and manage sessions',
+    title: 'Run queries / chat with agents and teams',
     href: '/user-guide/queries'
   },
   tools: {
