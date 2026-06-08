@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.63",
+  "version": "0.1.64-rc",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -45,6 +45,7 @@
     "@napi-rs/simple-git-linux-x64-musl": "^0.1.19"
   },
   "overrides": {
+    "brace-expansion": ">=5.0.6",
     "undici": "^7.24.0",
     "rollup": "4.59.0",
     "minimatch": "^10.2.3",

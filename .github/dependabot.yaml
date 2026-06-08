@@ -48,9 +48,24 @@ updates:
       interval: weekly
     open-pull-requests-limit: 1
 
-  # Python - ark-api
-  - package-ecosystem: "pip"
-    directory: "services/ark-api"
+  # Go modules
+  - package-ecosystem: "gomod"
+    directories:
+      - "ark"
+      - "tools/fark"
+    commit-message:
+      prefix: 'chore(go): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # Python (uv)
+  - package-ecosystem: "uv"
+    directories:
+      - "services/ark-api/ark-api"
+      - "services/ark-mcp/ark-mcp"
+      - "lib/ark-sdk"
+      - "lib/ark-sdk/gen_sdk/overlay/python"
     commit-message:
       prefix: 'chore(python): '
     schedule:

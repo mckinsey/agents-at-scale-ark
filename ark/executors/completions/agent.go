@@ -42,6 +42,12 @@ func (a *Agent) FullName() string {
 	return a.Namespace + "/" + a.Name
 }
 
+func (a *Agent) Close() {
+	if a.Tools != nil {
+		_ = a.Tools.Close()
+	}
+}
+
 func (a *Agent) GetToolRegistry() *ToolRegistry {
 	return a.Tools
 }

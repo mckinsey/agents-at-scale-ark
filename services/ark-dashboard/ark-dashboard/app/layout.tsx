@@ -6,6 +6,14 @@ import { GlobalProviders } from '@/providers/GlobalProviders';
 
 import './globals.css';
 
+// Auth mode (open vs sso) and the resulting provider/session are runtime config
+// read via process.env.AUTH_MODE + cookies in GlobalProviders. Without this the
+// layout is statically prerendered at build time (AUTH_MODE unset → OpenMode
+// baked in), so a single image can't switch modes at runtime: middleware honours
+// AUTH_MODE live but the rendered page serves the baked Open provider, leaving
+// session.user empty (no user menu / Sign out). Force per-request rendering.
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',

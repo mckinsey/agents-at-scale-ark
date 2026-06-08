@@ -136,7 +136,25 @@ func (r *TeamReconciler) updateStatus(ctx context.Context, team *arkv1alpha1.Tea
 	return err
 }
 
+// teamAgentMemberIndexer returns agent member names for field-based Team lookups.
+func teamAgentMemberIndexer(obj client.Object) []string {
+	team := obj.(*arkv1alpha1.Team)
+	var names []string
+	for _, member := range team.Spec.Members {
+		if member.Type == "agent" && member.Name != "" {
+			names = append(names, member.Name)
+		}
+	}
+	return names
+}
+
 func (r *TeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(), &arkv1alpha1.Team{}, ".spec.members.agent.name", teamAgentMemberIndexer,
+	); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Team{}).
 		Watches(&arkv1alpha1.Agent{}, handler.EnqueueRequestsFromMapFunc(r.findTeamsForAgent)).
@@ -145,27 +163,19 @@ func (r *TeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *TeamReconciler) findTeamsForAgent(ctx context.Context, obj client.Object) []reconcile.Request {
-	agent := obj.(*arkv1alpha1.Agent)
-
 	var teams arkv1alpha1.TeamList
-	if err := r.List(ctx, &teams, client.InNamespace(agent.Namespace)); err != nil {
+	if err := r.List(ctx, &teams,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{".spec.members.agent.name": obj.GetName()},
+	); err != nil {
 		return []reconcile.Request{}
 	}
 
-	var requests []reconcile.Request
-	for _, team := range teams.Items {
-		for _, member := range team.Spec.Members {
-			if member.Type == "agent" && member.Name == agent.Name {
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      team.Name,
-						Namespace: team.Namespace,
-					},
-				})
-				break
-			}
+	requests := make([]reconcile.Request, len(teams.Items))
+	for i, team := range teams.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: team.Name, Namespace: team.Namespace},
 		}
 	}
-
 	return requests
 }

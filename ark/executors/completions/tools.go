@@ -20,10 +20,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
+
+var toolHTTPClient = &http.Client{Transport: common.NewSharedTransport()}
 
 type ToolDefinition struct {
 	Name        string         `json:"name"`
@@ -96,19 +99,14 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		method = "GET"
 	}
 
-	// Handle request body for POST/PUT/PATCH requests
-	var requestBody io.Reader
-	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
-		if err != nil {
-			log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
-			return ToolResult{
-				ID:    call.ID,
-				Name:  call.Function.Name,
-				Error: fmt.Sprintf("failed to resolve body template: %v", err),
-			}, fmt.Errorf("failed to resolve body template: %w", err)
-		}
-		requestBody = strings.NewReader(bodyContent)
+	requestBody, err := h.resolveRequestBody(ctx, httpSpec, method, tool.Namespace, arguments)
+	if err != nil {
+		log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to resolve body template: %v", err),
+		}, fmt.Errorf("failed to resolve body template: %w", err)
 	}
 
 	// Create HTTP request
@@ -134,9 +132,10 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		req.Header.Set(header.Name, value)
 	}
 
-	// Set timeout
+	// Set timeout — shallow-copy the shared client to override only Timeout.
 	timeout := h.getTimeout(httpSpec.Timeout)
-	httpClient := &http.Client{Timeout: timeout}
+	httpClient := *toolHTTPClient
+	httpClient.Timeout = timeout
 
 	// Make the request
 	log.Info("making HTTP request", "method", method, "url", parsedURL.String())
@@ -161,14 +160,17 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		}, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body — limit to 10 MB to prevent unbounded allocation.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
 			Error: fmt.Sprintf("failed to read response: %v", err),
 		}, fmt.Errorf("failed to read response: %w", err)
+	}
+	if len(body) == 10<<20 {
+		log.Info("HTTP tool response may have been truncated", "url", parsedURL.String(), "limit", "10MB")
 	}
 
 	log.Info("HTTP request completed", "status", resp.StatusCode, "responseSize", len(body))
@@ -178,6 +180,17 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		Name:    call.Function.Name,
 		Content: string(body),
 	}, nil
+}
+
+func (h *HTTPExecutor) resolveRequestBody(ctx context.Context, httpSpec *arkv1alpha1.HTTPSpec, method, namespace string, arguments map[string]any) (io.Reader, error) {
+	if httpSpec.Body == "" || (method != "POST" && method != "PUT" && method != "PATCH") {
+		return nil, nil
+	}
+	bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
+	if err != nil {
+		return nil, err
+	}
+	return strings.NewReader(bodyContent), nil
 }
 
 type ToolRegistry struct {

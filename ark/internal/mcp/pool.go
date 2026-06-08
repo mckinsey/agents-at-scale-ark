@@ -17,7 +17,7 @@ type MCPClientConfig struct {
 }
 
 type MCPClientPool struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	clients map[string]*MCPClient
 }
 
@@ -29,6 +29,13 @@ func NewMCPClientPool() *MCPClientPool {
 
 func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConfig, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
 	key := fmt.Sprintf("%s/%s", cfg.ServerNamespace, cfg.ServerName)
+
+	p.mu.RLock()
+	if mcpClient, exists := p.clients[key]; exists {
+		p.mu.RUnlock()
+		return mcpClient, nil
+	}
+	p.mu.RUnlock()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()

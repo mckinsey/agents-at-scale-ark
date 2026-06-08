@@ -1,0 +1,169 @@
+---
+title: Marketplace
+description: How the Ark Dashboard Marketplace works, how to add new sources, and how to publish your own items
+---
+
+# Marketplace
+
+The **Marketplace** tab in the Ark Dashboard is a catalog of installable add-on components — services, MCP servers, agents, executors, and demo bundles — that extend Ark without you having to write Helm charts from scratch. Each item is a Helm chart hosted in an OCI registry; the dashboard surfaces them in a card grid and gives you the exact terminal command to install one.
+
+This page covers:
+
+- How the Marketplace surface works end to end.
+- How to register additional marketplace sources (your team's, a vendor's, etc.).
+- How to publish your own marketplace items.
+- Current limitations.
+
+## How the catalog works
+
+The dashboard fetches one or more `marketplace.json` manifest files over HTTPS and renders the items it finds. The default source is the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace), which is pre-configured on every install.
+
+![Marketplace tab listing items from the default source](/marketplace/list.png)
+
+Each card shows:
+
+- A **type** badge (`Service`, `Agent`, `MCP`, `Demo`).
+- The item name, description, and source repository.
+- Tags (free-form labels for search/filter).
+- The advertised chart version.
+- A **Get** button (or **Installed** if a helm release with the same name already exists in the cluster).
+
+The filter strip at the top (`All / Agents / MCPs / Demos / Services / Installed`) narrows the grid. The search box in the top-right matches across name, description, and tags.
+
+### Install flow
+
+Clicking **Get** does **not** install anything by itself. It opens a dialog with two terminal commands you can copy:
+
+![Install dialog showing the Ark CLI and Helm one-liners](/marketplace/install.png)
+
+1. **`ark install marketplace/<category>/<name>`** — the recommended path. The Ark CLI reads the same manifest, resolves the OCI chart, and runs `helm install` with the item's declared namespace and install args.
+2. **`helm upgrade --install <name> oci://… --namespace <ns> --create-namespace`** — the direct Helm form, in case you don't want to use the Ark CLI or need to override values.
+
+Run whichever you prefer in a shell with `kubectl` configured against the target cluster, then come back to the dashboard — the card flips to **Installed** on the next refresh.
+
+## Add a new marketplace source
+
+The default `marketplace.json` only lists items maintained by the Ark team. To browse items from another team or vendor, register their manifest URL as an additional source.
+
+### Step 1: enable the feature
+
+Adding sources is gated behind an experimental flag. Open **Settings → Experimental Features** and turn on **Marketplace** ("Enables adding 3rd party Marketplaces from settings").
+
+![Experimental Features panel with the Marketplace toggle](/marketplace/experimental.png)
+
+A new **Manage marketplace** entry appears in the Settings sidebar.
+
+### Step 2: add the source
+
+Open **Settings → Manage marketplace**. The default Ark marketplace appears at the top with its canonical URL pinned.
+
+![Manage marketplace screen with the default Ark source](/marketplace/sources.png)
+
+Click **Add new marketplace** to register a new one:
+
+![Add new marketplace form](/marketplace/add-source.png)
+
+| Field | Notes |
+| --- | --- |
+| **Marketplace JSON URL** | Required. HTTPS URL that returns a JSON manifest in the [schema below](#marketplacejson-schema). Common pattern: `https://raw.githubusercontent.com/<org>/<repo>/main/marketplace.json`. |
+| **Display name** | Optional label shown in the sidebar and item cards. Defaults to the `marketplace` field inside the manifest. |
+
+Hit **Add**. The dashboard `POST`s the URL to its own `/api/marketplace/validate` endpoint, which fetches it server-side and confirms the manifest is well-formed before the source is saved. On the next reload of the Marketplace tab you'll see the new items alongside the defaults.
+
+The **Refresh Data** button at the top of the Manage marketplace page re-pulls every source on demand without a page reload.
+
+## `marketplace.json` schema
+
+A minimal valid manifest looks like this:
+
+```json
+{
+  "version": "1.0.0",
+  "marketplace": "my-team-marketplace",
+  "items": [
+    {
+      "name": "support-agent",
+      "type": "agent",
+      "displayName": "Support Agent",
+      "description": "Demo customer-support agent with FAQ retrieval tooling",
+      "version": "0.1.0",
+      "category": "agents",
+      "tags": ["agent", "support", "demo"],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/my-org/support-agent",
+      "documentation": "https://my-org.github.io/support-agent/",
+      "ark": {
+        "chartPath": "oci://ghcr.io/my-org/charts/support-agent",
+        "namespace": "default",
+        "helmReleaseName": "support-agent",
+        "installArgs": ["--create-namespace"]
+      }
+    }
+  ]
+}
+```
+
+The chart this points at should bundle the `Agent` CRD (and any `Model`, `Tool`, or `MCPServer` resources the agent depends on) so that one `helm install` produces a working, queryable agent.
+
+The dashboard's manifest validator (`/api/marketplace/validate`) enforces three rules:
+
+- The top-level object must have `version`, `marketplace`, and `items[]` keys.
+- Every item must have at least a `name`.
+- The whole document must be valid JSON returned with HTTP 200.
+
+Beyond that, populate the optional fields for a good catalog entry:
+
+| Field | Purpose |
+| --- | --- |
+| `type` | `service`, `agent`, `mcp`, `demo`, or `executor`. Drives the badge colour and the top-bar filter. |
+| `category` | One of `observability`, `tools`, `mcp-servers`, `agents`, `models`, `workflows`, `integrations`. Used by the CLI's `ark install marketplace/<category>/<name>` path. |
+| `displayName`, `description`, `tags`, `icon` | All show in the card. Search matches name + description + tags. |
+| `version` | Free-form string shown in the card footer. Track your chart version here. |
+| `documentation`, `homepage`, `repository`, `support.url` | Outbound links from the detail card. |
+| `ark.chartPath` | **Required for install to work.** The OCI URL the install command will pass to Helm. |
+| `ark.namespace` | Helm `--namespace` value. |
+| `ark.helmReleaseName` | Release name. The Installed filter matches by this name. |
+| `ark.installArgs` | Extra flags appended verbatim to the install command. Typical: `["--create-namespace"]`. |
+| `ark.k8sServiceName`, `k8sServicePort`, `k8sDeploymentName` | Optional metadata used by the Ark CLI to wire port-forwards after install. |
+
+## What needs to be reachable by the dashboard?
+
+Only the manifest itself sits on a critical path.
+
+| Field | Fetched by | Hosting requirement |
+| --- | --- | --- |
+| The manifest URL | **Dashboard pod**, server-side, no `Authorization` header | Must be reachable from the cluster and return the manifest without authentication. |
+| `ark.chartPath` (OCI) | **The user's local `helm` CLI** | Doesn't have to be public. If the registry is private, users run `helm registry login` first. Public OCI registries just remove that step. |
+
+"Reachable" doesn't mean internet-public — it just means **the dashboard pod can `GET` the URL and the server returns the manifest without an `Authorization` header**. Common patterns:
+
+- **Public HTTPS** — e.g. `https://raw.githubusercontent.com/{owner}/{repo}/{branch}/marketplace.json` for a public GitHub repo. Anyone on the internet, including the dashboard pod, can fetch it.
+- **Internal GitHub Enterprise Server** — a repo on a corp-network GHES instance with anonymous read enabled. The cluster needs network routing to the GHES host.
+- **Internal artifact repo** — Artifactory / Nexus / Harbor serving the file at a static URL with anonymous read enabled, reachable from the cluster.
+- **In-cluster `ConfigMap` + nginx (or similar)** — the manifest lives in a `ConfigMap`, an in-cluster `Service` serves it at `http://marketplace.my-ns.svc.cluster.local/marketplace.json`. Zero internet egress required — ideal for air-gapped installs.
+
+> `raw.githubusercontent.com` is GitHub's host for raw file contents in **public** repos. A file at `https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}` is fetchable by anyone over HTTPS with no auth, which makes it a low-effort way to publish a manifest without setting up GitHub Pages or a CDN. Private repos return 404 from this host because the dashboard doesn't authenticate.
+
+Practical implication: for a fully-internal marketplace, you need exactly one URL the dashboard pod can fetch without auth — the manifest. Charts can live in your private OCI registry.
+
+## Publish your own marketplace items
+
+To make a new item installable from the dashboard:
+
+1. **Build and publish a Helm chart** to an OCI registry your users can pull from. The official marketplace pushes to `ghcr.io/mckinsey/agents-at-scale-marketplace/charts/<name>`; any OCI-compatible registry (Harbor, ECR, Artifactory) works.
+2. **Add an entry** to a hosted `marketplace.json` with the fields above. Point `ark.chartPath` at the OCI URL from step 1.
+3. **Share the manifest URL** with users — they paste it into **Settings → Manage marketplace** and your items appear in their dashboard.
+
+The official marketplace publishes via [GitHub Actions on push to `main`](https://github.com/mckinsey/agents-at-scale-marketplace) — use that repo's workflows as a starting point for your own pipeline.
+
+## Limitations
+
+Things the Marketplace tab does **not** do today. Track these before relying on it for production rollout:
+
+- **No in-dashboard install.** Clicking **Get** generates a terminal command; the user still has to paste and run it in a shell with `kubectl` configured. There's no progress bar or status tracking for in-progress installs.
+- **Sources persist in `localStorage`, per browser.** Sources added under **Settings → Manage marketplace** are saved with Jotai's `atomWithStorage` keyed to `marketplace-sources`. They live only in the browser that added them — not synced to the cluster, not shared across users, and lost if you clear site data.
+- **The "Marketplace" sources UI is experimental.** It's hidden until you flip the toggle under **Settings → Experimental Features → Marketplace**. Until that lands as a default, document the toggle for your users.
+- **No authentication for source URLs.** The dashboard fetches manifests with no `Authorization` header (see [What needs to be reachable by the dashboard?](#what-needs-to-be-reachable-by-the-dashboard)). Private GitHub repos and authenticated endpoints can't host a manifest unless you front them with an anonymously-readable URL.
+- **No version selector.** Each item card shows a single advertised version from the manifest, and `ark install` uses whatever tag the OCI chart reference resolves to. To pin to an older version, use the Helm command form with an explicit `--version`.
+- **"Installed" detection matches by helm release name.** The badge compares `ark.helmReleaseName` against helm releases in the cluster. If you installed the chart under a different release name, the card still says **Get**.
+- **No client-side schema enforcement.** The validate endpoint checks only that `version`, `marketplace`, and `items[].name` exist. Items missing `ark.chartPath` show in the grid but produce a broken install command; missing `type`/`category` produce a card with no badge or filter membership.

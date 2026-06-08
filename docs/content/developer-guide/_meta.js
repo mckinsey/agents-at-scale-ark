@@ -27,7 +27,6 @@ export default {
 
   '---advanced': { type: 'separator', title: 'Advanced topics' },
   'langchain-execution-engine': 'LangChain Execution Engine',
-  'rag-implementation': 'RAG Implementation Guide',
   authentication: 'Authentication',
 
   '---project': { type: 'separator', title: 'Project and tooling' },

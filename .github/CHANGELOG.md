@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.1.64-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.63...v0.1.64-rc) (2026-06-08)
+
+
+### Features
+
+* **2290:** Release process docs ([#2350](https://github.com/mckinsey/agents-at-scale-ark/issues/2350)) ([64b2a70](https://github.com/mckinsey/agents-at-scale-ark/commit/64b2a70d63a3d08e6533030fb7104d99445b76f1))
+* Add Origin to CRDs & Dashboard ([#2320](https://github.com/mckinsey/agents-at-scale-ark/issues/2320)) ([bc22140](https://github.com/mckinsey/agents-at-scale-ark/commit/bc2214075b56c61ba369ff988bafb8cd3962a099))
+* **api:** implement K8s user impersonation for SSO-authenticated requests ([#2066](https://github.com/mckinsey/agents-at-scale-ark/issues/2066)) ([60f9e65](https://github.com/mckinsey/agents-at-scale-ark/commit/60f9e656cd11f165f89745a7e75955f19012b12e))
+* force selector to call a tool via tool_choice=required ([#2059](https://github.com/mckinsey/agents-at-scale-ark/issues/2059)) ([7812bb8](https://github.com/mckinsey/agents-at-scale-ark/commit/7812bb83d689f2b064cdc6482c936b4888a6abed))
+* **mcp-auth:** implement ark-api OAuth orchestration + 'ark mcp auth' CLI ([#2174](https://github.com/mckinsey/agents-at-scale-ark/issues/2174)) ([0bc6c37](https://github.com/mckinsey/agents-at-scale-ark/commit/0bc6c3727b3fb1cd885cb7d49bfc3c2858952722))
+
+
+### Bug Fixes
+
+* Add namespace suffix to cluster-scoped RBAC resources for multi-tenant support ([#2353](https://github.com/mckinsey/agents-at-scale-ark/issues/2353)) ([fba5e31](https://github.com/mckinsey/agents-at-scale-ark/commit/fba5e311cb151cad0fb979f88f518f1aac0f9baa))
+* **ark-api,ark-mcp:** pin kubernetes and kubernetes-asyncio to fix CI/CD failures ([#2196](https://github.com/mckinsey/agents-at-scale-ark/issues/2196)) ([457286f](https://github.com/mckinsey/agents-at-scale-ark/commit/457286f91b4787c188b01a52f4e2783358e84f94))
+* **ark-sdk:** fail fast on OIDC discovery, init TokenValidator once ([#2333](https://github.com/mckinsey/agents-at-scale-ark/issues/2333)) ([fb2ff52](https://github.com/mckinsey/agents-at-scale-ark/commit/fb2ff52aa799527648bf6df30732c4b8729cd8ed))
+* **completions:** address progressive memory growth in completions executor ([#2345](https://github.com/mckinsey/agents-at-scale-ark/issues/2345)) ([593ce02](https://github.com/mckinsey/agents-at-scale-ark/commit/593ce02223a64db1c053fd941cc10c0edbb78934))
+* **completions:** cache Model CRD to avoid per-query k8s API calls ([#2358](https://github.com/mckinsey/agents-at-scale-ark/issues/2358)) ([5f932c6](https://github.com/mckinsey/agents-at-scale-ark/commit/5f932c6435f5952f7852fc9d42a0d73d7653339b))
+* **completions:** harden A2A streaming — shared http.Client and idle timeout ([#2359](https://github.com/mckinsey/agents-at-scale-ark/issues/2359)) ([083cf7a](https://github.com/mckinsey/agents-at-scale-ark/commit/083cf7a0c0dbd1a686a8fa754992186fde3906e9))
+* **controller:** address memory leaks and goroutine accumulation ([#2275](https://github.com/mckinsey/agents-at-scale-ark/issues/2275)) ([878dbb1](https://github.com/mckinsey/agents-at-scale-ark/commit/878dbb1665735551c22a4a293f05da386f745af0))
+* **controller:** replace O(n) list scans with FieldIndexer-based lookups ([#2277](https://github.com/mckinsey/agents-at-scale-ark/issues/2277)) ([fd2265d](https://github.com/mckinsey/agents-at-scale-ark/commit/fd2265d809d76bfb14a4a4721ebfb93beb9d11f3))
+* **dashboard:** align teams rows with page heading ([#1201](https://github.com/mckinsey/agents-at-scale-ark/issues/1201)) ([#2091](https://github.com/mckinsey/agents-at-scale-ark/issues/2091)) ([9161783](https://github.com/mckinsey/agents-at-scale-ark/commit/9161783d6f1aab1db94bed53e0dd89570bd2b2c1))
+* **dashboard:** read __Secure- session cookie in SSO proxy over HTTPS ([#2318](https://github.com/mckinsey/agents-at-scale-ark/issues/2318)) ([#2319](https://github.com/mckinsey/agents-at-scale-ark/issues/2319)) ([c26b574](https://github.com/mckinsey/agents-at-scale-ark/commit/c26b574dff43ac6be2d6f9cf9b13408fb1138b9b))
+* **docs,samples:** make the walkthrough tutorial apply against current Ark ([#2282](https://github.com/mckinsey/agents-at-scale-ark/issues/2282)) ([0bfca87](https://github.com/mckinsey/agents-at-scale-ark/commit/0bfca8791fb83bff29bfc63cc316d20f3abbb9f8))
+* **docs:** rewrite quickstart tutorials with inline YAML and validate against CRDs ([#2228](https://github.com/mckinsey/agents-at-scale-ark/issues/2228)) ([dac92e7](https://github.com/mckinsey/agents-at-scale-ark/commit/dac92e7174675f3c1205b4afcbeaf75101d03f37))
+* **e2e:** install ark-controller before ark-broker to prevent CRD race ([#2223](https://github.com/mckinsey/agents-at-scale-ark/issues/2223)) ([e855321](https://github.com/mckinsey/agents-at-scale-ark/commit/e855321c363e96e51c1b6310c6eba366bef313c2))
+* enforce user impersonation across all ark-api routes; document SDK ApiException contract ([#2376](https://github.com/mckinsey/agents-at-scale-ark/issues/2376)) ([acaf29b](https://github.com/mckinsey/agents-at-scale-ark/commit/acaf29b056e9bf68b7163714b6977c2d3cd0eddb))
+* handle OIDC providers without end_session_endpoint and fix session.user.id ([#2328](https://github.com/mckinsey/agents-at-scale-ark/issues/2328)) ([68558ee](https://github.com/mckinsey/agents-at-scale-ark/commit/68558eeed36df3b3207188a01c951af308ee50a8))
+* improve e2e-setup speed ([#2136](https://github.com/mckinsey/agents-at-scale-ark/issues/2136)) ([6b7c761](https://github.com/mckinsey/agents-at-scale-ark/commit/6b7c761a6f0ed729edb295a9c9295bbf65f0db6e))
+* patch CVE-2026-45736 by pinning ws to 8.20.1 ([#2186](https://github.com/mckinsey/agents-at-scale-ark/issues/2186)) ([07a064f](https://github.com/mckinsey/agents-at-scale-ark/commit/07a064f0c41806c1b435557e5b605f3627b922d7))
+* prevent infinite A2ATask polling with backoff, timeout, and TTL ([#2356](https://github.com/mckinsey/agents-at-scale-ark/issues/2356)) ([ae79e73](https://github.com/mckinsey/agents-at-scale-ark/commit/ae79e7331c3df947c05cda9100eaeb3f25ba0495))
+* **security:** CVE-2026-42504 (Go 1.26.4) and CVE-2026-45149 (brace-expansion 5.0.6) ([#2343](https://github.com/mckinsey/agents-at-scale-ark/issues/2343)) ([efba874](https://github.com/mckinsey/agents-at-scale-ark/commit/efba8744ee490f87b3a5589add7dc4c00eb0cbf2))
+* update golang.org/x/crypto and golang.org/x/net to patch 10 critical CVEs ([#2249](https://github.com/mckinsey/agents-at-scale-ark/issues/2249)) ([92f4730](https://github.com/mckinsey/agents-at-scale-ark/commit/92f4730aabd20772c8576412c86a846b67eb38ef))
+* upgrade vitest to v4.1.8 to fix  CVE-2026-47429 ([#2289](https://github.com/mckinsey/agents-at-scale-ark/issues/2289)) ([ae40c16](https://github.com/mckinsey/agents-at-scale-ark/commit/ae40c169574f29cb2985b92a59175cc1332208fd))
+* use generateName for unique name and register internal versions for all ark crds ([#2310](https://github.com/mckinsey/agents-at-scale-ark/issues/2310)) ([5c0155b](https://github.com/mckinsey/agents-at-scale-ark/commit/5c0155b5ff9b09e0571cda1371b2c16678753974))
+* whitelist unresolvable JFrog CVE violations in ML packages (issue [#2188](https://github.com/mckinsey/agents-at-scale-ark/issues/2188)) ([#2190](https://github.com/mckinsey/agents-at-scale-ark/issues/2190)) ([7b4deb3](https://github.com/mckinsey/agents-at-scale-ark/commit/7b4deb3d4a266578a7f1c699e1e7c7f5d8de06c6))
+
 ## [0.1.63](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.63...v0.1.63) (2026-05-14)
 
 
