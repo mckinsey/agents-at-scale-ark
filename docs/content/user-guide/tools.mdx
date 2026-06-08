@@ -187,11 +187,11 @@ spec:
     name: review-team
 ```
 
-The agent that wants to delegate then references the Tool by name (`type: agent` / `type: team`). See [Teams → Team as a tool](/user-guide/teams#team-as-a-tool) for the end-to-end wiring.
+The agent that wants to delegate then references the Tool by name (`type: agent` / `type: team`).
 
 ## Built-in tools
 
-Two built-in tools ship with every install (seeded by the `ark-tenant` chart): `terminate` (ends a conversation / team turn with a final response) and `noop` (does nothing — useful for testing). They already exist as `Tool` resources, so you just reference them:
+Built-in tools map to functions implemented inside Ark. There are two: `terminate` (ends a conversation / team turn with a final response) and `noop` (does nothing — useful for testing). The `ark-tenant` chart seeds them as `Tool` resources in each tenant namespace (gated on `builtinTools.create`), so on a standard install they already exist and you just reference them:
 
 ```bash
 kubectl get tools terminate noop
@@ -203,6 +203,29 @@ spec:
     - type: builtin
       name: terminate
 ```
+
+You can also **author a built-in `Tool` yourself** — for example to re-create one in a namespace where the chart didn't seed it, or to customise its `description` / `inputSchema`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: terminate          # must be one of the supported built-ins
+spec:
+  type: builtin
+  description: "End the conversation with a final response"
+  inputSchema:
+    type: object
+    properties:
+      response:
+        type: string
+        description: The final response to send before terminating
+    required: ["response"]
+  builtin:
+    name: terminate
+```
+
+The catch: the set of built-in *implementations* is fixed in Ark's code, and both the admission webhook and the executor key on the **resource name** — so the `Tool`'s `metadata.name` (and `spec.builtin.name`) must be `terminate` or `noop`. You can't invent a new built-in behaviour by authoring a `Tool`; that requires a code change to Ark. What you *can* do is own the resource definition (schema, description, which namespace it lives in).
 
 ## Attach a tool to an agent
 
@@ -265,46 +288,15 @@ kubectl get tool get-coordinates -o yaml
 kubectl delete tool get-coordinates
 ```
 
-## Building robust MCP servers
+## Features only available in YAML
 
-When you deploy your own MCP server into the cluster, give its pod Kubernetes health probes so the cluster can detect a hung or unready server. The standard trio:
+The dashboard's **Add Tool** form covers name, type (`HTTP` / `MCP` / `Agent` / `Team`), description, input schema, and annotations — plus the type-specific target (HTTP URL, or the agent/team picker). These tool features are only configurable via the `Tool` YAML for now:
 
-- **startupProbe** — protects slow-starting containers; delays the other probes until the server is up.
-- **readinessProbe** — gates traffic; a failing readiness probe removes the pod from Service endpoints without restarting it.
-- **livenessProbe** — restarts a deadlocked container.
+- **HTTP method, headers, body, `bodyParameters`, and `timeout`.** The form only takes the URL (so it produces a `GET` with no auth headers or body). Any POST/PUT tool, any tool that needs an `Authorization` header or a templated body, must be authored in YAML.
+- **`builtin` tools.** The form's type dropdown is `HTTP` / `MCP` / `Agent` / `Team` only — built-in tools aren't creatable from the UI (they're seeded by the install, or authored in YAML as shown above).
+- **Partial tools (`agent.spec.tools[].partial`).** Pre-filling/hiding tool parameters is configured on the agent in YAML, not in the tool form.
 
-A good readiness/startup check is an MCP `initialize` handshake against the server's endpoint:
-
-```yaml
-startupProbe:
-  exec:
-    command:
-      - /bin/sh
-      - -c
-      - |
-        curl -s -f -X POST http://localhost:8080/mcp \
-          -H "Content-Type: application/json" \
-          -H "Accept: application/json, text/event-stream" \
-          -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
-          | grep -q '"result"'
-  initialDelaySeconds: 30
-  periodSeconds: 15
-  timeoutSeconds: 10
-  failureThreshold: 12        # 12 × 15s = 3 minutes of startup headroom
-readinessProbe:
-  exec:
-    command: ["/bin/sh", "-c", "curl -s -f -X POST http://localhost:8080/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"probe\",\"version\":\"1.0\"}}}' | grep -q '\"result\"'"]
-  periodSeconds: 15
-  failureThreshold: 3
-livenessProbe:
-  httpGet:
-    path: /
-    port: 8080
-  periodSeconds: 30
-  failureThreshold: 6         # higher than readiness — pod is parked before it's restarted
-```
-
-See the Kubernetes [Configure Liveness, Readiness and Startup Probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/) guide for the full reference.
+For any of these, write the `Tool` (or `Agent`) YAML directly. You can still inspect and delete the resource from the dashboard afterwards.
 
 ## Troubleshooting
 
