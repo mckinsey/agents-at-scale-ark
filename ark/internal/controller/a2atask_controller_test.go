@@ -3,13 +3,19 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func TestComputePollBackoff(t *testing.T) {
@@ -133,5 +139,99 @@ func TestStatusSnapshotDetectsChanges(t *testing.T) {
 	t.Run("no change is stable", func(t *testing.T) {
 		same := base
 		assert.Equal(t, before, snapshotA2ATaskStatus(&same))
+	})
+}
+
+func TestPollIntervalOrDefault(t *testing.T) {
+	t.Run("defaults when unset", func(t *testing.T) {
+		assert.Equal(t, defaultPollInterval, pollIntervalOrDefault(&arkv1alpha1.A2ATask{}))
+	})
+	t.Run("uses configured interval", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{Spec: arkv1alpha1.A2ATaskSpec{PollInterval: &metav1.Duration{Duration: 90 * time.Second}}}
+		assert.Equal(t, 90*time.Second, pollIntervalOrDefault(task))
+	})
+}
+
+func TestGetFailureCount(t *testing.T) {
+	r := &A2ATaskReconciler{}
+	ctx := context.Background()
+	t.Run("valid annotation", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{pollFailureCountAnnotation: "4"}}}
+		assert.Equal(t, 4, r.getFailureCount(ctx, task))
+	})
+	t.Run("missing annotation is zero", func(t *testing.T) {
+		assert.Equal(t, 0, r.getFailureCount(ctx, &arkv1alpha1.A2ATask{}))
+	})
+	t.Run("corrupted annotation resets to zero", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{pollFailureCountAnnotation: "bad"}}}
+		assert.Equal(t, 0, r.getFailureCount(ctx, task))
+	})
+}
+
+func TestReconcileTTL(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("not expired keeps the task", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{Name: "fresh", Namespace: "default", CreationTimestamp: metav1.Now()},
+		}
+		r := &A2ATaskReconciler{Client: fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(task).Build()}
+
+		done, err := r.reconcileTTL(ctx, task)
+		assert.NoError(t, err)
+		assert.False(t, done)
+		assert.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(task), &arkv1alpha1.A2ATask{}))
+	})
+
+	t.Run("expired deletes the task", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "stale",
+				Namespace:         "default",
+				CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Hour)),
+			},
+			Spec: arkv1alpha1.A2ATaskSpec{TTL: &metav1.Duration{Duration: time.Hour}},
+		}
+		r := &A2ATaskReconciler{Client: fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(task).Build()}
+
+		done, err := r.reconcileTTL(ctx, task)
+		assert.NoError(t, err)
+		assert.True(t, done)
+		assert.True(t, apierrors.IsNotFound(r.Get(ctx, client.ObjectKeyFromObject(task), &arkv1alpha1.A2ATask{})))
+	})
+}
+
+func TestReconcileTimeout(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("within timeout is a no-op", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{Name: "live", Namespace: "default", CreationTimestamp: metav1.Now()},
+		}
+		r := &A2ATaskReconciler{Client: fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(task).WithStatusSubresource(task).Build()}
+
+		done, err := r.reconcileTimeout(ctx, task)
+		assert.NoError(t, err)
+		assert.False(t, done)
+		assert.NotEqual(t, arka2a.PhaseFailed, task.Status.Phase)
+	})
+
+	t.Run("exceeded timeout marks the task failed", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "expired",
+				Namespace:         "default",
+				CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Hour)),
+			},
+			Spec: arkv1alpha1.A2ATaskSpec{Timeout: &metav1.Duration{Duration: time.Hour}},
+		}
+		r := &A2ATaskReconciler{Client: fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(task).WithStatusSubresource(task).Build()}
+
+		done, err := r.reconcileTimeout(ctx, task)
+		assert.NoError(t, err)
+		assert.True(t, done)
+		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
+		assert.NotEmpty(t, task.Status.Error)
+		assert.NotNil(t, task.Status.CompletionTime)
 	})
 }
