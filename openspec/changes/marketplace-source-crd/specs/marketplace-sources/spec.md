@@ -1,51 +1,54 @@
 ## ADDED Requirements
 
-### Requirement: MarketplaceSource CRD
+### Requirement: Marketplace sources ConfigMap
 
-The Ark API SHALL define a namespaced CRD named `MarketplaceSource` in the `ark.mckinsey.com/v1alpha1` API group. Each `MarketplaceSource` represents one URL pointing at a `marketplace.json` manifest.
+Each namespace SHALL store its marketplace sources in a single ConfigMap named `marketplace-sources`. The ConfigMap's `data` field SHALL contain one key per source, where the key is the source name and the value is a JSON-encoded object with required `url` (string, HTTPS URL) and optional `displayName` (string).
 
-The CRD spec SHALL include:
+The per-source value JSON SHALL match the schema:
 
-- `spec.url` (required, string) — the absolute URL of the `marketplace.json` manifest. SHALL match the regex `^https://` (HTTPS-only) at OpenAPI validation.
-- `spec.displayName` (optional, string) — the user-facing label for the source. When omitted, consumers SHALL fall back to `metadata.name`.
+```jsonc
+{ "url": "<absolute https URL>", "displayName": "<optional human label>" }
+```
 
-The CRD SHALL NOT include a `status` subresource in `v1alpha1` (no controller reconciles `MarketplaceSource`). The CRD SHALL be cluster-scope-rejecting — attempts to create cluster-scoped instances are rejected by kube-apiserver.
+Source names SHALL conform to the ConfigMap key naming rules already enforced by Kubernetes (alphanumeric, dashes, dots, underscores).
 
-#### Scenario: Create a valid MarketplaceSource
-- **WHEN** an operator applies a `MarketplaceSource` with `spec.url: "https://example.com/marketplace.json"` in namespace `team-a`
-- **THEN** kube-apiserver accepts the resource
-- **AND** `kubectl get marketplacesources -n team-a` lists it
+#### Scenario: Read sources from ConfigMap
+- **WHEN** ark-api lists marketplace sources for namespace `team-a`
+- **AND** the `marketplace-sources` ConfigMap in `team-a` contains key `internal-mirror` with value `'{"url":"https://example.com/marketplace.json","displayName":"Internal"}'`
+- **THEN** ark-api parses the value and returns the source with `name: "internal-mirror"`, `url: "https://example.com/marketplace.json"`, `displayName: "Internal"`
 
-#### Scenario: Reject non-HTTPS URLs
-- **WHEN** an operator applies a `MarketplaceSource` with `spec.url: "http://example.com/marketplace.json"`
-- **THEN** kube-apiserver rejects the request with an OpenAPI validation error referencing the `^https://` pattern
+#### Scenario: ConfigMap absent
+- **WHEN** ark-api lists marketplace sources for a namespace where the `marketplace-sources` ConfigMap does not exist
+- **THEN** ark-api returns an empty list with HTTP 200
 
-#### Scenario: Reject missing url
-- **WHEN** an operator applies a `MarketplaceSource` without `spec.url`
-- **THEN** kube-apiserver rejects the request with a required-field validation error
+### Requirement: URL validation on write
 
-### Requirement: URL well-formedness webhook
+ark-api SHALL validate the `url` field on every create or update of a marketplace source. The URL SHALL parse as an absolute URL with scheme `https`. Validation failures SHALL return HTTP 422 with a message identifying the offending field. ark-api SHALL NOT write a malformed URL to the ConfigMap.
 
-The Ark validating webhook SHALL reject `MarketplaceSource` resources whose `spec.url` is not a syntactically valid absolute URL, in addition to the OpenAPI HTTPS check.
+#### Scenario: Reject non-HTTPS URL
+- **WHEN** an authenticated user calls `POST /api/v1/namespaces/team-a/marketplace-sources` with body `{"name": "x", "url": "http://example.com/marketplace.json"}`
+- **THEN** ark-api returns HTTP 422 with a message identifying `url` as the invalid field
+- **AND** the `marketplace-sources` ConfigMap is not modified
 
 #### Scenario: Reject malformed URL
-- **WHEN** an operator applies a `MarketplaceSource` with `spec.url: "https://"`
-- **THEN** the validating webhook rejects the request with a message identifying the malformed URL
+- **WHEN** an authenticated user calls `POST /api/v1/namespaces/team-a/marketplace-sources` with body `{"name": "x", "url": "https://"}`
+- **THEN** ark-api returns HTTP 422
+- **AND** the ConfigMap is not modified
 
-#### Scenario: Accept well-formed URL
-- **WHEN** an operator applies a `MarketplaceSource` with `spec.url: "https://raw.githubusercontent.com/org/repo/main/marketplace.json"`
-- **THEN** the validating webhook accepts the request
+#### Scenario: Accept well-formed HTTPS URL
+- **WHEN** an authenticated user with edit permission calls `POST /api/v1/namespaces/team-a/marketplace-sources` with body `{"name": "x", "url": "https://raw.githubusercontent.com/org/repo/main/marketplace.json"}`
+- **THEN** ark-api creates the corresponding key in the ConfigMap and returns HTTP 201
 
 ### Requirement: Marketplace source RBAC role
 
-The Ark install SHALL provide a `ClusterRole` named `marketplace-source-editor` granting `get`, `list`, `watch`, `create`, `update`, `patch`, and `delete` verbs on the `marketplacesources` resource in the `ark.mckinsey.com` API group. The default install SHALL NOT bind this role to any user or group — operators bind it per namespace.
+The Ark install SHALL provide a `ClusterRole` named `marketplace-source-editor` granting `get`, `update`, and `patch` verbs on the `configmaps` resource scoped to `resourceNames: ["marketplace-sources"]`. The default install SHALL NOT bind this role to any user or group — operators bind it per namespace.
 
-The Ark install SHALL grant `get`, `list`, `watch` on `marketplacesources` to the existing dashboard tenant role(s) so every dashboard user can read the catalogue regardless of edit permission.
+The Ark install SHALL grant `get` on the `marketplace-sources` ConfigMap to the existing dashboard tenant role(s) so every dashboard user can read the catalogue regardless of edit permission.
 
 #### Scenario: Editor binding allows write
 - **WHEN** an operator binds `marketplace-source-editor` to user `alice` in namespace `team-a` via a `RoleBinding`
 - **AND** `alice` calls `POST /api/v1/namespaces/team-a/marketplace-sources` with a valid body
-- **THEN** the request succeeds and the resource is created
+- **THEN** the request succeeds and the corresponding key appears in the `marketplace-sources` ConfigMap
 
 #### Scenario: No binding denies write
 - **WHEN** user `bob` is not bound to `marketplace-source-editor` in namespace `team-a`
@@ -58,36 +61,42 @@ The Ark install SHALL grant `get`, `list`, `watch` on `marketplacesources` to th
 
 ### Requirement: Marketplace source CRUD endpoints
 
-ark-api SHALL expose REST CRUD endpoints under `/api/v1/namespaces/{namespace}/marketplace-sources` covering list, get, create, update, and delete of `MarketplaceSource` resources. All operations SHALL execute under the requesting user's identity via the existing impersonation middleware. Errors from kube-apiserver SHALL be propagated to the caller with their original HTTP status (403, 404, 422).
+ark-api SHALL expose REST CRUD endpoints under `/api/v1/namespaces/{namespace}/marketplace-sources` covering list, get, create, update, and delete of individual marketplace source entries. All operations SHALL execute under the requesting user's identity via the existing impersonation middleware. CRUD operations SHALL be expressed as server-side patches against the namespace's `marketplace-sources` ConfigMap data keys, so concurrent edits to different sources do not conflict. Errors from kube-apiserver SHALL be propagated to the caller with their original HTTP status (403, 404).
 
 #### Scenario: List sources
 - **WHEN** an authenticated user calls `GET /api/v1/namespaces/team-a/marketplace-sources`
-- **THEN** ark-api returns a JSON list containing every `MarketplaceSource` in `team-a` the user can read
+- **THEN** ark-api returns a JSON list containing every source entry parsed from the namespace's `marketplace-sources` ConfigMap
 
 #### Scenario: Create source
 - **WHEN** an authenticated user with edit permission calls `POST /api/v1/namespaces/team-a/marketplace-sources` with body `{"name": "internal", "url": "https://example.com/marketplace.json", "displayName": "Internal"}`
-- **THEN** ark-api creates the corresponding `MarketplaceSource` CR
-- **AND** returns HTTP 201 with the created resource representation
+- **THEN** ark-api server-side patches the `marketplace-sources` ConfigMap to add key `internal` with the JSON-encoded value
+- **AND** returns HTTP 201 with the created source representation
 
 #### Scenario: Delete source without permission
 - **WHEN** an authenticated user without edit permission calls `DELETE /api/v1/namespaces/team-a/marketplace-sources/internal`
 - **THEN** ark-api returns HTTP 403 with the kube-apiserver error message
 
+#### Scenario: Create source when ConfigMap does not yet exist
+- **WHEN** the `marketplace-sources` ConfigMap does not exist in `team-a`
+- **AND** an authenticated user with create permission calls `POST /api/v1/namespaces/team-a/marketplace-sources` with a valid body
+- **THEN** ark-api creates the ConfigMap and adds the key in a single server-side apply
+- **AND** returns HTTP 201
+
 ### Requirement: Marketplace items aggregator endpoint
 
-ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-items` returning marketplace items aggregated across every `MarketplaceSource` the requesting user can read. Each source's `marketplace.json` is fetched server-side and cached for 1 hour, keyed on `(namespace, source-name, url)`.
+ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-items` returning marketplace items aggregated across every source in the namespace's `marketplace-sources` ConfigMap that the requesting user can read. Each source's `marketplace.json` is fetched server-side and cached for 1 hour, keyed on `(namespace, source-name, url)`.
 
 The response SHALL be a JSON array with one entry per source in the grouped shape:
 
 ```jsonc
-{ "source": "<metadata.name>", "displayName": "<spec.displayName | metadata.name>", "items": [ /* ... */ ] }
-{ "source": "<metadata.name>", "displayName": "<...>", "error": { "message": "<...>", "code": "<...>" } }
+{ "source": "<key in ConfigMap data>", "displayName": "<value.displayName | source>", "items": [ /* ... */ ] }
+{ "source": "<key>", "displayName": "<...>", "error": { "message": "<...>", "code": "<...>" } }
 ```
 
 `error.code` SHALL be one of: `fetch_timeout`, `aggregator_timeout`, `http_error`, `parse_error`, `network_error`. The endpoint SHALL return HTTP 200 even when every source fails — per-source state is conveyed by the entry shape.
 
 #### Scenario: All sources reachable
-- **WHEN** every `MarketplaceSource` in `team-a` returns a valid `marketplace.json`
+- **WHEN** every source in the namespace's `marketplace-sources` ConfigMap returns a valid `marketplace.json`
 - **AND** the user calls `GET /api/v1/namespaces/team-a/marketplace-items`
 - **THEN** ark-api returns HTTP 200 with one entry per source, each containing `source`, `displayName`, and `items`
 
@@ -97,8 +106,8 @@ The response SHALL be a JSON array with one entry per source in the grouped shap
 - **AND** the failed source entry contains an `error` field with `code: "http_error"`
 - **AND** other sources return their items normally
 
-#### Scenario: User cannot list sources
-- **WHEN** a user without `list marketplacesources` permission calls `GET /api/v1/namespaces/team-a/marketplace-items`
+#### Scenario: User cannot read ConfigMap
+- **WHEN** a user without `get` on `configmaps/marketplace-sources` calls `GET /api/v1/namespaces/team-a/marketplace-items`
 - **THEN** ark-api returns HTTP 403
 
 ### Requirement: Aggregator timeout guards
@@ -118,7 +127,7 @@ The aggregator endpoint SHALL enforce two independent timeouts: per-source HTTP 
 
 ### Requirement: Marketplace permission probe endpoint
 
-ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-sources/permissions` issuing a `SelfSubjectAccessReview` for verb `update` on `marketplacesources` and returning `{"canEdit": <bool>}`. If the SSAR call itself fails (e.g. ark-api ServiceAccount lacks `create selfsubjectaccessreviews`, kube-apiserver 5xx), the endpoint SHALL fail closed — return HTTP 200 with `{"canEdit": false}` and log the underlying error. The dashboard SHALL never see a 5xx from this endpoint.
+ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-sources/permissions` issuing a `SelfSubjectAccessReview` for verb `update` on `configmaps` with `resourceName: "marketplace-sources"` and returning `{"canEdit": <bool>}`. If the SSAR call itself fails (e.g. ark-api ServiceAccount lacks `create selfsubjectaccessreviews`, kube-apiserver 5xx), the endpoint SHALL fail closed — return HTTP 200 with `{"canEdit": false}` and log the underlying error. The dashboard SHALL never see a 5xx from this endpoint.
 
 #### Scenario: User can edit
 - **WHEN** user `alice` (bound to `marketplace-source-editor` in `team-a`) calls `GET /api/v1/namespaces/team-a/marketplace-sources/permissions`
@@ -135,32 +144,32 @@ ark-api SHALL expose `GET /api/v1/namespaces/{namespace}/marketplace-sources/per
 
 ### Requirement: Helm-seeded default sources
 
-The Ark Helm chart SHALL accept a `marketplaceSources` values key, a list of objects with `name`, `url`, optional `displayName`, and optional `namespace` fields. At install and upgrade time, the chart SHALL create one `MarketplaceSource` CR per entry in the entry's `namespace` (defaulting to the install namespace when `namespace` is omitted) using server-side apply with a dedicated field manager. Helm upgrades SHALL NOT revert user edits to fields the user owns under server-side apply semantics.
+The Ark Helm chart SHALL accept a `marketplaceSources` values key, a list of objects with `name`, `url`, optional `displayName`, and optional `namespace` fields. At install and upgrade time, the chart SHALL apply each entry as a key in the `marketplace-sources` ConfigMap of the entry's `namespace` (defaulting to the install namespace when `namespace` is omitted) using server-side apply with the field manager `helm-marketplace-seeder`. Helm upgrades SHALL NOT revert user edits to keys whose ownership has transferred to another field manager.
 
 The default `marketplaceSources` value SHALL contain a single entry pointing at the canonical `mckinsey/agents-at-scale-marketplace` URL, replacing the hard-coded default formerly in `services/ark-dashboard/ark-dashboard/atoms/marketplace-sources.ts`.
 
 #### Scenario: Default install
 - **WHEN** an operator runs `helm install ark` with default values
-- **THEN** one `MarketplaceSource` named `agents-at-scale-marketplace` exists in the install namespace pointing at the canonical URL
+- **THEN** the `marketplace-sources` ConfigMap exists in the install namespace with one key `agents-at-scale-marketplace` whose JSON value contains the canonical URL
 
 #### Scenario: Helm upgrade preserves user edits
-- **WHEN** an operator manually patches a Helm-seeded `MarketplaceSource` to change `spec.displayName`
+- **WHEN** an operator manually patches a Helm-seeded source entry to change its `displayName` (transferring ownership of that key to another field manager)
 - **AND** subsequently runs `helm upgrade` with the same values
-- **THEN** `spec.displayName` retains the user's edit
-- **AND** fields owned by the Helm field manager are reconciled to chart values
+- **THEN** the user's `displayName` edit is preserved
+- **AND** keys still owned by the `helm-marketplace-seeder` field manager are reconciled to chart values
 
 #### Scenario: Custom seed in install namespace
 - **WHEN** an operator runs `helm install ark --set 'marketplaceSources[0].name=internal' --set 'marketplaceSources[0].url=https://example.com/marketplace.json'`
-- **THEN** a `MarketplaceSource` named `internal` exists in the install namespace pointing at the custom URL
+- **THEN** the `marketplace-sources` ConfigMap in the install namespace contains a key `internal` pointing at the custom URL
 
 #### Scenario: Multi-namespace seeding from one install
 - **WHEN** an operator installs with `marketplaceSources` containing entries in `team-a` and `team-b` (different `namespace` values per entry)
-- **THEN** each entry produces a `MarketplaceSource` CR in its specified namespace
-- **AND** namespaces not referenced by any entry receive no CRs from the chart
+- **THEN** each namespace receives a `marketplace-sources` ConfigMap with the namespace's entries
+- **AND** namespaces not referenced by any entry receive no ConfigMaps from the chart
 
 ### Requirement: Dashboard reads sources from cluster
 
-The dashboard SHALL load `MarketplaceSource` data from ark-api via the CRUD and items endpoints. The dashboard SHALL NOT persist the source list in `localStorage` and SHALL NOT carry an `X-Marketplace-Sources` HTTP header on any outbound request. The Next.js route at `services/ark-dashboard/ark-dashboard/app/api/marketplace/route.ts` SHALL be removed.
+The dashboard SHALL load marketplace source data from ark-api via the CRUD and items endpoints. The dashboard SHALL NOT persist the source list in `localStorage` and SHALL NOT carry an `X-Marketplace-Sources` HTTP header on any outbound request. The Next.js route at `services/ark-dashboard/ark-dashboard/app/api/marketplace/route.ts` SHALL be removed.
 
 When the user switches the active namespace, the dashboard SHALL refetch the source list and items for the new namespace.
 
