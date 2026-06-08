@@ -28,22 +28,28 @@ export function handleStreamingMessages(
 ): void {
   req.log.info({cursor}, 'starting SSE stream for all messages');
 
-  let replayItems: MessageItem[] | undefined;
-  if (cursor !== undefined) {
-    let items = memory.all().filter((item) => item.sequenceNumber > cursor);
-    if (conversationId) {
-      items = items.filter(
-        (item) => item.data.conversationId === conversationId
-      );
-    }
-    replayItems = items.map((item) => ({
-      timestamp: item.timestamp.toISOString(),
-      conversation_id: item.data.conversationId,
-      query_id: item.data.queryId,
-      message: item.data.message,
-      sequence: item.sequenceNumber,
-    }));
-  }
+  const getReplay =
+    cursor !== undefined
+      ? (): Promise<MessageItem[]> => {
+          let items = memory
+            .all()
+            .filter((item) => item.sequenceNumber > cursor);
+          if (conversationId) {
+            items = items.filter(
+              (item) => item.data.conversationId === conversationId
+            );
+          }
+          return Promise.resolve(
+            items.map((item) => ({
+              timestamp: item.timestamp.toISOString(),
+              conversation_id: item.data.conversationId,
+              query_id: item.data.queryId,
+              message: item.data.message,
+              sequence: item.sequenceNumber,
+            }))
+          );
+        }
+      : undefined;
 
   streamSSE({
     res,
@@ -61,11 +67,13 @@ export function handleStreamingMessages(
           sequence: item.sequenceNumber,
         });
       }),
+    getReplay,
+    getSequence: (item: unknown): number =>
+      (item as {sequence: number}).sequence,
     filter: conversationId
       ? (msg: unknown): boolean =>
           (msg as {conversation_id: string}).conversation_id === conversationId
       : undefined,
-    replayItems,
   });
 }
 

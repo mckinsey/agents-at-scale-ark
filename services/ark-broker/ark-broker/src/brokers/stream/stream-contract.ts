@@ -1,4 +1,5 @@
-import type {Stream} from '../stream.js';
+import type {Stream} from './stream.js';
+import type {BrokerItem} from './broker-item.js';
 
 export function runStreamContract<T>(
   factory: () => Stream<T>,
@@ -32,7 +33,7 @@ export function runStreamContract<T>(
 
     it('fires subscribe callback synchronously during append', async () => {
       const received: T[] = [];
-      stream.subscribe((item) => received.push(item.data));
+      stream.subscribe((item: BrokerItem<T>) => received.push(item.data));
       const appendPromise = stream.append(makeData('x'));
       expect(received).toHaveLength(1);
       await appendPromise;
@@ -60,7 +61,7 @@ export function runStreamContract<T>(
       const a = await stream.append(makeData('a'));
       await stream.append(makeData('b'));
       const result = await stream.filter(
-        (item) => item.sequenceNumber === a.sequenceNumber
+        (item: BrokerItem<T>) => item.sequenceNumber === a.sequenceNumber
       );
       expect(result).toHaveLength(1);
       expect(result[0].sequenceNumber).toBe(a.sequenceNumber);
@@ -68,7 +69,7 @@ export function runStreamContract<T>(
 
     it('returns empty array when nothing matches', async () => {
       await stream.append(makeData('a'));
-      const result = await stream.filter(() => false);
+      const result = await stream.filter((_item: BrokerItem<T>) => false);
       expect(result).toHaveLength(0);
     });
   });
@@ -103,7 +104,7 @@ export function runStreamContract<T>(
     it('applies predicate before pagination', async () => {
       const result = await stream.paginate(
         {limit: 10},
-        (item) => item.sequenceNumber % 2 === 1
+        (item: BrokerItem<T>) => item.sequenceNumber % 2 === 1
       );
       expect(result.items).toHaveLength(3);
       expect(result.total).toBe(3);
@@ -123,7 +124,9 @@ export function runStreamContract<T>(
     it('removes only matching items when predicate is provided', async () => {
       const a = await stream.append(makeData('a'));
       await stream.append(makeData('b'));
-      await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
+      await stream.delete(
+        (item: BrokerItem<T>) => item.sequenceNumber === a.sequenceNumber
+      );
       const all = await stream.all();
       expect(all).toHaveLength(1);
       expect(all[0].sequenceNumber).toBe(2);
@@ -131,7 +134,9 @@ export function runStreamContract<T>(
 
     it('does not reset sequence when using predicate', async () => {
       const a = await stream.append(makeData('a'));
-      await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
+      await stream.delete(
+        (item: BrokerItem<T>) => item.sequenceNumber === a.sequenceNumber
+      );
       const next = await stream.append(makeData('b'));
       expect(next.sequenceNumber).toBe(2);
     });
@@ -152,7 +157,7 @@ export function runStreamContract<T>(
   describe('subscribe / unsubscribe', () => {
     it('notifies subscriber for each append', async () => {
       const seqs: number[] = [];
-      stream.subscribe((item) => seqs.push(item.sequenceNumber));
+      stream.subscribe((item: BrokerItem<T>) => seqs.push(item.sequenceNumber));
       await stream.append(makeData('a'));
       await stream.append(makeData('b'));
       expect(seqs).toEqual([1, 2]);
@@ -160,7 +165,7 @@ export function runStreamContract<T>(
 
     it('stops notifying after returned unsubscribe is called', async () => {
       const seqs: number[] = [];
-      const unsubscribe = stream.subscribe((item) =>
+      const unsubscribe = stream.subscribe((item: BrokerItem<T>) =>
         seqs.push(item.sequenceNumber)
       );
       await stream.append(makeData('a'));
@@ -172,8 +177,8 @@ export function runStreamContract<T>(
     it('multiple subscribers all receive events', async () => {
       const a: number[] = [];
       const b: number[] = [];
-      stream.subscribe((item) => a.push(item.sequenceNumber));
-      stream.subscribe((item) => b.push(item.sequenceNumber));
+      stream.subscribe((item: BrokerItem<T>) => a.push(item.sequenceNumber));
+      stream.subscribe((item: BrokerItem<T>) => b.push(item.sequenceNumber));
       await stream.append(makeData('x'));
       expect(a).toEqual([1]);
       expect(b).toEqual([1]);

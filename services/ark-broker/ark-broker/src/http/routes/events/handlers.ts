@@ -20,14 +20,20 @@ export function handleStreamingAllEvents(
 ): void {
   req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
 
-  let replayItems: EventData[] | undefined;
-  if (cursor !== undefined) {
-    let items = events.all().filter((item) => item.sequenceNumber > cursor);
-    if (sessionId) {
-      items = items.filter((item) => item.data.data.sessionId === sessionId);
-    }
-    replayItems = items.map((item) => item.data);
-  }
+  const getReplay =
+    cursor !== undefined
+      ? (): Promise<EventData[]> => {
+          let items = events
+            .all()
+            .filter((item) => item.sequenceNumber > cursor);
+          if (sessionId) {
+            items = items.filter(
+              (item) => item.data.data.sessionId === sessionId
+            );
+          }
+          return Promise.resolve(items.map((item) => item.data));
+        }
+      : undefined;
 
   streamSSE({
     res,
@@ -41,7 +47,7 @@ export function handleStreamingAllEvents(
           callback(item.data);
         }
       }),
-    replayItems,
+    getReplay,
   });
 }
 
@@ -85,15 +91,20 @@ export function handleStreamingQueryEvents(
 ): void {
   req.log.info({queryId}, 'starting SSE stream for query');
 
-  let replayItems: EventData[] | undefined;
-  if (fromBeginning) {
-    replayItems = events.getEventsByQuery(queryId);
-  } else if (cursor !== undefined) {
-    replayItems = events
-      .getByQuery(queryId)
-      .filter((item) => item.sequenceNumber > cursor)
-      .map((item) => item.data);
-  }
+  const getReplay =
+    fromBeginning || cursor !== undefined
+      ? (): Promise<EventData[]> => {
+          if (fromBeginning) {
+            return Promise.resolve(events.getEventsByQuery(queryId));
+          }
+          return Promise.resolve(
+            events
+              .getByQuery(queryId)
+              .filter((item) => item.sequenceNumber > cursor!)
+              .map((item) => item.data)
+          );
+        }
+      : undefined;
 
   streamSSE({
     res,
@@ -103,7 +114,7 @@ export function handleStreamingQueryEvents(
     itemName: 'events',
     subscribe: (callback) =>
       events.subscribeToQuery(queryId, (item) => callback(item.data)),
-    replayItems,
+    getReplay,
     identifier: `Query ${queryId}`,
   });
 }

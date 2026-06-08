@@ -24,16 +24,20 @@ export function handleStreamingAllTraces(
 ): void {
   req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
 
-  let replayItems: OTELSpan[] | undefined;
-  if (cursor !== undefined) {
-    let items = traces.all().filter((item) => item.sequenceNumber > cursor);
-    if (sessionId) {
-      items = items.filter((item) =>
-        spanMatchesSessionId(item.data, sessionId)
-      );
-    }
-    replayItems = items.map((item) => item.data);
-  }
+  const getReplay =
+    cursor !== undefined
+      ? (): Promise<OTELSpan[]> => {
+          let items = traces
+            .all()
+            .filter((item) => item.sequenceNumber > cursor);
+          if (sessionId) {
+            items = items.filter((item) =>
+              spanMatchesSessionId(item.data, sessionId)
+            );
+          }
+          return Promise.resolve(items.map((item) => item.data));
+        }
+      : undefined;
 
   streamSSE({
     res,
@@ -47,7 +51,7 @@ export function handleStreamingAllTraces(
           callback(item.data);
         }
       }),
-    replayItems,
+    getReplay,
   });
 }
 
@@ -89,15 +93,20 @@ export function handleStreamingTrace(
 ): void {
   req.log.info({traceId}, 'starting SSE stream for trace');
 
-  let replayItems: OTELSpan[] | undefined;
-  if (fromBeginning) {
-    replayItems = traces.getSpansByTraceId(traceId);
-  } else if (cursor !== undefined) {
-    replayItems = traces
-      .getByTraceId(traceId)
-      .filter((item) => item.sequenceNumber > cursor)
-      .map((item) => item.data);
-  }
+  const getReplay =
+    fromBeginning || cursor !== undefined
+      ? (): Promise<OTELSpan[]> => {
+          if (fromBeginning) {
+            return Promise.resolve(traces.getSpansByTraceId(traceId));
+          }
+          return Promise.resolve(
+            traces
+              .getByTraceId(traceId)
+              .filter((item) => item.sequenceNumber > cursor!)
+              .map((item) => item.data)
+          );
+        }
+      : undefined;
 
   streamSSE({
     res,
@@ -107,7 +116,7 @@ export function handleStreamingTrace(
     itemName: 'spans',
     subscribe: (callback) =>
       traces.subscribeToTrace(traceId, (item) => callback(item.data)),
-    replayItems,
+    getReplay,
     identifier: `Trace ${traceId}`,
   });
 }
