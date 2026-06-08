@@ -33,13 +33,15 @@ const server = app.listen(config.server.port, config.server.host, () => {
 
 server.requestTimeout = config.server.requestTimeoutMs;
 
-const gracefulShutdown = (): void => {
+const gracefulShutdown = async (): Promise<void> => {
   logger.info('shutting down gracefully');
-  memory.save();
-  chunks.save();
-  traces.save();
-  events.save();
   sessions.save();
+  await Promise.all([
+    memory.save(),
+    chunks.save(),
+    traces.save(),
+    events.save(),
+  ]);
   server.close(() => {
     logger.info('process terminated');
     process.exit(0);
@@ -48,10 +50,10 @@ const gracefulShutdown = (): void => {
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received');
-  gracefulShutdown();
+  void gracefulShutdown();
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received');
-  gracefulShutdown();
+  void gracefulShutdown();
 });
