@@ -204,28 +204,7 @@ spec:
       name: terminate
 ```
 
-You can also **author a built-in `Tool` yourself** — for example to re-create one in a namespace where the chart didn't seed it, or to customise its `description` / `inputSchema`:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Tool
-metadata:
-  name: terminate          # must be one of the supported built-ins
-spec:
-  type: builtin
-  description: "End the conversation with a final response"
-  inputSchema:
-    type: object
-    properties:
-      response:
-        type: string
-        description: The final response to send before terminating
-    required: ["response"]
-  builtin:
-    name: terminate
-```
-
-The catch: the set of built-in *implementations* is fixed in Ark's code, and both the admission webhook and the executor key on the **resource name** — so the `Tool`'s `metadata.name` (and `spec.builtin.name`) must be `terminate` or `noop`. You can't invent a new built-in behaviour by authoring a `Tool`; that requires a code change to Ark. What you *can* do is own the resource definition (schema, description, which namespace it lives in).
+The set of built-in implementations is fixed in Ark's code — `terminate` and `noop` are the only ones, and you reference them rather than defining new ones.
 
 ## Attach a tool to an agent
 
@@ -293,7 +272,7 @@ kubectl delete tool get-coordinates
 The dashboard's **Add Tool** form covers name, type (`HTTP` / `MCP` / `Agent` / `Team`), description, input schema, and annotations — plus the type-specific target (HTTP URL, or the agent/team picker). These tool features are only configurable via the `Tool` YAML for now:
 
 - **HTTP method, headers, body, `bodyParameters`, and `timeout`.** The form only takes the URL (so it produces a `GET` with no auth headers or body). Any POST/PUT tool, any tool that needs an `Authorization` header or a templated body, must be authored in YAML.
-- **`builtin` tools.** The form's type dropdown is `HTTP` / `MCP` / `Agent` / `Team` only — built-in tools aren't creatable from the UI (they're seeded by the install, or authored in YAML as shown above).
+- **`builtin` tools.** The form's type dropdown is `HTTP` / `MCP` / `Agent` / `Team` only. Built-in tools (`terminate`, `noop`) aren't created from the UI — they're seeded by the install and referenced by name.
 - **Partial tools (`agent.spec.tools[].partial`).** Pre-filling/hiding tool parameters is configured on the agent in YAML, not in the tool form.
 
 For any of these, write the `Tool` (or `Agent`) YAML directly. You can still inspect and delete the resource from the dashboard afterwards.

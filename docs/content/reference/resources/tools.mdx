@@ -208,7 +208,7 @@ spec:
 
 ## Built-in tools
 
-System functions implemented inside Ark. The `ark-tenant` chart seeds them as `Tool` resources; you can also author them yourself, but `metadata.name` and `spec.builtin.name` must be one of the supported built-ins (`terminate`, `noop`) — both the webhook and the executor key on the name.
+System functions implemented inside Ark. The `ark-tenant` chart seeds them as `Tool` resources, so on a standard install they already exist and you reference them by name. The set of built-ins is fixed in Ark's code — `terminate` and `noop`. The seeded shape:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
