@@ -3,11 +3,14 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Search } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
+import {
+  ResourceEmptyState,
+  ResourceNoResults,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -175,58 +178,33 @@ export function ResourceListSection<T extends ResourceListItem>({
           <div className="py-8 text-center">Loading...</div>
         </div>
       ) : isEmpty ? (
-        <div className="mt-5 flex-1">
-          <div className="bg-surface-primary flex flex-col items-center justify-center py-12">
-            <div className="flex flex-col items-center gap-6">
-              <div className="flex flex-col items-center gap-3">
-                <div className="bg-surface-secondary flex items-center p-3">
-                  <IconShell size="default" variant="secondary">
-                    {icon}
-                  </IconShell>
-                </div>
-                <p className="text-fg-primary text-xl leading-7">
-                  {emptyTitle}
-                </p>
-                <div className="text-fg-secondary text-center text-base leading-6 tracking-[-0.128px]">
-                  {emptyDescription}
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                {readOnlyMode ? (
-                  <Button disabled>{createLabel}</Button>
-                ) : (
-                  <NamespacedLink href={createHref}>
-                    <Button>{createLabel}</Button>
-                  </NamespacedLink>
-                )}
-                <a
-                  href={learnMoreUrl}
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <Button variant="outline">Learn more</Button>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ResourceEmptyState
+          icon={icon}
+          title={emptyTitle}
+          description={emptyDescription}
+          actions={
+            <>
+              {readOnlyMode ? (
+                <Button disabled>{createLabel}</Button>
+              ) : (
+                <NamespacedLink href={createHref}>
+                  <Button>{createLabel}</Button>
+                </NamespacedLink>
+              )}
+              <a href={learnMoreUrl} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline">Learn more</Button>
+              </a>
+            </>
+          }
+        />
       ) : (
         <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
           <div className="flex flex-none items-end justify-between gap-3">
             <div className="flex items-end gap-3">
-              <div className="relative w-full max-w-[493px]">
-                <span className="text-fg-tertiary pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
-                  <IconShell size="sm" variant="secondary">
-                    <Search />
-                  </IconShell>
-                </span>
-                <Input
-                  type="search"
-                  placeholder="Search"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+              <ResourceSearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+              />
               <div className="flex w-48 flex-col gap-2">
                 <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
                   Status
@@ -261,16 +239,7 @@ export function ResourceListSection<T extends ResourceListItem>({
           </div>
 
           {filteredItems.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12">
-              <div className="bg-surface-secondary flex items-center p-3">
-                <IconShell size="default" variant="secondary">
-                  {icon}
-                </IconShell>
-              </div>
-              <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">
-                {noResultsMessage}
-              </p>
-            </div>
+            <ResourceNoResults icon={icon} message={noResultsMessage} />
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
               {renderTable(filteredItems, handleDelete)}
