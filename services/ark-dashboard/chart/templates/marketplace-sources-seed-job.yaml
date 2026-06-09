@@ -1,0 +1,130 @@
+{{- if .Values.marketplaceSources }}
+{{- /*
+Render one single-key ConfigMap manifest per source entry. Applying each key
+independently with server-side apply (field manager helm-marketplace-seeder)
+tracks ownership at the data-key level: a user edit to one key transfers that
+key's ownership, so a later seed run conflicts on (and skips) only that key
+while still reconciling the others. Sources sharing a namespace merge into one
+ConfigMap named marketplace-sources.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seed-manifests
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+{{- range $i, $e := .Values.marketplaceSources }}
+{{- $ns := $e.namespace | default $.Release.Namespace }}
+{{- $val := dict "url" $e.url }}
+{{- if $e.displayName }}{{- $_ := set $val "displayName" $e.displayName }}{{- end }}
+{{- $cm := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" "marketplace-sources" "namespace" $ns) "data" (dict $e.name ($val | toJson)) }}
+  {{ printf "%03d-%s-%s.yaml" $i $ns $e.name }}: |-
+{{ toYaml $cm | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seeder
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seeder-{{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  # create cannot be scoped by resourceName; needed to materialise the ConfigMap.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  # get/update/patch scoped to the single ConfigMap the seeder owns.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["marketplace-sources"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seeder-{{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.app.name }}-marketplace-seeder
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Values.app.name }}-marketplace-seeder-{{ .Release.Namespace }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}
+    spec:
+      serviceAccountName: {{ .Values.app.name }}-marketplace-seeder
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: {{ .Values.marketplaceSourcesSeed.image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              for f in /seed/*.yaml; do
+                if out=$(kubectl apply --server-side \
+                    --field-manager helm-marketplace-seeder -f "$f" 2>&1); then
+                  echo "$out"
+                elif echo "$out" | grep -qi conflict; then
+                  echo "preserving user-owned key in $f (apply conflict): $out"
+                else
+                  echo "$out" >&2
+                  exit 1
+                fi
+              done
+          volumeMounts:
+            - name: manifests
+              mountPath: /seed
+              readOnly: true
+      volumes:
+        - name: manifests
+          configMap:
+            name: {{ .Values.app.name }}-marketplace-seed-manifests
+{{- end }}
