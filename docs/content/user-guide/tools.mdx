@@ -122,7 +122,7 @@ spec:
 
 ## MCP tools (auto-created)
 
-You don't write `mcp` Tool resources by hand. Register an MCP server with an `MCPServer` resource and the controller connects to it, discovers the tools it advertises, and **creates one `Tool` per function** — named `<mcp-server>-<tool>` and labelled `ark.mckinsey.com/mcp-server: <server>`.
+You don't write `mcp` Tool resources by hand. Register an MCP server with an `MCPServer` resource and the controller connects to it, discovers the tools it advertises, and **creates one `Tool` per function** — named `<mcp-server>-<tool>` and labelled `mcp/server: <server>`.
 
 ```bash
 cat <<'EOF' | kubectl apply -f -
@@ -140,7 +140,7 @@ EOF
 
 # Wait for the server, then list the tools it produced.
 kubectl wait --for=condition=Available mcpserver/calculator --timeout=60s
-kubectl get tools -l ark.mckinsey.com/mcp-server=calculator
+kubectl get tools -l "mcp/server=calculator"
 ```
 
 Deleting the `MCPServer` deletes the tools it created. The dashboard groups tools by MCP server, and `ark tools` shows that grouped view.
@@ -260,7 +260,7 @@ Or via a `Query` resource with `target.type: tool`.
 ```bash
 ark tools                                   # CLI list (grouped by MCP server)
 kubectl get tools                           # all Tool resources
-kubectl get tools -l ark.mckinsey.com/mcp-server=calculator   # tools from one MCP server
+kubectl get tools -l "mcp/server=calculator"   # tools from one MCP server
 kubectl describe tool get-coordinates
 kubectl get tool get-coordinates -o yaml
 
@@ -281,7 +281,7 @@ For any of these, write the `Tool` (or `Agent`) YAML directly. You can still ins
 
 **Tool stuck — not `Ready`.** `kubectl get tool <name> -o jsonpath='{.status.message}'` shows why. Common causes: invalid `inputSchema` JSON, a missing type block (`http`/`agent`/`team`), or an agent/team reference to a resource that doesn't exist.
 
-**`Tool 'X' not found in namespace 'Y'` on an agent.** The agent references a tool that hasn't been created. Apply the Tool first; for MCP tools, confirm the `MCPServer` is `Available` and produced the tool (`kubectl get tools -l ark.mckinsey.com/mcp-server=<server>`).
+**`Tool 'X' not found in namespace 'Y'` on an agent.** The agent references a tool that hasn't been created. Apply the Tool first; for MCP tools, confirm the `MCPServer` is `Available` and produced the tool (`kubectl get tools -l "mcp/server=<server>"`).
 
 **Agent ignores the tool.** The LLM decides whether to call a tool from its **description** — vague descriptions get skipped. Make the `description` specific about when to use it.
 

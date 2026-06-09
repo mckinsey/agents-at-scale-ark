@@ -146,7 +146,7 @@ spec:
 
 ## MCP tools
 
-Tools provided by a Model Context Protocol server. **These are normally auto-created** by the MCP server controller — when you apply an `MCPServer`, Ark discovers the functions it advertises and creates one `Tool` per function, named `<mcp-server>-<tool>` and labelled `ark.mckinsey.com/mcp-server: <server>`. You rarely write these by hand. The generated shape:
+Tools provided by a Model Context Protocol server. **These are normally auto-created** by the MCP server controller — when you apply an `MCPServer`, Ark discovers the functions it advertises and creates one `Tool` per function, named `<mcp-server>-<tool>` and labelled `mcp/server: <server>`. You rarely write these by hand. The generated shape:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -154,7 +154,7 @@ kind: Tool
 metadata:
   name: filesys-server-read-file
   labels:
-    ark.mckinsey.com/mcp-server: filesys-server
+    mcp/server: filesys-server
 spec:
   type: mcp
   description: "Read contents of a file"
