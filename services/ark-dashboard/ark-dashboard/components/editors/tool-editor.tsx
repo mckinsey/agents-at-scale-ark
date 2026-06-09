@@ -1,13 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Label } from '@radix-ui/react-label';
-import { Maximize2, Minimize2 } from 'lucide-react';
 import { useLayoutEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import * as z from 'zod';
 
+import { CollapseContent, ExpandContent } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,6 +24,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -187,7 +187,7 @@ export function ToolEditor({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}  modal={false}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create New Tool</DialogTitle>
@@ -204,9 +204,7 @@ export function ToolEditor({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Name <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel>Name *</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="e.g., search-tool"
@@ -224,9 +222,7 @@ export function ToolEditor({
                 name="type"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Type <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel>Type *</FormLabel>
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
@@ -257,9 +253,7 @@ export function ToolEditor({
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Description <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel>Description *</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="Tool description"
@@ -278,13 +272,10 @@ export function ToolEditor({
                 render={({ field }) => (
                   <FormItem>
                     <div className="flex items-center justify-between">
-                      <FormLabel>
-                        Input Schema (JSON){' '}
-                        <span className="text-red-500">*</span>
-                      </FormLabel>
+                      <FormLabel>Input Schema (JSON) *</FormLabel>
                       <div className="flex items-center gap-2">
                         {field.value.length > 0 && (
-                          <span className="text-muted-foreground text-xs">
+                          <span className="text-fg-tertiary text-xs">
                             {field.value.length} characters
                           </span>
                         )}
@@ -295,18 +286,15 @@ export function ToolEditor({
                           onClick={() =>
                             setIsInputSchemaExpanded(!isInputSchemaExpanded)
                           }
-                          className="h-8 px-2">
-                          {isInputSchemaExpanded ? (
-                            <>
-                              <Minimize2 className="mr-1 h-4 w-4" />
-                              Collapse
-                            </>
-                          ) : (
-                            <>
-                              <Maximize2 className="mr-1 h-4 w-4" />
-                              Expand
-                            </>
-                          )}
+                          className="h-8 gap-1 px-2">
+                          <IconShell size="sm" variant="secondary">
+                            {isInputSchemaExpanded ? (
+                              <CollapseContent />
+                            ) : (
+                              <ExpandContent />
+                            )}
+                          </IconShell>
+                          {isInputSchemaExpanded ? 'Collapse' : 'Expand'}
                         </Button>
                       </div>
                     </div>
@@ -327,7 +315,7 @@ export function ToolEditor({
                       />
                     </FormControl>
                     {isInputSchemaExpanded && field.value.length > 0 && (
-                      <div className="text-muted-foreground text-xs">
+                      <div className="text-fg-tertiary text-xs">
                         {field.value.split('\n').length} lines
                       </div>
                     )}
@@ -345,7 +333,7 @@ export function ToolEditor({
                       <FormLabel>Annotations (JSON)</FormLabel>
                       <div className="flex items-center gap-2">
                         {field.value && field.value.length > 0 && (
-                          <span className="text-muted-foreground text-xs">
+                          <span className="text-fg-tertiary text-xs">
                             {field.value.length} characters
                           </span>
                         )}
@@ -356,18 +344,15 @@ export function ToolEditor({
                           onClick={() =>
                             setIsAnnotationsExpanded(!isAnnotationsExpanded)
                           }
-                          className="h-8 px-2">
-                          {isAnnotationsExpanded ? (
-                            <>
-                              <Minimize2 className="mr-1 h-4 w-4" />
-                              Collapse
-                            </>
-                          ) : (
-                            <>
-                              <Maximize2 className="mr-1 h-4 w-4" />
-                              Expand
-                            </>
-                          )}
+                          className="h-8 gap-1 px-2">
+                          <IconShell size="sm" variant="secondary">
+                            {isAnnotationsExpanded ? (
+                              <CollapseContent />
+                            ) : (
+                              <ExpandContent />
+                            )}
+                          </IconShell>
+                          {isAnnotationsExpanded ? 'Collapse' : 'Expand'}
                         </Button>
                       </div>
                     </div>
@@ -390,7 +375,7 @@ export function ToolEditor({
                     {isAnnotationsExpanded &&
                       field.value &&
                       field.value.length > 0 && (
-                        <div className="text-muted-foreground text-xs">
+                        <div className="text-fg-tertiary text-xs">
                           {field.value.split('\n').length} lines
                         </div>
                       )}
@@ -405,9 +390,7 @@ export function ToolEditor({
                   name="httpUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        URL <span className="text-red-500">*</span>
-                      </FormLabel>
+                      <FormLabel>URL *</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="https://example.com/api"
@@ -427,9 +410,7 @@ export function ToolEditor({
                   name="selectedAgent"
                   render={({ field }) => (
                     <FormItem>
-                      <Label>
-                        Agent <span className="text-red-500">*</span>
-                      </Label>
+                      <FormLabel>Agent *</FormLabel>
                       <AgentFields
                         selectedAgent={field.value || ''}
                         setSelectedAgent={field.onChange}
@@ -448,9 +429,7 @@ export function ToolEditor({
                   name="selectedTeam"
                   render={({ field }) => (
                     <FormItem>
-                      <Label>
-                        Team <span className="text-red-500">*</span>
-                      </Label>
+                      <FormLabel>Team *</FormLabel>
                       <TeamFields
                         selectedTeam={field.value || ''}
                         setSelectedTeam={field.onChange}

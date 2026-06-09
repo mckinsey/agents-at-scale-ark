@@ -1,36 +1,27 @@
 'use client';
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@radix-ui/react-collapsible';
-import { Label } from '@radix-ui/react-label';
-import { ArrowUpRightIcon, ChevronRight, Plus } from 'lucide-react';
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { ToolCard } from '@/components/cards';
-import { InfoDialog } from '@/components/dialogs/info-dialog';
 import { ToolEditor } from '@/components/editors/tool-editor';
-import { ToolRow } from '@/components/rows/tool-row';
-import { Button } from '@/components/ui/button';
+import { Handyman, Search } from '@/components/icons';
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
+  getToolTypeKey,
+  type ToolTypeKey,
+  ToolsTable,
+} from '@/components/sections/tools-table';
+import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
   type Agent,
@@ -39,36 +30,31 @@ import {
   agentsService,
   toolsService,
 } from '@/lib/services';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
-interface ToolsSectionProps {
-  namespace: string;
-}
+const LEARN_MORE_URL =
+  'https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/';
 
-export const ToolsSection = forwardRef<
-  { openAddEditor: () => void },
-  ToolsSectionProps
->(function ToolsSection({ namespace }, ref) {
+type TypeFilter = 'All' | ToolTypeKey;
+
+const TYPE_ITEMS: ReadonlyArray<{ value: TypeFilter; label: string }> = [
+  { value: 'All', label: 'All' },
+  { value: 'built-in', label: 'Built-in' },
+  { value: 'mcp', label: 'MCP' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'team', label: 'Team' },
+];
+
+export function ToolsSection() {
+  const { readOnlyMode, namespace } = useNamespace();
   const [tools, setTools] = useState<Tool[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
-  const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
-  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
-  const [showCompactView, setShowCompactView] = useState(false);
-  const { push } = useNamespacedNavigation();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('All');
   const [toolEditorOpen, setToolEditorOpen] = useState(false);
 
-  useImperativeHandle(ref, () => ({
-    openAddEditor: () => setToolEditorOpen(true),
-  }));
-
-  const viewOptions: ToggleOption[] = [
-    { id: 'compact', label: 'compact view', active: !showCompactView },
-    { id: 'card', label: 'card view', active: showCompactView },
-  ];
-  const groupedTools = useMemo(() => groupToolsByLabel(tools), [tools]);
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -91,37 +77,58 @@ export const ToolsSection = forwardRef<
         setLoading(false);
       }
     };
+
     loadData();
   }, [namespace]);
 
-  const toolUsageMap = useMemo(() => {
-    const usageMap: Record<string, { inUse: boolean; agents: Agent[] }> = {};
-    tools.forEach(tool => {
-      usageMap[tool.name] = { inUse: false, agents: [] };
-    });
+  const usage = useMemo(() => {
+    const map: Record<string, { inUse: boolean; reason?: string }> = {};
+    const agentsByTool: Record<string, string[]> = {};
     agents.forEach(agent => {
       agent.tools?.forEach((tool: AgentTool) => {
-        if (tool.name && usageMap[tool.name]) {
-          usageMap[tool.name].inUse = true;
-          usageMap[tool.name].agents.push(agent);
+        if (tool.name) {
+          (agentsByTool[tool.name] ??= []).push(agent.name);
         }
       });
     });
-    return usageMap;
+    tools.forEach(tool => {
+      const usingAgents = agentsByTool[tool.name] ?? [];
+      map[tool.name] = {
+        inUse: usingAgents.length > 0,
+        reason:
+          usingAgents.length > 0
+            ? `Used by: ${usingAgents.join(', ')}`
+            : undefined,
+      };
+    });
+    return map;
   }, [tools, agents]);
 
-  const handleDelete = async (identifier: string) => {
-    if (toolUsageMap[identifier]?.inUse) {
+  const filteredTools = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return tools.filter(tool => {
+      const matchesSearch =
+        !q ||
+        tool.name.toLowerCase().includes(q) ||
+        (tool.description?.toLowerCase().includes(q) ?? false);
+      const matchesType =
+        typeFilter === 'All' || getToolTypeKey(tool) === typeFilter;
+      return matchesSearch && matchesType;
+    });
+  }, [tools, searchQuery, typeFilter]);
+
+  const handleDelete = async (id: string) => {
+    const tool = tools.find(t => t.id === id);
+    if (!tool || usage[tool.name]?.inUse) {
       return;
     }
     try {
-      await toolsService.delete(identifier);
-      setTools(tools.filter(tool => (tool.name || tool.type) !== identifier));
+      await toolsService.delete(tool.name);
+      setTools(prev => prev.filter(t => t.id !== id));
       toast.success('Tool Deleted', {
-        description: 'Successfully deleted tool',
+        description: `Successfully deleted ${tool.name}`,
       });
     } catch (error) {
-      console.error('Failed to delete tool:', error);
       toast.error('Failed to Delete Tool', {
         description:
           error instanceof Error
@@ -129,11 +136,6 @@ export const ToolsSection = forwardRef<
             : 'An unexpected error occurred',
       });
     }
-  };
-
-  const handleInfo = (tool: Tool) => {
-    setSelectedTool(tool);
-    push(`/tool/${tool.name}`);
   };
 
   const handleSaveTool = async (toolSpec: {
@@ -149,9 +151,7 @@ export const ToolsSection = forwardRef<
       toast.success('Tool Created', {
         description: `Successfully created ${toolSpec.name}`,
       });
-
-      const updatedTools = await toolsService.getAll();
-      setTools(updatedTools);
+      setTools(await toolsService.getAll());
     } catch (error) {
       toast.error('Failed to Create Tool', {
         description:
@@ -161,214 +161,138 @@ export const ToolsSection = forwardRef<
       });
     }
   };
-  const parseAnnotations = (
-    annotations: unknown,
-  ): Record<string, unknown> | null => {
-    try {
-      if (!annotations) return null;
-      let parsed: Record<string, unknown> = annotations as Record<
-        string,
-        unknown
-      >;
-      if (typeof parsed === 'string') {
-        parsed = JSON.parse(parsed);
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  };
-  const extractDescriptionFromAnnotations = (
-    annotations: unknown,
-  ): string | null => {
-    const parsed = parseAnnotations(annotations);
-    if (!parsed) return null;
-    const lastApplied =
-      parsed['kubectl.kubernetes.io/last-applied-configuration'];
-    if (!lastApplied) return null;
-    try {
-      const config =
-        typeof lastApplied === 'string' ? JSON.parse(lastApplied) : lastApplied;
-      return config?.spec?.tool?.description ?? null;
-    } catch {
-      return null;
-    }
-  };
-  const getAdditionalFields = (tool: Tool) => {
-    const fields = [];
-    if (tool.description) {
-      fields.push({
-        key: 'description',
-        value: tool.description,
-        label: 'Description',
-      });
-      return fields;
-    }
-    const desc = extractDescriptionFromAnnotations(tool.annotations);
-    if (desc) {
-      fields.push({
-        key: 'description',
-        value: desc,
-        label: 'Description',
-      });
-    }
-    return fields;
-  };
 
-  if (showLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="py-8 text-center">Loading...</div>
-      </div>
-    );
-  }
-
-  if (groupedTools.length === 0 && !loading) {
-    return (
-      <>
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <DASHBOARD_SECTIONS.tools.icon />
-            </EmptyMedia>
-            <EmptyTitle>No Tools Yet</EmptyTitle>
-            <EmptyDescription>
-              You haven&apos;t added any tools yet. Get started by adding your
-              first tool.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button onClick={() => setToolEditorOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Add Tool
-            </Button>
-          </EmptyContent>
-          <Button
-            variant="ghost"
-            asChild
-            className="text-muted-foreground"
-            size="sm">
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/"
-              target="_blank">
-              Learn More <ArrowUpRightIcon />
-            </a>
-          </Button>
-        </Empty>
-        <ToolEditor
-          open={toolEditorOpen}
-          onOpenChange={setToolEditorOpen}
-          onSave={handleSaveTool}
-          namespace={namespace}
-        />
-      </>
-    );
-  }
+  const isEmpty = !loading && tools.length === 0;
 
   return (
-    <>
-      <div className="flex h-full flex-col">
-        <div className="flex items-center justify-end px-6 py-3">
-          <ToggleSwitch
-            options={viewOptions}
-            onChange={id => setShowCompactView(id === 'card')}
-          />
+    <div className="flex h-full flex-col">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <IconShell size="default" variant="primary">
+            <Handyman className="size-full" />
+          </IconShell>
+          <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+            Tools
+          </h1>
         </div>
-        <main className="flex-1 overflow-auto p-6">
-          <div className="flex flex-col gap-y-4">
-            {groupedTools?.map((toolGroup, index) => (
-              <Collapsible
-                defaultOpen
-                className="group/collapsible"
-                key={`${toolGroup.groupName}-${index}`}>
-                <div className="bg-card text-card-foreground flex flex-col rounded-xl border p-4">
-                  <CollapsibleTrigger className="w-full py-4">
-                    <div className="flex w-full flex-row items-center justify-between">
-                      <Label className="text-lg font-bold">
-                        {toolGroup.groupName}
-                      </Label>
-                      <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    {showCompactView ? (
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {toolGroup.tools.map(tool => {
-                          const toolData = toolUsageMap[tool.name] || {
-                            inUse: false,
-                            agents: [],
-                          };
-                          const agentNames = toolData.agents
-                            .map(agent => agent.name)
-                            .join(', ');
-                          return (
-                            <ToolCard
-                              key={tool.id}
-                              tool={tool}
-                              onDelete={handleDelete}
-                              onInfo={handleInfo}
-                              deleteDisabled={toolData.inUse}
-                              deleteDisabledReason={
-                                toolData.inUse
-                                  ? `Used by: ${agentNames}`
-                                  : undefined
-                              }
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {toolGroup.tools.map(tool => {
-                          const toolData = toolUsageMap[tool.name] || {
-                            inUse: false,
-                            agents: [],
-                          };
-                          const agentNames = toolData.agents
-                            .map(agent => agent.name)
-                            .join(', ');
-                          return (
-                            <ToolRow
-                              key={tool.id}
-                              tool={tool}
-                              onDelete={handleDelete}
-                              onInfo={handleInfo}
-                              namespace={namespace}
-                              inUse={toolData.inUse}
-                              inUseReason={
-                                toolData.inUse
-                                  ? `Used by: ${agentNames}`
-                                  : undefined
-                              }
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
-            ))}
-          </div>
-        </main>
-        {selectedTool && (
-          <InfoDialog
-            open={infoDialogOpen}
-            onOpenChange={setInfoDialogOpen}
-            title={`Tool: ${
-              selectedTool.name || selectedTool.type || 'Unnamed'
-            }`}
-            data={selectedTool}
-            additionalFields={getAdditionalFields(selectedTool)}
-          />
-        )}
+        <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+          Create and manage tools
+        </p>
       </div>
+
+      {showLoading ? (
+        <div className="mt-5 flex flex-1 items-center justify-center">
+          <div className="py-8 text-center">Loading...</div>
+        </div>
+      ) : isEmpty ? (
+        <div className="mt-5 flex-1">
+          <div className="bg-surface-primary flex flex-col items-center justify-center py-12">
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex flex-col items-center gap-3">
+                <div className="bg-surface-secondary flex items-center p-3">
+                  <IconShell size="default" variant="secondary">
+                    <Handyman className="size-full" />
+                  </IconShell>
+                </div>
+                <p className="text-fg-primary text-xl leading-7">
+                  No tools yet
+                </p>
+                <div className="text-fg-secondary text-center text-base leading-6 tracking-[-0.128px]">
+                  <p className="mb-2">You haven&apos;t added any tools yet.</p>
+                  <p>Get started by adding your first tool.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Button
+                  onClick={() => setToolEditorOpen(true)}
+                  disabled={readOnlyMode}>
+                  Add Tool
+                </Button>
+                <a
+                  href={LEARN_MORE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <Button variant="outline">Learn more</Button>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
+          <div className="flex flex-none items-end justify-between gap-3">
+            <div className="flex items-end gap-3">
+              <div className="relative w-full max-w-[493px]">
+                <span className="text-fg-tertiary pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+                  <IconShell size="sm" variant="secondary">
+                    <Search />
+                  </IconShell>
+                </span>
+                <Input
+                  type="search"
+                  placeholder="Search"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex w-48 flex-col gap-2">
+                <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                  Type
+                </span>
+                <Select
+                  items={TYPE_ITEMS}
+                  value={typeFilter}
+                  onValueChange={v => setTypeFilter(v as TypeFilter)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TYPE_ITEMS.map(item => (
+                      <SelectItem key={item.value} value={item.value}>
+                        <SelectItemText>{item.label}</SelectItemText>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button
+              onClick={() => setToolEditorOpen(true)}
+              disabled={readOnlyMode}>
+              Add Tool
+            </Button>
+          </div>
+
+          {filteredTools.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12">
+              <div className="bg-surface-secondary flex items-center p-3">
+                <IconShell size="default" variant="secondary">
+                  <Handyman className="size-full" />
+                </IconShell>
+              </div>
+              <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">
+                No tools match your search.
+              </p>
+            </div>
+          ) : (
+            <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+              <ToolsTable
+                tools={filteredTools}
+                usage={usage}
+                onDelete={handleDelete}
+              />
+            </ScrollArea>
+          )}
+        </div>
+      )}
+
       <ToolEditor
         open={toolEditorOpen}
         onOpenChange={setToolEditorOpen}
         onSave={handleSaveTool}
         namespace={namespace}
       />
-    </>
+    </div>
   );
-});
+}

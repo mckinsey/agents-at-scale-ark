@@ -161,7 +161,7 @@ function SelectContent({
             className,
           )}>
           <SelectScrollUpArrow />
-          <SelectPrimitive.List className="max-h-[var(--available-height)] min-w-[var(--anchor-width)] p-1">
+          <SelectPrimitive.List className="max-h-[var(--available-height)] min-w-[var(--anchor-width)] overflow-y-auto p-1">
             {children}
           </SelectPrimitive.List>
           <SelectScrollDownArrow />
