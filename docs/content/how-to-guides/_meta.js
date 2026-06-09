@@ -1,7 +1,7 @@
 export default {
   index: 'Overview',
   
-  '---build': { type: 'separator', title: 'Build with ARK (application developers)' },
+  '---build': { type: 'separator', title: 'Basic use' },
   models: {
     title: 'Configure providers and models',
     href: '/user-guide/models'
@@ -35,7 +35,7 @@ export default {
     href: '/user-guide/samples/teams/team-strategies'
   },
   
-  '---extend': { type: 'separator', title: 'Extend ARK (contributors)' },
+  '---extend': { type: 'separator', title: 'Advanced use' },
   'local-development': {
     title: 'Build and run locally',
     href: '/developer-guide/local-development'

@@ -4,7 +4,7 @@ export default {
   'starting-new-project': 'Starting a New Agentic Project',
   'starting-new-project-example': 'Complete Worked Example',
 
-  '---build': { type: 'separator', title: 'Build with ARK' },
+  '---build': { type: 'separator', title: 'Basic use' },
   models: 'Creating and Managing Models',
   agents: 'Creating and Managing Agents',
   teams: 'Creating and Managing Teams',
