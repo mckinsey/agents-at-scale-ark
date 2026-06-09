@@ -219,7 +219,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           finish_reason: 0,
           other: 0,
         },
-        appendChain: Promise.resolve() as Promise<void>,
+        appendChain: Promise.resolve(),
       };
 
       req.on('data', (chunk: Buffer) =>

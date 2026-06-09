@@ -23,7 +23,7 @@ export interface EventData {
 }
 
 export class EventBroker {
-  private stream: Stream<EventData>;
+  private readonly stream: Stream<EventData>;
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
     this.stream = new InMemoryStream<EventData>(

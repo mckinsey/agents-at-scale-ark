@@ -29,8 +29,9 @@ export function handleStreamingMessages(
   req.log.info({cursor}, 'starting SSE stream for all messages');
 
   const getReplay =
-    cursor !== undefined
-      ? async (): Promise<MessageItem[]> => {
+    cursor === undefined
+      ? undefined
+      : async (): Promise<MessageItem[]> => {
           let items = (await memory.all()).filter(
             (item) => item.sequenceNumber > cursor
           );
@@ -46,8 +47,7 @@ export function handleStreamingMessages(
             message: item.data.message,
             sequence: item.sequenceNumber,
           }));
-        }
-      : undefined;
+        };
 
   streamSSE({
     res,

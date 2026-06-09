@@ -13,7 +13,7 @@ export interface MessageData {
 }
 
 export class MemoryBroker {
-  private stream: Stream<MessageData>;
+  private readonly stream: Stream<MessageData>;
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
     this.stream = new InMemoryStream<MessageData>(

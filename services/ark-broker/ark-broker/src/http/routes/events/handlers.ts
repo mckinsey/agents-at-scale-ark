@@ -21,8 +21,9 @@ export function handleStreamingAllEvents(
   req.log.info({cursor, sessionId}, 'starting SSE stream for all events');
 
   const getReplay =
-    cursor !== undefined
-      ? async (): Promise<EventData[]> => {
+    cursor === undefined
+      ? undefined
+      : async (): Promise<EventData[]> => {
           let items = (await events.all()).filter(
             (item) => item.sequenceNumber > cursor
           );
@@ -32,8 +33,7 @@ export function handleStreamingAllEvents(
             );
           }
           return items.map((item) => item.data);
-        }
-      : undefined;
+        };
 
   streamSSE({
     res,

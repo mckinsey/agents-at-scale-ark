@@ -14,7 +14,7 @@ export class InMemoryStream<T> implements Stream<T> {
   private nextSequence = 1;
   private maxItems?: number;
   private fileStore: JsonFileStore<BrokerItem<T>>;
-  private eventEmitter = new EventEmitter();
+  private readonly eventEmitter = new EventEmitter();
 
   constructor(
     private readonly logger: Logger,

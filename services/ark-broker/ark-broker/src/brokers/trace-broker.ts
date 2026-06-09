@@ -40,7 +40,7 @@ export interface OTELSpan {
 }
 
 export class TraceBroker {
-  private stream: Stream<OTELSpan>;
+  private readonly stream: Stream<OTELSpan>;
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
     this.stream = new InMemoryStream<OTELSpan>(logger, 'Trace', path, maxItems);

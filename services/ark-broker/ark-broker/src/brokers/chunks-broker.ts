@@ -12,7 +12,7 @@ export interface CompletionChunkData {
 }
 
 export class CompletionChunkBroker {
-  private stream: Stream<CompletionChunkData>;
+  private readonly stream: Stream<CompletionChunkData>;
   public eventEmitter = new EventEmitter();
 
   constructor(logger: Logger, path?: string, maxItems?: number) {

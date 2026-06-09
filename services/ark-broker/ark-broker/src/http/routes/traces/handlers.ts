@@ -25,8 +25,9 @@ export function handleStreamingAllTraces(
   req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
 
   const getReplay =
-    cursor !== undefined
-      ? async (): Promise<OTELSpan[]> => {
+    cursor === undefined
+      ? undefined
+      : async (): Promise<OTELSpan[]> => {
           let items = (await traces.all()).filter(
             (item) => item.sequenceNumber > cursor
           );
@@ -36,8 +37,7 @@ export function handleStreamingAllTraces(
             );
           }
           return items.map((item) => item.data);
-        }
-      : undefined;
+        };
 
   streamSSE({
     res,
