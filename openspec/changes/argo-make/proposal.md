@@ -4,35 +4,55 @@ Ark ships Argo Workflows as a first-class service and the dashboard already list
 
 A previous evaluation of visual workflow editors (Flowify) found them too feature-thin to fill the gap. Rather than continue searching for a click-and-drag editor, this change adds a conversational authoring experience — modelled on Figma Make — where a non-technical user prompts their way to a runnable workflow.
 
+A complete authoring experience is not just creation: users must also be able to **open an existing template and refine it**, and to **hand-edit the generated YAML** when they want precise control the chat can't easily express. The user is a co-editor, not just a prompter — so the agent must always be working against the *current* draft, including edits the user made by hand and changes that have not yet been saved.
+
 The fit is unusually clean: the dashboard already renders any workflow YAML through `WorkflowDagViewer` (no Argo round-trip required), so the LLM can stream YAML directly into the same canvas the user will see after Save. Ark also already exposes an MCP server (`services/ark-mcp`) that an Ark Agent can use to ground its output in the user's real catalogue of agents, models, and teams.
+
+There is also a gap on the workflow-authoring side itself: there is **no Ark-native way to submit a `Query` from an Argo workflow**. Every sample today (`query-fanout-template.yaml`, `a2a-arithmetic-workflow.yaml`, `weather-workflow-template.yaml`) re-emits the same inline recipe — `kubectl apply` a `Query`, `kubectl wait --for=condition=Completed`, `jq` the result, exit non-zero on error. This boilerplate is the single most error-prone thing the author Agent has to reproduce. Shipping it as one reusable, well-tested template closes the gap for hand-written workflows and gives the author Agent a canonical building block to reference instead of regenerating the recipe each time.
 
 ## What Changes
 
+### Conversational authoring
+
 - Add a new dashboard route `/workflow-templates/new` with a two-pane layout:
   - **Left:** chat panel reusing the existing chat/session infrastructure
-  - **Right:** live preview using the existing `WorkflowDagViewer` + `CodeViewer`, fed by YAML extracted from streamed assistant messages
+  - **Right:** live preview with two tabs — `WorkflowDagViewer` (read-only DAG) and an **editable YAML editor**. The existing `CodeViewer` is a read-only `react-syntax-highlighter`, so authoring introduces an editable editor for the YAML tab (`CodeViewer` stays the read-only renderer elsewhere)
+- Make a single **`draftYaml` buffer the source of truth** for the route. Both writers feed it — the agent (its latest fenced ` ```yaml ` block) and the user (manual edits in the editable YAML tab) — and the preview, Save, and agent-grounding all read from it. This replaces the earlier model where the agent's last message was the source of truth
+- **Ground the agent on the live draft.** Track the draft and the agent's last emitted block; on each user turn, if they diverge (the user hand-edited the YAML, or an existing template was just loaded), prepend the current draft to the user's input so the agent edits the real current state. When they match, send the user's text alone — history already carries the YAML. The agent always replies with a full replacement block. No backend change; the draft never leaves the browser until Save
+- Add an **edit entry point** for existing templates: a dedicated `/workflow-templates/[id]/edit` route (the `[id]` segment is the template `metadata.name`, matching the existing detail route) plus an "Edit" button on the template detail page. It seeds `draftYaml` via the existing `workflowTemplatesService.getYaml(name)` (with the agent's last block unset, so the first turn grounds the agent)
 - Add a "New conversation" control inside the route (explicit only — never automatic) so a single session can host multiple authoring conversations
-- On Save: POST the YAML as a `WorkflowTemplate` via the existing resources passthrough endpoint and navigate to the template's detail page; on name collision, prompt to overwrite
+- On Save: add a create/overwrite method to `workflowTemplatesService` that POSTs `draftYaml` as a `WorkflowTemplate` through the existing `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate` passthrough (the same endpoint `run()` already POSTs to), then navigate to the template's detail page.
+  - **New-template Save:** on name collision, prompt to overwrite
+  - **Edit-mode Save:** overwrite the same name silently (that's the intent), with "Save as new name" offered as a secondary action
 - Add three new MCP tools to `services/ark-mcp`: `list_models`, `list_teams`, `list_workflow_templates`
 - Ship a sample `Agent` CRD (`argo-make-author`) under `services/argo-workflows/samples/` whose system prompt:
   - Mandates calling `list_agents` / `list_models` / `list_teams` before referencing any Ark resource
   - Refuses to invent resources that aren't in the returned list (fail-and-tell-user)
-  - Includes few-shot examples drawn from existing samples (`a2a-arithmetic-workflow.yaml`, `query-fanout-template.yaml`) to teach the canonical `kubectl apply` recipe for embedding Ark queries inside Argo steps
+  - Teaches embedding Ark queries inside Argo steps by **referencing the shipped `ark-query` template** (below) via `templateRef`, with the inline `kubectl apply` recipe retained as a fallback few-shot example
 - Output is restricted to `kind: WorkflowTemplate` for v1
+
+### Ark-native query template
+
+- Ship a reusable `WorkflowTemplate` (`ark-query`) under `services/argo-workflows/samples/` that submits an Ark `Query`, waits for completion, and returns its result. Workflows reference one canonical, tested template via `templateRef` instead of re-emitting the query-and-wait recipe. The step uses the existing `alpine/k8s` image (`kubectl` + `jq`):
+  - **Inputs:** `target` (required, `type/name` notation matching the ark CLI, e.g. `agent/weather`, `model/default`, `team/research`) and `input` (required, the prompt — mirrors `spec.input`). Optional, drawn from `QuerySpec`: `timeout` (default `5m`, also bounds the `kubectl wait`), `ttl`, `parameters` (JSON array merged into `spec.parameters` for `{{.param}}` templating), `session-id`, `memory`, `query-name` (else generated from the workflow/pod), and `service-account`
+  - **Outputs:** `response` (the final `status.response.content`), `query-json` (the full Query object for downstream steps that need token usage, target, etc.), `phase` (`done` / `error`), and `conversation-id` (`status.conversationId`)
+  - **Multiple team-member messages:** the Query CR exposes only the final assistant message in `status.response.content` (per-member turns live in the broker/memory keyed by `conversationId`, not in the CR). v1 outputs the final content plus the full Query JSON; the `conversation-id` output is the seam for a follow-up broker-backed transcript step
+  - **Error handling:** the step always writes its output files *before* exiting — even on failure — so `continueOn: {failed: true}` consumers and Argo exit-handlers can still read `phase` / `response` / `query-json`. It exits `0` on `done` and non-zero on `error` or a wait-timeout / non-`done` phase, so the Argo node is marked Failed and `retryStrategy` / `continueOn` integrate naturally
 
 ## Capabilities
 
 ### New Capabilities
-- `argo-make-authoring`: Conversational authoring of Argo `WorkflowTemplate` resources from natural-language prompts, with live DAG preview and Ark-resource-grounded composition
+- `argo-make-authoring`: Conversational authoring of Argo `WorkflowTemplate` resources from natural-language prompts, with live DAG preview, editable YAML, editing of existing templates, and Ark-resource-grounded composition kept in sync with the user's current (possibly hand-edited, unsaved) draft
+- `argo-query-template`: A reusable Argo `WorkflowTemplate` that submits an Ark `Query` and returns its result, giving workflows an Ark-native way to run a query with structured outputs and Argo-integrated error handling
 
 ### Modified Capabilities
 - `ark-mcp-tools`: Adds list endpoints for models, teams, and workflow templates
-- `dashboard-workflow-templates`: Adds a "New" entry point with chat-driven authoring alongside the existing list and detail views
+- `dashboard-workflow-templates`: Adds "New" and "Edit" entry points with chat-driven authoring — editable YAML, live DAG preview, and overwrite-on-save for edits — alongside the existing list and detail views
 
 ## Impact
 
 - **ark-mcp (Python):** Three new tool functions in `ark_mcp/tools.py` reusing `with_ark_client`. No new dependencies.
-- **Samples (YAML):** One new sample `Agent` CRD in `services/argo-workflows/samples/argo-make-author.yaml`. Users opt in via `kubectl apply`. Not added to the chart, to keep the system prompt iterable without chart bumps.
-- **ark-dashboard (TypeScript):** New `/workflow-templates/new` route and supporting components. Reuses `chatService`, `conversationsService`, `WorkflowDagViewer`, `CodeViewer`, `useNamespacedNavigation`. No new API surface; uses existing `/api/v1/resources/.../WorkflowTemplate` passthrough.
-- **Tests:** Unit tests for the YAML extraction logic and the new MCP tools; chainsaw e2e test that exercises the full author → save → run loop using mock-llm.
-- **Out of scope for v1:** `lint_workflow` MCP tool, `CronWorkflow` / one-shot `Workflow` output, canvas direct-manipulation, starter-prompt gallery, template versioning. Tracked as follow-ups.
+- **Samples (YAML):** Two new samples under `services/argo-workflows/samples/`: the `argo-make-author.yaml` `Agent` CRD and the `ark-query-template.yaml` reusable `WorkflowTemplate`. Users opt in via `kubectl apply`. Neither is added to the chart, to keep the system prompt and the template iterable without chart bumps.
+- **ark-dashboard (TypeScript):** New `/workflow-templates/new` and `/workflow-templates/[id]/edit` routes and supporting components, plus an "Edit" button on the template detail page. Introduces a new editable YAML editor component (the existing `CodeViewer` is a read-only `react-syntax-highlighter`), a `draftYaml` buffer that is the route's source of truth, and a small client-side grounding helper (diverge-check + input prefix). Reuses `chatService`, `conversationsService`, `WorkflowDagViewer`, `useNamespacedNavigation`, and `workflowTemplatesService` (`getYaml` for load). No new backend endpoint; load and save both go through the existing `/api/v1/resources/.../WorkflowTemplate` passthrough, with a save method added to `workflowTemplatesService`.
+- **Tests:** Unit tests for the YAML extraction logic, the draft-grounding diverge-check, and the new MCP tools; chainsaw e2e tests that exercise (a) the full author → save → run loop using mock-llm, (b) loading an existing template, hand-editing the YAML, and confirming the agent's next turn is grounded on the edit, and (c) the `ark-query` template against an agent and a team target, asserting outputs on success and a Failed node with readable outputs on a query error.
+- **Out of scope for v1:** `lint_workflow` MCP tool, `CronWorkflow` / one-shot `Workflow` output, canvas direct-manipulation (DAG click-to-edit), starter-prompt gallery, template versioning, a server-side draft store and the agent-callable draft-inspection tool it would enable (prefix-injection covers grounding for now), a broker-backed per-member transcript output for team queries (the `conversation-id` output is the seam), and shipping the `ark-query` template in the Helm chart (sample-first, promote once stable). Tracked as follow-ups.
