@@ -1,27 +1,58 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
-import { PageHeader } from '@/components/common/page-header';
-import type { BreadcrumbElement } from '@/components/common/page-header';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { ChevronLeft } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
+import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import { toolsService } from '@/lib/services';
 import type { ToolDetail } from '@/lib/services/tools';
 
-const FIELD_HEADING_STYLES =
-  'px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left';
+function DetailSection({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col">
+      <h2 className="text-fg-secondary border-stroke-tertiary border-b pb-3 text-sm leading-5 tracking-[-0.112px]">
+        {title}
+      </h2>
+      <dl className="flex flex-col">{children}</dl>
+    </section>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className="border-stroke-tertiary flex flex-col gap-1 border-b px-3 py-4 sm:flex-row sm:gap-4">
+      <dt className="text-fg-secondary w-[240px] shrink-0 text-sm leading-5 tracking-[-0.112px]">
+        {label}
+      </dt>
+      <dd className="text-fg-primary min-w-0 flex-1 text-sm leading-5 tracking-[-0.112px]">
+        {children}
+      </dd>
+    </div>
+  );
+}
 
 export default function ToolDetailsPage() {
   const params = useParams();
   const [loading, setLoading] = useState(true);
   const [tool, setTool] = useState<ToolDetail | null>(null);
   const toolName = params.name as string;
-
-  const breadcrumbs: BreadcrumbElement[] = [
-    ...BASE_BREADCRUMBS,
-    { href: '/tools', label: 'Tools' },
-  ];
 
   useEffect(() => {
     const fetchTool = async () => {
@@ -41,76 +72,67 @@ export default function ToolDetailsPage() {
     fetchTool();
   }, [toolName]);
 
-  if (loading) {
-    return (
-      <>
-        <PageHeader breadcrumbs={breadcrumbs} />
-        <div className="py-8 text-center">Loading...</div>
-      </>
-    );
-  }
-
   return (
-    <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={toolName} />
-      {/* Tool Details Content */}
-      <div className="m-4">
-        <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-          <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-            <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-              Tool description
-            </h3>
-          </div>
-          <table className="w-full">
-            <tbody>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className={FIELD_HEADING_STYLES}>Name</td>
-                <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                  {toolName}
-                </td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className={FIELD_HEADING_STYLES}>Description</td>
-                <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                  {tool?.description ?? null}
-                </td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className={FIELD_HEADING_STYLES}>Tool type</td>
-                <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                  {tool?.spec?.type ?? null}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+    <div className="flex h-full flex-col">
+      <header className="flex flex-none flex-col gap-4 pb-5">
+        <div className="flex items-center justify-between">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+            <NamespacedLink
+              href="/tools"
+              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+              <IconShell size="sm" className="opacity-100">
+                <ChevronLeft />
+              </IconShell>
+              Tools
+            </NamespacedLink>
+            <span aria-hidden="true" className="text-fg-secondary">
+              /
+            </span>
+            <span aria-current="page" className="text-fg-secondary">
+              {toolName}
+            </span>
+          </nav>
+          <NamespacedLink href="/tools">
+            <Button variant="outline">Back</Button>
+          </NamespacedLink>
         </div>
+        <h1 className="text-fg-primary text-xl leading-7">{toolName}</h1>
+      </header>
 
-        <div className="mt-5 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-          <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-            <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-              Annotations and metadata
-            </h3>
-          </div>
-          <table className="w-full">
-            <tbody>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className={FIELD_HEADING_STYLES}>Status</td>
-                <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                  {JSON.stringify(tool?.status?.state)}
-                </td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className={FIELD_HEADING_STYLES}>Input schema</td>
-                <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                  <pre className="whitespace-pre-wrap">
-                    {JSON.stringify(tool?.spec?.inputSchema, null, 2)}
-                  </pre>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner className="h-8 w-8" />
         </div>
-      </div>
-    </>
+      ) : !tool ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-fg-secondary">Tool not found</div>
+        </div>
+      ) : (
+        <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+          <div className="mx-auto flex w-full max-w-[1344px] flex-col gap-8 pb-6">
+            <DetailSection title="Tool description">
+              <DetailRow label="Name">{toolName}</DetailRow>
+              <DetailRow label="Description">
+                {tool.description || '—'}
+              </DetailRow>
+              <DetailRow label="Tool type">{tool.spec?.type || '—'}</DetailRow>
+            </DetailSection>
+
+            <DetailSection title="Annotations and metadata">
+              <DetailRow label="Status">
+                {JSON.stringify(tool.status?.state)}
+              </DetailRow>
+              <DetailRow label="Input schema">
+                <pre className="bg-surface-secondary text-fg-primary overflow-x-auto p-3 font-mono text-xs leading-5 whitespace-pre-wrap">
+                  {JSON.stringify(tool.spec?.inputSchema, null, 2)}
+                </pre>
+              </DetailRow>
+            </DetailSection>
+          </div>
+        </ScrollArea>
+      )}
+    </div>
   );
 }
