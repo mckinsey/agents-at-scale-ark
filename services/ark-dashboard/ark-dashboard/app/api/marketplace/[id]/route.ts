@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import type { MarketplaceItemDetail } from '@/lib/api/generated/marketplace-types';
-import { getMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import { getMarketplaceItemById } from '@/lib/services/marketplace-transform';
 
 export async function GET(
   request: NextRequest,

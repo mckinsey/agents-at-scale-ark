@@ -11,12 +11,12 @@ vi.mock('node:child_process', () => {
   return { default: mod, ...mod };
 });
 
-vi.mock('@/lib/services/marketplace-fetcher', () => ({
+vi.mock('@/lib/services/marketplace-transform', () => ({
   getRawMarketplaceItemById: vi.fn(),
 }));
 
 import { POST, DELETE } from './route';
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-transform';
 
 const mockGetRawMarketplaceItemById = vi.mocked(getRawMarketplaceItemById);
 

@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-transform';
 
 /**
  * Helm release name validation (max 53 chars, RFC 1123)

@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET } from './route';
 
-vi.mock('@/lib/services/marketplace-fetcher', () => ({
+vi.mock('@/lib/services/marketplace-transform', () => ({
   getMarketplaceItemById: vi.fn(),
 }));
 
-import { getMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import { getMarketplaceItemById } from '@/lib/services/marketplace-transform';
 
 function createRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost'));
