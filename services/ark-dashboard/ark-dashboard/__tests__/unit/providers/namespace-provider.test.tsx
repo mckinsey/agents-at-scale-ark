@@ -30,11 +30,17 @@ vi.mock('@/lib/services/namespaces-hooks', () => ({
   })),
 }));
 
-vi.mock('@/lib/api/client', () => ({
-  apiClient: {
-    setDefaultParam: vi.fn(),
-  },
-}));
+vi.mock('@/lib/api/client', () => {
+  class APIClient {
+    setDefaultParam = vi.fn();
+  }
+  return {
+    APIClient,
+    apiClient: {
+      setDefaultParam: vi.fn(),
+    },
+  };
+});
 
 vi.mock('sonner', () => ({
   toast: {
