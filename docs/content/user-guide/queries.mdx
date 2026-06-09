@@ -241,7 +241,7 @@ kubectl get query my-q -o jsonpath='{.status.response.content}'
 Common causes:
 
 - A2A / executor returned a 500 — usually the agent's tools or model are misconfigured; check `kubectl describe agent <name>` for the model/tool resolution path.
-- Timeout exceeded — bump `spec.timeout` (default `5m`); see the [Reference → Timeout Behavior](/reference/resources/query#timeout-behavior).
+- Timeout exceeded — bump `spec.timeout` (default `5m`); see the [Reference → Timeout](/reference/resources/query#timeout).
 
 **Query never starts (`phase: pending` forever).** The controller couldn't dispatch — usually because the controller pod is restarting or the ark-completions executor isn't reachable. `kubectl get pods -n ark-system` and check `ark-controller` + `ark-completions` are both `Running`.
 
