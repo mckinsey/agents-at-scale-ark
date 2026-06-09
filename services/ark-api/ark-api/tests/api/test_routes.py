@@ -1306,7 +1306,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_create_model_openai_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1356,7 +1356,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_create_model_azure_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1407,7 +1407,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_create_model_bedrock_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1464,7 +1464,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_get_model_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1514,7 +1514,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_update_model_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1576,7 +1576,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_update_model_partial(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):

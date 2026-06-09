@@ -40,6 +40,10 @@ var (
 	sharedA2ADiscoverTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.discover" }),
 	)
+	sharedA2ASendClient = &http.Client{
+		Timeout:   5 * time.Minute,
+		Transport: sharedA2ASendTransport,
+	}
 )
 
 func getA2ADiscoveryTimeout() time.Duration {
@@ -120,18 +124,8 @@ func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address strin
 }
 
 func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string, headers []arkv1prealpha1.Header, namespace, agentName string, a2aRecorder eventing.A2aRecorder) (*a2aclient.A2AClient, error) {
-	timeout := 5 * time.Minute
-	if deadline, ok := ctx.Deadline(); ok {
-		timeout = time.Until(deadline)
-	}
-
-	httpClient := &http.Client{
-		Timeout:   timeout,
-		Transport: sharedA2ASendTransport,
-	}
-
 	var clientOptions []a2aclient.Option
-	clientOptions = append(clientOptions, a2aclient.WithHTTPClient(httpClient))
+	clientOptions = append(clientOptions, a2aclient.WithHTTPClient(sharedA2ASendClient))
 
 	if len(headers) > 0 {
 		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)

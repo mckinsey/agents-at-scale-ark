@@ -24,7 +24,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.client = TestClient(app)
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_get_returns_defaults_when_missing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value
@@ -38,7 +38,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.assertIsNone(body["queryTTL"])
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_get_returns_existing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value
@@ -54,7 +54,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.assertEqual(body["queryTTL"], "720h")
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_put_creates_when_missing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value
@@ -74,7 +74,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.assertEqual(call_kwargs["body"]["spec"], {"queryTTL": "240h"})
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_put_updates_existing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value
@@ -99,7 +99,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.assertEqual(call_kwargs["body"]["spec"]["queryTTL"], "48h")
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_put_null_clears_value_on_existing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value
@@ -123,7 +123,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.assertNotIn("queryTTL", call_kwargs["body"]["spec"])
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_delete_noop_when_missing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value
@@ -134,7 +134,7 @@ class TestArkConfigAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 204)
 
     @patch("ark_api.api.v1.arkconfig.CustomObjectsApi")
-    @patch("ark_api.api.v1.arkconfig.ApiClient")
+    @patch("ark_api.api.v1.client_utils.ApiClient")
     def test_delete_existing(self, mock_api_client, mock_custom_api_cls):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client
         mock_custom = mock_custom_api_cls.return_value

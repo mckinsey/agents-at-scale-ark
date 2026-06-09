@@ -20,6 +20,7 @@ export default {
   'release-process': 'Release Process and Artifacts',
   'secure-sdlc': 'Secure Software Development Lifecycle',
   'secure-software-architecture': 'Secure Software Architecture',
+  scalability: 'Scalability',
   'vulnerability-management': 'Vulnerability Management',
 
   '---project': { type: 'separator', title: 'Project' },

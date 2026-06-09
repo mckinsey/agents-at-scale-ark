@@ -45,7 +45,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 	}
 
 	// Create HTTP client with timeout for memory operations
-	httpClient := common.NewHTTPClientWithLogging(ctx)
+	httpClient := common.NewHTTPClientWithLogging()
 	if config.Timeout > 0 {
 		httpClient.Timeout = config.Timeout
 	}
