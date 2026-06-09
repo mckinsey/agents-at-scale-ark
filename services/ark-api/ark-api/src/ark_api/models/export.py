@@ -1,6 +1,6 @@
 """Export models for Ark API."""
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal, get_args
+from typing import List, Optional, Dict, Literal, get_args
 from pydantic import BaseModel, Field
 
 

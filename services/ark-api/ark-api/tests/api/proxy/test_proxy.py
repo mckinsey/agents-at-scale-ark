@@ -405,7 +405,7 @@ class TestListServices(unittest.TestCase):
         self.client = TestClient(app)
 
     @patch('ark_api.api.v1.proxy.proxy.get_context')
-    @patch('ark_api.api.v1.proxy.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     def test_list_services_success(self, mock_api_client, mock_get_context):
         """Test listing available services."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -434,7 +434,7 @@ class TestListServices(unittest.TestCase):
         self.assertIn("services", data)
         self.assertEqual(data["services"], ["file-gateway-api", "other-service"])
     
-    @patch('ark_api.api.v1.proxy.ApiClient')
+    @patch('ark_api.api.v1.client_utils.ApiClient')
     def test_list_services_success_with_namespace(self, mock_api_client):
         """Test listing available services."""
 

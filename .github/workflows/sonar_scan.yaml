@@ -36,7 +36,7 @@ jobs:
 
       - name: Download coverage artifacts
         id: download-coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: coverage-*
           path: coverage-artifacts
@@ -115,7 +115,7 @@ jobs:
 
       - name: Install Helm
         if: steps.check-coverage.outputs.found == 'false'
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: "3.18.6"
 

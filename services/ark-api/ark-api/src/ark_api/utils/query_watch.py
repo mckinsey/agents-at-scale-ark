@@ -93,7 +93,6 @@ async def watch_query_completion(ark_client, query_name: str, model: str, messag
             field_selector=f"metadata.name={query_name}",
             timeout_seconds=timeout_seconds
         ):
-            event_type = event['type']
             query_obj = event['object']
 
             status = query_obj.get("status", {})
