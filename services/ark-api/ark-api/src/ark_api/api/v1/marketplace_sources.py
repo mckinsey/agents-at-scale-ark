@@ -40,6 +40,11 @@ def _encode_value(url: str, display_name: Optional[str]) -> str:
     return json.dumps(value)
 
 
+def sanitize_log_value(value: str) -> str:
+    """Strip CR/LF so user-controlled values can't forge log lines (CWE-117)."""
+    return value.replace("\r", "").replace("\n", "")
+
+
 def _apply_body(name: str, value_json: str) -> dict:
     """Single-key ConfigMap manifest for server-side apply."""
     return {
@@ -87,8 +92,8 @@ async def get_marketplace_source_permissions(
     except Exception as e:
         logger.warning(
             "marketplace-sources permission probe failed for namespace %s: %s",
-            namespace,
-            e,
+            sanitize_log_value(namespace),
+            sanitize_log_value(str(e)),
         )
         return MarketplacePermissionsResponse(canEdit=False)
 

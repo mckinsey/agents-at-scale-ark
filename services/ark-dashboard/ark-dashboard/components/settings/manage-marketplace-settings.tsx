@@ -32,12 +32,11 @@ function validateMarketplaceUrl(url: string): string | null {
 
 // Derive a ConfigMap-key-safe source name from the display name or URL.
 function deriveSourceName(displayName: string, url: string): string {
-  const base = displayName || url.replace(/^https:\/\//, '');
+  const base = (displayName || url.replace(/^https:\/\//, '')).slice(0, 200);
   const slug = base
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-    .slice(0, 200);
+    .replaceAll(/[^a-z0-9._-]+/g, '-')
+    .replaceAll(/(?:^[-.]+|[-.]+$)/g, '');
   return slug || 'source';
 }
 

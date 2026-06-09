@@ -17,7 +17,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
-from .marketplace_sources import CONFIGMAP_NAME, parse_sources
+from .marketplace_sources import CONFIGMAP_NAME, parse_sources, sanitize_log_value
 from ...auth.dependencies import get_impersonation_config
 from ...models.marketplace_sources import (
     MarketplaceItemError,
@@ -103,7 +103,11 @@ async def _fetch_source(
             ),
         )
 
-    logger.info("fetching marketplace items for source %s in namespace %s", name, namespace)
+    logger.info(
+        "fetching marketplace items for source %s in namespace %s",
+        sanitize_log_value(name),
+        sanitize_log_value(namespace),
+    )
     try:
         response = await http_client.get(url, headers={"Accept": "application/json"})
         if response.is_redirect:
