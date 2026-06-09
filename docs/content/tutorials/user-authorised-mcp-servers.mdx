@@ -173,6 +173,33 @@ spec:
 Whichever source you use, the token authorises real API calls — treat it like a credential. Prefer Secrets over inline `value`, and never put a token in an agent prompt or a Query `input` (it would become part of the model context). The `valueFrom.secretKeyRef` / `queryParameterRef` paths keep it out of the prompt.
 </Callout>
 
+## Via the ark API
+
+The same override works through the [ark API](/reference/ark-apis) — `POST /v1/queries` accepts an `overrides` array that maps straight onto the `Query` spec. This is the path a front-end or service would use to run a query as the signed-in user:
+
+```bash
+curl -X POST "http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries?namespace=default" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "who-am-i",
+    "input": "Who am I on GitHub? Reply with just my login.",
+    "target": { "type": "agent", "name": "github-agent" },
+    "overrides": [
+      {
+        "resourceType": "mcpserver",
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": { "valueFrom": { "secretKeyRef": { "name": "alice-github-token", "key": "token" } } }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+The override block is identical to the `Query` YAML — `resourceType: mcpserver`, header value from a `secretKeyRef` (or `queryParameterRef`, or an inline `value`). Read the result back with `GET /v1/queries/who-am-i?namespace=default` and check `status.response.content`.
+
 ## Verify it's the override doing the work
 
 A quick way to prove the per-query token is what authorises the call: send a query whose override carries a **bad** token. The GitHub MCP connection fails, and the query ends in `error` — even though the server's registration token is valid:
