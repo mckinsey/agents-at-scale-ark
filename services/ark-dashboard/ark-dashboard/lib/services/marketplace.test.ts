@@ -81,5 +81,32 @@ describe('marketplaceService items', () => {
     });
     expect(filtered.items).toHaveLength(1);
     expect(filtered.items[0].category).toBe('observability');
+
+    expect((await marketplaceService.getMarketplaceItems(NS, { type: 'service' })).items).toHaveLength(2);
+    expect((await marketplaceService.getMarketplaceItems(NS, { status: 'installed' })).items).toHaveLength(0);
+    expect((await marketplaceService.getMarketplaceItems(NS, { featured: true })).items).toHaveLength(0);
+    expect((await marketplaceService.getMarketplaceItems(NS, { search: 'phoenix' })).items).toHaveLength(1);
+  });
+});
+
+describe('marketplaceService item actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('gets an item by id, installs and uninstalls via the dashboard routes', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ id: 'phoenix' });
+    await marketplaceService.getMarketplaceItemById('phoenix');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace/phoenix');
+
+    vi.mocked(apiClient.post).mockResolvedValueOnce({});
+    await marketplaceService.installMarketplaceItem('phoenix');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/marketplace/phoenix/install', {
+      mode: 'command',
+    });
+
+    vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
+    await marketplaceService.uninstallMarketplaceItem('phoenix');
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/marketplace/phoenix/install');
   });
 });

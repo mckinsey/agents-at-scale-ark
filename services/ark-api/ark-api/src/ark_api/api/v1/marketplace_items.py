@@ -17,7 +17,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
-from .marketplace_sources import CONFIGMAP_NAME, parse_sources, sanitize_log_value
+from .marketplace_sources import CONFIGMAP_NAME, parse_sources
 from ...auth.dependencies import get_impersonation_config
 from ...models.marketplace_sources import (
     MarketplaceItemError,
@@ -103,11 +103,7 @@ async def _fetch_source(
             ),
         )
 
-    logger.info(
-        "fetching marketplace items for source %s in namespace %s",
-        sanitize_log_value(name),
-        sanitize_log_value(namespace),
-    )
+    logger.info("fetching marketplace items for source %s", name)
     try:
         response = await http_client.get(url, headers={"Accept": "application/json"})
         if response.is_redirect:
@@ -174,8 +170,10 @@ async def list_marketplace_items(
 
     timeout = httpx.Timeout(PER_SOURCE_TIMEOUT_SECONDS)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as http_client:
-        tasks: dict[str, asyncio.Task] = {
-            source.name: asyncio.create_task(
+        tasks: dict[str, asyncio.Task] = {}
+        for source in sources:
+            # Assign to a held reference (the dict) so the task isn't GC'd mid-flight.
+            tasks[source.name] = asyncio.create_task(
                 _fetch_source(
                     http_client,
                     namespace,
@@ -184,8 +182,6 @@ async def list_marketplace_items(
                     source.displayName or source.name,
                 )
             )
-            for source in sources
-        }
         await asyncio.wait(tasks.values(), timeout=AGGREGATOR_TIMEOUT_SECONDS)
 
         results: list[MarketplaceItemsSourceResult] = []

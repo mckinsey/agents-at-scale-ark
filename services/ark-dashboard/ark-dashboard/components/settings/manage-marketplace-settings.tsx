@@ -32,12 +32,26 @@ function validateMarketplaceUrl(url: string): string | null {
 
 // Derive a ConfigMap-key-safe source name from the display name or URL.
 function deriveSourceName(displayName: string, url: string): string {
-  const base = (displayName || url.replace(/^https:\/\//, '')).slice(0, 200);
-  const slug = base
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9._-]+/g, '-')
-    .replaceAll(/(?:^[-.]+|[-.]+$)/g, '');
-  return slug || 'source';
+  // Regex-free on purpose: a char-by-char scan is provably linear, so it can't
+  // trip the ReDoS analyzer the way a quantified character class does.
+  const raw = displayName || (url.startsWith('https://') ? url.slice(8) : url);
+  const base = raw.slice(0, 200).toLowerCase();
+  let slug = '';
+  for (const ch of base) {
+    const allowed =
+      (ch >= 'a' && ch <= 'z') ||
+      (ch >= '0' && ch <= '9') ||
+      ch === '.' ||
+      ch === '_' ||
+      ch === '-';
+    if (allowed) slug += ch;
+    else if (!slug.endsWith('-')) slug += '-';
+  }
+  let start = 0;
+  let end = slug.length;
+  while (start < end && (slug[start] === '-' || slug[start] === '.')) start++;
+  while (end > start && (slug[end - 1] === '-' || slug[end - 1] === '.')) end--;
+  return slug.slice(start, end) || 'source';
 }
 
 export function ManageMarketplaceSettings() {

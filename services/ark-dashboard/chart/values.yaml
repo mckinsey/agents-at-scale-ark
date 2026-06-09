@@ -163,8 +163,8 @@ marketplaceSources:
 
 # Seed Job configuration (runs only when marketplaceSources is non-empty).
 marketplaceSourcesSeed:
-  # Image providing kubectl for the server-side apply.
-  image: bitnami/kubectl:latest
+  # Image providing kubectl for the server-side apply (pinned, not :latest).
+  image: bitnami/kubectl:1.35.0
 
 # The marketplace-source-editor ClusterRole grants edit access to the
 # marketplace-sources ConfigMap. Created by default but bound to no one;
