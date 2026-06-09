@@ -9,9 +9,7 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
     <div
       data-slot="table-container"
       className="relative w-full overflow-x-auto">
-      {/* Table headers provided by children (TableHeader/TableHead components) */}
-      {/* sonar-disable-next-line Web:TableHeaderRule */}
-      <table
+      <table // NOSONAR: header row provided by consumer via TableHeader/TableHead children
         data-slot="table"
         className={cn('w-full caption-bottom', className)}
         {...props}
