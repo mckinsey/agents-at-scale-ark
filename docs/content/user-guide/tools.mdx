@@ -145,7 +145,7 @@ kubectl get tools -l ark.mckinsey.com/mcp-server=calculator
 
 Deleting the `MCPServer` deletes the tools it created. The dashboard groups tools by MCP server, and `ark tools` shows that grouped view.
 
-> **MCP server authentication.** MCP servers that need OAuth can have a token injected via `spec.tokenSecretRef`; the authorization state is surfaced on the `MCPServer` status. See [Reference → MCPServer](/reference/resources/mcpserver).
+> **MCP server authentication.** Static credentials go in `spec.headers` (e.g. a GitHub PAT from a Secret) — see [Reference → MCPServer](/reference/resources/mcpserver). For per-query or per-user credentials, use [overrides](/user-guide/overrides) to inject headers at query time, targeting specific MCP servers via label selectors.
 
 ## Agents and teams as tools
 
