@@ -317,6 +317,7 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
 		}
+		defer agent.Close()
 		member = agent
 	case ToolTypeTeam:
 		var teamCRD arkv1alpha1.Team
@@ -327,6 +328,7 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to make team %s: %w", targetName, err)
 		}
+		defer team.Close()
 		member = team
 	default:
 		return nil, nil, fmt.Errorf("unsupported member type: %s", targetType)

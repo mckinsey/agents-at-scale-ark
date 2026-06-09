@@ -103,10 +103,13 @@ func performBackoff(ctx context.Context, attempt int, url string) error {
 	backoff := time.Duration(1<<uint(attempt)) * time.Second
 	log.V(1).Info("retrying MCP client connection", "attempt", attempt+1, "backoff", backoff.String(), "server", url)
 
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("%s %s: %w", ErrConnectionRetryFailed, url, ctx.Err())
-	case <-time.After(backoff):
+	case <-timer.C:
 		return nil
 	}
 }
@@ -205,7 +208,7 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcpsdk.Client, url str
 func createMCPClientWithRetry(ctx context.Context, url string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
 	mcpClient := createHTTPClient()
 
-	retryCtx, retryCancel := context.WithTimeout(context.Background(), httpTimeout)
+	retryCtx, retryCancel := context.WithTimeout(ctx, httpTimeout)
 	defer retryCancel()
 
 	var lastErr error

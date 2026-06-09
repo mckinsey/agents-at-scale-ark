@@ -1,15 +1,20 @@
 """Namespaces API endpoints."""
 import logging
 import os
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.exceptions import ApiException
 
 from ark_sdk.models.kubernetes import NamespaceResponse, NamespaceListResponse, NamespaceCreateRequest
+from ark_sdk.impersonation import ImpersonationConfig
+
+from ...auth.dependencies import get_impersonation_config
 from ...core.namespace import get_current_context
 from ...models.context import ContextResponse
+from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -19,14 +24,14 @@ router = APIRouter(tags=["namespaces"])
 
 @router.get("/namespaces", response_model=NamespaceListResponse)
 @handle_k8s_errors(operation="list", resource_type="namespace")
-async def list_namespaces() -> NamespaceListResponse:
+async def list_namespaces(impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> NamespaceListResponse:
     """
     List all available namespaces.
-    
+
     Returns:
         NamespaceListResponse: List of all available namespaces
     """
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         v1 = client.CoreV1Api(api)
         
         # List all namespaces
@@ -46,17 +51,17 @@ async def list_namespaces() -> NamespaceListResponse:
 
 @router.post("/namespaces", response_model=NamespaceResponse)
 @handle_k8s_errors(operation="create", resource_type="namespace")
-async def create_namespace(body: NamespaceCreateRequest) -> NamespaceResponse:
+async def create_namespace(body: NamespaceCreateRequest, impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> NamespaceResponse:
     """
     Create a new Kubernetes namespace.
-    
+
     Args:
         body: The namespace creation request
-        
+
     Returns:
         NamespaceResponse: The created namespace details
     """
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         v1 = client.CoreV1Api(api)
         
         # Create the namespace object

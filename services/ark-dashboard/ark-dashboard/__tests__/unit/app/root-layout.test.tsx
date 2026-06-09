@@ -14,7 +14,7 @@ vi.mock('@/providers/GlobalProviders', () => ({
   ),
 }));
 
-import { metadata } from '@/app/layout';
+import { metadata, dynamic } from '@/app/layout';
 
 describe('RootLayout metadata', () => {
   it('should have correct title and description', () => {
@@ -22,5 +22,9 @@ describe('RootLayout metadata', () => {
     expect(metadata.description).toBe(
       'Basic Configuration and Monitoring for Ark',
     );
+  });
+
+  it('forces dynamic rendering so AUTH_MODE is read at runtime, not baked at build', () => {
+    expect(dynamic).toBe('force-dynamic');
   });
 });

@@ -300,9 +300,10 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"MCPServer", &controller.MCPServerReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   mgr.GetScheme(),
-			Eventing: eventingProvider,
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Eventing:  eventingProvider,
+			APIReader: mgr.GetAPIReader(),
 		}},
 		{"Model", &controller.ModelReconciler{
 			Client:    mgr.GetClient(),

@@ -4,7 +4,8 @@ import type { NextRequest } from 'next/server';
 
 import type { NextRequestWithAuth } from './auth';
 import { auth } from './auth';
-import { COOKIE_SESSION_TOKEN, SIGNIN_PATH } from './lib/constants/auth';
+import { SESSION_COOKIE_NAME } from './lib/auth/auth-config';
+import { SIGNIN_PATH } from './lib/constants/auth';
 
 async function proxy(request: NextRequest) {
   // Get the base path from environment (no default)
@@ -24,7 +25,7 @@ async function proxy(request: NextRequest) {
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET,
-      cookieName: COOKIE_SESSION_TOKEN,
+      cookieName: SESSION_COOKIE_NAME,
     });
     // Read environment variables at runtime
     const host = process.env.ARK_API_SERVICE_HOST || 'localhost';

@@ -58,9 +58,10 @@ const (
 
 type MCPServerReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Eventing eventing.Provider
-	resolver *common.ValueSourceResolver
+	Scheme    *runtime.Scheme
+	Eventing  eventing.Provider
+	APIReader client.Reader
+	resolver  *common.ValueSourceResolver
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=mcpservers,verbs=get;list;watch;create;update;patch;delete
@@ -146,6 +147,11 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 	if err != nil {
 		return r.handleClientCreationError(ctx, &mcpServer, err)
 	}
+	defer func() {
+		if err := mcpClient.Client.Close(); err != nil {
+			logf.FromContext(ctx).Error(err, "closing MCP client")
+		}
+	}()
 
 	mcpTools, err := mcpClient.ListTools(ctx)
 	if err != nil {
@@ -191,7 +197,7 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 
 	secret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: ref.Name, Namespace: mcpServer.Namespace}
-	if err := r.Get(ctx, nn, secret); err != nil {
+	if err := r.APIReader.Get(ctx, nn, secret); err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Secret %q not found in namespace %q — referenced by spec.authorization.tokenSecretRef.name", ref.Name, mcpServer.Namespace)
 			log.Info(msg)

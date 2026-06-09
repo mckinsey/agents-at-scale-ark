@@ -85,3 +85,9 @@ true
 false
 {{- end -}}
 {{- end -}}
+
+{{- define "ark.originAnnotations" -}}
+{{- if .Values.origin }}
+ark.mckinsey.com/origin: {{ dict "type" (.Values.origin.type | default "marketplace") "uri" .Values.origin.uri "version" .Chart.Version | toJson | quote }}
+{{- end }}
+{{- end -}}

@@ -5,6 +5,7 @@ export default {
   'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
   monitoring: 'Monitoring',
+  'disaster-recovery': 'Disaster Recovery',
 
   '---integrations': { type: 'separator', title: 'Integrations' },
   'mcp-oauth-callback': 'MCP OAuth Callback',
@@ -13,6 +14,7 @@ export default {
   'build-pipelines': 'Build Pipelines',
 
   '---security': { type: 'separator', title: 'Security and assurance' },
+  'data-flow-and-encryption': 'Data Flow and Encryption',
   'model-url-security': 'Model URL Security',
   'penetration-testing-reports': 'Penetration Testing Reports',
   'code-analysis-reports': 'Code Analysis Reports',
