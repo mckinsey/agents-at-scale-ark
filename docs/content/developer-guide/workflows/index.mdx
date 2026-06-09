@@ -17,6 +17,8 @@ Argo is a battle-tested workflow engine for running complex, distributed workflo
 - **Battle-tested** — many years of production use.
 - **Isolation** — containerised step execution is ideal for low-trust or isolated agentic operations.
 
+> **Argo is a recommendation, not a requirement.** Ark agents and teams are API-callable (via the `Query` resource or the `ark` CLI), so any workflow engine that can run a container or make an HTTP/Kubernetes call can orchestrate them — for example [Temporal](https://temporal.io/). Argo is the engine Ark ships ready-made charts and the `ark-tools` image for; the patterns on this page apply to any engine.
+
 ## What the dashboard does (and doesn't) do
 
 The Ark dashboard's **Workflow Templates** page is **read-only** — it lists the Argo `WorkflowTemplate`s in your namespace and renders their DAGs so you can see the shape of a pipeline. It is a *viewer*, not an editor:
@@ -28,7 +30,7 @@ The Ark dashboard's **Workflow Templates** page is **read-only** — it lists th
 
 ## Installing
 
-This installs Argo in single-namespace mode within the Ark tenant namespace (typically `default` in development). Production installations typically use a cross-tenant Argo operator with execution distributed across Ark tenant namespaces.
+This installs Argo in single-namespace mode within the Ark tenant namespace (typically `default` in development).
 
 ```bash
 helm upgrade --install argo-workflows \
