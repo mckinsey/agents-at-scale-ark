@@ -16,11 +16,7 @@
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "(cd ../../.. && husky services/ark-broker/ark-broker/.husky) || true",
-    "db:migrate:up": "migrate -path src/db/migrations -database \"$DATABASE_URL\" up",
-    "db:migrate:down": "migrate -path src/db/migrations -database \"$DATABASE_URL\" down 1",
-    "db:migrate:version": "migrate -path src/db/migrations -database \"$DATABASE_URL\" version",
-    "db:migrate:create": "migrate create -ext sql -dir src/db/migrations -seq"
+    "prepare": "(cd ../../.. && husky services/ark-broker/ark-broker/.husky) || true"
   },
   "lint-staged": {
     "*.{ts,js}": [
