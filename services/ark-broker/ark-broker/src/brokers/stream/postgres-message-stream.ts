@@ -39,14 +39,18 @@ export class PostgresMessageStream implements Stream<MessageData> {
     private readonly ttlSeconds: number
   ) {}
 
-  async append(data: MessageData): Promise<BrokerItem<MessageData>> {
+  async append(
+    data: MessageData,
+    ttlSeconds?: number
+  ): Promise<BrokerItem<MessageData>> {
+    const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
     const rows = await this.db<MessageRow[]>`
       INSERT INTO messages (conversation_id, query_id, message, expires_at)
       VALUES (
         ${data.conversationId},
         ${data.queryId},
         ${JSON.stringify(data.message)}::jsonb,
-        now() + make_interval(secs => ${this.ttlSeconds})
+        now() + make_interval(secs => ${effectiveTtl})
       )
       RETURNING sequence_number, conversation_id, query_id, message, created_at
     `;

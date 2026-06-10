@@ -20,19 +20,23 @@ export class MemoryBroker {
   async addMessage(
     conversationId: string,
     queryId: string,
-    message: Message
+    message: Message,
+    ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>> {
-    return this.stream.append({conversationId, queryId, message});
+    return this.stream.append({conversationId, queryId, message}, ttlSeconds);
   }
 
   async addMessages(
     conversationId: string,
     queryId: string,
-    messages: Message[]
+    messages: Message[],
+    ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>[]> {
     const items: BrokerItem<MessageData>[] = [];
     for (const message of messages) {
-      items.push(await this.addMessage(conversationId, queryId, message));
+      items.push(
+        await this.addMessage(conversationId, queryId, message, ttlSeconds)
+      );
     }
     return items;
   }

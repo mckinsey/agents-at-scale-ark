@@ -181,4 +181,45 @@ describe('PostgresMessageStream', () => {
       expect(b).toEqual([1]);
     });
   });
+
+  describe('TTL', () => {
+    it('uses constructor ttlSeconds as default expires_at', async () => {
+      const before = Date.now();
+      const item = await stream.append(makeMessageData());
+      const after = Date.now();
+
+      const pgDb = db();
+      const rows = await pgDb<{expires_at: Date}[]>`
+        SELECT expires_at FROM messages WHERE sequence_number = ${item.sequenceNumber}
+      `;
+      const expiresAt = rows[0]!.expires_at.getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(before + 3600 * 1000);
+      expect(expiresAt).toBeLessThanOrEqual(after + 3600 * 1000 + 2000);
+    });
+
+    it('uses per-call ttlSeconds when provided', async () => {
+      const customTtl = 60;
+      const before = Date.now();
+      const item = await stream.append(makeMessageData(), customTtl);
+      const after = Date.now();
+
+      const pgDb = db();
+      const rows = await pgDb<{expires_at: Date}[]>`
+        SELECT expires_at FROM messages WHERE sequence_number = ${item.sequenceNumber}
+      `;
+      const expiresAt = rows[0]!.expires_at.getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(before + customTtl * 1000);
+      expect(expiresAt).toBeLessThanOrEqual(after + customTtl * 1000 + 2000);
+    });
+
+    it('expired items are invisible to all and getCurrentSequence', async () => {
+      await stream.append(makeMessageData(), 1);
+      expect(await stream.all()).toHaveLength(1);
+
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      expect(await stream.all()).toHaveLength(0);
+      expect(await stream.getCurrentSequence()).toBe(0);
+    });
+  });
 });
