@@ -4,6 +4,20 @@ export interface StreamEntry {
   data: unknown;
 }
 
+export function getAttributeStringValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    if (typeof v.stringValue === 'string') return v.stringValue;
+    if (typeof v.intValue === 'string' || typeof v.intValue === 'number') {
+      return String(v.intValue);
+    }
+    if (typeof v.boolValue === 'boolean') return String(v.boolValue);
+    if (typeof v.doubleValue === 'number') return String(v.doubleValue);
+  }
+  return undefined;
+}
+
 export function extractQueryIdAndSessionId(entry: StreamEntry): {
   queryId: string | undefined;
   sessionId: string | undefined;
@@ -28,12 +42,14 @@ export function extractQueryIdAndSessionId(entry: StreamEntry): {
       const attributes = span?.attributes as Array<Record<string, unknown>>;
       if (attributes) {
         const queryAttr = attributes.find(attr => attr?.key === 'query.name');
-        if (queryAttr?.value) {
-          queryId = queryAttr.value as string;
+        const queryValue = getAttributeStringValue(queryAttr?.value);
+        if (queryValue) {
+          queryId = queryValue;
         }
         const sessionAttr = attributes.find(attr => attr?.key === 'ark.session.id');
-        if (sessionAttr?.value) {
-          sessionId = sessionAttr.value as string;
+        const sessionValue = getAttributeStringValue(sessionAttr?.value);
+        if (sessionValue) {
+          sessionId = sessionValue;
           break;
         }
       }
