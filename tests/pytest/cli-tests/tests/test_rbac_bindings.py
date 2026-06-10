@@ -16,6 +16,11 @@ from helpers.rbac_helper import (
     RBACHelper,
 )
 
+ADMIN_VERBS = ["list", "get", "create", "update", "delete"]
+VIEWER_VERBS_ALLOWED = ["list", "get"]
+VIEWER_VERBS_DENIED = ["create", "update", "delete"]
+NO_ACCESS_VERBS = ["list", "create", "delete"]
+
 
 @pytest.fixture(scope="module")
 def rbac():
@@ -29,117 +34,51 @@ def rbac():
 @pytest.mark.cli
 @pytest.mark.rbac
 class TestAdminRole:
-    """ark-admin group is bound to the editor ClusterRole for every resource type,
-    granting list + create + delete. Verified via SubjectAccessReview, so no OIDC
-    provider is required."""
+    """ark-admin group has full editor access (list/get/create/update/delete)
+    on every resource type, verified via SubjectAccessReview."""
 
     @pytest.mark.parametrize("resource", RESOURCES)
-    def test_admin_can_list(self, rbac, resource):
-        assert rbac.can_i("list", resource, ADMIN_USER, ADMIN_GROUP), (
-            f"admin should be able to list {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_admin_can_create(self, rbac, resource):
-        assert rbac.can_i("create", resource, ADMIN_USER, ADMIN_GROUP), (
-            f"admin should be able to create {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_admin_can_delete(self, rbac, resource):
-        assert rbac.can_i("delete", resource, ADMIN_USER, ADMIN_GROUP), (
-            f"admin should be able to delete {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_admin_can_get(self, rbac, resource):
-        assert rbac.can_i("get", resource, ADMIN_USER, ADMIN_GROUP), (
-            f"admin should be able to get {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_admin_can_update(self, rbac, resource):
-        assert rbac.can_i("update", resource, ADMIN_USER, ADMIN_GROUP), (
-            f"admin should be able to update {resource}"
-        )
+    def test_admin_full_access(self, rbac, resource):
+        denied = [v for v in ADMIN_VERBS if not rbac.can_i(v, resource, ADMIN_USER, ADMIN_GROUP)]
+        assert not denied, f"admin denied {denied} on {resource}"
 
 
 @pytest.mark.cli
 @pytest.mark.rbac
 class TestViewerRole:
-    """ark-viewers group is bound to the viewer ClusterRole: read-only. It can list
-    every resource but must not create or delete any."""
+    """ark-viewers group is read-only: list/get allowed, write verbs denied."""
 
     @pytest.mark.parametrize("resource", RESOURCES)
-    def test_viewer_can_list(self, rbac, resource):
-        assert rbac.can_i("list", resource, VIEWER_USER, VIEWER_GROUP), (
-            f"viewer should be able to list {resource}"
-        )
+    def test_viewer_read_allowed(self, rbac, resource):
+        denied = [v for v in VIEWER_VERBS_ALLOWED if not rbac.can_i(v, resource, VIEWER_USER, VIEWER_GROUP)]
+        assert not denied, f"viewer denied read verb {denied} on {resource}"
 
     @pytest.mark.parametrize("resource", RESOURCES)
-    def test_viewer_can_get(self, rbac, resource):
-        assert rbac.can_i("get", resource, VIEWER_USER, VIEWER_GROUP), (
-            f"viewer should be able to get {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_viewer_cannot_create(self, rbac, resource):
-        assert not rbac.can_i("create", resource, VIEWER_USER, VIEWER_GROUP), (
-            f"viewer must not be able to create {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_viewer_cannot_update(self, rbac, resource):
-        assert not rbac.can_i("update", resource, VIEWER_USER, VIEWER_GROUP), (
-            f"viewer must not be able to update {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_viewer_cannot_delete(self, rbac, resource):
-        assert not rbac.can_i("delete", resource, VIEWER_USER, VIEWER_GROUP), (
-            f"viewer must not be able to delete {resource}"
-        )
+    def test_viewer_write_denied(self, rbac, resource):
+        allowed = [v for v in VIEWER_VERBS_DENIED if rbac.can_i(v, resource, VIEWER_USER, VIEWER_GROUP)]
+        assert not allowed, f"viewer must not have write verb {allowed} on {resource}"
 
 
 @pytest.mark.cli
 @pytest.mark.rbac
 class TestNoAccessUser:
-    """A user with no group binding is denied on every resource and verb."""
+    """A user with no group binding is denied on all verbs for every resource."""
 
     @pytest.mark.parametrize("resource", RESOURCES)
-    def test_no_access_cannot_list(self, rbac, resource):
-        assert not rbac.can_i("list", resource, NO_ACCESS_USER), (
-            f"unbound user must not be able to list {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_no_access_cannot_create(self, rbac, resource):
-        assert not rbac.can_i("create", resource, NO_ACCESS_USER), (
-            f"unbound user must not be able to create {resource}"
-        )
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_no_access_cannot_delete(self, rbac, resource):
-        assert not rbac.can_i("delete", resource, NO_ACCESS_USER), (
-            f"unbound user must not be able to delete {resource}"
-        )
+    def test_no_access_all_denied(self, rbac, resource):
+        allowed = [v for v in NO_ACCESS_VERBS if rbac.can_i(v, resource, NO_ACCESS_USER)]
+        assert not allowed, f"unbound user must not have {allowed} on {resource}"
 
 
 @pytest.mark.cli
 @pytest.mark.rbac
 class TestNamespaceScoping:
-    """The bindings are namespace-scoped RoleBindings in 'default'. The same
-    groups must have no access in another namespace, confirming multi-tenant
-    isolation rather than cluster-wide grants."""
+    """RoleBindings are namespace-scoped to 'default'. Both groups must be
+    denied in any other namespace, confirming multi-tenant isolation."""
 
     @pytest.mark.parametrize("resource", RESOURCES)
-    def test_admin_denied_in_other_namespace(self, rbac, resource):
-        assert not rbac.can_i(
-            "list", resource, ADMIN_USER, ADMIN_GROUP, namespace=OTHER_NAMESPACE
-        ), f"admin must not have access to {resource} outside the bound namespace"
-
-    @pytest.mark.parametrize("resource", RESOURCES)
-    def test_viewer_denied_in_other_namespace(self, rbac, resource):
-        assert not rbac.can_i(
-            "list", resource, VIEWER_USER, VIEWER_GROUP, namespace=OTHER_NAMESPACE
-        ), f"viewer must not have access to {resource} outside the bound namespace"
+    def test_bindings_scoped_to_default(self, rbac, resource):
+        admin_leak = rbac.can_i("list", resource, ADMIN_USER, ADMIN_GROUP, namespace=OTHER_NAMESPACE)
+        viewer_leak = rbac.can_i("list", resource, VIEWER_USER, VIEWER_GROUP, namespace=OTHER_NAMESPACE)
+        assert not admin_leak, f"admin must not access {resource} in {OTHER_NAMESPACE}"
+        assert not viewer_leak, f"viewer must not access {resource} in {OTHER_NAMESPACE}"
