@@ -477,7 +477,7 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	if displayName == "" {
 		displayName = authStatus.Resource
 	}
-	message := fmt.Sprintf("OAuth authorization required for %s. Authorize via dashboard or CLI.", displayName)
+	message := fmt.Sprintf("OAuth authorization required for %s. Run `ark mcp auth login %s` to authorize.", displayName, mcpServer.Name)
 
 	r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, message)
 	r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, "Cannot attempt tool discovery until authorization is complete")

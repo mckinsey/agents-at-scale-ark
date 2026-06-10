@@ -92,7 +92,7 @@ shell    True        1
 | _(empty)_     | Server does not require OAuth. |
 | `Required`    | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. |
 | `Authorized`  | A token was successfully written to the referenced Secret by ark-api. |
-| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. Dashboard/CLI cannot drive an OAuth flow against this server. |
+| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. The CLI cannot drive an OAuth flow against this server. |
 
 ### Prerequisites
 
@@ -107,18 +107,18 @@ spec:
 
 ### Token writes go through ark-api
 
-The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The dashboard "Authorize" button and the [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI are thin clients that POST to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and poll `auth/status` — neither touches the Kubernetes Secret directly. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
+The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI is a thin client that POSTs to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and polls `auth/status` — it never touches the Kubernetes Secret directly. The CLI is the only client today; a dashboard authorize flow is not yet available. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
 
 A successful flow leaves two annotations on the MCPServer:
 
 ```yaml
 metadata:
   annotations:
-    ark.mckinsey.com/mcp-auth-authorized-by: cli       # cli | dashboard
+    ark.mckinsey.com/mcp-auth-authorized-by: cli       # cli (dashboard not yet supported)
     ark.mckinsey.com/mcp-auth-authorized-at: 2026-05-19T14:32:11Z
 ```
 
-`authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated dashboard user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
+`authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
 
 ## Key Features
 
