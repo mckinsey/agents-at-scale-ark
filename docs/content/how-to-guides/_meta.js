@@ -32,7 +32,7 @@ export default {
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-strategies'
+    href: '/user-guide/samples/teams/team-selector-strategy'
   },
   
   '---extend': { type: 'separator', title: 'Advanced use' },

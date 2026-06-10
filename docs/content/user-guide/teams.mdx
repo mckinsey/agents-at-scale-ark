@@ -1,111 +1,406 @@
 ---
 title: Teams
-description: Coordinate multiple agents working together
+description: Coordinate multiple agents working together with execution strategies
 ---
 
 # Teams
 
-Teams are collections of agents that work together to accomplish complex tasks. They coordinate multiple agents using different strategies to process inputs and generate comprehensive outputs.
+A `Team` is a set of agents (or other teams) plus a **strategy** that decides who runs next. The strategy is what turns a list of agents into a coordinated workflow — sequential pipeline, AI-chosen speaker, or a graph of allowed transitions.
 
-Teams enable multi-agent collaboration by defining how agents should work together. Different execution strategies allow teams to handle various workflow patterns like sequential processing, parallel execution, or specialized coordination.
-## Creating Your First Team
+The full schema reference (every field, every option) lives at [Reference → Team](/reference/resources/team). This page walks you through creating teams, the strategies you can pick, querying them, and what's only configurable via YAML.
 
-Let's use the Sequential Team defined in `samples/teams/sequential.yaml`. This team contains multiple instances of the same agent working in sequence.
+## Minimum viable team
 
-First, we need to apply the team configuration which includes both the agent and team definitions:
-
-```bash
-kubectl apply -f samples/teams/sequential.yaml
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: sequential-team
+spec:
+  strategy: sequential
+  members:
+    - name: researcher
+      type: agent
+    - name: writer
+      type: agent
 ```
 
-Now, let's query the team using the sample query:
+That's enough to apply, given two existing agents named `researcher` and `writer`. The team runs `researcher` first, hands its output to `writer`, and returns the final response.
+
+## Strategies at a glance
+
+| Strategy | What it does | When you'd pick it |
+| --- | --- | --- |
+| **`sequential`** | Members run in array order, one pass. | Fixed pipeline (researcher → analyst → writer). |
+| **`sequential` + `loops: true`** | Members cycle through `members` repeatedly until `maxTurns` or a member calls the `terminate` tool. | Back-and-forth between a small set of agents (e.g. critic + writer iterating). |
+| **`selector`** | An LLM-powered **selector agent** picks the next member each turn. Required `maxTurns`. | Free-form coordination where the next speaker depends on context. |
+| **`selector` + `graph`** | Selector still chooses, but only from members the graph says are reachable. | Workflows that need structure (researcher must come before writer) but allow AI flexibility within those rails. |
+
+`round-robin` and standalone `graph` are deprecated and **migrated automatically by the mutating webhook** when you apply them — `round-robin` becomes `sequential + loops: true`; `graph` becomes `sequential` (the graph edges are discarded). Both stamp a `ark.mckinsey.com/migration-warning-<key>` annotation on the Team (e.g. `migration-warning-round-robin`, `migration-warning-graph`). New configs should use the strategies in the table.
+
+## Create a team
+
+### Via Dashboard
+
+1. Launch the dashboard: `ark dashboard`.
+2. Go to **Agent Builder → Teams** in the left nav and click **Create Team**.
+3. Fill the form:
+
+| Section | Field | Notes |
+| --- | --- | --- |
+| **Basic Information** | **Name** | Required. Lowercase, k8s name rules. |
+| | **Description** | Optional. Shown in team lists and surfaced in selector prompts as part of `{{.Roles}}`. |
+| **Strategy Configuration** | **Strategy** | `Sequential` or `Selector`. (Deprecated strategies aren't offered.) |
+| | **Enable loops** | Only shown for `Sequential`. Toggles cycling through members. |
+| | **Max Turns** | Required when strategy is `Selector`, or when `Sequential` + `Enable loops` is on. Caps the number of turns. |
+| **Members** | Agent checklist | Pick agents to include. Order in the list is execution order for `Sequential`. |
+| **Selector Configuration** (only for `Selector`) | **Selector Agent** | Required. The LLM-powered agent that decides who speaks next via the `select-next-speaker` tool. |
+| | **Selector Prompt** | Optional override of the default prompt. Has `{{.Roles}}`, `{{.Participants}}`, and `{{.History}}` template variables. The form has a **Reset to Default Prompt** button. |
+| | **Enable Terminate Tool** | When on, the selector agent can call `terminate` to end the conversation early. |
+| | **Terminate Prompt** | Optional override of the prompt that explains *when* to terminate. |
+| **Graph** (only for `Selector`) | Add edges | Optional. Constrains the selector to picking from members reachable by `from → to` edges. |
+
+4. Hit **Create Team**.
+
+### Via kubectl
 
 ```bash
-fark query query-seq
+cat <<'EOF' | kubectl apply -f -
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: sequential-team
+spec:
+  strategy: sequential
+  members:
+    - name: researcher
+      type: agent
+    - name: writer
+      type: agent
+EOF
 ```
 
-After all the above steps, we can also query the team directly using fark:
+Wait for the team to reach `Available`:
 
 ```bash
-fark team team-seq "Hello from the team!"
+kubectl wait --for=condition=Available team/sequential-team --timeout=60s
+kubectl get team sequential-team
 ```
 
-## Modifying Teams
+The controller validates that every member resolves, that the strategy's cross-field rules hold (more on those below), and that the team isn't "mixed" — i.e. you can't combine agents whose execution engines are external (Claude Agent SDK, LangChain, …) with built-in completion agents in one team.
 
-You can modify existing teams in several ways:
+## Strategy walkthroughs
 
-### Update Team Configuration
+### Sequential — one pass
 
-```bash
-# Change the team strategy
-kubectl patch team team-seq --type='merge' -p='{
-  "spec": {
-    "strategy": "round-robin"
-  }
-}'
+The simplest workflow. Apply once, each member runs once.
 
-# Add more members to the team
-kubectl patch team team-seq --type='json' -p='[{
-  "op": "add",
-  "path": "/spec/members/-",
-  "value": {
-    "name": "agent-seq",
-    "type": "agent"
-  }
-}]'
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: pipeline-team
+spec:
+  strategy: sequential
+  members:
+    - name: researcher
+      type: agent
+    - name: analyst
+      type: agent
+    - name: writer
+      type: agent
 ```
 
-### Edit Team Files Directly
+Rules enforced by the admission webhook:
 
-```bash
-# Edit team configuration interactively
-kubectl edit team team-seq
+- `loops` defaults to `false`.
+- `maxTurns` **must not** be set when `loops` is `false`. (A single pass is bounded by the member list.)
 
-# Or update from a modified file
-kubectl apply -f samples/teams/sequential.yaml
+### Sequential with loops — cycling until done
+
+The `loops: true` flag turns the same pipeline into a loop that cycles through members until `maxTurns` is reached or a member calls the built-in `terminate` tool.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: critic-writer-loop
+spec:
+  strategy: sequential
+  loops: true
+  maxTurns: 10
+  members:
+    - name: writer
+      type: agent
+    - name: critic
+      type: agent
 ```
 
-## Managing Team Resources
+Rules:
 
-### List and Inspect Teams
+- `maxTurns` is **required** when `loops: true`. The admission webhook rejects the team otherwise.
+- Give at least one member the `terminate` built-in tool so the loop can exit early when the conversation is done.
 
-```bash
-# List all teams
-kubectl get teams
+This is the migration target for the old `round-robin` strategy.
 
-# Get detailed information about a team
-kubectl describe team team-seq
+### Selector — LLM picks the next speaker
 
-# View the full team configuration
-kubectl get team team-seq -o yaml
+The team includes a separate **selector agent**. Each turn the selector is given the conversation, the list of participants, and a `select-next-speaker` tool. Whatever name it returns becomes the next speaker.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: consulting-team
+spec:
+  strategy: selector
+  description: Consulting team with AI-driven turn-taking
+  maxTurns: 10
+  members:
+    - name: research-analyst
+      type: agent
+    - name: strategy-consultant
+      type: agent
+    - name: technical-expert
+      type: agent
+  selector:
+    agent: project-manager
+    enableTerminateTool: true
 ```
 
-### Verify Team Functionality
+Rules:
 
-```bash
-# Test the team after creation or modification
-fark team team-seq "Process this request through the team"
+- `selector.agent` is **required** and must reference an existing agent.
+- `maxTurns` is **required** (selector strategies have no built-in stop condition).
+- `loops` cannot be set on a selector team. The "loop" comes from the selector picking again each turn.
+- The selector agent calls a generated tool named `select-next-speaker` whose `name` parameter is an enum of valid candidates. If the agent picks something not in the enum, or doesn't call the tool at all, the conversation ends with a warning event.
+- When `selector.enableTerminateTool: true` (the default in the dashboard form), the selector agent also gets a `terminate` tool it can call to end the conversation early.
 
-# Check recent queries
-kubectl get queries
+#### Customising the selector prompt
 
-# View query details
-kubectl describe query query-seq
+The selector's prompt has three template variables. The default looks like this:
+
+```text
+You are in a role play game. The following roles are available:
+{{.Roles}}.
+Read the following conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
+
+{{.History}}
+
+Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
 ```
 
-## Deleting Teams
+If you override `selector.selectorPrompt`, **include an instruction to use the `select-next-speaker` tool**. The mutating webhook will stamp a migration warning on the team if your custom prompt doesn't mention it, because without that instruction the model will return free-form text and the selector will time out.
 
-Remove teams when they're no longer needed:
+```yaml
+selector:
+  agent: project-manager
+  selectorPrompt: |
+    You are coordinating a consulting team. Pick the next speaker.
+
+    Roles available: {{.Roles}}
+    Conversation so far: {{.History}}
+    Choose from: {{.Participants}}
+
+    Use the select-next-speaker tool to make your selection.
+```
+
+### Selector with graph — structure + flexibility
+
+Adding `graph.edges` to a selector team turns it into a constrained selector. The selector still chooses each turn, but only from the members reachable by the graph from the current member. If only one outgoing edge exists, the runtime takes it without calling the selector (a cheap optimisation).
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: constrained-research-team
+spec:
+  strategy: selector
+  maxTurns: 10
+  selector:
+    agent: coordinator
+  members:
+    - name: researcher
+      type: agent
+    - name: analyzer
+      type: agent
+    - name: writer
+      type: agent
+  graph:
+    edges:
+      - from: researcher
+        to: analyzer
+      - from: analyzer
+        to: writer
+```
+
+Rules:
+
+- Every `from` and `to` in `graph.edges` **must** be a team member name. The admission webhook rejects edges that reference unknown members.
+- `graph` requires at least one edge.
+- The standalone `strategy: graph` is deprecated. If you apply it, the mutating webhook rewrites the team to `strategy: sequential` and **discards your edges**, so re-author as `strategy: selector` + `graph.edges` instead.
+
+## Member types
+
+```yaml
+members:
+  - name: researcher
+    type: agent
+  - name: review-subteam
+    type: team
+```
+
+- **`agent`** — references an Agent in the same namespace. Standard case.
+- **`team`** — references another Team. The nested team runs as a single "member"; its own strategy and members are isolated. Useful for composing larger workflows. *(Nested teams are YAML-only — the dashboard's Create Team form does not surface team members.)*
+
+A team cannot reference itself, and you can't mix internal (default completions executor) and external (e.g. Claude Agent SDK, LangChain) agents in the same team — the webhook will reject the apply with `mixed teams are not allowed`.
+
+## Query a team
+
+Send a one-off query without creating a `Query` resource:
 
 ```bash
-# Delete a specific team
-kubectl delete team team-seq
+ark query team/sequential-team "Summarise the latest on EV battery chemistries."
 
-# Delete multiple teams
-kubectl delete team team-seq research-team analysis-team
+# Or via the teams subcommand
+ark teams query sequential-team "Summarise the latest on EV battery chemistries."
+```
 
-# Delete all teams (use with caution!)
+Or apply a `Query` resource if you want it persisted, want streaming, or want to pass parameters:
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: team-q1
+spec:
+  input: "Summarise the latest on EV battery chemistries."
+  target:
+    type: team
+    name: sequential-team
+EOF
+
+kubectl get query team-q1 -w
+kubectl get query team-q1 -o jsonpath='{.status.response.content}'   # final assistant message
+kubectl get query team-q1 -o jsonpath='{.status.response.raw}'       # full conversation (JSON array)
+```
+
+In the dashboard, opening a team also opens an embedded chat panel on the right — type into it to query the team interactively. While a turn is in flight the **Send** button becomes a **Stop** button that cancels the conversation. The panel also surfaces selector decisions inline (`<selector-agent> chose <speaker>`) and a `Maximum turns reached (N)` badge when `maxTurns` is hit.
+
+The team form's Strategy section also shows live warnings about configuration choices that may cause runtime issues — for example, "Neither the agents nor the selector have access to the terminate tool, which may prevent the conversation from terminating gracefully" when nothing on the team can call `terminate`.
+
+## Modify a team
+
+### Edit interactively
+
+```bash
+kubectl edit team sequential-team
+```
+
+### Patch a single field
+
+```bash
+# Switch strategy
+kubectl patch team sequential-team --type='merge' \
+  -p='{"spec":{"strategy":"sequential","loops":true,"maxTurns":10}}'
+
+# Replace members (merge patches REPLACE the whole array)
+kubectl patch team sequential-team --type='merge' \
+  -p='{"spec":{"members":[{"name":"researcher","type":"agent"},{"name":"writer","type":"agent"}]}}'
+
+# Append one member with a JSON patch
+kubectl patch team sequential-team --type='json' \
+  -p='[{"op":"add","path":"/spec/members/-","value":{"name":"reviewer","type":"agent"}}]'
+```
+
+### Re-apply the YAML
+
+If the team lives in a file, `kubectl apply -f` again — the controller reconciles the diff.
+
+## List, inspect, delete
+
+```bash
+ark teams list                  # quick list
+kubectl get teams               # full kubectl view (shows strategy + Available)
+kubectl describe team consulting-team
+kubectl get team consulting-team -o yaml
+
+# Delete
+kubectl delete team consulting-team
+kubectl delete teams team-a team-b
 kubectl delete teams --all
 ```
 
-**Next**: Learn about the [Concepts and Building Blocks](/user-guide/queries) that power ARK.
+The `Available` condition flips to `False` when the team is misconfigured — `kubectl describe` shows the underlying admission error (missing member, missing selector agent, missing `maxTurns`, mixed engines, etc.).
+
+## Team as a tool
+
+A Team can be wired into an agent via the `Tool` CRD — create a Tool of `type: team` pointing at the team, then reference that Tool from the agent's `spec.tools`:
+
+```yaml
+# 1. The bridge: a Tool of type team that references the team.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: consulting-team           # the Tool's name — this is what the agent references
+spec:
+  type: team
+  description: AI consulting team — research, strategy, and technical review
+  team:
+    name: consulting-team         # the Team to delegate to (same namespace)
+---
+# 2. The agent references the Tool by name (not the Team directly).
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: orchestrator
+spec:
+  prompt: |
+    You are an orchestrator. Delegate research tasks to the consulting-team tool.
+  tools:
+    - type: team
+      name: consulting-team       # resolves to the Tool above, which routes to the Team
+```
+
+When the agent calls the tool, the team executes a normal run and returns its final message back to the agent. The Tool's `description` is what the LLM sees when deciding whether to call the team — keep it task-oriented.
+
+## Features only available in YAML
+
+The dashboard's Create Team form covers name, description, strategy (sequential or selector), loops, max-turns, member-as-agent selection, and the selector configuration. These features are only configurable via the `Team` YAML for now:
+
+- **Nested teams (`members[].type: team`)** — the form's member picker only lists agents. To compose teams, write the YAML.
+- **`spec.selector.enableTerminateTool` / `terminatePrompt`** — actually surfaced in the form's Advanced Settings, but the same Selector section is the only place to customise these; if you create the team without opening the Advanced section the defaults stick.
+- **Graph edges on selector teams** — the dashboard form does have a Graph section, but it's only visible when `strategy: selector`, and many teams using graph constraints today were authored in YAML. If you want a `Selector + Graph` workflow with many edges, YAML is far easier.
+
+For any of these, write the `Team` YAML directly. You can still inspect, edit, and delete it from the dashboard afterwards.
+
+## Troubleshooting
+
+**`kubectl apply` rejected by the admission webhook.** Failures from the validation webhook happen *before* the team exists, so the error comes back in the `apply` output rather than the `Available` condition. The exact messages and how to fix them:
+
+- **`selector strategy requires maxTurns to prevent infinite execution`** — add `spec.maxTurns: <n>` (e.g. 10).
+- **`selector strategy requires selector.agent to be specified`** — every selector team needs a `selector.agent` pointing at an existing Agent in the same namespace.
+- **`selector agent 'X' not found in namespace Y`** — the agent name in `selector.agent` doesn't exist; apply it first.
+- **`maxTurns is required when loops is enabled`** — sequential + loops needs an upper bound.
+- **`maxTurns can only be set when loops is enabled`** — drop `maxTurns` if you don't want a loop, or set `loops: true`.
+- **`loops can only be used with the 'sequential' strategy`** — selector teams loop via the selector's choices, not via `loops`.
+- **`graph constraint requires at least one edge`** — drop the `graph:` block entirely or add edges.
+- **`graph edge N: 'from'/'to' member 'X' not found in team members`** — every endpoint in `graph.edges` must reference a member of the team.
+- **`mixed teams are not allowed`** — one or more members use an external execution engine while others use the built-in completions engine; split into two teams.
+- **`team member N references agent: agent 'X' does not exist in namespace 'Y'`** — apply the referenced Agent first.
+- **`team 'X' cannot reference itself`** — `members[].name` cannot equal `metadata.name` when `type: team`.
+
+**`AVAILABLE: False` after the team was accepted.** The webhook passed but a runtime dependency is unavailable. Read the condition:
+
+```bash
+kubectl get team my-team -o jsonpath='{.status.conditions[?(@.type=="Available")].message}'
+```
+
+Most common cause is `Agent member 'X' is not available` — the team's Available rolls up the Available status of its members, so fix the member first (often a model that can't reach its provider).
+
+**Selector team terminates immediately with no response.** The selector agent returned text instead of calling the `select-next-speaker` tool. Either reset the prompt (the dashboard has a button) or make sure your custom prompt instructs the agent to use the tool. The mutating webhook also stamps an `ark.mckinsey.com/migration-warning-selector-prompt` annotation when your custom prompt doesn't reference the tool — check for that on the team.
+
+**Conversation hit `maxTurns` but the work isn't done.** The team appends a system message `Team conversation reached maximum turns limit (N)` to the conversation, the query still completes with `phase: done`, and the dashboard chat panel shows a `Maximum turns reached (N)` badge. To detect this case in YAML/kubectl flows, grep `.status.response.raw` for `maximum turns limit`. To fix: increase `maxTurns`, or give a member (or the selector) the `terminate` built-in tool so the team can exit cleanly earlier.
+
+**Ready for the next step?** Move on to [Queries](/user-guide/queries) for parameter passing, streaming, and session management.
