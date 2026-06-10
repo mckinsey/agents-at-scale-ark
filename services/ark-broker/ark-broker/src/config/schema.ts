@@ -41,7 +41,7 @@ export const envSchema = z
     DATABASE_DEBUG_QUERIES: z
       .string()
       .default('false')
-      .pipe(z.enum(['true', 'false']).transform((v) => v === 'true')),
+      .transform((v) => v === 'true'),
   })
   .superRefine((data, ctx) => {
     if (data.MESSAGE_BACKEND === 'postgres' && !data.DATABASE_URL) {

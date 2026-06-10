@@ -156,8 +156,10 @@ describe('loadConfig', () => {
       ).toBe(false);
     });
 
-    it('rejects invalid value', () => {
-      expect(() => loadConfig({DATABASE_DEBUG_QUERIES: '1'})).toThrow();
+    it('treats any non-"true" value as false', () => {
+      expect(
+        loadConfig({DATABASE_DEBUG_QUERIES: '1'}).database.debugQueries
+      ).toBe(false);
     });
   });
 });
