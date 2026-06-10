@@ -1,5 +1,6 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {BrokerItemStream} from './stream/broker-item-stream.js';
+import {InMemoryStream} from './stream/in-memory-stream.js';
+import type {Stream} from './stream/stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
 
@@ -21,7 +22,6 @@ export function spanMatchesSessionId(
   return false;
 }
 
-/** OTEL span data */
 export interface OTELSpan {
   traceId: string;
   spanId: string;
@@ -39,61 +39,58 @@ export interface OTELSpan {
   [key: string]: unknown;
 }
 
-/**
- * Broker for storing OTEL trace spans.
- * Spans are grouped by trace ID.
- */
 export class TraceBroker {
-  private stream: BrokerItemStream<OTELSpan>;
+  private readonly stream: Stream<OTELSpan>;
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<OTELSpan>(
-      logger,
-      'Trace',
-      path,
-      maxItems
-    );
+    this.stream = new InMemoryStream<OTELSpan>(logger, 'Trace', path, maxItems);
   }
 
-  addSpan(span: OTELSpan): BrokerItem<OTELSpan> {
+  async addSpan(span: OTELSpan): Promise<BrokerItem<OTELSpan>> {
     return this.stream.append(span);
   }
 
-  addSpans(spans: OTELSpan[]): BrokerItem<OTELSpan>[] {
-    const items = spans.map((span) => this.stream.append(span));
-    this.save();
+  async addSpans(spans: OTELSpan[]): Promise<BrokerItem<OTELSpan>[]> {
+    const items: BrokerItem<OTELSpan>[] = [];
+    for (const span of spans) {
+      items.push(await this.stream.append(span));
+    }
+    await this.save();
     return items;
   }
 
-  getByTraceId(traceId: string): BrokerItem<OTELSpan>[] {
+  async getByTraceId(traceId: string): Promise<BrokerItem<OTELSpan>[]> {
     return this.stream.filter((item) => item.data.traceId === traceId);
   }
 
-  getSpansByTraceId(traceId: string): OTELSpan[] {
-    return this.getByTraceId(traceId).map((item) => item.data);
+  async getSpansByTraceId(traceId: string): Promise<OTELSpan[]> {
+    return (await this.getByTraceId(traceId)).map((item) => item.data);
   }
 
-  getTraceIds(): string[] {
-    const ids = new Set(this.stream.all().map((item) => item.data.traceId));
+  async getTraceIds(): Promise<string[]> {
+    const ids = new Set(
+      (await this.stream.all()).map((item) => item.data.traceId)
+    );
     return Array.from(ids);
   }
 
-  hasTrace(traceId: string): boolean {
+  async hasTrace(traceId: string): Promise<boolean> {
     return (
-      this.stream.filter((item) => item.data.traceId === traceId).length > 0
+      (await this.stream.filter((item) => item.data.traceId === traceId))
+        .length > 0
     );
   }
 
-  all(): BrokerItem<OTELSpan>[] {
+  all(): Promise<BrokerItem<OTELSpan>[]> {
     return this.stream.all();
   }
 
-  save(): void {
-    this.stream.save();
+  save(): Promise<void> {
+    return this.stream.save();
   }
 
-  delete(): void {
-    this.stream.delete();
+  async delete(): Promise<void> {
+    return this.stream.delete();
   }
 
   subscribe(callback: (item: BrokerItem<OTELSpan>) => void): () => void {
@@ -111,17 +108,13 @@ export class TraceBroker {
     });
   }
 
-  /**
-   * Get paginated traces grouped by trace ID.
-   * Returns traces in reverse chronological order (newest first).
-   */
-  paginateTraces(
+  async paginateTraces(
     params: PaginationParams,
     sessionId?: string
-  ): PaginatedList<{traceId: string; spans: OTELSpan[]}> {
+  ): Promise<PaginatedList<{traceId: string; spans: OTELSpan[]}>> {
     const limit = params.limit ?? DEFAULT_LIMIT;
 
-    let allItems = this.stream.all();
+    let allItems = await this.stream.all();
 
     if (sessionId) {
       allItems = allItems.filter((item) =>
@@ -173,11 +166,13 @@ export class TraceBroker {
     };
   }
 
-  paginate(params: PaginationParams): PaginatedList<BrokerItem<OTELSpan>> {
+  async paginate(
+    params: PaginationParams
+  ): Promise<PaginatedList<BrokerItem<OTELSpan>>> {
     return this.stream.paginate(params);
   }
 
-  getCurrentSequence(): number {
+  async getCurrentSequence(): Promise<number> {
     return this.stream.getCurrentSequence();
   }
 }

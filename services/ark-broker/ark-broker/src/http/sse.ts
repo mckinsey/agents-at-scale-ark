@@ -39,7 +39,8 @@ interface SSEStreamOptions {
   tag: string;
   itemName: string;
   subscribe: (callback: (item: unknown) => void) => () => void;
-  replayItems?: unknown[];
+  getReplay?: () => Promise<unknown[]>;
+  getSequence?: (item: unknown) => number;
   filter?: (item: unknown) => boolean;
   identifier?: string;
 }
@@ -52,7 +53,8 @@ export const streamSSE = (options: SSEStreamOptions): void => {
     tag,
     itemName,
     subscribe,
-    replayItems,
+    getReplay,
+    getSequence,
     filter,
     identifier,
   } = options;
@@ -69,23 +71,16 @@ export const streamSSE = (options: SSEStreamOptions): void => {
   let itemCount = 0;
   let lastLogTime = Date.now();
 
-  if (replayItems && replayItems.length > 0) {
-    logger.info(
-      {tag, itemName, identifier, count: replayItems.length},
-      'sending existing items'
-    );
-    for (const item of replayItems) {
-      if (!writeSSEEvent(res, item, logger)) {
-        logger.warn({tag, itemName, identifier}, 'error writing existing item');
-        clearInterval(heartbeat);
-        return;
-      }
-      itemCount++;
-    }
-  }
+  let caughtUp = false;
+  const buffer: unknown[] = [];
 
   const unsubscribe = subscribe((item: unknown) => {
     if (filter && !filter(item)) {
+      return;
+    }
+
+    if (!caughtUp) {
+      buffer.push(item);
       return;
     }
 
@@ -109,6 +104,62 @@ export const streamSSE = (options: SSEStreamOptions): void => {
       lastLogTime = now;
     }
   });
+
+  void (getReplay ? getReplay() : Promise.resolve([]))
+    .then((replay) => {
+      if (replay.length > 0) {
+        logger.info(
+          {tag, itemName, identifier, count: replay.length},
+          'sending existing items'
+        );
+      }
+
+      let maxReplayedSeq = -1;
+
+      for (const item of replay) {
+        const seq = getSequence?.(item);
+        if (seq !== undefined && seq > maxReplayedSeq) {
+          maxReplayedSeq = seq;
+        }
+        if (!writeSSEEvent(res, item, logger)) {
+          logger.warn(
+            {tag, itemName, identifier},
+            'error writing existing item'
+          );
+          clearInterval(heartbeat);
+          unsubscribe();
+          return;
+        }
+        itemCount++;
+      }
+
+      for (const item of buffer) {
+        const seq = getSequence?.(item);
+        if (seq !== undefined && seq <= maxReplayedSeq) {
+          continue;
+        }
+        if (!writeSSEEvent(res, item, logger)) {
+          logger.info(
+            {tag, itemName, identifier},
+            'client disconnected (write failed)'
+          );
+          clearInterval(heartbeat);
+          unsubscribe();
+          return;
+        }
+        itemCount++;
+      }
+
+      caughtUp = true;
+    })
+    .catch((err: unknown) => {
+      logger.error(
+        {err, tag, itemName, identifier},
+        'error fetching replay items'
+      );
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
 
   req.on('close', () => {
     logger.info(
