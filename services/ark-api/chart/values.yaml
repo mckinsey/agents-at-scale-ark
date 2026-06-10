@@ -81,8 +81,12 @@ app:
     # loopback literal (127.0.0.1, [::1] bracketed per RFC 3986 §3.2.2, or
     # localhost). The path /v1/mcp/auth/callback is appended automatically
     # if the configured URL has no path.
+    # The default port matches the local port that `ark mcp auth login`
+    # forwards ark-api to (k8sPortForwardLocalPort in tools/ark-cli), so the
+    # IdP redirect lands on the CLI's live port-forward. Override with a public
+    # https ingress URL for real deployments.
     - name: ARK_API_PUBLIC_CALLBACK_URL
-      value: "http://localhost:8088/v1/mcp/auth/callback"
+      value: "http://localhost:34780/v1/mcp/auth/callback"
     # Base URL of the dashboard, used to build the post-callback redirect for
     # dashboard-initiated auth flows. The redirect target is <value>/mcp, so the
     # value MUST include any path prefix the dashboard is served under (e.g.
