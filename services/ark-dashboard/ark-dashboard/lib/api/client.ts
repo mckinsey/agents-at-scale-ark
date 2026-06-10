@@ -38,6 +38,15 @@ class APIClient {
     }
   }
 
+  getDefaultParams(): Record<string, string> {
+    return { ...this.defaultParams };
+  }
+
+  buildUrl(endpoint: string, params?: Record<string, string | number | boolean>): string {
+    const mergedParams = { ...this.defaultParams, ...params };
+    return this.buildRequestUrl(endpoint, mergedParams);
+  }
+
   private buildRequestUrl(
     endpoint: string,
     params?: Record<string, string | number | boolean>,
