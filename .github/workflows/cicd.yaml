@@ -254,7 +254,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - run: make -j24 services-build-all
 
@@ -898,7 +898,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build and install ark-cli
         run: |
@@ -1031,7 +1031,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build ARK CLI
         run: |
@@ -1406,7 +1406,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install published ark-cli from npm
         run: |

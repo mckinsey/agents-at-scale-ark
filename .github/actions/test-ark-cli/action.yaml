@@ -52,10 +52,10 @@ runs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '24.x'
+        node-version: "24"
 
     - name: Configure K3s registry authentication
-      if: ${{ inputs.is-fork-pr == 'false' }}
+      if: ${{ inputs.is-fork-pr == "false' }}
       shell: bash
       run: |
         sudo mkdir -p /etc/rancher/k3s
