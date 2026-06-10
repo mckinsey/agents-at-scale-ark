@@ -1,7 +1,5 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {InMemoryStream} from './stream/in-memory-stream.js';
 import type {Stream} from './stream/stream.js';
-import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 export type Message = unknown;
@@ -15,13 +13,8 @@ export interface MessageData {
 export class MemoryBroker {
   private readonly stream: Stream<MessageData>;
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new InMemoryStream<MessageData>(
-      logger,
-      'Memory',
-      path,
-      maxItems
-    );
+  constructor(stream: Stream<MessageData>) {
+    this.stream = stream;
   }
 
   async addMessage(

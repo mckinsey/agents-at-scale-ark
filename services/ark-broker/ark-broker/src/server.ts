@@ -8,7 +8,8 @@ import {
 } from './http/middleware/error-handler.js';
 import {createHttpLogger} from './http/middleware/http-logger.js';
 import {requestId} from './http/middleware/request-id.js';
-import {MemoryBroker} from './brokers/memory-broker.js';
+import {MemoryBroker, type MessageData} from './brokers/memory-broker.js';
+import type {Stream} from './brokers/stream/stream.js';
 import {CompletionChunkBroker} from './brokers/chunks-broker.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
@@ -38,15 +39,12 @@ export function buildApp(deps: {
   config: AppConfig;
   logger: Logger;
   version: string;
+  messageStream: Stream<MessageData>;
 }): AppBundle {
-  const {config, logger, version} = deps;
+  const {config, logger, version, messageStream} = deps;
   const app = express();
 
-  const memory = new MemoryBroker(
-    logger.child({broker: 'memory'}),
-    config.persistence.memoryFilePath,
-    config.limits.maxMessages
-  );
+  const memory = new MemoryBroker(messageStream);
   const chunks = new CompletionChunkBroker(
     logger.child({broker: 'chunks'}),
     config.persistence.streamFilePath,
