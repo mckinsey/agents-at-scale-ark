@@ -27,6 +27,13 @@ describe('ARK Broker API', () => {
       expect(response.status).toBe(200);
       expect(response.text).toBe('OK');
     });
+
+    test('GET /readyz should return OK when no db is configured', async () => {
+      const response = await request(app).get('/readyz');
+
+      expect(response.status).toBe(200);
+      expect(response.text).toBe('OK');
+    });
   });
 
   describe('Single Message Endpoints', () => {

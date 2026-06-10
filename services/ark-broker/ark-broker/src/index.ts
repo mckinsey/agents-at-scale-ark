@@ -3,6 +3,7 @@ import {loadConfig} from './config/index.js';
 import {createLogger} from './logging/logger.js';
 import {buildApp} from './server.js';
 import {createMessageStream} from './brokers/stream/message-stream-factory.js';
+import {createDb} from './db/db.js';
 
 const require = createRequire(import.meta.url);
 const {version} = require('../package.json');
@@ -23,8 +24,15 @@ const main = async (): Promise<void> => {
 
   logger.level = config.logLevel;
 
+  logger.info({backend: config.backends.message}, 'message backend');
+
+  const db =
+    config.backends.message === 'postgres'
+      ? createDb(config, logger)
+      : undefined;
+
   const messageStream = createMessageStream(config, logger);
-  const {app, brokers} = buildApp({config, logger, version, messageStream});
+  const {app, brokers} = buildApp({config, logger, version, messageStream, db});
   const {memory, chunks, traces, events, sessions} = brokers;
 
   const server = app.listen(config.server.port, config.server.host, () => {
@@ -54,6 +62,9 @@ const main = async (): Promise<void> => {
         );
       }
     });
+    if (db) {
+      await db.end({timeout: 5});
+    }
     server.close(() => {
       logger.info('process terminated');
       process.exit(0);
