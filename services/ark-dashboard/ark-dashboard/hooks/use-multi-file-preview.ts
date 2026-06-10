@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
-import { FILES_API_BASE_URL } from '@/lib/api/files-client';
+import { filesApiClient } from '@/lib/api/files-client';
 import {
   getLanguageFromExtension,
   isImageFile,
@@ -73,7 +73,7 @@ export function useMultiFilePreview() {
     setPreviewOpen(true);
 
     try {
-      const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
+      const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
       const response = await fetch(url);
 
       if (!response.ok) {
