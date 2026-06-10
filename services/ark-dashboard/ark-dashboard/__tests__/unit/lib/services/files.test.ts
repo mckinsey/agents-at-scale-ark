@@ -12,6 +12,7 @@ vi.mock('@/lib/api/files-client', () => ({
   filesApiClient: {
     get: vi.fn(),
     delete: vi.fn(),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}?namespace=test-namespace&_t=1234567890`),
   },
   FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api/',
 }));
@@ -166,15 +167,18 @@ describe('filesService', () => {
       }) as unknown as typeof XMLHttpRequest;
     });
 
-    it('should upload file with FormData', async () => {
+    it('should upload file with FormData using buildUrl for namespace support', async () => {
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
       const prefix = 'uploads/';
 
       const uploadPromise = filesService.upload(file, prefix);
 
+      // Verify buildUrl was called to construct the URL with namespace
+      expect(filesApiClient.buildUrl).toHaveBeenCalledWith('files');
+      // Verify the URL includes namespace from buildUrl
       expect(mockXHR.open).toHaveBeenCalledWith(
         'POST',
-        '/api/v1/proxy/services/file-gateway-api/files',
+        '/api/v1/proxy/services/file-gateway-api/files?namespace=test-namespace&_t=1234567890',
       );
       expect(mockXHR.send).toHaveBeenCalled();
 
@@ -263,11 +267,16 @@ describe('filesService', () => {
       vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
-    it('should open download URL in new tab', () => {
+    it('should use buildUrl to construct download URL with namespace', () => {
       filesService.download('test-file.txt');
 
+      // Verify buildUrl was called with the correct endpoint
+      expect(filesApiClient.buildUrl).toHaveBeenCalledWith(
+        'files/test-file.txt/download',
+      );
+      // Verify the URL returned by buildUrl (with namespace) is used
       expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/services/file-gateway-api/files/test-file.txt/download',
+        '/api/v1/proxy/services/file-gateway-api/files/test-file.txt/download?namespace=test-namespace&_t=1234567890',
         '_blank',
       );
     });
@@ -275,9 +284,8 @@ describe('filesService', () => {
     it('should URL encode the file key in download URL', () => {
       filesService.download('folder/file with spaces.txt');
 
-      expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/services/file-gateway-api/files/folder%2Ffile%20with%20spaces.txt/download',
-        '_blank',
+      expect(filesApiClient.buildUrl).toHaveBeenCalledWith(
+        'files/folder%2Ffile%20with%20spaces.txt/download',
       );
     });
   });

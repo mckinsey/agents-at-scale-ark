@@ -147,7 +147,7 @@ export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
     }) as express.RequestHandler
   );
 
-  router.post('/traces', (req, res) => {
+  router.post('/traces', async (req, res) => {
     try {
       const body = decodeOTLPBody(req, res);
       if (!body) return;
@@ -160,7 +160,7 @@ export function createOTLPRouter(traces: TraceBroker, logger: Logger): Router {
       }
 
       const spans = buildSpans(body);
-      traces.addSpans(spans);
+      await traces.addSpans(spans);
       req.log.info({count: spans.length}, 'received spans');
       res.status(200).json({});
     } catch (err) {
