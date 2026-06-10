@@ -1,12 +1,14 @@
 {{- if .Values.marketplaceSources }}
-{{- /*
-Render one single-key ConfigMap manifest per source entry. Applying each key
-independently with server-side apply (field manager helm-marketplace-seeder)
-tracks ownership at the data-key level: a user edit to one key transfers that
-key's ownership, so a later seed run conflicts on (and skips) only that key
-while still reconciling the others. Sources sharing a namespace merge into one
-ConfigMap named marketplace-sources.
-*/}}
+{{- /* One ConfigMap manifest per namespace (all keys in one apply) so the seeder owns every key without pruning. */}}
+{{- $byNs := dict }}
+{{- range .Values.marketplaceSources }}
+{{- $ns := .namespace | default $.Release.Namespace }}
+{{- $data := index $byNs $ns | default (dict) }}
+{{- $val := dict "url" .url }}
+{{- if .displayName }}{{- $_ := set $val "displayName" .displayName }}{{- end }}
+{{- $_ := set $data .name ($val | toJson) }}
+{{- $_ := set $byNs $ns $data }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -19,12 +21,9 @@ metadata:
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation
 data:
-{{- range $i, $e := .Values.marketplaceSources }}
-{{- $ns := $e.namespace | default $.Release.Namespace }}
-{{- $val := dict "url" $e.url }}
-{{- if $e.displayName }}{{- $_ := set $val "displayName" $e.displayName }}{{- end }}
-{{- $cm := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" "marketplace-sources" "namespace" $ns) "data" (dict $e.name ($val | toJson)) }}
-  {{ printf "%03d-%s-%s.yaml" $i $ns $e.name }}: |-
+{{- range $ns, $data := $byNs }}
+{{- $cm := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" "marketplace-sources" "namespace" $ns) "data" $data }}
+  {{ $ns }}.yaml: |-
 {{ toYaml $cm | indent 4 }}
 {{- end }}
 ---
@@ -105,10 +104,17 @@ spec:
           image: {{ .Values.marketplaceSourcesSeed.image }}
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             capabilities:
               drop: ["ALL"]
             seccompProfile:
               type: RuntimeDefault
+          env:
+            # uid 1001 has no home; give kubectl a writable cache dir.
+            - name: HOME
+              value: /tmp
           resources:
             requests:
               cpu: 50m
