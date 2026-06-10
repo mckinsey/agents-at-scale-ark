@@ -48,7 +48,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       200:
    *         description: Paginated chunks or SSE stream
    */
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const watch = req.query['watch'] === 'true';
 
     if (watch) {
@@ -67,7 +67,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         const params = parsePaginationParams(
           req.query as Record<string, unknown>
         );
-        const result = chunks.paginate(params);
+        const result = await chunks.paginate(params);
         res.json(result);
       } catch (error) {
         if (error instanceof PaginationError) {
@@ -123,7 +123,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    */
   router.get<{query_name: string}, unknown, unknown, GetStreamQueryRaw>(
     '/:query_name',
-    (req, res) => {
+    async (req, res) => {
       const parse = getStreamQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id, 'query');
@@ -132,7 +132,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       const streamQuery: GetStreamQuery = parse.data;
       const {query_name} = req.params;
       try {
-        handleQueryStream(
+        await handleQueryStream(
           req,
           res,
           chunks,
@@ -219,6 +219,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           finish_reason: 0,
           other: 0,
         },
+        appendChain: Promise.resolve(),
       };
 
       req.on('data', (chunk: Buffer) =>
@@ -226,19 +227,26 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       );
 
       req.on('end', () => {
-        req.log.info(
-          {
-            queryId: query_id,
-            total: state.chunkCount,
-            types: state.chunkTypeCounts,
-          },
-          'stream ended'
-        );
-        res.json({
-          status: 'stream_processed',
-          query: query_id,
-          chunks_received: state.chunkCount,
-        });
+        void state.appendChain
+          .then(() => {
+            req.log.info(
+              {
+                queryId: query_id,
+                total: state.chunkCount,
+                types: state.chunkTypeCounts,
+              },
+              'stream ended'
+            );
+            res.json({
+              status: 'stream_processed',
+              query: query_id,
+              chunks_received: state.chunkCount,
+            });
+          })
+          .catch((err: unknown) => {
+            req.log.error({err, queryId: query_id}, 'append error');
+            sendInternalError(res, req.id);
+          });
       });
 
       req.on('error', (error: Error & {code?: string}) => {
@@ -292,7 +300,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       400:
    *         description: Invalid request
    */
-  router.post<{query_id: string}>('/:query_id/complete', (req, res) => {
+  router.post<{query_id: string}>('/:query_id/complete', async (req, res) => {
     try {
       const {query_id} = req.params;
 
@@ -309,7 +317,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
       req.log.info({queryId: query_id}, 'marking query as complete');
 
-      if (!chunks.hasQuery(query_id)) {
+      if (!(await chunks.hasQuery(query_id))) {
         res.status(404).json({
           error: {
             code: 'NOT_FOUND',
@@ -320,7 +328,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      if (chunks.isComplete(query_id)) {
+      if (await chunks.isComplete(query_id)) {
         res.json({
           status: 'already_completed',
           query: query_id,
@@ -328,7 +336,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         return;
       }
 
-      chunks.completeQuery(query_id);
+      await chunks.completeQuery(query_id);
 
       res.json({
         status: 'completed',
@@ -365,9 +373,9 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *       500:
    *         description: Failed to purge streams
    */
-  router.delete('/', (req, res) => {
+  router.delete('/', async (req, res) => {
     try {
-      chunks.delete();
+      await chunks.delete();
       res.json({status: 'success', message: 'Stream data purged'});
     } catch (error) {
       req.log.error({err: error}, 'stream purge failed');

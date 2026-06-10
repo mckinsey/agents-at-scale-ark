@@ -21,7 +21,7 @@ export function createTracesRouter(traces: TraceBroker): Router {
 
   router.get<Record<string, string>, unknown, unknown, GetTracesQueryRaw>(
     '/',
-    (req, res) => {
+    async (req, res) => {
       const parse = getTracesQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id, 'query');
@@ -32,14 +32,14 @@ export function createTracesRouter(traces: TraceBroker): Router {
       if (watch) {
         handleStreamingAllTraces(req, res, traces, sessionId, cursor);
       } else {
-        handlePaginatedAllTraces(req, res, traces, sessionId);
+        await handlePaginatedAllTraces(req, res, traces, sessionId);
       }
     }
   );
 
   router.get<{trace_id: string}, unknown, unknown, GetTracesQueryRaw>(
     '/:trace_id',
-    (req, res) => {
+    async (req, res) => {
       const {trace_id} = req.params;
       const parse = getTracesQuerySchema.safeParse(req.query);
       if (!parse.success) {
@@ -55,14 +55,14 @@ export function createTracesRouter(traces: TraceBroker): Router {
       if (watch) {
         handleStreamingTrace(req, res, traces, trace_id, fromBeginning, cursor);
       } else {
-        handlePaginatedTrace(req, res, traces, trace_id);
+        await handlePaginatedTrace(req, res, traces, trace_id);
       }
     }
   );
 
-  router.delete('/', (req, res) => {
+  router.delete('/', async (req, res) => {
     try {
-      traces.delete();
+      await traces.delete();
       res.json({status: 'success', message: 'Trace data purged'});
     } catch (error) {
       req.log.error({err: error}, 'trace purge failed');
