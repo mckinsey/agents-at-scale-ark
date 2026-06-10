@@ -3,7 +3,7 @@ include ../../helpers.mk
 # Local ark-broker convenience commands
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev test lint install uninstall db-migrate-up db-migrate-down db-migrate-version db-migrate-create
+.PHONY: help build dev test lint install uninstall db-migrate-up db-migrate-down db-migrate-version db-migrate-create check-migrate
 
 help: # show help for each of the Makefile recipes
 	@grep -E '^[a-zA-Z0-9 -]+:.*#'  Makefile | sort | while read -r l; do printf "\033[1;32m$$(echo $$l | cut -f 1 -d':')\033[00m:$$(echo $$l | cut -f 2- -d'#')\n"; done
@@ -29,14 +29,17 @@ uninstall: # remove service from cluster (same as make ark-broker-uninstall)
 chainsaw: # Run chainsaw tests
 	chainsaw test
 
-db-migrate-up: # apply all pending migrations (requires DATABASE_URL and golang-migrate CLI)
+check-migrate:
+	@command -v migrate >/dev/null 2>&1 || { echo "Error: 'migrate' CLI not found in PATH. Install it from https://github.com/golang-migrate/migrate"; exit 1; }
+
+db-migrate-up: check-migrate # apply all pending migrations (requires DATABASE_URL)
 	migrate -path ark-broker/src/db/migrations -database "$(DATABASE_URL)" up
 
-db-migrate-down: # roll back the last migration (requires DATABASE_URL and golang-migrate CLI)
+db-migrate-down: check-migrate # roll back the last migration (requires DATABASE_URL)
 	migrate -path ark-broker/src/db/migrations -database "$(DATABASE_URL)" down 1
 
-db-migrate-version: # print current migration version (requires DATABASE_URL and golang-migrate CLI)
+db-migrate-version: check-migrate # print current migration version (requires DATABASE_URL)
 	migrate -path ark-broker/src/db/migrations -database "$(DATABASE_URL)" version
 
-db-migrate-create: # create a new migration pair — usage: make db-migrate-create NAME=add_index (requires golang-migrate CLI)
+db-migrate-create: check-migrate # create a new migration pair — usage: make db-migrate-create NAME=add_index
 	migrate create -ext sql -dir ark-broker/src/db/migrations -seq $(NAME)
