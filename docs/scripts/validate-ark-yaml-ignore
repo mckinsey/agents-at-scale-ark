@@ -15,12 +15,3 @@ docs/content/reference/resources/a2atask.mdx
 docs/content/reference/resources/memory.mdx
 docs/content/reference/upgrading.mdx
 docs/content/user-guide/samples/mcp-servers.mdx
-
-# Team cross-field rule drift (surfaced by the cross-field validator added in
-# this PR — schemas allow the shape but the API server's admission webhook
-# rejects it). Out of scope for the quickstart rewrite; follow-up PR can fix.
-#   - team.mdx, team-selector-strategy.mdx: selector strategy without maxTurns
-#   - team-strategies.mdx: still documents the deprecated `strategy: graph`
-docs/content/reference/resources/team.mdx
-docs/content/user-guide/samples/teams/team-selector-strategy.mdx
-docs/content/user-guide/samples/teams/team-strategies.mdx
