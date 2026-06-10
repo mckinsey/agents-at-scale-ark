@@ -21,7 +21,7 @@ export function createDb(config: AppConfig, logger: Logger): Db {
             query: string,
             parameters: unknown[]
           ): void => {
-            log.debug({connectionId, paramCount: parameters.length}, query);
+            log.info({connectionId, paramCount: parameters.length}, query);
           },
         }
       : {}),
