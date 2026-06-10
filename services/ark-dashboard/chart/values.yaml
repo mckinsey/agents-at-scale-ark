@@ -150,25 +150,15 @@ httpRoute:
   #       - name: ark-dashboard
   #         port: 3000
 
-# Marketplace sources seeded into the namespaced `marketplace-sources` ConfigMap.
-# Each entry materialises one data key in the target namespace's ConfigMap via a
-# post-install/post-upgrade Job using server-side apply (field manager
-# `helm-marketplace-seeder`), so user edits to seeded entries survive upgrades.
-# Set to [] to seed nothing (the Job is skipped entirely).
+# Seeded into the `marketplace-sources` ConfigMap. Set to [] to skip.
 marketplaceSources:
   - name: agents-at-scale-marketplace
     url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
     displayName: "Ark Marketplace"
-    # namespace omitted -> defaults to the install namespace
 
-# Seed Job configuration (runs only when marketplaceSources is non-empty).
 marketplaceSourcesSeed:
-  # Shell-capable kubectl image, pinned. Override to a mirror if Docker Hub
-  # pulls are rate-limited in your environment.
   image: alpine/k8s:1.35.5
 
-# The marketplace-source-editor ClusterRole grants edit access to the
-# marketplace-sources ConfigMap. Created by default but bound to no one;
-# platform teams bind it per namespace. Set create=false to omit it entirely.
+# Edit access to the marketplace-sources ConfigMap; bound per namespace.
 marketplaceSourceEditorRole:
   create: true

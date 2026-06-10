@@ -1,15 +1,5 @@
-# Grant marketplace-source edit access to a user or group in a single namespace.
-#
-# The marketplace-source-editor ClusterRole (shipped with the dashboard chart)
-# grants get/update/patch on the `marketplace-sources` ConfigMap. It is bound to
-# no one by default. Apply a RoleBinding like this per namespace to let specific
-# users or groups manage that namespace's marketplace catalogue:
-#
-#   kubectl apply -f marketplace-source-editor-binding.yaml
-#
-# Edit `namespace` and the subject(s) to suit. Read access for the catalogue is
-# already granted to dashboard users by their tenant role; this binding only adds
-# write access.
+# Grants edit access to the `marketplace-sources` ConfigMap in one namespace.
+# Read access is already granted via the tenant role. Edit `namespace` and subjects.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
