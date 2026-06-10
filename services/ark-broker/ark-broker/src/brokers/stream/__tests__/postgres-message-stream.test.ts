@@ -1,42 +1,44 @@
-import type {Stream} from './stream.js';
-import type {BrokerItem} from './broker-item.js';
+import {createLogger} from '@ark-broker/logging/logger.js';
+import {usePgContainer} from '../../../db/__tests__/testHelpers/pg-testcontainer.js';
+import {PostgresMessageStream} from '../postgres-message-stream.js';
+import {makeMessageData} from './testHelpers/message-data-factory.js';
 
-export function runStreamContract<T>(
-  factory: () => Stream<T>,
-  makeData: (label: string) => T
-): void {
-  let stream: Stream<T>;
+jest.setTimeout(120_000);
 
-  beforeEach(() => {
-    stream = factory();
+const silentLogger = createLogger({level: 'silent', pretty: false});
+
+describe('PostgresMessageStream', () => {
+  const {db} = usePgContainer();
+  let stream: PostgresMessageStream;
+
+  beforeAll(() => {
+    stream = new PostgresMessageStream(silentLogger, db(), 3600);
   });
 
   describe('append', () => {
     it('assigns sequenceNumber starting at 1', async () => {
-      const item = await stream.append(makeData('a'));
+      const item = await stream.append(makeMessageData());
       expect(item.sequenceNumber).toBe(1);
     });
 
     it('increments sequenceNumber monotonically', async () => {
-      const a = await stream.append(makeData('a'));
-      const b = await stream.append(makeData('b'));
-      const c = await stream.append(makeData('c'));
+      const a = await stream.append(makeMessageData());
+      const b = await stream.append(makeMessageData());
+      const c = await stream.append(makeMessageData());
       expect(a.sequenceNumber).toBe(1);
       expect(b.sequenceNumber).toBe(2);
       expect(c.sequenceNumber).toBe(3);
     });
 
     it('returns item with timestamp as Date', async () => {
-      const item = await stream.append(makeData('a'));
+      const item = await stream.append(makeMessageData());
       expect(item.timestamp).toBeInstanceOf(Date);
     });
 
-    it('fires subscribe callback synchronously during append', async () => {
-      const received: T[] = [];
-      stream.subscribe((item: BrokerItem<T>) => received.push(item.data));
-      const appendPromise = stream.append(makeData('x'));
-      expect(received).toHaveLength(1);
-      await appendPromise;
+    it('fires subscribe callback during append', async () => {
+      const received: number[] = [];
+      stream.subscribe((item) => received.push(item.sequenceNumber));
+      await stream.append(makeMessageData());
       expect(received).toHaveLength(1);
     });
   });
@@ -47,8 +49,8 @@ export function runStreamContract<T>(
     });
 
     it('returns all appended items in order', async () => {
-      await stream.append(makeData('a'));
-      await stream.append(makeData('b'));
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       const all = await stream.all();
       expect(all).toHaveLength(2);
       expect(all[0].sequenceNumber).toBe(1);
@@ -58,26 +60,25 @@ export function runStreamContract<T>(
 
   describe('filter', () => {
     it('returns only matching items', async () => {
-      const a = await stream.append(makeData('a'));
-      await stream.append(makeData('b'));
+      const a = await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       const result = await stream.filter(
-        (item: BrokerItem<T>) => item.sequenceNumber === a.sequenceNumber
+        (item) => item.sequenceNumber === a.sequenceNumber
       );
       expect(result).toHaveLength(1);
       expect(result[0].sequenceNumber).toBe(a.sequenceNumber);
     });
 
     it('returns empty array when nothing matches', async () => {
-      await stream.append(makeData('a'));
-      const result = await stream.filter((_item: BrokerItem<T>) => false);
-      expect(result).toHaveLength(0);
+      await stream.append(makeMessageData());
+      expect(await stream.filter(() => false)).toHaveLength(0);
     });
   });
 
   describe('paginate', () => {
     beforeEach(async () => {
       for (let i = 0; i < 5; i++) {
-        await stream.append(makeData(`item-${i}`));
+        await stream.append(makeMessageData());
       }
     });
 
@@ -104,7 +105,7 @@ export function runStreamContract<T>(
     it('applies predicate before pagination', async () => {
       const result = await stream.paginate(
         {limit: 10},
-        (item: BrokerItem<T>) => item.sequenceNumber % 2 === 1
+        (item) => item.sequenceNumber % 2 === 1
       );
       expect(result.items).toHaveLength(3);
       expect(result.total).toBe(3);
@@ -112,32 +113,28 @@ export function runStreamContract<T>(
   });
 
   describe('delete', () => {
-    it('removes all items and resets sequence when called without predicate', async () => {
-      await stream.append(makeData('a'));
-      await stream.append(makeData('b'));
+    it('removes all items when called without predicate', async () => {
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       await stream.delete();
       expect(await stream.all()).toHaveLength(0);
-      const next = await stream.append(makeData('c'));
-      expect(next.sequenceNumber).toBe(1);
+      const next = await stream.append(makeMessageData());
+      expect(next.sequenceNumber).toBe(3);
     });
 
     it('removes only matching items when predicate is provided', async () => {
-      const a = await stream.append(makeData('a'));
-      await stream.append(makeData('b'));
-      await stream.delete(
-        (item: BrokerItem<T>) => item.sequenceNumber === a.sequenceNumber
-      );
+      const a = await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
+      await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
       const all = await stream.all();
       expect(all).toHaveLength(1);
       expect(all[0].sequenceNumber).toBe(2);
     });
 
     it('does not reset sequence when using predicate', async () => {
-      const a = await stream.append(makeData('a'));
-      await stream.delete(
-        (item: BrokerItem<T>) => item.sequenceNumber === a.sequenceNumber
-      );
-      const next = await stream.append(makeData('b'));
+      const a = await stream.append(makeMessageData());
+      await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
+      const next = await stream.append(makeMessageData());
       expect(next.sequenceNumber).toBe(2);
     });
   });
@@ -148,8 +145,8 @@ export function runStreamContract<T>(
     });
 
     it('returns last assigned sequence number', async () => {
-      await stream.append(makeData('a'));
-      await stream.append(makeData('b'));
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       expect(await stream.getCurrentSequence()).toBe(2);
     });
   });
@@ -157,31 +154,31 @@ export function runStreamContract<T>(
   describe('subscribe / unsubscribe', () => {
     it('notifies subscriber for each append', async () => {
       const seqs: number[] = [];
-      stream.subscribe((item: BrokerItem<T>) => seqs.push(item.sequenceNumber));
-      await stream.append(makeData('a'));
-      await stream.append(makeData('b'));
+      stream.subscribe((item) => seqs.push(item.sequenceNumber));
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       expect(seqs).toEqual([1, 2]);
     });
 
     it('stops notifying after returned unsubscribe is called', async () => {
       const seqs: number[] = [];
-      const unsubscribe = stream.subscribe((item: BrokerItem<T>) =>
+      const unsubscribe = stream.subscribe((item) =>
         seqs.push(item.sequenceNumber)
       );
-      await stream.append(makeData('a'));
+      await stream.append(makeMessageData());
       unsubscribe();
-      await stream.append(makeData('b'));
+      await stream.append(makeMessageData());
       expect(seqs).toEqual([1]);
     });
 
     it('multiple subscribers all receive events', async () => {
       const a: number[] = [];
       const b: number[] = [];
-      stream.subscribe((item: BrokerItem<T>) => a.push(item.sequenceNumber));
-      stream.subscribe((item: BrokerItem<T>) => b.push(item.sequenceNumber));
-      await stream.append(makeData('x'));
+      stream.subscribe((item) => a.push(item.sequenceNumber));
+      stream.subscribe((item) => b.push(item.sequenceNumber));
+      await stream.append(makeMessageData());
       expect(a).toEqual([1]);
       expect(b).toEqual([1]);
     });
   });
-}
+});

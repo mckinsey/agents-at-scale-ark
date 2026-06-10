@@ -31,7 +31,7 @@ const main = async (): Promise<void> => {
       ? createDb(config, logger)
       : undefined;
 
-  const messageStream = createMessageStream(config, logger);
+  const messageStream = createMessageStream(config, logger, db);
   const {app, brokers} = buildApp({config, logger, version, messageStream, db});
   const {memory, chunks, traces, events, sessions} = brokers;
 
