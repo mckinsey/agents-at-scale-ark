@@ -9,7 +9,7 @@ Get Ark running on a local Kubernetes cluster, verify the install, then open the
 
 ## 1. Prerequisites
 
-Ark runs on Kubernetes, driven by the `ark` CLI. You'll need:
+Ark runs on a Kubernetes cluster and is managed with the `ark` CLI. You'll need:
 
 | Requirement | Notes |
 | --- | --- |
@@ -17,7 +17,7 @@ Ark runs on Kubernetes, driven by the `ark` CLI. You'll need:
 | **[Node.js](https://nodejs.org/en/download)** (18+) | Provides `npm`, used to install the `ark` CLI. |
 | **[Helm](https://helm.sh/docs/intro/install/)** | Ark installs its components as Helm releases. |
 | **[kubectl](https://kubernetes.io/docs/tasks/tools/)** | Configured to talk to your cluster (`kubectl get nodes` should work). |
-| **An LLM API key** | OpenAI, Azure OpenAI, AWS Bedrock, or Anthropic — for the model you create in step 4. |
+| **An LLM API key** | OpenAI, Azure OpenAI, or Anthropic — for the model you create in step 4. |
 
 Install the `ark` CLI:
 
@@ -33,12 +33,6 @@ With your cluster running and `kubectl` pointed at it:
 
 ```bash
 ark install
-```
-
-This installs the Ark dependencies, the controller, the APIs, the MCP host, and the dashboard. Add `--wait-for-ready 5m` to block until everything is up:
-
-```bash
-ark install --wait-for-ready 5m
 ```
 
 > **Pin a version** with `ark install --ark-version 0.1.50`. If the version doesn't exist, install continues with a warning. See [GitHub releases](https://github.com/mckinsey/agents-at-scale-ark/releases) for available versions. For per-component installs, RBAC, and remote clusters, see [Deploying Ark](/operations-guide/deploying-ark).
@@ -103,14 +97,14 @@ Agents need a model. The conventional first model is named `default` — agents 
 | **Name** | `default` |
 | **Provider** | e.g. `OpenAI` |
 | **Model** | e.g. `gpt-4o-mini` |
-| **API Key** | Pick an existing secret, or hit **Add New** to create one inline |
+| **API Key** | Hit **Add New** to create a secret with your API key |
 | **Base URL** | The provider's API URL |
 
 3. Hit **Create Model**.
 
 ![Add Model form filled in for the default OpenAI model](/models/add-form.png)
 
-The form adapts per provider (Azure OpenAI adds an Authentication dropdown + API Version; Bedrock takes Access Key / Secret Access Key; Anthropic adds an optional version). Once created, the model shows **Available** when its credentials check out. See [Models](/user-guide/models) for every provider and field.
+See [Models](/user-guide/models) for every provider and field.
 
 > Prefer the CLI? `ark models create default` walks you through the same setup interactively.
 
