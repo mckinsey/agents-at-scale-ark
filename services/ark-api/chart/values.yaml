@@ -81,8 +81,12 @@ app:
     # loopback literal (127.0.0.1, [::1] bracketed per RFC 3986 §3.2.2, or
     # localhost). The path /v1/mcp/auth/callback is appended automatically
     # if the configured URL has no path.
+    # The default matches ark-api's HTTPRoute hostname on the localhost-gateway
+    # (httpRoute.hostnames below, enabled in devspace dev), so the IdP redirect
+    # reaches ark-api through the gateway for both the CLI and dashboard flows.
+    # Override with a public https ingress URL for real deployments.
     - name: ARK_API_PUBLIC_CALLBACK_URL
-      value: "http://localhost:8088/v1/mcp/auth/callback"
+      value: "http://ark-api.default.127.0.0.1.nip.io:8080/v1/mcp/auth/callback"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"
