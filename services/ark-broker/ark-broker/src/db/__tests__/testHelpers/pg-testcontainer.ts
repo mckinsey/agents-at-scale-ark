@@ -51,13 +51,15 @@ export async function truncateAllTables(db: Db): Promise<void> {
   );
 }
 
-export function usePgContainer(): {db: () => Db} {
+export function usePgContainer(): {db: () => Db; connectionUrl: () => string} {
   let _db: Db;
   let _stop: () => Promise<void>;
+  let _connectionUrl: string;
 
   beforeAll(async () => {
     const pg = await startPgContainer();
     _stop = pg.stop;
+    _connectionUrl = pg.connectionUrl;
     _db = postgres(pg.connectionUrl, {max: 5});
   });
 
@@ -70,5 +72,5 @@ export function usePgContainer(): {db: () => Db} {
     await truncateAllTables(_db);
   });
 
-  return {db: () => _db};
+  return {db: () => _db, connectionUrl: () => _connectionUrl};
 }

@@ -1,4 +1,5 @@
 import {EventEmitter} from 'events';
+import type postgres from 'postgres';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
 import type {MessageData} from '../memory-broker.js';
@@ -49,7 +50,7 @@ export class PostgresMessageStream implements Stream<MessageData> {
       VALUES (
         ${data.conversationId},
         ${data.queryId},
-        ${JSON.stringify(data.message)}::jsonb,
+        ${this.db.json(data.message as unknown as postgres.JSONValue)},
         now() + make_interval(secs => ${effectiveTtl})
       )
       RETURNING sequence_number, conversation_id, query_id, message, created_at
