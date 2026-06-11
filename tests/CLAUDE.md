@@ -171,7 +171,7 @@ JMESPath's `contains()` requires a string or array — it throws a hard type err
       status:
         (contains(response.content, 'expected text')): true
 
-# Good - wait for completion first, then assert
+# Good - wait until response.content is populated, then assert against it
 - apply:
     file: manifests/a04-query.yaml
 - wait:
@@ -180,9 +180,8 @@ JMESPath's `contains()` requires a string or array — it throws a hard type err
     name: test-query
     timeout: 2m
     for:
-      condition:
-        name: Completed
-        value: 'True'
+      jsonPath:
+        path: '{.status.response.content}'
 - assert:
     resource:
       ...
@@ -190,7 +189,9 @@ JMESPath's `contains()` requires a string or array — it throws a hard type err
         (contains(response.content, 'expected text')): true
 ```
 
-This applies to both success and error queries — the `Completed` condition is set to `True` regardless of outcome (`QuerySucceeded`, `QueryErrored`, `QueryCanceled`).
+Prefer `for.jsonPath` over `for.condition: Completed=True` whenever the next step reads `response.content`. `Completed=True` can become visible on a watch before `response.content` has propagated to a subsequent read (especially on the postgresql backend, where watch events hop through the WAL consumer), and `contains(nil, ...)` errors rather than failing-with-retry. Waiting on the jsonpath itself fires only once the field is non-empty, so the follow-up assert and any shell-script `kubectl get … jsonpath='{.status.response.content}'` (which has no retry of its own) both see a populated value.
+
+`Completed=True` is still the right wait for tests that only care that the query terminated — for example, error queries where the body of `response.content` is not what's under test.
 
 ### Model Assertions
 Models should assert existence and readiness:
