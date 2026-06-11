@@ -50,7 +50,7 @@ BROKER_MESSAGE_BACKEND=postgres devspace dev
 This activates the `broker-postgres` profile, which:
 - Deploys `ark-storage-dev` (Postgres 16-alpine, service `ark-storage-dev`, database `ark`) in the `default` namespace and waits for it to be ready.
 - Builds the `ark-broker-migrate` init container image locally.
-- Sets `DATABASE_URL=postgres://postgres:arkdev123@ark-storage-dev:5432/ark` on the broker deployment.
+- Sets `DATABASE_URL=postgres://postgres:arkdev123@ark-storage-dev:5432/ark?sslmode=disable` on the broker deployment.
 - Runs `golang-migrate` as an init container before the broker starts.
 
 The same var works standalone: `BROKER_MESSAGE_BACKEND=postgres devspace deploy`.
