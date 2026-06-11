@@ -183,6 +183,8 @@ describe('PostgresMessageStream', () => {
   });
 
   describe('TTL', () => {
+    const CLOCK_SKEW_MS = 100;
+
     it('uses constructor ttlSeconds as default expires_at', async () => {
       const before = Date.now();
       const item = await stream.append(makeMessageData());
@@ -193,7 +195,9 @@ describe('PostgresMessageStream', () => {
         SELECT expires_at FROM messages WHERE sequence_number = ${item.sequenceNumber}
       `;
       const expiresAt = rows[0]!.expires_at.getTime();
-      expect(expiresAt).toBeGreaterThanOrEqual(before + 3600 * 1000);
+      expect(expiresAt).toBeGreaterThanOrEqual(
+        before - CLOCK_SKEW_MS + 3600 * 1000
+      );
       expect(expiresAt).toBeLessThanOrEqual(after + 3600 * 1000 + 2000);
     });
 
@@ -208,7 +212,9 @@ describe('PostgresMessageStream', () => {
         SELECT expires_at FROM messages WHERE sequence_number = ${item.sequenceNumber}
       `;
       const expiresAt = rows[0]!.expires_at.getTime();
-      expect(expiresAt).toBeGreaterThanOrEqual(before + customTtl * 1000);
+      expect(expiresAt).toBeGreaterThanOrEqual(
+        before - CLOCK_SKEW_MS + customTtl * 1000
+      );
       expect(expiresAt).toBeLessThanOrEqual(after + customTtl * 1000 + 2000);
     });
 

@@ -17,6 +17,7 @@ database:
 migrate:
   image:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-broker-migrate
+    tag: ""
     pullPolicy: IfNotPresent
 
 # Global annotations added to all resources

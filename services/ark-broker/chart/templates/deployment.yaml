@@ -22,7 +22,7 @@ spec:
       {{- if eq .Values.backends.message "postgres" }}
       initContainers:
         - name: migrate
-          image: "{{ .Values.migrate.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag | default .Values.app.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.migrate.image.pullPolicy }}
           args: ["-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
           env:

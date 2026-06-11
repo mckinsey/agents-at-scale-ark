@@ -8,11 +8,14 @@ Event bus for ARK cluster communication. Stores messages, chunks, traces, events
 # Show available commands.
 make help
 
-# Deploy to configured cluster.
+# Deploy to configured cluster (default: in-memory backend).
 devspace deploy
 
 # Run in-cluster dev mode.
 devspace dev
+
+# Run with Postgres message backend (deploys ark-storage-dev automatically).
+BROKER_MESSAGE_BACKEND=postgres devspace dev
 ```
 
 ## Configuration
@@ -37,6 +40,20 @@ devspace dev
 ## Database backend
 
 Messages can survive pod restarts by opting in to Postgres storage.
+
+### Local development with devspace
+
+```bash
+BROKER_MESSAGE_BACKEND=postgres devspace dev
+```
+
+This activates the `broker-postgres` profile, which:
+- Deploys `ark-storage-dev` (Postgres 16-alpine, service `ark-storage-dev`, database `ark`) in the `default` namespace and waits for it to be ready.
+- Builds the `ark-broker-migrate` init container image locally.
+- Sets `DATABASE_URL=postgres://postgres:arkdev123@ark-storage-dev:5432/ark` on the broker deployment.
+- Runs `golang-migrate` as an init container before the broker starts.
+
+The same var works standalone: `BROKER_MESSAGE_BACKEND=postgres devspace deploy`.
 
 ### Enabling in Helm
 
