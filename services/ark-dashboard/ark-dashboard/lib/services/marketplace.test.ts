@@ -96,17 +96,23 @@ describe('marketplaceService item actions', () => {
 
   it('gets an item by id, installs and uninstalls via the dashboard routes', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ id: 'phoenix' });
-    await marketplaceService.getMarketplaceItemById('phoenix');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace/phoenix');
-
-    vi.mocked(apiClient.post).mockResolvedValueOnce({});
-    await marketplaceService.installMarketplaceItem('phoenix');
-    expect(apiClient.post).toHaveBeenCalledWith('/api/marketplace/phoenix/install', {
-      mode: 'command',
+    await marketplaceService.getMarketplaceItemById('phoenix', NS);
+    expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace/phoenix', {
+      params: { namespace: NS },
     });
 
+    vi.mocked(apiClient.post).mockResolvedValueOnce({});
+    await marketplaceService.installMarketplaceItem('phoenix', NS);
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/marketplace/phoenix/install',
+      { mode: 'command' },
+      { params: { namespace: NS } },
+    );
+
     vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
-    await marketplaceService.uninstallMarketplaceItem('phoenix');
-    expect(apiClient.delete).toHaveBeenCalledWith('/api/marketplace/phoenix/install');
+    await marketplaceService.uninstallMarketplaceItem('phoenix', NS);
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/marketplace/phoenix/install', {
+      params: { namespace: NS },
+    });
   });
 });

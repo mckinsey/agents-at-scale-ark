@@ -28,10 +28,11 @@ export function useGetMarketplaceItems(filters?: MarketplaceFilters) {
 }
 
 export function useGetMarketplaceItemById(id: string) {
+  const { namespace } = useNamespace();
   return useQuery<MarketplaceItemDetail>({
-    queryKey: ['marketplace', 'item', id],
-    queryFn: () => marketplaceService.getMarketplaceItemById(id),
-    enabled: Boolean(id),
+    queryKey: ['marketplace', 'item', namespace, id],
+    queryFn: () => marketplaceService.getMarketplaceItemById(id, namespace),
+    enabled: Boolean(id && namespace),
     retry: retryQueryHandler,
   });
 }
@@ -91,9 +92,10 @@ export function useDeleteMarketplaceSource() {
 }
 
 export function useInstallMarketplaceItem() {
+  const { namespace } = useNamespace();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => marketplaceService.installMarketplaceItem(id),
+    mutationFn: (id: string) => marketplaceService.installMarketplaceItem(id, namespace),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['marketplace'] });
     },
@@ -106,9 +108,10 @@ export function useInstallMarketplaceItem() {
 }
 
 export function useUninstallMarketplaceItem() {
+  const { namespace } = useNamespace();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => marketplaceService.uninstallMarketplaceItem(id),
+    mutationFn: (id: string) => marketplaceService.uninstallMarketplaceItem(id, namespace),
     onSuccess: (_, id) => {
       toast.success('Uninstallation started', {
         description: `Uninstalling marketplace item ${id}`,

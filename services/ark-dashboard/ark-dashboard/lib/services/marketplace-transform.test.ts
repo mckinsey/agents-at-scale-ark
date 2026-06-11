@@ -3,9 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api/client';
 import {
   buildItemsFromGroups,
-  fetchMarketplaceManifest,
-  getMarketplaceItemById,
-  getRawMarketplaceItemById,
   transformGitHubItemToMarketplaceItem,
   type GitHubMarketplaceItem,
 } from '@/lib/services/marketplace-transform';
@@ -138,45 +135,5 @@ describe('buildItemsFromGroups', () => {
       'team-a',
     );
     expect(items[0].status).toBe('available');
-  });
-});
-
-describe('default-manifest helpers', () => {
-  beforeEach(() => {
-    globalThis.fetch = vi.fn();
-  });
-
-  const manifest = {
-    version: '1.0.0',
-    marketplace: 'Ark',
-    items: [ghItem({ name: 'phoenix', type: 'service' })],
-  };
-
-  it('fetchMarketplaceManifest returns parsed JSON on success', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => manifest,
-    } as Response);
-    expect(await fetchMarketplaceManifest()).toEqual(manifest);
-  });
-
-  it('fetchMarketplaceManifest returns null on non-ok and on throw', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce({ ok: false } as Response);
-    expect(await fetchMarketplaceManifest()).toBeNull();
-    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error('network'));
-    expect(await fetchMarketplaceManifest()).toBeNull();
-  });
-
-  it('getRawMarketplaceItemById finds by generated id or returns null', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue({ ok: true, json: async () => manifest } as Response);
-    expect(await getRawMarketplaceItemById('phoenix')).not.toBeNull();
-    expect(await getRawMarketplaceItemById('missing')).toBeNull();
-  });
-
-  it('getMarketplaceItemById transforms the found item', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue({ ok: true, json: async () => manifest } as Response);
-    const item = await getMarketplaceItemById('phoenix');
-    expect(item?.id).toBe('phoenix');
-    expect(await getMarketplaceItemById('missing')).toBeNull();
   });
 });

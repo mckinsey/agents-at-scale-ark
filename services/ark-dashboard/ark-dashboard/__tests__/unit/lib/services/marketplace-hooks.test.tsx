@@ -66,7 +66,7 @@ describe('marketplace query hooks', () => {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledWith('phoenix');
+    expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledWith('phoenix', 'team-a');
   });
 
   it('useMarketplaceSources fetches the namespace source list', async () => {
@@ -135,7 +135,7 @@ describe('marketplace mutation hooks', () => {
     const { result } = renderHook(() => useInstallMarketplaceItem(), { wrapper: createWrapper() });
     result.current.mutate('phoenix');
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.installMarketplaceItem).toHaveBeenCalledWith('phoenix');
+    expect(marketplaceService.installMarketplaceItem).toHaveBeenCalledWith('phoenix', 'team-a');
 
     vi.mocked(marketplaceService.installMarketplaceItem).mockRejectedValueOnce(new Error('boom'));
     const { result: errResult } = renderHook(() => useInstallMarketplaceItem(), {

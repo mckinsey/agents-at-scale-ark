@@ -11,12 +11,12 @@ vi.mock('node:child_process', () => {
   return { default: mod, ...mod };
 });
 
-vi.mock('@/lib/services/marketplace-transform', () => ({
+vi.mock('@/lib/services/marketplace-server', () => ({
   getRawMarketplaceItemById: vi.fn(),
 }));
 
 import { POST, DELETE } from './route';
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-transform';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-server';
 
 const mockGetRawMarketplaceItemById = vi.mocked(getRawMarketplaceItemById);
 
@@ -69,7 +69,11 @@ function mockSpawnFailure(error: Error) {
 }
 
 function createRequest(url: string, options?: RequestInit) {
-  return new NextRequest(new URL(url, 'http://localhost'), options);
+  const parsed = new URL(url, 'http://localhost');
+  if (!parsed.searchParams.has('namespace')) {
+    parsed.searchParams.set('namespace', 'team-a');
+  }
+  return new NextRequest(parsed, options);
 }
 
 const baseItem = {

@@ -1,5 +1,3 @@
-import GitUrlParse from 'git-url-parse';
-
 import { apiClient } from '@/lib/api/client';
 import type {
   MarketplaceCategory,
@@ -56,22 +54,6 @@ interface ServiceUi {
   label: string;
 }
 
-export const DEFAULT_MARKETPLACE_MANIFEST_URL =
-  'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
-
-function extractOrgRepoFromUrl(url: string): string | null {
-  try {
-    const parsed = GitUrlParse(url);
-    if (parsed.full_name) {
-      const parts = parsed.full_name.split('/');
-      return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 function mapCategoryFromGitHub(category?: string): MarketplaceCategory {
   const categoryMap: Record<string, MarketplaceCategory> = {
     observability: 'observability',
@@ -105,7 +87,7 @@ function mapTypeFromGitHub(
   return 'component';
 }
 
-function generateItemId(item: GitHubMarketplaceItem): string {
+export function generateItemId(item: GitHubMarketplaceItem): string {
   return item.name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
@@ -306,40 +288,4 @@ export async function buildItemsFromGroups(
     }
   }
   return Array.from(itemsById.values());
-}
-
-// --- Default-manifest helpers (used by the server-side detail/install routes) ---
-
-export async function fetchMarketplaceManifest(
-  url?: string,
-): Promise<GitHubMarketplaceManifest | null> {
-  const manifestUrl = url ?? DEFAULT_MARKETPLACE_MANIFEST_URL;
-  try {
-    const response = await fetch(manifestUrl, {
-      next: { revalidate: 3600 },
-      headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as GitHubMarketplaceManifest;
-  } catch {
-    return null;
-  }
-}
-
-export async function getRawMarketplaceItemById(
-  id: string,
-): Promise<GitHubMarketplaceItem | null> {
-  const manifest = await fetchMarketplaceManifest();
-  if (!manifest?.items) return null;
-  return manifest.items.find(item => generateItemId(item) === id) ?? null;
-}
-
-export async function getMarketplaceItemById(
-  id: string,
-): Promise<MarketplaceItem | null> {
-  const raw = await getRawMarketplaceItemById(id);
-  if (!raw) return null;
-  const source =
-    extractOrgRepoFromUrl(DEFAULT_MARKETPLACE_MANIFEST_URL) ?? 'Ark Marketplace';
-  return transformGitHubItemToMarketplaceItem(raw, false, source);
 }

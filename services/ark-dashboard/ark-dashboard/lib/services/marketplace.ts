@@ -93,16 +93,27 @@ const marketplaceService = {
     return { items, total: items.length, page: 1, pageSize: items.length };
   },
 
-  async getMarketplaceItemById(id: string): Promise<MarketplaceItemDetail> {
-    return await apiClient.get<MarketplaceItemDetail>(`/api/marketplace/${id}`);
+  async getMarketplaceItemById(
+    id: string,
+    namespace: string,
+  ): Promise<MarketplaceItemDetail> {
+    return await apiClient.get<MarketplaceItemDetail>(`/api/marketplace/${id}`, {
+      params: { namespace },
+    });
   },
 
-  async installMarketplaceItem(id: string): Promise<unknown> {
-    return await apiClient.post(`/api/marketplace/${id}/install`, { mode: 'command' });
+  async installMarketplaceItem(id: string, namespace: string): Promise<unknown> {
+    return await apiClient.post(
+      `/api/marketplace/${id}/install`,
+      { mode: 'command' },
+      { params: { namespace } },
+    );
   },
 
-  async uninstallMarketplaceItem(id: string): Promise<void> {
-    await apiClient.delete(`/api/marketplace/${id}/install`);
+  async uninstallMarketplaceItem(id: string, namespace: string): Promise<void> {
+    await apiClient.delete(`/api/marketplace/${id}/install`, {
+      params: { namespace },
+    });
   },
 };
 

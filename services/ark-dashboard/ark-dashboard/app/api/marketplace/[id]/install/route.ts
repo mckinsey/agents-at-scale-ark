@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-transform';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-server';
 
 /**
  * Helm release name validation (max 53 chars, RFC 1123)
@@ -150,8 +150,8 @@ function validateHelmInputs(
 /**
  * Fetch and validate marketplace item exists
  */
-async function fetchAndValidateMarketplaceItem(id: string) {
-  const item = await getRawMarketplaceItemById(id);
+async function fetchAndValidateMarketplaceItem(id: string, namespace: string) {
+  const item = await getRawMarketplaceItemById(id, namespace);
 
   if (!item) {
     return {
@@ -201,10 +201,17 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const namespace = request.nextUrl.searchParams.get('namespace');
+    if (!namespace) {
+      return NextResponse.json(
+        { error: 'namespace query parameter is required' },
+        { status: 400 },
+      );
+    }
 
     const { mode } = await request.json().catch(() => ({ mode: 'command' }));
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id);
+    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
     if (error) return error;
 
     if (!item!.ark?.chartPath || !item!.ark?.helmReleaseName) {
@@ -290,13 +297,20 @@ export async function POST(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
+    const namespace = request.nextUrl.searchParams.get('namespace');
+    if (!namespace) {
+      return NextResponse.json(
+        { error: 'namespace query parameter is required' },
+        { status: 400 },
+      );
+    }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id);
+    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
     if (error) return error;
 
     if (!item!.ark?.helmReleaseName) {
