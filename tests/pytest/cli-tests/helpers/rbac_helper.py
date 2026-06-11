@@ -11,24 +11,10 @@ NAMESPACE = "default"
 OTHER_NAMESPACE = "kube-system"
 API_GROUP = "ark.mckinsey.com"
 
-RESOURCES = [
-    "agents",
-    "models",
-    "queries",
-    "teams",
-    "tools",
-    "memories",
-    "mcpservers",
-    "a2aservers",
-    "a2atasks",
-    "executionengines",
-]
-
 ADMIN_USER = "admin@acme.com"
 ADMIN_GROUP = "ark-admin"
 VIEWER_USER = "viewer@acme.com"
 VIEWER_GROUP = "ark-viewers"
-NO_ACCESS_USER = "noaccess@acme.com"
 
 
 class RBACHelper:
