@@ -205,7 +205,7 @@ async def list_memory_messages(
                     memory_name=memory_name
                 )
                 
-                messages = data.get("messages", [])
+                messages = data.get("items", [])
                 
                 # Convert each database record to response format
                 for msg_record in messages:
