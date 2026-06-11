@@ -110,7 +110,7 @@ jobs:
           ref: ${{ needs.resolve_version.outputs.sha }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Build libraries
         run: make libs-build-all
