@@ -27,7 +27,7 @@ export function createEventsRouter(
 
   router.get<Record<string, string>, unknown, unknown, GetEventsQueryRaw>(
     '/',
-    (req, res) => {
+    async (req, res) => {
       const parse = getEventsQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id, 'query');
@@ -38,14 +38,14 @@ export function createEventsRouter(
       if (watch) {
         handleStreamingAllEvents(req, res, events, sessionId, cursor);
       } else {
-        handlePaginatedAllEvents(req, res, events, sessionId);
+        await handlePaginatedAllEvents(req, res, events, sessionId);
       }
     }
   );
 
   router.get<{query_id: string}, unknown, unknown, GetEventsQueryRaw>(
     '/:query_id',
-    (req, res) => {
+    async (req, res) => {
       const {query_id} = req.params;
       const parse = getEventsQuerySchema.safeParse(req.query);
       if (!parse.success) {
@@ -68,14 +68,14 @@ export function createEventsRouter(
           cursor
         );
       } else {
-        handlePaginatedQueryEvents(req, res, events, query_id);
+        await handlePaginatedQueryEvents(req, res, events, query_id);
       }
     }
   );
 
   router.post<Record<string, string>, unknown, PostEventBody>(
     '/',
-    (req, res) => {
+    async (req, res) => {
       const parse = postEventBodySchema.safeParse(req.body);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id);
@@ -84,8 +84,8 @@ export function createEventsRouter(
       const event: PostEventBody = parse.data;
 
       try {
-        events.addEvent(event as unknown as EventData);
-        events.save();
+        await events.addEvent(event as unknown as EventData);
+        await events.save();
 
         sessions.applyEvent({
           ...event.data,
@@ -102,9 +102,9 @@ export function createEventsRouter(
     }
   );
 
-  router.delete('/', (req, res) => {
+  router.delete('/', async (req, res) => {
     try {
-      events.delete();
+      await events.delete();
       res.json({status: 'success', message: 'Event data purged'});
     } catch (error) {
       req.log.error({err: error}, 'event purge failed');

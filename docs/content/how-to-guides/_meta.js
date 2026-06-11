@@ -1,7 +1,7 @@
 export default {
   index: 'Overview',
   
-  '---build': { type: 'separator', title: 'Build with ARK (application developers)' },
+  '---build': { type: 'separator', title: 'Basic use' },
   models: {
     title: 'Configure providers and models',
     href: '/user-guide/models'
@@ -15,7 +15,7 @@ export default {
     href: '/user-guide/teams'
   },
   queries: {
-    title: 'Run work and manage sessions',
+    title: 'Run queries / chat with agents and teams',
     href: '/user-guide/queries'
   },
   tools: {
@@ -32,10 +32,10 @@ export default {
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-strategies'
+    href: '/user-guide/samples/teams/team-selector-strategy'
   },
   
-  '---extend': { type: 'separator', title: 'Extend ARK (contributors)' },
+  '---extend': { type: 'separator', title: 'Advanced use' },
   'local-development': {
     title: 'Build and run locally',
     href: '/developer-guide/local-development'

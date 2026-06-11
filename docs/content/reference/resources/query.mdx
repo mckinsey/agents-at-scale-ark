@@ -1,13 +1,13 @@
 ---
 title: Query
-description: Execution requests to agents or teams with input types and parameter expansion
+description: Query CRD reference — fields, phases, parameter expansion, and conversation continuity
 ---
 
 # Query
 
-Queries represent execution requests sent to agents or teams. They support both simple string inputs and structured conversation messages with template parameter expansion.
+A `Query` is a request to run work on an Ark resource. The CRD ships an input plus exactly one of `target` (a single agent / team / model / tool) or `selector` (picks a single target by label — first match wins, not a fan-out). For a task-oriented walkthrough see [User Guide → Run queries / chat with agents and teams](/user-guide/queries); this page is the field-by-field reference.
 
-## Specification
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -15,194 +15,120 @@ kind: Query
 metadata:
   name: example-query
 spec:
-  # Input type: "user" (default) or "messages"
-  type: user
+  # --- Required ----------------------------------------------------------
+  input: "What's the weather in {{.city}}?"   # user message (string)
 
-  # For type: user - simple string input
-  input: "What is the weather in {{.location}}?"
-
-  # OR for type: messages - structured conversation array
-  # input:
-  #   - role: user
-  #     content: "Calculate 1+1"
-  #   - role: assistant
-  #     content: "2"
-  #   - role: user
-  #     content: "Calculate 2+2"
-
-  # Template parameters for input expansion
-  parameters:
-    - name: location
-      value: "New York"
-    - name: api_key
-      valueFrom:
-        secretKeyRef:
-          name: weather-api
-          key: token
-
-  # Execution target
+  # Exactly ONE of target or selector is required.
   target:
-    type: agent
+    type: agent                               # agent | team | model | tool
     name: weather-agent
 
-  # Optional: session identifier for tracking and telemetry
-  sessionId: user-session-123
+  # OR pick a single target by label (first match wins; not a fan-out).
+  # selector:
+  #   matchLabels:
+  #     role: reviewer
 
-  # Optional: conversation threading identifier sent to engines as A2A contextId.
-  # Used by completions engine for memory continuity, available to all engines.
-  conversationId: conv-abc123
-
-  # Optional: memory storage for conversation history
+  # --- Common optional fields --------------------------------------------
+  type: user                                  # only 'user' is accepted (default)
+  parameters:                                 # template values for {{.name}} in input
+    - name: city
+      value: Boston
+  conversationId: chat-alice-001              # thread queries into one conversation
   memory:
-    name: broker
-
-  # Optional: timeout for query execution
-  timeout: 5m
-
-  # Optional: header overrides for models and MCP servers
-  overrides:
-    - headers:
+    name: broker                              # Memory resource that stores history
+  sessionId: user-session-123                 # telemetry / tracking key (separate from conversationId)
+  serviceAccount: my-sa                       # RBAC for execution
+  timeout: 5m                                 # default '5m'
+  ttl: 720h                                   # default from ArkConfig/default (720h fallback)
+  cancel: false                               # set to true to cancel mid-flight
+  overrides:                                  # HTTP header overrides for downstream model/MCP calls
+    - resourceType: model
+      headers:
         - name: X-Trace-ID
           value:
-            value: "trace-xyz789"
-      resourceType: model
-
-status:
-  # Execution state: pending, running, done, error
-  phase: done
-
-  # Response from target
-  response:
-    target:
-      type: agent
-      name: weather-agent
-    content: "It's 72°F and sunny in New York"
-
-  # A2A protocol metadata (when targeting A2A agents)
-  a2a:
-    contextId: "ctx-abc123"
-    taskId: "task-xyz789"
+            value: trace-xyz789
 ```
 
-## Input Types
+## Fields
 
-### User Input (Default)
-
-Simple string input, treated as a single user message. Supports template parameter expansion.
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: simple-query
-spec:
-  # Type is optional - defaults to "user"
-  input: "What is the capital of {{.country}}?"
-  parameters:
-    - name: country
-      value: "France"
-  target:
-    type: agent
-    name: geography-agent
-```
-
-### Conversation Continuity
-
-For multi-turn conversations, use `conversationId` to maintain context across queries. The memory service manages conversation history.
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: followup-query
-spec:
-  input: "Now calculate 2+2"
-  conversationId: "conv-abc123"
-  target:
-    type: agent
-    name: math-agent
-```
-
-The `conversationId` is returned in `status.conversationId` after the first query completes. Pass it to subsequent queries to continue the conversation.
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.input` | string | yes | The user message. Supports Go template substitution via `{{.name}}` against `spec.parameters`. |
+| `spec.target` | object | conditional | Single execution target. **Either `target` or `selector` must be set** — the validation webhook rejects queries with neither. |
+| `spec.target.type` | enum (`agent`, `team`, `model`, `tool`) | yes (when `target` set) | Resource kind to dispatch to. |
+| `spec.target.name` | string | yes (when `target` set) | Name of the target resource in the same namespace. |
+| `spec.selector` | `LabelSelector` | conditional | Pick a single target by label (alternative to `target`). Resolves to the **first** matching resource, checked in order Agent → Team → Model → Tool. Not a fan-out — it does not run against multiple matches. Empty match set fails with `no matching resources found for selector`. |
+| `spec.type` | enum (`user`) | no | Only `user` is accepted (default). The previous `messages` type is deprecated; the mutating webhook migrates it to `user` and stamps a `migration-warning-input-type` annotation. |
+| `spec.parameters[]` | list | no | Template values substituted into `input` (and into any agent prompt that references `queryParameterRef`). Each entry has a `name` and either a `value` or `valueFrom` (`configMapKeyRef`, `secretKeyRef`). |
+| `spec.memory.name` | string | no | Name of a `Memory` resource that stores conversation history keyed by `conversationId`. **If unset**, the completions executor falls back to a `Memory` named `default` in the same namespace; if that doesn't exist either, it uses a no-op (in-process) store. |
+| `spec.sessionId` | string | no | Identifier for grouping queries in tracking / telemetry. **Auto-derived from the Query UID if unset.** **Not** the same as `conversationId` — `sessionId` is observability, `conversationId` is memory continuity. |
+| `spec.conversationId` | string | no | Conversation threading identifier. Sent to execution engines as the A2A `contextId`. With memory active, ties subsequent queries to the same history. **Auto-generated by the memory backend if unset** (a new conversation is created and the ID written back to `status.conversationId`). |
+| `spec.serviceAccount` | string | no | Kubernetes ServiceAccount used for RBAC during execution. |
+| `spec.timeout` | duration | no | Execution timeout (`30s`, `5m`, `1h`). Defaults to `5m`. Applies to all targets in the query. |
+| `spec.ttl` | duration | no | How long the Query resource lingers after completion. Mutating webhook resolves the default from `ArkConfig/default.spec.queryTTL` (falls back to `720h`). |
+| `spec.cancel` | bool | no | When `true`, indicates intent to cancel a running query. The controller transitions the query to `phase: canceled`. |
+| `spec.overrides[]` | list | no | HTTP header overrides applied when the query's target calls its model or any MCP server. See [Overrides](/user-guide/overrides). |
 
 ## Targets
 
-Targets specify which resources should process the query. Supported types: `agent`, `team`, `model`, `tool`.
+A query dispatches to exactly one target — named directly via `spec.target`, or picked by label via `spec.selector`. Supported `type` values: `agent`, `team`, `model`, `tool`.
 
 ```yaml
 spec:
-  input: "What's your recommendation?"
+  input: "Summarise the news."
   target:
-    type: agent
-    name: data-analyst
     type: team
-    name: review-team
-    type: model
-    name: gpt-4
+    name: news-team
 ```
 
-Each target receives the same input and produces an independent response in `status.response[]`.
-
-## Query Parameter Expansion
-
-### Overview
-
-Query parameters enable dynamic input through Go template syntax. Parameters are resolved from values, ConfigMaps, or Secrets.
-
-**Important:** Parameter expansion applies to the query input string via Go template syntax.
-
-### Parameter Sources
+Pick by label (resolves to a single target — first match across Agent → Team → Model → Tool):
 
 ```yaml
 spec:
-  input: "API: {{.endpoint}}, Key: {{.key}}, Mode: {{.mode}}"
-  parameters:
-    # Direct value
-    - name: mode
-      value: "production"
+  input: "Should we ship this feature?"
+  selector:
+    matchLabels:
+      role: reviewer
+```
 
-    # From ConfigMap
+The webhook enforces that one of `target` / `selector` is set, and that the named resource exists when `target` is used.
+
+## Parameters
+
+Parameters are substituted into `spec.input` (and into agent prompts that declare `queryParameterRef`) before dispatch. Sources:
+
+```yaml
+spec:
+  input: "Hit {{.endpoint}} with token {{.key}}, mode {{.mode}}."
+  parameters:
+    - name: mode
+      value: "production"                     # direct value
     - name: endpoint
       valueFrom:
-        configMapKeyRef:
+        configMapKeyRef:                      # from ConfigMap
           name: api-config
           key: url
-
-    # From Secret
     - name: key
       valueFrom:
-        secretKeyRef:
+        secretKeyRef:                         # from Secret
           name: api-credentials
           key: api-key
 ```
 
-### Template Syntax
+Template syntax is Go templates: `{{.parameter_name}}`. Names must match the `parameters[].name` field.
 
-Use `{{.parameter_name}}` in the input string to reference parameters:
+### Wiring parameters into the agent
 
-```yaml
-input: |
-  Environment: {{.environment}}
-  Database: {{.db_host}}:{{.db_port}}
-  User: {{.db_user}}
-```
-
-Parameters are resolved before the query is sent to the target agent or team.
-
-### Agent Parameters
-
-Agent prompts can reference query parameters using `queryParameterRef`, allowing agents to access values from the query at runtime:
+Agents can pull the same query parameters into their own prompt or system message using `queryParameterRef`:
 
 ```yaml
-# Agent with query parameter reference
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: dynamic-agent
 spec:
   prompt: |
-    You are operating in {{.mode}} mode.
-    Target environment: {{.environment}}
+    You are running in {{.mode}} mode against {{.environment}}.
   parameters:
     - name: mode
       valueFrom:
@@ -212,14 +138,17 @@ spec:
       valueFrom:
         queryParameterRef:
           name: target_env
----
-# Query providing parameters for the agent
+```
+
+The matching query supplies them:
+
+```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: parameterized-query
+  name: parameterised-q1
 spec:
-  input: "Process this request"
+  input: "Run a health check."
   parameters:
     - name: operation_mode
       value: "production"
@@ -230,28 +159,22 @@ spec:
     name: dynamic-agent
 ```
 
-## Session and Conversation Management
+See [Agents → Pass parameter values at query time](/user-guide/agents#pass-parameter-values-at-query-time) for the dashboard walkthrough.
 
-Ark supports two identifiers for tracking and memory continuity:
+## Conversations + memory
 
-- **sessionId**: Groups related queries for tracking and telemetry purposes
-- **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
-
-### Using Conversation ID for Memory
-
-Use `conversationId` with `memory` to maintain conversation context:
+`conversationId` threads queries together; `Memory` stores the history. By default the completions executor uses the `Memory` named `default` in the query's namespace when `spec.memory` is unset — most Ark installs ship one backed by the in-cluster broker. Two queries with the same `conversationId` share context as long as they hit the same memory store:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: query-1
+  name: chat-q1
 spec:
-  conversationId: conv-abc123
-  sessionId: user-session-123
+  input: "Hi, my name is Alice."
+  conversationId: chat-alice-001
   memory:
     name: broker
-  input: "Hello, my name is Alice"
   target:
     type: agent
     name: assistant
@@ -259,215 +182,123 @@ spec:
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: query-2
+  name: chat-q2
 spec:
-  conversationId: conv-abc123  # Same conversation
-  sessionId: user-session-123  # Same session
+  input: "What's my name?"
+  conversationId: chat-alice-001            # same conversation
   memory:
     name: broker
-  input: "What's my name?"
   target:
     type: agent
     name: assistant
 ```
 
-The agent will remember "Alice" from the first query when processing the second because they share the same `conversationId`.
+`sessionId` is a separate identifier for telemetry — same telemetry session can contain many distinct conversations.
 
-If `conversationId` is not provided when using memory, a new conversation ID will be automatically generated for each query.
+If you set `conversationId` without `spec.memory`, the executor still resolves the default `Memory` (so continuity works out of the box on a standard install). The `conversationId` also flows through to execution engines as the A2A `contextId` — named engines (Claude Agent SDK, LangChain, …) can use it for their own session model.
 
-## Timeout Configuration
+If you set `memory` without `conversationId`, the controller auto-generates a fresh `conversationId` on each query.
 
-Control how long ARK waits for query execution before timing out:
+## Timeout
 
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: long-running-query
-spec:
-  input: "Perform deep analysis"
-  target:
-    type: agent
-    name: research-agent
-  timeout: 30m  # Wait up to 30 minutes (default: 5m)
+`spec.timeout` caps execution. Default is `5m`. Format follows Go's `time.ParseDuration` (`30s`, `5m`, `1h`).
+
+- Completes within timeout → `status.phase: done`.
+- Exceeds timeout → `status.phase: error` with a timeout error message in `status.response.content`.
+
+For A2A agents the timeout flows through as a Go context deadline. A2A servers can also enforce their own per-server timeouts via `A2AServer.spec.timeout` — see [Building A2A Servers → Timeout configuration](/developer-guide/building-a2a-servers#timeout-configuration).
+
+## Cancel
+
+To cancel a running query, patch `spec.cancel: true`:
+
+```bash
+kubectl patch query slow-q1 --type='merge' -p='{"spec":{"cancel": true}}'
 ```
 
-**Timeout format**: Duration string (e.g., `30s`, `5m`, `1h`, `30m`)  
-**Default**: 5 minutes if not specified
+The controller transitions the query to `phase: canceled` once the in-flight dispatch acknowledges. The dashboard chat panel does the same when you click **Stop** on an embedded chat.
 
-### Timeout Behavior
-
-- If execution completes within timeout → Query phase: `done`
-- If execution exceeds timeout → Query phase: `error` with timeout error message
-- Applies to all targets in the query
-
-### For A2A Agents
-
-A2A execution automatically respects the query timeout. The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
-
-Individual A2A servers can also have their own timeout configured via `A2AServer.spec.timeout` to further limit specific server calls.
-
-See the [Building A2A Servers guide](/developer-guide/building-a2a-servers#timeout-configuration) for detailed timeout configuration for A2A agents.
-
-## Examples
-
-### Simple Query
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: hello-query
-spec:
-  input: "Hello, how are you?"
-  target:
-    type: agent
-    name: assistant
-```
-
-### Query with Parameters
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: weather-query
-spec:
-  input: "What's the weather in {{.city}} on {{.date}}?"
-  parameters:
-    - name: city
-      value: "Boston"
-    - name: date
-      valueFrom:
-        configMapKeyRef:
-          name: query-config
-          key: target-date
-  target:
-    type: agent
-    name: weather-agent
-```
-
-### Conversation with Messages
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: math-conversation
-spec:
-  type: messages
-  input:
-    - role: user
-      content: "Calculate the sum of 15 and 27"
-    - role: assistant
-      content: "15 + 27 = 42"
-    - role: user
-      content: "Now multiply that result by 3"
-  target:
-    type: agent
-    name: calculator
-```
-
-### Multi-Target Query
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: opinion-poll
-spec:
-  input: "Should we deploy this feature?"
-  target:
-    type: agent
-    name: product-manager
-    type: agent
-    name: tech-lead
-    type: team
-    name: qa-team
-```
-
-### Query with Overrides
-
-Add custom headers for model or MCP server requests:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: tracked-query
-spec:
-  input: "Analyze this data"
-  target:
-    type: agent
-    name: data-analyst
-  overrides:
-    - headers:
-        - name: X-Request-ID
-          value:
-            value: "req-12345"
-        - name: X-User-Context
-          value:
-            valueFrom:
-              configMapKeyRef:
-                name: user-config
-                key: context
-      resourceType: model
-      labelSelector:
-        matchLabels:
-          tier: production
-```
-
-See [Overrides](/user-guide/overrides) for detailed documentation.
-
-## Status and Phases
-
-### Phases
-
-| Phase | Description |
-|-------|-------------|
-| **pending** | Query created, waiting to execute |
-| **running** | Query executing on targets |
-| **done** | All targets completed successfully |
-| **error** | Query execution failed |
-
-### Status Fields
+## Status
 
 ```yaml
 status:
   phase: done
-
-  # Response from each target
-  responses:
-    - target:
-        type: agent
-        name: weather-agent
-        namespace: default
-      content: "Current temperature is 72°F"
-
-  # Execution timing
-  startTime: "2025-10-02T10:00:00Z"
-  completionTime: "2025-10-02T10:00:05Z"
-
-  # A2A protocol metadata (populated when targeting A2A agents)
-  a2a:
-    contextId: "ctx-abc123"
-    taskId: "task-xyz789"
+  conditions:
+    - type: Completed
+      status: "True"
+      reason: QuerySucceeded
+      message: Query completed successfully
+  conversationId: ctx-86e022b0-1f4f-49f5-bc4b-e0d6437a789b
+  duration: 1.82s
+  response:
+    target:
+      type: agent
+      name: weather-agent
+    content: "It's 72°F and sunny in New York"
+    raw: '[{"content":"...","role":"assistant","name":"weather-agent"}]'
+    phase: done
+    a2a:
+      contextId: ctx-86e022b0-1f4f-49f5-bc4b-e0d6437a789b
+      taskId: task-xyz789
+  tokenUsage:
+    promptTokens: 97
+    completionTokens: 20
+    totalTokens: 117
 ```
 
-### A2A Protocol Metadata
+### Status fields
 
-When queries target agents hosted on A2A servers, the `status.a2a` field contains A2A protocol-specific metadata:
+| Field | Description |
+| --- | --- |
+| `status.phase` | One of `pending`, `provisioning`, `running`, `done`, `error`, `canceled`. |
+| `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` on success or failure. |
+| `status.response` | Single response object (singular — there is no `responses[]` array). A selector resolves to one target, so there is always exactly one response. |
+| `status.response.content` | The final assistant message. |
+| `status.response.raw` | The full conversation as a JSON-encoded array of messages — what the dashboard's Debug tab renders. |
+| `status.response.phase` | Per-response phase (mirrors top-level `phase`). |
+| `status.response.target` | The target the response is for. |
+| `status.response.a2a.contextId` | A2A context ID returned by the engine. When `conversationId` is set on the spec, the engine receives it as the `contextId` and echoes it back here. |
+| `status.response.a2a.taskId` | Set when the target is an A2A agent and a task was created. References an `A2ATask` resource — see [A2ATask](/reference/resources/a2atask). |
+| `status.conversationId` | Effective conversation ID — either the one you supplied, or the auto-generated one when memory is set without a `conversationId`. |
+| `status.duration` | Total wall-clock execution time. |
+| `status.tokenUsage` | `promptTokens`, `completionTokens`, `totalTokens` from the underlying model call. |
 
-```yaml
-status:
-  a2a:
-    # Context identifier for grouping related interactions
-    contextId: "ctx-abc123"
+### Phases
 
-    # Task identifier if an A2ATask was created
-    taskId: "task-xyz789"
-```
+| Phase | Meaning |
+| --- | --- |
+| `pending` | Resource accepted by admission, controller hasn't picked it up yet. |
+| `provisioning` | Controller is preparing the dispatch (parameter resolution, target lookup). |
+| `running` | Dispatched to the executor; waiting for the response. |
+| `done` | Execution finished successfully. |
+| `error` | Execution failed; details in `status.response.content`. |
+| `canceled` | `spec.cancel: true` was honoured. |
 
-- **contextId**: The context ID returned by the execution engine. When `conversationId` is set, it is sent to the engine as the A2A contextId, and the engine's response populates this field. The `ark.mckinsey.com/a2a-context-id` annotation can also be used as an advanced override for sub-agent dispatch.
-- **taskId**: References the A2ATask resource created for this query. See [A2ATask](/reference/resources/a2atask) for details.
-```
+### Print columns
+
+`kubectl get queries` prints `Type`, `Phase`, `Duration`, `Age`. Pipe through `-o jsonpath` for the content/raw fields.
+
+## Webhook validation
+
+Enforced by `ark/internal/validation/query.go`:
+
+- Exactly one of `spec.target` and `spec.selector` is required.
+- When `spec.target` is set, the named resource must exist in the namespace and `target.type` must be one of `agent`, `team`, `model`, `tool`.
+- Parameter resolution must succeed (referenced ConfigMaps and Secrets must exist).
+- `spec.overrides[]` must reference real resources for any `valueFrom` source.
+
+## Mutating webhook
+
+Enforced by `ark/internal/validation/defaults.go`:
+
+- `spec.type: messages` is **deprecated**. The mutating webhook extracts the last user-message text, sets `spec.type: user`, replaces `spec.input` with that text, and stamps an `ark.mckinsey.com/migration-warning-input-type` annotation. Use `conversationId` for multi-turn instead.
+- `spec.ttl` is defaulted from `ArkConfig/default.spec.queryTTL` (or `720h` if absent).
+
+## Related
+
+- [User Guide → Run queries / chat with agents and teams](/user-guide/queries) — task-oriented walkthrough.
+- [Agents](/reference/resources/agent) — target type `agent`.
+- [Teams](/reference/resources/team) — target type `team`.
+- [Memory](/reference/resources/memory) — backing store for `spec.memory`.
+- [Overrides](/user-guide/overrides) — header overrides via `spec.overrides`.
+- [A2ATask](/reference/resources/a2atask) — task resource referenced by `status.response.a2a.taskId`.

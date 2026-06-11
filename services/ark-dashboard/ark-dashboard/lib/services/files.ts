@@ -1,4 +1,4 @@
-import { FILES_API_BASE_URL, filesApiClient } from '@/lib/api/files-client';
+import { filesApiClient } from '@/lib/api/files-client';
 import type {
   DeleteDirectoryResponse,
   ListFilesParams,
@@ -49,7 +49,7 @@ export const filesService = {
         reject(new Error('Upload failed'));
       });
 
-      xhr.open('POST', `${FILES_API_BASE_URL}files`);
+      xhr.open('POST', filesApiClient.buildUrl('files'));
       xhr.send(formData);
     });
   },
@@ -59,7 +59,7 @@ export const filesService = {
   },
 
   download(key: string): void {
-    const url = `${FILES_API_BASE_URL}files/${encodeURIComponent(key)}/download`;
+    const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
     window.open(url, '_blank');
   },
 
