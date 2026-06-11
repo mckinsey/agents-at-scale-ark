@@ -30,6 +30,11 @@ pipelines:
 
     start_dev --all
 
+vars:
+  BROKER_POSTGRES_PASSWORD:
+    source: env
+    default: arkdev123
+
 images:
   ark-broker:
     image: ark-broker
@@ -133,7 +138,7 @@ profiles:
       - op: add
         path: deployments.ark-broker.helm.values.database
         value:
-          url: "postgres://postgres:arkdev123@ark-storage-dev:5432/ark?sslmode=disable"
+          url: "postgres://postgres:${BROKER_POSTGRES_PASSWORD}@ark-storage-dev:5432/ark?sslmode=disable"
       - op: add
         path: deployments.ark-broker.helm.values.migrate
         value:
