@@ -1,3 +1,5 @@
 FROM migrate/migrate:v4.19.1
 
-COPY src/db/migrations /migrations
+COPY --chown=65534:65534 src/db/migrations /migrations
+
+USER 65534:65534
