@@ -22,10 +22,6 @@ export default {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
   },
-  'workflow-templates': {
-    title: 'Workflow Templates',
-    href: '/user-guide/workflow-templates'
-  },
   'ark-cli': {
     title: 'Use the Ark CLI',
     href: '/user-guide/ark-cli'
