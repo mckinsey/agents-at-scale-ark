@@ -7,8 +7,10 @@ description: The marketplace-sources ConfigMap, its per-source value schema, RBA
 
 Each namespace stores its marketplace catalogue in a single ConfigMap named
 `marketplace-sources`. The dashboard reads it through ark-api, so a namespace's
-catalogue is shared by every user of that namespace rather than living in each
-browser's `localStorage`.
+catalogue is shared by every user of that namespace.
+
+For seeding catalogues, granting edit access, and multi-namespace operation, see
+[Operating the Marketplace](/operations-guide/marketplace).
 
 ## ConfigMap shape
 
@@ -35,7 +37,7 @@ so Helm-seeded entries and user edits can coexist.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `url` | yes | Absolute `https` URL of a `marketplace.json` manifest. |
+| `url` | yes | Absolute `https` URL of a marketplace manifest. The filename is not constrained. |
 | `displayName` | no | Human label shown in the dashboard. Defaults to the source name. |
 
 Source names must match the Kubernetes ConfigMap key rules (alphanumeric, `-`,
@@ -97,7 +99,7 @@ All endpoints run under the requesting user's identity via impersonation.
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-sources/permissions` | Permission probe (`{canEdit}`, fail-closed). |
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-items` | Aggregate items across all sources. |
 
-The items aggregator fetches each source's `marketplace.json` concurrently
+The items aggregator fetches each source's manifest concurrently
 (per-source timeout 10s, aggregator total 30s), caches successful fetches for
 one hour per `(namespace, source, url)`, and always returns HTTP 200 — per-source
 failures are reported inline with an `error.code` of `fetch_timeout`,

@@ -82,6 +82,20 @@ describe('ManageMarketplaceSettings', () => {
     expect(body.name).toMatch(/^[-._a-z0-9]+$/);
   });
 
+  it('accepts a manifest URL not named marketplace.json', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    render(<ManageMarketplaceSettings />);
+
+    await user.click(screen.getByRole('button', { name: /add new marketplace/i }));
+    const urlInput = screen.getByPlaceholderText(/marketplace\.json/i);
+    await user.type(urlInput, 'https://new.test/agents.json');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).toHaveBeenCalledTimes(1);
+    expect(createMutate.mock.calls[0][0].url).toBe('https://new.test/agents.json');
+  });
+
   it('deletes a source when canEdit is true', async () => {
     setup({ canEdit: true });
     const user = userEvent.setup();

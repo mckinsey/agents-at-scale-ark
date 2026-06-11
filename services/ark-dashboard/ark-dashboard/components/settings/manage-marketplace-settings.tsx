@@ -24,9 +24,6 @@ type NewSourceForm = {
 function validateMarketplaceUrl(url: string): string | null {
   if (!url) return 'Marketplace URL is required';
   if (!url.startsWith('https://')) return 'Only HTTPS URLs are allowed';
-  if (!url.endsWith('/marketplace.json')) {
-    return 'URL must point to a marketplace.json file';
-  }
   return null;
 }
 
