@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.64-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.64-rc...v0.1.64-rc.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* Add docs to release notes ([#2412](https://github.com/mckinsey/agents-at-scale-ark/issues/2412)) ([696b480](https://github.com/mckinsey/agents-at-scale-ark/commit/696b4802c1f750572328002f462d0f1e9ce57786))
+* **api:** Memory UI always empty — read broker messages from items key ([#2427](https://github.com/mckinsey/agents-at-scale-ark/issues/2427)) ([5089cfa](https://github.com/mckinsey/agents-at-scale-ark/commit/5089cfaddb27abda59f16ea5a0777eaac2689f64))
+* **ark-api:** default MCP auth callback to ark-api gateway URL ([#2423](https://github.com/mckinsey/agents-at-scale-ark/issues/2423)) ([223ec03](https://github.com/mckinsey/agents-at-scale-ark/commit/223ec031ebdb8e84204cef04852dd34ace2752fe))
+* Dashboard crashes on debug due to OTLP format ([#2420](https://github.com/mckinsey/agents-at-scale-ark/issues/2420)) ([fc8b0c5](https://github.com/mckinsey/agents-at-scale-ark/commit/fc8b0c5461737fc94556cd33629268847aa1394f))
+* Dashboard mermaid hardening ([#2428](https://github.com/mckinsey/agents-at-scale-ark/issues/2428)) ([64cf1d3](https://github.com/mckinsey/agents-at-scale-ark/commit/64cf1d3f8c6c90bc6e03a4ac9a3a7d893283b315))
+* Make filesApiClient namespace aware ([#2095](https://github.com/mckinsey/agents-at-scale-ark/issues/2095)) ([502ff4c](https://github.com/mckinsey/agents-at-scale-ark/commit/502ff4c3d0e460a52217f96c5e53301273532ef0))
+* **mcp-auth:** drop nonexistent dashboard authorize flow references ([#2426](https://github.com/mckinsey/agents-at-scale-ark/issues/2426)) ([83c512f](https://github.com/mckinsey/agents-at-scale-ark/commit/83c512f2c0abc28e432a8dc2a16dc5a9c370555c)), closes [#2417](https://github.com/mckinsey/agents-at-scale-ark/issues/2417)
+
+
+### Documentation
+
+* **nav:** rename section headers to Basic use / Advanced use ([#2410](https://github.com/mckinsey/agents-at-scale-ark/issues/2410)) ([1607299](https://github.com/mckinsey/agents-at-scale-ark/commit/16072990b5c6f6ac9bbb7a6ece0fd962f71fd5c9))
+* **queries:** rewrite user-guide as 'Run queries / chat with agents and teams', refresh reference, clear deny-list ([#2371](https://github.com/mckinsey/agents-at-scale-ark/issues/2371)) ([23dbd62](https://github.com/mckinsey/agents-at-scale-ark/commit/23dbd629d7a10c86dceca82d29e608f52ff1cb2d))
+* **teams:** rewrite user-guide + reference, validated end-to-end ([#2360](https://github.com/mckinsey/agents-at-scale-ark/issues/2360)) ([3d34e26](https://github.com/mckinsey/agents-at-scale-ark/commit/3d34e2681d7dfd7fbd66e59e401aa112daf97e6e))
+* **tools:** rewrite user-guide as a full tools + MCP guide (UI + kubectl) ([#2385](https://github.com/mckinsey/agents-at-scale-ark/issues/2385)) ([8265bb6](https://github.com/mckinsey/agents-at-scale-ark/commit/8265bb65a6455833d6f41bc7770e84b50cc54138))
+* **tutorials:** add User authorised MCP servers tutorial ([#2411](https://github.com/mckinsey/agents-at-scale-ark/issues/2411)) ([b0820f5](https://github.com/mckinsey/agents-at-scale-ark/commit/b0820f5a3a30c1a77d55ff569fb0029f7163833c))
+* **workflows:** consolidate into one Argo-powered page; fix samples + in-cluster CLI (live-verified) ([#2402](https://github.com/mckinsey/agents-at-scale-ark/issues/2402)) ([fe9f200](https://github.com/mckinsey/agents-at-scale-ark/commit/fe9f2002d93e8c816bef2b4cdb62fb72dc194bed))
+
 ## [0.1.64-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.63...v0.1.64-rc) (2026-06-08)
 
 
