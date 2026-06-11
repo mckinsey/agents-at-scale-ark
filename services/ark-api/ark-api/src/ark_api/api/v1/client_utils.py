@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from ark_sdk.k8s import create_api_client
 from ark_sdk.impersonation import ImpersonationConfig
 
-USER_AGENT = "ark-api"
+USER_AGENT = "ArkAPI"
 
 
 @asynccontextmanager

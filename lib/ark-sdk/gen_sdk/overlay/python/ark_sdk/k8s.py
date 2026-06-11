@@ -15,7 +15,7 @@ from kubernetes_asyncio.client.rest import ApiException
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "ark-sdk"
+USER_AGENT = "ArkSDK"
 
 
 def create_sync_api_client() -> sync_client.ApiClient:
