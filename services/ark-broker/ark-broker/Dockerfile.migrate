@@ -13,5 +13,6 @@ LABEL org.opencontainers.image.title="ark-broker-migrate" \
 # the migration files are owned by the same user, satisfying read access
 # without granting any write capability to the container.
 COPY --chown=65534:65534 src/db/migrations /migrations
+RUN chmod -R a-w /migrations
 
 USER 65534:65534
