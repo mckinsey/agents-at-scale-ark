@@ -1,5 +1,18 @@
 FROM migrate/migrate:v4.19.1
 
+ARG BUILD_DATE
+ARG GIT_REVISION
+ARG VERSION
+
+LABEL org.opencontainers.image.title="ark-broker-migrate" \
+      org.opencontainers.image.description="Applies database schema migrations for ark-broker using golang-migrate" \
+      org.opencontainers.image.source="https://github.com/mckinsey/agents-at-scale-ark" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.vendor="McKinsey & Company" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${GIT_REVISION}"
+
 # Run as nobody (65534:65534) instead of root.
 # Numeric UID/GID is used rather than the "nobody" name so the identity
 # is stable even when /etc/passwd is not available or remapped (e.g. in
