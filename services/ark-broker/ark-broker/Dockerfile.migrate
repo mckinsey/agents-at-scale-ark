@@ -1,5 +1,11 @@
 FROM migrate/migrate:v4.19.1
 
+# Run as nobody (65534:65534) instead of root.
+# Numeric UID/GID is used rather than the "nobody" name so the identity
+# is stable even when /etc/passwd is not available or remapped (e.g. in
+# Kubernetes with a custom user namespace). The --chown on COPY ensures
+# the migration files are owned by the same user, satisfying read access
+# without granting any write capability to the container.
 COPY --chown=65534:65534 src/db/migrations /migrations
 
 USER 65534:65534
