@@ -1,0 +1,9 @@
+{
+  "consolidation_workflow": "dependabot-consolidation-5kcb9",
+  "created_at": "2026-06-11T12:00:00Z",
+  "consolidation_branch": "dependabot/consolidation-20260611",
+  "consolidated_prs": [2431, 2429, 2432, 2433, 2435, 2434, 2430],
+  "total_prs": 7,
+  "ecosystems": ["docker", "github_actions", "npm", "python", "terraform"],
+  "notes": "Consolidating multiple Dependabot PRs to reduce CI/CD load and enable comprehensive testing"
+}
