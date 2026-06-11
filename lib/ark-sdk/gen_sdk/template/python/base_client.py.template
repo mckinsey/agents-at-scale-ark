@@ -12,7 +12,7 @@ import logging
 import asyncio
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, create_sync_api_client
 import yaml
 import json
 
@@ -86,7 +86,7 @@ class ARKResourceClient(Generic[T]):
 
         init_k8s()
 
-        self.api_client = client.ApiClient()
+        self.api_client = create_sync_api_client()
         if default_headers:
             for header_name, header_value in default_headers.items():
                 self.api_client.set_default_header(header_name, header_value)

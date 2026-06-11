@@ -8,6 +8,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from kubernetes_asyncio import client
+from ark_sdk.k8s import create_api_client
 from dotenv import load_dotenv
 from opentelemetry import baggage, propagate, trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -106,7 +107,7 @@ async def lifespan(app: FastAPI):
     await a2a_manager.shutdown()
     
     # Close all kubernetes async clients
-    await client.ApiClient().close()
+    await create_api_client().close()
 
 
 app = FastAPI(

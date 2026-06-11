@@ -109,7 +109,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
         self.service = APIKeyService()
     
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_create_api_key(self, mock_v1_api, mock_api_client):
         """Test API key creation."""
@@ -149,7 +149,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         self.assertIn("secret_key_hash", secret_body.string_data)
         self.assertIn("is_active", secret_body.string_data)
     
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_list_api_keys(self, mock_v1_api, mock_api_client):
         """Test API key listing."""
@@ -193,7 +193,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
             label_selector=f"{API_KEY_TYPE}=true"
         )
     
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_delete_api_key(self, mock_v1_api, mock_api_client):
         """Test API key soft deletion."""
@@ -228,7 +228,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         self.assertIn("deletedAt", annotation_data)
         self.assertEqual(patched_secret.string_data["is_active"], "false")
     
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_verify_api_key_success(self, mock_v1_api, mock_api_client):
         """Test successful API key verification."""
@@ -272,7 +272,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         # Verify last used timestamp was updated
         mock_api_instance.patch_namespaced_secret.assert_called_once()
     
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_verify_api_key_invalid_secret(self, mock_v1_api, mock_api_client):
         """Test API key verification with invalid secret."""
@@ -332,7 +332,7 @@ class TestAPIKeyNamespaceScoping(unittest.TestCase):
         mock_get_context.assert_called_once()
     
     @patch('ark_api.services.api_keys.get_context')
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_api_keys_isolated_by_namespace(self, mock_v1_api, mock_api_client, mock_get_context):
         """Test that API keys in different namespaces are isolated."""
@@ -370,7 +370,7 @@ class TestAPIKeyNamespaceScoping(unittest.TestCase):
         self.assertEqual(calls[1][1]["namespace"], "team-b")
     
     @patch('ark_api.services.api_keys.get_context')
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_list_api_keys_namespace_scoped(self, mock_v1_api, mock_api_client, mock_get_context):
         """Test that listing API keys only returns keys from the service's namespace."""
@@ -398,7 +398,7 @@ class TestAPIKeyNamespaceScoping(unittest.TestCase):
         )
     
     @patch('ark_api.services.api_keys.get_context')
-    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_verify_api_key_namespace_scoped(self, mock_v1_api, mock_api_client, mock_get_context):
         """Test that API key verification is namespace-scoped."""

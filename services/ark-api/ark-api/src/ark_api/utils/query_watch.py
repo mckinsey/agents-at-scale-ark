@@ -7,6 +7,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 from kubernetes_asyncio import client, watch
+from ark_sdk.k8s import create_api_client
 
 from ark_api.core.constants import GROUP
 
@@ -79,7 +80,7 @@ async def watch_query_completion(ark_client, query_name: str, model: str, messag
     """Watch for query completion using Kubernetes watch API and return chat completion response."""
     namespace = ark_client.namespace
 
-    api_client = client.ApiClient()
+    api_client = create_api_client()
     custom_api = client.CustomObjectsApi(api_client)
     w = watch.Watch()
 
