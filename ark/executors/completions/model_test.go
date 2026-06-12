@@ -27,9 +27,15 @@ func TestResolveModelSpec_NilModelSpec(t *testing.T) {
 }
 
 func TestResolveModelSpec_NilAgentModelRefPointer(t *testing.T) {
-	_, _, err := ResolveModelSpec((*arkv1alpha1.AgentModelRef)(nil), defaultNamespace)
-	if err == nil || !strings.Contains(err.Error(), "AgentModelRef pointer is nil") {
-		t.Errorf("expected 'AgentModelRef pointer is nil' error, got: %v", err)
+	modelName, namespace, err := ResolveModelSpec((*arkv1alpha1.AgentModelRef)(nil), defaultNamespace)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if modelName != "default" {
+		t.Errorf("expected default model, got: %s", modelName)
+	}
+	if namespace != defaultNamespace {
+		t.Errorf("expected default namespace, got: %s", namespace)
 	}
 }
 
