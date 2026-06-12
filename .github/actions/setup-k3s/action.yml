@@ -159,9 +159,12 @@ runs:
     - name: Wait for k3s bootstrap RBAC
       run: |
         echo "::group::Wait for k3s bootstrap RBAC"
+        # Probe the actual auth chain (rolebinding + configmap + apiserver
+        # cache) instead of pattern-matching resource names; the rolebinding
+        # the cloud-controller uses has been renamed across k3s versions.
         for attempt in $(seq 1 24); do
-          if kubectl -n kube-system get rolebinding extension-apiserver-authentication-reader >/dev/null 2>&1 \
-             && kubectl -n kube-system get configmap extension-apiserver-authentication >/dev/null 2>&1; then
+          if kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+               --as=k3s-cloud-controller-manager >/dev/null 2>&1; then
             echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
             break
           fi
@@ -170,6 +173,8 @@ runs:
           if [ "$attempt" -eq 24 ]; then
             echo "Timed out waiting for k3s bootstrap RBAC"
             kubectl -n kube-system get rolebinding,configmap || true
+            kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+              --as=k3s-cloud-controller-manager -v=6 || true
             exit 1
           fi
         done
