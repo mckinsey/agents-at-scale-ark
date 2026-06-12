@@ -3,7 +3,7 @@ version: 2
 updates:
   # GitHub Actions
   - package-ecosystem: github-actions
-    directory: '.github/workflows'
+    directory: '.github'
     commit-message:
       prefix: 'chore(actions): '
     schedule:
