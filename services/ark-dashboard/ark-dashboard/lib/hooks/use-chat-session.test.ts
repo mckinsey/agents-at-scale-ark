@@ -406,9 +406,7 @@ describe('useChatSession - Approval Handling', () => {
   });
 
   describe('Approval Message Display', () => {
-    it.skip(
-      'includes query name in approval message metadata',
-      async () => {
+    it.skip('includes query name in approval message metadata', async () => {
         const mockChunks = [
           {
             type: 'tool_approval_request',
@@ -454,13 +452,9 @@ describe('useChatSession - Approval Handling', () => {
           },
           { timeout: 10000 },
         );
-      },
-      { timeout: 15000 },
-    );
+    });
 
-    it.skip(
-      'preserves tool call information in approval message',
-      async () => {
+    it.skip('preserves tool call information in approval message', async () => {
         const toolCalls = [
           {
             id: 'call-1',
@@ -523,8 +517,6 @@ describe('useChatSession - Approval Handling', () => {
           },
           { timeout: 10000 },
         );
-      },
-      { timeout: 15000 },
-    );
+    });
   });
 });
