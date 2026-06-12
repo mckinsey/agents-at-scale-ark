@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from kubernetes import client
 from kubernetes.client.rest import ApiException
+from ark_sdk.k8s import create_sync_api_client
 
 from ark_sdk.models.kubernetes import NamespaceResponse, NamespaceListResponse
 
@@ -21,7 +22,7 @@ async def list_namespaces() -> NamespaceListResponse:
         NamespaceListResponse: List of all namespaces
     """
     try:
-        v1 = client.CoreV1Api()
+        v1 = client.CoreV1Api(create_sync_api_client())
         namespaces = v1.list_namespace()
         
         namespace_list = []

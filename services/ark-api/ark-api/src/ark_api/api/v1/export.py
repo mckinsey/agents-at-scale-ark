@@ -13,6 +13,7 @@ from kubernetes import client
 from kubernetes.client import CustomObjectsApi
 from kubernetes.client.rest import ApiException
 
+from ark_sdk.k8s import create_sync_api_client
 from ark_sdk.client import with_ark_client
 from ark_sdk.impersonation import ImpersonationConfig
 
@@ -40,7 +41,7 @@ EXPORT_CONFIGMAP_NAMESPACE = get_current_context()['namespace']
 async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consistency with project architecture
     """Get export history from ConfigMap."""
     try:
-        v1 = client.CoreV1Api()
+        v1 = client.CoreV1Api(create_sync_api_client())
         cm = v1.read_namespaced_config_map(
             name=EXPORT_CONFIGMAP_NAME,
             namespace=EXPORT_CONFIGMAP_NAMESPACE
@@ -58,7 +59,7 @@ async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consist
 async def update_export_history(timestamp: datetime, resource_counts: Dict[str, int]):
     """Update export history in ConfigMap."""
     try:
-        v1 = client.CoreV1Api()
+        v1 = client.CoreV1Api(create_sync_api_client())
         history = await get_export_history()
 
         history["last_export"] = timestamp.isoformat()
@@ -134,7 +135,7 @@ async def _collect_workflows(
     def _fetch_workflows_sync():
         """Synchronous helper to fetch workflow templates."""
         items = []
-        custom_api = CustomObjectsApi()
+        custom_api = CustomObjectsApi(create_sync_api_client())
 
         try:
             # Determine namespace

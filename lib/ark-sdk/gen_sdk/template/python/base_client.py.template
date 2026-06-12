@@ -12,7 +12,7 @@ import logging
 import asyncio
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, create_sync_api_client
 import yaml
 import json
 
@@ -75,7 +75,8 @@ class ARKResourceClient(Generic[T]):
         plural: str,
         model_class: Type[T],
         namespace: str = "default",
-        default_headers: Optional[Dict[str, str]] = None
+        default_headers: Optional[Dict[str, str]] = None,
+        user_agent: Optional[str] = None
     ):
         self.api_version = api_version
         self.kind = kind
@@ -86,7 +87,9 @@ class ARKResourceClient(Generic[T]):
 
         init_k8s()
 
-        self.api_client = client.ApiClient()
+        self.api_client = create_sync_api_client()
+        if user_agent:
+            self.api_client.user_agent = user_agent
         if default_headers:
             for header_name, header_value in default_headers.items():
                 self.api_client.set_default_header(header_name, header_value)
@@ -292,8 +295,9 @@ class ARKResourceClient(Generic[T]):
 class _ARKClient:
     """Base ARK client class"""
 
-    def __init__(self, namespace: Optional[str] = None, default_headers: Optional[Dict[str, str]] = None):
+    def __init__(self, namespace: Optional[str] = None, default_headers: Optional[Dict[str, str]] = None, user_agent: Optional[str] = None):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
         self.default_headers = default_headers
+        self.user_agent = user_agent
