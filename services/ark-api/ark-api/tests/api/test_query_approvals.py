@@ -221,15 +221,12 @@ class TestSubmitApproval(unittest.TestCase):
         from ark_api.main import app
         self.client = TestClient(app)
 
-    @patch('ark_api.api.v1.queries.asyncio.to_thread')
-    @patch('kubernetes.client.CustomObjectsApi')
     @patch('ark_api.api.v1.queries.with_ark_client')
-    def test_submit_approval_approved(self, mock_ark_client, mock_custom_api, mock_to_thread):
+    def test_submit_approval_approved(self, mock_ark_client):
         """Test POST approval with action='approved' updates A2ATask to completed."""
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
-        # Mock query in input-required phase
         mock_query = Mock()
         mock_query.to_dict.return_value = {
             "metadata": {
@@ -246,7 +243,6 @@ class TestSubmitApproval(unittest.TestCase):
             }
         }
 
-        # Mock current task
         mock_task = Mock()
         mock_task.to_dict.return_value = {
             "metadata": {
@@ -260,9 +256,7 @@ class TestSubmitApproval(unittest.TestCase):
 
         mock_client.queries.a_get = AsyncMock(return_value=mock_query)
         mock_client.a2atasks.a_get = AsyncMock(return_value=mock_task)
-
-        # Mock kubernetes API patch
-        mock_to_thread.return_value = None
+        mock_client.a2atasks.a_patch = AsyncMock(return_value=None)
 
         response = self.client.post(
             "/v1/queries/test-query/approval?namespace=default",
@@ -277,16 +271,14 @@ class TestSubmitApproval(unittest.TestCase):
         self.assertEqual(data["action"], "approved")
         self.assertEqual(data["taskId"], "task-789")
 
-        # Verify patch was called with approved decision in spec.input
-        mock_to_thread.assert_called_once()
-        call_args = mock_to_thread.call_args
-        patch_body = call_args.kwargs['body']
-        self.assertEqual(patch_body["spec"]["input"], '{"decision": "approved"}')
+        mock_client.a2atasks.a_patch.assert_awaited_once()
+        args, _ = mock_client.a2atasks.a_patch.call_args
+        self.assertEqual(args[0], "a2a-task-task-789")
+        self.assertEqual(args[1], {"spec": {"input": '{"decision": "approved"}'}})
+        self.assertEqual(args[2], "default")
 
-    @patch('ark_api.api.v1.queries.asyncio.to_thread')
-    @patch('kubernetes.client.CustomObjectsApi')
     @patch('ark_api.api.v1.queries.with_ark_client')
-    def test_submit_approval_rejected(self, mock_ark_client, mock_custom_api, mock_to_thread):
+    def test_submit_approval_rejected(self, mock_ark_client):
         """Test POST approval with action='rejected' updates A2ATask to failed."""
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
@@ -316,7 +308,7 @@ class TestSubmitApproval(unittest.TestCase):
 
         mock_client.queries.a_get = AsyncMock(return_value=mock_query)
         mock_client.a2atasks.a_get = AsyncMock(return_value=mock_task)
-        mock_to_thread.return_value = None
+        mock_client.a2atasks.a_patch = AsyncMock(return_value=None)
 
         response = self.client.post(
             "/v1/queries/test-query/approval?namespace=default",
@@ -328,10 +320,9 @@ class TestSubmitApproval(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["action"], "rejected")
 
-        # Verify patch was called with rejected decision in spec.input
-        call_args = mock_to_thread.call_args
-        patch_body = call_args.kwargs['body']
-        self.assertEqual(patch_body["spec"]["input"], '{"decision": "rejected"}')
+        mock_client.a2atasks.a_patch.assert_awaited_once()
+        args, _ = mock_client.a2atasks.a_patch.call_args
+        self.assertEqual(args[1], {"spec": {"input": '{"decision": "rejected"}'}})
 
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_submit_approval_query_not_found(self, mock_ark_client):
@@ -411,10 +402,8 @@ class TestSubmitApproval(unittest.TestCase):
         data = response.json()
         self.assertIn("No approval task found", data["detail"])
 
-    @patch('ark_api.api.v1.queries.asyncio.to_thread')
-    @patch('kubernetes.client.CustomObjectsApi')
     @patch('ark_api.api.v1.queries.with_ark_client')
-    def test_submit_approval_validates_namespace(self, mock_ark_client, mock_custom_api, mock_to_thread):
+    def test_submit_approval_validates_namespace(self, mock_ark_client):
         """Test POST approval validates namespace parameter."""
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
@@ -444,7 +433,7 @@ class TestSubmitApproval(unittest.TestCase):
 
         mock_client.queries.a_get = AsyncMock(return_value=mock_query)
         mock_client.a2atasks.a_get = AsyncMock(return_value=mock_task)
-        mock_to_thread.return_value = None
+        mock_client.a2atasks.a_patch = AsyncMock(return_value=None)
 
         response = self.client.post(
             "/v1/queries/test-query/approval?namespace=custom-namespace",
@@ -455,10 +444,9 @@ class TestSubmitApproval(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["queryNamespace"], "custom-namespace")
 
-        # Verify patch was called with correct namespace
-        call_args = mock_to_thread.call_args
-        patch_namespace = call_args.kwargs['namespace']
-        self.assertEqual(patch_namespace, "custom-namespace")
+        mock_client.a2atasks.a_patch.assert_awaited_once()
+        args, _ = mock_client.a2atasks.a_patch.call_args
+        self.assertEqual(args[2], "custom-namespace")
 
     def test_submit_approval_invalid_action(self):
         """Test POST approval validates action field."""

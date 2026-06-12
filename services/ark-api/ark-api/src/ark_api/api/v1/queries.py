@@ -1,11 +1,9 @@
 """API routes for Query resources."""
 
-import asyncio
 import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from typing import Optional
-from kubernetes_asyncio import client as k8s_client
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
@@ -437,20 +435,13 @@ async def submit_approval(
         current_task = await ark_client.a2atasks.a_get(task_name)
         current_task_dict = current_task.to_dict()
 
-        # Set the approval decision in spec.input as JSON
         decision_json = json.dumps({"decision": request.action.value})
 
-        # Patch the spec to set the input field with the approval decision
-        # Use the ark_client's underlying api_client to preserve impersonation
         actual_namespace = query_dict["metadata"]["namespace"]
-        custom_api = k8s_client.CustomObjectsApi(ark_client._api_client)
-        await custom_api.patch_namespaced_custom_object(
-            group="ark.mckinsey.com",
-            version=VERSION,
-            namespace=actual_namespace,
-            plural="a2atasks",
-            name=task_name,
-            body={"spec": {"input": decision_json}}
+        await ark_client.a2atasks.a_patch(
+            task_name,
+            {"spec": {"input": decision_json}},
+            actual_namespace,
         )
 
         return ApprovalResponse(
