@@ -1094,6 +1094,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.2"
+          # Coverage tooling only; no project build, so module caching has no value here.
+          cache: false
 
       - name: Install Python coverage tools
         run: |
@@ -1334,6 +1336,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.2'
+          # goreleaser builds tools/fark; cache against its go.sum.
+          cache-dependency-path: tools/fark/go.sum
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
