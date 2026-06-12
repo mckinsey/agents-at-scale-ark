@@ -1420,6 +1420,7 @@ export interface paths {
          *         query_name: Name of the query
          *         request: Approval action (approved/rejected)
          *         namespace: Namespace for the query
+         *         impersonation: Impersonation configuration for RBAC enforcement
          *
          *     Returns:
          *         ApprovalResponse with status and query information
