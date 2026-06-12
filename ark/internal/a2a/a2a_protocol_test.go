@@ -941,3 +941,70 @@ func TestUpdateA2ATaskStatus(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+func TestIsUserRejection(t *testing.T) {
+	completedType := string(arkv1alpha1.A2ATaskCompleted)
+
+	t.Run("returns false when conditions are empty", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{}
+		if IsUserRejection(task) {
+			t.Error("expected false for empty conditions")
+		}
+	})
+
+	t.Run("returns false when Completed condition is missing", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   "Unrelated",
+					Reason: ConditionReasonApprovalRejected,
+				}},
+			},
+		}
+		if IsUserRejection(task) {
+			t.Error("expected false when no Completed condition")
+		}
+	})
+
+	t.Run("returns true when Completed condition has ApprovalRejected reason", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalRejected,
+				}},
+			},
+		}
+		if !IsUserRejection(task) {
+			t.Error("expected true for explicit user rejection")
+		}
+	})
+
+	t.Run("returns false for timeout rejection (not a user rejection)", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalTimeoutRejected,
+				}},
+			},
+		}
+		if IsUserRejection(task) {
+			t.Error("expected false for timeout-driven rejection")
+		}
+	})
+
+	t.Run("returns false for granted approval", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalGranted,
+				}},
+			},
+		}
+		if IsUserRejection(task) {
+			t.Error("expected false for approved task")
+		}
+	})
+}
