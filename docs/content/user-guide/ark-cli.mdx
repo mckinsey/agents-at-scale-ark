@@ -104,10 +104,17 @@ tool/file-gateway-read-file
 
 `ark queries` also has subcommands for working with a single query:
 
+| Subcommand | What it does |
+| --- | --- |
+| `ark queries get <name>` | Show one query. `@latest` resolves to the most recent. `-o json\|markdown`, `-r` prints only the response content. |
+| `ark queries delete [name]` | Delete a query, or `--all` to delete every query. |
+| `ark queries resubmit <name>` | Re-run a query by clearing its status (`@latest` supported). |
+
 ```bash
-ark queries get @latest            # show the most recent query (@latest is supported)
+ark queries get @latest -r          # just the response text of the most recent query
 ark queries delete my-query
-ark queries resubmit @latest       # re-run by clearing its status
+ark queries delete --all
+ark queries resubmit @latest
 ```
 
 ### Run work
@@ -141,17 +148,43 @@ ark chat                # pick a target interactively
 ark chat agent/default  # chat with a specific agent or model
 ```
 
-### Author resources
+### Create a model
+
+`ark models create` is an interactive helper that creates a `Model` resource (and the backing API-key `Secret`) without writing YAML. Run it bare for prompts, or pass flags to skip them:
+
+```bash
+ark models create default                       # interactive
+ark models create default \                      # non-interactive
+  --type openai --model gpt-4o-mini \
+  --base-url https://api.openai.com/v1 \
+  --api-key "$OPENAI_API_KEY" --yes
+```
+
+Flags: `--type` (`openai`, `azure`, `bedrock`), `--model`, `--base-url`, `--api-key`, `--api-version` (Azure), `--yes` to skip confirmation.
+
+### Generate, export, import
 
 | Command | What it does |
 | --- | --- |
-| `ark generate <kind> [name]` | Scaffold a resource from a template: `project`, `agent`, `team`, `query`, `mcp-server`, or `marketplace`. Interactive. |
+| `ark generate <kind> [name]` | Scaffold a resource from a template (interactive by default; `--no-interactive` for defaults). See the generators below. |
 | `ark export` | Export resources to a YAML file. `-n` namespace, `-t` types, `-l` label selector, `-o` output path. |
 | `ark import <file>` | Apply resources from a YAML file. |
 
+`ark generate` (alias `ark g`) scaffolds files on disk:
+
+| Generator | Scaffolds |
+| --- | --- |
+| `project` | A complete Ark project — Helm chart, CI/CD, sample agents/teams/queries, model configs, RBAC. Flags include `--project-type empty\|with-samples`, `--namespace`, `--skip-models`, `--skip-git`. |
+| `agent` | An agent YAML in the current project (must be run inside a project). |
+| `team` | A team with selected agents and a strategy (sequential / round-robin / graph / selector). |
+| `query` | A query to test an agent or team. |
+| `mcp-server` | An MCP server with a Kubernetes deployment (Node.js / Deno / Go / Python). |
+| `marketplace` | A central marketplace repository structure for sharing components. |
+
 ```bash
 ark generate project my-project    # full project: charts, CI/CD, samples
-ark generate agent my-agent        # a single agent definition
+ark g agent customer-support       # an agent in the current project
+ark g team research-team           # a team with a chosen strategy
 
 ark export -o backup.yaml                       # everything in the namespace
 ark export -t agents,teams -o agents-teams.yaml # only some types
@@ -183,8 +216,13 @@ Pin a version with `--marketplace-version <v>`. See the [marketplace repo](https
 
 | Command | What it does |
 | --- | --- |
-| `ark mcp auth login <server>` | Start an OAuth flow for an `MCPServer` (via ark-api). |
-| `ark mcp auth logout <server>` | Clear stored OAuth state for an `MCPServer`. |
+| `ark mcp auth login <server>` | Start an OAuth flow for an `MCPServer` (via ark-api). Flags: `-n` namespace, `--no-open` (print the URL instead of opening a browser), `--scope`, `--timeout`, `--force` (fresh client registration). |
+| `ark mcp auth logout <server>` | Clear stored OAuth state for an `MCPServer`. Flags: `-n` namespace, `--keep-client` (keep cached client credentials), `--delete-secret` (remove the whole token Secret). |
+
+```bash
+ark mcp auth login my-server --no-open --scope "repo,read:org"
+ark mcp auth logout my-server --delete-secret
+```
 
 ### Open things
 
