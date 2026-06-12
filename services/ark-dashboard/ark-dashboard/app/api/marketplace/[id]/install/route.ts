@@ -88,31 +88,6 @@ async function executeHelmCommand(
 }
 
 /**
- * Check if Helm is available
- */
-async function checkHelmAvailable(): Promise<{
-  available: boolean;
-  error?: string;
-}> {
-  try {
-    const { stdout } = await executeHelmCommand(
-      'helm',
-      ['version', '--short'],
-      10000,
-    );
-    console.log('Helm version:', stdout.trim());
-    return { available: true };
-  } catch (error) {
-    console.error('Helm not available:', error);
-    return {
-      available: false,
-      error:
-        'Helm CLI is not available. Please ensure helm is installed and accessible.',
-    };
-  }
-}
-
-/**
  * Maps source item type to marketplace installation path category.
  */
 function getMarketplaceCategoryPath(
@@ -209,8 +184,6 @@ export async function POST(
       );
     }
 
-    const { mode } = await request.json().catch(() => ({ mode: 'command' }));
-
     const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
     if (error) return error;
 
@@ -248,45 +221,7 @@ export async function POST(
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
 
-    if (mode === 'command') {
-      return buildCommandResponse(item!, id, helmCommand, ark.namespace);
-    }
-
-    console.log('Attempting direct execution:', helmCommand);
-
-    try {
-      const helmCheck = await checkHelmAvailable();
-      if (!helmCheck.available) {
-        return buildCommandResponse(
-          item!,
-          id,
-          helmCommand,
-          ark.namespace,
-          'Direct installation not available. Run this command in your terminal:',
-        );
-      }
-
-      const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
-
-      logHelmStderr(stderr);
-      console.log('Helm stdout:', stdout);
-
-      return NextResponse.json({
-        message: `Successfully installed ${item!.name}`,
-        status: 'installed',
-        output: stdout,
-      });
-    } catch (error) {
-      console.error('Direct installation failed, returning command:', error);
-
-      return buildCommandResponse(
-        item!,
-        id,
-        helmCommand,
-        ark.namespace,
-        'Direct installation not available. Run this command in your terminal:',
-      );
-    }
+    return buildCommandResponse(item!, id, helmCommand, ark.namespace);
   } catch (error) {
     console.error('Error installing marketplace item:', error);
     return NextResponse.json(
