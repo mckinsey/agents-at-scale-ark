@@ -74,6 +74,10 @@ export default {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
   },
+  'operate-marketplace': {
+    title: 'Marketplace',
+    href: '/operations-guide/marketplace'
+  },
   pipelines: {
     title: 'Build pipelines',
     href: '/operations-guide/build-pipelines'
