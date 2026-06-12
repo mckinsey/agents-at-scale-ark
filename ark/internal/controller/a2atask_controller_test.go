@@ -215,6 +215,7 @@ var _ = Describe("A2ATask Controller", func() {
 		})
 	})
 })
+
 func TestComputePollBackoff(t *testing.T) {
 	base := 5 * time.Second
 	tests := []struct {
