@@ -2,7 +2,9 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple
 
-RBAC_BINDINGS = Path(__file__).resolve().parent.parent / "fixtures" / "rbac-test-bindings.yaml"
+_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "rbac-test-bindings.yaml"
+_SAMPLES = Path(__file__).resolve().parents[4] / "samples" / "rbac-test-bindings.yaml"
+RBAC_BINDINGS = _FIXTURES if _FIXTURES.exists() else _SAMPLES
 
 NAMESPACE = "default"
 # A namespace with no RBAC test bindings, used to prove the RoleBindings are
