@@ -1,9 +1,4 @@
-import os
-import sys
-
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from helpers.rbac_helper import (
     ADMIN_GROUP,
@@ -18,9 +13,8 @@ from helpers.rbac_helper import (
 # ClusterRole bindings work without re-testing K8s parametrize mechanics 9×.
 PROBE_RESOURCES = ["agents", "a2atasks"]
 
-ADMIN_VERBS = ["list", "get", "create", "update", "delete"]
-VIEWER_VERBS_ALLOWED = ["list", "get"]
-VIEWER_VERBS_DENIED = ["create", "update", "delete"]
+READ_VERBS = ["list", "get"]
+WRITE_VERBS = ["create", "update", "delete"]
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +33,7 @@ class TestAdminRole:
 
     @pytest.mark.parametrize("resource", PROBE_RESOURCES)
     def test_admin_full_access(self, rbac, resource):
-        denied = [v for v in ADMIN_VERBS if not rbac.can_i(v, resource, ADMIN_USER, ADMIN_GROUP)]
+        denied = [v for v in READ_VERBS + WRITE_VERBS if not rbac.can_i(v, resource, ADMIN_USER, ADMIN_GROUP)]
         assert not denied, f"admin denied {denied} on {resource}"
 
 
@@ -50,12 +44,12 @@ class TestViewerRole:
 
     @pytest.mark.parametrize("resource", PROBE_RESOURCES)
     def test_viewer_read_allowed(self, rbac, resource):
-        denied = [v for v in VIEWER_VERBS_ALLOWED if not rbac.can_i(v, resource, VIEWER_USER, VIEWER_GROUP)]
+        denied = [v for v in READ_VERBS if not rbac.can_i(v, resource, VIEWER_USER, VIEWER_GROUP)]
         assert not denied, f"viewer denied read verb {denied} on {resource}"
 
     @pytest.mark.parametrize("resource", PROBE_RESOURCES)
     def test_viewer_write_denied(self, rbac, resource):
-        allowed = [v for v in VIEWER_VERBS_DENIED if rbac.can_i(v, resource, VIEWER_USER, VIEWER_GROUP)]
+        allowed = [v for v in WRITE_VERBS if rbac.can_i(v, resource, VIEWER_USER, VIEWER_GROUP)]
         assert not allowed, f"viewer must not have write verb {allowed} on {resource}"
 
 

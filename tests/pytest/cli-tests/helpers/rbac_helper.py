@@ -2,8 +2,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-RBAC_BINDINGS = REPO_ROOT / "samples" / "rbac-test-bindings.yaml"
+RBAC_BINDINGS = Path(__file__).resolve().parent.parent / "fixtures" / "rbac-test-bindings.yaml"
 
 NAMESPACE = "default"
 # A namespace with no RBAC test bindings, used to prove the RoleBindings are

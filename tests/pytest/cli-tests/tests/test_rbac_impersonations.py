@@ -1,18 +1,11 @@
-import os
-import sys
-
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from helpers.ark_api_helper import ensure_port_forward, send_request
+from helpers.ark_api_helper import get_api_url, is_api_reachable, send_request
 
 REJECTION_DETAIL = "Client-supplied Impersonate-* headers are not allowed"
-RESOURCE_PATH = "/v1/agents?namespace=default"
-HEALTH_PATH = "/health"
 
 # Canonical header name + lowercase variant. Enough to prove the middleware
-# blocks the known attack vectors and is case-insensitive.
+# blocks the known attack vector and is case-insensitive.
 IMPERSONATE_HEADERS = [
     "Impersonate-User",
     "impersonate-user",
@@ -21,9 +14,10 @@ IMPERSONATE_HEADERS = [
 
 @pytest.fixture(scope="module", autouse=True)
 def api_available():
-    assert ensure_port_forward(), (
-        "ark-api is not reachable on localhost:8080. "
-        "Run: kubectl port-forward svc/ark-api 8080:80 -n default"
+    url = get_api_url()
+    assert is_api_reachable(), (
+        f"ark-api is not reachable at {url}. "
+        "Set ARK_API_URL to override, or ensure the local gateway is running."
     )
 
 
@@ -41,26 +35,26 @@ class TestImpersonationHeaderRejection:
 
     @pytest.mark.parametrize("header_name", IMPERSONATE_HEADERS)
     def test_single_header_rejected(self, header_name):
-        status, body = send_request(RESOURCE_PATH, headers={header_name: "attacker@example.com"})
+        status, body = send_request("/v1/agents?namespace=default", headers={header_name: "attacker@example.com"})
         assert status == 403, f"'{header_name}' should be rejected with 403, got {status}"
         assert REJECTION_DETAIL in _detail(body), f"Missing rejection detail, got: {body}"
 
     def test_multiple_headers_rejected(self):
         status, body = send_request(
-            RESOURCE_PATH,
+            "/v1/agents?namespace=default",
             headers={"Impersonate-User": "attacker@example.com", "Impersonate-Group": "ark-admin"},
         )
         assert status == 403 and REJECTION_DETAIL in _detail(body)
 
     def test_rejection_applies_to_health_and_post(self):
         health_status, health_body = send_request(
-            HEALTH_PATH, headers={"Impersonate-User": "attacker@example.com"}
+            "/health", headers={"Impersonate-User": "attacker@example.com"}
         )
         assert health_status == 403, f"Must reject on public route, got {health_status}"
         assert REJECTION_DETAIL in _detail(health_body)
 
         post_status, post_body = send_request(
-            RESOURCE_PATH,
+            "/v1/agents?namespace=default",
             method="POST",
             headers={"Impersonate-User": "attacker@example.com"},
             data={"metadata": {"name": "rbac-test-agent"}},
@@ -70,13 +64,11 @@ class TestImpersonationHeaderRejection:
 
     def test_bearer_token_does_not_bypass_check(self):
         status, body = send_request(
-            RESOURCE_PATH,
+            "/v1/agents?namespace=default",
             headers={"Authorization": "Bearer not-a-real-token", "Impersonate-User": "attacker@example.com"},
         )
         assert status == 403 and REJECTION_DETAIL in _detail(body)
 
     def test_normal_request_not_rejected(self):
-        status, body = send_request(RESOURCE_PATH)
-        assert not (status == 403 and REJECTION_DETAIL in _detail(body)), (
-            f"Request without Impersonate-* headers must not be blocked. Body: {body}"
-        )
+        status, _ = send_request("/v1/agents?namespace=default")
+        assert status != 403, "Request without Impersonate-* headers must not return 403"
