@@ -15,10 +15,11 @@ import {
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type { Agent } from '@/lib/services';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface AgentRowProps {
@@ -42,6 +43,8 @@ export function AgentRow({ agent, onDelete, leading }: AgentRowProps) {
     Bot,
   );
 
+  const originIcon = getOriginIcon(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
+
   return (
     <>
       <div
@@ -61,9 +64,13 @@ export function AgentRow({ agent, onDelete, leading }: AgentRowProps) {
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={agent.name}>
-              {agent.name}
-            </p>
+            <div className="flex items-center gap-x-1.5">
+              {originIcon}
+              <p className="truncate text-sm font-medium" title={agent.name}>
+                {agent.name}
+              </p>
+            </div>
+
             <p
               className="text-muted-foreground truncate text-xs"
               title={agent.description || ''}>

@@ -32,6 +32,7 @@ metadata:
   name: research-team
 spec:
   strategy: selector
+  maxTurns: 10
   members:
     - name: researcher
       type: agent
@@ -43,10 +44,10 @@ spec:
     agent: coordinator
 ```
 
-Query the team and let AI choose the best participant for each step:
+Query the team and let the selector choose the best participant for each step:
 
 ```bash
-fark team research-team 'analyze market trends for electric vehicles'
+ark query team/research-team "analyze market trends for electric vehicles"
 ```
 
 The selector agent will automatically choose which team member should respond based on the conversation context and member descriptions.
@@ -98,6 +99,7 @@ metadata:
   name: constrained-research-team
 spec:
   strategy: selector
+  maxTurns: 10
   selector:
     agent: coordinator
   members:
@@ -121,7 +123,7 @@ spec:
 - If multiple legal transitions exist, the selector agent chooses from those candidates
 - This combines the flexibility of AI selection with the structure of graph workflows
 
-See [Team Strategies](/user-guide/samples/teams/team-strategies#graph-constrained-selector-strategy) for more details.
+See [Teams → Selector with graph](/user-guide/teams#strategy-walkthroughs) for more details.
 
 ## Configuration Examples
 
@@ -129,6 +131,7 @@ See [Team Strategies](/user-guide/samples/teams/team-strategies#graph-constraine
 ```yaml
 spec:
   strategy: selector
+  maxTurns: 10
   members:
     - name: researcher
       type: agent
@@ -153,6 +156,7 @@ spec:
 ```yaml
 spec:
   strategy: selector
+  maxTurns: 10
   members:
     - name: project-manager
       type: agent

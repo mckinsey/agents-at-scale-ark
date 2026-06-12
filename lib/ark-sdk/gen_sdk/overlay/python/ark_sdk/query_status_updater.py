@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
+from ark_sdk.k8s import create_api_client
 
 from .extensions.query import QueryRef
 from .k8s import init_k8s
@@ -46,7 +46,7 @@ class QueryStatusUpdater:
         }
 
         try:
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 custom = client.CustomObjectsApi(api)
                 await custom.patch_namespaced_custom_object_status(
                     group=ARK_API_GROUP,

@@ -169,7 +169,16 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	opCtx, cancel := context.WithCancel(ctx)
+	queryTimeout := time.Hour
+	if obj.Spec.TTL != nil {
+		queryTimeout = obj.Spec.TTL.Duration
+	}
+	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
+	if remaining <= 0 {
+		return ctrl.Result{}, nil
+	}
+
+	opCtx, cancel := context.WithTimeout(ctx, remaining)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
@@ -761,9 +770,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		tokenUsage:     query.Status.TokenUsage,
 		conversationId: query.Status.ConversationId,
 	}
-	// Note: Do NOT clear A2A taskID when transitioning from input-required to running
+	// Do NOT clear A2A taskID when transitioning from input-required to running.
 	// The executor needs the taskID to detect this is a resumption after approval
-	// The executor will clear it after processing (handler.go)
+	// and clears it after processing (handler.go).
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if ctx.Err() != nil {

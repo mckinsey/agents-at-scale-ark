@@ -1,0 +1,80 @@
+---
+title: Scalability
+description: Capacity management, resource monitoring, and capacity planning for Ark deployments
+---
+
+# Scalability
+
+This page describes how Ark scales, what to monitor, and how to plan capacity for production deployments. It complements the [Core Architecture](/reference/core-architecture) and [Monitoring](/operations-guide/monitoring) guides.
+
+Ark's control plane runs on Kubernetes and inherits its scaling primitives. The controller coordinates reconciliation via leader election. The API and dashboard are stateless and can be horizontally scaled. The broker holds data in memory, so it runs as a single replica by default.
+
+## Capacity management
+
+### Controller
+
+The controller reconciles all Ark custom resources across the cluster. It runs with leader election enabled by default, so multiple replicas can be deployed for availability — only the leader actively reconciles. Reconciler concurrency uses controller-runtime defaults and is not currently configurable via Helm values.
+
+The controller's default resource allocation is intentionally conservative. Production deployments with a high volume of concurrent queries or large numbers of resources should increase CPU and memory limits based on observed usage.
+
+### API and dashboard
+
+The API and dashboard are stateless and can be scaled horizontally by increasing replica counts in their Helm values.
+
+### Broker
+
+The broker stores messages, streaming chunks, traces, events, and sessions in memory. It is not stateless — each replica maintains its own state, so it runs as a single replica by default. If scaling beyond a single replica is needed, consider enabling file-based persistence or a sticky session strategy.
+
+### Storage backend
+
+When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
+
+### Executors
+
+All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The default completions executor uses an in-memory A2A task manager that holds conversation history, active tasks, and streaming subscribers, so it runs as a single replica by default. Scaling it to multiple replicas would require sticky sessions or a shared task store. Marketplace and custom executors can define their own HPA, resource limits, and replica strategy depending on their state management approach.
+
+## Resource monitoring
+
+### Metrics
+
+The controller exposes Prometheus metrics over a TLS-protected endpoint. A ServiceMonitor template is included in the Helm chart (disabled by default) for integration with the Prometheus Operator. Standard controller-runtime metrics cover reconciliation rates, queue depths, and error counts.
+
+Ark also integrates with OpenTelemetry for distributed tracing across the query lifecycle — from the controller through A2A dispatch to executors. See the [Monitoring](/operations-guide/monitoring) guide for setup instructions.
+
+### Health probes
+
+All services expose liveness and readiness probes. The controller uses conservative initial delays and failure thresholds to avoid premature restarts during startup. Probe timing is configurable through Helm values.
+
+### Key indicators to watch
+
+- **Reconciler queue depth and latency** — Rising queue depth or increasing reconciliation time indicates the controller is falling behind. Consider increasing resource limits or investigating slow external calls (LLM providers, executors).
+- **Broker memory usage** — The broker holds data in memory with configurable item limits. Monitor memory consumption against the configured limits to avoid OOM conditions.
+- **API response times** — Increased latency at the API layer may indicate Kubernetes API server pressure, especially under high query volume.
+- **Executor pod scaling** — If executors are autoscaled, monitor HPA status and pending pod counts to ensure the cluster has sufficient capacity to schedule new replicas.
+
+## Capacity planning
+
+### Sizing considerations
+
+Ark's resource footprint depends primarily on the number of concurrent queries, the complexity of agent configurations (tool count, team depth), and the volume of stored resources. The default Helm values are sized for development and small-scale deployments.
+
+For production planning, consider:
+
+- **Query throughput** — Each active query involves a controller reconciliation, an A2A dispatch to an executor, and one or more LLM provider calls. The controller and executor are the primary bottlenecks.
+- **Resource count** — A large number of Agent, Tool, or Team definitions increases the controller's reconciliation workload and etcd/PostgreSQL storage requirements.
+- **Conversation history** — If the broker has persistence enabled, or if you use an external memory backend, storage grows with conversation volume. Plan retention and cleanup accordingly.
+
+### Cluster-level capacity
+
+Ark does not ship PodDisruptionBudgets by default. Production deployments should add PDBs for the controller and API to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
+
+Node capacity should account for executor workloads, which are typically the most resource-intensive components. LLM-backed executors may require significant memory for request/response buffering, especially with long-context models.
+
+### Scaling path
+
+1. **Start with defaults** — Deploy with the default Helm values and a single replica per service.
+2. **Monitor under load** — Use Prometheus metrics and pod resource usage to identify bottlenecks.
+3. **Scale horizontally** — Increase replica counts for the API, dashboard, and executors as needed.
+4. **Tune the controller** — Increase CPU and memory limits based on observed reconciliation load.
+5. **Consider PostgreSQL** — Switch from etcd to PostgreSQL if resource volume or query history exceeds etcd's practical limits.
+6. **Add autoscaling** — Configure HPA for executors and stateless services based on CPU or custom metrics.

@@ -15,9 +15,9 @@ const {
 });
 
 describe('Session ID Filtering', () => {
-  afterEach(() => {
-    traces.delete();
-    events.delete();
+  afterEach(async () => {
+    await traces.delete();
+    await events.delete();
   });
 
   describe('GET /traces with session_id filter', () => {
@@ -52,9 +52,9 @@ describe('Session ID Filtering', () => {
         ],
       };
 
-      traces.addSpan(span1);
-      traces.addSpan(span2);
-      traces.addSpan(span3);
+      await traces.addSpan(span1);
+      await traces.addSpan(span2);
+      await traces.addSpan(span3);
 
       const response = await request(app).get('/traces?session_id=session-123');
 
@@ -83,8 +83,8 @@ describe('Session ID Filtering', () => {
         ],
       };
 
-      traces.addSpan(span1);
-      traces.addSpan(span2);
+      await traces.addSpan(span1);
+      await traces.addSpan(span2);
 
       const response = await request(app).get('/traces');
 
@@ -102,7 +102,7 @@ describe('Session ID Filtering', () => {
         ],
       };
 
-      traces.addSpan(span1);
+      await traces.addSpan(span1);
 
       const response = await request(app).get(
         '/traces?session_id=session-nonexistent'
@@ -141,8 +141,8 @@ describe('Session ID Filtering', () => {
         },
       };
 
-      events.addEvent(event1);
-      events.addEvent(event2);
+      await events.addEvent(event1);
+      await events.addEvent(event2);
 
       const response = await request(app).get('/events?session_id=session-123');
 
@@ -178,8 +178,8 @@ describe('Session ID Filtering', () => {
         },
       };
 
-      events.addEvent(event1);
-      events.addEvent(event2);
+      await events.addEvent(event1);
+      await events.addEvent(event2);
 
       const response = await request(app).get('/events');
 
@@ -201,7 +201,7 @@ describe('Session ID Filtering', () => {
         },
       };
 
-      events.addEvent(event1);
+      await events.addEvent(event1);
 
       const response = await request(app).get(
         '/events?session_id=session-nonexistent'

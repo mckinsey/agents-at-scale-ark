@@ -17,7 +17,7 @@ class FakeArkApiProxy {
 }
 
 vi.mock('../../lib/arkApiProxy.js', () => ({
-  ArkApiProxy: vi.fn().mockImplementation((p?: number, r?: boolean) => {
+  ArkApiProxy: vi.fn(function (p?: number, r?: boolean) {
     const inst = new FakeArkApiProxy(p, r);
     mockStart.mockImplementation(inst.start);
     return inst;

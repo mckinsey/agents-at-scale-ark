@@ -20,6 +20,26 @@
 - Services are defined in lib/services
 - Services should always use the generated types in lib/api/generated
 
+### Tests
+- Use `globalThis` instead of `global` when assigning to global objects. `global` is Node-only and triggers Sonar; `globalThis` is the ES standard
+- For mock class methods, use `vi.fn()` class-field assignments rather than empty method bodies — reads as "this is a mock" and avoids Sonar's no-empty-function warning
+
+```typescript
+// ❌ WRONG - global is Node-specific; empty methods trigger Sonar
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
+
+// ✅ CORRECT
+globalThis.ResizeObserver = class {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+} as typeof ResizeObserver;
+```
+
 ### Navigation
 - **IMPORTANT**: Do NOT use `useRouter` from `next/navigation` for programmatic navigation
 - Instead, use `useNamespacedNavigation` from `@/lib/hooks/use-namespaced-navigation`

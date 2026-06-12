@@ -18,7 +18,8 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
 
     @patch.dict(os.environ, {"AUTH_MODE": "sso", "OIDC_ISSUER_URL": "http://issuer", "OIDC_APPLICATION_ID": "app"})
     @patch("ark_api.auth.middleware.APIKeyService")
-    async def test_rejects_impersonate_user_header(self, mock_api_key_svc):
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_rejects_impersonate_user_header(self, mock_validator_cls, mock_api_key_svc):
         from ark_api.auth.middleware import AuthMiddleware
 
         app = MagicMock()
@@ -33,7 +34,8 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
 
     @patch.dict(os.environ, {"AUTH_MODE": "sso", "OIDC_ISSUER_URL": "http://issuer", "OIDC_APPLICATION_ID": "app"})
     @patch("ark_api.auth.middleware.APIKeyService")
-    async def test_rejects_impersonate_group_header(self, mock_api_key_svc):
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_rejects_impersonate_group_header(self, mock_validator_cls, mock_api_key_svc):
         from ark_api.auth.middleware import AuthMiddleware
 
         app = MagicMock()
@@ -63,7 +65,8 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
 
     @patch.dict(os.environ, {"AUTH_MODE": "sso", "OIDC_ISSUER_URL": "http://issuer", "OIDC_APPLICATION_ID": "app"})
     @patch("ark_api.auth.middleware.APIKeyService")
-    async def test_missing_auth_header_returns_401(self, mock_api_key_svc):
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_missing_auth_header_returns_401(self, mock_validator_cls, mock_api_key_svc):
         from ark_api.auth.middleware import AuthMiddleware
 
         app = MagicMock()
@@ -108,6 +111,7 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
         identity = request.state.user_identity
         self.assertEqual(identity.username, "jane@acme.com")
         self.assertEqual(identity.groups, ["team-a", "admins"])
+        mock_validator_cls.assert_called_once()
 
     @patch.dict(os.environ, {
         "AUTH_MODE": "sso",
@@ -136,6 +140,7 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
         import json
         body = json.loads(response.body)
         self.assertIn("email", body["detail"])
+        mock_validator_cls.assert_called_once()
 
     @patch.dict(os.environ, {
         "AUTH_MODE": "sso",
@@ -162,10 +167,12 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
         response = await middleware.dispatch(request, call_next)
 
         self.assertEqual(response, expected_response)
+        mock_validator_cls.assert_called_once()
 
     @patch.dict(os.environ, {"AUTH_MODE": "sso", "OIDC_ISSUER_URL": "http://issuer", "OIDC_APPLICATION_ID": "app"})
     @patch("ark_api.auth.middleware.APIKeyService")
-    async def test_public_route_skips_auth(self, mock_api_key_svc):
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_public_route_skips_auth(self, mock_validator_cls, mock_api_key_svc):
         from ark_api.auth.middleware import AuthMiddleware
 
         app = MagicMock()
@@ -180,7 +187,8 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
 
     @patch.dict(os.environ, {"AUTH_MODE": "sso", "OIDC_ISSUER_URL": "http://issuer", "OIDC_APPLICATION_ID": "app"})
     @patch("ark_api.auth.middleware.APIKeyService")
-    async def test_empty_bearer_token_returns_401(self, mock_api_key_svc):
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_empty_bearer_token_returns_401(self, mock_validator_cls, mock_api_key_svc):
         from ark_api.auth.middleware import AuthMiddleware
 
         app = MagicMock()

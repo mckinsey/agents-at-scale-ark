@@ -27,8 +27,8 @@ spec:
       image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
       command: [bash]
       source: |
-        # Use the ark cli to run a simple query against the default model.
-        ark query model/default "hello world" > /tmp/result.txt
+        # Use fark (in-cluster config) to run a query against the default model.
+        fark model default "hello world" --quiet > /tmp/result.txt
     outputs:
       parameters:
       - name: result

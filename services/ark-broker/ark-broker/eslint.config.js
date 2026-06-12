@@ -45,7 +45,12 @@ export default [
     },
   },
   {
-    files: ['**/*.test.ts', '**/*.spec.ts'],
+    files: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/__tests__/**/*.ts',
+      '**/stream-contract.ts',
+    ],
     languageOptions: {
       globals: {
         describe: 'readonly',

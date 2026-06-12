@@ -55,6 +55,38 @@ func init() {
 	utilruntime.Must(arkv1prealpha1.AddToScheme(Scheme))
 	utilruntime.Must(metav1.AddMetaToScheme(Scheme))
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Group: "", Version: "v1"})
+
+	// Register external types as internal versions to enable patch operations.
+	// Since ARK only has one version per API group, we use the external types
+	// as the internal representation (no conversion needed).
+	// Without this, kubectl patch fails with "no kind X is registered for internal version".
+	internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
+	Scheme.AddKnownTypes(internalGV,
+		&arkv1alpha1.Agent{},
+		&arkv1alpha1.AgentList{},
+		&arkv1alpha1.Team{},
+		&arkv1alpha1.TeamList{},
+		&arkv1alpha1.Query{},
+		&arkv1alpha1.QueryList{},
+		&arkv1alpha1.Model{},
+		&arkv1alpha1.ModelList{},
+		&arkv1alpha1.Tool{},
+		&arkv1alpha1.ToolList{},
+		&arkv1alpha1.MCPServer{},
+		&arkv1alpha1.MCPServerList{},
+		&arkv1alpha1.Memory{},
+		&arkv1alpha1.MemoryList{},
+		&arkv1alpha1.A2ATask{},
+		&arkv1alpha1.A2ATaskList{},
+		&arkv1alpha1.ArkConfig{},
+		&arkv1alpha1.ArkConfigList{},
+	)
+	Scheme.AddKnownTypes(internalGV,
+		&arkv1prealpha1.A2AServer{},
+		&arkv1prealpha1.A2AServerList{},
+		&arkv1prealpha1.ExecutionEngine{},
+		&arkv1prealpha1.ExecutionEngineList{},
+	)
 }
 
 type Config struct {

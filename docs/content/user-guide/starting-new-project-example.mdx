@@ -89,7 +89,7 @@ Phase progression (lowercase per the CRD): `pending` → `running` → `done`. `
 
 ```bash
 kubectl get query test-password-reset \
-  -o jsonpath='{.status.responses[0].content}'
+  -o jsonpath='{.status.response.content}'
 ```
 
 Example:
@@ -139,7 +139,7 @@ EOF
 
 kubectl apply -f queries/test-billing.yaml
 kubectl get query test-billing \
-  -o jsonpath='{.status.responses[0].content}'
+  -o jsonpath='{.status.response.content}'
 ```
 
 ## Step 10: Triage Agent

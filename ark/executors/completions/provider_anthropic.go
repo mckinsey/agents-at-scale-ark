@@ -7,12 +7,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
+	"mckinsey.com/ark/internal/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const defaultAnthropicVersion = "2023-06-01"
+
+var anthropicHTTPClient = &http.Client{
+	Timeout:   60 * time.Second,
+	Transport: common.NewSharedTransport(),
+}
 
 type AnthropicProvider struct {
 	Model      string
@@ -62,15 +70,18 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 		httpReq.Header.Set(k, v)
 	}
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := anthropicHTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic API request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Anthropic response: %w", err)
+	}
+	if len(body) == 10<<20 {
+		logf.FromContext(ctx).Info("Anthropic response may have been truncated", "limit", "10MB")
 	}
 
 	if resp.StatusCode != http.StatusOK {

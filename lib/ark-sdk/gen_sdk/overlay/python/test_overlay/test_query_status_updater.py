@@ -7,7 +7,7 @@ from ark_sdk.query_status_updater import QueryStatusUpdater
 
 class TestQueryStatusUpdater(unittest.IsolatedAsyncioTestCase):
     @patch("ark_sdk.query_status_updater.init_k8s", new_callable=AsyncMock)
-    @patch("ark_sdk.query_status_updater.ApiClient")
+    @patch("ark_sdk.query_status_updater.create_api_client")
     async def test_successful_patch(self, mock_api_client_cls, mock_init_k8s):
         mock_custom = AsyncMock()
         mock_api_ctx = AsyncMock()
@@ -32,7 +32,7 @@ class TestQueryStatusUpdater(unittest.IsolatedAsyncioTestCase):
         await updater.update_query_phase("provisioning", "ExecutorProvisioning")
 
     @patch("ark_sdk.query_status_updater.init_k8s", new_callable=AsyncMock)
-    @patch("ark_sdk.query_status_updater.ApiClient")
+    @patch("ark_sdk.query_status_updater.create_api_client")
     async def test_api_failure_noop(self, mock_api_client_cls, mock_init_k8s):
         mock_custom = AsyncMock()
         mock_custom.patch_namespaced_custom_object_status.side_effect = Exception("API error")

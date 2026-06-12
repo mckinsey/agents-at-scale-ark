@@ -1,15 +1,15 @@
 ---
 title: Team
-description: Teams of agents with execution strategies
+description: Team CRD reference — fields, strategies, validation rules, and migrations
 ---
 
 import { Callout } from 'nextra/components'
 
 # Team
 
-Teams coordinate multiple agents working together using different execution strategies.
+Teams coordinate multiple agents (and other teams) using an execution strategy. For a task-oriented walkthrough see [User Guide → Teams](/user-guide/teams); this page is the field-by-field reference for the `Team` CRD.
 
-## Specification
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -17,81 +17,203 @@ kind: Team
 metadata:
   name: example-team
 spec:
-  # Team members - agents or nested teams
-  members:
-    - name: researcher
-      type: agent
+  # --- Required ----------------------------------------------------------
+  members:                                  # at least one entry
+    - name: researcher                      # references an Agent or a Team
+      type: agent                           # 'agent' or 'team'
     - name: analyst
       type: agent
-    - name: writer
-      type: agent
+  strategy: selector                        # 'sequential' or 'selector'
+  maxTurns: 10                              # required when strategy=selector,
+                                            # or when strategy=sequential + loops=true
 
-  # Execution strategy - how members collaborate
-  strategy: selector  # Options: sequential, selector, graph
+  # --- Common optional fields --------------------------------------------
+  description: AI consulting team           # surfaces in selector prompts as part of {{.Roles}}
+  loops: false                              # sequential only; cycles members until maxTurns/terminate
 
-  # Enable looping for sequential strategy (optional)
-  # loops: true
-  # maxTurns: 10  # Required when loops is true
-
-  # Selector configuration - for strategy: selector
+  # --- Selector configuration (strategy=selector) ------------------------
   selector:
-    agent: planner  # Agent to use for selection (required)
-    selectorPrompt: "Choose the best agent for: {{.Input}}"  # Optional
+    agent: project-manager                  # required for selector strategy
+    selectorPrompt: |                       # optional; default is documented below
+      You are coordinating a team. ...
+      Use the select-next-speaker tool to make your selection.
+    enableTerminateTool: true               # optional; lets the selector end conversations early
+    terminatePrompt: |                      # optional; default is documented below
+      If the most recent user message has been given an adequate response,
+      do not return a role. Instead call the terminate tool.
 
-  # Graph constraints (optional) - can be combined with selector strategy
-  # When combined with selector, limits AI selection to valid graph transitions
+  # --- Graph constraints (strategy=selector + graph) ---------------------
   graph:
     edges:
-      - from: researcher
+      - from: researcher                    # both endpoints must be team members
         to: analyst
       - from: analyst
         to: writer
-
-  # # Sequential configuration - for strategy: sequential
-  # strategy: sequential
-  # # Single pass through members, no maxTurns needed
-
-  # # Sequential with loops - for cycling through members
-  # strategy: sequential
-  # loops: true
-  # maxTurns: 10  # Required - prevents infinite loops
-
-  # # Graph-only configuration - for strategy: graph
-  # strategy: graph
-  # maxTurns: 10
-  # graph:
-  #   edges:
-  #     - from: researcher
-  #       to: analyst
-  #     - from: analyst
-  #       to: writer
 ```
 
-## Execution Strategies
+## Fields
 
-Execution strategies define how team members are chosen during query execution.
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.members[]` | list | yes | Members of the team. Order matters for `sequential` (defines pass order). |
+| `spec.members[].name` | string | yes | Name of the referenced Agent or Team in the same namespace. |
+| `spec.members[].type` | enum (`agent`, `team`) | yes | Whether the member is an Agent or a nested Team. Self-reference (member named the same as the team) is rejected. |
+| `spec.strategy` | enum (`sequential`, `selector`) | yes | Execution strategy. `round-robin` and `graph` are deprecated; the mutating webhook migrates them on apply (see [Deprecated strategies and migration](#deprecated-strategies-and-migration)). |
+| `spec.description` | string | no | Free-form description. Surfaced in selector prompts as part of `{{.Roles}}`. |
+| `spec.loops` | bool | no | Sequential only. When `true`, the team cycles through `members` repeatedly until `maxTurns` or a `terminate` call. Defaults to `false`. Setting `loops: true` on a non-sequential strategy is rejected. |
+| `spec.maxTurns` | int | conditional | **Required** when `strategy: selector` or when `strategy: sequential` with `loops: true`. **Must be omitted** when `strategy: sequential` with `loops: false`. |
+| `spec.selector.agent` | string | yes for `selector` | Name of an Agent in the same namespace. Used as the selector. |
+| `spec.selector.selectorPrompt` | string | no | Overrides the default selector prompt. Must instruct the agent to call the `select-next-speaker` tool; the mutating webhook stamps a migration warning if it doesn't. Template vars: `{{.Roles}}`, `{{.Participants}}`, `{{.History}}`. |
+| `spec.selector.enableTerminateTool` | bool | no | When `true`, the selector agent gets a `terminate` tool to end the conversation early. Defaults vary by client (the dashboard form enables it by default; YAML-only teams must set it explicitly). |
+| `spec.selector.terminatePrompt` | string | no | Overrides the default termination prompt. |
+| `spec.graph.edges[]` | list | no | Constrains a `selector` strategy to `from → to` transitions. Every endpoint must be a team member. Empty edges list is rejected. |
 
-- **sequential** - Agents process input one after another in a single pass
-- **sequential + loops** - Agents cycle through members repeatedly until `maxTurns` or terminate
-- **selector** - Dynamic agent selection based on criteria, LLM chooses the next agent for the job
-- **graph** - Custom execution flows with edges, supports more complex workflows
-- **selector + graph** - Combines AI-driven selection with workflow constraints (selector agent chooses from graph-defined valid transitions)
+## Strategies
+
+### `sequential`
+
+Single pass through `members[]` in declared order. Use for fixed pipelines (researcher → analyst → writer).
+
+```yaml
+spec:
+  strategy: sequential
+  members:
+    - { name: researcher, type: agent }
+    - { name: analyst, type: agent }
+    - { name: writer, type: agent }
+```
+
+Webhook rules: `loops` defaults to `false`; `maxTurns` must not be set.
+
+### `sequential` + `loops: true`
+
+Cycles through members until `maxTurns` or until a member calls the `terminate` built-in tool. Use for iterative back-and-forth between a small set of agents (e.g. critic + writer).
+
+```yaml
+spec:
+  strategy: sequential
+  loops: true
+  maxTurns: 10
+  members:
+    - { name: writer, type: agent }
+    - { name: critic, type: agent }
+```
+
+Webhook rules: `maxTurns` is required.
+
+### `selector`
+
+An LLM-backed selector agent picks the next speaker each turn via a generated `select-next-speaker` tool whose `name` parameter is an enum of valid candidates. If the agent returns a name outside the enum, or doesn't call the tool at all, the team terminates with a warning event.
+
+```yaml
+spec:
+  strategy: selector
+  maxTurns: 10
+  members:
+    - { name: research-analyst, type: agent }
+    - { name: strategy-consultant, type: agent }
+    - { name: technical-expert, type: agent }
+  selector:
+    agent: project-manager
+    enableTerminateTool: true
+```
+
+Webhook rules: `selector.agent` is required and must exist; `maxTurns` is required; `loops` cannot be set.
+
+### `selector` + `graph`
+
+Same as selector, but the candidates the selector can pick are filtered by the graph's outgoing edges from the current member. If only one edge applies, the runtime takes it without calling the selector.
+
+```yaml
+spec:
+  strategy: selector
+  maxTurns: 10
+  selector:
+    agent: coordinator
+  members:
+    - { name: researcher, type: agent }
+    - { name: analyzer, type: agent }
+    - { name: writer, type: agent }
+  graph:
+    edges:
+      - { from: researcher, to: analyzer }
+      - { from: analyzer, to: writer }
+```
+
+Webhook rules: every `from`/`to` must be a team member; at least one edge is required.
+
+## Selector template variables
+
+The selector prompt supports these template variables, substituted server-side before the LLM call:
+
+| Variable | Value |
+| --- | --- |
+| `{{.Roles}}` | Member names with descriptions (`name: description`, one per line). |
+| `{{.Participants}}` | Comma-separated list of member names. |
+| `{{.History}}` | Full formatted conversation so far. |
+
+### Default selector prompt
+
+```text
+You are in a role play game. The following roles are available:
+{{.Roles}}.
+Read the following conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
+
+{{.History}}
+
+Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
+```
+
+### Default terminate prompt
+
+```text
+If the most recent user message has been given an adequate response,
+do not return a role. Instead call the terminate tool.
+```
+
+## Cross-field validation summary
+
+The admission webhook (`ark/internal/validation/team.go`) enforces these rules at create/update:
+
+- `members[]` not empty.
+- Each `members[i].name` references an existing Agent or Team in the same namespace.
+- `members[i].name != metadata.name` (no self-reference).
+- No mixed teams — all member agents must share an execution-engine kind (all internal or all external; not mixed).
+- `strategy` is one of the supported values (or a deprecated one — see [Deprecated strategies and migration](#deprecated-strategies-and-migration)).
+- `sequential`: `maxTurns` required iff `loops: true`.
+- `selector`: `selector.agent` required and resolvable; `maxTurns` required; `loops` not allowed; if `graph` is set, every edge endpoint must be a member.
+
+## Deprecated strategies and migration
+
+Two strategies are accepted on create/update but get rewritten by the mutating webhook (`ark/internal/validation/defaults.go`) and removed in `v1.0.0`. Both rewrites stamp a `ark.mckinsey.com/migration-warning-<key>` annotation on the team for visibility (e.g. `migration-warning-round-robin`, `migration-warning-graph`).
+
+| Original | Rewritten to | Notes |
+| --- | --- | --- |
+| `strategy: round-robin` (no `maxTurns`) | `strategy: sequential`, `loops: false` | The original `round-robin` with no maxTurns was a single pass. To keep cycling, re-apply with `loops: true` and `maxTurns`. |
+| `strategy: round-robin` (with `maxTurns`) | `strategy: sequential`, `loops: true`, `maxTurns` preserved | Direct equivalent. |
+| `strategy: graph`, with `graph.edges` | `strategy: sequential`, `loops: false`, `graph: nil`, `maxTurns: nil` | **Graph edges are discarded.** If you want graph-shaped flow, re-author as `strategy: selector` + `graph.edges`. |
 
 <Callout type="warning">
-`strategy: round-robin` is deprecated and will be removed in v1.0.0. Use `strategy: sequential` with `loops: true` instead. Existing round-robin teams are automatically migrated on create/update.
+The `graph` migration drops your edges. If you have an existing `strategy: graph` team that depends on edge ordering, **re-author it as `strategy: selector` with the same edges under `spec.graph`** before re-applying.
 </Callout>
 
-## Turn Limiting
+## Status
 
-The `maxTurns` field limits execution turns. Its usage depends on the strategy:
+```yaml
+status:
+  conditions:
+    - type: Available
+      status: "True"
+      reason: TeamReady
+      message: Team is configured correctly and all members are available
+```
 
-- **sequential** - Not applicable for single pass. Required when `loops: true` to prevent infinite loops.
-- **selector** - Limits selection rounds (each round = one agent selection and execution)
-- **graph** - Limits edge traversals through the execution graph
+The `Available` condition flips to `False` when validation fails or a referenced member becomes unavailable. `kubectl describe team <name>` shows the underlying message.
 
-When `maxTurns` is reached:
+`maxTurns` reached during execution does **not** emit a Kubernetes event. Instead the runtime appends a system message to the conversation (`Team conversation reached maximum turns limit (N)`), the Query completes with `phase: done` (not an error), and the dashboard surfaces a `Maximum turns reached (N)` badge in the chat panel. To detect a maxTurns hit programmatically, parse `query.status.response.raw` (a JSON array of messages) and look for the marker string.
 
-1. Team execution stops gracefully
-2. All responses generated up to the limit are returned
-3. Warning event emitted: `TeamMaxTurnsReached`
-4. Query completes successfully (not an error)
+## Related
+
+- [User Guide → Teams](/user-guide/teams) — task-oriented walkthrough.
+- [User Guide → Samples → Team Selector Strategy](/user-guide/samples/teams/team-selector-strategy) — deeper dive on selector prompts.
+- [Reference → Agents](/reference/resources/agent) — team members.

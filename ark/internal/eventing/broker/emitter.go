@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -30,6 +31,7 @@ type Event struct {
 type BrokerEventEmitter struct {
 	httpClient *http.Client
 	endpoints  map[string]string
+	sem        *semaphore.Weighted
 }
 
 func NewBrokerEventEmitter(endpoints []routing.BrokerEndpoint) eventing.EventEmitter {
@@ -43,6 +45,7 @@ func NewBrokerEventEmitter(endpoints []routing.BrokerEndpoint) eventing.EventEmi
 			Timeout: 5 * time.Second,
 		},
 		endpoints: endpointMap,
+		sem:       semaphore.NewWeighted(64),
 	}
 }
 
@@ -94,17 +97,24 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 		Data:      eventData,
 	}
 
-	go e.sendEvent(endpoint, event)
+	if e.sem.TryAcquire(1) {
+		go func() {
+			defer e.sem.Release(1)
+			e.sendEvent(context.WithoutCancel(ctx), endpoint, event)
+		}()
+	} else {
+		log.V(1).Info("semaphore full, dropping event", "namespace", query.Namespace, "reason", reason)
+	}
 }
 
-func (e *BrokerEventEmitter) sendEvent(endpoint string, event Event) {
+func (e *BrokerEventEmitter) sendEvent(ctx context.Context, endpoint string, event Event) {
 	body, err := json.Marshal(event)
 	if err != nil {
 		log.Error(err, "failed to marshal event")
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		log.Error(err, "failed to create request", "endpoint", endpoint)
 		return
