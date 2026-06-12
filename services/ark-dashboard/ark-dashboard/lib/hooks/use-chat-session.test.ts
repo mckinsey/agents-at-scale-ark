@@ -339,10 +339,9 @@ describe('useChatSession - Approval Handling', () => {
       });
     });
 
-    it('times out after 120 seconds of polling', async () => {
-      // Skip this test as it requires complex fake timer handling
-      // Timeout logic is covered by manual testing
-    }, { skip: true });
+    it.skip('times out after 120 seconds of polling', async () => {
+      // Requires complex fake timer handling; timeout logic covered by manual testing.
+    });
 
     it('does nothing when no pending approval exists', async () => {
       const { result } = renderHook(() =>
