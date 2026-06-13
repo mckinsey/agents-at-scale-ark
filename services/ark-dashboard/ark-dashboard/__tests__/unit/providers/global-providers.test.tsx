@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/agents'),
   useRouter: vi.fn(() => ({ push: vi.fn() })),
+  useSearchParams: vi.fn(() => new URLSearchParams('')),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
