@@ -62,7 +62,7 @@
     "testcontainers": "^12.0.1",
     "ts-jest": "^29.4.6",
     "tsc-alias": "^1.8.10",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
   "engines": {
