@@ -93,10 +93,6 @@ rules:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["arkconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Marketplace-sources permission probe issues a SelfSubjectAccessReview
-  - apiGroups: ["authorization.k8s.io"]
-    resources: ["selfsubjectaccessreviews"]
-    verbs: ["create"]
   {{- if .Values.impersonation.enabled }}
   # User impersonation for SSO-authenticated requests (must be cluster-scoped)
   - apiGroups: [""]

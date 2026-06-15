@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import type { MarketplaceItemDetail } from '@/lib/api/generated/marketplace-types';
-import { getMarketplaceItemById } from '@/lib/services/marketplace-server';
+import { getMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
 
 export async function GET(
   request: NextRequest,
@@ -10,14 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const namespace = request.nextUrl.searchParams.get('namespace');
-    if (!namespace) {
-      return NextResponse.json(
-        { error: 'namespace query parameter is required' },
-        { status: 400 },
-      );
-    }
-    const item = await getMarketplaceItemById(id, namespace);
+    const item = await getMarketplaceItemById(id);
 
     if (!item) {
       return NextResponse.json(

@@ -7,7 +7,6 @@ export default {
   '---crds': { type: 'separator', title: 'Kubernetes API' },
   crds: 'Custom Resource Definitions',
   resources: 'Resources',
-  'marketplace-sources': 'Marketplace Sources',
 
   '---behaviour': { type: 'separator', title: 'System behaviour' },
   'core-architecture': 'Core Architecture',
