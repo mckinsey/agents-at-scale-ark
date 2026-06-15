@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
+from ark_sdk.k8s import create_api_client
 
 from ..executor import (
     AgentConfig,
@@ -193,7 +193,7 @@ async def _resolve_configmap_ref(cm_ref: Any, namespace: str) -> str:
     if not (ref_name and ref_key):
         return ""
     try:
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
             return (cm.data or {}).get(ref_key, "")

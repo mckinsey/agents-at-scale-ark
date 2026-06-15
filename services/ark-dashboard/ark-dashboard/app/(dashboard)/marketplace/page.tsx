@@ -42,6 +42,18 @@ export default function MarketplacePage() {
 
   const { data, isPending } = useGetMarketplaceItems(filters);
 
+  // Silent migration: discard the legacy per-browser source list. Sources now
+  // live in the cluster (marketplace-sources ConfigMap). One-shot and
+  // idempotent — subsequent loads find no key and noop.
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      localStorage.getItem('marketplace-sources') !== null
+    ) {
+      localStorage.removeItem('marketplace-sources');
+    }
+  }, []);
+
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;

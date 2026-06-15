@@ -5,8 +5,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.exceptions import ApiException
+from ark_sdk.k8s import create_api_client
 
 from ark_sdk.models.kubernetes import NamespaceResponse, NamespaceListResponse, NamespaceCreateRequest
 from ark_sdk.impersonation import ImpersonationConfig
@@ -101,7 +101,7 @@ async def get_context_endpoint(namespace: str = None) -> ContextResponse:
     # Check if namespace exists and has demo label
     read_only_mode = False
     try:
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             ns = await v1.read_namespace(name=target_namespace)
 

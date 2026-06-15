@@ -29,6 +29,17 @@ class McpAuthConfigError(ValueError):
     """Raised when MCP-auth configuration is invalid."""
 
 
+def _has_embedded_loopback_ip(host: str) -> bool:
+    labels = host.replace("-", ".").split(".")
+    for i in range(len(labels) - 3):
+        try:
+            if ipaddress.ip_address(".".join(labels[i : i + 4])).is_loopback:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _is_loopback_host(host: str) -> bool:
     if host in _LOOPBACK_HOSTS:
         return True
@@ -44,7 +55,7 @@ def _is_loopback_host(host: str) -> bool:
             ipaddress.ip_address(addr[4][0]).is_loopback for addr in resolved
         )
     except (socket.gaierror, ValueError):
-        return False
+        return _has_embedded_loopback_ip(host)
 
 
 def _validate_callback_url(raw: str) -> str:

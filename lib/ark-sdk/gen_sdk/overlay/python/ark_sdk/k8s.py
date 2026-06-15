@@ -9,10 +9,27 @@ from kubernetes.config.config_exception import ConfigException
 from kubernetes_asyncio import client, config as async_config
 import base64
 from typing import Dict, List, Optional
+from kubernetes import client as sync_client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 
 logger = logging.getLogger(__name__)
+
+USER_AGENT = "ArkSDK"
+
+
+def create_sync_api_client() -> sync_client.ApiClient:
+    """Create a sync Kubernetes ApiClient with the Ark user-agent."""
+    api = sync_client.ApiClient()
+    api.user_agent = USER_AGENT
+    return api
+
+
+def create_api_client() -> ApiClient:
+    """Create an async Kubernetes ApiClient with the Ark user-agent."""
+    api = ApiClient()
+    api.user_agent = USER_AGENT
+    return api
 
 NS_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
@@ -154,7 +171,7 @@ class SecretClient:
     
     async def list_secrets(self, label_selector: Optional[str] = None):
         """List all secrets in namespace."""
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secrets = await v1.list_namespaced_secret(
@@ -179,7 +196,7 @@ class SecretClient:
         """Create a new secret."""
         validated_data = self.validate_and_encode_token(string_data)
 
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             
@@ -206,7 +223,7 @@ class SecretClient:
     
     async def get_secret(self, name: str):
         """Get a specific secret."""
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secret = await v1.read_namespaced_secret(
@@ -224,7 +241,7 @@ class SecretClient:
     
     async def get_secret_value(self, name: str, key: str):
         """Get a specific secret."""
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secret = await v1.read_namespaced_secret(
@@ -246,7 +263,7 @@ class SecretClient:
         """Update an existing secret."""
         validated_data = self.validate_and_encode_token(string_data)
 
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             
@@ -273,7 +290,7 @@ class SecretClient:
     
     async def delete_secret(self, name: str) -> bool:
         """Delete a secret."""
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             await v1.delete_namespaced_secret(

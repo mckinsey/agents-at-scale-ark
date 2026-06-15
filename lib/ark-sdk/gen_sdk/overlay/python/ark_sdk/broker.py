@@ -11,11 +11,10 @@ import httpx
 from .streaming_config import get_streaming_config, get_streaming_base_url
 
 try:
-    from kubernetes_asyncio.client.api_client import ApiClient
-    from .k8s import init_k8s
+    from .k8s import init_k8s, create_api_client
 except ImportError:
-    ApiClient = None  # type: ignore[assignment,misc]
     init_k8s = None  # type: ignore[assignment]
+    create_api_client = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ async def discover_broker_url(namespace: str) -> Optional[str]:
     try:
         from kubernetes_asyncio import client
         await init_k8s()
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             config = await get_streaming_config(v1, namespace)
             if config and config.enabled:

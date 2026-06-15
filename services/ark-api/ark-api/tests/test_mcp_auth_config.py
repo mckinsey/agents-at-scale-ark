@@ -1,12 +1,15 @@
 """Tests for ark_api.core.mcp_auth_config."""
 from __future__ import annotations
 
+import socket
 import unittest
 from unittest.mock import patch
 
 from ark_api.core.mcp_auth_config import (
     CALLBACK_PATH,
     McpAuthConfigError,
+    _has_embedded_loopback_ip,
+    _is_loopback_host,
     _read_int,
     _validate_callback_url,
     load_mcp_auth_config,
@@ -72,6 +75,65 @@ class TestValidateCallbackUrl(unittest.TestCase):
         result = _validate_callback_url("https://ark.example.com/proxy")
         self.assertTrue(result.endswith(CALLBACK_PATH))
         self.assertIn("/proxy", result)
+
+
+class TestHasEmbeddedLoopbackIp(unittest.TestCase):
+    def test_dotted_embedded_loopback_is_detected(self):
+        self.assertTrue(_has_embedded_loopback_ip("127.0.0.1.nip.io"))
+
+    def test_dash_embedded_loopback_is_detected(self):
+        self.assertTrue(_has_embedded_loopback_ip("ark-api.default.127-0-0-1.nip.io"))
+
+    def test_mixed_dash_and_dot_embedded_loopback_is_detected(self):
+        self.assertTrue(_has_embedded_loopback_ip("ark-api.default.127.0.0.1.nip.io"))
+
+    def test_no_embedded_ip_returns_false(self):
+        self.assertFalse(_has_embedded_loopback_ip("ark.example.com"))
+
+    def test_embedded_non_loopback_ip_returns_false(self):
+        self.assertFalse(_has_embedded_loopback_ip("host.8.8.8.8.nip.io"))
+
+    def test_too_few_labels_returns_false(self):
+        self.assertFalse(_has_embedded_loopback_ip("127.0.0"))
+
+
+class TestIsLoopbackHost(unittest.TestCase):
+    def test_literal_loopback_name_is_loopback(self):
+        self.assertTrue(_is_loopback_host("localhost"))
+
+    def test_loopback_ipv4_literal_is_loopback(self):
+        self.assertTrue(_is_loopback_host("127.0.0.1"))
+
+    def test_loopback_ipv6_literal_is_loopback(self):
+        self.assertTrue(_is_loopback_host("::1"))
+
+    def test_dns_resolved_loopback_is_loopback(self):
+        with patch(
+            "ark_api.core.mcp_auth_config.socket.getaddrinfo",
+            return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+        ):
+            self.assertTrue(_is_loopback_host("loopback.example.com"))
+
+    def test_dns_resolved_public_is_not_loopback(self):
+        with patch(
+            "ark_api.core.mcp_auth_config.socket.getaddrinfo",
+            return_value=[(0, 0, 0, "", ("93.184.216.34", 0))],
+        ):
+            self.assertFalse(_is_loopback_host("public.example.com"))
+
+    def test_unresolvable_host_falls_back_to_embedded_loopback(self):
+        with patch(
+            "ark_api.core.mcp_auth_config.socket.getaddrinfo",
+            side_effect=socket.gaierror,
+        ):
+            self.assertTrue(_is_loopback_host("ark-api.default.127.0.0.1.nip.io"))
+
+    def test_unresolvable_host_without_embedded_loopback_is_not_loopback(self):
+        with patch(
+            "ark_api.core.mcp_auth_config.socket.getaddrinfo",
+            side_effect=socket.gaierror,
+        ):
+            self.assertFalse(_is_loopback_host("ark.example.com"))
 
 
 class TestReadInt(unittest.TestCase):

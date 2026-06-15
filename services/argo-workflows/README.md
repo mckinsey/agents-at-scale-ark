@@ -48,4 +48,4 @@ devspace purge -n argo-workflows
 
 DevSpace will prompt whether to enable Minio artifact storage. If enabled, it automatically installs the Minio Operator and tenant.
 
-See [documentation](../../docs/content/developer-guide/workflows/argo-workflows.mdx) for full details.
+See [documentation](../../docs/content/developer-guide/workflows/index.mdx) for full details.
