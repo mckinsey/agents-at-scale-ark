@@ -1,7 +1,7 @@
 import { type VariantProps, cva } from 'class-variance-authority';
 import type * as React from 'react';
 
-import { cn } from '../../lib/utils';
+import { cn } from '@/lib/utils';
 
 // Edge case when type=search for input, there is a cancel button (X) that is styled to match the design system colors.
 const searchCancelButtonIcon =

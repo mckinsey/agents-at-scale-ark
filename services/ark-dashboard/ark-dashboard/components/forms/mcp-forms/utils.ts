@@ -39,7 +39,7 @@ export const EMPTY_HEADER_ROW: HeaderData = {
 };
 
 export function generateUniqueKey() {
-  const randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0];
+  const randomValue = globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
   const generatedSuffix = randomValue % 100000;
   return `row-${Date.now()}-${generatedSuffix}`;
 }

@@ -27,7 +27,7 @@ import {
   useDayPicker,
 } from 'react-day-picker';
 
-import { cn } from '../../lib/utils';
+import { cn } from '@/lib/utils';
 import { ChevronLeft } from '../icons/chevron-left';
 import { ChevronRight } from '../icons/chevron-right';
 import { Button } from './button';

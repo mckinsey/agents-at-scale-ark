@@ -4,12 +4,14 @@ import { Code } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 interface ResourceSwitcherBarProps {
   value: string | undefined;
@@ -33,7 +35,8 @@ export function ResourceSwitcherBar({
   return (
     <div className="bg-surface-secondary border-stroke-divider flex items-center gap-2 border-b px-5 py-2">
       <Select value={value} onValueChange={v => onSelect(v as string)}>
-        <SelectTrigger className="!h-8 !w-auto !gap-1 !border-0 !bg-transparent !p-0 text-sm font-medium !shadow-none hover:!bg-transparent focus:!ring-0 focus-visible:!ring-0 focus-visible:!bg-transparent data-[popup-open]:!bg-transparent">
+        <SelectTrigger
+          className={cn(GHOST_TRIGGER, 'h-8 w-auto gap-1 text-sm font-medium')}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
