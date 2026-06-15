@@ -23,7 +23,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
+import {
+  getAttributeStringValue,
+  getSessionDisplayNameFromEntries,
+} from '@/lib/broker/session-utils';
 import { useSSEStream } from '@/lib/hooks/use-sse-stream';
 import { type BrokerStatus, proxyService } from '@/lib/services/proxy';
 import type { GraphEdge } from '@/lib/types/chat-message';
@@ -33,30 +36,13 @@ type ChatType = 'model' | 'team' | 'agent';
 type TabType = 'chat' | 'debug';
 type DebugStreamType = 'traces' | 'events';
 
-function unwrapAttrValue(value: unknown): string | undefined {
-  if (value == null) return undefined;
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (typeof value === 'object') {
-    const v = value as Record<string, unknown>;
-    if (typeof v.stringValue === 'string') return v.stringValue;
-    if (typeof v.intValue === 'string') return v.intValue;
-    if (typeof v.intValue === 'number') return String(v.intValue);
-    if (typeof v.boolValue === 'boolean') return String(v.boolValue);
-    if (typeof v.doubleValue === 'number') return String(v.doubleValue);
-  }
-  return undefined;
-}
-
 function findAttrValue(attributes: unknown, key: string): string | undefined {
   if (!Array.isArray(attributes)) return undefined;
   const attr = attributes.find(
     (a: unknown) =>
       typeof a === 'object' && a !== null && 'key' in a && a.key === key,
   ) as { value?: unknown } | undefined;
-  return unwrapAttrValue(attr?.value);
+  return getAttributeStringValue(attr?.value);
 }
 
 interface DebugStreamViewProps {
