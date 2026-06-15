@@ -4,7 +4,6 @@ export default {
   'deploying-ark': 'Deploying Ark',
   'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
-  marketplace: 'Marketplace',
   monitoring: 'Monitoring',
   'disaster-recovery': 'Disaster Recovery',
 
