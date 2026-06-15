@@ -1,5 +1,8 @@
+import json
 import logging
+import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -8,6 +11,70 @@ logger = logging.getLogger(__name__)
 
 MOCK_LLM_MODEL_YAML = Path(__file__).parent / "mock-llm-model.yaml"
 MOCK_LLM_MODEL_NAME = "test-model-mock"
+
+_PORT_BASE = 18080
+
+
+def _health_ok(url: str, timeout: int = 2) -> bool:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{url.rstrip('/')}/health", timeout=timeout) as r:
+            body = json.loads(r.read())
+            return isinstance(body, dict) and body.get("service") == "ark-api"
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ark_api_url(request):
+    """Ensure ARK_API_URL points to a reachable ark-api instance.
+
+    Locally: use ARK_API_URL env var or the nip.io local-gateway default.
+    In CI (GITHUB_ACTIONS=true): start a per-worker kubectl port-forward so
+    each xdist worker (gw0, gw1, ...) gets its own dedicated port.
+    """
+    if os.environ.get("ARK_API_URL"):
+        yield os.environ["ARK_API_URL"]
+        return
+
+    if not os.environ.get("GITHUB_ACTIONS"):
+        yield "http://ark-api.default.127.0.0.1.nip.io:8080"
+        return
+
+    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "gw0")
+    try:
+        port = _PORT_BASE + int(worker_id.lstrip("gw"))
+    except ValueError:
+        port = _PORT_BASE
+
+    url = f"http://localhost:{port}"
+    logger.info("CI: starting port-forward svc/ark-api → :%d (worker=%s)", port, worker_id)
+
+    proc = subprocess.Popen(
+        ["kubectl", "port-forward", "svc/ark-api", f"{port}:80", "-n", "default"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    for _ in range(20):
+        time.sleep(1)
+        if _health_ok(url):
+            break
+    else:
+        proc.terminate()
+        pytest.exit(f"ark-api port-forward on :{port} did not become healthy in 20s", returncode=1)
+
+    os.environ["ARK_API_URL"] = url
+    logger.info("ARK_API_URL set to %s", url)
+
+    yield url
+
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    os.environ.pop("ARK_API_URL", None)
 
 
 @pytest.fixture(scope="session", autouse=True)
