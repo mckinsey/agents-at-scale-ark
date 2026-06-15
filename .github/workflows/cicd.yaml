@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release-v*']
   pull_request:
     types: [opened, synchronize, reopened]
     paths-ignore:
@@ -34,7 +34,7 @@ permissions:
 # have the full pipeline run on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release-v') }}
 
 env:
   CHAINSAW_VERSION: v0.2.15
@@ -1157,51 +1157,35 @@ jobs:
 
       - name: Determine release type
         id: release-type
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
         run: |
-          VERSION=$(jq -r '."."' .github/release-please-manifest.json)
-
-          # Extract base version (remove -rc or -rc.* suffix if present)
-          BASE_VERSION="${VERSION%-rc*}"
-
-          echo "Manifest version: $VERSION"
-          echo "Base version: $BASE_VERSION"
-
-          # Promotion scenario:
-          # 1. Manifest version is stable (no -rc suffix)
-          # 2. RC tags exist for this version (v0.1.60-rc*)
-          # 3. Stable tag doesn't exist yet (v0.1.60)
-          RC_TAGS=$(git tag --list "v${BASE_VERSION}-rc*" | head -1)
-          STABLE_TAG=$(git tag --list "v${BASE_VERSION}" | head -1)
-
-          echo "RC tags for v${BASE_VERSION}: $RC_TAGS"
-          echo "Stable tag v${BASE_VERSION}: $STABLE_TAG"
-
-          if [[ "$VERSION" != *-rc* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
-            echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
-            echo "type=stable" >> $GITHUB_OUTPUT
-            echo "release_as=${BASE_VERSION}" >> $GITHUB_OUTPUT
-            echo "Promotion detected: RC tags exist for v${BASE_VERSION}, releasing stable"
-          else
+          # Branch-based release type:
+          #   - main           → always RC (RCs are cut from main as commits land)
+          #   - release-v*     → always stable (release branch is created from an RC tag
+          #                      by promote-to-stable; its only job is to cut the stable)
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
             echo "type=rc" >> $GITHUB_OUTPUT
-            echo "Normal development flow, using RC config"
+            echo "Branch: main → RC release"
+          else
+            echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
+            echo "type=stable" >> $GITHUB_OUTPUT
+            echo "Branch: ${{ github.ref_name }} → stable release"
           fi
 
       - name: Create Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
           config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
-          target-branch: main
-          release-as: ${{ steps.release-type.outputs.release_as || '' }}
+          target-branch: ${{ github.ref_name }}
 
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1235,7 +1219,7 @@ jobs:
   release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
     strategy:
       matrix:
         chart:
@@ -1268,7 +1252,7 @@ jobs:
   release-ark-cli:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1302,7 +1286,7 @@ jobs:
   release-fark:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1345,7 +1329,7 @@ jobs:
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')) }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1371,7 +1355,7 @@ jobs:
   verify-ark-installation:
     needs: [check-release, release-charts, release-ark-cli]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
+    if: ${{ needs.check-release.outputs.released && startsWith(github.ref, 'refs/heads/release-v') && needs.check-release.outputs.release_type == 'stable' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1417,37 +1401,24 @@ jobs:
           path: tests/pytest/*.log
           retention-days: 7
 
-  bootstrap-next-rc-cycle:
+  cleanup-release-branch:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && needs.check-release.outputs.release_type == 'stable' && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && needs.check-release.outputs.release_type == 'stable' && startsWith(github.ref, 'refs/heads/release-v') }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ github.ref_name }}
 
-      - name: Calculate next version
-        id: next-version
-        run: |
-          TAG="${{ needs.check-release.outputs.tag }}"
-          VERSION="${TAG#v}"
-
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          NEXT_PATCH=$((PATCH + 1))
-          NEXT_VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
-
-          echo "current=$VERSION" >> $GITHUB_OUTPUT
-          echo "next=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          echo "Stable release: $VERSION → Next version: $NEXT_VERSION"
-
-      - name: Check for existing bootstrap PR
+      - name: Check for existing cleanup PR
         id: check-pr
         run: |
-          BRANCH="bootstrap/${{ steps.next-version.outputs.next }}"
-          EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
+          RELEASE_BRANCH="${{ github.ref_name }}"
+          BRANCH="cleanup/${RELEASE_BRANCH}"
+          EXISTING_PR=$(gh pr list --base "$RELEASE_BRANCH" --head "$BRANCH" --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
-            echo "Bootstrap PR #${EXISTING_PR} already exists"
+            echo "Cleanup PR #${EXISTING_PR} already exists"
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -1460,15 +1431,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create bootstrap branch and PR
+      - name: Create cleanup branch and PR
         if: ${{ steps.check-pr.outputs.exists == 'false' }}
         run: |
-          NEXT="${{ steps.next-version.outputs.next }}"
-          BRANCH="bootstrap/${NEXT}"
+          RELEASE_BRANCH="${{ github.ref_name }}"
+          TAG="${{ needs.check-release.outputs.tag }}"
+          BRANCH="cleanup/${RELEASE_BRANCH}"
+
+          # If no release-as is set, nothing to clean — skip.
+          NEEDS_CLEANUP=false
+          if jq -e 'has("release-as")' .github/release-please-config.json > /dev/null 2>&1; then
+            NEEDS_CLEANUP=true
+          fi
+          if jq -e 'has("release-as")' .github/release-please-config-rc.json > /dev/null 2>&1; then
+            NEEDS_CLEANUP=true
+          fi
+
+          if [ "$NEEDS_CLEANUP" = "false" ]; then
+            echo "No release-as override present, nothing to clean."
+            exit 0
+          fi
 
           git checkout -b "$BRANCH"
 
-          # Clean up release-as from both configs (don't update manifest - release-please calculates version from tags)
           if jq -e 'has("release-as")' .github/release-please-config.json > /dev/null 2>&1; then
             jq 'del(."release-as")' .github/release-please-config.json > tmp.json
             mv tmp.json .github/release-please-config.json
@@ -1480,27 +1465,22 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "chore: bootstrap v$NEXT RC cycle after v${{ steps.next-version.outputs.current }} stable release"
+          git add .github/release-please-config.json .github/release-please-config-rc.json
+          git commit -m "chore: clean release-as override after $TAG"
           git push origin "$BRANCH"
 
           gh pr create \
-            --base main \
+            --base "$RELEASE_BRANCH" \
             --head "$BRANCH" \
-            --title "chore: bootstrap v$NEXT development cycle" \
+            --title "chore: clean release-as override on $RELEASE_BRANCH" \
             --body "## Summary
 
-          Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
+          Removes the \`release-as\` override from release-please config after stable release \`$TAG\`.
 
-          ### What this PR does
-          - Cleans up \`release-as\` from config files
-
-          ### What happens when merged
-          - Release-please will create v${NEXT}-rc from conventional commits
-          - Subsequent releases: v${NEXT}-rc.1 → rc.2 → ... → v${NEXT} (stable)
+          Without this cleanup, future runs of release-please on \`$RELEASE_BRANCH\` (e.g. for hotfix RCs cherry-picked onto this branch) would try to re-cut \`$TAG\`.
 
           ---
-          **Previous Stable:** v${{ steps.next-version.outputs.current }}
-          **Next Version:** $NEXT"
+          **Released tag:** \`$TAG\`
+          **Branch:** \`$RELEASE_BRANCH\`"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

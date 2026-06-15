@@ -2,6 +2,11 @@ name: Promote to Stable
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable version to promote (e.g. 0.1.64). The latest v<version>-rc.* tag will be used as the freeze point.'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,40 +19,70 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          fetch-tags: true
           ref: main
 
-      - name: Get current version
-        id: version
+      - name: Resolve RC tag and release branch
+        id: resolve
         run: |
-          MANIFEST=".github/release-please-manifest.json"
-          CURRENT=$(jq -r '."."' "$MANIFEST")
-          # Handle both -rc and -rc.N formats
-          STABLE=$(echo "$CURRENT" | sed 's/-rc.*$//')
+          STABLE="${{ inputs.version }}"
 
-          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
-          echo "stable=${STABLE}" >> $GITHUB_OUTPUT
-
-          if [[ "$CURRENT" != *-rc* ]]; then
-            echo "Error: Current version $CURRENT is not an RC version. Nothing to promote."
+          if [[ ! "$STABLE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: version input '$STABLE' must be X.Y.Z (no 'v' prefix, no -rc suffix)"
             exit 1
           fi
 
-          # Handle both -rc and -rc.N tag formats
+          STABLE_TAG="v${STABLE}"
+          if git rev-parse -q --verify "refs/tags/${STABLE_TAG}" >/dev/null; then
+            echo "Error: stable tag ${STABLE_TAG} already exists. Nothing to promote."
+            exit 1
+          fi
+
           LATEST_RC=$(git tag --list "v${STABLE}-rc*" --sort=-version:refname | head -1)
-          echo "latest_rc=${LATEST_RC:-v${CURRENT}}" >> $GITHUB_OUTPUT
+          if [ -z "$LATEST_RC" ]; then
+            echo "Error: no RC tags found matching v${STABLE}-rc*. Cut an RC from main first."
+            exit 1
+          fi
+
+          RC_SHA=$(git rev-list -n 1 "$LATEST_RC")
+          RELEASE_BRANCH="release-v${STABLE}"
+
+          echo "stable=${STABLE}" >> $GITHUB_OUTPUT
+          echo "latest_rc=${LATEST_RC}" >> $GITHUB_OUTPUT
+          echo "rc_sha=${RC_SHA}" >> $GITHUB_OUTPUT
+          echo "release_branch=${RELEASE_BRANCH}" >> $GITHUB_OUTPUT
+
+          echo "Promoting ${LATEST_RC} (${RC_SHA}) → v${STABLE} via ${RELEASE_BRANCH}"
+
+      - name: Ensure release branch exists at the RC tag SHA
+        run: |
+          RELEASE_BRANCH="${{ steps.resolve.outputs.release_branch }}"
+          RC_SHA="${{ steps.resolve.outputs.rc_sha }}"
+
+          if git ls-remote --heads origin "$RELEASE_BRANCH" | grep -q "$RELEASE_BRANCH"; then
+            REMOTE_SHA=$(git ls-remote --heads origin "$RELEASE_BRANCH" | awk '{print $1}')
+            echo "Release branch $RELEASE_BRANCH already exists at $REMOTE_SHA"
+            if [ "$REMOTE_SHA" != "$RC_SHA" ]; then
+              echo "Note: existing branch tip differs from RC tag SHA. Keeping existing branch (it may include hotfixes)."
+            fi
+          else
+            echo "Creating $RELEASE_BRANCH at $RC_SHA"
+            git push origin "${RC_SHA}:refs/heads/${RELEASE_BRANCH}"
+          fi
 
       - name: Check for existing promotion PR
         id: check-pr
         run: |
-          BRANCH="promote/${{ steps.version.outputs.stable }}"
-          EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
+          RELEASE_BRANCH="${{ steps.resolve.outputs.release_branch }}"
+          BRANCH="promote/${{ steps.resolve.outputs.stable }}"
+
+          EXISTING_PR=$(gh pr list --base "$RELEASE_BRANCH" --head "$BRANCH" --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
-            echo "Error: Promotion PR #${EXISTING_PR} already exists for v${{ steps.version.outputs.stable }}"
+            echo "Error: Promotion PR #${EXISTING_PR} already exists for v${{ steps.resolve.outputs.stable }}"
             echo "Please merge or close the existing PR first."
             exit 1
           fi
 
-          # Clean up orphaned branch from previous failed runs (no PR exists)
           if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
             echo "Deleting orphaned branch $BRANCH from previous run"
             git push origin --delete "$BRANCH" || true
@@ -55,56 +90,69 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create promotion branch
+      - name: Check out release branch and create promote branch
         run: |
-          BRANCH="promote/${{ steps.version.outputs.stable }}"
+          RELEASE_BRANCH="${{ steps.resolve.outputs.release_branch }}"
+          BRANCH="promote/${{ steps.resolve.outputs.stable }}"
+
+          git fetch origin "$RELEASE_BRANCH"
+          git checkout "$RELEASE_BRANCH"
           git checkout -b "$BRANCH"
 
-      - name: Graduate version in manifest and add release-as
+      - name: Graduate manifest and pin release-as
         run: |
           MANIFEST=".github/release-please-manifest.json"
-          CURRENT="${{ steps.version.outputs.current }}"
-          STABLE="${{ steps.version.outputs.stable }}"
+          STABLE="${{ steps.resolve.outputs.stable }}"
 
-          echo "Graduating version: $CURRENT → $STABLE"
+          CURRENT=$(jq -r '."."' "$MANIFEST")
+          echo "Manifest on release branch: $CURRENT → $STABLE"
+
           jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
           mv tmp.json "$MANIFEST"
 
-          # Add release-as to stable config (required because release-please ignores action input in manifest mode)
+          # Pin release-as in the stable config so release-please cuts exactly $STABLE
+          # (release-please ignores the action's release-as input in manifest mode)
           jq --arg v "$STABLE" '. + {"release-as": $v}' .github/release-please-config.json > tmp.json
           mv tmp.json .github/release-please-config.json
-          echo "Added release-as: $STABLE to stable config"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$MANIFEST" .github/release-please-config.json
-          git commit -m "chore: promote ${{ steps.version.outputs.latest_rc }} to v$STABLE"
+          git commit -m "chore: promote ${{ steps.resolve.outputs.latest_rc }} to v$STABLE"
 
       - name: Push branch and create PR
         run: |
-          BRANCH="promote/${{ steps.version.outputs.stable }}"
+          RELEASE_BRANCH="${{ steps.resolve.outputs.release_branch }}"
+          BRANCH="promote/${{ steps.resolve.outputs.stable }}"
+          LATEST_RC="${{ steps.resolve.outputs.latest_rc }}"
+          STABLE="${{ steps.resolve.outputs.stable }}"
+          RC_SHA="${{ steps.resolve.outputs.rc_sha }}"
+
           git push origin "$BRANCH"
 
           gh pr create \
-            --base main \
+            --base "$RELEASE_BRANCH" \
             --head "$BRANCH" \
-            --title "chore: promote ${{ steps.version.outputs.latest_rc }} to v${{ steps.version.outputs.stable }}" \
+            --title "chore: promote $LATEST_RC to v$STABLE" \
             --body "## Summary
 
-          Promotes release candidate \`${{ steps.version.outputs.latest_rc }}\` to stable release \`v${{ steps.version.outputs.stable }}\`.
+          Promotes release candidate \`$LATEST_RC\` to stable release \`v$STABLE\`.
 
           ### What this PR does
-          - Updates the release-please manifest from \`${{ steps.version.outputs.current }}\` to \`${{ steps.version.outputs.stable }}\`
-          - Adds \`release-as\` to stable config (required because release-please ignores action input in manifest mode)
+          - Updates the release-please manifest to \`$STABLE\` on \`$RELEASE_BRANCH\`
+          - Adds \`release-as: $STABLE\` to the stable config
 
           ### What happens when merged
-          - CI/CD pipeline runs on main
-          - Release Please creates \`v${{ steps.version.outputs.stable }}\` stable release
-          - Full deployment: containers, Helm charts, npm, PyPI, and docs
+          - CI runs on \`$RELEASE_BRANCH\`
+          - Release-please cuts \`v$STABLE\` from \`$RELEASE_BRANCH\` HEAD
+          - The released artifacts come from the RC commit (\`$RC_SHA\`) plus this manifest bump only — nothing else from main is included
+          - Full deployment: containers, Helm charts, npm, PyPI, docs
 
           ---
-          **RC Tag:** \`${{ steps.version.outputs.latest_rc }}\`
-          **Stable Version:** \`v${{ steps.version.outputs.stable }}\`"
+          **RC Tag:** \`$LATEST_RC\`
+          **RC SHA:** \`$RC_SHA\`
+          **Release Branch:** \`$RELEASE_BRANCH\`
+          **Stable Version:** \`v$STABLE\`"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -112,7 +160,9 @@ jobs:
         run: |
           echo "## Promotion PR Created" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **RC Version:** ${{ steps.version.outputs.latest_rc }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stable Version:** v${{ steps.version.outputs.stable }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **RC Tag:** ${{ steps.resolve.outputs.latest_rc }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **RC SHA:** ${{ steps.resolve.outputs.rc_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Branch:** ${{ steps.resolve.outputs.release_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stable Version:** v${{ steps.resolve.outputs.stable }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Merge the PR to trigger the stable release." >> $GITHUB_STEP_SUMMARY
+          echo "Merge the PR on the release branch to trigger the stable release." >> $GITHUB_STEP_SUMMARY
