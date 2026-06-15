@@ -57,8 +57,8 @@ const marketplaceService = {
     });
   },
 
-  async uninstallMarketplaceItem(id: string): Promise<void> {
-    await apiClient.delete(`/api/marketplace/${id}/install`);
+  async uninstallMarketplaceItem(id: string): Promise<unknown> {
+    return await apiClient.delete(`/api/marketplace/${id}/install`);
   },
 };
 

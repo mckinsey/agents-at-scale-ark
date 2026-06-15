@@ -1,18 +1,10 @@
 'use client';
 
-import copyToClipboard from 'copy-to-clipboard';
-import {
-  Bot,
-  Check,
-  Copy,
-  ExternalLink,
-  Loader2,
-  Server,
-  Terminal,
-} from 'lucide-react';
+import { Bot, Check, ExternalLink, Loader2, Server } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,13 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Tooltip,
   TooltipContent,
@@ -282,99 +267,13 @@ export function MarketplaceItemCard({
         </div>
       </CardFooter>
 
-      <InstallCommandDialog
+      <MarketplaceCommandDialog
         open={showCommandDialog}
         onOpenChange={setShowCommandDialog}
-        installCommand={installCommand}
+        command={installCommand}
         itemName={item.name}
+        action="install"
       />
     </Card>
-  );
-}
-
-function InstallCommandDialog({
-  open,
-  onOpenChange,
-  installCommand,
-  itemName,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  installCommand: {
-    helmCommand?: string;
-    arkCommand?: string;
-    name?: string;
-  };
-  itemName: string;
-}) {
-  const handleCopy = (text: string) => {
-    const success = copyToClipboard(text);
-    if (success) {
-      toast.success('Command copied to clipboard');
-    } else {
-      toast.error('Failed to copy to clipboard');
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            Install {installCommand.name || itemName}
-          </DialogTitle>
-          <DialogDescription>
-            Run one of these commands in your terminal to install the
-            marketplace item:
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {installCommand.arkCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Using Ark CLI (Recommended)
-              </label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm">
-                  {installCommand.arkCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(installCommand.arkCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {installCommand.helmCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Using Helm directly</label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm break-all">
-                  {installCommand.helmCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(installCommand.helmCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              💡 Make sure you have kubectl configured to the correct cluster
-              before running these commands.
-            </p>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
