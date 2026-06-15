@@ -1,5 +1,4 @@
 export default {
-  index: { display: 'hidden' },
   'walkthrough': {
     title: 'End-to-end walkthrough',
     href: '/user-guide/samples/walkthrough'
