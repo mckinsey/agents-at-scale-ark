@@ -9,7 +9,7 @@ import {
   toast as sonnerToast,
 } from 'sonner';
 
-import { cn } from '../../lib/utils';
+import { cn } from '@/lib/utils';
 import { Cancel } from '../icons/cancel';
 import { CheckCircle } from '../icons/check-circle';
 import { Close } from '../icons/close';

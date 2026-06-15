@@ -1,7 +1,7 @@
 import { type VariantProps, cva } from 'class-variance-authority';
 import * as React from 'react';
 
-import { cn } from '../../lib/utils';
+import { cn } from '@/lib/utils';
 import { Close } from '../icons/close';
 import { Button } from './button';
 import { IconShell } from './icon-shell';
