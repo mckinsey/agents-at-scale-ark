@@ -300,6 +300,9 @@ jobs:
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
+          - path: services/ark-broker/ark-broker
+            image: ark-broker-migrate
+            dockerfile: Dockerfile.migrate
           - path: services/ark-mcp
             image: ark-mcp
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
@@ -354,6 +357,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-broker
+          - ark-broker-migrate
           - ark-mcp
           - ark-cli
           - ark-tools

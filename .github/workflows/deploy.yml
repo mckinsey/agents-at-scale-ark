@@ -91,6 +91,9 @@ jobs:
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: services/ark-broker/ark-broker
             image: ark-broker
+          - path: services/ark-broker/ark-broker
+            image: ark-broker-migrate
+            dockerfile: Dockerfile.migrate
           - path: tools/ark-cli
             image: ark-cli
             prebuild: "make ark-cli-build"

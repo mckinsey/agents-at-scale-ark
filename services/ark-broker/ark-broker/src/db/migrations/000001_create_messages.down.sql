@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS messages;
+DROP SEQUENCE IF EXISTS messages_seq;
