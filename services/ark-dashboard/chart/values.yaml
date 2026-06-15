@@ -149,16 +149,3 @@ httpRoute:
   #     backendRefs:
   #       - name: ark-dashboard
   #         port: 3000
-
-# Seeded into the `marketplace-sources` ConfigMap. Set to [] to skip.
-marketplaceSources:
-  - name: agents-at-scale-marketplace
-    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
-    displayName: "Ark Marketplace"
-
-marketplaceSourcesSeed:
-  image: alpine/k8s:1.35.5
-
-# Edit access to the marketplace-sources ConfigMap; bound per namespace.
-marketplaceSourceEditorRole:
-  create: true
