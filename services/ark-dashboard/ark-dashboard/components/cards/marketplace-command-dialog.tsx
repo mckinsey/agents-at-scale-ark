@@ -33,6 +33,13 @@ export function MarketplaceCommandDialog({
   action: 'install' | 'uninstall';
 }) {
   const verb = action === 'install' ? 'Install' : 'Uninstall';
+  const commandCount = [command.arkCommand, command.helmCommand].filter(
+    Boolean,
+  ).length;
+  const intro =
+    commandCount > 1
+      ? `Run one of these commands in your terminal to ${action} the marketplace item:`
+      : `Run this command in your terminal to ${action} the marketplace item:`;
 
   const handleCopy = (text: string) => {
     if (copyToClipboard(text)) {
@@ -50,10 +57,7 @@ export function MarketplaceCommandDialog({
             <Terminal className="h-5 w-5" />
             {verb} {command.name || itemName}
           </DialogTitle>
-          <DialogDescription>
-            Run one of these commands in your terminal to {action} the
-            marketplace item:
-          </DialogDescription>
+          <DialogDescription>{intro}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">

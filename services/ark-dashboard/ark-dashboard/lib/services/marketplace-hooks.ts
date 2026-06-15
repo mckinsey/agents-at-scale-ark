@@ -58,7 +58,7 @@ export function useUninstallMarketplaceItem() {
       queryClient.invalidateQueries({ queryKey: ['marketplace'] });
     },
     onError: error => {
-      toast.error('Failed to get uninstall command', {
+      toast.error('Failed to load uninstall command', {
         description:
           error instanceof Error
             ? error.message
