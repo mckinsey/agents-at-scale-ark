@@ -60,14 +60,27 @@ jobs:
           BRANCH="promote/${{ steps.version.outputs.stable }}"
           git checkout -b "$BRANCH"
 
-      - name: Graduate version in manifest and add release-as
+      - name: Determine last stable version
+        id: last-stable
+        run: |
+          LAST_STABLE=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname \
+                        | grep -vE -- '-' | head -1)
+          if [ -z "$LAST_STABLE" ]; then
+            echo "Error: No prior stable tag found"
+            exit 1
+          fi
+          echo "tag=${LAST_STABLE}" >> $GITHUB_OUTPUT
+          echo "version=${LAST_STABLE#v}" >> $GITHUB_OUTPUT
+
+      - name: Rewind manifest to last stable and add release-as
         run: |
           MANIFEST=".github/release-please-manifest.json"
           CURRENT="${{ steps.version.outputs.current }}"
           STABLE="${{ steps.version.outputs.stable }}"
+          LAST_STABLE="${{ steps.last-stable.outputs.version }}"
 
-          echo "Graduating version: $CURRENT → $STABLE"
-          jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
+          echo "Rewinding manifest: $CURRENT → $LAST_STABLE (so release-please walks from v$LAST_STABLE)"
+          jq --arg v "$LAST_STABLE" '."." = $v' "$MANIFEST" > tmp.json
           mv tmp.json "$MANIFEST"
 
           # Add release-as to stable config (required because release-please ignores action input in manifest mode)
