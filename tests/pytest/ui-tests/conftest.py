@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import pytest
 import subprocess
 import time
@@ -9,6 +10,8 @@ from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 from pages.models_page import MOCK_LLM_MODEL_NAME
+
+_DEFAULT_API_URL = "http://ark-api.default.127.0.0.1.nip.io:8080"
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +244,12 @@ def mock_llm_model(ark_setup):
         check=True
     )
     yield MOCK_LLM_MODEL_NAME
+
+
+@pytest.fixture(scope="session")
+def ark_api_url() -> str:
+    """Resolved ark-api base URL for direct HTTP calls (e.g. broker traces)."""
+    return os.environ.get("ARK_API_URL", _DEFAULT_API_URL).rstrip("/")
 
 
 @pytest.fixture(scope="session")

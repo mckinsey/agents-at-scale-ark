@@ -160,6 +160,42 @@ class SessionsPage(BasePage):
     def get_assistant_message_count(self) -> int:
         return self.page.locator(self.ASSISTANT_MESSAGE).count()
 
+    def get_assistant_message_speakers(self) -> list[str]:
+        """Return the speaker label text for each visible assistant message bubble.
+
+        In team conversations each bubble should display the member's name above
+        the message content.  An empty string in the list means the speaker label
+        is absent — which is the bug reported as 'names stopped showing'.
+        """
+        speakers = []
+        bubbles = self.page.locator(self.ASSISTANT_MESSAGE).all()
+        for bubble in bubbles:
+            try:
+                label = bubble.locator(
+                    "span.font-medium, p.font-medium, [data-testid='speaker-name']"
+                ).first
+                if label.is_visible(timeout=1000):
+                    speakers.append(label.inner_text().strip())
+                else:
+                    speakers.append("")
+            except Exception:
+                speakers.append("")
+        return speakers
+
+    def get_last_assistant_message_text(self) -> str:
+        """Return the text content of the most recently received assistant message."""
+        try:
+            bubbles = self.page.locator(self.ASSISTANT_MESSAGE).all()
+            if not bubbles:
+                return ""
+            last = bubbles[-1]
+            content = last.locator("p, span:not(.font-medium), div.prose").first
+            if content.is_visible(timeout=2000):
+                return content.inner_text().strip()
+            return last.inner_text().strip()
+        except Exception:
+            return ""
+
     def get_sidebar_conversation_count(self) -> int:
         try:
             sidebar = self.page.locator(self.CONVERSATION_SIDEBAR).first

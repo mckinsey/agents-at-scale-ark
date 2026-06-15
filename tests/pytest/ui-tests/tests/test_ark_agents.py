@@ -3,6 +3,7 @@ import pytest
 from playwright.sync_api import Page, expect
 from pages.agents_page import AgentsPage
 from pages.tools_page import ToolsPage
+from pages.trace_assertions import find_recent_trace_for_agent, assert_agent_trace
 from conftest import MOCK_LLM_MODEL_NAME
 
 
@@ -96,6 +97,9 @@ class TestArkAgents:
         new_assistant_message.wait_for(state="visible", timeout=15000)
         assert new_assistant_message.inner_text() == assistant_text, "Assistant messages should be visible in chat after reload"
         agents.close_agent_chat()
+
+        trace = find_recent_trace_for_agent(agent_name, timeout=30)
+        assert_agent_trace([trace] if trace else [], agent_name)
 
     def test_chat_window_closed_does_not_reopen_after_reload(self, page: Page, agent_test_resources: dict):
         agent_name = agent_test_resources["agents"].get("agent")

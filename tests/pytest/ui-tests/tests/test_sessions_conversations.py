@@ -4,6 +4,12 @@ from playwright.sync_api import Page
 from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
 from pages.sessions_page import SessionsPage
+from pages.trace_assertions import (
+    wait_for_session_trace,
+    assert_agent_trace,
+    assert_team_trace,
+    assert_multi_message_trace,
+)
 from conftest import MOCK_LLM_MODEL_NAME
 
 
@@ -137,6 +143,9 @@ class TestSessionsAndConversations:
             f"Session {session_id} should show at least 1 conversation in the detail header, got {conv_count}"
         sessions.navigate_back_to_sessions()
 
+        traces = wait_for_session_trace(session_id, timeout=30)
+        assert_agent_trace(traces, session_id)
+
     # -------------------------------------------------------------------------
     # Team session: create + conversation flow (multi-agent)
     # -------------------------------------------------------------------------
@@ -201,6 +210,9 @@ class TestSessionsAndConversations:
             f"Team session {session_id} should appear in the sessions list"
         assert sessions.get_stats_total_session_count() >= 1, \
             "Sessions stats bar should show at least 1 session"
+
+        traces = wait_for_session_trace(session_id, timeout=30)
+        assert_team_trace(traces, session_id, team_name)
 
     # -------------------------------------------------------------------------
     # Session counts and status verification
@@ -378,6 +390,9 @@ class TestSessionsAndConversations:
             f"At least {len(messages)} user messages should be visible"
         assert sessions.get_assistant_message_count() >= len(messages), \
             f"At least {len(messages)} assistant responses should be visible"
+
+        traces = wait_for_session_trace(session_id, timeout=30)
+        assert_multi_message_trace(traces, session_id, expected_messages=len(messages))
 
     # -------------------------------------------------------------------------
     # Multiple conversations in one session
