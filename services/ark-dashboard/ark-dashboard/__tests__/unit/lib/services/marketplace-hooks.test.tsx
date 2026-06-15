@@ -3,17 +3,23 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { toast } from 'sonner';
+
 import { APIError } from '@/lib/api/client';
 import {
   useGetMarketplaceItemById,
   useGetMarketplaceItems,
+  useUninstallMarketplaceItem,
 } from '@/lib/services/marketplace-hooks';
 import { marketplaceService } from '@/lib/services/marketplace';
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock('@/lib/services/marketplace', () => ({
   marketplaceService: {
     getMarketplaceItems: vi.fn(),
     getMarketplaceItemById: vi.fn(),
+    uninstallMarketplaceItem: vi.fn(),
   },
 }));
 
@@ -23,6 +29,9 @@ const createWrapper = () => {
       queries: {
         retry: false,
         gcTime: 0,
+      },
+      mutations: {
+        retry: false,
       },
     },
   });
@@ -153,6 +162,44 @@ describe('marketplace hooks', () => {
 
       expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledTimes(1);
       expect(result.current.error).toBe(error);
+    });
+  });
+
+  describe('useUninstallMarketplaceItem', () => {
+    it('invalidates marketplace queries on success without a success toast', async () => {
+      vi.mocked(marketplaceService.uninstallMarketplaceItem).mockResolvedValue({
+        status: 'command',
+        helmCommand: 'helm uninstall phoenix',
+      } as any);
+      const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+
+      const { result } = renderHook(() => useUninstallMarketplaceItem(), {
+        wrapper: createWrapper(),
+      });
+      result.current.mutate('phoenix');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['marketplace'] });
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('shows an error toast on failure', async () => {
+      vi.mocked(marketplaceService.uninstallMarketplaceItem).mockRejectedValue(
+        new Error('boom'),
+      );
+
+      const { result } = renderHook(() => useUninstallMarketplaceItem(), {
+        wrapper: createWrapper(),
+      });
+      result.current.mutate('phoenix');
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to load uninstall command',
+        expect.objectContaining({ description: 'boom' }),
+      );
     });
   });
 });
