@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-server';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
 
 /**
  * Helm release name validation (max 53 chars, RFC 1123)
@@ -88,6 +88,31 @@ async function executeHelmCommand(
 }
 
 /**
+ * Check if Helm is available
+ */
+async function checkHelmAvailable(): Promise<{
+  available: boolean;
+  error?: string;
+}> {
+  try {
+    const { stdout } = await executeHelmCommand(
+      'helm',
+      ['version', '--short'],
+      10000,
+    );
+    console.log('Helm version:', stdout.trim());
+    return { available: true };
+  } catch (error) {
+    console.error('Helm not available:', error);
+    return {
+      available: false,
+      error:
+        'Helm CLI is not available. Please ensure helm is installed and accessible.',
+    };
+  }
+}
+
+/**
  * Maps source item type to marketplace installation path category.
  */
 function getMarketplaceCategoryPath(
@@ -125,8 +150,8 @@ function validateHelmInputs(
 /**
  * Fetch and validate marketplace item exists
  */
-async function fetchAndValidateMarketplaceItem(id: string, namespace: string) {
-  const item = await getRawMarketplaceItemById(id, namespace);
+async function fetchAndValidateMarketplaceItem(id: string) {
+  const item = await getRawMarketplaceItemById(id);
 
   if (!item) {
     return {
@@ -176,15 +201,10 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const namespace = request.nextUrl.searchParams.get('namespace');
-    if (!namespace) {
-      return NextResponse.json(
-        { error: 'namespace query parameter is required' },
-        { status: 400 },
-      );
-    }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
+    const { mode } = await request.json().catch(() => ({ mode: 'command' }));
+
+    const { item, error } = await fetchAndValidateMarketplaceItem(id);
     if (error) return error;
 
     if (!item!.ark?.chartPath || !item!.ark?.helmReleaseName) {
@@ -221,7 +241,45 @@ export async function POST(
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
 
-    return buildCommandResponse(item!, id, helmCommand, ark.namespace);
+    if (mode === 'command') {
+      return buildCommandResponse(item!, id, helmCommand, ark.namespace);
+    }
+
+    console.log('Attempting direct execution:', helmCommand);
+
+    try {
+      const helmCheck = await checkHelmAvailable();
+      if (!helmCheck.available) {
+        return buildCommandResponse(
+          item!,
+          id,
+          helmCommand,
+          ark.namespace,
+          'Direct installation not available. Run this command in your terminal:',
+        );
+      }
+
+      const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
+
+      logHelmStderr(stderr);
+      console.log('Helm stdout:', stdout);
+
+      return NextResponse.json({
+        message: `Successfully installed ${item!.name}`,
+        status: 'installed',
+        output: stdout,
+      });
+    } catch (error) {
+      console.error('Direct installation failed, returning command:', error);
+
+      return buildCommandResponse(
+        item!,
+        id,
+        helmCommand,
+        ark.namespace,
+        'Direct installation not available. Run this command in your terminal:',
+      );
+    }
   } catch (error) {
     console.error('Error installing marketplace item:', error);
     return NextResponse.json(
@@ -232,20 +290,13 @@ export async function POST(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
-    const namespace = request.nextUrl.searchParams.get('namespace');
-    if (!namespace) {
-      return NextResponse.json(
-        { error: 'namespace query parameter is required' },
-        { status: 400 },
-      );
-    }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
+    const { item, error } = await fetchAndValidateMarketplaceItem(id);
     if (error) return error;
 
     if (!item!.ark?.helmReleaseName) {

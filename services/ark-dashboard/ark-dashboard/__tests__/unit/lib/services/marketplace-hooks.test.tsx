@@ -2,155 +2,157 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { toast } from 'sonner';
 
+import { APIError } from '@/lib/api/client';
 import {
-  useCreateMarketplaceSource,
-  useDeleteMarketplaceSource,
   useGetMarketplaceItemById,
   useGetMarketplaceItems,
-  useInstallMarketplaceItem,
-  useMarketplaceCanEdit,
-  useMarketplaceSources,
-  useUninstallMarketplaceItem,
 } from '@/lib/services/marketplace-hooks';
 import { marketplaceService } from '@/lib/services/marketplace';
-
-vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: () => ({ namespace: 'team-a', readOnlyMode: false }),
-}));
-
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock('@/lib/services/marketplace', () => ({
   marketplaceService: {
     getMarketplaceItems: vi.fn(),
     getMarketplaceItemById: vi.fn(),
-    getMarketplaceSources: vi.fn(),
-    getMarketplaceSourcePermissions: vi.fn(),
-    createMarketplaceSource: vi.fn(),
-    deleteMarketplaceSource: vi.fn(),
-    installMarketplaceItem: vi.fn(),
-    uninstallMarketplaceItem: vi.fn(),
   },
 }));
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+      },
+    },
   });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 };
 
-describe('marketplace query hooks', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('useGetMarketplaceItems fetches items for the active namespace', async () => {
-    vi.mocked(marketplaceService.getMarketplaceItems).mockResolvedValueOnce({
-      items: [{ id: 'item-1' }],
-      total: 1,
-      page: 1,
-      pageSize: 1,
-    } as never);
-    const { result } = renderHook(() => useGetMarketplaceItems(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.getMarketplaceItems).toHaveBeenCalledWith('team-a', undefined);
-    expect(result.current.data?.items).toHaveLength(1);
+describe('marketplace hooks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('useGetMarketplaceItemById fetches by id when id is set', async () => {
-    vi.mocked(marketplaceService.getMarketplaceItemById).mockResolvedValueOnce({ id: 'phoenix' } as never);
-    const { result } = renderHook(() => useGetMarketplaceItemById('phoenix'), {
-      wrapper: createWrapper(),
+  describe('useGetMarketplaceItems', () => {
+    it('should fetch and return marketplace items', async () => {
+      const mockResponse = {
+        items: [
+          { id: 'item-1', name: 'Test Item 1' },
+          { id: 'item-2', name: 'Test Item 2' },
+        ],
+        total: 2,
+      };
+
+      vi.mocked(marketplaceService.getMarketplaceItems).mockResolvedValue(
+        mockResponse as any,
+      );
+
+      const { result } = renderHook(() => useGetMarketplaceItems(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toEqual(mockResponse);
+      expect(marketplaceService.getMarketplaceItems).toHaveBeenCalledTimes(1);
     });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledWith('phoenix', 'team-a');
-  });
 
-  it('useMarketplaceSources fetches the namespace source list', async () => {
-    vi.mocked(marketplaceService.getMarketplaceSources).mockResolvedValueOnce([
-      { name: 'a', url: 'https://a.test/marketplace.json' },
-    ]);
-    const { result } = renderHook(() => useMarketplaceSources(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.getMarketplaceSources).toHaveBeenCalledWith('team-a');
-    expect(result.current.data).toHaveLength(1);
-  });
+    it('should handle 4xx errors without retry', async () => {
+      const error = new APIError('Bad request', 400);
+      vi.mocked(marketplaceService.getMarketplaceItems).mockRejectedValue(
+        error,
+      );
 
-  it('useMarketplaceCanEdit reads the permission probe', async () => {
-    vi.mocked(marketplaceService.getMarketplaceSourcePermissions).mockResolvedValueOnce({ canEdit: false });
-    const { result } = renderHook(() => useMarketplaceCanEdit(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.canEdit).toBe(false);
-  });
-});
+      const { result } = renderHook(() => useGetMarketplaceItems(), {
+        wrapper: createWrapper(),
+      });
 
-describe('marketplace mutation hooks', () => {
-  beforeEach(() => vi.clearAllMocks());
+      await waitFor(() => expect(result.current.isError).toBe(true));
 
-  it('useCreateMarketplaceSource calls the service and invalidates on success', async () => {
-    vi.mocked(marketplaceService.createMarketplaceSource).mockResolvedValueOnce({
-      name: 'x',
-      url: 'https://x.test/marketplace.json',
+      expect(result.current.error).toBe(error);
+      expect(marketplaceService.getMarketplaceItems).toHaveBeenCalledTimes(1);
     });
-    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
-    const { result } = renderHook(() => useCreateMarketplaceSource(), { wrapper: createWrapper() });
+  });
 
-    result.current.mutate({ name: 'x', url: 'https://x.test/marketplace.json' });
+  describe('useGetMarketplaceItemById', () => {
+    it('should fetch and return a marketplace item', async () => {
+      const mockItem = {
+        id: 'test-item',
+        name: 'Test Item',
+        description: 'Test description',
+      };
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.createMarketplaceSource).toHaveBeenCalledWith('team-a', {
-      name: 'x',
-      url: 'https://x.test/marketplace.json',
+      vi.mocked(marketplaceService.getMarketplaceItemById).mockResolvedValue(
+        mockItem as any,
+      );
+
+      const { result } = renderHook(() => useGetMarketplaceItemById('test-item'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toEqual(mockItem);
+      expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledWith(
+        'test-item',
+      );
     });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['marketplace'] });
-  });
 
-  it('useCreateMarketplaceSource toasts on error', async () => {
-    vi.mocked(marketplaceService.createMarketplaceSource).mockRejectedValueOnce(new Error('409'));
-    const { result } = renderHook(() => useCreateMarketplaceSource(), { wrapper: createWrapper() });
+    it('should not retry on 404 errors', async () => {
+      const error = new APIError('Not found', 404);
+      vi.mocked(marketplaceService.getMarketplaceItemById).mockRejectedValue(
+        error,
+      );
 
-    result.current.mutate({ name: 'x', url: 'https://x.test/marketplace.json' });
+      const { result } = renderHook(
+        () => useGetMarketplaceItemById('non-existent'),
+        {
+          wrapper: createWrapper(),
+        },
+      );
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(toast.error).toHaveBeenCalled();
-  });
+      await waitFor(() => expect(result.current.isError).toBe(true));
 
-  it('useDeleteMarketplaceSource deletes by name and invalidates', async () => {
-    vi.mocked(marketplaceService.deleteMarketplaceSource).mockResolvedValueOnce(undefined);
-    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
-    const { result } = renderHook(() => useDeleteMarketplaceSource(), { wrapper: createWrapper() });
-
-    result.current.mutate('internal');
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.deleteMarketplaceSource).toHaveBeenCalledWith('team-a', 'internal');
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['marketplace'] });
-  });
-
-  it('useInstallMarketplaceItem invalidates on success and toasts on error', async () => {
-    vi.mocked(marketplaceService.installMarketplaceItem).mockResolvedValueOnce({});
-    const { result } = renderHook(() => useInstallMarketplaceItem(), { wrapper: createWrapper() });
-    result.current.mutate('phoenix');
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.installMarketplaceItem).toHaveBeenCalledWith('phoenix', 'team-a');
-
-    vi.mocked(marketplaceService.installMarketplaceItem).mockRejectedValueOnce(new Error('boom'));
-    const { result: errResult } = renderHook(() => useInstallMarketplaceItem(), {
-      wrapper: createWrapper(),
+      expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBe(error);
     });
-    errResult.current.mutate('phoenix');
-    await waitFor(() => expect(errResult.current.isError).toBe(true));
-    expect(toast.error).toHaveBeenCalled();
-  });
 
-  it('useUninstallMarketplaceItem toasts success and error', async () => {
-    vi.mocked(marketplaceService.uninstallMarketplaceItem).mockResolvedValueOnce(undefined);
-    const { result } = renderHook(() => useUninstallMarketplaceItem(), { wrapper: createWrapper() });
-    result.current.mutate('phoenix');
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(toast.success).toHaveBeenCalled();
+    it('should not retry on 400 errors', async () => {
+      const error = new APIError('Bad request', 400);
+      vi.mocked(marketplaceService.getMarketplaceItemById).mockRejectedValue(
+        error,
+      );
+
+      const { result } = renderHook(() => useGetMarketplaceItemById('bad-id'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBe(error);
+    });
+
+    it('should not retry on 403 errors', async () => {
+      const error = new APIError('Forbidden', 403);
+      vi.mocked(marketplaceService.getMarketplaceItemById).mockRejectedValue(
+        error,
+      );
+
+      const { result } = renderHook(
+        () => useGetMarketplaceItemById('forbidden-item'),
+        {
+          wrapper: createWrapper(),
+        },
+      );
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBe(error);
+    });
   });
 });

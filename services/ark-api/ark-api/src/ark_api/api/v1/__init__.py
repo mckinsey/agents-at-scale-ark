@@ -24,8 +24,6 @@ from .broker import router as broker_router
 from .export import router as export_router
 from .file_preview import router as file_preview_router
 from .arkconfig import router as arkconfig_router
-from .marketplace_sources import router as marketplace_sources_router
-from .marketplace_items import router as marketplace_items_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -55,5 +53,3 @@ router.include_router(proxy_router)
 router.include_router(export_router)
 router.include_router(file_preview_router)
 router.include_router(arkconfig_router)
-router.include_router(marketplace_sources_router)
-router.include_router(marketplace_items_router)
