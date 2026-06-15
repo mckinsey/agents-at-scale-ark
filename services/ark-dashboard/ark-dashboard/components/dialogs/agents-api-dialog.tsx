@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -92,121 +91,115 @@ export function AgentsAPIDialog({ open, onOpenChange }: AgentsAPIDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-2xl gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl">
-        <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[85vh]">
-          <div className="flex flex-col gap-4 p-6">
-            <DialogHeader>
-              <DialogTitle>API Access</DialogTitle>
-              <DialogDescription>
-                Use the Query API to chat with your agents from external
-                systems.
-              </DialogDescription>
-            </DialogHeader>
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>API Access</DialogTitle>
+          <DialogDescription>
+            Use the Query API to chat with your agents from external systems.
+          </DialogDescription>
+        </DialogHeader>
 
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label className="text-fg-secondary text-sm">
-                  Select Agent
+        <div className="flex max-h-[70vh] min-w-0 flex-col gap-4 overflow-y-auto">
+          <div className="flex min-w-0 flex-col gap-2">
+            <Label className="text-fg-secondary text-sm">Select Agent</Label>
+            <Select
+              items={agentItems}
+              value={selectedAgent}
+              onValueChange={value =>
+                setUserSelectedAgent(value as string | null)
+              }>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select an agent" />
+              </SelectTrigger>
+              <SelectContent>
+                {agentItems.map(item => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-fg-secondary text-sm">Endpoint</Label>
+              <div className="flex items-center gap-2">
+                <Label
+                  htmlFor="endpoint-toggle"
+                  className="text-fg-secondary text-xs">
+                  Cluster internal
                 </Label>
-                <Select
-                  items={agentItems}
-                  value={selectedAgent}
-                  onValueChange={value =>
-                    setUserSelectedAgent(value as string | null)
-                  }>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {agentItems.map(item => (
-                      <SelectItem key={item.value} value={item.value}>
-                        <SelectItemText>{item.label}</SelectItemText>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-fg-secondary text-sm">Endpoint</Label>
-                  <div className="flex items-center gap-2">
-                    <Label
-                      htmlFor="endpoint-toggle"
-                      className="text-fg-secondary text-xs">
-                      Cluster internal
-                    </Label>
-                    <Switch
-                      id="endpoint-toggle"
-                      checked={isInternalEndpoint}
-                      onCheckedChange={setIsInternalEndpoint}
-                    />
-                  </div>
-                </div>
-                <div className="bg-fill-onsurface-ui-2 flex items-center justify-between gap-2 overflow-hidden p-3">
-                  <code className="text-fg-primary overflow-x-auto text-sm">
-                    {fullEndpoint}
-                  </code>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    className="shrink-0"
-                    aria-label="Copy endpoint"
-                    onClick={() => copyToClipboard(fullEndpoint, 'endpoint')}>
-                    {copiedEndpoint ? (
-                      <Check className="size-4" />
-                    ) : (
-                      <ContentCopy className="size-4" />
-                    )}
-                  </Button>
-                </div>
-                {isInternalEndpoint && (
-                  <p className="text-fg-secondary text-xs">
-                    Replace <code>&lt;namespace&gt;</code> with the namespace
-                    where Ark is deployed.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-fg-secondary text-sm">
-                  Code Examples
-                </Label>
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <div className="flex items-center justify-between">
-                    <TabsList>
-                      <TabsTrigger value="python">Python</TabsTrigger>
-                      <TabsTrigger value="go">Go</TabsTrigger>
-                      <TabsTrigger value="bash">Bash</TabsTrigger>
-                    </TabsList>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Copy code"
-                      onClick={() =>
-                        copyToClipboard(codeSnippets[activeTab], 'code')
-                      }>
-                      {copiedCode ? (
-                        <Check className="size-4" />
-                      ) : (
-                        <ContentCopy className="size-4" />
-                      )}
-                    </Button>
-                  </div>
-                  <TabsContent value="python">
-                    <pre className={codeBlockClass}>{pythonCode}</pre>
-                  </TabsContent>
-                  <TabsContent value="go">
-                    <pre className={codeBlockClass}>{goCode}</pre>
-                  </TabsContent>
-                  <TabsContent value="bash">
-                    <pre className={codeBlockClass}>{bashCode}</pre>
-                  </TabsContent>
-                </Tabs>
+                <Switch
+                  id="endpoint-toggle"
+                  checked={isInternalEndpoint}
+                  onCheckedChange={setIsInternalEndpoint}
+                />
               </div>
             </div>
+            <div className="bg-fill-onsurface-ui-2 flex items-center justify-between gap-2 p-3">
+              <code className="text-fg-primary block min-w-0 flex-1 overflow-x-auto text-sm whitespace-nowrap">
+                {fullEndpoint}
+              </code>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className="shrink-0"
+                aria-label="Copy endpoint"
+                onClick={() => copyToClipboard(fullEndpoint, 'endpoint')}>
+                {copiedEndpoint ? (
+                  <Check className="size-4" />
+                ) : (
+                  <ContentCopy className="size-4" />
+                )}
+              </Button>
+            </div>
+            {isInternalEndpoint && (
+              <p className="text-fg-secondary text-xs">
+                Replace <code>&lt;namespace&gt;</code> with the namespace where
+                Ark is deployed.
+              </p>
+            )}
           </div>
-        </ScrollArea>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <Label className="text-fg-secondary text-sm">Code Examples</Label>
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="min-w-0">
+              <div className="flex items-center justify-between">
+                <TabsList>
+                  <TabsTrigger value="python">Python</TabsTrigger>
+                  <TabsTrigger value="go">Go</TabsTrigger>
+                  <TabsTrigger value="bash">Bash</TabsTrigger>
+                </TabsList>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Copy code"
+                  onClick={() =>
+                    copyToClipboard(codeSnippets[activeTab], 'code')
+                  }>
+                  {copiedCode ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <ContentCopy className="size-4" />
+                  )}
+                </Button>
+              </div>
+              <TabsContent value="python" className="min-w-0">
+                <pre className={codeBlockClass}>{pythonCode}</pre>
+              </TabsContent>
+              <TabsContent value="go" className="min-w-0">
+                <pre className={codeBlockClass}>{goCode}</pre>
+              </TabsContent>
+              <TabsContent value="bash" className="min-w-0">
+                <pre className={codeBlockClass}>{bashCode}</pre>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
