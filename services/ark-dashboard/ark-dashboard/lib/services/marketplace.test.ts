@@ -1,118 +1,168 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { apiClient } from '@/lib/api/client';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { marketplaceService } from '@/lib/services/marketplace';
+import { apiClient } from '@/lib/api/client';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
-    patch: vi.fn(),
     delete: vi.fn(),
   },
 }));
 
-const NS = 'team-a';
-const SOURCES_BASE = `/api/v1/namespaces/${NS}/marketplace-sources`;
+const mockResponse = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 0,
+};
 
-describe('marketplaceService sources', () => {
+describe('marketplaceService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
-  it('lists sources from the namespaced ConfigMap endpoint', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce([
-      { name: 'a', url: 'https://a.test/marketplace.json' },
-    ]);
-    const result = await marketplaceService.getMarketplaceSources(NS);
-    expect(apiClient.get).toHaveBeenCalledWith(SOURCES_BASE);
-    expect(result).toHaveLength(1);
-  });
+  describe('getMarketplaceItems', () => {
+    it('should call apiClient.get with base url when no filters', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
 
-  it('creates a source via POST', async () => {
-    const body = { name: 'internal', url: 'https://i.test/marketplace.json' };
-    vi.mocked(apiClient.post).mockResolvedValueOnce(body);
-    await marketplaceService.createMarketplaceSource(NS, body);
-    expect(apiClient.post).toHaveBeenCalledWith(SOURCES_BASE, body);
-  });
+      await marketplaceService.getMarketplaceItems();
 
-  it('deletes a source via DELETE on the encoded name', async () => {
-    vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
-    await marketplaceService.deleteMarketplaceSource(NS, 'internal');
-    expect(apiClient.delete).toHaveBeenCalledWith(`${SOURCES_BASE}/internal`);
-  });
-
-  it('reads the permission probe', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ canEdit: true });
-    const result = await marketplaceService.getMarketplaceSourcePermissions(NS);
-    expect(apiClient.get).toHaveBeenCalledWith(`${SOURCES_BASE}/permissions`);
-    expect(result.canEdit).toBe(true);
-  });
-});
-
-describe('marketplaceService items', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('aggregates and filters items from the namespace items endpoint', async () => {
-    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
-      if (url.endsWith('/marketplace-items')) {
-        return [
-          {
-            source: 'a',
-            displayName: 'A',
-            items: [
-              { name: 'phoenix', description: 'obs', category: 'observability', type: 'service' },
-              { name: 'helper', description: 'tool', category: 'tools', type: 'service' },
-            ],
-          },
-        ];
-      }
-      // install-detection calls (helm releases / services)
-      return { items: [] };
+      expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace', { headers: {} });
     });
 
-    const all = await marketplaceService.getMarketplaceItems(NS);
-    expect(all.items).toHaveLength(2);
+    it('should build query params from category filter', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
 
-    const filtered = await marketplaceService.getMarketplaceItems(NS, {
-      category: 'observability',
-    });
-    expect(filtered.items).toHaveLength(1);
-    expect(filtered.items[0].category).toBe('observability');
+      await marketplaceService.getMarketplaceItems({ category: 'observability' });
 
-    expect((await marketplaceService.getMarketplaceItems(NS, { type: 'service' })).items).toHaveLength(2);
-    expect((await marketplaceService.getMarketplaceItems(NS, { status: 'installed' })).items).toHaveLength(0);
-    expect((await marketplaceService.getMarketplaceItems(NS, { featured: true })).items).toHaveLength(0);
-    expect((await marketplaceService.getMarketplaceItems(NS, { search: 'phoenix' })).items).toHaveLength(1);
-  });
-});
-
-describe('marketplaceService item actions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('gets an item by id, installs and uninstalls via the dashboard routes', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ id: 'phoenix' });
-    await marketplaceService.getMarketplaceItemById('phoenix', NS);
-    expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace/phoenix', {
-      params: { namespace: NS },
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/marketplace?category=observability',
+        { headers: {} },
+      );
     });
 
-    vi.mocked(apiClient.post).mockResolvedValueOnce({});
-    await marketplaceService.installMarketplaceItem('phoenix', NS);
-    expect(apiClient.post).toHaveBeenCalledWith(
-      '/api/marketplace/phoenix/install',
-      { mode: 'command' },
-      { params: { namespace: NS } },
-    );
+    it('should build query params from type filter', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
 
-    vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
-    await marketplaceService.uninstallMarketplaceItem('phoenix', NS);
-    expect(apiClient.delete).toHaveBeenCalledWith('/api/marketplace/phoenix/install', {
-      params: { namespace: NS },
+      await marketplaceService.getMarketplaceItems({ type: 'service' });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/marketplace?type=service',
+        { headers: {} },
+      );
+    });
+
+    it('should build query params from status filter', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems({ status: 'available' });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/marketplace?status=available',
+        { headers: {} },
+      );
+    });
+
+    it('should build query params from search filter', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems({ search: 'phoenix' });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/marketplace?search=phoenix',
+        { headers: {} },
+      );
+    });
+
+    it('should build query params from featured filter', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems({ featured: true });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/marketplace?featured=true',
+        { headers: {} },
+      );
+    });
+
+    it('should combine multiple filters into query string', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems({
+        category: 'tools',
+        type: 'component',
+        search: 'test',
+      });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/marketplace?category=tools&type=component&search=test',
+        { headers: {} },
+      );
+    });
+
+    it('should add X-Marketplace-Sources header when sources in localStorage', async () => {
+      const sources = [{ id: 'src-1', name: 'Source 1', url: 'https://example.com/manifest.json' }];
+      localStorage.setItem('marketplace-sources', JSON.stringify(sources));
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems();
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace', {
+        headers: { 'X-Marketplace-Sources': JSON.stringify(sources) },
+      });
+    });
+
+    it('should not add sources header when localStorage is empty', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems();
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace', { headers: {} });
+    });
+
+    it('should not add sources header when localStorage has invalid JSON', async () => {
+      localStorage.setItem('marketplace-sources', 'not-valid-json');
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
+
+      await marketplaceService.getMarketplaceItems();
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace', { headers: {} });
+    });
+  });
+
+  describe('getMarketplaceItemById', () => {
+    it('should call apiClient.get with the correct url', async () => {
+      const mockItem = { id: 'phoenix', name: 'Phoenix' };
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockItem);
+
+      const result = await marketplaceService.getMarketplaceItemById('phoenix');
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/marketplace/phoenix');
+      expect(result).toEqual(mockItem);
+    });
+  });
+
+  describe('installMarketplaceItem', () => {
+    it('should call apiClient.post with correct url and body', async () => {
+      const mockResult = { status: 'command', helmCommand: 'helm install ...' };
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResult);
+
+      const result = await marketplaceService.installMarketplaceItem('phoenix');
+
+      expect(apiClient.post).toHaveBeenCalledWith('/api/marketplace/phoenix/install', { mode: 'command' });
+      expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('uninstallMarketplaceItem', () => {
+    it('should call apiClient.delete with correct url', async () => {
+      vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
+
+      await marketplaceService.uninstallMarketplaceItem('phoenix');
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/marketplace/phoenix/install');
     });
   });
 });
