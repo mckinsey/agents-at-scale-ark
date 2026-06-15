@@ -1,3 +1,9 @@
+XRAY-1002760 - GHSA-gv7w-rqvm-qjhr (esbuild < 0.28.1)
+- Missing binary integrity verification in esbuild's Deno module enables RCE via NPM_CONFIG_REGISTRY manipulation.
+- NOT introduced by this PR: affects esbuild@0.27.x pulled transitively via tsx@4.21.0 (ark-broker, ark-cli) and vite@7.3.2 (ark-dashboard). No package-lock.json was modified in this PR.
+- Exploitation requires the attacker to control NPM_CONFIG_REGISTRY during a Deno binary download at build time. Does not affect production runtime — esbuild is a dev-only toolchain dep, not deployed in any container.
+- Fix requires tsx upgrade (4.x→5.x or newer minor that allows esbuild@~0.28.0) and vite upgrade (7.x→8.x) across three packages; tracked separately.
+
 XRAY-97724 - CVE-2018-20225
 - An issue was discovered in pip (all versions) because it installs the version with the highest version number, even if the user had intended to obtain a private package from a private index. This only affects use of the --extra-index-url option, and exploitation requires that the package does not already exist in the public index (and thus the attacker can put the package there with an arbitrary version number). NOTE: it has been reported that this is intended functionality and the user is responsible for using --extra-index-url securely.
 - NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, simple-agent, retrieval-service, tool templates).
