@@ -184,7 +184,7 @@ class TestReadCachedClientCreds(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             creds = asyncio.run(
                 read_cached_client_creds("ns", "tok-secret", SecretKeys())
@@ -200,7 +200,7 @@ class TestReadCachedClientCreds(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             creds = asyncio.run(
                 read_cached_client_creds("ns", "tok-secret", SecretKeys())
@@ -216,7 +216,7 @@ class TestReadCachedClientCreds(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             with self.assertRaises(ApiException):
                 asyncio.run(read_cached_client_creds("ns", "tok-secret", SecretKeys()))
@@ -229,7 +229,7 @@ class TestReadCachedClientCreds(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             creds = asyncio.run(
                 read_cached_client_creds("ns", "tok-secret", SecretKeys())
@@ -285,7 +285,7 @@ class TestWriteTokenSecret(unittest.TestCase):
         v1.patch_namespaced_secret = AsyncMock()
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             asyncio.run(
                 write_token_secret(
@@ -316,7 +316,7 @@ class TestWriteTokenSecret(unittest.TestCase):
         v1.patch_namespaced_secret = AsyncMock()
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             asyncio.run(
                 write_token_secret(
@@ -338,7 +338,7 @@ class TestClearTokenSecret(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             cleared = asyncio.run(
                 clear_token_secret(
@@ -366,7 +366,7 @@ class TestClearTokenSecret(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             cleared = asyncio.run(
                 clear_token_secret(
@@ -388,7 +388,7 @@ class TestClearTokenSecret(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             cleared = asyncio.run(
                 clear_token_secret(
@@ -409,7 +409,7 @@ class TestDeleteTokenSecret(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             result = asyncio.run(delete_token_secret(namespace="ns", secret_name="tok"))
 
@@ -421,7 +421,7 @@ class TestDeleteTokenSecret(unittest.TestCase):
         api_factory, core_factory = _api_client_cm(v1)
 
         with patch(
-            "ark_api.services.mcp_auth_persistence.ApiClient", api_factory
+            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
         ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
             result = asyncio.run(delete_token_secret(namespace="ns", secret_name="tok"))
 

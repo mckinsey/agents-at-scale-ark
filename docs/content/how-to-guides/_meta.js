@@ -1,7 +1,7 @@
 export default {
   index: 'Overview',
   
-  '---build': { type: 'separator', title: 'Build with ARK (application developers)' },
+  '---build': { type: 'separator', title: 'Basic use' },
   models: {
     title: 'Configure providers and models',
     href: '/user-guide/models'
@@ -15,16 +15,12 @@ export default {
     href: '/user-guide/teams'
   },
   queries: {
-    title: 'Run work and manage sessions',
+    title: 'Run queries / chat with agents and teams',
     href: '/user-guide/queries'
   },
   tools: {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
-  },
-  'workflow-templates': {
-    title: 'Workflow Templates',
-    href: '/user-guide/workflow-templates'
   },
   'ark-cli': {
     title: 'Use the Ark CLI',
@@ -32,10 +28,10 @@ export default {
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-strategies'
+    href: '/user-guide/samples/teams/team-selector-strategy'
   },
   
-  '---extend': { type: 'separator', title: 'Extend ARK (contributors)' },
+  '---extend': { type: 'separator', title: 'Advanced use' },
   'local-development': {
     title: 'Build and run locally',
     href: '/developer-guide/local-development'
@@ -77,6 +73,10 @@ export default {
   deploying: {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
+  },
+  'operate-marketplace': {
+    title: 'Marketplace',
+    href: '/operations-guide/marketplace'
   },
   pipelines: {
     title: 'Build pipelines',

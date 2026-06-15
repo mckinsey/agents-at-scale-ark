@@ -5,7 +5,7 @@ description: Configuring ark-api as the OAuth callback target for MCP server aut
 
 # MCP OAuth Callback
 
-When a user authorizes an MCP server through the dashboard or `ark mcp auth login`, the IdP redirects the browser back to ark-api with the authorization code. ark-api exchanges the code for tokens, writes the result to the MCPServer's referenced Secret, and stamps the parent MCPServer with an annotation that records who triggered the flow.
+When a user authorizes an MCP server with `ark mcp auth login`, the IdP redirects the browser back to ark-api with the authorization code. ark-api exchanges the code for tokens, writes the result to the MCPServer's referenced Secret, and stamps the parent MCPServer with an annotation that records who triggered the flow.
 
 The redirect target is a single externally reachable URL that ark-api must own. This page covers configuring `ARK_API_PUBLIC_CALLBACK_URL` for both public ingress and air-gapped clusters.
 

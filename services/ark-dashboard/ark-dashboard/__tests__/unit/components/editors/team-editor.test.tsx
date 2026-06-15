@@ -14,7 +14,29 @@ vi.mock('@/lib/api/client', () => ({
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
+    setDefaultParam: vi.fn(),
   },
+  APIClient: vi.fn().mockImplementation(() => ({
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    setDefaultParam: vi.fn(),
+    getDefaultParams: vi.fn().mockReturnValue({}),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}`),
+  })),
+}));
+
+vi.mock('@/lib/api/files-client', () => ({
+  filesApiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
+    setDefaultParam: vi.fn(),
+    getDefaultParams: vi.fn().mockReturnValue({}),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}`),
+  },
+  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api/',
 }));
 
 describe('TeamEditor', () => {

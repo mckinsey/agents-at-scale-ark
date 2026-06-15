@@ -9,9 +9,8 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, Tuple, Dict, Any
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
 
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, create_api_client
 
 from ..models.auth import (
     APIKeyCreateRequest,
@@ -253,7 +252,7 @@ class APIKeyService:
             }
         )
         
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             created_secret = await v1.create_namespaced_secret(
                 namespace=self.namespace,
@@ -277,7 +276,7 @@ class APIKeyService:
         Returns:
             List of API key responses
         """
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             
             # List secrets with our API key label
@@ -339,7 +338,7 @@ class APIKeyService:
         secret_name = self._secret_name_from_public_key(public_key)
         
         try:
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 secret = await v1.read_namespaced_secret(
                     name=secret_name,
@@ -427,7 +426,7 @@ class APIKeyService:
         try:
             now = datetime.now(timezone.utc)
             
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 
                 # Get current secret
@@ -480,7 +479,7 @@ class APIKeyService:
         try:
             now = datetime.now(timezone.utc)
             
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 
                 # Get current secret

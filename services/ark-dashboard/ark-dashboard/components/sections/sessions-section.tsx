@@ -1016,6 +1016,12 @@ export function SessionsSection() {
   useEffect(() => {
     const params = new URLSearchParams();
 
+    // Preserve namespace parameter
+    const namespace = searchParams.get('namespace');
+    if (namespace) {
+      params.set('namespace', namespace);
+    }
+
     if (debouncedWorkflowName) {
       params.set('workflowName', debouncedWorkflowName);
     }
@@ -1033,6 +1039,7 @@ export function SessionsSection() {
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
   }, [
+    searchParams,
     debouncedWorkflowName,
     debouncedWorkflowTemplateName,
     statusFilter,

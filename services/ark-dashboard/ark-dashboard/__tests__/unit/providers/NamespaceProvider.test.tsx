@@ -42,6 +42,21 @@ vi.mock('sonner', () => ({
   }),
 }));
 
+const mockApiClientSetDefaultParam = vi.fn();
+const mockFilesApiClientSetDefaultParam = vi.fn();
+
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    setDefaultParam: (...args: unknown[]) => mockApiClientSetDefaultParam(...args),
+  },
+}));
+
+vi.mock('@/lib/api/files-client', () => ({
+  filesApiClient: {
+    setDefaultParam: (...args: unknown[]) => mockFilesApiClientSetDefaultParam(...args),
+  },
+}));
+
 import { toast } from 'sonner';
 
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
@@ -313,6 +328,99 @@ describe('NamespaceProvider', () => {
       expect(mockPush).toHaveBeenCalledWith(
         '/agents?namespace=production&filter=active',
       );
+    });
+  });
+
+  describe('API client namespace synchronization', () => {
+    it('should set namespace on both apiClient and filesApiClient', async () => {
+      mockGetSearchParam.mockReturnValue('kyc-demo');
+      mockGetContext.mockReturnValue({
+        data: {
+          namespace: 'kyc-demo',
+          cluster: 'test-cluster',
+          read_only_mode: false,
+        },
+        isPending: false,
+        error: null,
+      });
+      mockGetAllNamespaces.mockReturnValue({
+        data: [{ name: 'kyc-demo', id: 0 }],
+        isPending: false,
+        error: null,
+      });
+
+      renderHook(() => useNamespace(), { wrapper });
+
+      await waitFor(() => {
+        expect(mockApiClientSetDefaultParam).toHaveBeenCalledWith(
+          'namespace',
+          'kyc-demo',
+        );
+        expect(mockFilesApiClientSetDefaultParam).toHaveBeenCalledWith(
+          'namespace',
+          'kyc-demo',
+        );
+      });
+    });
+
+    it('should update both API clients when namespace changes', async () => {
+      // Start with 'default' namespace
+      mockGetSearchParam.mockReturnValue('default');
+      mockGetContext.mockReturnValue({
+        data: {
+          namespace: 'default',
+          cluster: 'test-cluster',
+          read_only_mode: false,
+        },
+        isPending: false,
+        error: null,
+      });
+      mockGetAllNamespaces.mockReturnValue({
+        data: [
+          { name: 'default', id: 0 },
+          { name: 'production', id: 1 },
+        ],
+        isPending: false,
+        error: null,
+      });
+
+      const { rerender } = renderHook(() => useNamespace(), { wrapper });
+
+      await waitFor(() => {
+        expect(mockApiClientSetDefaultParam).toHaveBeenCalledWith(
+          'namespace',
+          'default',
+        );
+        expect(mockFilesApiClientSetDefaultParam).toHaveBeenCalledWith(
+          'namespace',
+          'default',
+        );
+      });
+
+      // Simulate namespace change to 'production'
+      mockGetSearchParam.mockReturnValue('production');
+      mockGetContext.mockReturnValue({
+        data: {
+          namespace: 'production',
+          cluster: 'test-cluster',
+          read_only_mode: false,
+        },
+        isPending: false,
+        error: null,
+      });
+
+      rerender();
+
+      await waitFor(() => {
+        expect(mockApiClientSetDefaultParam).toHaveBeenCalledWith(
+          'namespace',
+          'production',
+        );
+        expect(mockFilesApiClientSetDefaultParam).toHaveBeenCalledWith(
+          'namespace',
+          'production',
+        );
+      });
     });
   });
 });

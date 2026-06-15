@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 if (typeof window !== 'undefined') {
   mermaid.initialize({
     startOnLoad: false,
+    securityLevel: 'strict',
     theme: 'dark',
     themeVariables: {
       primaryColor: '#3b82f6',

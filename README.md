@@ -20,6 +20,7 @@
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/sonar_scan.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/sonar_scan.yaml/badge.svg" alt="SonarQube Scan"></a>
     <a href="https://www.npmjs.com/package/@agents-at-scale/ark"><img src="https://img.shields.io/npm/v/@agents-at-scale/ark.svg" alt="npm version"></a>
     <a href="https://pypi.org/project/ark-sdk/"><img src="https://img.shields.io/pypi/v/ark-sdk.svg" alt="PyPI version"></a>
+    <a href="https://github.com/McK-Internal/ark-management"><img src="https://github.com/McK-Internal/ark-management/actions/workflows/deploy.yaml/badge.svg" alt="ARK Management">  
   </p>
 </div>
 
