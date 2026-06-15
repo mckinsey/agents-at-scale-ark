@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { renderMarkdown } from './render-markdown';
+import { renderMarkdown, sanitizeMermaidSvg } from './render-markdown';
 
 describe('renderMarkdown', () => {
   describe('mermaid fenced block', () => {
@@ -97,5 +97,39 @@ describe('renderMarkdown', () => {
       expect(bodyRows[0].querySelector('td')?.textContent).toBe('1');
       expect(bodyRows[1].querySelector('td')?.textContent).toBe('3');
     });
+  });
+});
+
+describe('sanitizeMermaidSvg', () => {
+  it('preserves legitimate svg structure and the foreignObject label container', () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><g><rect width="10" height="10"></rect>' +
+      '<foreignObject></foreignObject></g></svg>';
+
+    const clean = sanitizeMermaidSvg(svg);
+
+    expect(clean).toContain('<svg');
+    expect(clean).toContain('rect');
+    expect(clean.toLowerCase()).toContain('foreignobject');
+  });
+
+  it('strips script elements from rendered svg output', () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>window.__xss = 1</script><rect></rect></svg>';
+
+    const clean = sanitizeMermaidSvg(svg);
+
+    expect(clean).not.toContain('<script');
+    expect(clean).not.toContain('window.__xss');
+  });
+
+  it('strips inline event handler attributes', () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><image href="x" onerror="window.__xss = 2"></image></svg>';
+
+    const clean = sanitizeMermaidSvg(svg);
+
+    expect(clean).not.toContain('onerror');
+    expect(clean).not.toContain('window.__xss');
   });
 });

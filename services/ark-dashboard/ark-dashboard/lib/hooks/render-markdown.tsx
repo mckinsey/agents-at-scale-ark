@@ -1,7 +1,11 @@
+import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+export const sanitizeMermaidSvg = (svg: string): string =>
+  DOMPurify.sanitize(svg, { ADD_TAGS: ['foreignObject'] });
 
 // Initialize mermaid
 if (typeof window !== 'undefined') {
@@ -223,7 +227,7 @@ const MermaidDiagram = ({ content }: { content: string }) => {
       try {
         if (await mermaid.parse(content, { suppressErrors: true })) {
           const { svg } = await mermaid.render(id, content);
-          setDiagram(svg);
+          setDiagram(sanitizeMermaidSvg(svg));
         } else {
           setDiagram(false);
         }
