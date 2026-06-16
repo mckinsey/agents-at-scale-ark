@@ -107,7 +107,7 @@ jobs:
         if: steps.check-coverage.outputs.found == 'false'
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install uv
         if: steps.check-coverage.outputs.found == 'false'
@@ -145,7 +145,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Set up Cloudflare WARP
         uses: Boostport/setup-cloudflare-warp@v1

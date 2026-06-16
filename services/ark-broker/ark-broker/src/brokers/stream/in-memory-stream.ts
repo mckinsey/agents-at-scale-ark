@@ -48,7 +48,7 @@ export class InMemoryStream<T> implements Stream<T> {
     }
   }
 
-  async append(data: T): Promise<BrokerItem<T>> {
+  async append(data: T, _ttlSeconds?: number): Promise<BrokerItem<T>> {
     const item: BrokerItem<T> = {
       sequenceNumber: this.nextSequence++,
       timestamp: new Date(),

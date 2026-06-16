@@ -7,7 +7,7 @@ import type {
 export type Predicate<T> = (item: BrokerItem<T>) => boolean;
 
 export interface Stream<T> {
-  append(data: T): Promise<BrokerItem<T>>;
+  append(data: T, ttlSeconds?: number): Promise<BrokerItem<T>>;
   all(): Promise<BrokerItem<T>[]>;
   filter(predicate: Predicate<T>): Promise<BrokerItem<T>[]>;
   paginate(
