@@ -66,19 +66,33 @@ Internal page navigation triggered by the dashboard (links, programmatic routing
 - **WHEN** the dashboard issues an authentication or post-login redirect while base path `/namespace1` is set
 - **THEN** the redirect target URL includes the `/namespace1` prefix
 
-### Requirement: Ingress routes per-tenant API traffic to the tenant's ark-api
+### Requirement: Dashboard catch-all proxies `/api/v1/*` to its configured ark-api
 
-Per-tenant API traffic SHALL be routed by the cluster's ingress (or equivalent gateway) — not by the dashboard pod — from `${origin}/<basePath>/api/v1/*` to the tenant's own ark-api service, with the `/<basePath>` prefix stripped before the request reaches ark-api. The dashboard chart SHALL document and example this routing.
+The dashboard's `/api/v1/*` catch-all route handler SHALL forward every request to the ark-api backend identified by `ARK_API_SERVICE_HOST`, `ARK_API_SERVICE_PORT`, and `ARK_API_SERVICE_PROTOCOL` (with path `/v1/<rest>`), preserving HTTP method, query string, body, and the request/response semantics that ark-api expects. The in-dashboard YAML mock for `GET /api/v1/{resource}/{name}/export` SHALL be preserved.
 
-#### Scenario: Ingress strips the prefix before reaching ark-api
+#### Scenario: Browser API call reaches ark-api through the dashboard pod
 
-- **WHEN** the browser sends `GET ${origin}/namespace1/api/v1/context` with the ingress configured to route `/namespace1/api/v1/*` to `ark-api.namespace1.svc:8000` with prefix-strip
-- **THEN** `ark-api.namespace1.svc:8000` receives `GET /v1/context` and the browser receives ark-api's response
+- **WHEN** the browser sends `GET /api/v1/agents?namespace=default` to a dashboard pod configured with `ARK_API_SERVICE_HOST=ark-api`
+- **THEN** the dashboard forwards `GET /v1/agents?namespace=default` to `http://ark-api:80/v1/agents?namespace=default` and returns its response unchanged
 
-#### Scenario: Two tenants' API traffic stays isolated
+#### Scenario: POST with body is forwarded intact
 
-- **WHEN** the ingress is configured with both `/namespace1/api/v1/*` → `ark-api-ns1` and `/namespace2/api/v1/*` → `ark-api-ns2` and a browser issues calls to each prefix
-- **THEN** ark-api-ns1 only receives traffic prefixed by `/namespace1/api/v1/` and ark-api-ns2 only receives traffic prefixed by `/namespace2/api/v1/`, with no cross-tenant routing
+- **WHEN** the browser sends `POST /api/v1/queries?namespace=default` with a JSON body
+- **THEN** the dashboard forwards `POST /v1/queries?namespace=default` to ark-api with the same body and `Content-Type`, and returns ark-api's status, headers, and body
+
+#### Scenario: Export YAML mock is served by the dashboard, not proxied
+
+- **WHEN** the browser sends `GET /api/v1/agents/my-agent/export`
+- **THEN** the dashboard returns the in-dashboard YAML template with `Content-Type: text/yaml`; no request reaches ark-api for this path
+
+### Requirement: Per-tenant API traffic stays inside the tenant's URL prefix
+
+In a multi-tenant deployment under a non-empty base path, every browser-originated API call SHALL be issued under the tenant's `${origin}/<basePath>/api/v1/...` prefix, so the request can be routed to the correct tenant by ingress prefix matching, by the dashboard pod's own routing, or by both — with no cross-tenant collisions at the domain root.
+
+#### Scenario: Tenant API traffic is prefixed
+
+- **WHEN** the dashboard hosted at base path `/namespace1` issues browser-originated API calls
+- **THEN** every issued API URL begins with `/namespace1/api/v1/` and is handled by the dashboard's own catch-all (which proxies to its configured ark-api) or by an upstream ingress rule that captures `/namespace1/api/v1/*`
 
 ### Requirement: First-class Helm value for base path
 

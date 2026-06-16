@@ -97,11 +97,28 @@ The dashboard does NOT proxy API requests itself; it only serves UI. The browser
 
 **Caveat:** the `app/api/v1/[...proxy]/route.ts` catch-all is a different file and remains: it's the dashboard's mock export YAML generator and is reached by `lib/services/export.ts`. The mock route is left untouched by this change (see Decision 8).
 
-### Decision 8: Leave the `[...proxy]` catch-all alone
+### Decision 8: Turn the `[...proxy]` catch-all into a real proxy to ark-api
 
-**Choice:** Do not modify or remove `services/ark-dashboard/ark-dashboard/app/api/v1/[...proxy]/route.ts`. It returns 501 for most paths but generates mock export YAML for `/{resource}/{name}/export`, and the dashboard's export flow still hits it.
+**Choice:** Replace the 501-returning stub in `services/ark-dashboard/ark-dashboard/app/api/v1/[...proxy]/route.ts` with a real proxy that forwards every method to `${ARK_API_SERVICE_PROTOCOL}://${ARK_API_SERVICE_HOST}:${ARK_API_SERVICE_PORT}/v1/<path>`. Preserve the in-dashboard YAML mock for the `/{resource}/{name}/export` GET special case (still used by the dashboard's export flow).
 
-**Why:** With ingress-routed API traffic (Decision 5), the Ingress intercepts `/<basePath>/api/v1/*` before it reaches the dashboard pod, so the catch-all only runs when called *without* a basePath prefix — i.e. the current behaviour for the export endpoint. The catch-all therefore doesn't interfere with multi-tenant API routing. Touching it is out of scope.
+**Why:** The catch-all is the only place `/api/v1/*` requests land when the dashboard is reached directly (e.g. `kubectl port-forward` via the `ark dashboard` CLI), which bypasses any cluster Ingress. Without proxy logic in the catch-all, every fresh deployment returns 501 for every API call unless the operator also wires up additional cluster routing. The original `proxy.ts` middleware was the place for this — but it was removed and never replaced. Putting the proxy in the catch-all makes the dashboard self-sufficient for the local-dev/port-forward case AND continues to work when an Ingress is in front (the Ingress can still pre-empt at `/<basePath>/api/v1/*` if a multi-tenant operator wants to).
+
+This was originally written up as Decision 8 ("Leave the catch-all alone") for the ingress-routed-API model, but the user reported that the dashboard's data fetches returned 501 over `ark dashboard` port-forward in a fresh `devspace deploy` — confirming that without this proxy, the dashboard has no working local-dev path. The decision was flipped to keep the dashboard self-contained.
+
+**Alternatives considered:**
+
+- **Rename `proxy.ts` → `middleware.ts` again** — works, but reintroduces a deliberately-removed edge middleware. The route-handler approach is closer to current Next.js conventions and stays out of the framework's middleware machinery.
+- **Operator-side Ingress routing only** (the original Decision 8) — would force every operator to add an Ingress/HTTPRoute rule that splits `/api/v1/*` from `/`, and would leave the local-dev port-forward path broken. Rejected because the dashboard should work out of the box from `ark dashboard`.
+
+**What the proxy does:**
+
+- Forwards `GET`, `POST`, `PUT`, `PATCH`, `DELETE` to ark-api at `/v1/<rest-of-path>`.
+- Streams request body via `duplex: 'half'` for `POST`/`PUT`/`PATCH`.
+- Sets `X-Forwarded-Prefix: /api`, `X-Forwarded-Host`, `X-Forwarded-Proto`; drops the browser `host` so ark-api sees its cluster-Service authority.
+- Strips `content-length`/`transfer-encoding`/`connection` from the upstream response (Node recomputes them).
+- Preserves the YAML mock for `/{resource}/{name}/export` GET requests; everything else is proxied.
+
+**Auth caveat:** the proxy forwards headers as-is. For `AUTH_MODE=sso` deployments where ark-api expects a bearer token derived from the dashboard's NextAuth session, the proxy should call `getToken({ req })` and set `Authorization: Bearer <access_token>` before forwarding (this is what the old `proxy.ts` did). Tracked as a follow-up; not required for the open-mode and local-dev flows this change targets.
 
 ### Decision 9: Entrypoint runs as the non-root `nextjs` user
 

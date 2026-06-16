@@ -14,6 +14,7 @@ The dashboard does not proxy API traffic itself today — the cluster's ingress/
 - Update the chart's Ingress and HTTPRoute templates with example multi-tenant routing including the prefix-strip rewrite needed for API traffic.
 - Audit `ark-api` RBAC (existing `ClusterRole` in `services/ark-api/chart/templates/rbac.yaml`) to confirm it does not leak cross-namespace data when deployed per-tenant.
 - Remove the orphaned `services/ark-dashboard/ark-dashboard/proxy.ts` file (dead code since it was renamed off `middleware.ts`) so future readers don't assume the dashboard proxies API traffic itself.
+- Replace the 501-returning stub in `services/ark-dashboard/ark-dashboard/app/api/v1/[...proxy]/route.ts` with a real proxy that forwards to ark-api via `ARK_API_SERVICE_HOST/PORT/PROTOCOL`. Keeps the dashboard's local-dev path (`ark dashboard` port-forward) working without requiring operators to wire additional cluster Ingress rules.
 - No source changes to `ark-api`. No changes to other services.
 
 ## Capabilities
