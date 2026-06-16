@@ -2,16 +2,20 @@ import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
+import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {OTELSpan} from '../src/brokers/trace-broker.js';
 import {EventData} from '../src/brokers/event-broker.js';
 
+const config = loadConfig({});
+const logger = createLogger({level: 'silent', pretty: false});
 const {
   app,
   brokers: {traces, events},
 } = buildApp({
-  config: loadConfig({}),
-  logger: createLogger({level: 'silent', pretty: false}),
+  config,
+  logger,
   version: 'test',
+  messageStream: createMessageStream(config, logger),
 });
 
 describe('Session ID Filtering', () => {

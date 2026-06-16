@@ -1,44 +1,44 @@
-import {mkdtempSync, rmSync} from 'fs';
-import {join} from 'path';
-import {tmpdir} from 'os';
-import {InMemoryStream} from '../in-memory-stream.js';
 import {createLogger} from '@ark-broker/logging/logger.js';
+import {usePgContainer} from '../../../db/__tests__/testHelpers/pg-testcontainer.js';
+import {PostgresMessageStream} from '../postgres-message-stream.js';
+import {makeMessageData} from './testHelpers/message-data-factory.js';
+
+jest.setTimeout(120_000);
 
 const silentLogger = createLogger({level: 'silent', pretty: false});
 
-describe('InMemoryStream — Stream<T> contract', () => {
-  let stream: InMemoryStream<string>;
+describe('PostgresMessageStream', () => {
+  const {db} = usePgContainer();
+  let stream: PostgresMessageStream;
 
-  beforeEach(() => {
-    stream = new InMemoryStream<string>(silentLogger, 'test');
+  beforeAll(() => {
+    stream = new PostgresMessageStream(silentLogger, db(), 3600);
   });
 
   describe('append', () => {
     it('assigns sequenceNumber starting at 1', async () => {
-      const item = await stream.append('a');
+      const item = await stream.append(makeMessageData());
       expect(item.sequenceNumber).toBe(1);
     });
 
     it('increments sequenceNumber monotonically', async () => {
-      const a = await stream.append('a');
-      const b = await stream.append('b');
-      const c = await stream.append('c');
+      const a = await stream.append(makeMessageData());
+      const b = await stream.append(makeMessageData());
+      const c = await stream.append(makeMessageData());
       expect(a.sequenceNumber).toBe(1);
       expect(b.sequenceNumber).toBe(2);
       expect(c.sequenceNumber).toBe(3);
     });
 
     it('returns item with timestamp as Date', async () => {
-      const item = await stream.append('a');
+      const item = await stream.append(makeMessageData());
       expect(item.timestamp).toBeInstanceOf(Date);
     });
 
-    it('fires subscribe callback synchronously during append', async () => {
-      const received: string[] = [];
-      stream.subscribe((item) => received.push(item.data));
-      const appendPromise = stream.append('x');
-      expect(received).toHaveLength(1);
-      await appendPromise;
+    it('fires subscribe callback during append', async () => {
+      const received: number[] = [];
+      stream.subscribe((item) => received.push(item.sequenceNumber));
+      await stream.append(makeMessageData());
       expect(received).toHaveLength(1);
     });
   });
@@ -49,8 +49,8 @@ describe('InMemoryStream — Stream<T> contract', () => {
     });
 
     it('returns all appended items in order', async () => {
-      await stream.append('a');
-      await stream.append('b');
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       const all = await stream.all();
       expect(all).toHaveLength(2);
       expect(all[0].sequenceNumber).toBe(1);
@@ -60,8 +60,8 @@ describe('InMemoryStream — Stream<T> contract', () => {
 
   describe('filter', () => {
     it('returns only matching items', async () => {
-      const a = await stream.append('a');
-      await stream.append('b');
+      const a = await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       const result = await stream.filter(
         (item) => item.sequenceNumber === a.sequenceNumber
       );
@@ -70,7 +70,7 @@ describe('InMemoryStream — Stream<T> contract', () => {
     });
 
     it('returns empty array when nothing matches', async () => {
-      await stream.append('a');
+      await stream.append(makeMessageData());
       expect(await stream.filter(() => false)).toHaveLength(0);
     });
   });
@@ -78,7 +78,7 @@ describe('InMemoryStream — Stream<T> contract', () => {
   describe('paginate', () => {
     beforeEach(async () => {
       for (let i = 0; i < 5; i++) {
-        await stream.append(`item-${i}`);
+        await stream.append(makeMessageData());
       }
     });
 
@@ -113,18 +113,18 @@ describe('InMemoryStream — Stream<T> contract', () => {
   });
 
   describe('delete', () => {
-    it('removes all items and resets sequence when called without predicate', async () => {
-      await stream.append('a');
-      await stream.append('b');
+    it('removes all items when called without predicate', async () => {
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       await stream.delete();
       expect(await stream.all()).toHaveLength(0);
-      const next = await stream.append('c');
-      expect(next.sequenceNumber).toBe(1);
+      const next = await stream.append(makeMessageData());
+      expect(next.sequenceNumber).toBe(3);
     });
 
     it('removes only matching items when predicate is provided', async () => {
-      const a = await stream.append('a');
-      await stream.append('b');
+      const a = await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
       const all = await stream.all();
       expect(all).toHaveLength(1);
@@ -132,9 +132,9 @@ describe('InMemoryStream — Stream<T> contract', () => {
     });
 
     it('does not reset sequence when using predicate', async () => {
-      const a = await stream.append('a');
+      const a = await stream.append(makeMessageData());
       await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
-      const next = await stream.append('b');
+      const next = await stream.append(makeMessageData());
       expect(next.sequenceNumber).toBe(2);
     });
   });
@@ -145,8 +145,8 @@ describe('InMemoryStream — Stream<T> contract', () => {
     });
 
     it('returns last assigned sequence number', async () => {
-      await stream.append('a');
-      await stream.append('b');
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       expect(await stream.getCurrentSequence()).toBe(2);
     });
   });
@@ -155,8 +155,8 @@ describe('InMemoryStream — Stream<T> contract', () => {
     it('notifies subscriber for each append', async () => {
       const seqs: number[] = [];
       stream.subscribe((item) => seqs.push(item.sequenceNumber));
-      await stream.append('a');
-      await stream.append('b');
+      await stream.append(makeMessageData());
+      await stream.append(makeMessageData());
       expect(seqs).toEqual([1, 2]);
     });
 
@@ -165,9 +165,9 @@ describe('InMemoryStream — Stream<T> contract', () => {
       const unsubscribe = stream.subscribe((item) =>
         seqs.push(item.sequenceNumber)
       );
-      await stream.append('a');
+      await stream.append(makeMessageData());
       unsubscribe();
-      await stream.append('b');
+      await stream.append(makeMessageData());
       expect(seqs).toEqual([1]);
     });
 
@@ -176,98 +176,56 @@ describe('InMemoryStream — Stream<T> contract', () => {
       const b: number[] = [];
       stream.subscribe((item) => a.push(item.sequenceNumber));
       stream.subscribe((item) => b.push(item.sequenceNumber));
-      await stream.append('x');
+      await stream.append(makeMessageData());
       expect(a).toEqual([1]);
       expect(b).toEqual([1]);
     });
   });
-});
 
-describe('InMemoryStream — persistence', () => {
-  let tmpDir: string;
+  describe('TTL', () => {
+    const CLOCK_SKEW_MS = 100;
 
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'in-memory-stream-test-'));
-  });
+    it('uses constructor ttlSeconds as default expires_at', async () => {
+      const before = Date.now();
+      const item = await stream.append(makeMessageData());
+      const after = Date.now();
 
-  afterEach(() => {
-    rmSync(tmpDir, {recursive: true, force: true});
-  });
+      const pgDb = db();
+      const rows = await pgDb<{expires_at: Date}[]>`
+        SELECT expires_at FROM messages WHERE sequence_number = ${item.sequenceNumber}
+      `;
+      const expiresAt = rows[0]!.expires_at.getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(
+        before - CLOCK_SKEW_MS + 3600 * 1000
+      );
+      expect(expiresAt).toBeLessThanOrEqual(after + 3600 * 1000 + 2000);
+    });
 
-  it('saves and reloads items with timestamps rehydrated as Date', async () => {
-    const path = join(tmpDir, 'store.json');
-    const stream = new InMemoryStream<string>(silentLogger, 'test', path);
+    it('uses per-call ttlSeconds when provided', async () => {
+      const customTtl = 60;
+      const before = Date.now();
+      const item = await stream.append(makeMessageData(), customTtl);
+      const after = Date.now();
 
-    await stream.append('hello');
-    await stream.append('world');
-    await stream.save();
+      const pgDb = db();
+      const rows = await pgDb<{expires_at: Date}[]>`
+        SELECT expires_at FROM messages WHERE sequence_number = ${item.sequenceNumber}
+      `;
+      const expiresAt = rows[0]!.expires_at.getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(
+        before - CLOCK_SKEW_MS + customTtl * 1000
+      );
+      expect(expiresAt).toBeLessThanOrEqual(after + customTtl * 1000 + 2000);
+    });
 
-    const reloaded = new InMemoryStream<string>(silentLogger, 'test', path);
-    const all = await reloaded.all();
+    it('expired items are invisible to all and getCurrentSequence', async () => {
+      await stream.append(makeMessageData(), 1);
+      expect(await stream.all()).toHaveLength(1);
 
-    expect(all).toHaveLength(2);
-    expect(all[0].data).toBe('hello');
-    expect(all[1].data).toBe('world');
-    expect(all[0].timestamp).toBeInstanceOf(Date);
-    expect(all[1].timestamp).toBeInstanceOf(Date);
-    expect(await reloaded.getCurrentSequence()).toBe(2);
-  });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-  it('resumes sequence numbering after reload', async () => {
-    const path = join(tmpDir, 'store.json');
-    const stream = new InMemoryStream<string>(silentLogger, 'test', path);
-
-    await stream.append('a');
-    await stream.append('b');
-    await stream.save();
-
-    const reloaded = new InMemoryStream<string>(silentLogger, 'test', path);
-    const c = await reloaded.append('c');
-    expect(c.sequenceNumber).toBe(3);
-  });
-
-  it('starts fresh when no file exists', async () => {
-    const path = join(tmpDir, 'nonexistent.json');
-    const stream = new InMemoryStream<string>(silentLogger, 'test', path);
-    expect(await stream.all()).toHaveLength(0);
-    expect(await stream.getCurrentSequence()).toBe(0);
-  });
-});
-
-describe('InMemoryStream — maxItems eviction', () => {
-  it('retains only the most recent maxItems items', async () => {
-    const stream = new InMemoryStream<string>(
-      silentLogger,
-      'test',
-      undefined,
-      3
-    );
-
-    await stream.append('a');
-    await stream.append('b');
-    await stream.append('c');
-    await stream.append('d');
-
-    const all = await stream.all();
-    expect(all).toHaveLength(3);
-    expect(all.map((i) => i.data)).toEqual(['b', 'c', 'd']);
-  });
-
-  it('subscriber still fires for items that get evicted', async () => {
-    const stream = new InMemoryStream<string>(
-      silentLogger,
-      'test',
-      undefined,
-      2
-    );
-    const received: string[] = [];
-    stream.subscribe((item) => received.push(item.data as string));
-
-    await stream.append('a');
-    await stream.append('b');
-    await stream.append('c');
-
-    expect(received).toEqual(['a', 'b', 'c']);
-    expect((await stream.all()).map((i) => i.data)).toEqual(['b', 'c']);
+      expect(await stream.all()).toHaveLength(0);
+      expect(await stream.getCurrentSequence()).toBe(0);
+    });
   });
 });
