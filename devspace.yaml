@@ -34,11 +34,15 @@ dependencies:
 
 # Vars - To disable, set environment variables before the devspace commands
 #        For example: ENABLE_CERT_MANAGER=false devspace dev
-#        For PostgreSQL: STORAGE_BACKEND=postgresql devspace dev
+#        For PostgreSQL controller backend: STORAGE_BACKEND=postgresql devspace dev
+#        For Postgres message backend: BROKER_MESSAGE_BACKEND=postgres devspace dev
 vars:
   STORAGE_BACKEND:
     source: env
     default: "etcd"
+  BROKER_MESSAGE_BACKEND:
+    source: env
+    default: "memory"
   ENABLE_CERT_MANAGER:
     source: env
     default: true

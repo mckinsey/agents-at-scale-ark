@@ -1,85 +1,239 @@
 ---
-title: Using the ARK CLI
-description: Chat with ARK agents from your terminal
+title: The Ark CLI
+description: Install Ark, manage resources, and run queries from your terminal with the ark CLI
 ---
 
-# Using the ARK CLI
+import { Callout } from 'nextra/components'
 
-## Installation
+# The Ark CLI
+
+`ark` is the command-line interface for Ark. It does three things:
+
+- **Installs and manages Ark** on a Kubernetes cluster (`ark install`, `ark status`, `ark uninstall`).
+- **Inspects and authors resources** — list agents, teams, models, tools, and queries; generate, export, and import them.
+- **Runs work** — one-off queries (`ark query`) or an interactive chat session (`ark chat`).
+
+## How it works
+
+The CLI is a thin client over two things:
+
+- **The Kubernetes API** (via your current `kubectl` context) for cluster operations and listing/managing resources. The CLI acts in the namespace of your kube context — check it with `ark cluster get`.
+- **The `ark-api` service** for running queries and chats. When you run a query, the CLI **port-forwards to the `ark-api` service** and talks to it over `localhost`. This is why query commands need a reachable cluster and `kubectl` access — and why, inside a pod (e.g. an Argo workflow step), you use `fark` instead, which calls the Kubernetes API directly.
+
+There's no separate login: the CLI uses whatever cluster your `kubectl` is pointed at.
+
+## Install and set up
 
 ```bash
+# Install the CLI (requires Node.js 18+).
 npm install -g @agents-at-scale/ark
+
+# Check the version.
+ark --version
+
+# Enable shell tab-completion (add to ~/.bashrc or ~/.zshrc to persist).
+eval "$(ark completion bash)"     # bash
+eval "$(ark completion zsh)"      # zsh
 ```
 
-## Basic Usage
+`ark config` shows the effective configuration and where it came from (`~/.arkrc.yaml`, a project `.arkrc.yaml`, or `ARK_*` environment variables):
 
 ```bash
-# Enable tab completion (add to ~/.bashrc or ~/.zshrc)
-eval "$(ark completion bash)"      # For bash
-eval "$(ark completion zsh)"       # For zsh
-
-# Install ark - or install and wait for it to be ready.
-ark install
-ark install -y --wait-for-ready=5m  # chooses 'yes' for each option
-
-# Show ark status.
-ark status
-
-# Start interactive chat
-ark chat
-
-# Chat with a specific target
-ark chat agent/math
-
-# Show current config.
 ark config
-
-# Uninstall ark.
-ark uninstall
 ```
 
-Then query any agent:
-
+```text
+chat:
+  streaming: true
+  outputFormat: text
+marketplace:
+  repoUrl: https://github.com/mckinsey/agents-at-scale-marketplace
+  registry: oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts
+services:
+  reusePortForwards: false
 ```
-> @weather What's the weather today?
-> @math Calculate 15 * 23
-```
 
-That's it! The CLI maintains conversation context and lets you interact with any deployed ARK agents.
+## Command reference
 
-## Marketplace
+Run `ark <command> --help` for the full options of any command. `ark help` lists everything.
 
-The ARK CLI supports dynamic marketplace service enumeration from a `marketplace.json` file hosted in the marketplace repository.
+### Install and lifecycle
+
+| Command | What it does |
+| --- | --- |
+| `ark install [service...]` | Install Ark (or specific services) via Helm. `-y` to auto-confirm, `--wait-for-ready 5m` to block until ready, `--ark-version <v>` to pin. |
+| `ark uninstall [service...]` | Uninstall Ark or specific services. |
+| `ark status [services...]` | Check system dependencies, cluster access, and service health. `--wait-for-ready [timeout]` polls until ready. |
+| `ark cluster get` | Show the current Kubernetes context, namespace, and cluster IP. |
+| `ark config` | Show the effective CLI configuration. |
+| `ark routes` | Show gateway routes and their URLs (requires the localhost-gateway, installed in dev mode). |
 
 ```bash
-# List available marketplace services and agents
+ark install --wait-for-ready 5m     # install everything, wait until ready
+ark status                          # verify it's healthy
+```
+
+```text
+$ ark cluster get
+context: minikube
+namespace: default
+type: minikube
+ip: 192.168.49.2
+```
+
+### Inspect resources
+
+Each list command takes `-o json` for machine-readable output.
+
+| Command | What it does |
+| --- | --- |
+| `ark targets` | List every query target — agents, teams, models, and tools — as `type/name`. `-t agent` filters by type. |
+| `ark agents` | List agents. |
+| `ark teams` | List teams. |
+| `ark models` | List models. |
+| `ark tools` | List tools, grouped by MCP server. |
+| `ark queries` | List queries with their status. `--sort-by <field>` sorts. |
+
+```bash
+$ ark targets
+agent/default
+model/default
+tool/file-gateway-read-file
+...
+```
+
+`ark queries` also has subcommands for working with a single query:
+
+| Subcommand | What it does |
+| --- | --- |
+| `ark queries get <name>` | Show one query. `@latest` resolves to the most recent. `-o json\|markdown`, `-r` prints only the response content. |
+| `ark queries delete [name]` | Delete a query, or `--all` to delete every query. |
+| `ark queries resubmit <name>` | Re-run a query by clearing its status (`@latest` supported). |
+
+```bash
+ark queries get @latest -r          # just the response text of the most recent query
+ark queries delete my-query
+ark queries delete --all
+ark queries resubmit @latest
+```
+
+### Run work
+
+| Command | What it does |
+| --- | --- |
+| `ark query <target> <message>` | Run a single query and print the response. Target is `agent/<name>`, `team/<name>`, `model/<name>`, or `tool/<name>`. |
+| `ark chat [target]` | Open an interactive chat session that keeps conversation context. |
+
+```bash
+# One-off queries against any target type.
+ark query agent/my-agent "What's the refund policy?"
+ark query team/research-team "Summarise the latest on EVs."
+ark query model/default "Explain rate limiting in one sentence."
+ark query tool/get-coordinates '{"city":"Paris"}'
+
+# Output formats and conversation continuity.
+ark query agent/my-agent "Hello" -o json
+ark query agent/my-agent "Remember my name is Alice." --conversation-id chat-1
+ark query agent/my-agent "What's my name?"  --conversation-id chat-1
+```
+
+`-o` accepts `yaml`, `json`, `name`, or `events` (structured event stream). `--timeout`, `--session-id`, and `--conversation-id` are also available.
+
+`ark agents query <name> <message>`, `ark teams query <name> <message>`, and `ark models query <name> <message>` are equivalent shorthands for the respective target type.
+
+Interactive chat:
+
+```bash
+ark chat                # pick a target interactively
+ark chat agent/default  # chat with a specific agent or model
+```
+
+### Create a model
+
+`ark models create` is an interactive helper that creates a `Model` resource (and the backing API-key `Secret`) without writing YAML. Run it bare for prompts, or pass flags to skip them:
+
+```bash
+ark models create default                       # interactive
+ark models create default \                      # non-interactive
+  --type openai --model gpt-4o-mini \
+  --base-url https://api.openai.com/v1 \
+  --api-key "$OPENAI_API_KEY" --yes
+```
+
+Flags: `--type` (`openai`, `azure`, `bedrock`), `--model`, `--base-url`, `--api-key`, `--api-version` (Azure), `--yes` to skip confirmation.
+
+### Generate, export, import
+
+| Command | What it does |
+| --- | --- |
+| `ark generate <kind> [name]` | Scaffold a resource from a template (interactive by default; `--no-interactive` for defaults). See the generators below. |
+| `ark export` | Export resources to a YAML file. `-n` namespace, `-t` types, `-l` label selector, `-o` output path. |
+| `ark import <file>` | Apply resources from a YAML file. |
+
+`ark generate` (alias `ark g`) scaffolds files on disk:
+
+| Generator | Scaffolds |
+| --- | --- |
+| `project` | A complete Ark project — Helm chart, CI/CD, sample agents/teams/queries, model configs, RBAC. Flags include `--project-type empty\|with-samples`, `--namespace`, `--skip-models`, `--skip-git`. |
+| `agent` | An agent YAML in the current project (must be run inside a project). |
+| `team` | A team with selected agents and a strategy (sequential / round-robin / graph / selector). |
+| `query` | A query to test an agent or team. |
+| `mcp-server` | An MCP server with a Kubernetes deployment (Node.js / Deno / Go / Python). |
+| `marketplace` | A central marketplace repository structure for sharing components. |
+
+```bash
+ark generate project my-project    # full project: charts, CI/CD, samples
+ark g agent customer-support       # an agent in the current project
+ark g team research-team           # a team with a chosen strategy
+
+ark export -o backup.yaml                       # everything in the namespace
+ark export -t agents,teams -o agents-teams.yaml # only some types
+ark import backup.yaml
+```
+
+<Callout type="warning">
+`ark export` includes `Secret` resources with their data (base64-encoded, not encrypted). Treat export files as sensitive and don't commit them.
+</Callout>
+
+### Marketplace
+
+| Command | What it does |
+| --- | --- |
+| `ark marketplace list` | List installable marketplace items (services, agents, executors). |
+| `ark install marketplace/<category>/<name>` | Install a marketplace item. |
+| `ark uninstall marketplace/<category>/<name>` | Uninstall it. |
+
+```bash
 ark marketplace list
-
-# Install a marketplace service
-ark install marketplace/services/<service-name>
-
-# Install a marketplace agent
-ark install marketplace/agents/<agent-name>
-
-# Uninstall a marketplace service or agent
-ark uninstall marketplace/services/<service-name>
-ark uninstall marketplace/agents/<agent-name>
+ark install marketplace/services/phoenix
+ark install marketplace/agents/noah
+ark uninstall marketplace/services/phoenix
 ```
 
-The marketplace fetches services and agents from `https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json` using the Anthropic Marketplace JSON format. If the fetch fails, an unavailable message is displayed.
+Pin a version with `--marketplace-version <v>`. See the [marketplace repo](https://github.com/mckinsey/agents-at-scale-marketplace).
 
-## Local Development
+### MCP authorization
+
+| Command | What it does |
+| --- | --- |
+| `ark mcp auth login <server>` | Start an OAuth flow for an `MCPServer` (via ark-api). Flags: `-n` namespace, `--no-open` (print the URL instead of opening a browser), `--scope`, `--timeout`, `--force` (fresh client registration). |
+| `ark mcp auth logout <server>` | Clear stored OAuth state for an `MCPServer`. Flags: `-n` namespace, `--keep-client` (keep cached client credentials), `--delete-secret` (remove the whole token Secret). |
 
 ```bash
-# Navigate to the CLI source
-cd tools/ark-cli
-
-# Create global symlink
-npm link --force
-
-# Run directly or with live reload
-ark         # Run the CLI
-npm run dev # Or run with live reload
+ark mcp auth login my-server --no-open --scope "repo,read:org"
+ark mcp auth logout my-server --delete-secret
 ```
 
-Changes to the source code will instantly reflect when you run `ark` commands.
+### Open things
+
+| Command | What it does |
+| --- | --- |
+| `ark dashboard` | Open the Ark dashboard in your browser. |
+| `ark docs` | Open this documentation in your browser. |
+| `ark completion bash` / `zsh` | Print a shell completion script. |
+
+## Related
+
+- [Quickstart](/quickstart) — install, verify, and create your first model and agent.
+- [Run queries / chat with agents and teams](/user-guide/queries) — what `ark query` / `ark chat` create under the hood.
+- [Models](/user-guide/models), [Agents](/user-guide/agents), [Teams](/user-guide/teams), [Tools](/user-guide/tools) — the resources the CLI lists and runs.
