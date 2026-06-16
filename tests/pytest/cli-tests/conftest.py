@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 MOCK_LLM_MODEL_YAML = Path(__file__).parent / "mock-llm-model.yaml"
 MOCK_LLM_MODEL_NAME = "test-model-mock"
 
+_NIP_URL = "http://ark-api.default.127.0.0.1.nip.io:8080"
 _PORT_BASE = 18080
 
 
@@ -25,20 +26,31 @@ def _health_ok(url: str, timeout: int = 2) -> bool:
         return False
 
 
+def _start_port_forward(port: int) -> subprocess.Popen:
+    return subprocess.Popen(
+        ["kubectl", "port-forward", "svc/ark-api", f"{port}:80", "-n", "default"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def ark_api_url(request):
-    """Ensure ARK_API_URL points to a reachable ark-api instance.
+    """Resolve a reachable ark-api URL and expose it via ARK_API_URL.
 
-    Locally: use ARK_API_URL env var or the nip.io local-gateway default.
-    In CI (GITHUB_ACTIONS=true): start a per-worker kubectl port-forward so
-    each xdist worker gets its own dedicated port.
+    Priority:
+    1. ARK_API_URL env var (already set by caller / CI environment)
+    2. nip.io localhost-gateway (works when devspace/localhost-gateway is running)
+    3. kubectl port-forward fallback (works in CI and local clusters without a gateway)
     """
     if os.environ.get("ARK_API_URL"):
         yield os.environ["ARK_API_URL"]
         return
 
-    if not os.environ.get("GITHUB_ACTIONS"):
-        yield "http://ark-api.default.127.0.0.1.nip.io:8080"
+    if _health_ok(_NIP_URL):
+        os.environ["ARK_API_URL"] = _NIP_URL
+        yield _NIP_URL
+        os.environ.pop("ARK_API_URL", None)
         return
 
     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "gw0")
@@ -48,13 +60,9 @@ def ark_api_url(request):
         port = _PORT_BASE
 
     url = f"http://localhost:{port}"
-    logger.info("CI: starting port-forward svc/ark-api → :%d (worker=%s)", port, worker_id)
+    logger.info("Starting port-forward svc/ark-api → :%d (worker=%s)", port, worker_id)
 
-    proc = subprocess.Popen(
-        ["kubectl", "port-forward", "svc/ark-api", f"{port}:80", "-n", "default"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    proc = _start_port_forward(port)
 
     for _ in range(20):
         time.sleep(1)
@@ -65,8 +73,6 @@ def ark_api_url(request):
         pytest.exit(f"ark-api port-forward on :{port} did not become healthy in 20s", returncode=1)
 
     os.environ["ARK_API_URL"] = url
-    logger.info("ARK_API_URL set to %s", url)
-
     yield url
 
     proc.terminate()

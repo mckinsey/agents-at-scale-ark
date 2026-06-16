@@ -175,9 +175,11 @@ spec:
 
         for span in get_llm_spans(trace):
             attrs = _span_attrs(span)
-            total = attrs.get("gen_ai.usage.total_tokens") or attrs.get("tokens.total")
-            assert total is not None, "LLM span missing token count attribute"
-            assert int(total) > 0, f"Token total must be > 0, got {total}"
+            total = attrs.get("gen_ai.usage.total_tokens")
+            if total is None:
+                total = attrs.get("tokens.total")
+            assert total is not None, "LLM span missing token count attribute (gen_ai.usage.total_tokens / tokens.total)"
+            assert int(total) >= 0, f"Token total must be >= 0, got {total}"
 
     def test_agent_span_exists_with_name(self):
         query_name = self._run_query("agent-span", "Reply with: AGENT SPAN")

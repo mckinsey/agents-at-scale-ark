@@ -23,7 +23,11 @@ def _fetch_json(path: str, params: Optional[dict] = None, timeout: int = 10) -> 
 
 
 def _span_attrs(span: dict) -> dict:
-    return {a["key"]: list(a["value"].values())[0] for a in span.get("attributes", [])}
+    result = {}
+    for a in span.get("attributes", []):
+        v = a.get("value", {})
+        result[a["key"]] = list(v.values())[0] if isinstance(v, dict) and v else v
+    return result
 
 
 def get_traces(limit: int = 100, session_id: Optional[str] = None) -> list[dict]:
@@ -37,13 +41,20 @@ def get_traces_for_session(session_id: str, limit: int = 50) -> list[dict]:
 
 
 def find_trace_for_query(query_name: str, limit: int = 200, timeout: int = 30) -> Optional[dict]:
+    """Return the trace for query_name, waiting until the root span is present.
+
+    The root span (named ``query.<name>``) is emitted last, after all child
+    spans have been recorded.  Matching on the span *name* (not the attribute)
+    ensures we only return a complete trace and avoids grabbing a partial trace
+    that only contains the early dispatch span.
+    """
+    root_span_name = f"query.{query_name}"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             for trace in get_traces(limit=limit):
                 for span in trace.get("spans", []):
-                    attrs = _span_attrs(span)
-                    if attrs.get("query.name") == query_name:
+                    if span["name"] == root_span_name:
                         return trace
         except (urllib.error.URLError, json.JSONDecodeError):
             pass
