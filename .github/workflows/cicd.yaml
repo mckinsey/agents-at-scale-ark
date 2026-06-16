@@ -939,6 +939,17 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Deploy localhost-gateway
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
+          helm upgrade --install localhost-gateway services/localhost-gateway/chart \
+            --namespace ark-system \
+            --create-namespace \
+            --wait \
+            --timeout=10m
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ark-system --timeout=120s
+          kubectl wait --for=condition=Programmed gateway/localhost-gateway -n ark-system --timeout=120s
+
       - name: Install mock-llm
         run: |
           for resource in deployment service serviceaccount configmap role rolebinding secret; do
@@ -962,20 +973,9 @@ jobs:
         run: |
           pip install -r tests/pytest/ui-tests/requirements.txt
 
-      - name: Start port-forward for CLI tests
-        run: |
-          kubectl port-forward svc/ark-api 9082:80 -n default &
-          for i in $(seq 1 20); do
-            if curl -sf http://localhost:9082/health > /dev/null 2>&1; then
-              echo "ark-api ready on :9082"; break
-            fi
-            sleep 1
-          done
-
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
-          ARK_API_URL: http://localhost:9082
         run: |
           cd tests/pytest/cli-tests/tests
           pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
