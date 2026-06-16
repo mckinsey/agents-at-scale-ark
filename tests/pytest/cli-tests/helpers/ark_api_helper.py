@@ -1,3 +1,4 @@
+import os
 import subprocess
 from typing import Tuple
 import urllib.request
@@ -5,15 +6,25 @@ import urllib.error
 import json
 
 
+_DEFAULT_API_URL = "http://ark-api.default.127.0.0.1.nip.io:8080"
+
 ARK_API_URL = "http://localhost:8080"
 
 
-def _get_api_url() -> str:
+def get_api_url() -> str:
+    return os.environ.get("ARK_API_URL", _DEFAULT_API_URL).rstrip("/")
+
+
+def is_api_reachable(timeout: int = 2) -> bool:
     try:
-        urllib.request.urlopen(f"{ARK_API_URL}/health", timeout=2)
-        return ARK_API_URL
-    except Exception:
-        return ARK_API_URL
+        urllib.request.urlopen(f"{get_api_url()}/health", timeout=timeout)
+        return True
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def _get_api_url() -> str:
+    return get_api_url()
 
 
 def get_resource_status(resource: str, name: str, namespace: str = None) -> Tuple[int, dict]:
