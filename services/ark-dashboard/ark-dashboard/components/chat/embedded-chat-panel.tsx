@@ -21,7 +21,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
+import {
+  getAttributeStringValue,
+  getSessionDisplayNameFromEntries,
+} from '@/lib/broker/session-utils';
 import { type BrokerStatus, proxyService } from '@/lib/services/proxy';
 import type { GraphEdge } from '@/lib/types/chat-message';
 
@@ -319,10 +322,11 @@ function DebugStreamView({
             typeof attr === 'object' &&
             attr !== null &&
             'key' in attr &&
-            attr.key === 'session.id',
-        ) as { value?: string } | undefined;
-        if (sessionAttr?.value) {
-          return sessionAttr.value;
+            attr.key === 'ark.session.id',
+        ) as { value?: unknown } | undefined;
+        const sessionValue = getAttributeStringValue(sessionAttr?.value);
+        if (sessionValue) {
+          return sessionValue;
         }
       }
     }
@@ -334,10 +338,11 @@ function DebugStreamView({
           typeof attr === 'object' &&
           attr !== null &&
           'key' in attr &&
-          attr.key === 'session.id',
-      ) as { value?: string } | undefined;
-      if (sessionAttr?.value) {
-        return sessionAttr.value;
+          attr.key === 'ark.session.id',
+      ) as { value?: unknown } | undefined;
+      const sessionValue = getAttributeStringValue(sessionAttr?.value);
+      if (sessionValue) {
+        return sessionValue;
       }
     }
 

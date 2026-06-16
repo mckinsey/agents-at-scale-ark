@@ -7,15 +7,6 @@ metadata:
 spec:
   description: Verify that models using deprecated type field are migrated to use provider field
   steps:
-    - name: setup
-      try:
-        - script:
-            content: |
-              helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-
     - name: apply-model-with-deprecated-format
       try:
         - apply:
@@ -47,10 +38,3 @@ spec:
                 provider: openai
                 type: completions
 
-      cleanup:
-      - script:
-          content: |
-            helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-          env:
-          - name: NAMESPACE
-            value: ($namespace)

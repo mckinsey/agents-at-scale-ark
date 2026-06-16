@@ -1,12 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useCreateModel } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -23,8 +23,8 @@ type CreateModelFormProps = {
 };
 
 export function CreateModelForm({ defaultName }: CreateModelFormProps) {
-  const router = useRouter();
-  const { readOnlyMode } = useNamespace();
+  const { push } = useNamespacedNavigation();
+  const { readOnlyMode, namespace } = useNamespace();
   const form = useForm<FormValues>({
     mode: 'onChange',
     resolver: zodResolver(schema),
@@ -40,8 +40,8 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   const provider = form.watch('provider');
 
   const handleSuccess = useCallback(() => {
-    router.push('/models');
-  }, [router]);
+    push('/models');
+  }, [push]);
 
   const { mutate, isPending } = useCreateModel({
     onSuccess: handleSuccess,

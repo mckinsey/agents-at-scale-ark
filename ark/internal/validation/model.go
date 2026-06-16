@@ -218,6 +218,8 @@ func (v *Validator) validateProviderConfig(ctx context.Context, model *arkv1alph
 		return v.validateOpenAIConfig(ctx, model)
 	case ProviderBedrock:
 		return v.validateBedrockConfig(ctx, model)
+	case ProviderAnthropic:
+		return v.validateAnthropicConfig(ctx, model)
 	default:
 		if model.Spec.Provider == "" {
 			if IsDeprecatedProviderInType(model.Spec.Type) {
@@ -386,6 +388,45 @@ func (v *Validator) validateBedrockFields(ctx context.Context, bedrock *arkv1alp
 			if err := v.ValidateValueSource(ctx, field.value, ns, field.path); err != nil {
 				return err
 			}
+		}
+	}
+
+	return nil
+}
+
+func (v *Validator) validateAnthropicConfig(ctx context.Context, model *arkv1alpha1.Model) error {
+	if model.Spec.Config.Anthropic == nil {
+		return fmt.Errorf("anthropic configuration is required for anthropic provider")
+	}
+
+	ns := model.GetNamespace()
+	anthropic := model.Spec.Config.Anthropic
+
+	if err := v.ValidateValueSource(ctx, &anthropic.BaseURL, ns, "spec.config.anthropic.baseUrl"); err != nil {
+		return err
+	}
+	if err := v.ValidateValueSource(ctx, &anthropic.APIKey, ns, "spec.config.anthropic.apiKey"); err != nil {
+		return err
+	}
+
+	if anthropic.Version != nil {
+		if err := v.ValidateValueSource(ctx, anthropic.Version, ns, "spec.config.anthropic.version"); err != nil {
+			return err
+		}
+	}
+
+	baseURLValue, err := v.ResolveValueSource(ctx, anthropic.BaseURL, ns)
+	if err != nil {
+		return fmt.Errorf("failed to resolve Anthropic BaseURL: %w", err)
+	}
+	if err := ValidateBaseURL(baseURLValue); err != nil {
+		return fmt.Errorf("spec.config.anthropic.baseUrl validation failed: %w", err)
+	}
+
+	for i, header := range anthropic.Headers {
+		contextPrefix := fmt.Sprintf("spec.config.anthropic.headers[%d]", i)
+		if err := ValidateHeader(header, contextPrefix); err != nil {
+			return err
 		}
 	}
 

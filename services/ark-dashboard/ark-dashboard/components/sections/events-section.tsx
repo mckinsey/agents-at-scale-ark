@@ -2,6 +2,8 @@
 
 import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -42,6 +44,7 @@ export function EventsSection({
   name,
 }: EventsSectionProps) {
   const router = useRouter();
+  const { push: namespacedPush } = useNamespacedNavigation();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -203,7 +206,7 @@ export function EventsSection({
   };
 
   const handleEventClick = (event: Event) => {
-    router.push(`/event/${event.name}`);
+    namespacedPush(`/event/${event.name}`);
   };
 
   // Helper functions

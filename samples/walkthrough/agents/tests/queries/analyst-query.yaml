@@ -15,6 +15,6 @@ spec:
     - 73% report easier multi-cloud management
     
     Please provide analysis with insights, trends, and strategic recommendations.
-  targets:
-    - type: agent
-      name: analyst
+  target:
+    type: agent
+    name: analyst

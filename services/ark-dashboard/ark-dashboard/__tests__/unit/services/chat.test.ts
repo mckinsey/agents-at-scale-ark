@@ -1,4 +1,3 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
@@ -31,7 +30,7 @@ describe('chatService', () => {
     it('should create a query with normalized target type', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'test-query',
-        type: 'messages',
+        type: 'user',
         input: 'test input',
         status: { phase: 'pending' },
       };
@@ -40,14 +39,14 @@ describe('chatService', () => {
 
       const result = await chatService.createQuery({
         name: 'test-query',
-        type: 'messages',
+        type: 'user',
         input: 'test input',
         target: { name: 'TestAgent', type: 'AGENT' },
       });
 
       expect(apiClient.post).toHaveBeenCalledWith('/api/v1/queries/', {
         name: 'test-query',
-        type: 'messages',
+        type: 'user',
         input: 'test input',
         target: { name: 'TestAgent', type: 'agent' },
       });
@@ -57,7 +56,7 @@ describe('chatService', () => {
     it('should handle query without target', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'test-query',
-        type: 'messages',
+        type: 'user',
         input: 'test input',
         status: { phase: 'pending' },
       };
@@ -66,13 +65,13 @@ describe('chatService', () => {
 
       await chatService.createQuery({
         name: 'test-query',
-        type: 'messages',
+        type: 'user',
         input: 'test input',
       });
 
       expect(apiClient.post).toHaveBeenCalledWith('/api/v1/queries/', {
         name: 'test-query',
-        type: 'messages',
+        type: 'user',
         input: 'test input',
         target: undefined,
       });
@@ -83,7 +82,7 @@ describe('chatService', () => {
     it('should return query detail', async () => {
       const mockQuery: QueryDetailResponse = {
         name: 'query-123',
-        type: 'messages',
+        type: 'user',
         input: 'test',
         status: { phase: 'done' },
       };
@@ -121,8 +120,8 @@ describe('chatService', () => {
     it('should list all queries', async () => {
       const mockList = {
         items: [
-          { name: 'query-1', type: 'messages', input: 'test1' },
-          { name: 'query-2', type: 'messages', input: 'test2' },
+          { name: 'query-1', type: 'user', input: 'test1' },
+          { name: 'query-2', type: 'user', input: 'test2' },
         ],
       };
 
@@ -139,7 +138,7 @@ describe('chatService', () => {
     it('should update query', async () => {
       const mockUpdated: QueryDetailResponse = {
         name: 'query-123',
-        type: 'messages',
+        type: 'user',
         input: 'updated input',
         status: { phase: 'done' },
       };
@@ -214,34 +213,27 @@ describe('chatService', () => {
     beforeEach(() => {
       vi.mocked(apiClient.post).mockResolvedValue({
         name: 'chat-query-test-uuid-123',
-        type: 'messages',
+        type: 'user',
         status: { phase: 'pending' },
       } as QueryDetailResponse);
     });
 
-    it('should submit chat query with messages', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hello' },
-      ];
-
-      await chatService.submitChatQuery(messages, 'agent', 'TestAgent');
+    it('should submit chat query with string input', async () => {
+      await chatService.submitChatQuery('Hello', 'agent', 'TestAgent');
 
       expect(apiClient.post).toHaveBeenCalledWith('/api/v1/queries/', {
         name: 'chat-query-test-uuid-123',
-        type: 'messages',
-        input: messages,
+        type: 'user',
+        input: 'Hello',
         target: { type: 'agent', name: 'TestAgent' },
         sessionId: undefined,
+        conversationId: undefined,
         timeout: undefined,
       });
     });
 
     it('should normalize target type to lowercase', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hello' },
-      ];
-
-      await chatService.submitChatQuery(messages, 'AGENT', 'TestAgent');
+      await chatService.submitChatQuery('Hello', 'AGENT', 'TestAgent');
 
       expect(apiClient.post).toHaveBeenCalledWith(
         '/api/v1/queries/',
@@ -252,12 +244,8 @@ describe('chatService', () => {
     });
 
     it('should include sessionId when provided', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hello' },
-      ];
-
       await chatService.submitChatQuery(
-        messages,
+        'Hello',
         'agent',
         'TestAgent',
         'session-123',
@@ -271,15 +259,29 @@ describe('chatService', () => {
       );
     });
 
-    it('should include timeout when provided', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hello' },
-      ];
-
+    it('should include conversationId when provided', async () => {
       await chatService.submitChatQuery(
-        messages,
+        'Hello',
         'agent',
         'TestAgent',
+        undefined,
+        'conv-456',
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/queries/',
+        expect.objectContaining({
+          conversationId: 'conv-456',
+        }),
+      );
+    });
+
+    it('should include timeout when provided', async () => {
+      await chatService.submitChatQuery(
+        'Hello',
+        'agent',
+        'TestAgent',
+        undefined,
         undefined,
         undefined,
         '5m',
@@ -293,39 +295,12 @@ describe('chatService', () => {
       );
     });
 
-    it('should include both sessionId and timeout when provided', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hello' },
-      ];
-
-      await chatService.submitChatQuery(
-        messages,
-        'agent',
-        'TestAgent',
-        'session-456',
-        false,
-        '10m',
-      );
-
-      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/queries/', {
-        name: 'chat-query-test-uuid-123',
-        type: 'messages',
-        input: messages,
-        target: { type: 'agent', name: 'TestAgent' },
-        sessionId: 'session-456',
-        timeout: '10m',
-      });
-    });
-
     it('should handle enableStreaming parameter', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hello' },
-      ];
-
       await chatService.submitChatQuery(
-        messages,
+        'Hello',
         'agent',
         'TestAgent',
+        undefined,
         undefined,
         true,
       );
@@ -335,30 +310,9 @@ describe('chatService', () => {
         expect.objectContaining({
           metadata: {
             annotations: {
-              'ark.mckinsey.com/streaming-enabled': 'false',
+              'ark.mckinsey.com/streaming-enabled': 'true',
             },
           },
-        }),
-      );
-    });
-
-    it('should support multimodal messages', async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'What is in this image?' },
-            { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
-          ],
-        },
-      ];
-
-      await chatService.submitChatQuery(messages, 'agent', 'VisionAgent');
-
-      expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/queries/',
-        expect.objectContaining({
-          input: messages,
         }),
       );
     });
@@ -370,25 +324,25 @@ describe('chatService', () => {
         items: [
           {
             name: 'chat-query-300',
-            type: 'messages',
+            type: 'user',
             input: 'msg3',
             status: { phase: 'done' },
           },
           {
             name: 'other-query-100',
-            type: 'messages',
+            type: 'user',
             input: 'other',
             status: { phase: 'done' },
           },
           {
             name: 'chat-query-100',
-            type: 'messages',
+            type: 'user',
             input: 'msg1',
             status: { phase: 'done' },
           },
           {
             name: 'chat-query-200',
-            type: 'messages',
+            type: 'user',
             input: 'msg2',
             status: { phase: 'done' },
           },
@@ -714,14 +668,11 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-1' });
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        messages,
+        'test input',
         'agent',
         'TestAgent',
       )) {
@@ -729,112 +680,10 @@ describe('chatService', () => {
       }
 
       expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
-      expect(mockFetch).toHaveBeenCalledWith('/api/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'agent/TestAgent',
-          messages,
-          stream: true,
-          metadata: {},
-        }),
-      });
-    });
-
-    it('should include sessionId in metadata when provided', async () => {
-      const mockReader = {
-        read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: { getReader: () => mockReader },
-      });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
-
-      for await (const _ of chatService.streamChatResponse(
-        messages,
-        'agent',
-        'TestAgent',
-        'session-123',
-      )) {
-      }
-
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/openai/v1/chat/completions',
-        expect.objectContaining({
-          body: expect.stringContaining('"sessionId":"session-123"'),
-        }),
+        '/api/v1/broker/chunks?watch=true&query-id=test-query-1',
+        expect.objectContaining({ signal: undefined }),
       );
-    });
-
-    it('should include timeout in metadata when provided', async () => {
-      const mockReader = {
-        read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: { getReader: () => mockReader },
-      });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
-
-      for await (const _ of chatService.streamChatResponse(
-        messages,
-        'agent',
-        'TestAgent',
-        undefined,
-        '5m',
-      )) {
-      }
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/openai/v1/chat/completions',
-        expect.objectContaining({
-          body: expect.stringContaining('"timeout":"5m"'),
-        }),
-      );
-    });
-
-    it('should include both sessionId and timeout in metadata', async () => {
-      const mockReader = {
-        read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        body: { getReader: () => mockReader },
-      });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
-
-      for await (const _ of chatService.streamChatResponse(
-        messages,
-        'agent',
-        'TestAgent',
-        'session-456',
-        '10m',
-      )) {
-      }
-
-      const fetchCall = mockFetch.mock.calls[0][1];
-      const body = JSON.parse(fetchCall.body);
-
-      expect(body.metadata).toEqual({
-        sessionId: 'session-456',
-        timeout: '10m',
-      });
     });
 
     it('should handle buffered chunks across reads', async () => {
@@ -857,14 +706,11 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-2' });
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        messages,
+        'test input',
         'agent',
         'TestAgent',
       )) {
@@ -894,14 +740,11 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-3' });
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        messages,
+        'test input',
         'agent',
         'TestAgent',
       )) {
@@ -916,14 +759,11 @@ describe('chatService', () => {
         ok: false,
         statusText: 'Internal Server Error',
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-err' });
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          messages,
+          'test input',
           'agent',
           'TestAgent',
         )) {
@@ -936,14 +776,13 @@ describe('chatService', () => {
         ok: true,
         body: null,
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({
+        name: 'test-query-nobody',
+      });
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          messages,
+          'test input',
           'agent',
           'TestAgent',
         )) {
@@ -961,13 +800,10 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-lock' });
 
       for await (const _ of chatService.streamChatResponse(
-        messages,
+        'test input',
         'agent',
         'TestAgent',
       )) {
@@ -986,14 +822,13 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
-
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'user', content: 'Hi' },
-      ];
+      vi.mocked(apiClient.post).mockResolvedValue({
+        name: 'test-query-lockerr',
+      });
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          messages,
+          'test input',
           'agent',
           'TestAgent',
         )) {
@@ -1001,6 +836,38 @@ describe('chatService', () => {
       }).rejects.toThrow('Read error');
 
       expect(mockReader.releaseLock).toHaveBeenCalled();
+    });
+
+    it('should forward abort signal to fetch', async () => {
+      const mockReader = {
+        read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        releaseLock: vi.fn(),
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: { getReader: () => mockReader },
+      });
+      vi.mocked(apiClient.post).mockResolvedValue({
+        name: 'test-query-abort',
+      });
+
+      const controller = new AbortController();
+      for await (const _ of chatService.streamChatResponse(
+        'test input',
+        'agent',
+        'TestAgent',
+        undefined,
+        undefined,
+        undefined,
+        controller.signal,
+      )) {
+      }
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
+        expect.objectContaining({ signal: controller.signal }),
+      );
     });
   });
 });

@@ -14,7 +14,29 @@ vi.mock('@/lib/api/client', () => ({
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
+    setDefaultParam: vi.fn(),
   },
+  APIClient: vi.fn().mockImplementation(() => ({
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    setDefaultParam: vi.fn(),
+    getDefaultParams: vi.fn().mockReturnValue({}),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}`),
+  })),
+}));
+
+vi.mock('@/lib/api/files-client', () => ({
+  filesApiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
+    setDefaultParam: vi.fn(),
+    getDefaultParams: vi.fn().mockReturnValue({}),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}`),
+  },
+  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api/',
 }));
 
 describe('TeamEditor', () => {
@@ -141,11 +163,11 @@ describe('TeamEditor', () => {
       expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
-    it('should default to round-robin strategy', async () => {
+    it('should default to sequential strategy', async () => {
       render(<TeamEditor {...defaultProps} />);
 
       const combobox = screen.getByRole('combobox');
-      expect(combobox).toHaveTextContent('Round Robin');
+      expect(combobox).toHaveTextContent('Sequential');
     });
   });
 
@@ -167,7 +189,8 @@ describe('TeamEditor', () => {
         expect(defaultProps.onSave).toHaveBeenCalledWith(
           expect.objectContaining({
             name: 'my-team',
-            strategy: 'round-robin',
+            strategy: 'sequential',
+            loops: false,
             members: expect.arrayContaining([
               expect.objectContaining({ name: 'test-agent-1' }),
             ]),
@@ -274,7 +297,7 @@ describe('TeamEditor', () => {
       name: 'existing-team',
       namespace: 'default',
       description: 'Existing team description',
-      strategy: 'round-robin',
+      strategy: 'sequential',
       members: [{ name: 'test-agent-1', type: 'agent' as const }],
     };
 

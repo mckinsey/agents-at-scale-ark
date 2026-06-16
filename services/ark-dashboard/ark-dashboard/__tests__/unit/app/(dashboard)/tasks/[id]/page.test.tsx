@@ -14,6 +14,7 @@ vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({
     back: mockBack,
   })),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 // Mock services

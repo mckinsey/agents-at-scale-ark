@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/apiserver/pkg/storage/names"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
@@ -26,12 +27,13 @@ import (
 )
 
 const (
-	columnTypeDate   = "date"
-	defaultNamespace = "default"
+	columnTypeDate          = "date"
+	defaultNamespace        = "default"
+	maxGenerateNameAttempts = 100
 )
 
-func storageContext(ctx context.Context) context.Context {
-	return context.WithoutCancel(ctx)
+func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 }
 
 type ResourceConfig struct {
@@ -90,7 +92,9 @@ func (s *GenericStorage) GetSingularName() string {
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	start := time.Now()
 	namespace := getNamespace(ctx)
-	obj, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("get", s.config.Kind, "error")
 		metrics.RecordStorageLatency("get", s.config.Kind, start)
@@ -116,11 +120,13 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 		opts.Continue = options.Continue
 	}
 
-	objects, continueToken, err := s.backend.List(storageContext(ctx), s.config.Kind, namespace, opts)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	objects, continueToken, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		return nil, fmt.Errorf("failed to list %s: %w", s.config.Resource, err)
+		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
 	}
 
 	list := s.config.NewListFunc()
@@ -162,9 +168,46 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		accessor.SetCreationTimestamp(metav1.Now())
 	}
 
-	if err := s.backend.Create(storageContext(ctx), s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
-		metrics.RecordStorageOperation("create", s.config.Kind, "error")
+	// Handle generateName: if name is empty but generateName is set, generate a unique name
+	// Retry on name collisions up to maxGenerateNameAttempts
+	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
+			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
+			accessor.SetName(generatedName)
+
+			sctx, cancel := storageContext(ctx)
+			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
+			cancel()
+
+			if err == nil {
+				metrics.RecordStorageOperation("create", s.config.Kind, "success")
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+			}
+
+			if !errors.Is(err, storage.ErrAlreadyExists) {
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				metrics.RecordStorageOperation("create", s.config.Kind, "error")
+				return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
+			}
+		}
+
+		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		return nil, apierrors.NewServerTimeout(gr, "create", 1)
+	}
+
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	if err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
+		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		if errors.Is(err, storage.ErrAlreadyExists) {
+			metrics.RecordStorageOperation("create", s.config.Kind, "already_exists")
+			return nil, apierrors.NewAlreadyExists(gr, accessor.GetName())
+		}
+		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
 	}
 
@@ -177,7 +220,9 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 	start := time.Now()
 	namespace := getNamespace(ctx)
 
-	existing, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		if forceAllowCreate {
 			obj, err := objInfo.UpdatedObject(ctx, nil)
@@ -197,6 +242,15 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		return nil, false, fmt.Errorf("failed to get updated object: %w", err)
 	}
 
+	// Preserve resourceVersion from existing object if patch didn't include it.
+	// kubectl strategic merge patches may send resourceVersion: null, but PostgreSQL
+	// backend requires a non-zero resourceVersion for optimistic concurrency control.
+	existingAccessor, _ := meta.Accessor(existing)
+	updatedAccessor, _ := meta.Accessor(updated)
+	if updatedAccessor.GetResourceVersion() == "" && existingAccessor.GetResourceVersion() != "" {
+		updatedAccessor.SetResourceVersion(existingAccessor.GetResourceVersion())
+	}
+
 	if updateValidation != nil {
 		if err := updateValidation(ctx, updated, existing); err != nil {
 			metrics.RecordStorageOperation("update", s.config.Kind, "validation_error")
@@ -204,7 +258,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		}
 	}
 
-	if err := s.backend.Update(storageContext(ctx), s.config.Kind, namespace, name, updated); err != nil {
+	if err := s.backend.Update(sctx, s.config.Kind, namespace, name, updated); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "update", name, start)
 	}
 
@@ -218,7 +272,9 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	start := time.Now()
 	namespace := getNamespace(ctx)
 
-	existing, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
 		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
@@ -231,10 +287,8 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 		}
 	}
 
-	if err := s.backend.Delete(storageContext(ctx), s.config.Kind, namespace, name); err != nil {
-		metrics.RecordStorageOperation("delete", s.config.Kind, "error")
-		metrics.RecordStorageLatency("delete", s.config.Kind, start)
-		return nil, false, fmt.Errorf("failed to delete %s: %w", s.config.SingularName, err)
+	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
+		return nil, false, handleUpdateError(err, s.config, "delete", name, start)
 	}
 
 	metrics.RecordStorageOperation("delete", s.config.Kind, "success")

@@ -71,7 +71,7 @@ export const A2AServersSection = forwardRef<
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [namespace]);
 
   useEffect(() => {
     void loadData();

@@ -64,7 +64,7 @@ describe('AgentsAPIDialog', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('API Access')).toBeInTheDocument();
     expect(
-      screen.getByText('Use the OpenAI-compatible API to chat with your agents from external systems.')
+      screen.getByText('Use the Query API to chat with your agents from external systems.')
     ).toBeInTheDocument();
   });
 
@@ -103,7 +103,7 @@ describe('AgentsAPIDialog', () => {
       />
     );
 
-    const endpoint = screen.getByText('http://localhost:3000/api/openai/v1/chat/completions');
+    const endpoint = screen.getByText('http://localhost:3000/api/v1/queries/');
     expect(endpoint).toBeInTheDocument();
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
   });
@@ -121,13 +121,13 @@ describe('AgentsAPIDialog', () => {
     const toggle = screen.getByRole('switch');
     // Label always shows "Cluster internal" now
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
-    expect(screen.getByText('http://localhost:3000/api/openai/v1/chat/completions')).toBeInTheDocument();
+    expect(screen.getByText('http://localhost:3000/api/v1/queries/')).toBeInTheDocument();
 
     await user.click(toggle);
 
     // Label remains "Cluster internal" after toggle
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
-    expect(screen.getByText('http://ark-api.<namespace>.svc.cluster.local/api/openai/v1/chat/completions')).toBeInTheDocument();
+    expect(screen.getByText('http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/')).toBeInTheDocument();
 
     // Check for the namespace replacement instruction
     const namespaceText = screen.getByText((content, element) => {
@@ -151,7 +151,7 @@ describe('AgentsAPIDialog', () => {
 
     await user.click(endpointCopyButton);
 
-    expect(mockCopy).toHaveBeenCalledWith('http://localhost:3000/api/openai/v1/chat/completions');
+    expect(mockCopy).toHaveBeenCalledWith('http://localhost:3000/api/v1/queries/');
   });
 
   it('should show check icon after copying endpoint', async () => {
@@ -201,7 +201,7 @@ describe('AgentsAPIDialog', () => {
 
     expect(screen.getByText(/import requests/)).toBeInTheDocument();
     expect(screen.getByText(/from requests.auth import HTTPBasicAuth/)).toBeInTheDocument();
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 
   it('should switch between code examples', async () => {
@@ -218,13 +218,13 @@ describe('AgentsAPIDialog', () => {
     await user.click(goTab);
 
     expect(screen.getByText(/package main/)).toBeInTheDocument();
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
 
     const bashTab = screen.getByRole('tab', { name: 'Bash' });
     await user.click(bashTab);
 
     expect(screen.getByText(/curl -X POST/)).toBeInTheDocument();
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 
   it('should display correct default agent in code examples', () => {
@@ -236,7 +236,7 @@ describe('AgentsAPIDialog', () => {
       />
     );
 
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 
   it('should copy code to clipboard', async () => {
@@ -257,7 +257,7 @@ describe('AgentsAPIDialog', () => {
     expect(mockCopy).toHaveBeenCalled();
     const copiedText = mockCopy.mock.calls[0][0];
     expect(copiedText).toContain('import requests');
-    expect(copiedText).toContain('"model": "agent/test-agent"');
+    expect(copiedText).toContain('"name": "test-agent"');
   });
 
   it('should show check icon after copying code', async () => {
@@ -302,7 +302,7 @@ describe('AgentsAPIDialog', () => {
 
     const copiedText = mockCopy.mock.calls[0][0];
     expect(copiedText).toContain('package main');
-    expect(copiedText).toContain('"model": "agent/test-agent"');
+    expect(copiedText).toContain('"name": "test-agent"');
   });
 
   it('should update endpoint when toggling internal mode', async () => {
@@ -322,7 +322,7 @@ describe('AgentsAPIDialog', () => {
     await user.click(goTab);
 
     const codeBlock = screen.getByText(/package main/).closest('pre');
-    expect(codeBlock?.textContent).toContain('http://ark-api.<namespace>.svc.cluster.local/api/openai/v1/chat/completions');
+    expect(codeBlock?.textContent).toContain('http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/');
   });
 
   it('should call onOpenChange when dialog is closed', async () => {
@@ -366,14 +366,10 @@ describe('AgentsAPIDialog', () => {
 
     const pythonCode = screen.getByText(/import requests/).closest('pre')?.textContent || '';
 
-    expect(pythonCode).toContain('"model": "agent/test-agent"');
-    expect(pythonCode).toContain('"messages"');
-    expect(pythonCode).toContain('"role": "system"');
-    expect(pythonCode).toContain('"role": "user"');
-    expect(pythonCode).toContain('"stream": False');
-    expect(pythonCode).toContain('"temperature": 1.0');
-    expect(pythonCode).toContain('"max_tokens": 1024');
-    expect(pythonCode).toContain('"metadata"');
+    expect(pythonCode).toContain('"name": "test-agent"');
+    expect(pythonCode).toContain('"input"');
+    expect(pythonCode).toContain('"type": "user"');
+    expect(pythonCode).toContain('"target"');
   });
 
   it('should include authentication examples in code', () => {
@@ -404,16 +400,16 @@ describe('AgentsAPIDialog', () => {
     );
 
     // Check Python tab (default)
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
 
     // Switch to Go tab
     const goTab = screen.getByRole('tab', { name: 'Go' });
     await user.click(goTab);
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
 
     // Switch to Bash tab
     const bashTab = screen.getByRole('tab', { name: 'Bash' });
     await user.click(bashTab);
-    expect(screen.getByText(/"model": "agent\/test-agent"/)).toBeInTheDocument();
+    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 });

@@ -1,9 +1,9 @@
 'use client';
 
 import { Code, Plus } from 'lucide-react';
-import Link from 'next/link';
 import { useRef } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { PageHeader } from '@/components/common/page-header';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { Button } from '@/components/ui/button';
@@ -43,10 +43,10 @@ export default function AgentsPage() {
               </Button>
             ) : (
               <Button asChild>
-                <Link href="/agents/new">
+                <NamespacedLink href="/agents/new">
                   <Plus className="h-4 w-4" />
                   Create Agent
-                </Link>
+                </NamespacedLink>
               </Button>
             )}
           </div>

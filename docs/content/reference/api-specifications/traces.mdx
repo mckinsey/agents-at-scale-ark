@@ -57,6 +57,7 @@ Retrieve traces. Returns a paginated list of traces grouped by trace ID.
 |-----------|---------|-------------|
 | `limit` | 100 | Maximum traces to return (max 1000) |
 | `cursor` | - | Sequence number to paginate from |
+| `session_id` | - | Filter traces by Ark session ID (matches spans with `ark.session.id` attribute) |
 | `watch` | - | Enable SSE streaming. See [Streaming Traces](#streaming-traces) |
 
 List traces with pagination:

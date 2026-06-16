@@ -57,25 +57,27 @@ type executionState struct {
 	targetSpan     telemetry.Span
 }
 
-func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message) {
+func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
 	if s.eventStream == nil {
 		return
 	}
+	completedQuery := s.query.DeepCopy()
+	completedQuery.Status.Phase = "done"
+	completedQuery.Status.TokenUsage = tokenUsage
+	completedQuery.Status.ConversationId = s.conversationId
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
-		completedQuery := s.query.DeepCopy()
-		completedQuery.Status.Phase = "done"
 		completedQuery.Status.Response = &arkv1alpha1.Response{
 			Target:  *s.target,
 			Content: extractAssistantText(responseMessages),
 			Raw:     rawJSON,
 			Phase:   "done",
 		}
-		finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
-		wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
-		if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
-			log.Error(err, "failed to send final chunk")
-		}
+	}
+	finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
+	wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+	if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+		log.Error(err, "failed to send final chunk")
 	}
 	if completionErr := s.eventStream.NotifyCompletion(ctx); completionErr != nil {
 		log.Error(completionErr, "failed to notify stream completion")
@@ -110,7 +112,17 @@ func (h *Handler) ProcessMessage(
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
-		state.finalizeStream(ctx, nil)
+		// Save error messages to memory before returning
+		// This ensures failed queries appear in conversation history with error context
+		if state.memory != nil && len(state.inputMessages) > 0 {
+			errorMessage := NewAssistantMessage(fmt.Sprintf("Error: %v", err))
+			errorMessages := PrepareNewMessagesForMemory(state.inputMessages, []Message{errorMessage})
+			if saveErr := state.memory.AddMessages(ctx, state.query.Name, errorMessages); saveErr != nil {
+				log.Error(saveErr, "failed to save error messages to memory")
+			}
+		}
+
+		state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
@@ -282,7 +294,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		}
 	}
 
-	state.finalizeStream(ctx, responseMessages)
+	state.finalizeStream(ctx, responseMessages, tokenSummary)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
@@ -305,6 +317,7 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
 		}
+		defer agent.Close()
 		member = agent
 	case ToolTypeTeam:
 		var teamCRD arkv1alpha1.Team
@@ -315,13 +328,14 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to make team %s: %w", targetName, err)
 		}
+		defer team.Close()
 		member = team
 	default:
 		return nil, nil, fmt.Errorf("unsupported member type: %s", targetType)
 	}
 
 	currentMessage, contextMessages := PrepareExecutionMessages(state.inputMessages, state.memoryMessages)
-	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream)
+	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream, ExecuteOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -344,7 +358,7 @@ func (h *Handler) executeModel(
 		return nil, fmt.Errorf("failed to load model %s: %w", modelName, err)
 	}
 
-	completion, err := model.ChatCompletion(ctx, allMessages, eventStream, 1)
+	completion, err := model.ChatCompletion(ctx, allMessages, eventStream, 1, nil, ToolChoiceUnset)
 	if err != nil {
 		return nil, err
 	}
@@ -453,9 +467,7 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			responseMeta["a2a"] = a2aMeta
 		}
 	}
-	if serialized := serializeResponseMessages(responseMessages); serialized != "" {
-		responseMeta["messages"] = json.RawMessage(serialized)
-	}
+	responseMeta["messages"] = json.RawMessage(serializeResponseMessages(responseMessages))
 	return responseMeta
 }
 
@@ -559,11 +571,11 @@ func serializeResponseMessages(messages []Message) string {
 		}
 	}
 	if len(actual) == 0 {
-		return ""
+		return "[]"
 	}
 	data, err := json.Marshal(actual)
 	if err != nil {
-		return ""
+		return "[]"
 	}
 	return string(data)
 }

@@ -45,6 +45,12 @@ cert-manager or gateway-api are installed by default to disable them use env var
 ENABLE_CERT_MANAGER=false devspace dev
 ```
 
+Argo Workflows is opt-in. To enable it, set `ENABLE_ARGO`:
+
+```bash
+ENABLE_ARGO=true devspace dev
+```
+
 ## Storage Backend Selection
 
 The ark-controller supports two storage backends: etcd (default) and PostgreSQL. Use the `STORAGE_BACKEND` environment variable to select:

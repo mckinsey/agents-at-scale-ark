@@ -612,6 +612,131 @@ func TestModel_HealthCheck_DelegatesToAzureProvider(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestAnthropicProvider_HealthCheck_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "test-key", r.Header.Get("x-api-key"))
+		assert.Equal(t, "2023-06-01", r.Header.Get("anthropic-version"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":          "msg_test",
+			"model":       "claude-sonnet-4-20250514",
+			"stop_reason": "end_turn",
+			"content":     []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"usage":       map[string]interface{}{"input_tokens": 5, "output_tokens": 3},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-sonnet-4-20250514",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+	require.NoError(t, err)
+}
+
+func TestAnthropicProvider_HealthCheck_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`))
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-sonnet-4-20250514",
+		BaseURL: server.URL,
+		APIKey:  "invalid-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestAnthropicProvider_HealthCheck_NetworkError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-sonnet-4-20250514",
+		BaseURL: serverURL,
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+	require.Error(t, err)
+}
+
+func TestAnthropicProvider_HealthCheck_CustomVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "2024-01-01", r.Header.Get("anthropic-version"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":          "msg_test",
+			"model":       "claude-sonnet-4-20250514",
+			"stop_reason": "end_turn",
+			"content":     []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"usage":       map[string]interface{}{"input_tokens": 5, "output_tokens": 3},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-sonnet-4-20250514",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+		Version: "2024-01-01",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+	require.NoError(t, err)
+}
+
+func TestModel_HealthCheck_AnthropicProvider(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":          "msg_test",
+			"model":       "claude-sonnet-4-20250514",
+			"stop_reason": "end_turn",
+			"content":     []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"usage":       map[string]interface{}{"input_tokens": 5, "output_tokens": 3},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-sonnet-4-20250514",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	model := &Model{
+		Model:    "claude-sonnet-4-20250514",
+		Type:     "anthropic",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+	require.NoError(t, err)
+}
+
 func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -37,10 +37,10 @@ This directory contains three specialized agents that work together to create a 
 - Content consolidation and organization
 
 **Tools Used**:
-- `mcp-filesystem-write-file`: Save documents to filesystem
-- `mcp-filesystem-create-directory`: Create directory structure
-- `mcp-filesystem-list-directory`: Browse existing files
-- `mcp-filesystem-get-file-info`: Get file metadata
+- `file-gateway-write-file`: Save documents to filesystem
+- `file-gateway-create-directory`: Create directory structure
+- `file-gateway-list-directory`: Browse existing files
+- `file-gateway-get-file-info`: Get file metadata
 
 **Output Format**: Professional documents saved to filesystem with confirmation
 
@@ -84,4 +84,4 @@ chainsaw test --test-file chainsaw-creator-test.yaml samples/walkthrough/agents/
 - **Tools**: 
   - Researcher requires `web-search` tool
   - Creator requires MCP filesystem tools
-- **MCP Server**: Creator agent requires `mcp-filesystem` server for file operations
+- **MCP Server**: Creator agent requires the `file-gateway` MCPServer (provided by `marketplace/services/file-gateway`) for filesystem operations

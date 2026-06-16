@@ -149,22 +149,6 @@ class TestReadOnlyMiddleware(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
-    async def test_read_only_enabled_allows_chat_completions(self):
-        middleware = ReadOnlyMiddleware(Mock())
-
-        request = Mock()
-        request.method = "POST"
-        request.url.path = "/openai/v1/chat/completions"
-
-        call_next = AsyncMock()
-        call_next.return_value = Mock(status_code=200)
-
-        response = await middleware.dispatch(request, call_next)
-
-        call_next.assert_called_once_with(request)
-        self.assertEqual(response.status_code, 200)
-
-    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
     async def test_read_only_enabled_allows_queries(self):
         middleware = ReadOnlyMiddleware(Mock())
 

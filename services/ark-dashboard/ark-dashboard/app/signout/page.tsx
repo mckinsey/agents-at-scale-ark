@@ -2,9 +2,9 @@
 
 import { CheckCircle } from 'lucide-react';
 import { signOut } from 'next-auth/react';
-import Link from 'next/link';
 import { useEffect } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -26,7 +26,7 @@ export default function LogoutPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <Button asChild className="w-full">
-            <Link href="/">Return to Sign In</Link>
+            <NamespacedLink href="/">Return to Sign In</NamespacedLink>
           </Button>
         </CardContent>
       </Card>

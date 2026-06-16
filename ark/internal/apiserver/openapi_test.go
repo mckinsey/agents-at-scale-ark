@@ -4,6 +4,8 @@ package apiserver
 
 import (
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestGetOpenAPIDefinitions(t *testing.T) {
@@ -72,9 +74,12 @@ func TestModelSchemaHasProperStructure(t *testing.T) {
 func TestObjectMetaAnnotationsSchema(t *testing.T) {
 	defs := GetOpenAPIDefinitions(nil)
 
-	objectMeta, ok := defs["k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"]
+	// SSA fieldmanager looks up types by their canonical (reverse-domain) form,
+	// e.g. io.k8s.apimachinery..., not the Go-style import path. The map keys
+	// must match what the $ref strings use.
+	objectMeta, ok := defs["io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta"]
 	if !ok {
-		t.Fatal("ObjectMeta definition not found")
+		t.Fatal("ObjectMeta definition not found under canonical name")
 	}
 
 	annotations, ok := objectMeta.Schema.Properties["annotations"]
@@ -113,4 +118,32 @@ func TestAPIVersionByKind(t *testing.T) {
 			t.Errorf("APIVersion(%q) = %q, want %q", tt.kind, got, tt.expected)
 		}
 	}
+}
+
+func TestJsonOnlyNegotiatedSerializerExcludesProtobuf(t *testing.T) {
+	s := jsonOnlyNegotiatedSerializer{Codecs}
+	for _, info := range s.SupportedMediaTypes() {
+		if info.MediaType == runtime.ContentTypeProtobuf {
+			t.Error("SupportedMediaTypes should not include protobuf")
+		}
+	}
+}
+
+func TestJsonOnlyNegotiatedSerializerIncludesJSON(t *testing.T) {
+	s := jsonOnlyNegotiatedSerializer{Codecs}
+	for _, info := range s.SupportedMediaTypes() {
+		if info.MediaType == runtime.ContentTypeJSON {
+			return
+		}
+	}
+	t.Error("SupportedMediaTypes should include JSON")
+}
+
+func TestCodecsIncludesProtobufConfirmingFilterIsNeeded(t *testing.T) {
+	for _, info := range Codecs.SupportedMediaTypes() {
+		if info.MediaType == runtime.ContentTypeProtobuf {
+			return
+		}
+	}
+	t.Error("expected Codecs to include protobuf before filtering")
 }

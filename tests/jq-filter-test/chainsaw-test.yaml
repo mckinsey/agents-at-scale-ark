@@ -3,30 +3,92 @@ kind: Test
 metadata:
   name: jq-filter-test
 spec:
-  skip: true
   description: Test jq filtering functionality in agent tools
   steps:
-  - name: setup-resources
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: setup-mock-server
+    try:
+    - apply:
+        file: manifests/a00-mock-server.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: mock-httpbin
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+
+  - name: setup-agents
+    try:
     - script:
         content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          MOCK_URL="http://mock-httpbin.$NAMESPACE.svc.cluster.local"
+          kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/json"
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          MOCK_URL="http://mock-httpbin.$NAMESPACE.svc.cluster.local"
+          kubectl apply -f - -n $NAMESPACE <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: test-json-api
+          spec:
+            type: http
+            description: "Test API tool that returns structured JSON data"
+            inputSchema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: Query parameter (unused for this test)
+              required: []
+            http:
+              url: $MOCK_URL/json
+              method: GET
+          EOF
         env:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/*.yaml
-
-  - name: wait-for-agents
-    try:
+        file: manifests/a03-agent-filtered.yaml
+    - apply:
+        file: manifests/a03-agent-unfiltered.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: test-json-api
+          status:
+            state: Ready
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -40,44 +102,36 @@ spec:
           metadata:
             name: test-agent-unfiltered
 
-  - name: execute-queries
+  - name: run-queries
     try:
     - apply:
         file: manifests/a04-query-filtered.yaml
     - apply:
         file: manifests/a05-query-unfiltered.yaml
-
-  - name: wait-for-filtered-query-completion
-    try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-jq-filtered
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-jq-filtered
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-unfiltered
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-jq-filtered
-
-  - name: wait-for-unfiltered-query-completion
-    try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-unfiltered
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-    catch:
-    - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -93,11 +147,11 @@ spec:
             name: test-query-jq-filtered
           status:
             (response != null): true
+            (response.target.name): 'test-agent-jq-filtered'
             (contains(response.content, 'Sample Slide Show')): true
-            responses:
-            - target:
-                name: test-agent-jq-filtered
-                type: agent
+            (contains(response.content, 'slideshow')): false
+            (contains(response.content, 'author')): false
+            (contains(response.content, 'slides')): false
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -109,11 +163,21 @@ spec:
             (contains(response.content, 'slideshow')): true
             (contains(response.content, 'author')): true
             (contains(response.content, 'slides')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-jq-filtered
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-unfiltered
 
     cleanup:
     - script:
         content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

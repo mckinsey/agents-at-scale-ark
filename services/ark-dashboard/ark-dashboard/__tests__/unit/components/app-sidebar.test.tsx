@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
   usePathname: vi.fn(() => '/'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock('next/image', () => ({
@@ -78,6 +79,68 @@ vi.mock('@/components/editors', () => ({
 vi.mock('@/components/user', () => ({
   UserDetails: vi.fn(() => <div data-testid="user-details" />),
 }));
+
+describe('AppSidebar - Navigation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(window, 'location', {
+      value: { search: '' },
+      writable: true,
+    });
+  });
+
+  it('should preserve query parameters when navigating', async () => {
+    const mockPush = vi.fn();
+    const { useRouter } = await import('next/navigation');
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '?namespace=test-ns&foo=bar' },
+      writable: true,
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const modelsButton = await screen.findByRole('button', { name: /models/i });
+    await user.click(modelsButton);
+
+    expect(mockPush).toHaveBeenCalledWith('/models?namespace=test-ns&foo=bar');
+  });
+
+  it('should navigate without query string when no params exist', async () => {
+    const mockPush = vi.fn();
+    const { useRouter } = await import('next/navigation');
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+
+    Object.defineProperty(window, 'location', {
+      value: { search: '' },
+      writable: true,
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const toolsButton = await screen.findByRole('button', { name: /tools/i });
+    await user.click(toolsButton);
+
+    expect(mockPush).toHaveBeenCalledWith('/tools');
+  });
+});
 
 describe('AppSidebar - Files Section', () => {
   beforeEach(() => {

@@ -7,12 +7,12 @@ import './globals.css'
 export const metadata = {
   // Define your metadata here
   // For more information on metadata API, see: https://nextjs.org/docs/app/building-your-application/optimizing/metadata
-  title: "Agents at Scale",
-  description: "The McKinsey QuantumBlack Agentic Ecosystem",
+  title: "Ark",
+  description: "Open-source tools for running agentic workloads on Kubernetes",
 }
 const navbar = (
   <Navbar
-    logo={<b>Agents at Scale</b>}
+    logo={<b>Ark</b>}
     projectLink="https://github.com/mckinsey/agents-at-scale-ark"
   
     // ... Your additional navbar options

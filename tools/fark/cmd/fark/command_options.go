@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -313,6 +314,39 @@ func (r *ResourceIdentifier) UpdateFromFlags(spec *AgentSpec) error {
 	}
 }
 
+// parseAgentTools parses tool specifiers of the form "name" or "name:type".
+// When no type is given, "builtin" is assumed. Valid types match the AgentTool
+// CRD enum: builtin, http, mcp, agent, team.
+func parseAgentTools(tools []string) ([]arkv1alpha1.AgentTool, error) {
+	validTypes := map[string]bool{
+		"builtin": true,
+		"http":    true,
+		"mcp":     true,
+		"agent":   true,
+		"team":    true,
+	}
+	agentTools := make([]arkv1alpha1.AgentTool, 0, len(tools))
+	for _, raw := range tools {
+		name := raw
+		toolType := "builtin"
+		if idx := strings.LastIndex(raw, ":"); idx != -1 {
+			name = raw[:idx]
+			toolType = raw[idx+1:]
+		}
+		if !validTypes[toolType] {
+			return nil, fmt.Errorf("invalid tool type %q for tool %q (expected one of: builtin, http, mcp, agent, team)", toolType, name)
+		}
+		if name == "" {
+			return nil, fmt.Errorf("tool name cannot be empty in %q", raw)
+		}
+		agentTools = append(agentTools, arkv1alpha1.AgentTool{
+			Type: toolType,
+			Name: name,
+		})
+	}
+	return agentTools, nil
+}
+
 // createAgentFromFlags creates an agent from flags
 func (r *ResourceIdentifier) createAgentFromFlags(spec *AgentSpec) error {
 	if spec.Prompt == "" {
@@ -330,15 +364,10 @@ func (r *ResourceIdentifier) createAgentFromFlags(spec *AgentSpec) error {
 		}
 	}
 
-	// Add tools if provided
-	// TODO: "custom" type is deprecated - consider adding --tool-type flag or fetching tool type from cluster
 	if len(spec.Tools) > 0 {
-		agentTools := make([]arkv1alpha1.AgentTool, 0, len(spec.Tools))
-		for _, toolName := range spec.Tools {
-			agentTools = append(agentTools, arkv1alpha1.AgentTool{
-				Type: "custom",
-				Name: toolName,
-			})
+		agentTools, err := parseAgentTools(spec.Tools)
+		if err != nil {
+			return err
 		}
 		agentSpec.Tools = agentTools
 	}

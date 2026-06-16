@@ -23,7 +23,6 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS.tools).toBeDefined();
       expect(DASHBOARD_SECTIONS.mcp).toBeDefined();
       expect(DASHBOARD_SECTIONS.a2a).toBeDefined();
-      expect(DASHBOARD_SECTIONS.services).toBeDefined();
       expect(DASHBOARD_SECTIONS['api-keys']).toBeDefined();
       expect(DASHBOARD_SECTIONS.sessions).toBeDefined();
     });

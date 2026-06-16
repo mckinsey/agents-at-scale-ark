@@ -3,12 +3,14 @@ import {
   Bot,
   Calendar,
   ClipboardList,
+  Cog,
   Database,
   Download,
   FileText,
   Key,
   Lock,
   type LucideIcon,
+  MessageSquare,
   Package,
   Play,
   Search,
@@ -22,6 +24,7 @@ import {
 
 import {
   BROKER_FEATURE_KEY,
+  EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
 } from '@/atoms/experimental-features';
 
@@ -105,6 +108,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
   },
+  'session-history': {
+    key: 'session-history',
+    title: 'Sessions',
+    icon: MessageSquare,
+    group: 'monitoring',
+  },
 
   // Operations
   memory: {
@@ -146,11 +155,13 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Server,
     group: 'runtime',
   },
-  services: {
-    key: 'services',
-    title: 'ARK Services',
-    icon: Settings,
+
+  'execution-engines': {
+    key: 'execution-engines',
+    title: 'Execution Engines',
+    icon: Cog,
     group: 'runtime',
+    enablerFeature: EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   },
 
   // Service

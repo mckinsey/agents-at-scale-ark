@@ -12,6 +12,92 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## Installing a New Version of Ark
+
+Two scenarios are covered here: upgrading an existing Ark installation in place, and migrating resources to a different cluster.
+
+### Upgrading in place
+
+To move an existing cluster to a new Ark version, reinstall with `--ark-version`:
+
+```bash
+ark install -y --ark-version 0.2.0
+```
+
+Useful flags:
+
+- `--marketplace-version <version>` — pin the marketplace chart version
+
+Run `ark install --help` for the full list.
+
+Your CRD instances (agents, models, teams, tools, mcpservers, a2aservers, queries, memories, executionengines, a2atasks) are **preserved automatically** across the upgrade. The Ark CRDs are installed with the `helm.sh/resource-policy: keep` annotation, so they survive `ark uninstall` and are adopted by the reinstall. Non-Ark resources (for example, Argo `WorkflowTemplate`s) are not touched by Ark's Helm releases at all.
+
+<Callout type="info">
+What is not preserved:
+- **Broker state** — `ark-broker` is an in-memory event bus; messages, chunks, traces, events, sessions, and any conversation history held there are wiped when the broker pod restarts.
+- **In-flight query execution** — the `Query` CRD record survives, but the executor pod processing it is gone. Such queries are typically stuck and need to be cleaned up manually.
+
+Also review the version-specific sections below for manual migration steps that apply to the version you upgraded to.
+</Callout>
+
+### Migrating to a different cluster
+
+To move resources to a new cluster, use `ark export` on the source and `ark import` on the destination. This flow assumes the destination has a fresh Ark install with no overlapping resources.
+
+#### 1. Export from the source cluster
+
+```bash
+ark export -o ark-export.yaml
+```
+
+This captures Ark CRD instances for: `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, `a2aservers`.
+
+Useful flags:
+
+- `-n, --namespace <namespace>` — export from a single namespace
+- `-t, --types <types>` — comma-separated list of resource types (e.g. `-t models,agents,teams`)
+
+<Callout type="warning">
+Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and any non-Ark CRDs such as Argo `WorkflowTemplate`. Back those up separately with `kubectl get <kind> -A -o yaml` if you need them on the destination.
+</Callout>
+
+#### 2. Install Ark on the destination cluster
+
+```bash
+ark install -y --ark-version 0.2.0
+```
+
+#### 3. Import the exported resources
+
+```bash
+ark import ark-export.yaml
+```
+
+<Callout type="warning">
+`ark import` uses `kubectl create`, which fails for any resource that already exists on the destination. Run it against a clean install, or delete conflicting instances first with `kubectl delete -f ark-export.yaml`.
+</Callout>
+
+## Unreleased
+
+### OpenAI-Compatible Endpoints Removed
+
+The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been removed from the ark-api service. Use the Query API (`/v1/queries/`) instead.
+
+**Migration:**
+- Replace `POST /openai/v1/chat/completions` with `POST /v1/queries/` using `type: "user"` and string `input`
+- Replace `GET /openai/v1/models` with `GET /v1/agents/`, `GET /v1/models/`, etc.
+- For streaming, create a query with the `ark.mckinsey.com/streaming-enabled: "true"` annotation and consume SSE from `/v1/broker/chunks?watch=true&query-id={name}`
+- OpenAI SDK wrappers (Python/JS) are no longer supported; use direct HTTP calls to the query API
+
+### Query Type "messages" Removed
+
+The `type: "messages"` input mode has been removed from the Query CRD. Queries now only accept `type: "user"` with string input.
+
+**Migration:**
+- Use `conversationId` for multi-turn conversations instead of embedding full message history in the query
+- The memory service manages conversation history; the executor retrieves it via `conversationId`
+- During the deprecation period, a mutating webhook automatically converts `type: "messages"` queries to `type: "user"` with a warning
+
 ## v0.2.0
 
 ### Evaluations Moved to Marketplace
@@ -27,6 +113,111 @@ kubectl delete crd evaluations.ark.mckinsey.com evaluators.ark.mckinsey.com
 ```
 
 **If you are not using evaluations**, no action is needed.
+
+## v0.1.51
+
+### Round-Robin Strategy Deprecation
+
+The `round-robin` team strategy has been merged into `sequential` with a new `loops` field.
+
+- `strategy: sequential` (default): executes members once in order
+- `strategy: sequential` with `loops: true` and `maxTurns: N`: cycles through members repeatedly until maxTurns or terminate
+
+**Existing `round-robin` teams** are automatically migrated by the admission webhook:
+- `round-robin` with `maxTurns` becomes `sequential` + `loops: true` (maxTurns preserved)
+- `round-robin` without `maxTurns` becomes plain `sequential` (single pass)
+
+On create or update, you will see a deprecation warning.
+
+<Callout type="warning">
+`strategy: round-robin` will be removed in v1.0.0. Update your team manifests to use `sequential` with `loops: true`.
+</Callout>
+
+**Migration:**
+
+```bash
+# Trigger migration by annotating all teams
+kubectl annotate teams --all 'ark.mckinsey.com/migrate-round-robin-0.1.51=done' --overwrite
+
+# Verify migration
+kubectl get teams -o yaml | grep -A2 strategy
+```
+
+Update your manifests:
+
+```yaml
+# Before
+spec:
+  strategy: round-robin
+  maxTurns: 10
+
+# After
+spec:
+  strategy: sequential
+  loops: true
+  maxTurns: 10
+```
+
+For teams that previously used `round-robin` without `maxTurns` (relying on the terminate tool):
+
+```yaml
+# Before
+spec:
+  strategy: round-robin
+
+# After (single pass - terminates after one cycle)
+spec:
+  strategy: sequential
+
+# Or, to loop with a safety limit:
+spec:
+  strategy: sequential
+  loops: true
+  maxTurns: 20
+```
+
+### Graph Strategy Deprecation
+
+The `graph` team strategy is deprecated and has been merged into `sequential`.
+
+**Existing `graph` teams** are automatically migrated by the admission webhook to `strategy: sequential` with `loops: false`. Graph edges and `maxTurns` are discarded during migration.
+
+On create or update, you will see a deprecation warning.
+
+<Callout type="warning">
+`strategy: graph` will be removed in v1.0.0. Update your team manifests to use `sequential`.
+</Callout>
+
+**Migration:**
+
+```bash
+# Trigger migration by annotating all teams
+kubectl annotate teams --all 'ark.mckinsey.com/migrate-graph-0.1.51=done' --overwrite
+
+# Verify migration
+kubectl get teams -o yaml | grep -A2 strategy
+```
+
+Update your manifests:
+
+```yaml
+# Before
+spec:
+  strategy: graph
+  graph:
+    maxTurns: 10
+    edges:
+      - from: agent-a
+        to: agent-b
+
+# After
+spec:
+  strategy: sequential
+```
+
+<Callout type="info">
+Graph edges define execution order. After migration, agents run in the order listed in `spec.agents`. Review and reorder `spec.agents` if your graph had a specific execution path.
+</Callout>
 
 ## v0.1.50
 

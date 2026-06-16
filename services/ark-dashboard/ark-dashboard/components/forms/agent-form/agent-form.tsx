@@ -8,10 +8,9 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
@@ -35,7 +34,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Agent, agentsService } from '@/lib/services';
+import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
@@ -48,7 +49,7 @@ import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
+  { href: '/', label: 'Ark Dashboard' },
   { href: '/agents', label: 'Agents' },
 ];
 
@@ -58,8 +59,8 @@ export function AgentForm({
   onSuccess,
   onCancel,
 }: AgentFormProps) {
-  const router = useRouter();
-  const { readOnlyMode } = useNamespace();
+  const { push } = useNamespacedNavigation();
+  const { namespace, readOnlyMode } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -89,6 +90,7 @@ export function AgentForm({
     saving,
     agent,
     models,
+    executionEngines,
     availableTools,
     toolsLoading,
     unavailableTools,
@@ -114,72 +116,30 @@ export function AgentForm({
   const isDisabled = form.formState.isSubmitting;
   const hasUnavailableTools = unavailableTools.length > 0;
 
-  const agentYaml = useMemo(() => {
-    if (!agent) return '';
+  const [agentYaml, setAgentYaml] = useState('');
 
-    const allTools = [...availableTools, ...unavailableTools];
-    const selectedToolsList = allTools.filter(t =>
-      state.selectedTools.some(st => st.name === t.name),
-    );
-
-    const lines: string[] = [
-      'apiVersion: ark.mckinsey.com/v1alpha1',
-      'kind: Agent',
-      'metadata:',
-      `  name: ${agent.name}`,
-      `  namespace: ${agent.namespace}`,
-      'spec:',
-    ];
-
-    if (descriptionValue) {
-      lines.push(`  description: ${descriptionValue}`);
+  const fetchAgentYaml = useCallback(async (name: string) => {
+    try {
+      const raw = await agentsService.getRawResource(name);
+      setAgentYaml(toKubernetesYaml(raw));
+    } catch {
+      setAgentYaml('');
     }
+  }, []);
 
-    if (modelNameValue && modelNameValue !== '__none__') {
-      lines.push('  modelRef:');
-      lines.push(`    name: ${modelNameValue}`);
-      if (modelNamespaceValue) {
-        lines.push(`    namespace: ${modelNamespaceValue}`);
-      }
+  useEffect(() => {
+    if (agent?.name && showYaml) {
+      fetchAgentYaml(agent.name);
     }
+  }, [agent?.name, showYaml, fetchAgentYaml]);
 
-    if (promptValue) {
-      lines.push('  prompt: |');
-      promptValue.split('\n').forEach(line => {
-        lines.push(`    ${line}`);
-      });
+  const prevSavingRef = useRef(false);
+  useEffect(() => {
+    if (prevSavingRef.current && !saving && agent?.name && showYaml) {
+      fetchAgentYaml(agent.name);
     }
-
-    if (parameters.length > 0) {
-      lines.push('  parameters:');
-      parameters.forEach(param => {
-        lines.push(`    - name: ${param.name}`);
-        if (param.value) {
-          lines.push(`      value: ${param.value}`);
-        }
-      });
-    }
-
-    if (selectedToolsList.length > 0) {
-      lines.push('  tools:');
-      selectedToolsList.forEach(tool => {
-        lines.push(`    - type: custom`);
-        lines.push(`      name: ${tool.name}`);
-      });
-    }
-
-    return lines.join('\n');
-  }, [
-    agent,
-    descriptionValue,
-    modelNameValue,
-    modelNamespaceValue,
-    promptValue,
-    parameters,
-    availableTools,
-    unavailableTools,
-    state.selectedTools,
-  ]);
+    prevSavingRef.current = saving;
+  }, [saving, agent?.name, showYaml, fetchAgentYaml]);
 
   if (loading) {
     return (
@@ -215,10 +175,10 @@ export function AgentForm({
             isViewing ? (
               <div className="flex items-center gap-2">
                 <Button variant="outline" asChild>
-                  <Link href="/agents">
+                  <NamespacedLink href="/agents">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </Link>
+                  </NamespacedLink>
                 </Button>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
@@ -235,10 +195,10 @@ export function AgentForm({
               <div className="flex items-center gap-2">
                 {cancelHref ? (
                   <Button variant="outline" asChild>
-                    <Link href={cancelHref}>
+                    <NamespacedLink href={cancelHref}>
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       Cancel
-                    </Link>
+                    </NamespacedLink>
                   </Button>
                 ) : (
                   <Button variant="outline" onClick={onCancel}>
@@ -275,7 +235,7 @@ export function AgentForm({
                   <Settings className="text-muted-foreground h-4 w-4" />
                   <Select
                     value={agentName}
-                    onValueChange={value => router.push(`/agents/${value}`)}>
+                    onValueChange={value => push(`/agents/${value}`)}>
                     <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
                       <SelectValue placeholder="Select agent" />
                     </SelectTrigger>
@@ -321,6 +281,7 @@ export function AgentForm({
                           <ModelConfigSection
                             form={form}
                             models={models}
+                            executionEngines={executionEngines}
                             showExecutionEngine={
                               isExperimentalExecutionEngineEnabled
                             }
@@ -477,6 +438,7 @@ Environment: {{.environment}}"
                     <ModelConfigSection
                       form={form}
                       models={models}
+                      executionEngines={executionEngines}
                       showExecutionEngine={isExperimentalExecutionEngineEnabled}
                       disabled={isDisabled}
                     />

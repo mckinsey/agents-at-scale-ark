@@ -1,9 +1,6 @@
 name: SonarQube Scan
 
 on:
-  pull_request:
-    branches: ["main"]
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       branch:
@@ -32,14 +29,14 @@ jobs:
       PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch || github.ref }}
           fetch-depth: 0
 
       - name: Download coverage artifacts
         id: download-coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: coverage-*
           path: coverage-artifacts
@@ -102,7 +99,7 @@ jobs:
         if: steps.check-coverage.outputs.found == 'false'
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.8"
+          go-version: "1.26.2"
           cache: true
           cache-dependency-path: ark/go.sum
 
@@ -114,11 +111,11 @@ jobs:
 
       - name: Install uv
         if: steps.check-coverage.outputs.found == 'false'
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Install Helm
         if: steps.check-coverage.outputs.found == 'false'
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: "3.18.6"
 

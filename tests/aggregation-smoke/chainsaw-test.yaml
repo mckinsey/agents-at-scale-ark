@@ -1,0 +1,93 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: aggregation-smoke
+  labels:
+    postgresql: "true"
+spec:
+  steps:
+    - name: api-discovery
+      try:
+      - script:
+          content: |
+            set -eu
+            echo "Checking ark.mckinsey.com/v1alpha1 API resources..."
+            RESOURCES=$(kubectl api-resources --api-group=ark.mckinsey.com -o name)
+            for kind in agents models queries teams; do
+              if echo "$RESOURCES" | grep -q "^${kind}\."; then
+                echo "OK ${kind} discovered"
+              else
+                echo "FAIL ${kind} not found in API discovery"
+                exit 1
+              fi
+            done
+          timeout: 30s
+
+    - name: storage-round-trip
+      try:
+      - script:
+          content: |
+            set -eu
+            cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: smoke-test-model
+            spec:
+              provider: openai
+              model:
+                value: smoke-test
+              config:
+                openai:
+                  baseUrl:
+                    value: https://localhost:9999/v1
+                  apiKey:
+                    value: smoke-test-key
+            MANIFEST
+            echo "OK Model created"
+
+            MODEL=$(kubectl get model smoke-test-model -n $NAMESPACE -o jsonpath='{.metadata.name}')
+            if [ "$MODEL" != "smoke-test-model" ]; then
+              echo "FAIL Model read-back failed: got '$MODEL'"
+              exit 1
+            fi
+            echo "OK Model read-back succeeded"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 30s
+
+    - name: watch-routing
+      try:
+      - script:
+          content: |
+            set -eu
+            kubectl get models -n $NAMESPACE --watch-only --timeout=5 &
+            WATCH_PID=$!
+            sleep 2
+
+            cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: smoke-test-watch
+            spec:
+              provider: openai
+              model:
+                value: watch-test
+              config:
+                openai:
+                  baseUrl:
+                    value: https://localhost:9999/v1
+                  apiKey:
+                    value: smoke-test-key
+            MANIFEST
+
+            sleep 3
+            kill $WATCH_PID 2>/dev/null || true
+            wait $WATCH_PID 2>/dev/null || true
+            echo "OK Watch routing operational"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 30s

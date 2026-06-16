@@ -1,7 +1,6 @@
 'use client';
 
 import { Pencil, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -9,8 +8,10 @@ import { AvailabilityStatusBadge } from '@/components/ui/availability-status-bad
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelTypeDisplayName } from '@/lib/constants/model-types';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Model } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
@@ -21,7 +22,7 @@ interface ModelCardProps {
 }
 
 export function ModelCard({ model, onDelete }: ModelCardProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { readOnlyMode } = useNamespace();
   // Get custom icon or default model icon
@@ -30,12 +31,14 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
     DASHBOARD_SECTIONS.models.icon,
   );
 
+  const originIcon = getOriginIcon(model.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
+
   const actions: BaseCardAction[] = [
     {
       icon: Pencil,
       label: 'Edit model',
       onClick: () => {
-        router.push(`/models/${model.id}/update`);
+        push(`/models/${model.id}/update`);
       },
       disabled: readOnlyMode,
     },
@@ -64,7 +67,10 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
         actions={actions}
         footer={
           <div className="flex w-full flex-row items-end justify-between">
-            <div className="w-full">{description}</div>
+            <div className="flex w-full items-baseline gap-x-2">
+              <span className="shrink-0">{originIcon}</span>
+              {description}
+            </div>
             <AvailabilityStatusBadge
               status={model.available}
               eventsLink={`/events?kind=Model&name=${model.name}&page=1`}

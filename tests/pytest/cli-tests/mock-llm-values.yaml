@@ -1,0 +1,20 @@
+terminationGracePeriodSeconds: 1
+resources:
+  limits:
+    cpu: 50m
+    memory: 64Mi
+  requests:
+    cpu: 10m
+    memory: 32Mi
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: '{"object":"list","data":[{"id":"gpt-4.1-mini","object":"model","owned_by":"openai"}]}'
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"id":"mock-response","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Hello! I received your message."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'

@@ -2,18 +2,23 @@
 
 import * as SheetPrimitive from '@radix-ui/react-dialog';
 import { X, XIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { PreviewTab } from '@/hooks/use-multi-file-preview';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { cn } from '@/lib/utils';
 
 import { JsonTree } from './json-tree';
 import { SpreadsheetViewer } from './spreadsheet-viewer';
 import { ZipTree } from './zip-tree';
+
+type ViewMode = 'rendered' | 'source';
 
 interface MultiTabPreviewDialogProps {
   open: boolean;
@@ -36,6 +41,29 @@ export function MultiTabPreviewDialog({
   onTabClose,
   onCloseAll,
 }: MultiTabPreviewDialogProps) {
+  const [viewModes, setViewModes] = useState<Record<string, ViewMode>>({});
+
+  useEffect(() => {
+    setViewModes(prev => {
+      const next: Record<string, ViewMode> = {};
+      for (const tab of tabs) {
+        if (prev[tab.key]) {
+          next[tab.key] = prev[tab.key];
+        }
+      }
+      return next;
+    });
+  }, [tabs]);
+
+  const activeViewMode: ViewMode =
+    (activeTabKey && viewModes[activeTabKey]) || 'rendered';
+
+  const handleViewModeChange = (value: string) => {
+    if (!activeTabKey) return;
+    if (value !== 'rendered' && value !== 'source') return;
+    setViewModes(prev => ({ ...prev, [activeTabKey]: value }));
+  };
+
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       onCloseAll();
@@ -57,8 +85,24 @@ export function MultiTabPreviewDialog({
           )}
           onPointerDownOutside={e => e.preventDefault()}
           onInteractOutside={e => e.preventDefault()}>
-          <SheetHeader>
-            <SheetTitle>File Preview</SheetTitle>
+          <SheetHeader className="flex flex-row items-center justify-between gap-2 pr-10">
+            <SheetTitle className="min-w-0 truncate">File Preview</SheetTitle>
+            {activeTab?.isMarkdown && (
+              <ToggleGroup
+                type="single"
+                size="sm"
+                variant="outline"
+                value={activeViewMode}
+                onValueChange={handleViewModeChange}
+                className="flex-shrink-0">
+                <ToggleGroupItem value="rendered" aria-label="Rendered view">
+                  Rendered
+                </ToggleGroupItem>
+                <ToggleGroupItem value="source" aria-label="Source view">
+                  Source
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
           </SheetHeader>
 
           <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
@@ -129,6 +173,12 @@ export function MultiTabPreviewDialog({
                 <ZipTree entries={activeTab.zipEntries} />
               ) : activeTab.isJson && activeTab.jsonData !== null ? (
                 <JsonTree data={activeTab.jsonData} />
+              ) : activeTab.isMarkdown && activeViewMode === 'rendered' ? (
+                <div className="px-4">{renderMarkdown(activeTab.content)}</div>
+              ) : activeTab.isMarkdown ? (
+                <pre className="overflow-x-auto px-4 font-mono text-sm whitespace-pre">
+                  {activeTab.content}
+                </pre>
               ) : activeTab.language ? (
                 <div className="overflow-hidden rounded-md">
                   <SyntaxHighlighter

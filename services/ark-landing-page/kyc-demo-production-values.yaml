@@ -1,0 +1,4 @@
+app:
+  env:
+    - name: NEXT_PUBLIC_ARK_DASHBOARD_URL
+      value: "https://dashboard-demo.dev.agents-at-scale.com"

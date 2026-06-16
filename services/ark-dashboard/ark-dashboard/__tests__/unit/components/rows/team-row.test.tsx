@@ -67,7 +67,7 @@ describe('TeamRow', () => {
     id: 'team-1',
     name: 'my-team',
     description: 'A test team',
-    strategy: 'round-robin',
+    strategy: 'sequential',
     members: [
       { name: 'agent-1', type: 'agent' },
       { name: 'agent-2', type: 'agent' },
@@ -93,7 +93,7 @@ describe('TeamRow', () => {
 
   it('should display member count and strategy', () => {
     render(<TeamRow team={baseTeam} agents={mockAgents} />);
-    expect(screen.getByText(/2 members · Round Robin/)).toBeInTheDocument();
+    expect(screen.getByText(/2 members · Sequential/)).toBeInTheDocument();
   });
 
   it('should display singular member for count of 1', () => {
@@ -102,7 +102,7 @@ describe('TeamRow', () => {
       members: [{ name: 'agent-1', type: 'agent' }],
     } as unknown as Team;
     render(<TeamRow team={team} agents={mockAgents} />);
-    expect(screen.getByText(/1 member · Round Robin/)).toBeInTheDocument();
+    expect(screen.getByText(/1 member · Sequential/)).toBeInTheDocument();
   });
 
   it('should display correct strategy names', () => {
@@ -204,7 +204,7 @@ describe('TeamRow', () => {
     expect(toggleFloatingChat).toHaveBeenCalledWith(
       'my-team',
       'team',
-      'round-robin',
+      'sequential',
       undefined,
     );
   });

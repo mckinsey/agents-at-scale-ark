@@ -13,6 +13,10 @@ vi.mock('@/lib/services/workflow-templates', () => ({
 
 vi.mock('@/lib/hooks', () => ({
   useDelayedLoading: vi.fn(loading => loading),
+  useWorkflowsLayout: vi.fn(() => ({
+    layout: { sections: [], ungroupedOrder: [] },
+    setLayout: vi.fn(),
+  })),
 }));
 
 vi.mock('@/components/rows/flow-row', () => ({

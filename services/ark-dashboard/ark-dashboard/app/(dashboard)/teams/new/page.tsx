@@ -1,14 +1,14 @@
 'use client';
 
 import { MessageCircle, Users } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 
 import { TeamForm, TeamFormMode } from '@/components/forms/team-form';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
 export default function TeamNewPage() {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   const onSuccess = useCallback(() => {
     toast.success('Team Created', {
@@ -27,8 +27,8 @@ export default function TeamNewPage() {
       duration: 8000,
     });
 
-    router.push('/teams');
-  }, [router]);
+    push('/teams');
+  }, [push]);
 
   return <TeamForm mode={TeamFormMode.CREATE} onSuccess={onSuccess} />;
 }

@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"mckinsey.com/ark/internal/storage"
 )
@@ -269,6 +271,154 @@ func TestOptimisticConcurrency_Status_Integration(t *testing.T) {
 		t.Errorf("Expected ErrConflict for stale status update, got: %v", err)
 	} else {
 		t.Log("Correctly received ErrConflict for stale status update")
+	}
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+}
+
+func TestCreateAlreadyExists_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testName := "already-exists-test-resource"
+	testNS := "integration-test"
+	testKind := "TestResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+
+	obj := &integrationTestObject{
+		APIVersion: "ark.mckinsey.com/v1alpha1",
+		Kind:       testKind,
+		Metadata: struct {
+			Name            string            `json:"name"`
+			Namespace       string            `json:"namespace"`
+			UID             string            `json:"uid"`
+			ResourceVersion string            `json:"resourceVersion,omitempty"`
+			Labels          map[string]string `json:"labels,omitempty"`
+		}{
+			Name:      testName,
+			Namespace: testNS,
+			UID:       "test-uid-already-exists",
+		},
+		Spec: map[string]interface{}{"k": "v"},
+	}
+
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("first Create failed: %v", err)
+	}
+
+	dupErr := backend.Create(ctx, testKind, testNS, testName, obj)
+	if dupErr != storage.ErrAlreadyExists {
+		t.Errorf("Expected ErrAlreadyExists for duplicate Create, got: %v", dupErr)
+	} else {
+		t.Log("Correctly received ErrAlreadyExists for duplicate Create")
+	}
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+}
+
+func TestWatchAddedForFirstSeenUID_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "TestResource"
+	testName := "watch-added-test-resource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(500 * time.Millisecond)
+
+	obj := &integrationTestObject{
+		APIVersion: "ark.mckinsey.com/v1alpha1",
+		Kind:       testKind,
+		Metadata: struct {
+			Name            string            `json:"name"`
+			Namespace       string            `json:"namespace"`
+			UID             string            `json:"uid"`
+			ResourceVersion string            `json:"resourceVersion,omitempty"`
+			Labels          map[string]string `json:"labels,omitempty"`
+		}{
+			Name:      testName,
+			Namespace: testNS,
+			UID:       "test-uid-watch-added",
+		},
+		Spec: map[string]interface{}{"k": "v"},
+	}
+
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	deadline := time.After(10 * time.Second)
+	var firstEventType watch.EventType
+	var firstName string
+	for {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before any event")
+			}
+			testObj, _ := ev.Object.(*integrationTestObject)
+			if testObj == nil || testObj.Metadata.Name != testName {
+				continue
+			}
+			firstEventType = ev.Type
+			firstName = testObj.Metadata.Name
+		case <-deadline:
+			t.Fatal("timeout waiting for watch event")
+		}
+		break
+	}
+
+	if firstEventType != watch.Added {
+		t.Errorf("Expected first event for newly-created %s/%s to be Added, got %s",
+			testNS, firstName, firstEventType)
+	} else {
+		t.Logf("Correctly received watch.Added for first-seen UID")
 	}
 
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)

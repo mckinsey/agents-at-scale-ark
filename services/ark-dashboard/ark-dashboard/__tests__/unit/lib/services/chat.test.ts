@@ -89,11 +89,10 @@ describe('chatService', () => {
   });
 
   describe('submitChatQuery', () => {
-    it('should create chat query with generated name', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
+    it('should create chat query with string input', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       };
@@ -101,66 +100,61 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
       const result = await chatService.submitChatQuery(
-        messages,
+        'Hello',
         'agent',
         'test-agent',
         'session-123',
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`, {
-        name: 'chat-query-mock-uuid',
-        type: 'messages',
-        input: messages,
-        target: { type: 'agent', name: 'test-agent' },
-        sessionId: 'session-123',
-      });
+      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+        expect.objectContaining({
+          name: 'chat-query-mock-uuid',
+          type: 'user',
+          input: 'Hello',
+          target: { type: 'agent', name: 'test-agent' },
+          sessionId: 'session-123',
+        }),
+      );
       expect(result).toEqual(mockResponse);
     });
 
     it('should add streaming annotation when enableStreaming is true', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-        metadata: {
-          annotations: {
-            'ark.mckinsey.com/streaming-enabled': 'false',
-          },
-        },
       };
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
       const result = await chatService.submitChatQuery(
-        messages,
+        'Hello',
         'agent',
         'test-agent',
         'session-123',
-        true, // enableStreaming
+        undefined,
+        true,
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`, {
-        name: 'chat-query-mock-uuid',
-        type: 'messages',
-        input: messages,
-        target: { type: 'agent', name: 'test-agent' },
-        sessionId: 'session-123',
-        metadata: {
-          annotations: {
-            'ark.mckinsey.com/streaming-enabled': 'false',
+      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+        expect.objectContaining({
+          type: 'user',
+          input: 'Hello',
+          metadata: {
+            annotations: {
+              'ark.mckinsey.com/streaming-enabled': 'true',
+            },
           },
-        },
-      });
+        }),
+      );
       expect(result).toEqual(mockResponse);
     });
 
     it('should not add streaming annotation when enableStreaming is false or undefined', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       };
@@ -168,20 +162,14 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
       const result = await chatService.submitChatQuery(
-        messages,
+        'Hello',
         'agent',
         'test-agent',
         'session-123',
-        false, // enableStreaming
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`, {
-        name: 'chat-query-mock-uuid',
-        type: 'messages',
-        input: messages,
-        target: { type: 'agent', name: 'test-agent' },
-        sessionId: 'session-123',
-      });
+      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<string, unknown>;
+      expect(callArgs.metadata).toBeUndefined();
       expect(result).toEqual(mockResponse);
     });
   });

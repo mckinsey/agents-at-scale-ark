@@ -89,6 +89,9 @@ class QueryListResponse(BaseModel):
     """Response for listing queries."""
     items: List[QueryResponse]
     count: int
+    total: int = 0
+    page: int = 1
+    page_size: int = 25
 
 
 class QueryCreateRequest(BaseModel):

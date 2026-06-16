@@ -1,0 +1,239 @@
+---
+title: User authorised MCP servers
+description: Let each user authorise an MCP server (e.g. GitHub) with their own token, using query overrides
+---
+
+import { Callout } from 'nextra/components'
+
+# User authorised MCP servers
+
+When several people share an Ark deployment, you often want calls to an external service to run **as the individual user**. This tutorial shows how, using the GitHub MCP server as the example: the server is registered once, and each query carries the user's own token via an **override**.
+
+By the end you'll have:
+
+- A GitHub `MCPServer` registered in the cluster.
+- An agent that uses a GitHub tool.
+- Queries that authorise as different users by overriding the `Authorization` header per request.
+
+## How per-user auth works
+
+An `MCPServer` can carry static `spec.headers` (a shared token). On top of that, an Agent or a Query can set `spec.overrides` with `resourceType: mcpserver` to inject or replace headers for that specific run. The headers merge with this precedence (last wins):
+
+```
+MCPServer.spec.headers  <  Agent.spec.overrides  <  Query.spec.overrides
+```
+
+So a per-query `Authorization` override replaces the server's default token for that call — that's what makes the request "user authorised." The registration token on the `MCPServer` is only used to **discover** the server's tools; the token that actually authorises a tool *call* is whichever override is in effect.
+
+## Prerequisites
+
+- A working Ark cluster with a `default` model available (`kubectl get models`).
+- A GitHub token per user. The remote GitHub MCP server (`https://api.githubcopilot.com/mcp/`) accepts a GitHub personal access token as a bearer token.
+
+## Step 1 — Register the GitHub MCP server
+
+The MCP controller connects to the server, discovers its tools, and creates a `Tool` per function. It needs a token to do that discovery — use a service/registration token here (any valid GitHub token works):
+
+```bash
+# Registration token, used only for tool discovery.
+kubectl create secret generic github-registration-token \
+  --from-literal=token="Bearer $(gh auth token)"
+```
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: github
+spec:
+  address:
+    value: "https://api.githubcopilot.com/mcp/"
+  transport: http
+  timeout: "30s"
+  description: "Remote GitHub MCP server"
+  headers:
+    - name: Authorization
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: github-registration-token
+            key: token
+    - name: User-Agent
+      value:
+        value: "ark-tutorial/1.0"
+```
+
+Apply it and wait for discovery:
+
+```bash
+kubectl apply -f github-mcp.yaml
+kubectl get mcpserver github -o jsonpath='{.status.conditions[?(@.type=="Available")].message}'
+# Successfully discovered 44 tools
+```
+
+The discovered tools are labelled with the server name (`mcp/server: github`):
+
+```bash
+kubectl get tools -l mcp/server=github
+# github-get-me, github-get-file-contents, github-search-repositories, ...
+```
+
+## Step 2 — Create an agent that uses a GitHub tool
+
+`github-get-me` returns the authenticated user — handy because the answer reveals *which* token authorised the call.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: github-agent
+spec:
+  prompt: |
+    You answer questions about the user's GitHub account. Use the
+    github-get-me tool to find the authenticated user, then state their login.
+  tools:
+    - type: mcp
+      name: github-get-me
+```
+
+```bash
+kubectl apply -f github-agent.yaml
+```
+
+## Step 3 — Each user stores their own token
+
+Give each user a Secret holding their personal token (value formatted as a bearer token):
+
+```bash
+kubectl create secret generic alice-github-token \
+  --from-literal=token="Bearer ghp_alice_personal_access_token"
+```
+
+## Step 4 — Query as the user
+
+The query overrides the GitHub MCP server's `Authorization` header with the user's token, sourced from their Secret:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: who-am-i
+spec:
+  input: "Who am I on GitHub? Reply with just my login."
+  target:
+    type: agent
+    name: github-agent
+  overrides:
+    - resourceType: mcpserver
+      headers:
+        - name: Authorization
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: alice-github-token
+                key: token
+```
+
+```bash
+kubectl apply -f who-am-i.yaml
+kubectl get query who-am-i -o jsonpath='{.status.response.content}'
+# alice
+```
+
+The `github-get-me` call ran with Alice's token, so GitHub returned Alice's login. Swap the referenced Secret (or run from a different user's namespace) and the same agent answers as that user — without re-registering the server.
+
+## Alternative — pass the token at request time
+
+If you don't want a per-user Secret, the override header can read from a **query parameter**, so the token is supplied with the request:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: who-am-i-param
+spec:
+  input: "Who am I on GitHub?"
+  parameters:
+    - name: githubToken
+      value: "Bearer ghp_alice_personal_access_token"
+  target:
+    type: agent
+    name: github-agent
+  overrides:
+    - resourceType: mcpserver
+      headers:
+        - name: Authorization
+          value:
+            valueFrom:
+              queryParameterRef:
+                name: githubToken
+```
+
+<Callout type="warning">
+Whichever source you use, the token authorises real API calls — treat it like a credential. Prefer Secrets over inline `value`, and never put a token in an agent prompt or a Query `input` (it would become part of the model context). The `valueFrom.secretKeyRef` / `queryParameterRef` paths keep it out of the prompt.
+</Callout>
+
+## Via the ark API
+
+The same override works through the [ark API](/reference/ark-apis) — `POST /v1/queries` accepts an `overrides` array that maps straight onto the `Query` spec. This is the path a front-end or service would use to run a query as the signed-in user:
+
+```bash
+curl -X POST "http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries?namespace=default" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "who-am-i",
+    "input": "Who am I on GitHub? Reply with just my login.",
+    "target": { "type": "agent", "name": "github-agent" },
+    "overrides": [
+      {
+        "resourceType": "mcpserver",
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": { "valueFrom": { "secretKeyRef": { "name": "alice-github-token", "key": "token" } } }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+The override block is identical to the `Query` YAML — `resourceType: mcpserver`, header value from a `secretKeyRef` (or `queryParameterRef`, or an inline `value`). Read the result back with `GET /v1/queries/who-am-i?namespace=default` and check `status.response.content`.
+
+## Verify it's the override doing the work
+
+A quick way to prove the per-query token is what authorises the call: send a query whose override carries a **bad** token. The GitHub MCP connection fails, and the query ends in `error` — even though the server's registration token is valid:
+
+```yaml
+spec:
+  input: "Who am I on GitHub?"
+  target:
+    type: agent
+    name: github-agent
+  overrides:
+    - resourceType: mcpserver
+      headers:
+        - name: Authorization
+          value:
+            value: "Bearer ghp_not_a_real_token"
+```
+
+```bash
+kubectl get query <name> -o jsonpath='{.status.phase}'              # error
+kubectl get query <name> -o jsonpath='{.status.response.content}'   # MCP client creation failed
+```
+
+Replace it with a valid token and the same query succeeds — confirming the override header is what reaches GitHub.
+
+## Where to set the override
+
+- **On the Query** (shown above) — per request, per user. The most common choice for user-authorised access.
+- **On the Agent** (`Agent.spec.overrides`) — every query through that agent uses the same token. Useful for a dedicated service agent, less so for per-user auth.
+
+Query overrides win over agent overrides, which win over the server's `spec.headers`.
+
+## Related
+
+- [Overrides](/user-guide/overrides) — full override schema, label selectors, and value sources.
+- [Tools and MCP servers](/user-guide/tools) — registering MCP servers and how their tools are created.
+- [Run queries / chat with agents and teams](/user-guide/queries) — query parameters and execution.

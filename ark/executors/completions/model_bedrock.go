@@ -60,3 +60,29 @@ func resolveOptionalValue(ctx context.Context, resolver *common.ValueSourceResol
 	value, _ := resolver.ResolveValueSource(ctx, *valueSource, namespace)
 	return value
 }
+
+func resolveProperties(ctx context.Context, resolver *common.ValueSourceResolver, properties map[string]arkv1alpha1.ValueSource, namespace, providerName string) (map[string]string, error) {
+	if properties == nil {
+		return nil, nil
+	}
+	result := make(map[string]string)
+	for key, valueSource := range properties {
+		value, err := resolver.ResolveValueSource(ctx, valueSource, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve %s property %s: %w", providerName, key, err)
+		}
+		result[key] = value
+	}
+	return result, nil
+}
+
+func resolveHeadersAndMerge(ctx context.Context, resolver *common.ValueSourceResolver, headers []arkv1alpha1.Header, namespace string, additionalHeaders map[string]string) (map[string]string, error) {
+	resolved, err := resolveModelHeaders(ctx, resolver.Client, headers, namespace)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range additionalHeaders {
+		resolved[k] = v
+	}
+	return resolved, nil
+}

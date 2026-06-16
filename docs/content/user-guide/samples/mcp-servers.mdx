@@ -158,17 +158,10 @@ The Filesystem MCP Server provides persistent file operations with annotation-dr
 
 ### Deploying the Filesystem MCP Server
 
-Deploy using the provided Helm chart:
+Install from the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace):
 
 ```bash
-# From the repository root
-cd mcp/filesystem-mcp
-
-# Build the Docker image
-make build
-
-# Deploy with Helm
-make install
+ark install marketplace/mcps/filesystem-mcp-server
 
 # Verify deployment
 kubectl get pods -l app.kubernetes.io/name=mcp-filesystem

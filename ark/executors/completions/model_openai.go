@@ -23,35 +23,23 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 		return fmt.Errorf("failed to resolve OpenAI apiKey: %w", err)
 	}
 
-	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, namespace)
+	headers, err := resolveHeadersAndMerge(ctx, resolver, config.Headers, namespace, additionalHeaders)
 	if err != nil {
 		return err
 	}
 
-	for k, v := range additionalHeaders {
-		headers[k] = v
+	properties, err := resolveProperties(ctx, resolver, config.Properties, namespace, "OpenAI")
+	if err != nil {
+		return err
 	}
 
-	var properties map[string]string
-	if config.Properties != nil {
-		properties = make(map[string]string)
-		for key, valueSource := range config.Properties {
-			value, err := resolver.ResolveValueSource(ctx, valueSource, namespace)
-			if err != nil {
-				return fmt.Errorf("failed to resolve OpenAI property %s: %w", key, err)
-			}
-			properties[key] = value
-		}
-	}
-
-	openaiProvider := &OpenAIProvider{
+	model.Provider = &OpenAIProvider{
 		Model:      model.Model,
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
 		Headers:    headers,
 		Properties: properties,
 	}
-	model.Provider = openaiProvider
 	model.Properties = properties
 
 	return nil

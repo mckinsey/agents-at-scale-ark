@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: agent-a
+spec:
+  prompt: |
+    You are Agent A. Process information and provide results.
+    Start your response with "AGENT-A:" to identify your contribution.
+  modelRef:
+    name: test-model

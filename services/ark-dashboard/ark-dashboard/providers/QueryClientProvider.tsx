@@ -12,7 +12,13 @@ export function QueryClientProvider({ children }: PropsWithChildren) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { refetchOnWindowFocus: false } },
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            refetchOnMount: 'always',
+            staleTime: 0,
+          },
+        },
         // Disable all window switch application switch refetch
       }),
   );

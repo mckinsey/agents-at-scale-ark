@@ -1,5 +1,6 @@
 import pytest
 from helpers.file_gateway_helper import FileGatewayHelper
+from helpers.mcp_servers_helper import McpServersHelper
 
 
 @pytest.fixture(scope="session")
@@ -143,13 +144,6 @@ def test_mcp_server_registered(helper):
     """Test MCP server is registered with ARK"""
     success, tool_count = helper.verify_mcp_server_registered()
     assert success, "MCP server not registered"
-    assert tool_count > 0, "MCP server has no tools"
-
-
-def test_mcp_server_tool_count(helper):
-    """Test MCP server has expected number of tools"""
-    success, tool_count = helper.verify_mcp_server_registered()
-    assert success, "MCP server not registered"
     assert tool_count >= 10, f"MCP server has {tool_count} tools, expected at least 10"
 
 
@@ -190,12 +184,16 @@ def test_file_list(helper):
     assert success, "File listing failed"
     # Use the actual uploaded key
     uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
+    if not uploaded_key:
+        pytest.fail("File was not uploaded, skipping list check")
     assert uploaded_key in file_list, f"Uploaded file {uploaded_key} not found in listing"
 
 
 def test_file_download(helper):
     """Test file download functionality"""
     uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
+    if not uploaded_key:
+        pytest.fail("File was not uploaded, skipping download")
     success, content = helper.download_file(uploaded_key)
     assert success, "File download failed"
     assert len(content) > 0, "Downloaded file is empty"
@@ -223,13 +221,10 @@ def test_file_content_integrity(helper):
 def test_file_delete(helper):
     """Test file deletion functionality"""
     uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
+    if not uploaded_key:
+        pytest.fail("File was not uploaded, skipping delete")
     success = helper.delete_file(uploaded_key)
     assert success, "File deletion failed"
-
-
-def test_file_deleted_verification(helper):
-    """Test file is actually deleted after delete operation"""
-    uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
     _, file_list = helper.list_files()
     assert uploaded_key not in file_list, "File still exists after deletion"
 
@@ -321,6 +316,26 @@ def test_file_api_image_repository(helper):
     pod_names = helper.get_pod_names()
     file_api_pods = [p for p in pod_names if 'file-api' in p]
     assert len(file_api_pods) > 0, "file-api pod not found"
-    
+
     image = helper.get_pod_image(file_api_pods[0])
     assert "ghcr.io/mckinsey" in image or "file-api" in image, f"file-api image repository unexpected: {image}"
+
+
+def test_file_gateway_mcp_server(helper):
+    """Test File Gateway MCP server is available with tools"""
+    mcp_helper = McpServersHelper()
+    server_name = "file-gateway"
+
+    success, server_data = mcp_helper.get_mcp_server(server_name)
+    assert success, f"Failed to get MCP server {server_name}"
+
+    status = server_data.get("status", {})
+    tool_count = status.get("toolCount", 0)
+    assert tool_count > 0, f"File Gateway should have tools, found {tool_count}"
+
+    conditions = status.get("conditions", [])
+    available = any(
+        c.get("type") == "Available" and c.get("status") == "True"
+        for c in conditions
+    )
+    assert available, "File Gateway MCP server should be Available"

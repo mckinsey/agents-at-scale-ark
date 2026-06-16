@@ -10,6 +10,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(() => '/'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -132,7 +133,7 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('ARK Dashboard')).toBeInTheDocument();
+      expect(screen.getByText('Ark Dashboard')).toBeInTheDocument();
     });
   });
 });

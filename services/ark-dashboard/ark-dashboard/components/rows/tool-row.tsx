@@ -1,7 +1,6 @@
 'use client';
 
 import { ChevronRight, MessageCircle, Trash2, Wrench } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -13,9 +12,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Tool } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 type ToolRowProps = {
   readonly tool: Tool;
@@ -28,7 +29,7 @@ type ToolRowProps = {
 
 export function ToolRow(props: ToolRowProps) {
   const { tool, onInfo, onDelete, inUse, inUseReason } = props;
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get custom icon or default Wrench icon
@@ -45,8 +46,10 @@ export function ToolRow(props: ToolRowProps) {
   };
 
   const handleQueryTool = () => {
-    router.push(`/query/new?target_tool=${tool.name}`);
+    push(`/query/new?target_tool=${tool.name}`);
   };
+
+  const originIcon = getOriginIcon(tool.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
 
   return (
     <>
@@ -54,8 +57,10 @@ export function ToolRow(props: ToolRowProps) {
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={tool.name}>
-              {tool.name}
+            <p
+              className="flex items-center gap-x-1.5 truncate text-sm font-medium"
+              title={tool.name}>
+              {tool.name} <span>{originIcon}</span>
             </p>
             <p
               className="text-muted-foreground truncate text-xs"

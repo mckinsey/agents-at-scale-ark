@@ -1,11 +1,11 @@
 'use client';
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import Link from 'next/link';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { ModelCard } from '@/components/cards';
 import { ModelRow } from '@/components/rows/model-row';
 import { Button } from '@/components/ui/button';
@@ -73,7 +73,6 @@ export const ModelsSection = function ModelsSection({
       toast.success('Model Deleted', {
         description: `Successfully deleted ${model.name}`,
       });
-      // Reload data
       const updatedModels = await modelsService.getAll();
       setModels(updatedModels);
     } catch (error) {
@@ -115,12 +114,12 @@ export const ModelsSection = function ModelsSection({
                 Add Model
               </Button>
             ) : (
-              <Link href="/models/new">
+              <NamespacedLink href="/models/new">
                 <Button>
                   <Plus className="h-4 w-4" />
                   Add Model
                 </Button>
-              </Link>
+              </NamespacedLink>
             )}
           </EmptyContent>
           <Button

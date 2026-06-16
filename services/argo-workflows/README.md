@@ -32,6 +32,14 @@ helm upgrade --install argo-workflows ./chart -n argo-workflows --create-namespa
 
 ## Local Development
 
+From the root of the repo, enable Argo with the `ENABLE_ARGO` env var:
+
+```bash
+ENABLE_ARGO=true devspace dev
+```
+
+Or deploy standalone:
+
 ```bash
 devspace deploy -n argo-workflows
 devspace dev -n argo-workflows  # Port-forward to http://localhost:2746
@@ -40,4 +48,4 @@ devspace purge -n argo-workflows
 
 DevSpace will prompt whether to enable Minio artifact storage. If enabled, it automatically installs the Minio Operator and tenant.
 
-See [documentation](../../docs/content/developer-guide/workflows/argo-workflows.mdx) for full details.
+See [documentation](../../docs/content/developer-guide/workflows/index.mdx) for full details.

@@ -1,9 +1,9 @@
 import { AlertCircle } from 'lucide-react';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { useMemo, useEffect } from 'react';
 import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
 import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
@@ -11,7 +11,8 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
-import type { ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
+import type { TokenUsage } from '@/atoms/chat-history';
+import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
 
 interface ChatMessageListProps {
   messages: ExtendedChatMessage[];
@@ -21,32 +22,16 @@ interface ChatMessageListProps {
   graphEdges?: GraphEdge[];
   debugMode: boolean;
   isProcessing: boolean;
+  processingPhase?: string;
+
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  messageTokenUsage?: Record<number, TokenUsage>;
 }
 
-function extractMessageContent(msg: ChatCompletionMessageParam): string {
-  if (typeof msg.content === 'string') {
-    return msg.content;
-  }
-  if (Array.isArray(msg.content)) {
-    return msg.content
-      .filter(
-        part =>
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          part.type === 'text',
-      )
-      .map(part =>
-        typeof part === 'object' && part !== null && 'text' in part
-          ? part.text
-          : '',
-      )
-      .join('\n');
-  }
-  return '';
+function extractMessageContent(msg: ChatMessageType): string {
+  return msg.content ?? '';
 }
 
 type ToolCall = {
@@ -65,10 +50,10 @@ function findToolCallResults(
       .slice(currentIndex + 1)
       .find(
         m =>
-          (m as ChatCompletionMessageParam).role === 'tool' &&
+          (m as ChatMessageType).role === 'tool' &&
           'tool_call_id' in m &&
           (m as { tool_call_id: string }).tool_call_id === toolCall.id,
-      ) as ChatCompletionMessageParam | undefined;
+      ) as ChatMessageType | undefined;
 
     return {
       ...toolCall,
@@ -111,7 +96,7 @@ function extractTerminateInfo(
 }
 
 function determineMessageFlags(
-  msg: ChatCompletionMessageParam,
+  msg: ChatMessageType,
   content: string,
   toolCallsWithResults: ToolCallWithResult[] | undefined,
   terminateToolCall: unknown,
@@ -121,18 +106,22 @@ function determineMessageFlags(
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
     msg.role === 'system' && content.includes('Selector returned invalid agent name');
+  const isConversationStoppedMessage =
+    msg.role === 'system' && content === 'Conversation stopped by user';
   const hasToolCalls =
     debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
   const hasContent =
     !!content &&
     content.trim().length > 0 &&
     !isMaxTurnsMessage &&
-    !isSelectorFailureMessage;
+    !isSelectorFailureMessage &&
+    !isConversationStoppedMessage;
   const hasTermination = terminateToolCall !== undefined;
 
   return {
     isMaxTurnsMessage,
     isSelectorFailureMessage,
+    isConversationStoppedMessage,
     hasToolCalls,
     hasContent,
     hasTermination,
@@ -147,9 +136,12 @@ export function ChatMessageList({
   graphEdges,
   debugMode,
   isProcessing,
+  processingPhase,
+
   error,
   viewMode = 'markdown',
   messagesEndRef,
+  messageTokenUsage,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -172,7 +164,7 @@ export function ChatMessageList({
     const result: Array<{
       message: ExtendedChatMessage;
       index: number;
-      msg: ChatCompletionMessageParam;
+      msg: ChatMessageType;
       content: string;
       senderName: string | undefined;
       toolCallsWithResults:
@@ -187,13 +179,14 @@ export function ChatMessageList({
       terminateMessage: string | undefined;
       isMaxTurnsMessage: boolean;
       isSelectorFailureMessage: boolean;
+      isConversationStoppedMessage: boolean;
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
     }> = [];
 
     messages.forEach((message, index) => {
-      const msg = message as ChatCompletionMessageParam;
+      const msg = message as ChatMessageType;
       if (msg.role === 'tool') return;
 
       const content = extractMessageContent(msg);
@@ -209,6 +202,7 @@ export function ChatMessageList({
       const {
         isMaxTurnsMessage,
         isSelectorFailureMessage,
+        isConversationStoppedMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
@@ -219,7 +213,8 @@ export function ChatMessageList({
         !hasContent &&
         !hasTermination &&
         !isMaxTurnsMessage &&
-        !isSelectorFailureMessage
+        !isSelectorFailureMessage &&
+        !isConversationStoppedMessage
       ) {
         return;
       }
@@ -242,6 +237,7 @@ export function ChatMessageList({
         terminateMessage,
         isMaxTurnsMessage,
         isSelectorFailureMessage,
+        isConversationStoppedMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
@@ -330,7 +326,8 @@ export function ChatMessageList({
         if (
           isSelectorStrategy &&
           pm.msg.role === 'assistant' &&
-          pm.senderName
+          pm.senderName &&
+          !pm.hasTermination
         ) {
           transitionElement = (
             <SelectorTransition
@@ -372,6 +369,7 @@ export function ChatMessageList({
                 sender={pm.senderName}
                 status={pm.message.metadata?.status}
                 queryName={pm.message.metadata?.queryName}
+                tokenUsage={messageTokenUsage?.[pm.index]}
               />
             )}
             {pm.hasTermination && (
@@ -400,6 +398,7 @@ export function ChatMessageList({
             {pm.isSelectorFailureMessage && (
               <SelectorFailureEvent message={pm.content} />
             )}
+            {pm.isConversationStoppedMessage && <ConversationStoppedEvent />}
           </div>
         );
       })}
@@ -409,14 +408,21 @@ export function ChatMessageList({
       {isProcessing && (
         <div className="flex justify-start">
           <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
-            <div className="flex space-x-1">
-              <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
-              <div
-                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                style={{ animationDelay: '0.1s' }}></div>
-              <div
-                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                style={{ animationDelay: '0.2s' }}></div>
+            <div className="flex items-center gap-2">
+              <div className="flex space-x-1">
+                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+                <div
+                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  style={{ animationDelay: '0.1s' }}></div>
+                <div
+                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              {processingPhase === 'provisioning' && (
+                <span className="text-xs text-foreground">
+                  Preparing new workspace...
+                </span>
+              )}
             </div>
           </div>
         </div>

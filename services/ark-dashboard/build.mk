@@ -43,7 +43,7 @@ $(eval $(call CLEAN_STAMPS_TEMPLATE,$(ARK_DASHBOARD_SERVICE_NAME)))
 # Prerequisites:
 # 1. ARK API tests must complete successfully (generates fresh openapi.json)
 # 2. The actual openapi.json file must exist
-$(DASHBOARD_OPENAPI): $(ARK_API_STAMP_TEST) $(ARK_API_OPENAPI) | $(OUT)
+$(DASHBOARD_OPENAPI): $$(ARK_API_STAMP_TEST) $(ARK_API_OPENAPI) | $(OUT)
 	@mkdir -p $(ARK_DASHBOARD_SERVICE_DIR)/out
 	@mkdir -p $(dir $@)
 	cp $(ARK_API_OPENAPI) $(ARK_DASHBOARD_SERVICE_DIR)/out/openapi.json

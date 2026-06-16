@@ -6,7 +6,9 @@ import (
 	"github.com/openai/openai-go"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/telemetry"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 type mockTeamMember struct {
@@ -30,32 +32,89 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
-func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	return &ExecutionResult{}, nil
 }
 
 type mockSelectorAgent struct {
-	returnName  string
-	returnEmpty bool
+	returnName              string
+	returnEmpty             bool
+	returnTerminateResponse string
+	returnError             error
+	capturedHistory         []Message
+	capturedOptions         ExecuteOptions
+	executeCalls            int
+	tools                   *ToolRegistry
 }
 
 func newMockSelectorAgent() *mockSelectorAgent {
-	return &mockSelectorAgent{returnName: "selected"}
+	return &mockSelectorAgent{
+		returnName: "selected",
+		tools:      NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 }
 
-func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockSelectorAgent) Execute(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
+	m.capturedHistory = history
+	m.capturedOptions = opts
+	m.executeCalls++
+	if m.returnError != nil {
+		return nil, m.returnError
+	}
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
+	}
+	if m.returnTerminateResponse != "" {
+		assistantMsg := Message(openai.ChatCompletionMessageParamUnion{
+			OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+				Name: openai.String("mock-selector"),
+				ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+					{
+						ID: "tool-call-id",
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      "terminate",
+							Arguments: `{"response":"` + m.returnTerminateResponse + `"}`,
+						},
+					},
+				},
+			},
+		})
+		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
+		return &ExecutionResult{
+			Messages: []Message{assistantMsg, toolMsg},
+			Signal:   &TerminateSignal{},
+		}, nil
 	}
 	return &ExecutionResult{
 		Messages: []Message{
 			NewAssistantMessage(m.returnName),
 		},
+		Signal: &SelectionMadeSignal{SelectedName: m.returnName},
 	}, nil
 }
 
 func (m *mockSelectorAgent) FullName() string {
 	return "mock-selector"
+}
+
+func (m *mockSelectorAgent) GetToolRegistry() *ToolRegistry {
+	return m.tools
+}
+
+type mockSelectorAgentNoTool struct {
+	tools *ToolRegistry
+}
+
+func (m *mockSelectorAgentNoTool) Execute(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+	return &ExecutionResult{Messages: []Message{NewAssistantMessage("I pick researcher")}}, nil
+}
+
+func (m *mockSelectorAgentNoTool) FullName() string {
+	return "mock-selector-no-tool"
+}
+
+func (m *mockSelectorAgentNoTool) GetToolRegistry() *ToolRegistry {
+	return m.tools
 }
 
 type mockTelemetrySpan struct {
@@ -152,6 +211,11 @@ func (m *mockEventingRecorder) Start(ctx context.Context, operation, message str
 
 func (m *mockEventingRecorder) Complete(ctx context.Context, operation, message string, data map[string]string) {
 	m.completeCalled = true
+	m.lastOperation = operation
+	m.lastMessage = message
+}
+
+func (m *mockEventingRecorder) Cancel(ctx context.Context, operation, message string, data map[string]string) {
 	m.lastOperation = operation
 	m.lastMessage = message
 }

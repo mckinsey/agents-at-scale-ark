@@ -32,9 +32,6 @@ Comprehensive test of admission controller validation by attempting to create in
 - Deprecated format usage (spec.targets instead of spec.members)
 - Team self-reference (circular dependency)
 - Invalid member types (only agent/team allowed)
-- Graph strategy missing configuration
-- Graph strategy with no edges
-- Graph edges referencing non-existent members
 
 ### Tool Validation
 - Missing required type field

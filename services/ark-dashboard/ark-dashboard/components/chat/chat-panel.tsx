@@ -1,6 +1,6 @@
 'use client';
 
-import { RotateCcw, Send } from 'lucide-react';
+import { RotateCcw, Send, Square } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
@@ -8,6 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
 import type { GraphEdge } from '@/lib/types/chat-message';
@@ -34,10 +40,14 @@ export function ChatPanel({
   const {
     messages,
     isProcessing,
+    processingPhase,
     error,
     sendMessage,
     clearChat,
     messagesEndRef,
+    tokenUsage,
+    messageTokenUsage,
+    cancelQuery,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -82,9 +92,12 @@ export function ChatPanel({
             graphEdges={graphEdges}
             debugMode={debugMode}
             isProcessing={isProcessing}
+            processingPhase={processingPhase}
+
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
+            messageTokenUsage={messageTokenUsage}
           />
         </div>
       </div>
@@ -103,14 +116,24 @@ export function ChatPanel({
               disabled={isProcessing}
             />
           </div>
-          <Button
-            onClick={handleSendMessage}
-            disabled={!currentMessage.trim() || isProcessing}
-            size="sm"
-            variant="default"
-            aria-label="Send message">
-            <Send className="h-4 w-4" />
-          </Button>
+          {isProcessing ?
+            <Button
+              onClick={cancelQuery}
+              size="sm"
+              variant="destructive"
+              aria-label="Stop conversation"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+            : <Button
+              onClick={handleSendMessage}
+              disabled={!currentMessage.trim()}
+              size="sm"
+              variant="default"
+              aria-label="Send message">
+              <Send className="h-4 w-4" />
+            </Button>
+          }
         </div>
 
         <Separator />
@@ -137,6 +160,35 @@ export function ChatPanel({
               className="text-muted-foreground cursor-pointer text-sm">
               Show tool calls
             </label>
+            {tokenUsage && tokenUsage.total_tokens > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="text-muted-foreground ml-2 flex items-center gap-1 text-xs">
+                      <span className="font-mono">
+                        {tokenUsage.total_tokens.toLocaleString()} tokens
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1 text-xs">
+                      <div>
+                        Prompt:{' '}
+                        {tokenUsage.prompt_tokens.toLocaleString()}
+                      </div>
+                      <div>
+                        Completion:{' '}
+                        {tokenUsage.completion_tokens.toLocaleString()}
+                      </div>
+                      <div className="border-t pt-1 font-medium">
+                        Total:{' '}
+                        {tokenUsage.total_tokens.toLocaleString()}
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <Button
               variant="ghost"
               size="sm"

@@ -15,4 +15,3 @@ spec:
     - name: creator
       type: agent
   strategy: sequential
-  maxTurns: 3

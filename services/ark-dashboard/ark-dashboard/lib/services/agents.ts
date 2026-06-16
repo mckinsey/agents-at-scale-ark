@@ -173,4 +173,10 @@ export const agentsService = {
     const name = String(id);
     return agentsService.delete(name);
   },
+
+  async getRawResource(name: string): Promise<Record<string, unknown>> {
+    return apiClient.get<Record<string, unknown>>(
+      `/api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/${name}`,
+    );
+  },
 };

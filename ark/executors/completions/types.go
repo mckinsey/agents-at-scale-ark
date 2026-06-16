@@ -33,7 +33,7 @@ func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content
 }
 
 type TeamMember interface {
-	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
+	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	GetName() string
 	GetType() string
 	GetDescription() string
@@ -91,4 +91,55 @@ func NewTerminateTeamWithReason(reason string) error {
 	return &TerminateTeamWithReason{
 		Reason: reason,
 	}
+}
+
+// TerminateTeamWithResponse wraps TerminateTeam with a user-facing response message
+// from the terminate tool's response parameter.
+type TerminateTeamWithResponse struct {
+	Response string
+	Messages []Message
+	base     TerminateTeam
+}
+
+func (e *TerminateTeamWithResponse) Error() string {
+	return terminateTeamMessage
+}
+
+func (e *TerminateTeamWithResponse) Unwrap() error {
+	return &e.base
+}
+
+type ToolNotCalledError struct{}
+
+func (e *ToolNotCalledError) Error() string {
+	return "selector agent did not use the select-next-speaker tool"
+}
+
+type SelectionMade struct {
+	SelectedName string
+}
+
+func (e *SelectionMade) Error() string {
+	return fmt.Sprintf("selection made: %s", e.SelectedName)
+}
+
+func IsSelectionMade(err error) bool {
+	if err == nil {
+		return false
+	}
+	var selectionErr *SelectionMade
+	return errors.As(err, &selectionErr)
+}
+
+type ToolChoice string
+
+const (
+	ToolChoiceUnset    ToolChoice = ""
+	ToolChoiceAuto     ToolChoice = "auto"
+	ToolChoiceRequired ToolChoice = "required"
+	ToolChoiceNone     ToolChoice = "none"
+)
+
+type ExecuteOptions struct {
+	ToolChoice ToolChoice
 }

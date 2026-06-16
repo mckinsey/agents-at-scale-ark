@@ -311,7 +311,7 @@ func NewEventStreamForQuery(ctx context.Context, k8sClient client.Client, namesp
 		baseURL:   baseURL,
 		sessionId: sessionId,
 		queryName: queryName,
-		client:    common.NewHTTPClientWithoutTracing(),
+		client:    common.NewHTTPClientForStreaming(),
 	}, nil
 }
 

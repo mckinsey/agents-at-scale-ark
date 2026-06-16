@@ -7,4 +7,4 @@ spec:
     You are a data analysis expert who examines research findings.
     Provide analytical insights based on research data. Keep responses brief.
   modelRef:
-    name: test-model
+    name: test-model-mock

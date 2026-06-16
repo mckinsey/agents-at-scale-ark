@@ -3,3 +3,4 @@ export { StrategySection } from './strategy-section';
 export { MembersSection } from './members-section';
 export { SelectorSection } from './selector-section';
 export { GraphSection } from './graph-section';
+export { WarningsSection } from './warnings-section';

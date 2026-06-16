@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: team-without-turns
+spec:
+  strategy: round-robin
+  members:
+    - type: agent
+      name: agent-a
+    - type: agent
+      name: agent-b

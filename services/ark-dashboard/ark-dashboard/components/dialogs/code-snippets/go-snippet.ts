@@ -13,28 +13,15 @@ import (
 
 func main() {
 	payload := map[string]interface{}{
-		// Required: The agent to use (format: "agent/<name>")
-		"model": "agent/${selectedAgent}",
-
-		// Required: List of messages in the conversation
-		"messages": []map[string]string{
-			{"role": "system", "content": "You are a helpful assistant."},
-			{"role": "user", "content": "Hello, how can you help me?"},
+		"name":  "my-query",
+		"type":  "user",
+		"input": "Hello, how can you help me?",
+		"target": map[string]string{
+			"type": "agent",
+			"name": "${selectedAgent}",
 		},
-
-		// Optional: Enable streaming responses (default: false)
-		"stream": false,
-
-		// Optional: Sampling temperature 0-2, higher = more random (default: 1)
-		"temperature": 1.0,
-
-		// Optional: Maximum tokens to generate (default: model-dependent)
-		"max_tokens": 1024,
-
-		// Optional: Custom metadata to pass to the agent
-		"metadata": map[string]string{
-			"sessionId": "my-session-id",
-		},
+		// Optional: Continue a conversation
+		// "conversationId": "previous-conversation-id",
 	}
 
 	body, _ := json.Marshal(payload)

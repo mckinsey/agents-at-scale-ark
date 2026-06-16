@@ -4,6 +4,7 @@ import { AlertTriangle, ChevronRight, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { ComponentProps } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -35,7 +36,7 @@ export function MetricCard({
   hasError,
 }: Props) {
   return (
-    <Link href={href}>
+    <NamespacedLink href={href}>
       <Card
         className={cn(
           'group hover:border-primary/50 hover:shadow-primary/10 cursor-pointer transition-all duration-200 hover:shadow-lg',
@@ -91,6 +92,6 @@ export function MetricCard({
           </div>
         </CardContent>
       </Card>
-    </Link>
+    </NamespacedLink>
   );
 }

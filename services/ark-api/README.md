@@ -164,6 +164,24 @@ AUTH_MODE=hybrid
 AUTH_MODE=open
 ```
 
+## MCP Authorization Endpoints
+
+The four `/api/v1/mcp-servers/{name}/auth/*` endpoints (and the
+`/v1/mcp/auth/callback` redirect target) drive interactive OAuth 2.1
+flows for MCP servers whose `status.authorization` advertises an authorization
+server.
+
+| Env var | Default | Description |
+|---|---|---|
+| `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL that the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four auth endpoints return `503`. |
+| `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries. After this window the cache reaps the entry; in-flight callbacks will fail with "unknown state". |
+| `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
+| `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
+
+Air-gapped clusters can run the flow through `kubectl port-forward` by
+setting `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/v1/mcp/auth/callback`
+and forwarding the ark-api Service on that port.
+
 ## Usage
 
 For detailed usage examples including API key authentication, JWT authentication, and code examples in multiple languages, see the [Authentication Guide](../../docs/content/developer-guide/authentication.mdx).

@@ -61,7 +61,7 @@ export function AgentsAPIDialog({
   const [activeTab, setActiveTab] = useState('python');
   const [isInternalEndpoint, setIsInternalEndpoint] = useState(false);
 
-  const apiPath = '/api/openai/v1/chat/completions';
+  const apiPath = '/api/v1/queries/';
   const externalBaseUrl =
     typeof window !== 'undefined' ? window.location.origin : '';
   const internalBaseUrl = 'http://ark-api.<namespace>.svc.cluster.local';
@@ -96,8 +96,7 @@ export function AgentsAPIDialog({
         <DialogHeader>
           <DialogTitle>API Access</DialogTitle>
           <DialogDescription>
-            Use the OpenAI-compatible API to chat with your agents from external
-            systems.
+            Use the Query API to chat with your agents from external systems.
           </DialogDescription>
         </DialogHeader>
 

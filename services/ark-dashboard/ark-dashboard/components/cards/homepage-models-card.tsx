@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useGetAllModels } from '@/lib/services/models-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { MetricCard } from './metric-card';
 

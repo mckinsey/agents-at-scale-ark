@@ -1,13 +1,14 @@
 'use client';
 
 import { ChevronRight, MessageCircle, Trash2, Wrench } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Tool } from '@/lib/services/tools';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
@@ -26,7 +27,7 @@ export function ToolCard({
   deleteDisabled,
   deleteDisabledReason,
 }: ToolCardProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const actions: BaseCardAction[] = [];
 
@@ -60,14 +61,21 @@ export function ToolCard({
   actions.push({
     icon: MessageCircle,
     label: 'Query tool',
-    onClick: () => router.push(`/query/new?target_tool=${tool.name}`),
+    onClick: () => push(`/query/new?target_tool=${tool.name}`),
   });
+
+  const originIcon = getOriginIcon(tool.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
 
   return (
     <>
       <BaseCard
         title={tool.name || tool.type || 'Unnamed Tool'}
-        description={tool.type || 'Tool'}
+        description={
+          <div className="flex items-center gap-x-1.5">
+            <p className="">{tool.type || 'Tool'}</p>
+            {originIcon}
+          </div>
+        }
         icon={<IconComponent className="h-5 w-5" />}
         iconClassName="text-muted-foreground"
         actions={actions}>

@@ -20,6 +20,7 @@ vi.mock('next/navigation', () => ({
     prefetch: vi.fn(),
   }),
   usePathname: () => '/',
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 // Mock scrollIntoView
@@ -29,8 +30,11 @@ Element.prototype.scrollIntoView = vi.fn();
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
+    startStreamChatResponse: vi.fn(),
+    streamQueryStatus: vi.fn().mockResolvedValue(() => {}),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
+    getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
   },
 }));
 
@@ -80,6 +84,18 @@ describe('FloatingChat', () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     localStorage.clear();
+
+    vi.mocked(chatService.submitChatQuery).mockResolvedValue({
+      name: 'test-query',
+    } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+
+    vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+      async (...args: unknown[]) => ({
+        queryName: 'test-query',
+        chunks: (chatService.streamChatResponse as (...a: unknown[]) => AsyncGenerator<Record<string, unknown>>)(...args),
+      }),
+    );
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});
   });
 
   describe('streaming enabled', () => {
@@ -770,13 +786,13 @@ describe('FloatingChat', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      // Should call submitChatQuery with timeout parameter
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-          expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
+          'Test message',
           'agent',
           'Test Agent',
           expect.any(String),
+          undefined, // conversationId
           undefined, // enableStreaming
           '5m', // timeout
         );
@@ -900,10 +916,11 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-          expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
+          'Test message',
           'agent',
           'Test Agent',
           expect.any(String),
+          undefined,
           undefined,
           '5m',
         );

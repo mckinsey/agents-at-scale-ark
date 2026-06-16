@@ -1,0 +1,27 @@
+{{- if .Values.rbac.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: mcpserver-editor-role
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - mcpservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - mcpservers/status
+  verbs:
+  - get
+{{- end -}}

@@ -1,20 +1,5 @@
 import {vi, type Mock} from 'vitest';
 
-const mockOpenAI = {
-  models: {
-    list: vi.fn(),
-  },
-  chat: {
-    completions: {
-      create: vi.fn(),
-    },
-  },
-};
-
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => mockOpenAI),
-}));
-
 const mockFetch = vi.fn() as Mock;
 global.fetch = mockFetch;
 
@@ -35,47 +20,44 @@ describe('ArkApiClient', () => {
   });
 
   describe('getQueryTargets', () => {
-    it('returns query targets from models list', async () => {
-      mockOpenAI.models.list.mockResolvedValue({
-        data: [
-          {id: 'agent/test-agent'},
-          {id: 'model/test-model'},
-        ],
+    it('returns query targets from resource endpoints', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/v1/agents')) {
+          return {ok: true, json: async () => ({items: [{name: 'test-agent'}]})};
+        }
+        if (url.includes('/v1/models')) {
+          return {ok: true, json: async () => ({items: [{name: 'test-model'}]})};
+        }
+        return {ok: true, json: async () => ({items: []})};
       });
 
       const targets = await client.getQueryTargets();
 
-      expect(targets).toEqual([
-        {id: 'agent/test-agent', name: 'test-agent', type: 'agent', description: 'agent/test-agent'},
-        {id: 'model/test-model', name: 'test-model', type: 'model', description: 'model/test-model'},
-      ]);
+      expect(targets).toContainEqual({
+        id: 'agent/test-agent',
+        name: 'test-agent',
+        type: 'agent',
+        description: 'test-agent',
+      });
+      expect(targets).toContainEqual({
+        id: 'model/test-model',
+        name: 'test-model',
+        type: 'model',
+        description: 'test-model',
+      });
     });
 
-    it('throws error with cause when models list fails', async () => {
-      const originalError = new Error('Connection refused');
-      mockOpenAI.models.list.mockRejectedValue(originalError);
+    it('skips unavailable resource types', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/v1/agents')) {
+          return {ok: true, json: async () => ({items: [{name: 'agent1'}]})};
+        }
+        throw new Error('Connection refused');
+      });
 
-      try {
-        await client.getQueryTargets();
-        expect.fail('Should have thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get query targets: Connection refused');
-        expect((error as Error).cause).toBe(originalError);
-      }
-    });
-
-    it('handles non-Error exceptions with cause', async () => {
-      mockOpenAI.models.list.mockRejectedValue('string error');
-
-      try {
-        await client.getQueryTargets();
-        expect.fail('Should have thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get query targets: Unknown error');
-        expect((error as Error).cause).toBe('string error');
-      }
+      const targets = await client.getQueryTargets();
+      expect(targets).toHaveLength(1);
+      expect(targets[0].name).toBe('agent1');
     });
   });
 
@@ -462,57 +444,54 @@ describe('ArkApiClient', () => {
     });
   });
 
-  describe('createChatCompletion', () => {
-    it('creates non-streaming chat completion', async () => {
-      const mockResponse = {
-        id: 'chatcmpl-123',
-        choices: [{message: {content: 'Hello!'}}],
-      };
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockResponse);
-
-      const result = await client.createChatCompletion({
-        model: 'gpt-4',
-        messages: [{role: 'user', content: 'Hi'}],
+  describe('createQuery', () => {
+    it('creates a query via the API', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({name: 'cli-query-123', status: {phase: 'pending'}}),
       });
 
-      expect(result).toEqual(mockResponse);
-      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith({
-        model: 'gpt-4',
-        messages: [{role: 'user', content: 'Hi'}],
-        stream: false,
+      const result = await client.createQuery({
+        input: 'Hello',
+        target: {type: 'agent', name: 'test-agent'},
       });
+
+      expect(result).toEqual({name: 'cli-query-123', status: {phase: 'pending'}});
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/queries/',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"input":"Hello"'),
+        }),
+      );
+    });
+
+    it('throws on query creation failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'Internal Server Error',
+      });
+
+      await expect(
+        client.createQuery({
+          input: 'Hello',
+          target: {type: 'agent', name: 'test-agent'},
+        })
+      ).rejects.toThrow('Query creation failed');
     });
   });
 
-  describe('createChatCompletionStream', () => {
-    it('creates streaming chat completion', async () => {
-      const mockChunks = [
-        {choices: [{delta: {content: 'Hello'}}]},
-        {choices: [{delta: {content: ' World'}}]},
-      ];
-      const mockStream = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const chunk of mockChunks) {
-            yield chunk;
-          }
-        },
-      };
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockStream);
-
-      const chunks = [];
-      for await (const chunk of client.createChatCompletionStream({
-        model: 'gpt-4',
-        messages: [{role: 'user', content: 'Hi'}],
-      })) {
-        chunks.push(chunk);
-      }
-
-      expect(chunks).toEqual(mockChunks);
-      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith({
-        model: 'gpt-4',
-        messages: [{role: 'user', content: 'Hi'}],
-        stream: true,
+  describe('getQuery', () => {
+    it('fetches query by name', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({name: 'test-q', status: {phase: 'done'}}),
       });
+
+      const result = await client.getQuery('test-q');
+      expect(result).toEqual({name: 'test-q', status: {phase: 'done'}});
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/queries/test-q');
     });
   });
 });

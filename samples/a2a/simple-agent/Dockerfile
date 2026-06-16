@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.11-slim
 
 WORKDIR /app
 
@@ -6,7 +6,7 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
     mkdir -p /home/ark && \
     chown -R ark:nogroup /home/ark
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
 
 COPY pyproject.toml ./
 COPY src/ ./src/

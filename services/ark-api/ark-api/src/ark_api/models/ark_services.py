@@ -1,6 +1,35 @@
 """Pydantic models for ARK services API."""
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel
+
+
+class ChartMetadata(BaseModel):
+    """Chart metadata from Helm release."""
+    annotations: Optional[Dict[str, str]] = None
+    description: Optional[str] = None
+
+
+class HelmRelease(BaseModel):
+    """Helm release information for marketplace item detection.
+
+    Represents a Helm release with chart metadata including annotations
+    used for marketplace item identification.
+    """
+    name: str
+    namespace: str
+    chart: str
+    chart_version: str
+    app_version: str
+    status: str
+    revision: int
+    updated: str
+    chart_metadata: Optional[ChartMetadata] = None
+
+
+class HelmReleaseListResponse(BaseModel):
+    """Response model for listing Helm releases."""
+    items: List[HelmRelease]
+    count: int
 
 
 class HTTPRouteInfo(BaseModel):

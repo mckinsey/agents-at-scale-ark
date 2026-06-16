@@ -8,6 +8,8 @@ const mockGetAllMarketplaceServices =
   vi.fn<() => Promise<ServiceCollection | null>>();
 const mockGetAllMarketplaceAgents =
   vi.fn<() => Promise<ServiceCollection | null>>();
+const mockGetAllMarketplaceExecutors =
+  vi.fn<() => Promise<ServiceCollection | null>>();
 const mockFetchMarketplaceManifest =
   vi.fn<() => Promise<AnthropicMarketplaceManifest | null>>();
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -15,6 +17,7 @@ const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 vi.mock('../../marketplaceServices.js', () => ({
   getAllMarketplaceServices: mockGetAllMarketplaceServices,
   getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+  getAllMarketplaceExecutors: mockGetAllMarketplaceExecutors,
 }));
 
 vi.mock('../../lib/marketplaceFetcher.js', () => ({
@@ -85,6 +88,7 @@ describe('marketplace command', () => {
 
     mockGetAllMarketplaceServices.mockResolvedValue(mockServices);
     mockGetAllMarketplaceAgents.mockResolvedValue(mockAgents);
+    mockGetAllMarketplaceExecutors.mockResolvedValue(null);
     mockFetchMarketplaceManifest.mockResolvedValue(mockManifest);
 
     const command = createMarketplaceCommand({} as ArkConfig);
@@ -98,6 +102,7 @@ describe('marketplace command', () => {
   it('shows unavailable message when marketplace unavailable', async () => {
     mockGetAllMarketplaceServices.mockResolvedValue(null);
     mockGetAllMarketplaceAgents.mockResolvedValue(null);
+    mockGetAllMarketplaceExecutors.mockResolvedValue(null);
     mockFetchMarketplaceManifest.mockResolvedValue(null);
 
     const command = createMarketplaceCommand({} as ArkConfig);

@@ -5,10 +5,12 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,9 +26,9 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	completions "mckinsey.com/ark/executors/completions"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
@@ -54,6 +56,7 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 
@@ -141,7 +144,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
-	case statusRunning:
+	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
@@ -161,7 +164,16 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	opCtx, cancel := context.WithCancel(ctx)
+	queryTimeout := time.Hour
+	if obj.Spec.TTL != nil {
+		queryTimeout = obj.Spec.TTL.Duration
+	}
+	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
+	if remaining <= 0 {
+		return ctrl.Result{}, nil
+	}
+
+	opCtx, cancel := context.WithTimeout(ctx, remaining)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
@@ -191,7 +203,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	if sessionId == "" {
 		sessionId = string(obj.UID)
 	}
-	if member, err := baggage.NewMember("session.id", sessionId); err == nil {
+	if member, err := baggage.NewMember("ark.session.id", sessionId); err == nil {
 		if bag, err := baggage.New(member); err == nil {
 			opCtx = baggage.ContextWithBaggage(opCtx, bag)
 		}
@@ -238,6 +250,11 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	response, engineMeta, err := r.sendQueryA2A(opCtx, address, obj, *target)
 	if err != nil {
+		if stderrors.Is(err, context.Canceled) {
+			dispatchSpan.SetStatus(telemetry.StatusOk, "canceled")
+			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
+			return
+		}
 		dispatchSpan.RecordError(err)
 		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
@@ -264,16 +281,33 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
 
-	var operationData map[string]string
+	operationData := buildOperationData(target, queryInput)
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
+	operationData := make(map[string]string)
+	operationData["targetType"] = target.Type
+
+	switch target.Type {
+	case targetTypeTeam:
+		operationData["team"] = target.Name
+	case targetTypeAgent:
+		operationData["agent"] = target.Name
+	case targetTypeTool:
+		operationData["tool"] = target.Name
+	}
+
 	if queryInput != "" {
 		const maxDisplayInputLength = 48
 		displayInput := queryInput
 		if len(displayInput) > maxDisplayInputLength {
 			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
 		}
-		operationData = map[string]string{"input": displayInput}
+		operationData["input"] = displayInput
 	}
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+
+	return operationData
 }
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {
@@ -338,16 +372,17 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
-
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
+
+	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
+	if err != nil {
+		cancel()
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
+	}
 	defer cancel()
 
 	blocking := true
@@ -375,8 +410,7 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
-		responseMessages := []completions.Message{completions.NewAssistantMessage(responseText)}
-		rawJSON = serializeMessages(responseMessages)
+		rawJSON = buildFallbackRaw(responseText)
 	}
 
 	response := &arkv1alpha1.Response{
@@ -397,30 +431,19 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 }
 
 func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) string {
-	inputMessages, err := completions.GetQueryInputMessages(ctx, query, k8sClient)
+	text, err := resolution.ResolveQueryInputText(ctx, query, k8sClient)
 	if err != nil {
 		return ""
 	}
-	return completions.ExtractUserMessageContent(inputMessages)
+	return text
 }
 
-func serializeMessages(messages []completions.Message) string {
-	var actualMessages []interface{}
-	for _, msg := range messages {
-		switch {
-		case msg.OfAssistant != nil:
-			actualMessages = append(actualMessages, msg.OfAssistant)
-		case msg.OfUser != nil:
-			actualMessages = append(actualMessages, msg.OfUser)
-		case msg.OfSystem != nil:
-			actualMessages = append(actualMessages, msg.OfSystem)
-		case msg.OfTool != nil:
-			actualMessages = append(actualMessages, msg.OfTool)
-		case msg.OfFunction != nil:
-			actualMessages = append(actualMessages, msg.OfFunction)
-		}
-	}
-	rawBytes, err := json.Marshal(actualMessages)
+func buildFallbackRaw(responseText string) string {
+	msg := []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}{{Role: "assistant", Content: responseText}}
+	rawBytes, err := json.Marshal(msg)
 	if err != nil {
 		return "[]"
 	}
@@ -465,16 +488,23 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	var msgMeta map[string]any
-	if msg, ok := result.Result.(*protocol.Message); ok {
-		msgMeta = msg.Metadata
-	}
-
-	if msgMeta == nil {
+	msg, ok := result.Result.(*protocol.Message)
+	if !ok {
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[arka2a.QueryExtensionMetadataKey]
+	if msg.ContextID != nil && *msg.ContextID != "" {
+		responseMeta.A2AContextID = *msg.ContextID
+	}
+	if msg.TaskID != nil && *msg.TaskID != "" {
+		responseMeta.A2ATaskID = *msg.TaskID
+	}
+
+	if msg.Metadata == nil {
+		return responseMeta
+	}
+
+	arkData, ok := msg.Metadata[arka2a.QueryExtensionMetadataKey]
 	if !ok {
 		return responseMeta
 	}
@@ -633,11 +663,7 @@ func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Q
 	return r.updateStatusWithDuration(ctx, query, status, nil)
 }
 
-func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-	query.Status.Phase = status
+func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status string) {
 	switch status {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
@@ -652,12 +678,56 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	case statusCanceled:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
+}
+
+type savedQueryStatus struct {
+	response       *arkv1alpha1.Response
+	tokenUsage     arkv1alpha1.TokenUsage
+	conversationId string
+}
+
+func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
+	if s.response != nil {
+		query.Status.Response = s.response
+	}
+	query.Status.TokenUsage = s.tokenUsage
+	if s.conversationId != "" {
+		query.Status.ConversationId = s.conversationId
+	}
+}
+
+func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	saved := savedQueryStatus{
+		response:       query.Status.Response,
+		tokenUsage:     query.Status.TokenUsage,
+		conversationId: query.Status.ConversationId,
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	query.Status.Phase = status
+	saved.restoreOnto(query)
+	r.setConditionForPhase(query, status)
 	if duration != nil {
 		query.Status.Duration = duration
 	}
 	err := r.Status().Update(ctx, query)
 	if err != nil {
-		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		if !errors.IsConflict(err) {
+			logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+		}
 	}
 	return err
 }

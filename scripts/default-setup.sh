@@ -73,7 +73,7 @@ echo "  API Key: ${api_key:0:20}..."
 # Create or update AIGW secret
 echo "Creating/updating AIGW secret..."
 kubectl create secret generic aigw-secret \
-    --from-literal=api-key="$api_key" \
+    --from-literal=token="$api_key" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 if [[ $? -eq 0 ]]; then
@@ -105,7 +105,7 @@ spec:
         valueFrom:
           secretKeyRef:
             name: aigw-secret
-            key: api-key
+            key: token
       apiVersion:
         value: "$api_version"
 EOF

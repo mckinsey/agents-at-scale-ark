@@ -62,10 +62,20 @@ const bedrockSchema = z.object({
   modelARN: z.string().nullish(),
 });
 
+const anthropicSchema = z.object({
+  name: kubernetesNameSchema,
+  provider: z.literal('anthropic'),
+  model: z.string().min(1, { message: 'Model is required' }),
+  secret: z.string().min(1, { message: 'API Key is required' }),
+  baseUrl: z.string().min(1, { message: 'Base URL is required' }),
+  anthropicVersion: z.string().nullish(),
+});
+
 export const schema = z.discriminatedUnion('provider', [
   openaiSchema,
   azureSchema,
   bedrockSchema,
+  anthropicSchema,
 ]);
 
 export type FormValues = z.infer<typeof schema>;

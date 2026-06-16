@@ -1,5 +1,3 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
@@ -33,7 +31,7 @@ export type QueryUpdateRequest = Omit<
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'running';
+type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -46,7 +44,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'unknown',
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'running'] as const;
+  ['pending', 'provisioning', 'running'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
@@ -58,6 +56,10 @@ type QueryStatusWithPhase = {
     content: string;
     raw?: string;
   };
+  conditions?: Array<{
+    type?: string;
+    message?: string;
+  }>;
 };
 
 // Type guard for checking if a phase is terminal
@@ -191,31 +193,31 @@ export const chatService = {
   },
 
   async submitChatQuery(
-    messages: ChatCompletionMessageParam[],
+    input: string,
     targetType: string,
     targetName: string,
     sessionId?: string,
+    conversationId?: string,
     enableStreaming?: boolean,
     timeout?: string,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
-      type: 'messages',
-      // Use OpenAI ChatCompletionMessageParam which supports multimodal content
-      input: messages,
+      type: 'user',
+      input,
       target: {
         type: targetType.toLowerCase(),
         name: targetName,
       },
       sessionId,
+      conversationId,
       timeout,
     };
 
-    // Add streaming annotation if enabled
     if (enableStreaming) {
       queryRequest.metadata = {
         annotations: {
-          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'false',
+          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
         },
       };
     }
@@ -380,76 +382,99 @@ export const chatService = {
     }
   },
 
-  /**
-   * Stream chat response using Server-Sent Events
-   * @param messages - Chat messages to send
-   * @param targetType - Type of target (agent, model, team)
-   * @param targetName - Name of the target
-   * @param sessionId - Optional session ID
-   * @yields Parsed SSE chunks containing response data
-   */
-  async *streamChatResponse(
-    messages: ChatCompletionMessageParam[],
+  async startStreamChatResponse(
+    input: string,
     targetType: string,
     targetName: string,
     sessionId?: string,
+    conversationId?: string,
     timeout?: string,
-  ): AsyncGenerator<Record<string, unknown>, void, unknown> {
-    const model = `${targetType}/${targetName}`;
-    const response = await fetch('/api/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        metadata: {
-          ...(sessionId ? { sessionId } : {}),
-          ...(timeout ? { timeout } : {}),
+    abortSignal?: AbortSignal,
+  ): Promise<{
+    queryName: string;
+    chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
+  }> {
+    const query = await this.submitChatQuery(
+      input,
+      targetType,
+      targetName,
+      sessionId,
+      conversationId,
+      true,
+      timeout,
+    );
+
+    const queryName = query.name;
+    const self = this;
+
+    async function* generateChunks(): AsyncGenerator<Record<string, unknown>, void, unknown> {
+      const response = await fetch(
+        `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+        {
+          signal: abortSignal,
         },
-      }),
-    });
+      );
 
-    if (!response.ok) {
-      throw new Error(`Failed to connect to stream: ${response.statusText}`);
-    }
+      if (!response.ok) {
+        throw new Error(`Failed to connect to stream: ${response.statusText}`);
+      }
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('No response body available for streaming');
-    }
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body available for streaming');
+      }
 
-    const decoder = new TextDecoder();
-    let buffer = '';
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
 
-        // Decode the chunk and add to buffer
-        buffer += decoder.decode(value, { stream: true });
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
 
-        // Split by double newline (SSE event separator)
-        const lines = buffer.split('\n\n');
-
-        // Keep the last incomplete line in the buffer
-        buffer = lines.pop() || '';
-
-        // Process complete lines
-        for (const line of lines) {
-          const chunk = this.parseSSEChunk(line);
-          if (chunk) {
-            yield chunk;
+          for (const line of lines) {
+            const chunk = self.parseSSEChunk(line);
+            if (chunk) {
+              yield chunk;
+            }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
-    } finally {
-      reader.releaseLock();
     }
+
+    return { queryName, chunks: generateChunks() };
   },
+
+  async *streamChatResponse(
+    input: string,
+    targetType: string,
+    targetName: string,
+    sessionId?: string,
+    conversationId?: string,
+    timeout?: string,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<Record<string, unknown>, void, unknown> {
+    const { chunks } = await this.startStreamChatResponse(
+      input,
+      targetType,
+      targetName,
+      sessionId,
+      conversationId,
+      timeout,
+      abortSignal,
+    );
+    yield* chunks;
+  },
+
+  async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
+    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`)
+  }
 };

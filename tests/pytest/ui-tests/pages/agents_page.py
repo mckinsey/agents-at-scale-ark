@@ -16,10 +16,12 @@ class AgentsPage(BasePage):
     AGENT_DESCRIPTION_INPUT = "textarea[name='description'], textarea[placeholder*='description' i], input[name='description']"
     MODEL_SELECT = "select, [role='combobox'], button:has-text('Select')"
     SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created'), div:has-text('deleted'), div:has-text('Deleted')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
-    
+    CHAT_BUTTON = "button:has(svg.lucide-message-circle)"
+    CHAT_WINDOW = "div[data-slot='card']"
+    CLOSE_CHAT_BUTTON = "button[aria-label='Close chat']"
+
     TEST_DATA = {
         "default": {
             "description": "handle queries",
@@ -56,6 +58,21 @@ class AgentsPage(BasePage):
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_AGENT_BUTTON, timeout=10000)
         return False
+
+    def open_agent_chat(self, agent_name: str):
+        if self.page.locator(self.CHAT_WINDOW).is_visible(timeout=100):
+            logger.error("Chat already open")
+            return
+        row = self.page.locator(f"[role='link']:has(p.truncate.text-sm.font-medium:has-text('{agent_name}'))").first
+        row.locator(self.CHAT_BUTTON).click()
+        self.wait_for_element(self.CHAT_WINDOW)
+
+    def close_agent_chat(self):
+        if not self.page.locator(self.CHAT_WINDOW).is_visible(timeout=1000):
+            logger.error("Chat not open")
+            return
+        self.page.locator(self.CLOSE_CHAT_BUTTON).first.click()
+        self.wait_for_element_hidden(self.CHAT_WINDOW, timeout=5000)
     
     def check_for_error_banner(self) -> dict:
         logger.info("Checking for error banners...")
@@ -69,7 +86,6 @@ class AgentsPage(BasePage):
             "[role='alert']:has-text('error')",
             "[role='alert']:has-text('Error')",
             "[role='alert']:has-text('500')",
-            "div:has-text('500'):has-text('error')",
             "div:has-text('Internal Server Error')",
             ".error, .alert-error, .notification-error",
             "[class*='error'][class*='banner']",
@@ -204,36 +220,32 @@ class AgentsPage(BasePage):
             logger.warning("Could not open model dropdown")
         
         model_selected = False
-        for attempt in range(3):
+        for attempt in range(5):
             model_option = self.page.get_by_role("option", name=model_name, exact=True)
             if model_option.count() > 0:
                 logger.info(f"Found exact match for model: {model_name}")
                 model_option.first.click(force=True)
                 model_selected = True
                 break
-            
+
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
             if model_option_alt.count() > 0:
                 logger.info(f"Found partial match for model: {model_name}")
                 model_option_alt.click(force=True)
                 model_selected = True
                 break
-            
-            if attempt < 2:
-                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/3)...")
+
+            if attempt < 4:
+                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/5)...")
                 self.page.keyboard.press("Escape")
                 self.wait_for_element_hidden("[role='option']", timeout=3000)
+                self.page.wait_for_timeout(3000)
                 model_trigger.click(force=True)
-                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=3000)
-        
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+
         if not model_selected:
-            first_option = self.page.locator("[role='option']").first
-            if first_option.count() > 0:
-                logger.warning(f"Could not find model {model_name}, selecting first available")
-                first_option.click(force=True)
-            else:
-                logger.warning(f"No model options available")
-        
+            raise Exception(f"Could not find model '{model_name}' in dropdown after 5 attempts")
+
         logger.info(f"Model {model_name} selected")
         
         if tools:
@@ -258,11 +270,7 @@ class AgentsPage(BasePage):
             logger.error(f"{error_banner['message']}")
             raise Exception(f"Agent creation failed: {error_banner['message']}")
         
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-        except:
-            popup_visible = False
+        popup_visible = self._check_toast_popup()
         
         self._close_dialog_if_open()
         
@@ -300,11 +308,11 @@ class AgentsPage(BasePage):
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
-            self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
+            self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click(force=True)
         
         self.wait_for_load_state("domcontentloaded")
-        popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_agent_in_table(agent_name)
+        popup_visible = self._check_toast_popup()
+        deleted_from_table = not self.is_agent_in_table(agent_name, retries=0)
         
         return {
             "agent_name": agent_name,
@@ -324,13 +332,6 @@ class AgentsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
     
     def _close_dialog_if_open(self) -> None:
         for attempt in range(3):
@@ -374,18 +375,37 @@ class AgentsPage(BasePage):
         except Exception as e:
             logger.error(f"Error selecting tool {tool_name}: {str(e)}")
     
+    def wait_for_model_in_api(self, model_name: str, timeout: int = 30) -> bool:
+        import time
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                response = self.page.request.get("http://localhost:3274/api/v1/models?namespace=default")
+                if response.ok:
+                    data = response.json()
+                    names = [m["name"] for m in data.get("items", [])]
+                    if model_name in names:
+                        return True
+            except Exception:
+                pass
+            self.page.wait_for_timeout(1000)
+        return False
+
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
-        
+
         agent_data = self.TEST_DATA[test_data_key]
-        
+
         self.navigate_to_agents_tab()
-        
+
         if not self.is_visible(self.ADD_AGENT_BUTTON):
             pytest.skip("Add Agent button not available")
-        
+
         agent_name = self.generate_agent_name(prefix)
         logger.info(f"Generated agent name: {agent_name}")
-        
+
+        if not self.wait_for_model_in_api(model_name):
+            logger.warning(f"Model {model_name} not visible in API after timeout, proceeding anyway")
+
         result = self.create_agent_with_verification(
             agent_name=agent_name,
             description=agent_data["description"],

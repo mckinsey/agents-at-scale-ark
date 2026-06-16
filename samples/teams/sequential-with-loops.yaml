@@ -1,0 +1,33 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: agent-rr
+spec:
+  prompt: Append "Bazinga!" to the user input and say it. If you see Bazinga 3 times, end the conversation.
+  tools:
+    - type: built-in
+      name: terminate
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: team-rr
+spec:
+  members:
+    - name: agent-rr
+      type: agent
+  strategy: "sequential"
+  loops: true
+  maxTurns: 10
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-rr
+spec:
+  input: "Sheldon says:"
+  memory:
+    name: postgres-memory
+  target:
+    type: team
+    name: team-rr

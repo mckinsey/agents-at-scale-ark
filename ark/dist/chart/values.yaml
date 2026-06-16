@@ -45,6 +45,8 @@ controllerManager:
     runAsNonRoot: true
     seccompProfile:
       type: RuntimeDefault
+  extraVolumeMounts: []
+  extraVolumes: []
   terminationGracePeriodSeconds: 10
   serviceAccountName: ark-controller
 

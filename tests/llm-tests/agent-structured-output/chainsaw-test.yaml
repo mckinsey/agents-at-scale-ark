@@ -33,14 +33,15 @@ spec:
             file: manifests/agent.yaml
         - apply:
             file: manifests/query.yaml
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: structured-output-test-query
-              status:
-                phase: done
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: structured-output-test-query
+            timeout: 60s
+            for:
+              condition:
+                name: Completed
+                value: 'True'
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1

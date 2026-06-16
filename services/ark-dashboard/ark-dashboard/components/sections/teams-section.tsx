@@ -1,13 +1,22 @@
 'use client';
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import type React from 'react';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { TeamCard } from '@/components/cards';
 import { TeamRow } from '@/components/rows/team-row';
+import {
+  SortableSectionedList,
+  type SortableSectionedListHandle,
+} from '@/components/sortable-sectioned-list';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -19,7 +28,8 @@ import {
 } from '@/components/ui/empty';
 import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useDelayedLoading } from '@/lib/hooks';
+import { useDelayedLoading, useTeamsLayout } from '@/lib/hooks';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type Agent,
   type Team,
@@ -30,9 +40,11 @@ import {
 } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+const getTeamKey = (team: Team) => team.name;
+
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
   function TeamsSection(_, ref) {
-    const router = useRouter();
+    const { push } = useNamespacedNavigation();
     const [teams, setTeams] = useState<Team[]>([]);
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
@@ -43,10 +55,12 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       { id: 'compact', label: 'compact view', active: !showCompactView },
       { id: 'card', label: 'card view', active: showCompactView },
     ];
-    const { readOnlyMode } = useNamespace();
+    const { readOnlyMode, namespace } = useNamespace();
+    const { layout, setLayout } = useTeamsLayout(namespace);
+    const listRef = useRef<SortableSectionedListHandle>(null);
 
     useImperativeHandle(ref, () => ({
-      openAddEditor: () => router.push('/teams/new'),
+      openAddEditor: () => push('/teams/new'),
     }));
 
     useEffect(() => {
@@ -73,7 +87,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       };
 
       loadData();
-    }, []);
+    }, [namespace]);
 
     const handleSaveTeam = async (
       team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },
@@ -87,7 +101,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
             description: 'Successfully updated the team',
           });
         } else {
-          // This is a create
           const createRequest = team as TeamCreateRequest;
           await teamsService.create(createRequest);
           toast.success('Team Created', {
@@ -156,7 +169,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
           </EmptyHeader>
           <EmptyContent>
             <Button
-              onClick={() => router.push('/teams/new')}
+              onClick={() => push('/teams/new')}
               disabled={readOnlyMode}>
               <Plus className="h-4 w-4" />
               Create Team
@@ -179,14 +192,25 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
 
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-end px-6 py-3">
+        <div className="mt-3 flex items-center justify-between gap-2">
+          {!showCompactView ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => listRef.current?.openCreateGroup()}>
+              <Plus className="mr-1 h-4 w-4" />
+              Create Group
+            </Button>
+          ) : (
+            <div />
+          )}
           <ToggleSwitch
             options={viewOptions}
             onChange={id => setShowCompactView(id === 'card')}
           />
         </div>
 
-        <main className="flex-1 overflow-auto px-6 py-0">
+        <main className="mt-4 flex-1 overflow-auto">
           {showCompactView && (
             <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
               {teams.map(team => (
@@ -202,17 +226,23 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
           )}
 
           {!showCompactView && (
-            <div className="flex flex-col gap-3">
-              {teams.map(team => (
+            <SortableSectionedList
+              ref={listRef}
+              items={teams}
+              getKey={getTeamKey}
+              layout={layout}
+              setLayout={setLayout}
+              itemNoun={{ singular: 'team', plural: 'teams' }}
+              renderItem={(team, { dragHandle }) => (
                 <TeamRow
-                  key={team.id}
                   team={team}
                   agents={agents}
                   onUpdate={handleSaveTeam}
                   onDelete={handleDeleteTeam}
+                  leading={dragHandle}
                 />
-              ))}
-            </div>
+              )}
+            />
           )}
         </main>
       </div>

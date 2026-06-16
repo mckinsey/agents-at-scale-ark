@@ -13,6 +13,7 @@ const schema = z.object({
   name: z.string(),
   description: z.string().optional(),
   strategy: z.string(),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
@@ -24,17 +25,19 @@ const selectedMembers: TeamMember[] = [
 ];
 
 function Wrapper({
-  strategy = 'graph',
+  strategy = 'selector',
   graphEdges = [] as Array<{ from: string; to: string }>,
   unavailableMembers = [] as TeamMember[],
   onGraphEdgesChange = vi.fn(),
   disabled = false,
+  selectorAgent = '',
 }: {
   strategy?: string;
   graphEdges?: Array<{ from: string; to: string }>;
   unavailableMembers?: TeamMember[];
   onGraphEdgesChange?: (edges: Array<{ from: string; to: string }>) => void;
   disabled?: boolean;
+  selectorAgent?: string;
 }) {
   const form = useForm({
     resolver: zodResolver(schema),
@@ -42,8 +45,9 @@ function Wrapper({
       name: '',
       description: '',
       strategy,
+      loops: false,
       maxTurns: '',
-      selectorAgent: '',
+      selectorAgent,
       selectorPrompt: '',
     },
   });
@@ -73,24 +77,9 @@ describe('GraphSection', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('should render for graph strategy', () => {
-    render(<Wrapper strategy="graph" />);
-    expect(screen.getByText('Graph Edges')).toBeInTheDocument();
-  });
-
   it('should render for selector strategy', () => {
     render(<Wrapper strategy="selector" />);
     expect(screen.getByText('Graph Edges')).toBeInTheDocument();
-  });
-
-  it('should show required indicator for graph strategy', () => {
-    render(<Wrapper strategy="graph" />);
-    expect(screen.getByText('*')).toBeInTheDocument();
-  });
-
-  it('should not show required indicator for selector strategy', () => {
-    render(<Wrapper strategy="selector" />);
-    expect(screen.queryByText('*')).not.toBeInTheDocument();
   });
 
   it('should show empty state when no edges', () => {
@@ -130,17 +119,51 @@ describe('GraphSection', () => {
     expect(onGraphEdgesChange).toHaveBeenCalledWith([]);
   });
 
-  it('should show graph-specific description for graph strategy', () => {
-    render(<Wrapper strategy="graph" />);
-    expect(
-      screen.getByText(/Define the flow between agents/),
-    ).toBeInTheDocument();
-  });
-
-  it('should show selector-specific description for selector strategy', () => {
+  it('should show selector description', () => {
     render(<Wrapper strategy="selector" />);
     expect(
       screen.getByText(/Define graph constraints/),
     ).toBeInTheDocument();
   });
+
+  it('should show no-outgoing-edges warning for selector strategy with edges', () => {
+    render(
+      <Wrapper
+        strategy="selector"
+        graphEdges={[{ from: 'agent-1', to: 'agent-2' }]}
+      />,
+    );
+    expect(
+      screen.getByText(/have no outgoing edges/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/have no outgoing edges/)).toHaveTextContent('agent-2');
+  });
+
+  it('should not show no-outgoing-edges warning when all agents have outgoing edges', () => {
+    render(
+      <Wrapper
+        strategy="selector"
+        graphEdges={[
+          { from: 'agent-1', to: 'agent-2' },
+          { from: 'agent-2', to: 'agent-1' },
+        ]}
+      />,
+    );
+    expect(
+      screen.queryByText(/have no outgoing edges/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should not show no-outgoing-edges warning for graph strategy', () => {
+    render(
+      <Wrapper
+        strategy="graph"
+        graphEdges={[{ from: 'agent-1', to: 'agent-2' }]}
+      />,
+    );
+    expect(
+      screen.queryByText(/have no outgoing edges/),
+    ).not.toBeInTheDocument();
+  });
+
 });

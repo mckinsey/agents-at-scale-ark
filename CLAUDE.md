@@ -2,44 +2,59 @@
 
 **NEVER add comments** to generated code unless explicitly requested by the user
 
+# Pre-Push Gates (Non-Negotiable)
+
+BEFORE pushing ANY commit, `make lint` and `make test` MUST pass locally
+in every directory the change touches. Exact commands per stack live in
+"Build Instructions" below; do not skip them.
+
+- **Never push with lint failures.** Same rules CI enforces
+  (`golangci-lint` + `gofumpt` for Go, `ruff`/`pyright` for Python,
+  `eslint` for TypeScript). Local pass is the minimum bar.
+- **Never push with failing tests.**
+- **Never bypass hooks** (`--no-verify`, `--no-gpg-sign`) unless the user
+  explicitly asks.
+- **"One-line changes" hide `gofumpt` and whitespace diffs the most.** Run
+  the gates regardless of change size.
+- **Tooling gotcha (Go):** `GOLANGCI_LINT_VERSION` in `ark/Makefile` may
+  lag local Go. If `make lint` errors with *"Go language version ... used
+  to build golangci-lint is lower than the targeted Go version"*, fall
+  back to `gofumpt -l .` (install via `go install mvdan.cc/gofumpt@latest`)
+  — this catches the formatting rule that breaks CI most often. Full
+  `golangci-lint` still runs in CI.
+
 # Project Structure
 
 ## Core Folders
 
 - **`ark/`** - Kubernetes operator (Go)
-  - Main controller managing AI resources like agents, models, queries
-  - Custom Resource Definitions (CRDs) for AI workloads
-  - Webhooks for validation and admission control
+  - Controller reconciles CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer
+  - Webhooks for validation and mutation (including migration warnings)
+  - `executors/completions/` - Default executor (separate deployment, communicates with controller via A2A)
+  - The controller dispatches queries to the appropriate executor via A2A protocol
 
-- **`services/`** - Supporting services for Ark (Go, Python, TypeScript)
-  - `postgres-memory/` - Memory persistence service (Go)
-  - `vnext-ui/` - vNext Next.js web interface (TypeScript/React)
-  - `ark-sdk-python/` - Python SDK for Ark resources
-  - `arkpy/` - Python CLI and API client
+- **`lib/ark-sdk/`** - Python SDK (generated + overlay)
+  - Generated from CRDs via OpenAPI, with hand-written overlay for executor interfaces
+  - `BaseExecutor` ABC and `ExecutorApp` (A2A bridge) provide the standard interface for pluggable executors
+  - Downstream executor implementations live in the [marketplace](https://github.com/mckinsey/agents-at-scale-marketplace)
 
-- **`mcp/`** - Model Context Protocol servers
-  - `atlassian/` - Jira and Confluence integration
-  - `filesystem-mcp/` - File system operations
-  - `git/` - Git repository operations
-  - `github/` - GitHub API integration
-  - `pyodide-python/` - Python execution in browser
-  - `scm/` - Source code management bundle
+- **`services/`** - Component services
+  - `ark-api/` - REST API gateway (Python/FastAPI) with streaming, A2A, broker integration
+  - `ark-broker/` - In-memory event bus (Node.js/Express) for messages, chunks, traces, events, sessions
+  - `ark-dashboard/` - Web UI (Next.js/React)
+  - `ark-mcp/` - MCP server host service
+  - `localhost-gateway/` - Local development gateway
 
-- **`samples/`** - Example configurations (YAML)
-  - Agent definitions, models, queries, teams
-  - Demonstration workflows and use cases
-  - Demo configurations for various scenarios
+- **`samples/`** - Example YAML configurations for agents, models, queries, teams
 
-- **`docs/`** - Documentation site (Next.js)
-  - Architecture guides and API references
-  - Built with Next.js and MDX
+- **`docs/`** - Documentation site (Next.js/MDX)
 
 ## Supporting Folders
 
 - **`tools/`** - CLI tools
   - `ark-cli/` - Ark CLI (Node.js) - General-purpose, interactive
   - `fark/` - Fark CLI (Go) - Optimized for resource management and low latency
-- **`bundles/`** - LegacyX and vNext component bundles and manifests
+- **`bundles/`** - Component bundles and manifests
 - **`scripts/`** - Build and deployment scripts (Bash)
 - **`templates/`** - Project templates for new services
 
@@ -80,29 +95,23 @@ make lint          # Run linting and type checking
 make build         # Build container
 ```
 
-## MCP Servers
-All MCP servers follow this pattern:
-```bash
-cd mcp/{server-name}/
-make build         # Build Docker image
-```
-
 ## Node.js Services
 ```bash
 cd docs/           # Documentation site
 npm build          # Build site
-
-cd services/vnext-ui/    # UI service
-make build         # Build Docker image
 ```
+
+# Observability
+
+Ark uses OpenTelemetry with W3C TraceContext and Baggage propagation for distributed tracing. The operator instruments query dispatch and A2A communication, automatically propagating trace context to downstream executors via HTTP headers. The telemetry subsystem lives in `ark/internal/telemetry/`, and the `ExecutorApp` base class in `lib/ark-sdk/` handles context extraction on the executor side.
 
 # Marketplace
 
-Ark has a separate marketplace repository for community-contributed services and components:
+Ark has a separate marketplace repository for add-on components that extend Ark's native capabilities. Marketplace items depend on Ark core — never the other way around.
 
 **Repository**: https://github.com/mckinsey/agents-at-scale-marketplace
 
-The marketplace includes observability platforms (Phoenix, Langfuse) and other optional services. Services can be deployed using DevSpace or Helm as dependencies of your Ark installation.
+The marketplace includes executors (Claude Agent SDK, LangChain), services (Phoenix, Langfuse, ark-sandbox, file-gateway), MCP servers, pre-built agents, and demo bundles. Components can be deployed using DevSpace or Helm as dependencies of your Ark installation.
 
 Example usage in `devspace.yaml`:
 ```yaml
@@ -214,6 +223,10 @@ One sentence description.
 - **Use case**: When to use it
 ```
 
+# Build & CI/CD
+
+For build failures, CI issues, CVEs, dependabot management, and test failures, use the **ark-build-manager** agent. It triages failures across workflow runs and delegates to appropriate skills (chainsaw, vulnerability-fixer, ark-dependabot-management, etc.).
+
 # Testing Guidelines
 
 When writing tests for any service, consult `tests/CLAUDE.md` for comprehensive testing patterns and best practices.
@@ -231,6 +244,12 @@ When creating pull requests, use this simple format:
 ```
 
 DO NOT include "Test plan" sections in PR descriptions.
+
+## Environment Variable Naming
+
+Duration env vars must include a unit suffix:
+- `_MS` for milliseconds (e.g., `REQUEST_TIMEOUT_MS`)
+- `_SECONDS` for seconds (e.g., `ARK_MEMORY_HTTP_TIMEOUT_SECONDS`)
 
 ## Pull Request Maintenance
 

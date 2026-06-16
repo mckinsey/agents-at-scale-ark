@@ -51,6 +51,75 @@ spec:
 
 See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
 
+## OAuth-Protected Servers
+
+Remote MCP servers that require OAuth (e.g. `https://mcp.notion.com/mcp`, GitHub Copilot MCP) respond to unauthenticated requests with `HTTP 401` and a `WWW-Authenticate: Bearer` challenge per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and the [MCP 2025-06-18 authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
+
+When Ark detects this, it performs OAuth metadata discovery and populates `status.authorization`:
+
+```yaml
+kubectl get mcpserver notion -o yaml
+```
+```yaml
+status:
+  authorization:
+    state: Required                    # Required | DiscoveryFailed
+    resource: https://mcp.notion.com/mcp
+    resourceName: Notion MCP (Beta)
+    authorizationServers: [https://mcp.notion.com]
+    authorizationEndpoint: https://mcp.notion.com/authorize
+    tokenEndpoint: https://mcp.notion.com/token
+    registrationEndpoint: https://mcp.notion.com/register
+    grantTypesSupported: [authorization_code, refresh_token]
+  conditions:
+  - type: Available
+    status: "False"
+    reason: AuthorizationRequired
+    message: "OAuth authorization required for Notion MCP (Beta)..."
+```
+
+`kubectl get mcpservers` shows the state in the `AUTH` column:
+
+```
+NAME     AVAILABLE   TOOLS   AUTH
+notion   False               Required
+github   False               Required
+shell    True        1
+```
+
+| `state` value | Meaning |
+|---------------|---------|
+| _(empty)_     | Server does not require OAuth. |
+| `Required`    | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. |
+| `Authorized`  | A token was successfully written to the referenced Secret by ark-api. |
+| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. The CLI cannot drive an OAuth flow against this server. |
+
+### Prerequisites
+
+Before running `ark mcp auth login`, `spec.authorization.tokenSecretRef.name` must be set on the MCPServer. ark-api returns `422` with an actionable message if the field is missing:
+
+```yaml
+spec:
+  authorization:
+    tokenSecretRef:
+      name: notion-mcp-oauth   # operator must declare this
+```
+
+### Token writes go through ark-api
+
+The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI is a thin client that POSTs to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and polls `auth/status` — it never touches the Kubernetes Secret directly. The CLI is the only client today; a dashboard authorize flow is not yet available. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
+
+A successful flow leaves two annotations on the MCPServer:
+
+```yaml
+metadata:
+  annotations:
+    ark.mckinsey.com/mcp-auth-authorized-by: cli       # cli (dashboard not yet supported)
+    ark.mckinsey.com/mcp-auth-authorized-at: 2026-05-19T14:32:11Z
+```
+
+`authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
+
 ## Key Features
 
 - Standardized Model Context Protocol implementation
@@ -58,6 +127,7 @@ See [Tools](/reference/resources/tools) for creating Tool resources that connect
 - Service reference integration with Kubernetes
 - Secure credential management
 - Tool and resource discovery
+- OAuth authorization state detection (RFC 9728)
 
 ## Sample Resources
 

@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-without-turns
+spec:
+  input: "Process and analyze this data for the team without turns"
+  target:
+    type: team
+    name: team-without-turns

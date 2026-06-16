@@ -8,8 +8,9 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from kubernetes_asyncio import client
+from ark_sdk.k8s import create_api_client
+from ark_sdk.client import set_default_user_agent
 from dotenv import load_dotenv
-from typing import Dict, Any
 from opentelemetry import baggage, propagate, trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -77,7 +78,7 @@ def extract_session_context(request: Request):
     session_id = request.headers.get("x-session-id")
     if session_id:
         # Add session to baggage
-        ctx = baggage.set_baggage("session.id", session_id, context=ctx)
+        ctx = baggage.set_baggage("ark.session.id", session_id, context=ctx)
     
     return ctx, session_id
 
@@ -90,6 +91,7 @@ async def lifespan(app: FastAPI):
     # Initialize telemetry
     setup_telemetry()
 
+    set_default_user_agent("ArkAPI")
     await init_k8s()
     logger.info("Kubernetes clients initialized")
     
@@ -107,7 +109,7 @@ async def lifespan(app: FastAPI):
     await a2a_manager.shutdown()
     
     # Close all kubernetes async clients
-    await client.ApiClient().close()
+    await create_api_client().close()
 
 
 app = FastAPI(

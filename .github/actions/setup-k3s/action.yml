@@ -213,17 +213,38 @@ runs:
 
     - name: Wait for calico, coredns, metrics server, traefik
       run: |
-        echo "::group::Wait for daemonset/calico-node"
-        kubectl rollout status --watch --timeout=5m daemonset/calico-node -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout() {
+          local kind="$1" name="$2"
+          echo "::group::Wait for $kind/$name"
+          for attempt in $(seq 1 36); do
+            if kubectl rollout status --timeout=30s "$kind/$name" -n kube-system 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for $name (attempt $attempt/36)..."
+            sleep 5
+            if [ "$attempt" -eq 36 ]; then
+              echo "Timed out waiting for $name"
+              echo "--- pod status ---"
+              kubectl get pods -n kube-system -o wide || true
+              echo "--- $name describe ---"
+              kubectl describe "$kind/$name" -n kube-system || true
+              echo "--- $name pod describe ---"
+              kubectl describe pods -l k8s-app="$name" -n kube-system || true
+              echo "--- $name pod logs (all containers) ---"
+              kubectl logs -l k8s-app="$name" -n kube-system --all-containers=true --tail=50 || true
+              echo "--- node memory ---"
+              free -h || true
+              echo "--- k3s service logs ---"
+              sudo journalctl -u k3s --no-pager --since "10 minutes ago" --lines=50 || true
+              kubectl rollout status --timeout=30s "$kind/$name" -n kube-system
+            fi
+          done
+          echo "::endgroup::"
+        }
 
-        echo "::group::Wait for deployment/calico-kube-controllers"
-        kubectl rollout status --watch --timeout=5m deployment/calico-kube-controllers -n kube-system
-        echo "::endgroup::"
-
-        echo "::group::Wait for deployment/coredns"
-        kubectl rollout status --watch --timeout=5m deployment/coredns -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout daemonset calico-node
+        wait_for_rollout deployment calico-kube-controllers
+        wait_for_rollout deployment coredns
 
         echo "::group::Wait for deployment/metrics-server"
         if [[ "${{ inputs.metrics-enabled }}" == true ]]; then

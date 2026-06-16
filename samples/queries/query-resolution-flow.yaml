@@ -70,13 +70,14 @@ data:
   request-timeout: "30"
   retry-count: "3"
 ---
-# Supporting Secret for sensitive credentials
+# EXAMPLE SECRET - nonsensitive placeholder values for demonstration only.
+# These decode to "payment-token-12345" and "backup-token-67890".
+# Replace with real credentials via a Secret manager in production.
 apiVersion: v1
 kind: Secret
 metadata:
   name: api-credentials
 type: Opaque
 data:
-  # Base64 encoded values (example only)
   payment-token: cGF5bWVudC10b2tlbi0xMjM0NQ==  # "payment-token-12345"
   backup-token: YmFja3VwLXRva2VuLTY3ODkw     # "backup-token-67890"

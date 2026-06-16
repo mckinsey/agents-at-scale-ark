@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -35,6 +36,10 @@ type AzureProvider struct {
 	Properties       map[string]string
 	outputSchema     *runtime.RawExtension
 	schemaName       string
+
+	initOnce    sync.Once
+	httpClient  *http.Client
+	probeClient *http.Client
 }
 
 func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
@@ -62,7 +67,7 @@ func (ap *AzureProvider) getCredential() (azcore.TokenCredential, error) {
 	return nil, fmt.Errorf("no identity configuration found")
 }
 
-func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
 		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
@@ -76,9 +81,11 @@ func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message,
 
 	applyPropertiesToParams(ap.Properties, &params)
 
-	if len(tools) > 0 && len(tools[0]) > 0 {
-		params.Tools = tools[0]
+	if len(tools) > 0 {
+		params.Tools = tools
 	}
+
+	applyToolChoiceToParams(toolChoice, &params)
 
 	applyStructuredOutputToParams(ap.outputSchema, ap.schemaName, &params)
 
@@ -89,7 +96,7 @@ func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message,
 	return client.Chat.Completions.New(ctx, params)
 }
 
-func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
+func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) openai.ChatCompletionNewParams {
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
 		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
@@ -99,21 +106,26 @@ func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools 
 		Model:    ap.Model,
 		Messages: openaiMessages,
 		N:        openai.Int(n),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 
 	applyPropertiesToParams(ap.Properties, &params)
 
-	if len(tools) > 0 && len(tools[0]) > 0 {
-		params.Tools = tools[0]
+	if len(tools) > 0 {
+		params.Tools = tools
 	}
+
+	applyToolChoiceToParams(toolChoice, &params)
 
 	applyStructuredOutputToParams(ap.outputSchema, ap.schemaName, &params)
 
 	return params
 }
 
-func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	params := ap.prepareStreamParams(messages, n, tools...)
+func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+	params := ap.prepareStreamParams(messages, n, tools, toolChoice)
 	client, err := ap.createClient(ctx)
 	if err != nil {
 		return nil, err
@@ -131,6 +143,15 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		}
 
 		accumulateStreamChunk(&chunk, &fullResponse, toolCallsMap)
+
+		// Accumulate usage if present in chunk
+		if chunk.Usage.TotalTokens > 0 {
+			fullResponse.Usage = openai.CompletionUsage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+		}
 	}
 
 	ap.finalizeToolCalls(fullResponse, toolCallsMap, streamFunc)
@@ -186,12 +207,18 @@ func (ap *AzureProvider) ensureUsageData(fullResponse *openai.ChatCompletion) {
 	}
 }
 
+func (ap *AzureProvider) initClients() {
+	ap.httpClient = &http.Client{Transport: common.NewLoggingTransport(common.NewSharedTransport())}
+	ap.probeClient = common.NewHTTPClientWithoutTracing()
+}
+
 func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error) {
+	ap.initOnce.Do(ap.initClients)
 	var httpClient *http.Client
 	if IsProbeContext(ctx) {
-		httpClient = common.NewHTTPClientWithoutTracing()
+		httpClient = ap.probeClient
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = ap.httpClient
 	}
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)
@@ -216,7 +243,8 @@ func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error
 		}
 		options = append(options, option.WithHeader("Authorization", fmt.Sprintf("Bearer %s", tokenResp.Token)))
 	} else {
-		options = append(options,
+		options = append(
+			options,
 			option.WithHeader("api-key", ap.APIKey),
 			option.WithAPIKey(ap.APIKey),
 		)
@@ -229,7 +257,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error
 
 func (ap *AzureProvider) HealthCheck(ctx context.Context) error {
 	testMessages := []Message{NewUserMessage("test")}
-	_, err := ap.ChatCompletion(ctx, testMessages, 1)
+	_, err := ap.ChatCompletion(ctx, testMessages, 1, nil, ToolChoiceUnset)
 	return err
 }
 

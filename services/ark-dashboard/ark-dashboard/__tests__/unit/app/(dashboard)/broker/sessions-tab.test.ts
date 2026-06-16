@@ -83,7 +83,7 @@ describe('Sessions Tab Functionality', () => {
             spans: [
               {
                 attributes: [
-                  { key: 'session.id', value: 'session-abc-123' },
+                  { key: 'ark.session.id', value: 'session-abc-123' },
                   { key: 'other.attribute', value: 'other-value' },
                 ],
               },
@@ -96,17 +96,17 @@ describe('Sessions Tab Functionality', () => {
         expect(result.sessionId).toBe('session-abc-123');
       });
 
-      it('should use first span with session.id attribute', () => {
+      it('should use first span with ark.session.id attribute', () => {
         const entry: StreamEntry = {
           id: '1',
           timestamp: '2024-01-15T10:00:00.000Z',
           data: {
             spans: [
               {
-                attributes: [{ key: 'session.id', value: 'first-session' }],
+                attributes: [{ key: 'ark.session.id', value: 'first-session' }],
               },
               {
-                attributes: [{ key: 'session.id', value: 'second-session' }],
+                attributes: [{ key: 'ark.session.id', value: 'second-session' }],
               },
             ],
           },
@@ -122,7 +122,7 @@ describe('Sessions Tab Functionality', () => {
           id: '1',
           timestamp: '2024-01-15T10:00:00.000Z',
           data: {
-            attributes: [{ key: 'session.id', value: 'direct-session' }],
+            attributes: [{ key: 'ark.session.id', value: 'direct-session' }],
           },
         };
 
@@ -446,7 +446,7 @@ describe('Sessions Tab Functionality', () => {
           data: {
             spans: [
               {
-                attributes: [{ key: 'session.id', value: 'session-1' }],
+                attributes: [{ key: 'ark.session.id', value: 'session-1' }],
               },
             ],
           },

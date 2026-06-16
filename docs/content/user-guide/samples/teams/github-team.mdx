@@ -25,7 +25,7 @@ envsubst < samples/teams/github-team.yaml | kubectl apply -f -
 At this point your team is ready! You can send a request to an individual agent like so:
 
 ```bash
-fark agent github-repo-accessor 'what is my most popular repo'
+ark query agent/github-repo-accessor "what is my most popular repo"
 ```
 
 > github-repo-accessor: Your most popular GitHub repository is "hacker-laws" with 26,682 stars.
@@ -35,7 +35,7 @@ This query will take a few seconds- in the meantime you can explore what is goin
 To query the entire team, just pass a message to the team rather than the agent:
 
 ```bash
-fark team github-team 'describe the most recent PR on my most popular repo'
+ark query team/github-team "describe the most recent PR on my most popular repo"
 ```
 
 > github-team: The most recent pull request on your most popular repository "hacker-laws" includes a bug fix that corrects the mistranslation of Hyrum’s Law in Japanese.

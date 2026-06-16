@@ -1,11 +1,10 @@
 'use client';
 
 import { ArrowLeft, Code, Save, Settings, Trash2 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
@@ -22,8 +21,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
 import { teamsService } from '@/lib/services';
+import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
   BasicInfoSection,
@@ -36,12 +38,13 @@ import { TeamFormMode, type TeamFormProps } from './types';
 import { useTeamForm } from './use-team-form';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
+  { href: '/', label: 'Ark Dashboard' },
   { href: '/teams', label: 'Teams' },
 ];
 
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
+  const { namespace } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
@@ -82,62 +85,30 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { setSelectedMembers, setGraphEdges, setUnavailableMembers, onSubmit } =
     actions;
 
-  const teamYaml = useMemo(() => {
-    if (!team) return '';
+  const [teamYaml, setTeamYaml] = useState('');
 
-    const lines: string[] = [
-      'apiVersion: ark.mckinsey.com/v1alpha1',
-      'kind: Team',
-      'metadata:',
-      `  name: ${team.name}`,
-      `  namespace: ${team.namespace}`,
-      'spec:',
-    ];
-
-    if (team.description) {
-      lines.push(`  description: ${team.description}`);
+  const fetchTeamYaml = useCallback(async (name: string) => {
+    try {
+      const raw = await teamsService.getRawResource(name);
+      setTeamYaml(toKubernetesYaml(raw));
+    } catch {
+      setTeamYaml('');
     }
+  }, []);
 
-    if (team.strategy) {
-      lines.push(`  strategy: ${team.strategy}`);
+  useEffect(() => {
+    if (team?.name && showYaml) {
+      fetchTeamYaml(team.name);
     }
+  }, [team?.name, showYaml, fetchTeamYaml]);
 
-    if (team.maxTurns) {
-      lines.push(`  maxTurns: ${team.maxTurns}`);
+  const prevSavingRef = useRef(false);
+  useEffect(() => {
+    if (prevSavingRef.current && !saving && team?.name && showYaml) {
+      fetchTeamYaml(team.name);
     }
-
-    if (team.members && team.members.length > 0) {
-      lines.push('  members:');
-      team.members.forEach(member => {
-        lines.push(`    - name: ${member.name}`);
-        lines.push(`      type: ${member.type}`);
-      });
-    }
-
-    if (team.selector) {
-      lines.push('  selector:');
-      if (team.selector.agent) {
-        lines.push(`    agent: ${team.selector.agent}`);
-      }
-      if (team.selector.selectorPrompt) {
-        lines.push('    selectorPrompt: |');
-        team.selector.selectorPrompt.split('\n').forEach(line => {
-          lines.push(`      ${line}`);
-        });
-      }
-    }
-
-    if (team.graph && team.graph.edges && team.graph.edges.length > 0) {
-      lines.push('  graph:');
-      lines.push('    edges:');
-      team.graph.edges.forEach(edge => {
-        lines.push(`      - from: ${edge.from}`);
-        lines.push(`        to: ${edge.to}`);
-      });
-    }
-
-    return lines.join('\n');
-  }, [team]);
+    prevSavingRef.current = saving;
+  }, [saving, team?.name, showYaml, fetchTeamYaml]);
 
   const handleDelete = async () => {
     if (!team) return;
@@ -147,7 +118,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
       toast.success('Team Deleted', {
         description: `Successfully deleted ${team.name}`,
       });
-      router.push('/teams');
+      push('/teams');
     } catch (error) {
       toast.error('Failed to Delete Team', {
         description:
@@ -178,7 +149,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     <>
       <BasicInfoSection form={form} mode={mode} disabled={saving} />
 
-      <StrategySection form={form} disabled={saving} />
+      <StrategySection form={form} agents={agents} selectedMembers={selectedMembers} disabled={saving} />
 
       <MembersSection
         agents={agents}
@@ -211,6 +182,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         onGraphEdgesChange={setGraphEdges}
         disabled={saving}
       />
+
     </>
   );
 
@@ -224,10 +196,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             isViewing ? (
               <div className="flex items-center gap-2">
                 <Button variant="outline" asChild>
-                  <Link href="/teams">
+                  <NamespacedLink href="/teams">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </Link>
+                  </NamespacedLink>
                 </Button>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
@@ -249,10 +221,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             ) : isCreating ? (
               <div className="flex items-center gap-2">
                 <Button variant="outline" asChild>
-                  <Link href="/teams">
+                  <NamespacedLink href="/teams">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </Link>
+                  </NamespacedLink>
                 </Button>
                 <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>
                   {saving ? (
@@ -282,7 +254,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                   <Select
                     value={teamName}
                     onValueChange={value =>
-                      router.push(`/teams/${encodeURIComponent(value)}`)
+                      push(`/teams/${encodeURIComponent(value)}`)
                     }>
                     <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
                       <SelectValue placeholder="Select team" />

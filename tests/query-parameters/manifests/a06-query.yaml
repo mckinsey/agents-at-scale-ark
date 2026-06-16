@@ -3,21 +3,8 @@ kind: Query
 metadata:
   name: test-query-with-params
 spec:
-  input: |
-    Please analyze the following {{.data_type}} request:
-    
-    Customer: {{.customer_name}}
-    Environment: {{.environment}}
-    Analysis Method: {{.analysis_method}}
-    Priority Level: {{.priority_level}}
-    
-    Data Source: {{.data_source}}
-    API Endpoint: {{.api_endpoint}}
-    Access Key: {{.access_key}}
-    
-    Additional Context: {{.context_info}}
-    
-    Please confirm that you received all these parameters correctly and provide a brief analysis summary.
+  # Has to be in a single line or it will break the mock-llm JSON when echoing it back
+  input: "data_type={{.data_type}} customer={{.customer_name}} environment={{.environment}} method={{.analysis_method}} priority={{.priority_level}} source={{.data_source}} endpoint={{.api_endpoint}} key={{.access_key}} context={{.context_info}}"
   
   parameters:
     # Direct value parameters

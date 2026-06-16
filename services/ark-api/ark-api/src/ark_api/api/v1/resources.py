@@ -2,14 +2,20 @@
 import logging
 import yaml
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import Optional
-from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.dynamic import DynamicClient
 from ark_sdk.k8s import get_context
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ...auth.dependencies import get_impersonation_config
+from ...constants.query_param_descriptions import (
+    NAMESPACE_DESCRIPTION,
+    LABEL_SELECTOR_DESCRIPTION,
+)
+from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -34,7 +40,8 @@ async def get_core_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Get a core Kubernetes resource by name.
@@ -55,7 +62,7 @@ async def get_core_resource(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -74,7 +81,9 @@ async def list_core_resources(
     request: Request,
     version: str,
     kind: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     List core Kubernetes resources.
@@ -83,6 +92,7 @@ async def list_core_resources(
         version: API version (e.g., 'v1')
         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
         namespace: The namespace (defaults to current context)
+        label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
 
     Returns:
         Response: List of raw Kubernetes resources as JSON
@@ -90,11 +100,12 @@ async def list_core_resources(
     Examples:
         - GET /v1/resources/api/v1/Pod
         - GET /v1/resources/api/v1/Service
+        - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
     """
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -102,7 +113,7 @@ async def list_core_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace)
+        resources = await api_resource.get(namespace=namespace, label_selector=label_selector)
 
         return _create_resource_response(resources.to_dict(), request)
 
@@ -115,7 +126,8 @@ async def get_grouped_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Get a grouped Kubernetes resource by name.
@@ -141,7 +153,7 @@ async def get_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Getting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -161,10 +173,12 @@ async def list_grouped_resources(
     group: str,
     version: str,
     kind: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
-    status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
+    status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     List grouped Kubernetes resources with optional filtering.
@@ -174,6 +188,7 @@ async def list_grouped_resources(
         version: API version (e.g., 'v1', 'v1alpha1')
         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
         namespace: The namespace (defaults to current context)
+        label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
         workflowName: Filter by workflow name (partial match, case insensitive)
         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
         status: Filter by workflow status
@@ -186,13 +201,14 @@ async def list_grouped_resources(
         - GET /v1/resources/apis/batch/v1/Job
         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
+        - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
     """
     if namespace is None:
         namespace = get_context()["namespace"]
 
     api_version = f"{group}/{version}"
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -200,7 +216,7 @@ async def list_grouped_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace)
+        resources = await api_resource.get(namespace=namespace, label_selector=label_selector)
         resources_dict = resources.to_dict()
 
         # Apply filters for Workflow resources
@@ -247,7 +263,8 @@ async def create_core_resource(
     version: str,
     kind: str,
     body: dict,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Create a core Kubernetes resource.
@@ -268,7 +285,7 @@ async def create_core_resource(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -289,7 +306,8 @@ async def create_grouped_resource(
     version: str,
     kind: str,
     body: dict,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Create a grouped Kubernetes resource.
@@ -315,7 +333,7 @@ async def create_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Creating resource: api_version={api_version}, kind={kind}, namespace={namespace}")
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -334,7 +352,8 @@ async def delete_core_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Delete a core Kubernetes resource by name.
@@ -355,7 +374,7 @@ async def delete_core_resource(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -375,7 +394,8 @@ async def delete_grouped_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Delete a grouped Kubernetes resource by name.
@@ -401,7 +421,7 @@ async def delete_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Deleting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -422,6 +442,7 @@ async def get_pod_logs(
     container: Optional[str] = Query(None, description="Container name (defaults to first container)"),
     tail_lines: Optional[int] = Query(1000, alias="tailLines", description="Number of lines to tail"),
     follow: Optional[bool] = Query(False, description="Follow log stream"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> PlainTextResponse:
     """
     Get logs from a pod.
@@ -440,7 +461,7 @@ async def get_pod_logs(
         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log
         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log?container=main&tailLines=100
     """
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
         
         try:
@@ -464,6 +485,7 @@ async def get_workflow_logs(
     namespace: str,
     container: Optional[str] = Query("main", description="Container name"),
     tail_lines: Optional[int] = Query(1000, description="Number of lines to tail"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> PlainTextResponse:
     """
     Get logs for a workflow node by fetching directly from the pod.
@@ -482,7 +504,7 @@ async def get_workflow_logs(
     Examples:
         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log
     """
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
         
         try:

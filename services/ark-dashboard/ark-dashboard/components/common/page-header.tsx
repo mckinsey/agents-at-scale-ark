@@ -1,10 +1,10 @@
 'use client';
 
 import { Info } from 'lucide-react';
-import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 import { Fragment } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -28,7 +28,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 export type BreadcrumbElement = {
   label: string;
-  href: ComponentProps<typeof Link>['href'];
+  href: ComponentProps<typeof NamespacedLink>['href'];
 };
 
 type BreadcrumbsDropdownProps = {
@@ -44,9 +44,9 @@ function BreadcrumbsDropdown({ elements }: BreadcrumbsDropdownProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {elements.map(e => (
-          <Link href={e.href} key={e.label}>
+          <NamespacedLink href={e.href} key={e.label}>
             <DropdownMenuItem>{e.label}</DropdownMenuItem>
-          </Link>
+          </NamespacedLink>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -64,7 +64,7 @@ function BreadcrumbsLinks({ elements }: BreadcrumbsLinksProps) {
         <Fragment key={link.label}>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href={link.href}>{link.label}</Link>
+              <NamespacedLink href={link.href}>{link.label}</NamespacedLink>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
@@ -144,7 +144,7 @@ export function PageHeader({
               <>
                 <BreadcrumbItem>
                   <BreadcrumbLink asChild>
-                    <Link href={firstCrumb.href}>{firstCrumb.label}</Link>
+                    <NamespacedLink href={firstCrumb.href}>{firstCrumb.label}</NamespacedLink>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />

@@ -1,5 +1,3 @@
-import OpenAI from 'openai';
-
 export interface QueryTarget {
   id: string;
   name: string;
@@ -44,17 +42,10 @@ export interface Team {
 }
 
 export class ArkApiClient {
-  private openai: OpenAI;
   private baseUrl: string;
 
   constructor(arkApiUrl: string) {
     this.baseUrl = arkApiUrl;
-    this.openai = new OpenAI({
-      baseURL: `${arkApiUrl}/openai/v1`,
-      apiKey: 'dummy', // ark-api doesn't require an API key
-      dangerouslyAllowBrowser: false,
-      maxRetries: 0, // Disable automatic retries for query errors
-    });
   }
 
   getBaseUrl(): string {
@@ -63,20 +54,32 @@ export class ArkApiClient {
 
   async getQueryTargets(): Promise<QueryTarget[]> {
     try {
-      const models = await this.openai.models.list();
+      const targets: QueryTarget[] = [];
+      const endpoints = [
+        { type: 'agent', path: '/v1/agents' },
+        { type: 'model', path: '/v1/models' },
+        { type: 'team', path: '/v1/teams' },
+        { type: 'tool', path: '/v1/tools' },
+      ];
 
-      const targets: QueryTarget[] = models.data.map((model) => {
-        const parts = model.id.split('/');
-        const type = parts[0] || 'model';
-        const name = parts.slice(1).join('/') || model.id;
-
-        return {
-          id: model.id,
-          name,
-          type,
-          description: model.id,
-        };
-      });
+      for (const ep of endpoints) {
+        try {
+          const response = await fetch(`${this.baseUrl}${ep.path}`);
+          if (response.ok) {
+            const data = (await response.json()) as { items?: Array<{ name: string; description?: string }> };
+            for (const item of data.items || []) {
+              targets.push({
+                id: `${ep.type}/${item.name}`,
+                name: item.name,
+                type: ep.type,
+                description: item.description || item.name,
+              });
+            }
+          }
+        } catch {
+          // Skip unavailable resource types
+        }
+      }
 
       return targets;
     } catch (error) {
@@ -221,27 +224,40 @@ export class ArkApiClient {
     }
   }
 
-  async createChatCompletion(
-    params: OpenAI.Chat.Completions.ChatCompletionCreateParams
-  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-    return (await this.openai.chat.completions.create({
-      ...params,
-      stream: false,
-    })) as OpenAI.Chat.Completions.ChatCompletion;
+  async createQuery(params: {
+    input: string;
+    target: { type: string; name: string };
+    sessionId?: string;
+    conversationId?: string;
+    timeout?: string;
+    metadata?: { annotations?: Record<string, string> };
+  }): Promise<Record<string, unknown>> {
+    const response = await fetch(`${this.baseUrl}/v1/queries/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `cli-query-${Date.now()}`,
+        type: 'user',
+        input: params.input,
+        target: params.target,
+        sessionId: params.sessionId,
+        conversationId: params.conversationId,
+        timeout: params.timeout,
+        ...(params.metadata ? { metadata: params.metadata } : {}),
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Query creation failed (${response.status}): ${text}`);
+    }
+    return (await response.json()) as Record<string, unknown>;
   }
 
-  async *createChatCompletionStream(
-    params: OpenAI.Chat.Completions.ChatCompletionCreateParams
-  ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
-    // Errors from OpenAI SDK will automatically propagate with proper error messages
-    // and kill the CLI, so no try/catch needed here
-    const stream = await this.openai.chat.completions.create({
-      ...params,
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      yield chunk;
+  async getQuery(queryName: string): Promise<Record<string, unknown>> {
+    const response = await fetch(`${this.baseUrl}/v1/queries/${queryName}`);
+    if (!response.ok) {
+      throw new Error(`Failed to get query: ${response.status}`);
     }
+    return (await response.json()) as Record<string, unknown>;
   }
 }

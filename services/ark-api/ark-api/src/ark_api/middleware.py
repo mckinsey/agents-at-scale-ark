@@ -11,7 +11,6 @@ class ReadOnlyMiddleware(BaseHTTPMiddleware):
         self.read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
         
         self.allowed_paths = {
-            "/openai/v1/chat/completions",
             "/v1/queries",
         }
 

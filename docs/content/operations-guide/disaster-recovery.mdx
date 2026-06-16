@@ -1,0 +1,40 @@
+# Disaster Recovery
+
+Ark runs on Kubernetes and stores its state in custom resources (backed by etcd), Kubernetes Secrets, and optionally external backends for conversation memory and broker persistence. All runtime services (controller, API, dashboard, broker) are stateless by default and can be redeployed from their Helm charts without data loss.
+
+This guide outlines what needs to be protected and the general approach to recovery.
+
+## What to back up
+
+- **Ark custom resources** — All resources under the `ark.mckinsey.com` API group. These define your agents, teams, tools, models, and other platform configuration. If you use a [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) instead of etcd, back up the database using your provider's tooling.
+- **Kubernetes Secrets** — API keys, model credentials, and OIDC client secrets referenced by Ark resources.
+- **RBAC bindings** — Any RoleBindings or ClusterRoleBindings that grant users access to Ark resources (relevant if you use [user impersonation](/developer-guide/authentication#user-impersonation)).
+- **Helm values** — The configuration used to deploy Ark and its dependencies. Store these in version control.
+- **Memory backend** — If you use an external database for conversation memory, back it up using your database provider's tooling. Ark does not manage the memory backend lifecycle.
+- **Broker persistence** — The broker stores messages, streaming chunks, traces, events, and sessions in memory by default. If you have enabled file-based persistence (`persistence.enabled: true` in the broker Helm values), the backing PVC should be included in your backup.
+
+## Recovery approach
+
+### 1. Redeploy Ark
+
+Install the Ark Helm charts with your stored values. This re-creates the CRDs, controller, webhooks, API, dashboard, broker, and any marketplace components (executors, MCP servers). Wait for all services to become ready before restoring data.
+
+If you use a PostgreSQL storage backend, restore the database before deploying Ark.
+
+### 2. Restore custom resources
+
+Apply your backed-up Ark resources. Restore dependencies before dependents — standalone resources (models, tools, memory backends) first, then resources that reference them (agents), then resources that reference those (teams).
+
+### 3. Restore Secrets and RBAC
+
+Re-apply Kubernetes Secrets and any RBAC bindings to their original namespaces.
+
+### 4. Restore the memory backend
+
+If applicable, restore your external conversation memory database independently.
+
+### 5. Verify
+
+Confirm the controller is reconciling resources, services are healthy, and a test query executes successfully.
+
+For general Kubernetes backup and restore patterns, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/cluster-administration/).

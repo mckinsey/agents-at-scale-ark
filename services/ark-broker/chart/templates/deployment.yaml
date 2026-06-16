@@ -19,6 +19,16 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "ark-broker.serviceAccountName" . }}
+      {{- if eq .Values.backends.message "postgres" }}
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag | default .Values.app.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.migrate.image.pullPolicy }}
+          args: ["-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           {{- with .Values.securityContext }}
@@ -34,6 +44,8 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.memory.port | quote }}
+            - name: REQUEST_TIMEOUT_MS
+              value: {{ .Values.server.requestTimeout | quote }}
             {{- if .Values.limits.maxMessages }}
             - name: MAX_MESSAGES
               value: {{ .Values.limits.maxMessages | quote }}
@@ -50,6 +62,24 @@ spec:
             - name: MAX_EVENTS
               value: {{ .Values.limits.maxEvents | quote }}
             {{- end }}
+            - name: MESSAGE_BACKEND
+              value: {{ .Values.backends.message | quote }}
+            {{- if eq .Values.backends.message "postgres" }}
+            - name: DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            - name: DATABASE_POOL_MAX
+              value: {{ .Values.database.poolMax | quote }}
+            - name: DATABASE_CONNECT_TIMEOUT_MS
+              value: {{ .Values.database.connectTimeoutMs | quote }}
+            - name: DATABASE_STATEMENT_TIMEOUT_MS
+              value: {{ .Values.database.statementTimeoutMs | quote }}
+            - name: MESSAGE_VISIBILITY_TTL_SECONDS
+              value: {{ .Values.database.visibilityTtlSeconds | int | quote }}
+            {{- if .Values.database.debugQueries }}
+            - name: DATABASE_DEBUG_QUERIES
+              value: "true"
+            {{- end }}
+            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: MEMORY_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.memoryFileName }}"
@@ -59,30 +89,40 @@ spec:
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.traceFileName }}"
             - name: EVENT_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.eventFileName }}"
+            - name: SESSIONS_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.sessionsFileName }}"
             {{- end }}
-          {{- if .Values.persistence.enabled }}
           volumeMounts:
+            {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
-          {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
           resources:
             {{- toYaml .Values.app.resources | nindent 12 }}
-      {{- if .Values.persistence.enabled }}
       volumes:
+        {{- if .Values.persistence.enabled }}
         - name: data
           {{- if .Values.persistence.existingClaim }}
           persistentVolumeClaim:
@@ -91,7 +131,10 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "ark-broker.fullname" . }}-data
           {{- end }}
-      {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

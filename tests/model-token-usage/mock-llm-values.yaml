@@ -1,0 +1,44 @@
+ark:
+  model:
+    name: model-token-test
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "Quantum computing uses quantum mechanics principles including superposition, entanglement, and interference to process information in fundamentally different ways than classical computers. Quantum bits or qubits can exist in multiple states simultaneously through superposition, allowing parallel computation. Entanglement links qubits so the state of one instantly influences another regardless of distance. Key quantum algorithms include Shor's algorithm for factoring large numbers exponentially faster than classical methods, threatening current cryptography, and Grover's algorithm providing quadratic speedup for database search. Current challenges include maintaining qubit coherence, minimizing gate errors, and scaling systems while managing noise through quantum error correction techniques like surface codes."
+            },
+            "finish_reason": "stop"
+          }],
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 200,
+            "total_tokens": 300
+          }
+        }

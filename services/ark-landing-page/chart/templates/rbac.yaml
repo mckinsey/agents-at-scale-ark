@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Values.app.name }}
+  name: {{ .Values.app.name }}-{{ .Release.Namespace }}
   labels:
     app: {{ .Values.app.name }}
 rules:
@@ -11,7 +11,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.app.name }}
+  name: {{ .Values.app.name }}-{{ .Release.Namespace }}
   labels:
     app: {{ .Values.app.name }}
 subjects:
@@ -20,6 +20,6 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Values.app.name }}
+  name: {{ .Values.app.name }}-{{ .Release.Namespace }}
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

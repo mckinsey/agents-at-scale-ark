@@ -1,14 +1,12 @@
 # Disclaimer
 
-## Technical Preview
+## Open Source Software
 
-Agents at Scale - Agentic Runtime for Kubernetes ("Ark") is released as a technical preview and early access release. This software is provided as a Request for Comments (RFC) to share elements of our technical approach with the broader technology community, gather valuable feedback, and seek input from practitioners and researchers in the field of agentic AI systems and Kubernetes orchestration.
-
-As a technical preview release, this software may contain incomplete features, experimental functionality, and is subject to significant changes based on community feedback and continued development. The software is provided "as is" without warranties of any kind, and users should expect potential instability, breaking changes, and limited support during this preview phase.
+Ark is open-source software under active development. The agentic AI space is evolving rapidly, and Ark evolves with it — expect frequent updates, new features, and breaking changes between releases. The software is provided "as is" without warranties of any kind.
 
 ## API Stability and Migration
 
-This technical preview alpha release does not provide a stable API, and migration of existing data will not be supported until the first general availability launch. However, since Ark functions primarily as an operational layer, the recommended approach is to define your resources declaratively in YAML files or store configuration data in your application layer database, decoupled from Ark itself. This enables you to recreate resources in Ark as needed, allowing the system to reconcile them without data migration concerns.
+Ark does not yet provide a stable API, and breaking changes may occur between releases. Follow the [upgrading guide](/reference/upgrading) for migration steps. Since Ark functions primarily as an operational layer, the recommended approach is to define your resources declaratively in YAML files or store configuration data in your application layer database, decoupled from Ark itself. This enables you to recreate resources in Ark as needed, allowing the system to reconcile them without data migration concerns.
 
 ## Security
 
@@ -33,12 +31,12 @@ The default configuration includes:
 - Configurable network policies and service mesh integration
 - Pluggable secrets management and encryption capabilities
 
-Ark's design philosophy enables organizations to implement their required security posture through standard Kubernetes security primitives, enterprise identity providers, network security controls, and compliance frameworks. The platform provides the necessary extension points and configuration options to support defense-in-depth strategies without prescribing specific security implementations that may conflict with existing organizational standards.
+Ark's design philosophy enables organizations to implement their required security posture through standard Kubernetes security primitives, enterprise identity providers, network security controls, and compliance frameworks. Ark provides the necessary extension points and configuration options to support defense-in-depth strategies without prescribing specific security implementations that may conflict with existing organizational standards.
 
 ### Security-Conscious Design
 
-Ark's architecture and design decisions prioritize compatibility with Kubernetes enterprise security practices. Rather than implementing proprietary security mechanisms, all components are designed to work seamlessly with existing Kubernetes security primitives, enterprise identity systems, and network security controls. This approach ensures that organizations can apply their established security policies and tooling without architectural conflicts or security gaps introduced by the platform itself.
+Ark's architecture and design decisions prioritize compatibility with Kubernetes enterprise security practices. Rather than implementing proprietary security mechanisms, all components are designed to work seamlessly with existing Kubernetes security primitives, enterprise identity systems, and network security controls. This approach ensures that organizations can apply their established security policies and tooling without architectural conflicts or security gaps introduced by Ark itself.
 
 ## Third Party Vendors, Services and Products
 
-Any reference to third-party vendors, services, or products in this technical preview is provided for informational purposes only and does not constitute an endorsement, recommendation, or approval by McKinsey & Company. Inclusion of such references does not imply any affiliation or partnership, and McKinsey & Company makes no representations or warranties regarding the quality, reliability, or suitability of any third-party offerings mentioned.
+Any reference to third-party vendors, services, or products is provided for informational purposes only and does not constitute an endorsement, recommendation, or approval by McKinsey & Company. Inclusion of such references does not imply any affiliation or partnership, and McKinsey & Company makes no representations or warranties regarding the quality, reliability, or suitability of any third-party offerings mentioned.

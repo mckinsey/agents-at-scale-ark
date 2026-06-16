@@ -26,7 +26,11 @@ export {
   type MemoryUpdateRequest,
 } from './memories';
 export { namespacesService, type Namespace } from './namespaces';
-export { enginesService, type Engine } from './engines';
+export {
+  executionEnginesService,
+  type ExecutionEngine,
+  type ExecutionEnginePhase,
+} from './engines';
 export { mcpServersService, type MCPServer } from './mcp-servers';
 export { toolsService, type Tool } from './tools';
 export { queriesService } from './queries';

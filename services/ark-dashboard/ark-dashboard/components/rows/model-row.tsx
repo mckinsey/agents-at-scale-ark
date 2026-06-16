@@ -1,10 +1,10 @@
 'use client';
 
 import { Pencil, Trash2 } from 'lucide-react';
-import Link from 'next/link';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +18,7 @@ import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelTypeDisplayName } from '@/lib/constants/model-types';
 import type { Model } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 interface ModelRowProps {
   model: Model;
@@ -32,6 +33,7 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
     model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     DASHBOARD_SECTIONS.models.icon,
   );
+  const originIcon = getOriginIcon(model.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
 
   return (
     <>
@@ -40,9 +42,12 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
           <div className="flex max-w-[300px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={model.name}>
-              {model.name}
-            </p>
+            <div className="flex items-center gap-x-1.5">
+              {originIcon}
+              <p className="truncate text-sm font-medium" title={model.name}>
+                {model.name}
+              </p>
+            </div>
             <p
               className="text-muted-foreground truncate text-xs"
               title={`${getModelTypeDisplayName(model.type)} • ${model.provider} • ${model.model}`}>
@@ -66,9 +71,9 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
                   size="sm"
                   className="h-8 w-8 p-0"
                   asChild>
-                  <Link href={`/models/${model.id}/update`}>
+                  <NamespacedLink href={`/models/${model.id}/update`}>
                     <Pencil className="h-4 w-4" />
-                  </Link>
+                  </NamespacedLink>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Edit model</TooltipContent>

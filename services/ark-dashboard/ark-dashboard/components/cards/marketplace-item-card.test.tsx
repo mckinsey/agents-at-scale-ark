@@ -33,6 +33,7 @@ function makeItem(overrides?: Partial<MarketplaceItem>): MarketplaceItem {
     tags: [],
     createdAt: '2024-01-01',
     updatedAt: '2024-01-01',
+    uis: undefined,
     ...overrides,
   };
 }
@@ -281,6 +282,109 @@ describe('MarketplaceItemCard', () => {
           description: 'Network error',
         }),
       );
+    });
+  });
+
+  describe('UI buttons for installed items', () => {
+    it('renders UI buttons when item is installed and has uis array', () => {
+      const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [
+              { url: 'https://phoenix.example.com', label: 'Phoenix Dashboard' },
+            ],
+          })}
+        />,
+      );
+
+      const uiButton = screen.getByRole('button', { name: /phoenix dashboard/i });
+      expect(uiButton).toBeInTheDocument();
+
+      fireEvent.click(uiButton);
+      expect(spy).toHaveBeenCalledWith('https://phoenix.example.com', '_blank');
+
+      spy.mockRestore();
+    });
+
+    it('renders multiple UI buttons when item has multiple uis', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [
+              { url: 'https://phoenix.example.com', label: 'Phoenix' },
+              { url: 'https://minio.example.com', label: 'MinIO' },
+            ],
+          })}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /phoenix/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /minio/i })).toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when item is not installed', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'available',
+            uis: [
+              { url: 'https://phoenix.example.com', label: 'Phoenix' },
+            ],
+          })}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /phoenix/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when uis array is empty', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [],
+          })}
+        />,
+      );
+
+      expect(screen.getByText('Installed')).toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when uis is undefined', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+          })}
+        />,
+      );
+
+      expect(screen.getByText('Installed')).toBeInTheDocument();
+    });
+
+    it('opens URL in new tab when UI button is clicked', () => {
+      const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [
+              { url: 'https://test.example.com', label: 'Test UI' },
+            ],
+          })}
+        />,
+      );
+
+      const uiButton = screen.getByRole('button', { name: /test ui/i });
+      fireEvent.click(uiButton);
+
+      expect(spy).toHaveBeenCalledWith('https://test.example.com', '_blank');
+      spy.mockRestore();
     });
   });
 });

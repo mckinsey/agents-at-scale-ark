@@ -7,4 +7,4 @@ spec:
     You are a research specialist focused on gathering and analyzing information.
     Provide concise, fact-based research findings. Keep responses brief.
   modelRef:
-    name: test-model
+    name: test-model-mock

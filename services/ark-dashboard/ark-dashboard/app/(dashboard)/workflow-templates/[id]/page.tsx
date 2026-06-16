@@ -10,7 +10,7 @@ import {
   Trash2,
   Workflow,
 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type WorkflowStats,
   type WorkflowTemplate,
@@ -46,7 +47,7 @@ const ARGO_BASE_URL =
 
 export default function FlowDetailPage() {
   const params = useParams();
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const { namespace, readOnlyMode } = useNamespace();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
@@ -258,7 +259,7 @@ export default function FlowDetailPage() {
       toast.success('Workflow template deleted', {
         description: `Deleted workflow template: ${flowId}`,
       });
-      router.push('/workflow-templates');
+      push('/workflow-templates');
     } catch (err) {
       console.error('Failed to delete workflow template:', err);
       toast.error('Failed to delete workflow template', {

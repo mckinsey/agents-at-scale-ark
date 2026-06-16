@@ -3,18 +3,23 @@ import userEvent from '@testing-library/user-event';
 import { Provider } from 'jotai';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentEditor } from '@/components/editors/agent-editor';
 import type { Model, Team } from '@/lib/services';
 
-beforeAll(() => {
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  }));
-});
+const mockNamespace = 'default';
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: mockNamespace,
+    isNamespaceResolved: true,
+    availableNamespaces: [{ name: mockNamespace }],
+    isPending: false,
+    setNamespace: vi.fn(),
+    createNamespace: vi.fn(),
+    readOnlyMode: false,
+  })),
+}));
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
