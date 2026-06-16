@@ -53,7 +53,7 @@ def _broker_available() -> bool:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def broker_available():
+def broker_available(ark_api_url):
     if not _broker_available():
         pytest.skip("Broker traces endpoint not reachable — skip OTEL trace tests")
 
@@ -309,7 +309,6 @@ metadata:
   namespace: default
 spec:
   strategy: sequential
-  maxTurns: 2
   members:
     - name: {cls.agent_a}
       type: agent
