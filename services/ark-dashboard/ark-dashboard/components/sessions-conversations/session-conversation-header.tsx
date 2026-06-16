@@ -79,7 +79,7 @@ export function SessionConversationHeader({ session, formattedDate }: SessionCon
                     </div>
                   </div>
                   <div className="text-fg-secondary text-sm font-normal leading-5 line-clamp-1">
-                    Participants
+                    Targets
                   </div>
                 </div>
               </div>

@@ -57,9 +57,9 @@ describe('NewConversationPanel', () => {
       />
     );
 
-    expect(screen.getByPlaceholderText('Search participants...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search a target...')).toBeInTheDocument();
     expect(screen.getByText('In this session')).toBeInTheDocument();
-    expect(screen.getByText('All participants')).toBeInTheDocument();
+    expect(screen.getByText('All available targets')).toBeInTheDocument();
   });
 
   it('renders all participants from both lists', () => {
@@ -88,7 +88,7 @@ describe('NewConversationPanel', () => {
       />
     );
 
-    await user.type(screen.getByPlaceholderText('Search participants...'), 'tool');
+    await user.type(screen.getByPlaceholderText('Search a target...'), 'tool');
 
     await waitFor(() => {
       expect(screen.queryByText('agent-1')).not.toBeInTheDocument();
@@ -106,7 +106,7 @@ describe('NewConversationPanel', () => {
       />
     );
 
-    await user.type(screen.getByPlaceholderText('Search participants...'), 'nonexistent');
+    await user.type(screen.getByPlaceholderText('Search a target...'), 'nonexistent');
 
     await waitFor(() => {
       expect(screen.getByText('No participants found')).toBeInTheDocument();

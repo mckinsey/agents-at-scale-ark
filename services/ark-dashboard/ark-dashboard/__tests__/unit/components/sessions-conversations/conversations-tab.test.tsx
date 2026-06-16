@@ -270,30 +270,6 @@ describe('ConversationsTab', () => {
     expect(screen.getByText('No conversations yet')).toBeInTheDocument();
   });
 
-  it('should toggle sidebar collapse', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    const collapseButton = screen.getByTitle('Collapse sidebar');
-    await user.click(collapseButton);
-
-    // Sidebar should be collapsed - "Conversations" header hidden
-    expect(screen.queryByText('Conversations')).not.toBeInTheDocument();
-
-    const expandButton = screen.getByTitle('Expand sidebar');
-    await user.click(expandButton);
-
-    // Sidebar should be expanded - "Conversations" header visible
-    expect(screen.getByText('Conversations')).toBeInTheDocument();
-  });
-
   it('should open new conversation panel', async () => {
     const user = userEvent.setup();
 

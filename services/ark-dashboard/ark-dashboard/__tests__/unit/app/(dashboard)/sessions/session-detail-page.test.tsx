@@ -91,7 +91,7 @@ describe('SessionDetailPage', () => {
       // Session ID appears in the header (may also appear in child components)
       expect(screen.getAllByText('session-123')[0]).toBeInTheDocument();
       expect(screen.getByText('5')).toBeInTheDocument(); // conversationCount
-      expect(screen.getByText('Participants')).toBeInTheDocument();
+      expect(screen.getByText('Targets')).toBeInTheDocument();
       expect(screen.getByText('active')).toBeInTheDocument();
     });
   });

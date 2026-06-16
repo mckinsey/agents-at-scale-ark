@@ -10,11 +10,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TagToggle } from '@/components/ui/tag-toggle';
 import { Separator } from '@/components/ui/separator';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Check } from '@/components/icons/check';
 import { Search } from '@/components/icons/search';
 import { Close } from '@/components/icons/close';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +27,8 @@ import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { agentsService } from '@/lib/services/agents';
 import { teamsService } from '@/lib/services/teams';
 import { toolsService } from '@/lib/services/tools';
+import { cn } from '@/lib/utils';
+import { stripNamespace } from '@/lib/utils/participant';
 import { generateUUID } from '@/lib/utils/uuid';
 import type { ParticipantType } from '@/lib/services/conversations';
 
@@ -119,8 +126,8 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     return { agentsGroup, teamsGroup, toolsGroup };
   }, [filteredParticipants]);
 
-  const handleSelect = (name: string, checked: boolean) => {
-    setSelectedParticipant(checked ? name : null);
+  const handleSelect = (name: string) => {
+    setSelectedParticipant((prev) => (prev === name ? null : name));
   };
 
   const handleCreate = () => {
@@ -150,20 +157,35 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
   const renderParticipantItem = (participant: UnifiedParticipant) => {
     const isSelected = selectedParticipant === participant.name;
+    const label = stripNamespace(participant.name);
 
     return (
-      <label
+      <button
         key={participant.name}
-        className="flex w-full cursor-pointer items-center gap-3 px-3 py-1"
+        type="button"
+        role="option"
+        data-testid="session-participant-option"
+        aria-selected={isSelected}
+        onClick={() => handleSelect(participant.name)}
+        className={cn(
+          'flex h-10 w-full min-w-0 cursor-pointer items-center gap-2 px-3 text-left transition-colors hover:bg-stateslayer-overlay-hover',
+          isSelected && 'bg-stateslayer-overlay-hover'
+        )}
       >
-        <Checkbox
-          checked={isSelected}
-          onCheckedChange={(checked) => handleSelect(participant.name, checked === true)}
-        />
-        <span className="text-fg-primary truncate text-sm tracking-[-0.112px]">
-          {participant.name}
-        </span>
-      </label>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="min-w-0 flex-1 truncate text-sm text-fg-primary tracking-[-0.112px]">
+              {label}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+        {isSelected && (
+          <IconShell size="sm" variant="secondary">
+            <Check />
+          </IconShell>
+        )}
+      </button>
     );
   };
 
@@ -201,7 +223,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     }
 
     return (
-      <ScrollArea className="min-h-0 flex-1 pr-1">
+      <ScrollArea className="min-h-0 flex-1 pr-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
         <div className="flex flex-col gap-6">
           {renderSection('Agents', groupedParticipants.agentsGroup)}
           {renderSection('Teams', groupedParticipants.teamsGroup)}
@@ -224,7 +246,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
                 Create new session
               </DialogTitle>
               <DialogDescription className="text-fg-tertiary text-base leading-6 tracking-[-0.032px]">
-                Select one participant to start a session
+                Select one target to start a session
               </DialogDescription>
             </div>
             <DialogClose
@@ -277,10 +299,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
         <div className="flex flex-col gap-6">
           <Separator className="bg-stroke-divider" />
-          <div className="flex items-center justify-between">
-            <span className="text-fg-tertiary text-sm tracking-[-0.112px]">
-              {selectedParticipant ? '1 participant selected' : '0 participants selected'}
-            </span>
+          <div className="flex items-center justify-end">
             <div className="flex gap-3">
               <Button variant="outline" onClick={handleClose} className="min-w-[92px]">
                 Cancel

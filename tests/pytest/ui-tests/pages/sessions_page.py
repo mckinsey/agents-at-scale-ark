@@ -66,8 +66,8 @@ class SessionsPage(BasePage):
             logger.info("Could not fill search input")
 
         participant_item = self.page.locator(
-            f"[role='dialog'] label:has-text('{participant_name}'), "
-            f"[role='dialog'] div.font-medium:has-text('{participant_name}')"
+            f"[role='dialog'] [data-testid='session-participant-option']:has-text('{participant_name}'), "
+            f"[role='dialog'] button[role='option']:has-text('{participant_name}')"
         ).first
         participant_item.wait_for(state="visible", timeout=10000)
         participant_item.click()
@@ -106,10 +106,22 @@ class SessionsPage(BasePage):
             logger.warning("Could not get conversation count: %s", e)
         return 0
 
+    def wait_for_conversation_count_in_header(
+        self, min_count: int = 1, timeout_s: int = 30
+    ) -> int:
+        start = time.time()
+        count = 0
+        while time.time() - start < timeout_s:
+            count = self.get_conversation_count_from_header()
+            if count >= min_count:
+                return count
+            self.page.wait_for_timeout(1000)
+        return count
+
     def get_participants_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(div:has-text('Participants'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Targets'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
