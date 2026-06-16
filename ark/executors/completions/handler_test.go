@@ -747,7 +747,7 @@ func TestHandlerExtractTtlFromQuery(t *testing.T) {
 
 			var ttlSeconds *int64
 			if query.Spec.TTL != nil {
-				secs := int64(query.Spec.TTL.Duration.Seconds())
+				secs := int64(query.Spec.TTL.Seconds())
 				ttlSeconds = &secs
 			}
 

@@ -196,7 +196,7 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	}
 	var ttlSeconds *int64
 	if query.Spec.TTL != nil {
-		secs := int64(query.Spec.TTL.Duration.Seconds())
+		secs := int64(query.Spec.TTL.Seconds())
 		ttlSeconds = &secs
 	}
 	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, ttlSeconds, h.eventing.MemoryRecorder())
