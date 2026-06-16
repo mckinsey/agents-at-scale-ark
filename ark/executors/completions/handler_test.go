@@ -713,7 +713,7 @@ func TestDispatchTargetUnsupportedType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported target type")
 }
 
-func TestHandlerExtractTtlFromQuery(t *testing.T) {
+func TestTtlSecondsFromQuery(t *testing.T) {
 	tests := []struct {
 		name        string
 		queryTTL    *metav1.Duration
@@ -745,17 +745,13 @@ func TestHandlerExtractTtlFromQuery(t *testing.T) {
 				Spec: arkv1alpha1.QuerySpec{TTL: tt.queryTTL},
 			}
 
-			var ttlSeconds *int64
-			if query.Spec.TTL != nil {
-				secs := int64(query.Spec.TTL.Seconds())
-				ttlSeconds = &secs
-			}
+			result := ttlSecondsFromQuery(query)
 
 			if tt.expectNil {
-				require.Nil(t, ttlSeconds)
+				require.Nil(t, result)
 			} else {
-				require.NotNil(t, ttlSeconds)
-				require.Equal(t, tt.expectedSec, *ttlSeconds)
+				require.NotNil(t, result)
+				require.Equal(t, tt.expectedSec, *result)
 			}
 		})
 	}
