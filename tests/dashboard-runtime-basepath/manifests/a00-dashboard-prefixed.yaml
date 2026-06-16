@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ark-dashboard-prefixed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ark-dashboard-prefixed
+  template:
+    metadata:
+      labels:
+        app: ark-dashboard-prefixed
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: dashboard
+          image: ghcr.io/mckinsey/agents-at-scale-ark/ark-dashboard:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: 0.0.0.0
+            - name: ARK_DASHBOARD_BASE_PATH
+              value: /tenant-a
+            - name: NEXT_PUBLIC_BASE_PATH
+              value: /tenant-a
+            - name: ARK_API_SERVICE_HOST
+              value: ark-api
+            - name: ARK_API_SERVICE_PORT
+              value: "80"
+            - name: ARK_API_SERVICE_PROTOCOL
+              value: http
+            - name: AUTH_MODE
+              value: open
+            - name: AUTH_SECRET
+              value: chainsaw-test-secret-do-not-use-in-production
+            - name: BASE_URL
+              value: http://ark-dashboard-prefixed:3000/tenant-a
+          readinessProbe:
+            httpGet:
+              path: /tenant-a
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ark-dashboard-prefixed
+spec:
+  selector:
+    app: ark-dashboard-prefixed
+  ports:
+    - port: 3000
+      targetPort: 3000

@@ -4,7 +4,7 @@ The Ark dashboard is a Next.js application built with `output: 'standalone'`. It
 
 Compounding this, `lib/api/config.ts:2-5` deliberately bypasses `basePath` for browser-originated API calls by setting `API_CONFIG.baseURL = window.location.origin`. A comment in the file documents this is intentional. A few other call sites (`lib/services/proxy.ts:27`, `app/(dashboard)/broker/page.tsx:464`) use bare relative paths instead, so even today there is an inconsistency between absolute and relative API URL construction.
 
-The dashboard chart deploys per-release and exposes `ARK_API_SERVICE_HOST/PORT/PROTOCOL` env vars (`services/ark-dashboard/chart/templates/deployment.yaml:51-56`); each dashboard pod already proxies `${basePath}/api/*` to that backend through its own middleware (`proxy.ts`). The `ark-api` chart is namespace-scoped (every template uses `{{ .Release.Namespace }}`), so deploying one release per tenant namespace is the supported pattern.
+The dashboard chart deploys per-release and exposes `ARK_API_SERVICE_HOST/PORT/PROTOCOL` env vars (`services/ark-dashboard/chart/templates/deployment.yaml:51-56`). A prototype confirmed that despite a `proxy.ts` file at the dashboard root that looks like Next.js middleware, the file was deliberately renamed off `middleware.ts` in commit b16307122 and is no longer wired up — the compiled `middleware-manifest.json` is empty. In the cluster today, API traffic from the browser goes straight to ark-api through the cluster's ingress/gateway, not through the dashboard. The `ARK_API_SERVICE_*` env vars on the dashboard Deployment are therefore vestigial in the current behaviour. The `ark-api` chart itself is namespace-scoped (every template uses `{{ .Release.Namespace }}`), so deploying one release per tenant namespace is supported as-is.
 
 The driving constraint: clients consume the dashboard through a single external domain and cannot rebuild the container image. The image we publish must serve any URL prefix the operator chooses at install time, and multiple per-tenant installs must coexist behind one Ingress.
 
@@ -66,15 +66,21 @@ Sentinel substitution is the documented pattern used by other Next.js apps that 
 
 **Why:** Next.js does expose `basePath` to the client via the router, but reading it from `process.env.NEXT_PUBLIC_*` is simpler in non-component code (services, helpers) and is the same substitution mechanism we already need for the framework's own bundles. One mechanism, one source of truth, no two ways to do it.
 
-### Decision 5: Per-tenant deployment topology, fronted by one Ingress
+### Decision 5: Per-tenant deployment topology, with the Ingress routing both UI and API traffic
 
-**Choice:** For multi-tenant hosting, deploy one `ark-dashboard` release and one `ark-api` release per tenant namespace. A single Ingress on the shared domain routes each path prefix to the corresponding dashboard service. Each dashboard pod's `ARK_API_SERVICE_HOST` points at its own tenant's ark-api.
+**Choice:** For multi-tenant hosting, deploy one `ark-dashboard` release and one `ark-api` release per tenant namespace. A single Ingress on the shared domain routes two prefix classes per tenant:
 
-**Why:** Both charts already deploy namespace-scoped resources. Each `ark-api` enforces tenant isolation through its existing RBAC (subject to the audit in Decision 6). One dashboard pod per tenant satisfies the "one base path per Next.js process" constraint. Ingress path routing is well-supported across NGINX, Istio Gateway, and Gateway API; we make no controller-specific assumption.
+- `/<ns>/api/v1/*` → tenant `ark-api`, with `/<ns>` stripped from the request before it reaches ark-api (NGINX `rewrite-target`, Istio `URLRewrite`, or Gateway API `URLRewrite` filter)
+- `/<ns>/*` → tenant `ark-dashboard`
+
+The dashboard does NOT proxy API requests itself; it only serves UI. The browser issues `/<basePath>/api/v1/...` URLs and the Ingress is what sees and routes them.
+
+**Why:** This matches the existing production behaviour (the cluster's ingress is already the thing that gets `/api/v1/*` traffic to ark-api today; we just add per-tenant prefixes). Adding a real Next.js middleware would re-introduce a code path that was deliberately removed (commit b16307122), and would add complexity that operators already solve at the ingress layer. The trade-off: each tenant needs two ingress rules instead of one. That cost is small versus the alternative of resurrecting and maintaining an in-app proxy.
 
 **Alternatives considered:**
 
-- **One dashboard pod, namespace inferred from URL** — would require non-trivial source changes to make the dashboard "namespace-aware" per request and a redesign of how ark-api host/port are resolved. Larger blast radius, more risk.
+- **Dashboard internally proxies `/<basePath>/api/*` to ark-api** (Option A in the apply-time pivot) — requires renaming `proxy.ts` → `middleware.ts`, making it base-path-aware, and owning a token-forwarding/middleware code path. Rejected: matches an architecture the project explicitly moved away from.
+- **One dashboard pod, namespace inferred from URL** — large source change to make the dashboard "namespace-aware" per request and a redesign of how ark-api host/port are resolved. Larger blast radius, more risk.
 - **Subdomains per tenant (`namespace1.mydomain.com`)** — explicitly ruled out by the client's single-domain constraint.
 
 ### Decision 6: Audit `ark-api` ClusterRole for tenant isolation
@@ -83,7 +89,21 @@ Sentinel substitution is the documented pattern used by other Next.js apps that 
 
 **Why:** Tenant isolation is the operational story this change enables. We owe operators a clear statement of what the per-tenant deployment guarantees and what it does not. The audit is a read-only design step here; any code changes it produces are tracked in tasks.md.
 
-### Decision 7: Entrypoint runs as the non-root `nextjs` user
+### Decision 7: Remove the orphaned `proxy.ts` file
+
+**Choice:** Delete `services/ark-dashboard/ark-dashboard/proxy.ts`. The file looks like Next.js middleware but is not registered as one (its filename no longer matches the Next.js convention) and the compiled `middleware-manifest.json` confirms it is absent from the build.
+
+**Why:** Removing it eliminates a class of future bug where someone reads `proxy.ts`, assumes the dashboard proxies its own API traffic, and writes downstream code that depends on that assumption. There is nothing in the dashboard that imports `proxy.ts`; only `coverage/` mentions it.
+
+**Caveat:** the `app/api/v1/[...proxy]/route.ts` catch-all is a different file and remains: it's the dashboard's mock export YAML generator and is reached by `lib/services/export.ts`. The mock route is left untouched by this change (see Decision 8).
+
+### Decision 8: Leave the `[...proxy]` catch-all alone
+
+**Choice:** Do not modify or remove `services/ark-dashboard/ark-dashboard/app/api/v1/[...proxy]/route.ts`. It returns 501 for most paths but generates mock export YAML for `/{resource}/{name}/export`, and the dashboard's export flow still hits it.
+
+**Why:** With ingress-routed API traffic (Decision 5), the Ingress intercepts `/<basePath>/api/v1/*` before it reaches the dashboard pod, so the catch-all only runs when called *without* a basePath prefix — i.e. the current behaviour for the export endpoint. The catch-all therefore doesn't interfere with multi-tenant API routing. Touching it is out of scope.
+
+### Decision 9: Entrypoint runs as the non-root `nextjs` user
 
 **Choice:** The substitution entrypoint runs as the existing `nextjs` user (`Dockerfile:26-29`). The Dockerfile must ensure the files to be rewritten are owned by `nextjs` and writable by it; this matches the existing `chown -R nextjs:nodejs ./` in `Dockerfile:35`.
 
@@ -103,16 +123,17 @@ Sentinel substitution is the documented pattern used by other Next.js apps that 
 ## Migration Plan
 
 1. Ship the runtime-substitution image alongside the helper refactor in a single release. Default behavior (no base path) is unchanged, so single-tenant deployments upgrade transparently.
-2. Document the multi-tenant install procedure in `services/ark-dashboard/README.md` and a top-level guide: one Helm release per tenant namespace for both `ark-dashboard` and `ark-api`, plus one Ingress with prefix routes.
-3. Add a chainsaw test (or extend an existing one) that installs two ark-dashboard releases under different prefixes against mock ark-api and asserts:
+2. Document the multi-tenant install procedure in `services/ark-dashboard/README.md` and a top-level guide: one Helm release per tenant namespace for both `ark-dashboard` and `ark-api`, plus a single Ingress with two prefix rules per tenant (`/<ns>/api/v1/*` with rewrite to ark-api, `/<ns>/*` to ark-dashboard).
+3. Add a chainsaw test (or extend an existing one) that installs two ark-dashboard releases under different prefixes alongside two ark-api releases and an Ingress, then asserts:
    - HTML response under `/ns1/` references only `/ns1/...` assets.
-   - A `GET /ns1/api/v1/context` reaches the ns1 ark-api pod.
-   - A `GET /ns2/api/v1/context` reaches the ns2 ark-api pod.
+   - `GET /ns1/api/v1/<endpoint>` reaches the ns1 ark-api pod (post-rewrite path is `/v1/<endpoint>`).
+   - `GET /ns2/api/v1/<endpoint>` reaches the ns2 ark-api pod.
+   - `GET /api/v1/<endpoint>` (no prefix) is not routed to either tenant's ark-api by the ingress.
 4. Rollback: revert to the previous image. Helm releases with `ARK_DASHBOARD_BASE_PATH` unset continue to work on either image; releases with a non-empty value lose subpath hosting on the older image (expected).
 
 ## Open Questions
 
-- **Sentinel value**: `__ARK_BASE_PATH__` versus a path-shaped sentinel like `/__ark_base_path_placeholder__`. Path-shaped is friendlier to URL parsers during the build; finalize during prototyping.
+- **Sentinel value**: ~~`__ARK_BASE_PATH__` versus a path-shaped sentinel like `/__ark_base_path_placeholder__`. Path-shaped is friendlier to URL parsers during the build; finalize during prototyping.~~ **Resolved**: `/__ark_base_path__`. Path-shaped so Next.js's own URL parsing accepts it as a valid `basePath` during `next build`. Underscored to be highly unlikely to collide with real content; lower-case to read naturally in error messages.
 - **NextAuth integration**: confirm exactly which env vars (`NEXTAUTH_URL`, `AUTH_URL`, `BASE_URL`) need to include the base path, and whether substitution is needed there or whether passing them in directly from Helm values is enough.
 - **`ark-api` ClusterRole audit outcome**: if the audit reveals cross-namespace reads, do we scope the role down in this change or track it as a follow-up? Default: track as follow-up unless the leak is material to the multi-tenant story.
 - **Asset prefix vs base path divergence**: today both default to empty. Do we want a separate sentinel for `assetPrefix` (to support CDN hosting where assets live elsewhere from API)? Default: use the same sentinel until a concrete CDN use case appears.

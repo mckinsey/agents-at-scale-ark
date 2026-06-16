@@ -1,0 +1,117 @@
+# Multi-tenant dashboard hosting under a shared domain
+
+Host one Ark dashboard per tenant namespace behind a single domain, with each tenant served from its own URL prefix (e.g. `mydomain.com/namespace1/`, `mydomain.com/namespace2/`).
+
+## When to use this
+
+Use this pattern when clients can only access one external domain but need a separate dashboard and API per tenant. Each tenant's namespace, secrets, models, agents, and runtime resources stay isolated — only the URL space is shared.
+
+## Topology
+
+For each tenant namespace, install:
+
+- One `ark-api` Helm release (in the tenant's namespace).
+- One `ark-dashboard` Helm release (in the tenant's namespace) with `app.config.basePath` set to the tenant's URL prefix.
+
+A single cluster-wide Ingress (or Gateway API HTTPRoute) routes:
+
+- `mydomain.com/<ns>/api/v1/*` → tenant `ark-api`, with `/<ns>` stripped before the request reaches ark-api.
+- `mydomain.com/<ns>/*` → tenant `ark-dashboard`.
+
+The dashboard does not proxy API traffic itself. The Ingress is the routing point.
+
+## Install per tenant
+
+```bash
+helm install ark-api-ns1 ./services/ark-api/chart \
+  --namespace namespace1 --create-namespace
+
+helm install ark-dashboard-ns1 ./services/ark-dashboard/chart \
+  --namespace namespace1 \
+  --set app.config.basePath=/namespace1 \
+  --set app.config.arkApiService.host=ark-api.namespace1.svc.cluster.local \
+  --set 'app.env[0].name=BASE_URL,app.env[0].value=https://mydomain.com/namespace1' \
+  --set 'app.env[1].name=AUTH_URL,app.env[1].value=https://mydomain.com/namespace1/api/auth'
+```
+
+Repeat per tenant, substituting namespace and prefix. A ready-to-use values file lives at `services/ark-dashboard/chart/values-multi-tenant.example.yaml`.
+
+`ARK_DASHBOARD_BASE_PATH` is applied at container startup by the dashboard's entrypoint, which substitutes a sentinel inside the published image. No image rebuild is required to change the prefix.
+
+## Example Ingress (NGINX)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ark-multi-tenant
+  namespace: ingress-shared
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /v1/$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: mydomain.com
+      http:
+        paths:
+          # /namespace1/api/v1/<rest> -> ark-api in namespace1 as /v1/<rest>
+          - path: /namespace1/api/v1(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ark-api
+                port: { number: 80 }
+          # /namespace2/api/v1/<rest> -> ark-api in namespace2 as /v1/<rest>
+          - path: /namespace2/api/v1(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ark-api
+                port: { number: 80 }
+          # /namespace1/<rest> -> dashboard in namespace1, no rewrite
+          - path: /namespace1
+            pathType: Prefix
+            backend:
+              service:
+                name: ark-dashboard
+                port: { number: 3000 }
+          # /namespace2/<rest> -> dashboard in namespace2, no rewrite
+          - path: /namespace2
+            pathType: Prefix
+            backend:
+              service:
+                name: ark-dashboard
+                port: { number: 3000 }
+```
+
+NGINX's `rewrite-target` annotation is set per-Ingress; the rewrite applies only to the api-prefixed paths. The dashboard paths do *not* strip the prefix because Next.js needs to see `/<ns>/...` to route under its baked `basePath`.
+
+`ExternalName` services or per-namespace `Ingress` resources are equivalent alternatives — the important property is that one rule per tenant captures the API prefix and rewrites it, and one rule per tenant captures the dashboard prefix without rewrite.
+
+For Gateway API, use `URLRewrite` filters on the API-prefixed `HTTPRoute` rules and pass through the dashboard-prefixed ones.
+
+## Tenant isolation
+
+The per-tenant `ark-api` Role + RoleBinding isolates secrets, configmaps, pods, services, and all Ark CRDs to the tenant's namespace. Tenants cannot read or modify each other's resources through their `ark-api` instance.
+
+Caveats (current state of the `ark-api` chart):
+
+- The chart's `ClusterRole` grants every tenant's ark-api full CRUD on the cluster-scoped `ArkConfig` resource. Tenants can read and modify the cluster's `ArkConfig`. Do not store cross-tenant defaults in `ArkConfig` if your trust model requires strict isolation.
+- If `impersonation.enabled=true` in the ark-api chart, every tenant's service account can impersonate arbitrary users and groups cluster-wide. Keep impersonation disabled for cross-organisation tenancy.
+
+The full audit lives in the `dashboard-runtime-basepath` OpenSpec change (`openspec/changes/dashboard-runtime-basepath/rbac-audit.md`).
+
+## Verifying a deployment
+
+After installing two tenants, the following should hold:
+
+- `curl https://mydomain.com/namespace1/` returns the Ark Dashboard HTML, with every asset reference under `/namespace1/`.
+- `curl https://mydomain.com/namespace1/api/v1/context?namespace=namespace1` is routed to the `namespace1` ark-api and returns its context.
+- `curl https://mydomain.com/namespace2/api/v1/context?namespace=namespace2` is routed to the `namespace2` ark-api.
+- `curl https://mydomain.com/api/v1/context` (no prefix) is not routed to any tenant's ark-api.
+- A user signing into `mydomain.com/namespace1/` stays under `/namespace1/` for every subsequent navigation, including OIDC callbacks — provided `BASE_URL` and `AUTH_URL` include the prefix.
+
+## Rolling back
+
+Set `app.config.basePath=""` (default) and re-install the dashboard release. The container substitutes the sentinel with empty at startup; the dashboard serves at the root again. No image change is required.

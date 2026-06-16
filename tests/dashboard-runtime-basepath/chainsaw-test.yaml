@@ -1,0 +1,136 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: dashboard-runtime-basepath
+  labels:
+    requires-images: "true"
+spec:
+  description: |
+    Verifies the ark-dashboard image's entrypoint substitutes the build-time
+    base-path sentinel with the operator-supplied ARK_DASHBOARD_BASE_PATH at
+    container startup, producing a dashboard that serves correctly under any
+    prefix (including the empty default).
+  steps:
+  - name: deploy-prefixed-dashboard
+    try:
+    - apply:
+        file: manifests/a00-dashboard-prefixed.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: ark-dashboard-prefixed
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+
+  - name: deploy-root-dashboard
+    try:
+    - apply:
+        file: manifests/a01-dashboard-root.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: ark-dashboard-root
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+
+  - name: deploy-probe-pod
+    try:
+    - apply:
+        file: manifests/a02-probe.yaml
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: dashboard-probe
+        timeout: 1m
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: probe-prefixed-dashboard
+    try:
+    - script:
+        content: |
+          set -eu
+          # /tenant-a serves the dashboard
+          STATUS=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -s -o /dev/null -w '%{http_code}' \
+            http://ark-dashboard-prefixed:3000/tenant-a)
+          echo "GET /tenant-a -> $STATUS"
+          [ "$STATUS" = "200" ]
+
+          # / returns 404 (nothing at root when basepath is set)
+          STATUS=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -s -o /dev/null -w '%{http_code}' \
+            http://ark-dashboard-prefixed:3000/)
+          echo "GET / -> $STATUS"
+          [ "$STATUS" = "404" ]
+
+          # HTML at /tenant-a includes Ark Dashboard title
+          BODY=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -sS http://ark-dashboard-prefixed:3000/tenant-a)
+          echo "$BODY" | grep -q '<title>Ark Dashboard</title>'
+
+          # Every emitted asset path begins with /tenant-a
+          if echo "$BODY" | grep -oE '/_next/[^"\\ ]+' | grep -v '^/tenant-a/_next' > /tmp/unprefixed-assets; then
+            echo "FAIL: assets emitted without /tenant-a prefix:"
+            cat /tmp/unprefixed-assets
+            exit 1
+          fi
+
+          # No sentinel residue
+          if echo "$BODY" | grep -q '__ark_base_path__'; then
+            echo "FAIL: sentinel '__ark_base_path__' still present in HTML"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 60s
+
+  - name: probe-root-dashboard
+    try:
+    - script:
+        content: |
+          set -eu
+          # / serves the dashboard (legacy behaviour)
+          STATUS=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -s -o /dev/null -w '%{http_code}' \
+            http://ark-dashboard-root:3000/)
+          echo "GET / -> $STATUS"
+          [ "$STATUS" = "200" ]
+
+          # HTML title present
+          BODY=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -sS http://ark-dashboard-root:3000/)
+          echo "$BODY" | grep -q '<title>Ark Dashboard</title>'
+
+          # No sentinel residue
+          if echo "$BODY" | grep -q '__ark_base_path__'; then
+            echo "FAIL: sentinel still present in HTML for the empty-basepath case"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 60s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: ark-dashboard-prefixed
+    - describe:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: ark-dashboard-root
+    - podLogs:
+        name: ark-dashboard-prefixed
+    - podLogs:
+        name: ark-dashboard-root

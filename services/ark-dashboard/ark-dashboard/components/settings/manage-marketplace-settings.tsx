@@ -10,6 +10,7 @@ import { marketplaceSourcesAtom, type MarketplaceSource } from '@/atoms/marketpl
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { apiUrl } from '@/lib/api/config';
 
 const PUBLIC_MARKETPLACE_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
@@ -33,7 +34,7 @@ function validateMarketplaceUrl(url: string): string | null {
 }
 
 async function validateMarketplaceSchema(url: string): Promise<string | null> {
-  const response = await fetch('/api/marketplace/validate', {
+  const response = await fetch(apiUrl('/api/marketplace/validate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),

@@ -66,19 +66,19 @@ Internal page navigation triggered by the dashboard (links, programmatic routing
 - **WHEN** the dashboard issues an authentication or post-login redirect while base path `/namespace1` is set
 - **THEN** the redirect target URL includes the `/namespace1` prefix
 
-### Requirement: API proxy middleware matches the configured base path
+### Requirement: Ingress routes per-tenant API traffic to the tenant's ark-api
 
-The dashboard's server-side middleware that forwards `/api/*` requests to the ark-api backend SHALL match requests whose path starts with `<basePath>/api/` and SHALL forward them to the configured ark-api host with the base path and `/api` prefix stripped from the backend path.
+Per-tenant API traffic SHALL be routed by the cluster's ingress (or equivalent gateway) — not by the dashboard pod — from `${origin}/<basePath>/api/v1/*` to the tenant's own ark-api service, with the `/<basePath>` prefix stripped before the request reaches ark-api. The dashboard chart SHALL document and example this routing.
 
-#### Scenario: Prefixed API request is proxied to ark-api
+#### Scenario: Ingress strips the prefix before reaching ark-api
 
-- **WHEN** the browser sends `GET /namespace1/api/v1/context` to a dashboard pod configured with base path `/namespace1` and ark-api host `ark-api.namespace1.svc:8000`
-- **THEN** the dashboard forwards `GET /v1/context` to `ark-api.namespace1.svc:8000`
+- **WHEN** the browser sends `GET ${origin}/namespace1/api/v1/context` with the ingress configured to route `/namespace1/api/v1/*` to `ark-api.namespace1.svc:8000` with prefix-strip
+- **THEN** `ark-api.namespace1.svc:8000` receives `GET /v1/context` and the browser receives ark-api's response
 
-#### Scenario: API request without the prefix is not proxied
+#### Scenario: Two tenants' API traffic stays isolated
 
-- **WHEN** the browser sends `GET /api/v1/context` to a dashboard pod configured with base path `/namespace1`
-- **THEN** the dashboard does not forward the request to ark-api and instead returns the response Next.js would produce for an unprefixed URL
+- **WHEN** the ingress is configured with both `/namespace1/api/v1/*` → `ark-api-ns1` and `/namespace2/api/v1/*` → `ark-api-ns2` and a browser issues calls to each prefix
+- **THEN** ark-api-ns1 only receives traffic prefixed by `/namespace1/api/v1/` and ark-api-ns2 only receives traffic prefixed by `/namespace2/api/v1/`, with no cross-tenant routing
 
 ### Requirement: First-class Helm value for base path
 
