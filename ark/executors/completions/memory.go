@@ -49,12 +49,14 @@ type Config struct {
 	RetryDelay     time.Duration
 	ConversationId string
 	QueryName      string
+	TtlSeconds     *int64
 }
 
 type MessagesRequest struct {
 	ConversationID string                                   `json:"conversation_id,omitempty"`
 	QueryID        string                                   `json:"query_id"`
 	Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	TtlSeconds     *int64                                   `json:"ttl_seconds,omitempty"`
 }
 
 type MessageRecord struct {
@@ -88,10 +90,11 @@ func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryNam
 	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, config, memoryRecorder)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, ttlSeconds *int64, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	config := DefaultConfig()
 	config.ConversationId = conversationId
 	config.QueryName = queryName
+	config.TtlSeconds = ttlSeconds
 
 	var memoryName, memoryNamespace string
 

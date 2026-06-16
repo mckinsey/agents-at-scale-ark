@@ -194,7 +194,12 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	if conversationId == "" {
 		conversationId = query.Spec.ConversationId
 	}
-	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, h.eventing.MemoryRecorder())
+	var ttlSeconds *int64
+	if query.Spec.TTL != nil {
+		secs := int64(query.Spec.TTL.Duration.Seconds())
+		ttlSeconds = &secs
+	}
+	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, ttlSeconds, h.eventing.MemoryRecorder())
 	if err != nil {
 		querySpan.End()
 		return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
