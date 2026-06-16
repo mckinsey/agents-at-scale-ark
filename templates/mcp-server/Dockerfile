@@ -63,7 +63,7 @@ ENTRYPOINT [ "/bin/bash", "-c", "mcp-proxy --debug --port 8080 --host 0.0.0.0 --
 {{- end }}
 
 {{- else if eq .Values.technology "go" }}
-FROM golang:1.26.3-alpine AS go-builder
+FROM golang:1.26.4-alpine AS go-builder
 {{- if .Values.packageSource }}
 {{- if eq .Values.packageSource "go-install" }}
 RUN go install {{ .Values.packageName }}@latest
