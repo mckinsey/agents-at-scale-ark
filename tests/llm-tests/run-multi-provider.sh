@@ -4,11 +4,11 @@ set -e
 echo "=== Running Multi-Provider LLM Tests ==="
 
 MODELS=()
-FAILED_MODELS=()
-PASSED_MODELS=()
-TOTAL_TESTS=0
-TOTAL_PASSED=0
-TOTAL_FAILED=0
+# Index-aligned with MODELS. Indexed arrays (not associative) so this runs
+# on macOS /bin/bash 3.2 too.
+PASSED_PER_MODEL=()
+FAILED_PER_MODEL=()
+TOTAL_PER_MODEL=()
 
 # Check which providers are configured (OpenAI first for better network stability)
 if [ -n "${E2E_TEST_OPENAI_API_KEY}" ]; then
@@ -37,66 +37,76 @@ echo "Running tests for ${#MODELS[@]} provider(s): ${MODELS[*]}"
 echo ""
 
 mkdir -p /tmp/chainsaw-report
+REPORT=/tmp/chainsaw-report/chainsaw-report.json
 
-for MODEL in "${MODELS[@]}"; do
+# Fallback count if the report is missing (e.g. chainsaw crashed pre-write).
+TESTS_PER_PROVIDER=$(find llm-tests -mindepth 1 -maxdepth 1 -type d ! -name setup | wc -l | tr -d ' ')
+
+for i in "${!MODELS[@]}"; do
+  MODEL=${MODELS[$i]}
   echo "========================================"
   echo "Testing with MODEL=$MODEL"
   echo "========================================"
-  
+
   export MODEL
-  
-  # Count actual test directories (excluding setup/)
-  TESTS_PER_PROVIDER=$(find llm-tests -mindepth 1 -maxdepth 1 -type d ! -name setup | wc -l | tr -d ' ')
-  
-  if chainsaw test llm-tests/ --config .chainsaw.yaml; then
-    TOTAL_TESTS=$((TOTAL_TESTS + TESTS_PER_PROVIDER))
-    TOTAL_PASSED=$((TOTAL_PASSED + TESTS_PER_PROVIDER))
-    
-    echo "✓ $MODEL tests PASSED"
-    PASSED_MODELS+=("$MODEL")
+  rm -f "$REPORT"
+
+  chainsaw test llm-tests/ --config .chainsaw.yaml || true
+
+  if [ -f "$REPORT" ]; then
+    passed=$(jq '[.tests[]? | select(.status == "passed")] | length' "$REPORT")
+    failed=$(jq '[.tests[]? | select(.status == "failed")] | length' "$REPORT")
+    total=$(jq  '.tests   | length' "$REPORT")
   else
-    TOTAL_TESTS=$((TOTAL_TESTS + TESTS_PER_PROVIDER))
-    TOTAL_FAILED=$((TOTAL_FAILED + TESTS_PER_PROVIDER))
-    
-    echo "✗ $MODEL tests FAILED"
-    FAILED_MODELS+=("$MODEL")
+    passed=0
+    failed=$TESTS_PER_PROVIDER
+    total=$TESTS_PER_PROVIDER
+    echo "WARNING: no chainsaw report at $REPORT; assuming all $total tests failed"
   fi
-  
+
+  PASSED_PER_MODEL[$i]=$passed
+  FAILED_PER_MODEL[$i]=$failed
+  TOTAL_PER_MODEL[$i]=$total
+
+  if [ "$failed" -eq 0 ] && [ "$total" -gt 0 ]; then
+    echo "✓ $MODEL: $passed/$total tests passed"
+  else
+    echo "✗ $MODEL: $passed/$total tests passed ($failed failed)"
+  fi
   echo ""
 done
 
 echo "========================================"
 echo "Test Summary"
 echo "========================================"
-echo "Individual Tests: $TOTAL_PASSED/$TOTAL_TESTS passed"
-echo ""
 
-# Count test directories dynamically
-TESTS_PER_PROVIDER=$(find llm-tests -mindepth 1 -maxdepth 1 -type d ! -name setup | wc -l | tr -d ' ')
-
-# Show provider-level details
-for model in "${PASSED_MODELS[@]}"; do
-  echo "  ✓ $model: $TESTS_PER_PROVIDER/$TESTS_PER_PROVIDER tests passed"
+total_passed=0
+total_tests=0
+passed_providers=0
+for i in "${!MODELS[@]}"; do
+  total_passed=$((total_passed + PASSED_PER_MODEL[$i]))
+  total_tests=$((total_tests + TOTAL_PER_MODEL[$i]))
+  if [ "${FAILED_PER_MODEL[$i]}" -eq 0 ] && [ "${TOTAL_PER_MODEL[$i]}" -gt 0 ]; then
+    passed_providers=$((passed_providers + 1))
+  fi
 done
 
-if [ ${#FAILED_MODELS[@]} -gt 0 ]; then
-  for model in "${FAILED_MODELS[@]}"; do
-    echo "  ✗ $model: 0/$TESTS_PER_PROVIDER tests passed"
-  done
-fi
-
+echo "Individual Tests: $total_passed/$total_tests passed"
 echo ""
-echo "Providers: ${#PASSED_MODELS[@]}/${#MODELS[@]} passed"
-for model in "${PASSED_MODELS[@]}"; do
-  echo "  ✓ $model"
+
+for i in "${!MODELS[@]}"; do
+  model=${MODELS[$i]}
+  if [ "${FAILED_PER_MODEL[$i]}" -eq 0 ] && [ "${TOTAL_PER_MODEL[$i]}" -gt 0 ]; then
+    echo "  ✓ $model: ${PASSED_PER_MODEL[$i]}/${TOTAL_PER_MODEL[$i]} tests passed"
+  else
+    echo "  ✗ $model: ${PASSED_PER_MODEL[$i]}/${TOTAL_PER_MODEL[$i]} tests passed (${FAILED_PER_MODEL[$i]} failed)"
+  fi
 done
 
-if [ ${#FAILED_MODELS[@]} -gt 0 ]; then
-  echo ""
-  echo "Failed providers:"
-  for model in "${FAILED_MODELS[@]}"; do
-    echo "  ✗ $model"
-  done
+echo ""
+echo "Providers: $passed_providers/${#MODELS[@]} passed"
+
+if [ "$passed_providers" -ne "${#MODELS[@]}" ]; then
   echo ""
   echo "ERROR: Some tests failed"
   exit 1
