@@ -186,7 +186,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
   const renderContent = () => {
     if (isLoading) {
       return (
-        <div className="text-fg-tertiary py-8 text-center text-sm">
+        <div className="text-fg-tertiary flex flex-1 items-center justify-center py-8 text-center text-sm">
           Loading participants...
         </div>
       );
@@ -194,14 +194,14 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
     if (filteredParticipants.length === 0) {
       return (
-        <div className="text-fg-tertiary py-8 text-center text-sm">
+        <div className="text-fg-tertiary flex flex-1 items-center justify-center py-8 text-center text-sm">
           No participants found
         </div>
       );
     }
 
     return (
-      <ScrollArea className="pr-1 [&_[data-slot=scroll-area-viewport]]:max-h-[420px]">
+      <ScrollArea className="min-h-0 flex-1 pr-1">
         <div className="flex flex-col gap-6">
           {renderSection('Agents', groupedParticipants.agentsGroup)}
           {renderSection('Teams', groupedParticipants.teamsGroup)}
@@ -214,7 +214,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="bg-surface-bg-secondary sm:max-w-[600px] gap-10 border-0 p-12"
+        className="bg-surface-bg-secondary sm:max-w-[600px] flex h-[700px] max-h-[90vh] flex-col gap-10 border-0 p-12"
         showCloseButton={false}
       >
         <DialogHeader>
@@ -239,7 +239,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
           </div>
         </DialogHeader>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-6">
           <div className="flex flex-col gap-4">
             <div className="border-b-stroke-tertiary flex h-8 w-full items-center gap-2 border-b">
               <IconShell size="sm" variant="secondary">
