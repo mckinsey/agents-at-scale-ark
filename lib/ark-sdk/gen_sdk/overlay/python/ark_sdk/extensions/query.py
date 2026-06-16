@@ -109,7 +109,7 @@ async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: 
     execution_engine_annotations = await _resolve_execution_engine_annotations(agent, namespace)
 
     raw_ttl = getattr(query.spec, "ttl", None)
-    message_ttl_seconds = _parse_go_duration_to_seconds(raw_ttl) if raw_ttl else None
+    message_ttl_seconds = _parse_go_duration_to_seconds(raw_ttl) if isinstance(raw_ttl, str) else None
 
     return ExecutionEngineRequest(
         agent=agent_config,
