@@ -254,7 +254,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - run: make -j24 services-build-all
 
@@ -654,14 +654,36 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Warm up network connectivity
+        env:
+          AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
-          echo "Warming up egress network paths..."
+          echo "Warming up egress network paths to LLM providers..."
           for i in {1..5}; do
-            echo "Attempt $i: Testing connectivity to external APIs"
-            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            echo "Attempt $i:"
+            azure_ok=1
+            if [ -n "$AZURE_BASE_URL" ]; then
+              azure_ok=0
+              if curl -s -m 10 -o /dev/null "$AZURE_BASE_URL"; then
+                echo "✓ Azure OpenAI reachable"
+                azure_ok=1
+              else
+                echo "✗ Azure OpenAI unreachable (will retry)"
+              fi
+            fi
+            openai_ok=0
+            if curl -s -m 10 -o /dev/null "$OPENAI_BASE_URL"; then
+              echo "✓ OpenAI reachable"
+              openai_ok=1
+            else
+              echo "✗ OpenAI unreachable (will retry)"
+            fi
+            if [ "$azure_ok" = 1 ] && [ "$openai_ok" = 1 ]; then
+              echo "Network warm-up complete - LLM providers reachable"
+              break
+            fi
             sleep 3
           done
-          echo "Network warm-up complete - egress connectivity established"
 
       - name: Run multi-provider LLM tests
         env:
@@ -880,7 +902,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build and install ark-cli
         run: |
@@ -1013,7 +1035,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build ARK CLI
         run: |
@@ -1076,6 +1098,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.2"
+          # Coverage tooling only; no project build, so module caching has no value here.
+          cache: false
 
       - name: Install Python coverage tools
         run: |
@@ -1316,6 +1340,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.2'
+          # goreleaser builds tools/fark; cache against its go.sum.
+          cache-dependency-path: tools/fark/go.sum
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
@@ -1388,7 +1414,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install published ark-cli from npm
         run: |
