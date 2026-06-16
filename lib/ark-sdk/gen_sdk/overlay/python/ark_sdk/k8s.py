@@ -7,6 +7,7 @@ from functools import lru_cache
 from kubernetes import config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes_asyncio import client, config as async_config
+from kubernetes_asyncio.client import Configuration
 import base64
 from typing import Dict, List, Optional
 from kubernetes import client as sync_client
@@ -32,8 +33,6 @@ def create_api_client() -> ApiClient:
     return api
 
 NS_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-
-_async_k8s_initialized = False
 
 def get_namespace():
     """Get current namespace using standard Kubernetes patterns."""
@@ -119,15 +118,13 @@ def _init_k8s():
 
 async def init_k8s():
     """Initialize Kubernetes async client configuration by wrapping sync init."""
-    global _async_k8s_initialized
-    if _async_k8s_initialized:
+    if Configuration.get_default_copy().host:
         return
     _init_k8s()
     try:
         await async_config.load_kube_config()
     except:
         async_config.load_incluster_config()
-    _async_k8s_initialized = True
 
 
 class SecretClient:
