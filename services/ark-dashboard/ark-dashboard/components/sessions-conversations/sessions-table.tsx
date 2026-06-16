@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Add, BarChart, Search, SwapVert } from '@/components/icons';
+import { Add, BarChart, SwapVert } from '@/components/icons';
+import { ResourceSearchInput } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
-import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -139,50 +139,39 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
         </div>
       </div>
 
-      <div className="flex w-full items-end gap-3">
-        <div className="relative flex-1">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2">
-            <IconShell size="sm" variant="secondary">
-              <Search />
-            </IconShell>
+      <div className="flex w-full items-end justify-between gap-3">
+        <div className="flex items-end gap-3">
+          <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+          <div className="flex w-48 flex-col gap-2">
+            <span className="text-sm leading-5 text-fg-secondary">Date range</span>
+            <Select items={dateRangeItems} value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
+              <SelectTrigger className="h-9 w-48">
+                <SelectValue placeholder="Choose option" />
+              </SelectTrigger>
+              <SelectContent>
+                {dateRangeItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Input
-            type="search"
-            placeholder="Search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 pl-10 placeholder:text-fg-tertiary"
-          />
-        </div>
-        <div className="flex w-48 flex-col gap-2">
-          <span className="text-sm leading-5 text-fg-secondary">Date range</span>
-          <Select items={dateRangeItems} value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
-            <SelectTrigger className="h-9 w-48">
-              <SelectValue placeholder="Choose option" />
-            </SelectTrigger>
-            <SelectContent>
-              {dateRangeItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  <SelectItemText>{item.label}</SelectItemText>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex w-48 flex-col gap-2">
-          <span className="text-sm leading-5 text-fg-secondary">Status</span>
-          <Select items={statusItems} value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-            <SelectTrigger className="h-9 w-48">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  <SelectItemText>{item.label}</SelectItemText>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex w-48 flex-col gap-2">
+            <span className="text-sm leading-5 text-fg-secondary">Status</span>
+            <Select items={statusItems} value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+              <SelectTrigger className="h-9 w-48">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <Button onClick={() => setDialogOpen(true)} className="h-9">
           <IconShell size="sm">
