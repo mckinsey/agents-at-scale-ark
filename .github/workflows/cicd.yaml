@@ -939,6 +939,17 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Deploy localhost-gateway
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
+          helm upgrade --install localhost-gateway services/localhost-gateway/chart \
+            --namespace ark-system \
+            --create-namespace \
+            --wait \
+            --timeout=10m
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ark-system --timeout=120s
+          kubectl wait --for=condition=Programmed gateway/localhost-gateway -n ark-system --timeout=120s
+
       - name: Install mock-llm
         run: |
           for resource in deployment service serviceaccount configmap role rolebinding secret; do

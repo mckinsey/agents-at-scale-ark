@@ -1,11 +1,7 @@
 import pytest
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from helpers.namespace_helper import NamespaceTestHelper
-from helpers.ark_api_helper import get_resource_status, ensure_port_forward
+from helpers.ark_api_helper import get_api_url, is_api_reachable, get_resource_status
 
 TEST_NAMESPACE = "test-ns-cli"
 PREFIX = "test-ns-agent-"
@@ -21,6 +17,15 @@ def setup_namespace(helper):
     helper.setup()
     yield
     helper.teardown()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def api_available():
+    url = get_api_url()
+    assert is_api_reachable(), (
+        f"ark-api is not reachable at {url}. "
+        "Set ARK_API_URL to override, or ensure the local gateway is running."
+    )
 
 
 @pytest.mark.cli
@@ -94,10 +99,6 @@ class TestNamespaceIsolation:
         assert default_ns == "default"
 
     def test_get_agent_without_namespace_returns_404_not_500(self, helper):
-        assert ensure_port_forward(), (
-            "ark-api is not reachable on localhost:8080. "
-            "Run: kubectl port-forward svc/ark-api 8080:80 -n default"
-        )
         name = f"{PREFIX}404-check"
         success, message = helper.custom.create_agent(name, prompt="Issue 1399 test agent.")
         assert success, f"Failed to create agent: {message}"

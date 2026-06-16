@@ -111,7 +111,10 @@
     "express-rate-limit": "^8.3.0",
     "uuid": "^14.0.0",
     "postcss": "^8.5.10",
-    "ws": "^8.20.1",
-    "brace-expansion": ">=5.0.6"
+    "ws": "^8.21.0",
+    "brace-expansion": ">=5.0.6",
+    "esbuild": "^0.28.1",
+    "form-data": "^4.0.6",
+    "vite": "^8.0.16"
   }
 }
