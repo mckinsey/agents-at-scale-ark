@@ -2,8 +2,6 @@
 
 Builds on `marketplace-sources-configmap` (#2479): sources live in a per-namespace `marketplace-sources` ConfigMap, and the ark-api aggregator (`marketplace_items.py`) fetches each source's manifest server-side. That aggregator already (a) blocks non-routable hosts via an SSRF guard and (b) sets `follow_redirects=False`. This change adds an optional credential per source so private/authenticated manifests can be fetched.
 
-Threat class differs from the install feature (#2347): there is **no cluster mutation and no broad pod privilege** — the only new capability is an outbound HTTP fetch carrying a user-supplied token. The risk surface is **credential handling** (leakage, cross-user reuse), not privilege escalation.
-
 ## Goals / Non-Goals
 
 **Goals:**
@@ -23,15 +21,30 @@ The source entry in the ConfigMap gains an optional non-secret block, e.g. `auth
 
 - **Why:** ConfigMaps are plaintext; Secrets are the right store. Keeping the scheme/ref in the ConfigMap lets the aggregator know how to build the header without reading the Secret until fetch time.
 
+### Decision: Secret naming and schema
+- **Name:** `marketplace-source-<source-name>-auth` — derivable from the source name, so the aggregator and the create/update/delete path resolve it deterministically and the lifecycle (delete-with-source) needs no extra bookkeeping.
+- **Contents:** a single key `value` holding the credential. The `scheme` (`bearer`|`basic`) lives in the ConfigMap source entry, **not** the Secret — it is non-sensitive routing metadata, so keeping it in the ConfigMap leaves the Secret a pure value holder and lets the scheme be read or changed without touching the Secret.
+
 ### Decision: Read the credential Secret under the caller's impersonation, never the ark-api SA
 The aggregator reads the Secret with the requesting user's identity (same impersonation path as `marketplace-sources-configmap`). If the user can't read the Secret, the source fails for them and the credential is never used on their behalf.
 
 - **Why:** reading as the ark-api SA would let any catalogue viewer borrow another user's credential — the #2347 "service acts with more power than the caller" mistake. Impersonation makes the cluster enforce per-user access.
 - **Trade-off:** a shared authenticated source only resolves for users who can read its Secret. That is correct; granting broader access is an explicit RBAC decision.
 
-### Decision: Build the header by scheme
-- `bearer` → `Authorization: Bearer <value>` (GitHub raw also accepts `token <value>`; see open questions).
-- `basic` → `Authorization: Basic base64(":<value>")` (empty username + PAT, for Azure DevOps).
+### Decision: RBAC for credential Secrets — namespace-scoped
+Access to the credential Secrets is plain Kubernetes RBAC scoped to the marketplace namespace
+
+- **Read (fetch):** the aggregator impersonates the user, so the cluster requires that user's `get` on the Secret. That `get` *is* the "may use this private source" authorization — without it the source errors and the credential is never borrowed. No app-level permission table; the Secret's RBAC is the access control.
+- **Manage (editors):** a namespaced `Role` (`create`/`get`/`update`/`delete` on `secrets` + the `marketplace-sources` ConfigMap) bound to an explicit group via `RoleBinding`. No implicit "everyone in the namespace" — only named subjects get it.
+- **Why namespace-scoped suffices:** RBAC can't scope `create` by name (the name doesn't exist yet) or by label, so per-Secret write isolation isn't expressible. A namespaced `Role` bounds the blast radius to the marketplace namespace — the practical equivalent. A `ClusterRole` would be unacceptable (#2347 over-privilege); this is explicitly a `Role`.
+- **Rejected — ark-api SA owns the Secrets (`api_keys.py`/`mcp_auth_persistence.py` pattern):** reading/writing the credential with ark-api's own SA lets any viewer trigger a fetch with a credential they can't read — a confused deputy (#2347). All access goes through impersonation instead.
+
+### Decision: Authentication scheme is a fixed two-value enum (`bearer` | `basic`)
+The header is built from the scheme, never from a stored literal prefix:
+- `bearer` → `Authorization: Bearer <value>` — covers GitHub raw, GitHub Enterprise, and artifact stores. (GitHub also accepts the legacy `token <value>` form, but `Bearer` is the RFC standard and works for the same targets, so we emit one fixed prefix.)
+- `basic` → `Authorization: Basic base64(":<value>")` — empty username + PAT, for Azure DevOps.
+
+- **Why a fixed enum, not a per-source literal prefix:** the two schemes cover every target in scope (GitHub/GHES, ADO, common artifact stores). A configurable prefix is YAGNI; we would add one only if a real server is found that rejects `Bearer` and demands a different token prefix.
 
 ### Decision: Never leak the credential to another host
 Keep `follow_redirects=False`; a redirect on a credentialed fetch is an error, and the `Authorization` header is only ever sent to the configured source host. The SSRF guard continues to run before any request.
@@ -52,16 +65,10 @@ The credential value is never logged — not in request bodies, headers, or erro
 - **URL repoint to exfiltrate a stored credential** → mitigated: URL change requires re-supplying the credential.
 - **SSRF made more valuable by a credential** → mitigated: existing guard blocks loopback/link-local (incl. cloud metadata)/reserved before any request.
 - **Credential in logs** → mitigated: explicit scrubbing requirement.
-- **Secret RBAC scoping is awkward** → editors need to manage the per-source Secrets, but RBAC `resourceNames` can't prefix-match a naming convention; see open questions.
+- **Secret RBAC scoping** → resolved: editors get a namespace-scoped `Role` (never cluster-wide); reads are gated by per-user `get` under impersonation. K8s can't scope the write grant per-Secret, so the namespace bounds the blast radius — see the RBAC decision above.
 - **Dependency** → blocked on #2479 landing.
 
 ## Migration Plan
 
 - Additive: existing anonymous sources are untouched (no `auth` block → fetched as today).
 - Ships after #2479. Document how to add an authenticated source; remove the "No authentication for source URLs" bullet from PR #2336.
-
-## Open Questions
-
-- **Bearer prefix:** `Bearer <token>` (standard) vs `token <token>` (GitHub's documented form). GitHub raw accepts both; do we hardcode `Bearer`, or store the literal prefix per source for artifact stores that are strict?
-- **Secret RBAC scoping:** how do editors get create/get/update/delete on exactly the per-source credential Secrets? Options: a fixed naming convention + a Role over those names, or a label-selected Role (RBAC can't select by label for get, so likely a naming + Role-per-secret or a broader namespaced Secret role accepted by the platform team).
-- **Secret schema:** key names inside the Secret (e.g. `scheme`, `value`) and naming convention (`marketplace-source-<name>-auth`?).

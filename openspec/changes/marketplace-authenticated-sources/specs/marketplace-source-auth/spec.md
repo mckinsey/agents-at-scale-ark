@@ -2,12 +2,12 @@
 
 ### Requirement: Fetch marketplace sources that require authentication
 
-ark-api SHALL attach an `Authorization` header when fetching a source that has an associated credential, supporting both **bearer/token** (`Authorization: token <value>`) and **HTTP Basic** (`Authorization: Basic base64(":<value>")`) schemes, selectable per source. Sources without a credential SHALL be fetched anonymously, exactly as before.
+ark-api SHALL attach an `Authorization` header when fetching a source that has an associated credential, supporting both **bearer/token** (`Authorization: Bearer <value>`) and **HTTP Basic** (`Authorization: Basic base64(":<value>")`) schemes, selectable per source. Sources without a credential SHALL be fetched anonymously, exactly as before.
 
 #### Scenario: Bearer-authenticated source
 
 - **WHEN** a source has a credential configured with the bearer/token scheme
-- **THEN** ark-api fetches its manifest with `Authorization: token <value>` and the items load
+- **THEN** ark-api fetches its manifest with `Authorization: Bearer <value>` and the items load
 
 #### Scenario: HTTP Basic source (Azure DevOps)
 
@@ -110,3 +110,17 @@ The credential Secret SHALL be created and updated with its source and deleted w
 
 - **WHEN** a user edits an authenticated source to be anonymous (clears the credential)
 - **THEN** the credential Secret is deleted and the source is fetched anonymously afterward
+
+### Requirement: Document operating authenticated sources for platform teams
+
+Documentation SHALL explain how a platform team operates authenticated sources: the namespace-scoped `Role`/`RoleBinding` that grants editors credential-Secret access (and why it is never a `ClusterRole`), how a user's `get` on a credential Secret governs use of a private source, and the steps to add a bearer source and an Azure DevOps Basic source. The existing "No authentication for source URLs" limitation bullet (PR #2336) SHALL be removed once shipped.
+
+#### Scenario: Platform team can set up authenticated-source access
+
+- **WHEN** a platform team follows the documentation
+- **THEN** it can grant editors the namespace-scoped RBAC and add a working bearer source and an Azure DevOps Basic source without reading the code
+
+#### Scenario: Stale limitation removed
+
+- **WHEN** the feature ships
+- **THEN** the "No authentication for source URLs" bullet from PR #2336 is removed from the docs

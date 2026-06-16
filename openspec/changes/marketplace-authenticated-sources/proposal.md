@@ -29,8 +29,8 @@ This blocks the common enterprise hosting patterns: private GitHub repos, GitHub
 
 ## Impact
 
-- **ark-api** — `models/marketplace_sources.py` (source value schema gains an optional credential reference + auth scheme); `api/v1/marketplace_sources.py` (create/update/delete also manages the per-source Secret); `api/v1/marketplace_items.py` (aggregator reads the Secret and sets the `Authorization` header — `token` for bearer, `Basic base64(":<PAT>")` for ADO).
-- **ark-api RBAC** — ark-api needs to create/read/update/delete the per-source Secrets in the namespace; reads happen under user impersonation, so the requesting user's RBAC governs access (consistent with `marketplace-sources-configmap`).
+- **ark-api** — `models/marketplace_sources.py` (source value schema gains an optional credential reference + auth scheme); `api/v1/marketplace_sources.py` (create/update/delete also manages the per-source Secret); `api/v1/marketplace_items.py` (aggregator reads the Secret and sets the `Authorization` header — `Bearer <value>` for bearer, `Basic base64(":<PAT>")` for ADO).
+- **ark-api RBAC** — a namespace-scoped `Role` lets editors create/get/update/delete the per-source Secrets + the `marketplace-sources` ConfigMap, bound to an explicit group; all Secret access runs under user impersonation, so the requesting user's `get` governs use of a private source (consistent with `marketplace-sources-configmap`).
 - **ark-dashboard** — `components/settings/manage-marketplace-settings.tsx` and the marketplace service: UI to enter a credential and pick the scheme when adding/editing a source; the credential is sent once on save and never returned.
 - **Secrets** — one Kubernetes Secret per authenticated source; lifecycle tied to the source entry (created/updated/deleted with it).
 - **Docs** — remove the limitation bullet from PR #2336; document how to add an authenticated source.

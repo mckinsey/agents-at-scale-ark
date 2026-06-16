@@ -20,7 +20,8 @@
 
 ## 4. RBAC
 
-- [ ] 4.1 Grant editors the ability to manage the per-source credential Secrets (scoped per the chosen naming convention); reads happen under user impersonation
+- [ ] 4.1 Define a namespace-scoped `Role` (`create`/`get`/`update`/`delete` on `secrets` + the `marketplace-sources` ConfigMap) for marketplace editors, bound to an explicit group via `RoleBinding` — never a `ClusterRole`
+- [ ] 4.2 Ensure all Secret access (fetch read + create/update/delete) goes through the caller's impersonation, so a user's `get` on the Secret authorizes use of that private source
 
 ## 5. Dashboard UI
 
@@ -43,3 +44,4 @@
 
 - [ ] 7.1 Document adding an authenticated source (bearer + Azure DevOps Basic), and the per-user Secret-access requirement
 - [ ] 7.2 Remove the "No authentication for source URLs" limitation bullet from PR #2336
+- [ ] 7.3 Platform-team operating doc: the namespace-scoped `Role`/`RoleBinding` for credential-Secret access (and why never a `ClusterRole`), and how a user's `get` on a Secret governs use of a private source
