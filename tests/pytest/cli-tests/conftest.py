@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import subprocess
@@ -6,6 +5,8 @@ import time
 from pathlib import Path
 
 import pytest
+
+from helpers.ark_api_helper import _health_ok
 
 logger = logging.getLogger(__name__)
 
@@ -16,32 +17,14 @@ _NIP_URL = "http://ark-api.default.127.0.0.1.nip.io:8080"
 _PORT_BASE = 18080
 
 
-def _health_ok(url: str, timeout: int = 2) -> bool:
-    import urllib.request
-    try:
-        with urllib.request.urlopen(f"{url.rstrip('/')}/health", timeout=timeout) as r:
-            body = json.loads(r.read())
-            return isinstance(body, dict) and body.get("service") == "ark-api"
-    except Exception:
-        return False
-
-
-def _start_port_forward(port: int) -> subprocess.Popen:
-    return subprocess.Popen(
-        ["kubectl", "port-forward", "svc/ark-api", f"{port}:80", "-n", "default"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
 @pytest.fixture(scope="session", autouse=True)
 def ark_api_url(request):
-    """Resolve a reachable ark-api URL and expose it via ARK_API_URL.
+    """Resolve a reachable ark-api base URL and expose it via ARK_API_URL.
 
-    Priority:
-    1. ARK_API_URL env var (already set by caller / CI environment)
-    2. nip.io localhost-gateway (works when devspace/localhost-gateway is running)
-    3. kubectl port-forward fallback (works in CI and local clusters without a gateway)
+    Resolution order:
+    1. ARK_API_URL env var — set this in CI (e.g. alongside a port-forward step).
+    2. localhost-gateway nip.io URL — works when devspace / localhost-gateway is running locally.
+    3. kubectl port-forward fallback — for local clusters without a gateway.
     """
     if os.environ.get("ARK_API_URL"):
         yield os.environ["ARK_API_URL"]
@@ -62,7 +45,11 @@ def ark_api_url(request):
     url = f"http://localhost:{port}"
     logger.info("Starting port-forward svc/ark-api → :%d (worker=%s)", port, worker_id)
 
-    proc = _start_port_forward(port)
+    proc = subprocess.Popen(
+        ["kubectl", "port-forward", "svc/ark-api", f"{port}:80", "-n", "default"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
     for _ in range(20):
         time.sleep(1)
