@@ -72,9 +72,8 @@ spec:
         name: query-overrides-test-query
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     catch:
     - events: {}
     - describe:
@@ -91,7 +90,6 @@ spec:
           metadata:
             name: query-overrides-test-query
           status:
-            (response != null): true
             (response.target.name): 'query-overrides-test-agent'
     - script:
         env:
@@ -138,13 +136,8 @@ spec:
         name: query-overrides-test-query-tool
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
-    # Completed=True can fire before response.content is populated on the
-    # same status update. Use an assert with JP `contains()` so chainsaw
-    # retries until all three header markers are present, instead of a
-    # shell script that fails on the first empty read.
+          jsonPath:
+            path: '{.status.response.content}'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -152,7 +145,6 @@ spec:
           metadata:
             name: query-overrides-test-query-tool
           status:
-            (response != null): true
             (contains(response.content, 'x-query-override-mcp-static')): true
             (contains(response.content, 'query-mcp-override-secret-value')): true
             (contains(response.content, 'query-mcp-override-configmap')): true
@@ -173,9 +165,8 @@ spec:
         name: query-overrides-precedence-test
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     - script:
         env:
         - name: NAMESPACE
