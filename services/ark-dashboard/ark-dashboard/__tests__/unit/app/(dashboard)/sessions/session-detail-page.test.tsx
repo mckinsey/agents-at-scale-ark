@@ -8,12 +8,14 @@ import type { BrokerSession } from '@/lib/services/broker-sessions';
 vi.mock('@/lib/services/broker-sessions-hooks');
 
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const mockUseParams = vi.fn();
 const mockUseSearchParams = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useParams: () => mockUseParams(),
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  usePathname: () => '/sessions/session-123',
   useSearchParams: () => mockUseSearchParams(),
 }));
 
