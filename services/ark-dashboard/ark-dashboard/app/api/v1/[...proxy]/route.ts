@@ -1,5 +1,8 @@
+import { getToken } from 'next-auth/jwt';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+
+import { SESSION_COOKIE_NAME } from '@/lib/auth/auth-config';
 
 interface RouteContext {
   params: Promise<{ proxy: string[] }>;
@@ -113,6 +116,16 @@ async function proxyToArkApi(
   const backendPath = `/v1/${proxyPath.join('/')}`;
   const targetUrl = `${backendBaseUrl()}${backendPath}${request.nextUrl.search}`;
 
+  // Mint a bearer for ark-api from the NextAuth session JWT. In open mode the
+  // cookie is absent and getToken returns null, so no Authorization header is
+  // added — matching the prior in-process middleware (proxy.ts before commit
+  // b16307122) so SSO deployments keep authenticating against ark-api.
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET,
+    cookieName: SESSION_COOKIE_NAME,
+  });
+
   const headers = new Headers(request.headers);
   headers.set('X-Forwarded-Prefix', '/api');
   const hostHeader = request.headers.get('host');
@@ -123,6 +136,15 @@ async function proxyToArkApi(
   // The dashboard pod talks to ark-api on its cluster Service; drop the
   // browser-side Host header so the backend sees the right authority.
   headers.delete('host');
+
+  if (
+    token &&
+    typeof token === 'object' &&
+    'access_token' in token &&
+    typeof token.access_token === 'string'
+  ) {
+    headers.set('Authorization', `Bearer ${token.access_token}`);
+  }
 
   const fetchOptions: BackendFetchOptions = {
     method: request.method,
