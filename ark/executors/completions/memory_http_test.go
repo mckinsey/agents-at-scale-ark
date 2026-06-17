@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -728,4 +729,124 @@ func TestNewHTTPMemoryWithMixedHeaderSources(t *testing.T) {
 	require.Equal(t, "direct-value", mem.headers["X-Direct"])
 	require.Equal(t, "Bearer secret-token-123", mem.headers["Authorization"])
 	require.Equal(t, "config-api-key-456", mem.headers["X-API-Key"])
+}
+
+func TestNewMemoryForQueryTtl(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{Value: server.URL},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+
+	ttl := int64(3600)
+
+	t.Run("ttlSeconds propagated to HTTPMemory", func(t *testing.T) {
+		mem, err := NewMemoryForQuery(context.Background(), fakeClient, nil, "default", "conv-1", "q-1", &ttl, &noOpMemoryRecorder{})
+		require.NoError(t, err)
+		httpMem, ok := mem.(*HTTPMemory)
+		require.True(t, ok)
+		require.NotNil(t, httpMem.ttlSeconds)
+		require.Equal(t, ttl, *httpMem.ttlSeconds)
+	})
+
+	t.Run("nil ttlSeconds propagated to HTTPMemory", func(t *testing.T) {
+		mem, err := NewMemoryForQuery(context.Background(), fakeClient, nil, "default", "conv-1", "q-2", nil, &noOpMemoryRecorder{})
+		require.NoError(t, err)
+		httpMem, ok := mem.(*HTTPMemory)
+		require.True(t, ok)
+		require.Nil(t, httpMem.ttlSeconds)
+	})
+}
+
+func TestAddMessagesTtlSeconds(t *testing.T) {
+	ttl := int64(3600)
+
+	tests := []struct {
+		name           string
+		ttlSeconds     *int64
+		expectTtlField bool
+		expectedTtl    int64
+	}{
+		{
+			name:           "ttl_seconds present when configured",
+			ttlSeconds:     &ttl,
+			expectTtlField: true,
+			expectedTtl:    3600,
+		},
+		{
+			name:           "ttl_seconds absent when nil",
+			ttlSeconds:     nil,
+			expectTtlField: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedBody []byte
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+					var err error
+					capturedBody, err = io.ReadAll(r.Body)
+					require.NoError(t, err)
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			resolvedAddress := server.URL
+			mem := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-memory", Namespace: "default"},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{Value: server.URL},
+				},
+				Status: arkv1alpha1.MemoryStatus{
+					LastResolvedAddress: &resolvedAddress,
+					Phase:               "ready",
+				},
+			}
+
+			httpMemory := &HTTPMemory{
+				client:           setupMemoryTestClient([]client.Object{mem}),
+				httpClient:       server.Client(),
+				baseURL:          server.URL,
+				conversationId:   "conv-1",
+				name:             "test-memory",
+				namespace:        "default",
+				headers:          map[string]string{},
+				ttlSeconds:       tt.ttlSeconds,
+				eventingRecorder: &noOpMemoryRecorder{},
+			}
+
+			ctx := context.Background()
+			err := httpMemory.AddMessages(ctx, "query-1", []Message{Message(openai.UserMessage("hello"))})
+			require.NoError(t, err)
+
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(capturedBody, &body))
+
+			if tt.expectTtlField {
+				val, ok := body["ttl_seconds"]
+				require.True(t, ok, "ttl_seconds should be present in request body")
+				require.EqualValues(t, tt.expectedTtl, val)
+			} else {
+				_, ok := body["ttl_seconds"]
+				require.False(t, ok, "ttl_seconds should not be present in request body")
+			}
+		})
+	}
 }
