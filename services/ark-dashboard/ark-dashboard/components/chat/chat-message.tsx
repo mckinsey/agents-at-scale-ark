@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
-import { submitApproval } from '@/lib/services/query-approvals';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { submitApproval } from '@/lib/services/a2a-task-approvals';
 import type { ToolApprovalRequest } from '@/lib/types/chat-message';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
@@ -53,7 +53,10 @@ export function ChatMessage({
   const showErrorIcon = isFailed && queryName;
 
   // Track submitted task decisions in sessionStorage to persist across refreshes
-  const getSubmittedTaskDecisions = (): Map<string, 'approved' | 'rejected'> => {
+  const getSubmittedTaskDecisions = (): Map<
+    string,
+    'approved' | 'rejected'
+  > => {
     if (typeof window === 'undefined') return new Map();
     const stored = sessionStorage.getItem('submitted-approval-tasks');
     if (!stored) return new Map();
@@ -65,7 +68,10 @@ export function ChatMessage({
     }
   };
 
-  const addSubmittedTaskDecision = (taskId: string, decision: 'approved' | 'rejected') => {
+  const addSubmittedTaskDecision = (
+    taskId: string,
+    decision: 'approved' | 'rejected',
+  ) => {
     if (typeof window === 'undefined') return;
     const submitted = getSubmittedTaskDecisions();
     submitted.set(taskId, decision);
@@ -73,32 +79,36 @@ export function ChatMessage({
     sessionStorage.setItem('submitted-approval-tasks', JSON.stringify(obj));
   };
 
-  const taskDecision = approvalRequest?.taskId ? getSubmittedTaskDecisions().get(approvalRequest.taskId) : undefined;
-  const [approvalDecision, setApprovalDecision] = useState<'approved' | 'rejected' | null>(taskDecision || null);
+  const taskDecision = approvalRequest?.taskId
+    ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
+    : undefined;
+  const [approvalDecision, setApprovalDecision] = useState<
+    'approved' | 'rejected' | null
+  >(taskDecision || null);
 
   const handleApprove = async () => {
-    if (!queryName) return;
-    console.log('[HITL Debug] Submitting approval for query:', queryName);
-    if (approvalRequest?.taskId) {
-      addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
-    }
-    await submitApproval(queryName, namespace, 'approved');
+    if (!approvalRequest?.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'approved',
+    );
     setApprovalDecision('approved');
-    console.log('[HITL Debug] Approval submitted, starting polling');
     if (pollAfterApproval) {
       await pollAfterApproval();
     }
   };
 
   const handleReject = async () => {
-    if (!queryName) return;
-    console.log('[HITL Debug] Submitting rejection for query:', queryName);
-    if (approvalRequest?.taskId) {
-      addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
-    }
-    await submitApproval(queryName, namespace, 'rejected');
+    if (!approvalRequest?.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'rejected',
+    );
     setApprovalDecision('rejected');
-    console.log('[HITL Debug] Rejection submitted, starting polling');
     if (pollAfterApproval) {
       await pollAfterApproval();
     }
@@ -206,7 +216,10 @@ export function ChatMessage({
   const hasToolCalls = toolCalls && toolCalls.length > 0;
 
   if (approvalRequest) {
-    console.log('[HITL Debug] ChatMessage rendering approval request:', approvalRequest);
+    console.log(
+      '[HITL Debug] ChatMessage rendering approval request:',
+      approvalRequest,
+    );
     console.log('[HITL Debug] ChatMessage queryName:', queryName);
     console.log('[HITL Debug] ChatMessage namespace:', namespace);
 

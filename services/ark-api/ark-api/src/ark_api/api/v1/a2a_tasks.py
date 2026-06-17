@@ -1,8 +1,9 @@
 """Kubernetes A2A tasks API endpoints."""
+import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
@@ -19,7 +20,9 @@ from ...models.a2a_tasks import (
     A2ATaskStatus,
     A2ATaskArtifact,
     A2ATaskPart,
-    A2ATaskMessage
+    A2ATaskMessage,
+    ApprovalSubmissionRequest,
+    ApprovalSubmissionResponse,
 )
 from .exceptions import handle_k8s_errors
 
@@ -195,3 +198,45 @@ async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[
     """
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.a2atasks.a_delete(task_name)
+
+
+@router.post("/{task_name}/approval", response_model=ApprovalSubmissionResponse)
+@handle_k8s_errors(operation="update", resource_type="a2a task approval")
+async def submit_a2a_task_approval(
+    task_name: str,
+    body: ApprovalSubmissionRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> ApprovalSubmissionResponse:
+    """
+    Submit an approval decision for a HITL A2ATask.
+
+    The task must be in the 'input-required' phase. The decision is written to
+    spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+    controller picks it up and transitions the task to completed or failed.
+    """
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+        task = await ark_client.a2atasks.a_get(task_name)
+        task_dict = task.to_dict()
+
+        phase = task_dict.get("status", {}).get("phase")
+        if phase != "input-required":
+            raise HTTPException(
+                status_code=409,
+                detail=f"A2ATask {task_name} is not awaiting approval (phase: {phase})",
+            )
+
+        decision_json = json.dumps({"decision": body.decision.value})
+        actual_namespace = task_dict["metadata"]["namespace"]
+        await ark_client.a2atasks.a_patch(
+            task_name,
+            {"spec": {"input": decision_json}},
+            actual_namespace,
+        )
+
+        return ApprovalSubmissionResponse(
+            name=task_name,
+            namespace=actual_namespace,
+            taskId=task_dict.get("spec", {}).get("taskId", ""),
+            decision=body.decision,
+        )

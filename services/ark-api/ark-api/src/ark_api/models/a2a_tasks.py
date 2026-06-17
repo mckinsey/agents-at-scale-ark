@@ -1,4 +1,5 @@
 """A2ATask CRD response models."""
+from enum import Enum
 from typing import List, Dict, Optional, Any, Literal
 from datetime import datetime
 
@@ -101,3 +102,22 @@ class A2ATaskDetailResponse(BaseModel):
     ttl: Optional[str] = None
     status: Optional[A2ATaskStatus] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+class ApprovalDecision(str, Enum):
+    """Approval decision for a HITL tool call."""
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ApprovalSubmissionRequest(BaseModel):
+    """Request body to approve or reject an A2ATask's pending tool calls."""
+    decision: ApprovalDecision
+
+
+class ApprovalSubmissionResponse(BaseModel):
+    """Response after submitting an approval decision."""
+    name: str
+    namespace: str
+    taskId: str
+    decision: ApprovalDecision

@@ -20,10 +20,6 @@ spec:
   tools:
     - type: mcp
       name: file-gateway-create-directory
-      approval:
-        required: true
-        timeout: 3m
-        onTimeout: reject
 
     - type: mcp
       name: file-gateway-write-file
@@ -34,10 +30,6 @@ spec:
 
     - type: mcp
       name: file-gateway-move-file
-      approval:
-        required: true
-        timeout: 3m
-        onTimeout: reject
 
     - type: mcp
       name: file-gateway-read-text-file

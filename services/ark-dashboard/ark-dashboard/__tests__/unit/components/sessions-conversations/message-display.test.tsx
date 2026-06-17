@@ -11,9 +11,11 @@ vi.mock('@/lib/services/queries-hooks', () => ({
   useGetQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
   useListQueries: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
-vi.mock('@/lib/services/query-approvals-hooks', () => ({
-  useGetApprovalDetails: vi.fn(() => ({ data: undefined, isLoading: false })),
-  useSubmitApproval: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
+  useA2ATask: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock('@/lib/services/a2a-task-approvals-hooks', () => ({
+  useSubmitApproval: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false })),
 }));
 vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(() => ({

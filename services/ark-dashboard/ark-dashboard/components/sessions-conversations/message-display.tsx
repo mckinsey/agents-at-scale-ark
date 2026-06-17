@@ -1,18 +1,25 @@
 'use client';
 
-import { useEffect, useRef, memo, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useGetMessages } from '@/lib/services/conversations-hooks';
-import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
-import type { ChatMessage } from '@/lib/types/chat-message';
-import { Skeleton } from '@/components/ui/skeleton';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+
 import { Badge } from '@/components/ui/badge';
-import { SessionMessage } from './session-message';
-import { ApprovalNotification } from './approval-notification';
+import { Skeleton } from '@/components/ui/skeleton';
+import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
+import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
+import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
+import type {
+  Conversation,
+  ConversationMessage,
+} from '@/lib/services/conversations';
+import { useGetMessages } from '@/lib/services/conversations-hooks';
+import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
+import type { ChatMessage } from '@/lib/types/chat-message';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
-import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
-import { useGetApprovalDetails, useSubmitApproval } from '@/lib/services/query-approvals-hooks';
+
+import { ApprovalNotification } from './approval-notification';
+import { SessionMessage } from './session-message';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
@@ -25,7 +32,10 @@ interface EnhancedChatMessage extends Omit<ChatMessage, 'tool_calls' | 'role'> {
   tool_calls?: EnhancedToolCall[];
 }
 
-interface EnhancedConversationMessage extends Omit<ConversationMessage, 'message'> {
+interface EnhancedConversationMessage extends Omit<
+  ConversationMessage,
+  'message'
+> {
   message: EnhancedChatMessage;
 }
 
@@ -33,46 +43,57 @@ interface Props {
   readonly conversationId: string;
   readonly sessionId: string;
   readonly conversation: Conversation | null;
-  readonly pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>;
+  readonly pendingMessages: Array<{
+    role: 'user';
+    content: string;
+    timestamp: string;
+  }>;
   readonly onClearPending: () => void;
   readonly isProcessing: boolean;
   readonly showToolCalls: boolean;
 }
 
-function enhanceMessagesWithToolResults(messages: ConversationMessage[]): EnhancedConversationMessage[] {
+function enhanceMessagesWithToolResults(
+  messages: ConversationMessage[],
+): EnhancedConversationMessage[] {
   // Build a map of tool_call_id -> tool result content
   const toolResults = new Map<string, string>();
   messages.forEach(msg => {
-    if (msg.message?.role === 'tool' && msg.message?.tool_call_id && msg.message?.content) {
+    if (
+      msg.message?.role === 'tool' &&
+      msg.message?.tool_call_id &&
+      msg.message?.content
+    ) {
       toolResults.set(msg.message.tool_call_id, msg.message.content);
     }
   });
 
   // Filter out tool messages and enhance tool_calls with results
   return messages
-    .filter(msg => msg.message?.role !== 'tool')  // Skip tool response messages
+    .filter(msg => msg.message?.role !== 'tool') // Skip tool response messages
     .map(msg => {
       // If message has tool_calls, add results to them
       if (msg.message?.tool_calls && Array.isArray(msg.message.tool_calls)) {
-        const enhancedToolCalls: EnhancedToolCall[] = msg.message.tool_calls.map(tc => ({
-          ...tc,
-          result: toolResults.get(tc.id)
-        }));
+        const enhancedToolCalls: EnhancedToolCall[] =
+          msg.message.tool_calls.map(tc => ({
+            ...tc,
+            result: toolResults.get(tc.id),
+          }));
         return {
           ...msg,
           message: {
             ...msg.message,
             role: msg.message.role as 'user' | 'assistant' | 'system',
-            tool_calls: enhancedToolCalls
-          }
+            tool_calls: enhancedToolCalls,
+          },
         };
       }
       return {
         ...msg,
         message: {
           ...msg.message,
-          role: msg.message.role as 'user' | 'assistant' | 'system'
-        }
+          role: msg.message.role as 'user' | 'assistant' | 'system',
+        },
       };
     });
 }
@@ -94,7 +115,11 @@ interface ApprovalData {
 interface MessageContentProps {
   readonly isTemporary: boolean;
   readonly messages: ConversationMessage[] | undefined;
-  readonly pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>;
+  readonly pendingMessages: Array<{
+    role: 'user';
+    content: string;
+    timestamp: string;
+  }>;
   readonly participantName: string;
   readonly isProcessing: boolean;
   readonly showToolCalls: boolean;
@@ -120,7 +145,7 @@ const MessageContent = memo(function MessageContent({
   existingDecision,
   isWaitingForNextMessage = false,
   onApprove,
-  onReject
+  onReject,
 }: MessageContentProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -128,9 +153,10 @@ const MessageContent = memo(function MessageContent({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, pendingMessages]);
 
-  const processedMessages = messages && messages.length > 0
-    ? enhanceMessagesWithToolResults(messages)
-    : [];
+  const processedMessages =
+    messages && messages.length > 0
+      ? enhanceMessagesWithToolResults(messages)
+      : [];
 
   const hasBackendMessages = processedMessages.length > 0;
 
@@ -138,21 +164,23 @@ const MessageContent = memo(function MessageContent({
     ? new Set(
         processedMessages
           .filter(msg => msg.message.role === 'user')
-          .map(msg => msg.message.content?.trim())
+          .map(msg => msg.message.content?.trim()),
       )
     : new Set();
 
   const uniquePendingMessages = pendingMessages.filter(
-    pending => !backendUserMessages.has(pending.content.trim())
+    pending => !backendUserMessages.has(pending.content.trim()),
   );
 
   const hasPendingMessages = uniquePendingMessages.length > 0;
 
   if (isTemporary && !hasBackendMessages && !hasPendingMessages) {
     return (
-      <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center text-center">
         <div>
-          <p className="mb-2 text-sm">Conversation started with {participantName}</p>
+          <p className="mb-2 text-sm">
+            Conversation started with {participantName}
+          </p>
           <p className="text-xs">
             Send a message below to begin the conversation
           </p>
@@ -164,32 +192,37 @@ const MessageContent = memo(function MessageContent({
   if (hasBackendMessages || hasPendingMessages) {
     return (
       <>
-        {hasBackendMessages && processedMessages.map(msg => (
-          <SessionMessage
-            key={`${msg.query_id}-${msg.sequence}`}
-            role={msg.message.role}
-            content={msg.message.content || ''}
-            toolCalls={msg.message.tool_calls}
-            sender={msg.message.name}
-            timestamp={msg.timestamp}
-            showToolCalls={showToolCalls}
-          />
-        ))}
-        {approvalData && onApprove && onReject && queryName && queryNamespace && (
-          <ApprovalNotification
-            key={approvalData.taskId}
-            queryName={queryName}
-            queryNamespace={queryNamespace}
-            taskId={approvalData.taskId}
-            toolCalls={approvalData.toolCalls}
-            timeout={approvalData.timeout}
-            onTimeout={approvalData.onTimeout}
-            agentName={approvalData.agentName}
-            existingDecision={existingDecision || null}
-            onApprove={onApprove}
-            onReject={onReject}
-          />
-        )}
+        {hasBackendMessages &&
+          processedMessages.map(msg => (
+            <SessionMessage
+              key={`${msg.query_id}-${msg.sequence}`}
+              role={msg.message.role}
+              content={msg.message.content || ''}
+              toolCalls={msg.message.tool_calls}
+              sender={msg.message.name}
+              timestamp={msg.timestamp}
+              showToolCalls={showToolCalls}
+            />
+          ))}
+        {approvalData &&
+          onApprove &&
+          onReject &&
+          queryName &&
+          queryNamespace && (
+            <ApprovalNotification
+              key={approvalData.taskId}
+              queryName={queryName}
+              queryNamespace={queryNamespace}
+              taskId={approvalData.taskId}
+              toolCalls={approvalData.toolCalls}
+              timeout={approvalData.timeout}
+              onTimeout={approvalData.onTimeout}
+              agentName={approvalData.agentName}
+              existingDecision={existingDecision || null}
+              onApprove={onApprove}
+              onReject={onReject}
+            />
+          )}
         {isWaitingForNextMessage && (
           <div className="flex justify-start">
             <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
@@ -205,13 +238,14 @@ const MessageContent = memo(function MessageContent({
             </div>
           </div>
         )}
-        {hasPendingMessages && uniquePendingMessages.map((msg, idx) => (
-          <SessionMessage
-            key={`pending-${msg.timestamp}-${idx}`}
-            role="user"
-            content={msg.content}
-          />
-        ))}
+        {hasPendingMessages &&
+          uniquePendingMessages.map((msg, idx) => (
+            <SessionMessage
+              key={`pending-${msg.timestamp}-${idx}`}
+              role="user"
+              content={msg.content}
+            />
+          ))}
         {isProcessing && (
           <div className="flex justify-start">
             <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
@@ -233,26 +267,40 @@ const MessageContent = memo(function MessageContent({
   }
 
   return (
-    <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+    <div className="text-muted-foreground flex h-full items-center justify-center text-center">
       <div>
         <p className="mb-2 text-sm">No conversation messages available</p>
         <p className="text-xs">
-          Workflow sessions don't have conversational messages. Check the Logs tab for execution details.
+          Workflow sessions don&apos;t have conversational messages. Check the
+          Logs tab for execution details.
         </p>
       </div>
     </div>
   );
 });
 
-export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing, showToolCalls }: Props) {
-  const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
+export function MessageDisplay({
+  conversationId,
+  sessionId,
+  conversation,
+  pendingMessages,
+  onClearPending,
+  isProcessing,
+  showToolCalls,
+}: Props) {
+  const { data: messages, isLoading } = useGetMessages(
+    sessionId,
+    conversationId,
+  );
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
-  const [messageCountWhenWaitingStarted, setMessageCountWhenWaitingStarted] = useState<number | null>(null);
+  const [messageCountWhenWaitingStarted, setMessageCountWhenWaitingStarted] =
+    useState<number | null>(null);
 
   const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
-  const participantType = conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
+  const participantType =
+    conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
   const isTemporary = conversation?.isTemporary || false;
 
   // Get the latest query ID from messages
@@ -266,7 +314,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   const shouldFetchQueries = !latestQueryId && isProcessing;
   const { data: recentQueries } = useListQueries(
     shouldFetchQueries ? { page: 1, pageSize: 50 } : undefined,
-    shouldFetchQueries
+    shouldFetchQueries,
   );
 
   // Find the most recent query for this session that's awaiting approval
@@ -275,11 +323,17 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
 
     // Filter to this session and input-required phase
     const sessionQueries = recentQueries.items
-      .filter(q => q.sessionId === sessionId && q.status?.phase === 'input-required')
+      .filter(
+        q => q.sessionId === sessionId && q.status?.phase === 'input-required',
+      )
       .sort((a, b) => {
         // Sort by creation time descending
-        const timeA = a.creationTimestamp ? new Date(a.creationTimestamp).getTime() : 0;
-        const timeB = b.creationTimestamp ? new Date(b.creationTimestamp).getTime() : 0;
+        const timeA = a.creationTimestamp
+          ? new Date(a.creationTimestamp).getTime()
+          : 0;
+        const timeB = b.creationTimestamp
+          ? new Date(b.creationTimestamp).getTime()
+          : 0;
         return timeB - timeA;
       });
 
@@ -288,20 +342,39 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
 
   const effectiveQueryId = latestQueryId || pendingApprovalQuery?.name || null;
 
-  // Fetch query details to check if approval is needed
-  const { data: queryDetails } = useGetQuery(effectiveQueryId, !!effectiveQueryId);
+  // Fetch query details to check if approval is needed and to find the linked A2ATask
+  const { data: queryDetails } = useGetQuery(
+    effectiveQueryId,
+    !!effectiveQueryId,
+  );
   const queryPhase = queryDetails?.status?.phase;
   const needsApproval = queryPhase === 'input-required';
 
-  // Fetch approval details if needed
-  const { data: approvalDetails } = useGetApprovalDetails(
-    effectiveQueryId || '',
-    namespace,
-    needsApproval
+  // Pull the A2ATask id from the query's status (status is loosely-typed, so cast carefully)
+  const approvalTaskId = useMemo(() => {
+    const status = queryDetails?.status as
+      | { response?: { a2a?: { taskId?: unknown } } }
+      | null
+      | undefined;
+    const taskId = status?.response?.a2a?.taskId;
+    return typeof taskId === 'string' && taskId.length > 0 ? taskId : null;
+  }, [queryDetails]);
+
+  const approvalTaskName = approvalTaskId ? `a2a-task-${approvalTaskId}` : '';
+
+  const { data: approvalTask } = useA2ATask(
+    needsApproval ? approvalTaskName : '',
+  );
+  const approvalDetails = useMemo(
+    () => (approvalTask ? buildApprovalDetails(approvalTask) : null),
+    [approvalTask],
   );
 
   // Track submitted task decisions in session storage to persist across refreshes
-  const getSubmittedTaskDecisions = (): Map<string, 'approved' | 'rejected'> => {
+  const getSubmittedTaskDecisions = (): Map<
+    string,
+    'approved' | 'rejected'
+  > => {
     if (typeof window === 'undefined') return new Map();
     const stored = sessionStorage.getItem(`submitted-approvals-${sessionId}`);
     if (!stored) return new Map();
@@ -313,29 +386,35 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     }
   };
 
-  const addSubmittedTaskDecision = (taskId: string, decision: 'approved' | 'rejected') => {
+  const addSubmittedTaskDecision = (
+    taskId: string,
+    decision: 'approved' | 'rejected',
+  ) => {
     if (typeof window === 'undefined') return;
     const submitted = getSubmittedTaskDecisions();
     submitted.set(taskId, decision);
     const obj = Object.fromEntries(submitted);
-    sessionStorage.setItem(`submitted-approvals-${sessionId}`, JSON.stringify(obj));
+    sessionStorage.setItem(
+      `submitted-approvals-${sessionId}`,
+      JSON.stringify(obj),
+    );
   };
 
-  const existingDecision = approvalDetails?.taskId ? getSubmittedTaskDecisions().get(approvalDetails.taskId) : undefined;
+  const existingDecision = approvalDetails?.taskId
+    ? getSubmittedTaskDecisions().get(approvalDetails.taskId)
+    : undefined;
 
-  // Approval mutation
+  // Approval mutation against the A2ATask resource
   const { mutateAsync: submitApproval } = useSubmitApproval(
-    effectiveQueryId || '',
-    namespace
+    approvalTaskName,
+    namespace,
   );
 
   const handleApprove = async () => {
     if (approvalDetails?.taskId) {
       addSubmittedTaskDecision(approvalDetails.taskId, 'approved');
     }
-    const currentCount = messages?.length || 0;
-    console.log('[HITL Debug] Setting waiting state, current message count:', currentCount);
-    setMessageCountWhenWaitingStarted(currentCount);
+    setMessageCountWhenWaitingStarted(messages?.length || 0);
     setIsWaitingForNextMessage(true);
     await submitApproval('approved');
   };
@@ -351,7 +430,12 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
 
   useEffect(() => {
     // Clear processing only when agent response appears after pending user message
-    if (!isProcessing || !messages || messages.length === 0 || pendingMessages.length === 0) {
+    if (
+      !isProcessing ||
+      !messages ||
+      messages.length === 0 ||
+      pendingMessages.length === 0
+    ) {
       return;
     }
 
@@ -393,30 +477,42 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
       currentMessageCount,
       messageCountWhenWaitingStarted,
       needsApproval,
-      isWaitingForNextMessage
+      isWaitingForNextMessage,
     });
 
     // Clear waiting state if:
     // 1. A new message arrived (count increased)
     // 2. Approval is no longer needed
-    if (currentMessageCount > messageCountWhenWaitingStarted || !needsApproval) {
+    if (
+      currentMessageCount > messageCountWhenWaitingStarted ||
+      !needsApproval
+    ) {
       console.log('[HITL Debug] Clearing waiting state');
       setIsWaitingForNextMessage(false);
       setMessageCountWhenWaitingStarted(null);
     }
-  }, [isWaitingForNextMessage, messageCountWhenWaitingStarted, messages, needsApproval]);
+  }, [
+    isWaitingForNextMessage,
+    messageCountWhenWaitingStarted,
+    messages,
+    needsApproval,
+  ]);
 
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;
   }
 
   return (
-    <div className="min-h-0 flex flex-1 flex-col">
-      <div className="border-b border-border bg-muted p-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-border bg-muted border-b p-4">
         <div className="flex items-center gap-2">
           {getParticipantIcon(participantType, { size: '4' })}
-          <span className="font-semibold">{stripNamespace(participantName)}</span>
-          <Badge className="border-0 bg-muted/50 capitalize text-muted-foreground">{participantType}</Badge>
+          <span className="font-semibold">
+            {stripNamespace(participantName)}
+          </span>
+          <Badge className="bg-muted/50 text-muted-foreground border-0 capitalize">
+            {participantType}
+          </Badge>
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
@@ -429,7 +525,9 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
           showToolCalls={showToolCalls}
           queryName={effectiveQueryId || undefined}
           queryNamespace={namespace}
-          approvalData={needsApproval && approvalDetails ? approvalDetails : undefined}
+          approvalData={
+            needsApproval && approvalDetails ? approvalDetails : undefined
+          }
           existingDecision={existingDecision}
           isWaitingForNextMessage={isWaitingForNextMessage}
           onApprove={handleApprove}
