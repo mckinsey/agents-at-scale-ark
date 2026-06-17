@@ -15,6 +15,7 @@ This blocks the common enterprise hosting patterns: private GitHub repos, GitHub
   - **HTTP Basic** — Azure DevOps (`Authorization: Basic base64(":<PAT>")`, empty username + PAT). A bearer-only design leaves ADO blocked, so the scheme is explicit per source.
 - **Credentials are never readable from the browser** — stored in a Secret, read only server-side, never echoed in API responses, and never logged.
 - **Credentials apply on validate/create too**, so adding a private source is verified with its credential before it is saved.
+- **Authenticated sources are provisionable at deploy time** — because a source is just a credential Secret plus a `marketplace-sources` ConfigMap entry, a platform team can seed one declaratively via the `marketplaceSources` Helm values (extended with an optional `auth` block) referencing a pre-existing Secret, with no dashboard interaction and no token in `values.yaml`.
 - **Anonymous sources are unchanged** — a source with no credential fetches exactly as today.
 - **Clear UI error** when a credential is missing or rejected (401/403), instead of items silently dropping out of the grid.
 - **Docs:** remove the "No authentication for source URLs" limitation bullet captured in PR #2336.
@@ -33,5 +34,6 @@ This blocks the common enterprise hosting patterns: private GitHub repos, GitHub
 - **ark-api RBAC** — a namespace-scoped `Role` lets editors create/get/update/delete the per-source Secrets + the `marketplace-sources` ConfigMap, bound to an explicit group; all Secret access runs under user impersonation, so the requesting user's `get` governs use of a private source (consistent with `marketplace-sources-configmap`).
 - **ark-dashboard** — `components/settings/manage-marketplace-settings.tsx` and the marketplace service: UI to enter a credential and pick the scheme when adding/editing a source; the credential is sent once on save and never returned.
 - **Secrets** — one Kubernetes Secret per authenticated source; lifecycle tied to the source entry (created/updated/deleted with it).
+- **Helm (deploy-time)** — extend #2479's `marketplaceSources` values with an optional `auth: { scheme, secretRef }` block; the seed Job writes the `auth` block into the ConfigMap entry but never creates or templates the credential Secret (provisioned out-of-band).
 - **Docs** — remove the limitation bullet from PR #2336; document how to add an authenticated source.
 - **Dependency** — builds on #2479 (`marketplace-sources-configmap`); blocked until it merges.

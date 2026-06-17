@@ -111,6 +111,25 @@ The credential Secret SHALL be created and updated with its source and deleted w
 - **WHEN** a user edits an authenticated source to be anonymous (clears the credential)
 - **THEN** the credential Secret is deleted and the source is fetched anonymously afterward
 
+### Requirement: Provision authenticated sources declaratively at deploy time
+
+A platform team SHALL be able to provision an authenticated source at install/upgrade time without using the dashboard, by supplying a pre-existing credential Secret and declaring the source (with its `auth` scheme + `secretRef`) through the `marketplaceSources` Helm values. The seeding path SHALL write only the `marketplace-sources` ConfigMap entry and SHALL NOT template the credential value into Helm values.
+
+#### Scenario: Seed a bearer source at install
+
+- **WHEN** a platform team provides a credential Secret out-of-band and declares a source with `auth: { scheme: bearer, secretRef }` in the `marketplaceSources` Helm values
+- **THEN** the install seeds the `marketplace-sources` ConfigMap entry referencing that Secret, and the source resolves at fetch time for users who can read the Secret — no dashboard interaction required
+
+#### Scenario: Token never appears in Helm values
+
+- **WHEN** an authenticated source is provisioned via Helm
+- **THEN** the credential value is not present in `values.yaml` or the rendered manifests; only the non-secret `scheme` + `secretRef` are templated, and the seed path writes no Secret
+
+#### Scenario: Seeded source without read access errors visibly
+
+- **WHEN** a source is seeded at deploy time but a user lacks `get` on its credential Secret
+- **THEN** the source reports a per-source authorization error for that user (the credential is never borrowed), rather than silently dropping from the grid
+
 ### Requirement: Document operating authenticated sources for platform teams
 
 Documentation SHALL explain how a platform team operates authenticated sources: the namespace-scoped `Role`/`RoleBinding` that grants editors credential-Secret access (and why it is never a `ClusterRole`), how a user's `get` on a credential Secret governs use of a private source, and the steps to add a bearer source and an Azure DevOps Basic source. The existing "No authentication for source URLs" limitation bullet (PR #2336) SHALL be removed once shipped.
