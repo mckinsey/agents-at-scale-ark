@@ -202,6 +202,8 @@ kubectl get agents
 ark agent query simple-agent "who are you?"
 ```
 
+Discovery takes a few seconds. Wait for the `A2AServer` to report `READY True` (and the `Agent` to appear) before querying — until then the agent does not yet exist and queries are rejected.
+
 For production, harden the `Deployment` the way you would any workload: pin the image tag, set `replicas`, keep resource requests/limits (the sample already sets them), and add liveness/readiness probes against the `/health` endpoint. If the A2A server needs its own credentials (API keys for the framework behind it), mount them from a `Secret` rather than baking them into the image — this is separate from the per-query header overrides Ark forwards to the agent.
 
 ## Timeout Configuration
