@@ -147,12 +147,46 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Compute WARP apt cache key
+        id: warp-cache-key
+        run: echo "week=$(date -u +%Y-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore WARP apt packages
+        id: warp-apt-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/warp-apt-cache
+          key: warp-apt-${{ runner.os }}-${{ runner.arch }}-v1-${{ steps.warp-cache-key.outputs.week }}
+          restore-keys: |
+            warp-apt-${{ runner.os }}-${{ runner.arch }}-v1-
+
+      - name: Prime apt archive from cache
+        run: |
+          mkdir -p "$HOME/warp-apt-cache"
+          shopt -s nullglob
+          debs=("$HOME"/warp-apt-cache/*.deb)
+          if (( ${#debs[@]} )); then
+            sudo cp -n "${debs[@]}" /var/cache/apt/archives/
+            echo "Primed ${#debs[@]} cached .debs into /var/cache/apt/archives/"
+          else
+            echo "WARP apt cache empty; first run will download fresh packages."
+          fi
+
       - name: Set up Cloudflare WARP
         uses: Boostport/setup-cloudflare-warp@v1
         with:
           organization: ${{ secrets.CF_ORGANIZATION }}
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
+      - name: Sync apt archive back to cache
+        if: always()
+        run: |
+          mkdir -p "$HOME/warp-apt-cache"
+          sudo find /var/cache/apt/archives -maxdepth 1 -name '*.deb' \
+            -exec cp -n {} "$HOME/warp-apt-cache/" \;
+          sudo chown -R "$USER" "$HOME/warp-apt-cache"
+          echo "WARP apt cache now contains $(ls "$HOME/warp-apt-cache" | wc -l) .debs"
 
       - name: Run SonarQube Scan (Branch)
         if: github.event_name != 'pull_request'
