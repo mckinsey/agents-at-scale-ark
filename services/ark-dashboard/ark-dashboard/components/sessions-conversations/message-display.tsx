@@ -8,11 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconShell } from '@/components/ui/icon-shell';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { SessionMessage } from './session-message';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
@@ -240,14 +236,11 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
           <IconShell size="sm" className="opacity-100">
             {getParticipantIcon(participantType, { size: '4' })}
           </IconShell>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="min-w-0 truncate text-base font-semibold leading-6 text-fg-primary">
-                {stripNamespace(participantName)}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{stripNamespace(participantName)}</TooltipContent>
-          </Tooltip>
+          <TruncatedTooltip label={stripNamespace(participantName)}>
+            <span className="block min-w-0 truncate text-base font-semibold leading-6 text-fg-primary">
+              {stripNamespace(participantName)}
+            </span>
+          </TruncatedTooltip>
           <span className="shrink-0 text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
       </div>

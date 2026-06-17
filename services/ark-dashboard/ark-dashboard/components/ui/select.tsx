@@ -133,8 +133,10 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
+  side = 'bottom',
   sideOffset = 4,
   alignItemWithTrigger = false,
+  collisionAvoidance = { side: 'none', align: 'shift' },
   ...positionerProps
 }: SelectPrimitive.Positioner.Props & {
   className?: string;
@@ -143,8 +145,10 @@ function SelectContent({
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
+        side={side}
         sideOffset={sideOffset}
         alignItemWithTrigger={alignItemWithTrigger}
+        collisionAvoidance={collisionAvoidance}
         className="z-[60]"
         {...positionerProps}>
         <SelectPrimitive.Popup

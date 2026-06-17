@@ -5,8 +5,7 @@ import { type ComponentType, useState } from 'react';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Azure, Bedrock, Claude, Gemini, Meta, OpenAI, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelProviderDisplayName } from '@/lib/constants/model-types';
@@ -135,18 +134,14 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
             COL.action,
             'relative z-10 justify-center',
           )}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete model"
+          <IconActionButton
+            label="Delete model"
             disabled={readOnlyMode}
             onClick={() => {
               if (!readOnlyMode) setDeleteConfirmOpen(true);
             }}>
-            <IconShell size="sm" variant="secondary">
-              <Trash />
-            </IconShell>
-          </Button>
+            <Trash />
+          </IconActionButton>
         </div>
       </div>
       <ConfirmationDialog

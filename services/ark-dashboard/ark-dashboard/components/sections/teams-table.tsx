@@ -5,13 +5,8 @@ import { type ReactNode, useState } from 'react';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { IconActionButton } from '@/components/ui/icon-action-button';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import type { Team } from '@/lib/services';
@@ -100,17 +95,14 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
           role="cell"
           className={cn(rowCellClass, COL.description, 'relative z-10')}>
           {team.description ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <NamespacedLink
-                  href={`/teams/${encodeURIComponent(team.name)}`}
-                  tabIndex={-1}
-                  className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
-                  {team.description}
-                </NamespacedLink>
-              </TooltipTrigger>
-              <TooltipContent>{team.description}</TooltipContent>
-            </Tooltip>
+            <TruncatedTooltip label={team.description}>
+              <NamespacedLink
+                href={`/teams/${encodeURIComponent(team.name)}`}
+                tabIndex={-1}
+                className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                {team.description}
+              </NamespacedLink>
+            </TruncatedTooltip>
           ) : (
             <NamespacedLink
               href={`/teams/${encodeURIComponent(team.name)}`}
@@ -137,28 +129,20 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
             COL.action,
             'relative z-10 justify-center gap-2',
           )}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Chat with team"
+          <IconActionButton
+            label="Chat with team"
             className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
             onClick={() => toggleFloatingChat(team.name, 'team')}>
-            <IconShell size="sm" variant="secondary">
-              <ChatBubble />
-            </IconShell>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete team"
+            <ChatBubble />
+          </IconActionButton>
+          <IconActionButton
+            label="Delete team"
             disabled={isChatOpen || readOnlyMode}
             onClick={() => {
               if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
             }}>
-            <IconShell size="sm" variant="secondary">
-              <Trash />
-            </IconShell>
-          </Button>
+            <Trash />
+          </IconActionButton>
         </div>
       </div>
       <ConfirmationDialog

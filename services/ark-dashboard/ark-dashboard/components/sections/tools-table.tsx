@@ -5,13 +5,8 @@ import { useState } from 'react';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { IconActionButton } from '@/components/ui/icon-action-button';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Tool } from '@/lib/services/tools';
@@ -107,17 +102,14 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
           role="cell"
           className={cn(rowCellClass, COL.description, 'relative z-10')}>
           {tool.description ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <NamespacedLink
-                  href={href}
-                  tabIndex={-1}
-                  className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
-                  {tool.description}
-                </NamespacedLink>
-              </TooltipTrigger>
-              <TooltipContent>{tool.description}</TooltipContent>
-            </Tooltip>
+            <TruncatedTooltip label={tool.description}>
+              <NamespacedLink
+                href={href}
+                tabIndex={-1}
+                className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                {tool.description}
+              </NamespacedLink>
+            </TruncatedTooltip>
           ) : (
             <NamespacedLink
               href={href}
@@ -134,41 +126,24 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
             COL.action,
             'relative z-10 justify-center gap-2',
           )}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Query tool"
-                onClick={() => push(`/query/new?target_tool=${tool.name}`)}>
-                <IconShell size="sm" variant="secondary">
-                  <ChatBubble />
-                </IconShell>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Query tool</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Delete tool"
-                disabled={deleteDisabled}
-                onClick={() => {
-                  if (!deleteDisabled) setDeleteConfirmOpen(true);
-                }}>
-                <IconShell size="sm" variant="secondary">
-                  <Trash />
-                </IconShell>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {usage.inUse
+          <IconActionButton
+            label="Query tool"
+            onClick={() => push(`/query/new?target_tool=${tool.name}`)}>
+            <ChatBubble />
+          </IconActionButton>
+          <IconActionButton
+            label="Delete tool"
+            tooltip={
+              usage.inUse
                 ? (usage.reason ?? 'Tool is used by agents')
-                : 'Delete tool'}
-            </TooltipContent>
-          </Tooltip>
+                : 'Delete tool'
+            }
+            disabled={deleteDisabled}
+            onClick={() => {
+              if (!deleteDisabled) setDeleteConfirmOpen(true);
+            }}>
+            <Trash />
+          </IconActionButton>
         </div>
       </div>
       <ConfirmationDialog
