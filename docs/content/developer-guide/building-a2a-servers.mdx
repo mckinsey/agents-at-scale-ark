@@ -11,7 +11,7 @@ If you want deeper Ark integration (automatic agent config resolution, tool defi
 
 ## Quickstart
 
-You can get started is with the [Simple Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/simple-agent). This sample has the following basic structure:
+The fastest way to get started is with the [Simple Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/simple-agent). This sample has the following basic structure:
 
 ```
 simple-agent/
@@ -98,7 +98,7 @@ cd samples/a2a/simple-agent
 devspace dev
 ```
 
-Running with devspace applies the resources in the `manifest.yaml` file. These are:
+Running with devspace applies the resources in the `manifests.yaml` file. These are:
 
 ```
 Deployment - simple-agent    # This tells kubernetes to deploy your sample agent server
@@ -119,7 +119,7 @@ kubectl get services
 
 kubectl get a2aservers
 # NAME           READY   DISCOVERING   ADDRESS                                             AGE
-# simple-agent   True    False         http://simple-agent.mock-llm.svc.cluster.local:80   6m13s
+# simple-agent   True    False         http://simple-agent.default.svc.cluster.local:80   6m13s
 ```
 
 Note that to enable live reload, devspace creates a special 'dev' deployment. Details are in the devspace docs.
@@ -130,17 +130,31 @@ Ark will monitor the `A2AServer` resource that has been created, and will attemp
 # Check the A2AServer status.
 kubectl get a2aserver simple-agent -o yaml
 # NAME           READY   DISCOVERING   ADDRESS                                             AGE
-# simple-agent   True    False         http://simple-agent.mock-llm.svc.cluster.local:80   6m13s
+# simple-agent   True    False         http://simple-agent.default.svc.cluster.local:80   6m13s
 
 # Check if Ark created an Agent from the A2A server.
 kubectl get agents
 # NAME           MODEL   AVAILABLE   AGE
-# simple-agent           True        2m20s
+# simple-agent           False       2m20s
 
 # Query the agent you created.
 ark agent query simple-agent "who are you?"
 # I received your message: 'who are you?'. I'm a simple agent, so I can help with basic tasks like greetings, simple math, or just echoing your messages back to you. Try asking for help to see what I can do!
 ```
+
+The agent has no `modelRef` (A2A agents bring their own model) and uses the built-in `a2a` execution engine. It may report `AVAILABLE   False` with the message `ExecutionEngine 'a2a' not found` — this is an availability-probe artifact; the agent is still queryable, as the query above shows.
+
+### Viewing in the dashboard
+
+The dashboard surfaces both the A2A server and the agent Ark created from it. Open it with `ark dashboard`.
+
+The **A2A Servers** page lists the registered server with its status and resolved address:
+
+![Ark dashboard A2A Servers page showing the simple-agent server as Available](./images/a2a-dashboard-servers.png)
+
+Under **Agent Builder → Agents**, the discovered agent appears tagged as an **A2A Agent**:
+
+![Ark dashboard Agents list showing simple-agent tagged as an A2A Agent](./images/a2a-dashboard-agents.png)
 
 You can uninstall / cleanup your deployment with:
 
@@ -169,7 +183,8 @@ kind: A2AServer
 metadata:
   name: my-a2a-server
 spec:
-  address: "http://my-a2a-server:8000"
+  address:
+    value: "http://my-a2a-server:8000"
   timeout: "2m"  # Limit this server's calls to 2 minutes
 ```
 
@@ -197,11 +212,9 @@ kind: Query
 metadata:
   name: long-running-query
 spec:
-  input:
-  - content: "Complex analysis task"
-    role: user
+  input: "Complex analysis task"
   target:
-  - type: agent
+    type: agent
     name: my-agent
   timeout: "30m"  # 30 minutes for this specific query
 ```

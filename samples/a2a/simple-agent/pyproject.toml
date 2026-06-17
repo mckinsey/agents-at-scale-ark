@@ -9,7 +9,7 @@ description = "A simple A2A server demonstrating basic functionality"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "a2a-sdk[http-server]>=0.2.6",
+    "a2a-sdk[http-server]>=0.2.6,<0.3.0",
     "starlette>=0.27.0",
     "uvicorn>=0.23.0",
     "python-dotenv>=1.0.0",
