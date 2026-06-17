@@ -25,6 +25,7 @@ type HTTPMemory struct {
 	name             string
 	namespace        string
 	headers          map[string]string
+	ttlSeconds       *int64
 	eventingRecorder eventing.MemoryRecorder
 }
 
@@ -72,6 +73,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		name:             memoryName,
 		namespace:        namespace,
 		headers:          headers,
+		ttlSeconds:       config.TtlSeconds,
 		eventingRecorder: memoryRecorder,
 	}, nil
 }
@@ -182,6 +184,7 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		ConversationID: m.conversationId,
 		QueryID:        queryID,
 		Messages:       openaiMessages,
+		TtlSeconds:     m.ttlSeconds,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}

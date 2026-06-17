@@ -234,7 +234,15 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
     --wait --timeout=300s
   )
   if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
-    BROKER_HELM_ARGS+=(--set memory.createMemoryCRD=false)
+    POSTGRES_PASSWORD=$(kubectl -n ark-system get secret ark-storage-dev-password \
+      -o jsonpath='{.data.password}' | base64 -d)
+    BROKER_HELM_ARGS+=(
+      --set memory.createMemoryCRD=false
+      --set backends.message=postgres
+      --set "database.url=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=disable"
+      --set migrate.image.repository="${REGISTRY}/ark-broker-migrate"
+      --set migrate.image.tag="${ARK_IMAGE_TAG}"
+    )
   fi
   helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
     "${BROKER_HELM_ARGS[@]}" &
@@ -261,6 +269,9 @@ fi
 if [ -n "${BROKER_PID}" ]; then
   echo "=== Waiting for ARK Broker ==="
   wait "${BROKER_PID}"
+  if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+    kubectl rollout status deployment/ark-broker -n default --timeout=120s
+  fi
 fi
 
 if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
