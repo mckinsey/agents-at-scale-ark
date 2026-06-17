@@ -1,0 +1,42 @@
+version: v2beta1
+
+pipelines:
+  deploy: |-
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+
+deployments:
+  kubernetes-mcp-server:
+    namespace: default
+    helm:
+      chart:
+        name: oci://ghcr.io/containers/charts/kubernetes-mcp-server
+        version: 0.1.0
+      values:
+        ingress:
+          enabled: false
+        httpRoute:
+          enabled: true
+          parentRefs:
+            - group: gateway.networking.k8s.io
+              kind: Gateway
+              name: localhost-gateway
+              namespace: ark-system
+              sectionName: http-wildcard
+          hostnames:
+            - kubernetes-mcp-server.127.0.0.1.nip.io
+        rbac:
+          create: true
+          extraRoles:
+            - name: namespace-reader
+              namespace: default
+              rules:
+                - apiGroups: ["*"]
+                  resources: ["*"]
+                  verbs: ["get", "list", "watch"]
+          extraRoleBindings:
+            - name: namespace-reader
+              namespace: default
+              roleRef:
+                name: namespace-reader
