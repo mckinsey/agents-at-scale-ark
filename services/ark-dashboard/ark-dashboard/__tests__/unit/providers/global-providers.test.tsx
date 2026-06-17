@@ -1,13 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { GlobalProviders } from '@/providers/GlobalProviders';
+
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/agents'),
   useRouter: vi.fn(() => ({ push: vi.fn() })),
+  useSearchParams: vi.fn(() => new URLSearchParams('')),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   NamespaceProvider: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@/providers/ContextProvider', () => ({
+  ContextProvider: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
@@ -44,8 +53,6 @@ vi.mock('@/providers/AuthProviders', () => ({
     <div>{children}</div>
   ),
 }));
-
-import { GlobalProviders } from '@/providers/GlobalProviders';
 
 describe('GlobalProviders', () => {
   beforeEach(() => {
