@@ -2,7 +2,7 @@
 
 Five existing pieces of Ark infrastructure shape this design — without them the feature would require significantly more work:
 
-1. **`WorkflowDagViewer` parses YAML locally.** `services/ark-dashboard/ark-dashboard/components/workflow-dag-viewer.tsx` imports `js-yaml` and uses `@xyflow/react` + `dagre` to render any `WorkflowTemplate` manifest as a DAG. It does not need the workflow to be submitted to Argo first. The same component will happily render YAML the LLM is mid-stream of producing, or YAML the user is hand-editing.
+1. **`WorkflowDagViewer` parses YAML locally.** `services/ark-dashboard/ark-dashboard/components/workflow-dag-viewer.tsx` imports `js-yaml` and uses `@xyflow/react` + `dagre` to render any `WorkflowTemplate` manifest as a DAG. It does not need the workflow to be submitted to Argo first. The same component will happily render whatever YAML it is handed — the block the agent just finished emitting, or YAML the user is hand-editing — with no Argo round-trip.
 2. **The chat + session/conversation stack already exists.** `chatService` (`lib/services/chat.ts`), `conversationsService` (`lib/services/conversations.ts`), and the broker sessions were shipped with the recent sessions/conversations view. The author UI is a new consumer of that stack, not a new stack.
 3. **The Ark MCP server is already wired up.** `services/ark-mcp/ark-mcp/src/ark_mcp/tools.py` exposes `list_agents` and `query_agent` today and uses `ark_sdk.client.with_ark_client`; the Agent CRD's `tools` block can reference an MCP server. Adding `list_models`, `list_teams`, and `list_workflow_templates` is a localised change.
 4. **`WorkflowTemplate` read/write already goes through the resources passthrough.** `workflowTemplatesService` (`lib/services/workflow-templates.ts`) exposes `list`, `get`, `getYaml(name)`, and `run`. `getYaml` loads a template for the edit flow; `run()` already POSTs a `Workflow` to `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow`, proving the passthrough accepts POST. Save adds a `WorkflowTemplate` POST through the same endpoint — no new backend.
@@ -21,7 +21,7 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 - A non-technical PM can describe a workflow in natural language and receive runnable Argo YAML
 - A user can open an **existing** template and refine it conversationally
 - A user can **hand-edit** the YAML directly, and the agent stays grounded on the current draft — including manual edits that have not yet been saved
-- The DAG preview updates progressively as the model streams its response and reflects manual edits live
+- The DAG preview updates **when the agent finishes responding** (not mid-stream), and reflects manual edits live
 - The model composes from generic Argo steps **and** the user's existing Ark agents, models, and teams
 - The model **never invents** Ark resources that do not exist in the user's namespace; it lists what's available and asks
 - Saved templates are indistinguishable from hand-written templates and land on the existing detail page
@@ -45,6 +45,8 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 
 The LLM that drives authoring is `kind: Agent` in `services/argo-workflows/samples/argo-make-author.yaml`. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the Ark MCP server.
 
+The author Agent lives in the **currently-selected namespace**, created there on demand from the dashboard (Decision 15), not hand-applied. The dashboard dispatches each authoring turn to the author Agent **in that selected namespace** — so browsing namespace X chats with X's author Agent. Only the agent *name* is configured (Decision 13); the namespace is always the one the user is currently in, exactly like every other resource the dashboard shows.
+
 **Rationale:**
 - Ark eats its own dog food — argo-make is itself an Ark resource
 - Users get model swapping for free via `spec.modelRef`
@@ -53,22 +55,25 @@ The LLM that drives authoring is `kind: Agent` in `services/argo-workflows/sampl
 
 **Alternative considered:** Hard-code the author in a new dedicated service or inside `ark-api`. Rejected — it would create a parallel chat infrastructure and break the "everything is an Ark resource" story.
 
-### 2. Sample-first, not chart-bundled
+### 2. Author manifest owned by ark-api; `ark-query` stays sample-first
 
-Both new YAML artifacts — the `argo-make-author` Agent and the `ark-query` `WorkflowTemplate` — live under `services/argo-workflows/samples/` and are installed by `kubectl apply`. Neither is a Helm chart template.
+The two new YAML artifacts have different homes, because they have different install paths:
+
+- **`ark-query` `WorkflowTemplate`** lives under `services/argo-workflows/samples/` and is installed by `kubectl apply`, as before. It is referenced from hand-written workflows, so a file users can read and apply is the right shape. Promote to chart-shipped once stable.
+- **The `argo-make-author` Agent** is **not** a kubectl sample. Its manifest — spec plus the canonical system prompt — is bundled inside the **ark-api** image as the single source of truth for the prompt, and installed from the dashboard via an ark-api endpoint (Decision 15). There is no parallel sample file to drift from it.
 
 **Rationale:**
-- The system prompt, few-shot examples, and the query template will need rapid iteration in the first weeks
-- A chart bump per revision is the wrong cadence
-- Users opting in keeps the surface area honest: the feature is real only once the sample is applied
-
-Promote to chart-shipped once each has stabilised over a few releases.
+- The user installs the author Agent from the dashboard, not the CLI; owning the manifest in ark-api lets the install button materialise it without a `kubectl apply`.
+- Single source of truth: the prompt exists in exactly one place. No sample/chart/dashboard copy to keep in sync.
+- Trade-off (accepted): iterating the prompt now means shipping an ark-api build rather than re-applying a sample. Acceptable — install-from-dashboard is the priority and the prompt is expected to stabilise. The `ark-query` template keeps the fast kubectl-iterate loop where it still matters.
 
 ### 3. The draft buffer is the single source of truth
 
 A single `draftYaml` state in the route is the source of truth. It has **two writers** — the author Agent (the fenced ` ```yaml ` block in its latest message) and the user (manual edits in the YAML tab) — and three readers: the preview, Save, and agent-grounding (Decision 4).
 
-The agent emits its `WorkflowTemplate` inside a single fenced ` ```yaml ` block. The dashboard watches the streaming text, extracts the block, debounces, parses with `js-yaml`, and on a successful parse commits it to `draftYaml`. The editable YAML tab writes the user's keystrokes straight to `draftYaml`.
+The agent emits its `WorkflowTemplate` inside a single fenced ` ```yaml ` block. The chat streams the response as usual, but the preview does **not** track it mid-stream: only once the turn has finished streaming does the dashboard extract the block, parse it with `js-yaml`, and (on a successful parse) commit it to `draftYaml` in a single step. The editable YAML tab writes the user's keystrokes straight to `draftYaml`.
+
+**Update the preview only when the agent is done (explicit requirement).** A demo showed that updating the DAG on every streamed chunk is distracting and churns through transient, half-valid graphs. The agent writer therefore commits to `draftYaml` exactly once per turn, on stream completion. The user still sees progress in the streaming chat message; the DAG and YAML tab settle to one coherent state at the end. (Manual edits are unaffected — they commit live as the user types.)
 
 This replaces the earlier model where the agent's last message was the source of truth — that could not accommodate manual edits.
 
@@ -76,7 +81,7 @@ This replaces the earlier model where the agent's last message was the source of
 
 **Rationale:**
 - Reuses the existing chat streaming channel exactly as-is — no new event types, no new tool-call surface
-- The DAG appears progressively as the model writes the YAML — the "Figma Make moment" — and reflects manual edits live
+- The DAG settles to a single coherent state when the agent finishes — no mid-stream churn through half-valid graphs — and reflects manual edits live
 - One buffer means preview, Save, and grounding can never disagree
 
 **Alternative considered:** A dedicated `propose_workflow(yaml)` tool call for transport. Rejected for v1 — it would require the chat UI to surface tool-call results in a custom way, and provides no behaviour the fence-extraction approach lacks.
@@ -140,7 +145,7 @@ The route opens in the context of an Ark `Session`. The chat panel shows a "+ Ne
 
 Save POSTs `draftYaml` to `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate` via a new method on `workflowTemplatesService`, then navigates to `/workflow-templates/[id]`.
 
-- **New-template Save** (`/new` route): on a name collision (HTTP 409), show a dialog — *"A template named X already exists. Overwrite?"* — Confirm → overwrite (DELETE + POST, or PUT if available); Cancel → return to the chat, no destructive action.
+- **New-template Save** (`/new` route): on a name collision (HTTP 409 from the create passthrough), show a dialog — *"A template named X already exists. Overwrite?"* — Confirm → overwrite via **DELETE + POST** (the resources passthrough has no PUT/PATCH, only GET / POST / DELETE); Cancel → return to the chat, no destructive action.
 - **Edit-mode Save** (`/edit` route): overwrite the same name silently — that is the whole intent of the edit flow — with "Save as new name" offered as a secondary action for users who want to fork.
 
 No template versioning history is maintained — Argo does not natively model this, and inventing it would expand scope significantly. The conversation history in the session preserves the prompt-and-YAML trail; users who want history save under a new name.
@@ -208,7 +213,7 @@ A non-zero exit marks the Argo node Failed, so `retryStrategy`, `continueOn`, an
    │                          │  prefix draft into input      templates/[id]')
    │  lastAgentYaml ◀── fence │
    └───────────┬─────────────┘
-               │ agent fence (on parse)        ▲ manual edits
+               │ agent fence (on stream end)   ▲ manual edits
                ▼                                │ (keystrokes)
    ┌───────────────────────────────────────────┴───────┐
    │            draftYaml  (single source of truth)      │
@@ -221,14 +226,62 @@ A non-zero exit marks the Argo node Failed, so `retryStrategy`, `continueOn`, an
    └────────────────────────┘        └────────────────────────┘
 ```
 
-The fenced-block extractor lives in a small utility module under `lib/utils/`. It tolerates partial / streaming input by attempting `yaml.load` (js-yaml) on whatever has been received between the opening ` ```yaml ` and the next `\n` ``` ` (or end-of-stream). Parse failures during streaming are silently swallowed; `draftYaml` (and thus the preview) only updates from the agent when parsing succeeds. Manual edits update `draftYaml` directly regardless of parse state; the DAG simply shows the last valid parse.
+The fenced-block extractor lives in a small utility module under `lib/utils/`. It runs **once per turn, on stream completion** — pulling the text between the opening ` ```yaml ` and its closing ` ``` ` in the final message and parsing it with `yaml.load` (js-yaml). Partial chunks are never fed to it, so the preview never sees a half-written graph. If the final parse fails (malformed YAML, or no fenced block) the previous `draftYaml` is kept and the chat surfaces that the agent's output could not be applied. Manual edits update `draftYaml` directly; the DAG shows the last valid parse.
 
-### 13. Test strategy
+### 13. Resolving the author Agent (configuration, not a dashboard setting)
 
-- **Unit (TypeScript):** the YAML extraction utility (partial streams, multiple fences, malformed YAML, no-fence messages) and the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn).
-- **Unit (Python):** the new MCP tools — namespace-scoped, empty-namespace, error mapping.
+The dashboard must know **which** Agent to dispatch authoring turns to. The **namespace** is not configured — it is always the currently-selected namespace (Decision 1), resolved the same way every other resource view resolves it via the `NamespaceProvider`. Only the agent **name** comes from configuration, read at runtime, with **no dashboard UI for it in v1**:
+
+- One env var, following the existing `NEXT_PUBLIC_*` pattern (the route is a client component, like the `NEXT_PUBLIC_ARGO_URL` already read by the workflow-templates detail page):
+  - `NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT` — the author Agent name. Defaults to `argo-make-author` (matching the shipped sample) when unset.
+- The chat panel dispatches every authoring turn to `{selectedNamespace}/{configuredName}`. The same `NamespaceProvider` scopes which resources the MCP `list_*` tools surface for composition, so the author Agent and the resources it can reference are always in the namespace the user is looking at.
+
+**Rationale:**
+- Per-namespace dispatch matches the user's mental model: switching namespaces switches to that install's author Agent, with no extra step.
+- Pinning the *name* in config — not the UI — keeps that choice an operator/deploy concern, which is what the user wants for now. An operator can point the dashboard at a customised or differently-named author Agent purely by setting the env var; no settings screen, no per-user state.
+- The default name means the out-of-the-box flow (apply the sample into the Ark namespace) works with zero configuration.
+
+**Follow-up (parked):** a dashboard-side setting to select the author Agent, once there is a reason to vary it without redeploying. Out of scope for v1 by explicit request.
+
+### 14. When the author Agent is not installed
+
+The chat is an **enhancement layer over a manual editor that always works** — not a hard dependency. On mount (and whenever the selected namespace changes), the route checks for the configured author Agent in the current namespace via `agentsService.getByName(name)` (returns `null` if absent).
+
+- **Missing:** show a non-blocking banner — *"Author agent `argo-make-author` isn't installed in namespace `<ns>`"* — with an **"Install author agent"** button that calls the ark-api install endpoint for the current namespace (Decision 15); the chat composer is disabled until it succeeds. The **YAML editor, DAG preview, and Save remain fully functional** meanwhile:
+  - On `/new`: a YAML-literate user can still hand-write or paste a template and Save it — the route degrades to a plain manual editor.
+  - On `/[id]/edit`: the loaded template renders in the preview and stays hand-editable and saveable. **Editing an existing template never depends on the agent being present** — load and Save both go through the resources passthrough, not the agent.
+- **Disappears mid-session** (agent deleted, or a dispatch call fails): surface the error inline in the chat and re-run the existence check to flip into the banner state. The `draftYaml` buffer is untouched, so no in-progress work is lost.
+
+**Rationale:** sample-first means the agent legitimately may not be applied yet (or not in *this* namespace). Coupling the whole route to its presence would make the workflow-template editor unusable for the exact YAML-literate users who can work without the agent. Degrading to a manual editor keeps the page useful in every state.
+
+### 15. Installing the author Agent from the dashboard (reuse the resources passthrough)
+
+Install is a button, not a `kubectl apply` — and it adds **no new write endpoint**. Creating the Agent reuses the existing generic resources passthrough, the same one Save uses for `WorkflowTemplate`:
+
+```
+GET  /api/v1/argo-make/author-agent/manifest                  →  canonical Agent manifest (single source of truth)
+POST /api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent?namespace=<ns>   →  create it (existing passthrough, reused)
+```
+
+The single source of truth for the default prompt is one manifest file bundled in the **ark-api** image (spec + system prompt). The dashboard can't hold it without duplicating it, so the only genuinely new server surface is a **read-only** endpoint that serves it. The **"Install author agent"** button (Decision 14) then: GETs the manifest, stamps the configured name (Decision 13), and POSTs it through the resources passthrough into the currently-selected namespace. On success the route re-runs the existence check, the banner clears, and the chat composer enables — no page reload, no CLI.
+
+- **Idempotent:** the passthrough's create returns HTTP 409 if the Agent already exists (a second tab raced the install); the dashboard treats 409 as success. The banner only appears when the agent is absent (Decision 14), so the button's job is create-if-missing.
+- **No PUT/PATCH on the passthrough.** It exposes GET / POST / DELETE only, so there is no in-place update. "Upgrade an existing agent to the latest default prompt" is a parked follow-up and, when built, is a DELETE + re-create — not a PUT.
+- The dashboard needs no bespoke CRD-authoring logic — it composes one manifest GET with the create passthrough it already uses for Save.
+
+**Rationale:**
+- Keeps the prompt single-source: only the read-only manifest endpoint touches the one file in ark-api; nothing is duplicated into the dashboard bundle or a chart.
+- Reuses the existing create passthrough for the write rather than adding a parallel write endpoint — fewer endpoints, and the same auth path as every other dashboard write.
+
+**Alternative considered:** a bespoke `POST .../argo-make/author-agent` that reads the file and creates the CRD server-side in one call. Rejected — it duplicates create logic the resources passthrough already provides; the GET-then-passthrough-POST split keeps all writes on the one generic endpoint. **Also rejected:** embedding the manifest in the dashboard build, or a chart ConfigMap — both keep a single source but couple prompt iteration to a dashboard release or add chart plumbing for an artifact ark-api can simply serve.
+
+### 16. Test strategy
+
+- **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); and the missing-agent gating (agent present → composer enabled; `getByName` returns `null` → banner shown, composer disabled, editor + Save still enabled).
+- **Unit (Python):** the new MCP tools — namespace-scoped, empty-namespace, error mapping; and the author-agent manifest endpoint — returns the bundled manifest with the configured name stamped in.
 - **Chainsaw (e2e):**
   - **Authoring happy path:** mock-llm seeded with a canned `WorkflowTemplate` response → assert the template is created and the user lands on the detail page.
+  - **Install author agent:** open the route in a namespace with no author Agent → click Install → assert the Agent is created in that namespace (manifest GET + create via the resources passthrough), the banner clears, and the composer enables.
   - **Fail-and-tell-user:** the model is told to reference a non-existent agent → assert it refuses and no YAML is written.
   - **Edit + hand-edit grounding:** load an existing template, hand-edit the YAML, send a turn → assert the agent's next message is grounded on the edited draft (the prefix carried the manual edit).
   - **`ark-query` template:** run it against an agent target and a team target → assert `response` / `query-json` / `phase` / `conversation-id` outputs on success; force a query `error` → assert the node is Failed **and** the outputs are still readable.
@@ -237,15 +290,15 @@ The fenced-block extractor lives in a small utility module under `lib/utils/`. I
 
 - **The LLM can still emit invalid Argo YAML.** Without a lint loop, schema errors surface only at Save time as K8s API errors. **Mitigation:** the few-shot examples cover the patterns users actually need, and the `ark-query` template removes the most error-prone hand-written piece (a `templateRef` is far harder to get wrong than the full inline recipe). If error rate proves painful, add `lint_workflow` as a follow-up — the plug-in point is a check before Save.
 
-- **Streaming-YAML preview can flicker.** A partial chunk may parse as a different DAG than the next chunk. **Mitigation:** debounce extraction (e.g., 150ms); only commit to `draftYaml` on successful parse; show the previous DAG until the new one is valid.
+- **No live/progressive DAG while the agent streams.** By explicit requirement (Decision 3) the preview updates only when the agent finishes, so the user watches the chat stream and the DAG appears in one step at the end rather than building live. **Trade-off accepted:** this is the desired behaviour — it removes mid-stream flicker and transient invalid DAGs entirely (no debounce, no partial-parse handling needed). Manual edits still reflect live, so the canvas is never frozen.
 
 - **Fenced-block convention is fragile if the model emits prose around it.** A model that emits YAML in two blocks, or wraps it in extra text, breaks the extractor. **Mitigation:** the system prompt mandates a single fenced block at the end of the message; chainsaw tests pin the contract.
 
-- **Manual edits and the agent can race.** If the user edits while the agent is streaming, the fence parse could clobber the manual edit. **Mitigation:** the editable tab is read-only while a response is streaming; once the turn completes, edits resume and the diverge-check re-grounds the next turn.
+- **Manual edits and the agent can race.** If the user edits while the agent is streaming, the commit-on-completion could clobber the manual edit. **Mitigation:** the editable tab is read-only while a response is streaming; once the turn completes and the agent's block has committed, edits resume and the diverge-check re-grounds the next turn.
 
 - **Grounding by prefix bloats history on every manual edit.** Each diverged turn carries a full YAML copy into the conversation/memory. **Mitigation:** inject only on divergence (not every turn); the volume is one template per manual-edit turn, which is acceptable. A server-side draft store would remove this entirely — tracked as the same follow-up that would enable the draft-inspection tool.
 
-- **Sample-first means out-of-the-box users see no "argo-make" feature.** Until they `kubectl apply` the author Agent, the new route is just an empty chat. **Mitigation:** the empty-state of the route surfaces an "Install argo-make-author" hint with the apply command. Promote to chart-shipped once stable.
+- **Out-of-the-box users have no author Agent until they install it** — and per-namespace dispatch means it can be absent in some namespaces but present in others. **Mitigation:** Decisions 14 & 15 — the route detects the missing agent and offers a one-click "Install author agent" button (ark-api creates it in the current namespace from the bundled manifest); meanwhile the route degrades to a working manual YAML editor (Save still functions) rather than breaking.
 
 - **Overwrite is destructive (no versioning).** A user iterating on the same template loses earlier versions. **Mitigation:** new-template Save confirms on collision; edit-mode Save is explicitly an overwrite with "Save as new name" available; the session conversation preserves the prompt-and-YAML trail.
 
@@ -257,7 +310,7 @@ The fenced-block extractor lives in a small utility module under `lib/utils/`. I
 
 1. **"+ New conversation" — within-session or new-session?** Default v1 answer: within-session. Final decision deferred until implementation reads the existing `conversations.ts` semantics from the recent sessions/conversations PR.
 
-2. **What namespace does the author Agent run in by default?** Likely `default`, with the `NamespaceProvider` from the dashboard scoping which resources the MCP tools see. To confirm during implementation.
+2. **What namespace does the author Agent run in?** *Resolved (Decision 1 / 13):* it is installed alongside Ark in each install's namespace, and the dashboard dispatches to the author Agent in the **currently-selected namespace**. Only the agent name is configured (`NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT`, default `argo-make-author`); the namespace always follows the `NamespaceProvider`, which also scopes the MCP `list_*` tools.
 
 3. **Should `list_workflow_templates` filter to templates the user could plausibly riff on (e.g., excluding system templates)?** Initial answer: return everything; let the system prompt decide what to surface. Revisit if it produces noise.
 
