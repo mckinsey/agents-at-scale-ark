@@ -315,6 +315,36 @@ func (m *HTTPMemory) GetName() string {
 	return m.name
 }
 
+// DeleteQuery removes all messages for the given query from the memory backend.
+func (m *HTTPMemory) DeleteQuery(ctx context.Context, queryID string) error {
+	if err := m.resolveAndUpdateAddress(ctx); err != nil {
+		return fmt.Errorf("failed to resolve memory address: %w", err)
+	}
+
+	requestURL := fmt.Sprintf("%s"+QueryMessagesEndpointFmt, m.baseURL, url.PathEscape(queryID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // Close closes the HTTP client connections
 func (m *HTTPMemory) Close() error {
 	if m.httpClient != nil {
