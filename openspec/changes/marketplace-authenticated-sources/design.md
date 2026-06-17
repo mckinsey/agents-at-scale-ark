@@ -33,8 +33,8 @@ The source entry in the ConfigMap gains an optional non-secret block, e.g. `auth
 
 The aggregator reads the Secret with the requesting user's identity (same impersonation path as `marketplace-sources-configmap`). If the user can't read the Secret, the source fails for them and the credential is never used on their behalf.
 
-- **Why:** reading as the ark-api SA would let any catalogue viewer borrow another user's credential — the #2347 "service acts with more power than the caller" mistake. Impersonation makes the cluster enforce per-user access.
-- **Trade-off:** a shared authenticated source only resolves for users who can read its Secret. That is correct; granting broader access is an explicit RBAC decision.
+- **Why:** the credential is a service identity (a service-account token to the upstream), but *which Ark users may trigger a fetch with it* must still be controlled. Reading as the ark-api SA would let any catalogue viewer use a service credential they were never granted — the #2347 "service acts with more power than the caller" mistake. Impersonation makes the cluster enforce that access.
+- **Trade-off:** a shared authenticated source only resolves for the Ark users granted `get` on its service-credential Secret (typically a viewer-group `RoleBinding`). That is correct; granting broader access is an explicit RBAC decision.
 
 ### Decision: RBAC for credential Secrets — namespace-scoped
 
@@ -89,7 +89,7 @@ marketplaceSources:
 - **The credential Secret is pre-existing — created out-of-band (External Secrets Operator, sealed-secrets, SOPS, Vault), never by the seed Job.** The Helm values carry only the non-secret `scheme` + `secretRef`; the token is never templated into `values.yaml`. This keeps plaintext credentials out of the chart and out of Git, consistent with the "credential never in the ConfigMap/plaintext" stance.
 - **The #2479 seed Job writes only the ConfigMap entry** (the `auth` block is non-secret routing metadata), exactly as it already writes `url`/`displayName`. No new writer of Secrets is introduced.
 - **Deploy-time writes bypass the ark-api write-path guards** (validate-before-save, re-supply-on-URL-change) because they do not go through the create/update endpoint. This is acceptable: those are UX guards on the dashboard path, not security invariants. A wrong/missing credential simply surfaces the per-source auth error at fetch time (the impersonated read still runs) — it does not fail the install.
-- **RBAC still gates use.** The aggregator reads the Secret under the viewing user's impersonated identity, so deploy-time provisioning must also bind the namespace-scoped `Role`/`RoleBinding` granting those users `get` on the credential Secret — otherwise the seeded source silently errors for them.
+- **RBAC gates *which Ark users* may trigger the fetch — the credential itself is a service identity.** The token authenticates Ark to the upstream (GitHub/ADO); it is not a per-user credential. The aggregator reads the Secret under the requesting Ark user's impersonated identity, so deploy-time provisioning binds a namespace-scoped `Role`/`RoleBinding` granting the catalogue's viewer group `get` on that service-credential Secret (one binding, not per-user). An Ark user outside that binding gets the per-source auth error; the credential is never borrowed.
 - **Why:** the most common enterprise pattern is GitOps. A platform team seeds a curated, authenticated catalogue at install and never touches the dashboard. Because the runtime contract is just "a Secret + a ConfigMap entry the aggregator reads," this path needs no new mechanism — only the additive `auth` field on the existing `marketplaceSources` values.
 
 ## Risks / Trade-offs
