@@ -1,14 +1,22 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { ChatInput } from '@/components/sessions-conversations/chat-input';
-import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
+import { useSendMessage } from '@/lib/services/conversations-hooks';
 
 vi.mock('@/lib/services/conversations-hooks');
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
+  },
+}));
+
+const mockGetByName = vi.fn();
+vi.mock('@/lib/services', () => ({
+  agentsService: {
+    getByName: (...args: unknown[]) => mockGetByName(...args),
   },
 }));
 
@@ -31,6 +39,7 @@ describe('ChatInput', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetByName.mockResolvedValue({ parameters: [] });
     vi.mocked(useSendMessage).mockReturnValue({
       mutate: mockSendMessage,
       isPending: false,
@@ -51,12 +60,7 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={workflowConversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={workflowConversation} />);
 
       // Should render tool toggle switch
       expect(screen.getByRole('switch')).toBeInTheDocument();
@@ -85,12 +89,7 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={workflowConversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={workflowConversation} />);
 
       expect(screen.getByText('42')).toBeInTheDocument();
     });
@@ -113,7 +112,7 @@ describe('ChatInput', () => {
           {...baseProps}
           conversation={workflowConversation}
           showToolCalls={false}
-        />
+        />,
       );
 
       const switchElement = screen.getByRole('switch');
@@ -124,7 +123,7 @@ describe('ChatInput', () => {
           {...baseProps}
           conversation={workflowConversation}
           showToolCalls={true}
-        />
+        />,
       );
 
       expect(switchElement).toBeChecked();
@@ -149,7 +148,7 @@ describe('ChatInput', () => {
           {...baseProps}
           conversation={workflowConversation}
           showToolCalls={false}
-        />
+        />,
       );
 
       const switchElement = screen.getByRole('switch');
@@ -174,10 +173,7 @@ describe('ChatInput', () => {
       };
 
       const { container } = render(
-        <ChatInput
-          {...baseProps}
-          conversation={workflowConversation}
-        />
+        <ChatInput {...baseProps} conversation={workflowConversation} />,
       );
 
       // Component should return null - no UI rendered
@@ -204,10 +200,7 @@ describe('ChatInput', () => {
       };
 
       const { container } = render(
-        <ChatInput
-          {...baseProps}
-          conversation={workflowConversation}
-        />
+        <ChatInput {...baseProps} conversation={workflowConversation} />,
       );
 
       expect(container.firstChild).toBeNull();
@@ -228,21 +221,18 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={regularConversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={regularConversation} />);
 
       // Should render regular chat input
       expect(screen.getByRole('textbox')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Message agent-1')).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText('Message agent-1'),
+      ).toBeInTheDocument();
 
       // Should render send button
       const buttons = screen.getAllByRole('button');
-      const sendButton = buttons.find((btn) =>
-        btn.querySelector('svg')?.classList.contains('lucide-send')
+      const sendButton = buttons.find(btn =>
+        btn.querySelector('svg')?.classList.contains('lucide-send'),
       );
       expect(sendButton).toBeInTheDocument();
 
@@ -263,12 +253,7 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={regularConversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={regularConversation} />);
 
       // Should render regular chat input
       expect(screen.getByRole('textbox')).toBeInTheDocument();
@@ -279,15 +264,12 @@ describe('ChatInput', () => {
     });
 
     it('should handle null conversation gracefully', () => {
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={null}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={null} />);
 
       // Should render chat input with fallback participant name
-      expect(screen.getByPlaceholderText('Message participant')).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText('Message participant'),
+      ).toBeInTheDocument();
     });
 
     it('should send message when send button is clicked', async () => {
@@ -304,24 +286,22 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={regularConversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={regularConversation} />);
 
       const textarea = screen.getByRole('textbox');
       await user.type(textarea, 'Hello agent');
 
       const buttons = screen.getAllByRole('button');
-      const sendButton = buttons.find((btn) =>
-        btn.querySelector('svg')?.classList.contains('lucide-send')
+      const sendButton = buttons.find(btn =>
+        btn.querySelector('svg')?.classList.contains('lucide-send'),
       );
 
       await user.click(sendButton!);
 
-      expect(mockOnAddPendingMessage).toHaveBeenCalledWith('conv-1', 'Hello agent');
+      expect(mockOnAddPendingMessage).toHaveBeenCalledWith(
+        'conv-1',
+        'Hello agent',
+      );
       expect(mockOnSetProcessing).toHaveBeenCalledWith('conv-1', true);
     });
   });
@@ -340,12 +320,7 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={conversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={conversation} />);
 
       // Should render regular chat input (0 participants treated as non-workflow)
       expect(screen.getByRole('textbox')).toBeInTheDocument();
@@ -364,15 +339,112 @@ describe('ChatInput', () => {
         errorCount: 0,
       };
 
-      render(
-        <ChatInput
-          {...baseProps}
-          conversation={conversation}
-        />
-      );
+      render(<ChatInput {...baseProps} conversation={conversation} />);
 
       // Should render regular chat input
       expect(screen.getByRole('textbox')).toBeInTheDocument();
+    });
+  });
+
+  describe('agent requiring query parameters', () => {
+    const agentConversation: Conversation = {
+      conversationId: 'conv-1',
+      name: 'param-agent',
+      participants: ['param-agent'],
+      messageCount: 0,
+      toolCallCount: 0,
+      duration: '0m',
+      startTime: '2024-01-01T00:00:00Z',
+      participantType: 'agent',
+      errorCount: 0,
+    };
+
+    const findSendButton = () =>
+      screen
+        .getAllByRole('button')
+        .find(btn =>
+          btn.querySelector('svg')?.classList.contains('lucide-send'),
+        );
+
+    it('shows the parameter editor and keeps send disabled until required params are filled', async () => {
+      mockGetByName.mockResolvedValue({
+        parameters: [
+          {
+            name: 'agent_name',
+            valueFrom: { queryParameterRef: { name: 'agent_name' } },
+          },
+        ],
+      });
+
+      render(<ChatInput {...baseProps} conversation={agentConversation} />);
+
+      expect(
+        await screen.findByText(/needs the agent_name parameter/i),
+      ).toBeInTheDocument();
+
+      await userEvent.type(
+        screen.getByPlaceholderText('Message param-agent'),
+        'Hello',
+      );
+
+      expect(findSendButton()).toBeDisabled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+
+      await userEvent.type(
+        await screen.findByPlaceholderText('Enter value...'),
+        'researcher',
+      );
+
+      expect(findSendButton()).not.toBeDisabled();
+    });
+
+    it('passes supplied parameters when sending', async () => {
+      mockGetByName.mockResolvedValue({
+        parameters: [
+          {
+            name: 'agent_name',
+            valueFrom: { queryParameterRef: { name: 'agent_name' } },
+          },
+        ],
+      });
+
+      render(<ChatInput {...baseProps} conversation={agentConversation} />);
+
+      await userEvent.type(
+        await screen.findByPlaceholderText('Enter value...'),
+        'researcher',
+      );
+      await userEvent.type(
+        screen.getByPlaceholderText('Message param-agent'),
+        'Hello',
+      );
+
+      await userEvent.click(findSendButton()!);
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Hello',
+          parameters: [{ name: 'agent_name', value: 'researcher' }],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('allows sending when the agent has no required parameters', async () => {
+      mockGetByName.mockResolvedValue({ parameters: [] });
+
+      render(<ChatInput {...baseProps} conversation={agentConversation} />);
+
+      await waitFor(() => {
+        expect(mockGetByName).toHaveBeenCalledWith('param-agent');
+      });
+
+      await userEvent.type(
+        screen.getByPlaceholderText('Message param-agent'),
+        'Hello',
+      );
+
+      expect(findSendButton()).not.toBeDisabled();
     });
   });
 });
