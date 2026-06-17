@@ -11,6 +11,12 @@ The agent is keyword-based (no model) and exposes three skills:
 - **Simple math** — adds or multiplies numbers found in the message.
 - **Echo** — echoes the message back.
 
+The "agent" here is the A2A-protocol sense — a service that publishes an agent
+card and handles messages — not an LLM agent. The response logic lives in
+`SimpleAgentExecutor._process_message`; that method is the seam where a real
+implementation would call an LLM or agent framework. Everything around it (the
+agent card, A2A server, and Ark discovery) stays the same.
+
 ## Layout
 
 ```

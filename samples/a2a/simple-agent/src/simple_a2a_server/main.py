@@ -80,7 +80,15 @@ class SimpleAgentExecutor:
         # For this simple example, we don't have long-running tasks to cancel
 
     async def _process_message(self, message: str) -> str:
-        """Process the incoming message and generate a response."""
+        """Generate a response to the incoming message.
+
+        This is deliberately a deterministic keyword matcher with no model or
+        reasoning — it keeps the sample dependency-free. This method is the seam
+        where a real agent lives: replace the logic below with a call into your
+        LLM client or agent framework (LangChain, CrewAI, custom code) and
+        return its output. Everything else (agent card, A2A server, Ark
+        discovery) stays the same.
+        """
         if not message:
             return "Hello! I'm a simple A2A agent. How can I help you today?"
 

@@ -36,6 +36,8 @@ This A2A server demonstrates:
 - ✅ Local in-cluster development with devspace
 - ✅ Required Kubernetes resources to deploy to a cluster
 
+The sample's response logic is a deliberately simple, dependency-free keyword matcher — it is not an LLM agent. The point is the A2A plumbing, not the intelligence. In `src/simple_a2a_server/main.py`, `SimpleAgentExecutor._process_message` is the seam where a real implementation would call your LLM client or agent framework (LangChain, CrewAI, custom code); everything around it — the agent card, the A2A server, and Ark discovery — stays the same.
+
 ## Running Locally and Testing with the A2A Inspector
 
 You can run your A2A server locally and test with the [A2A Inspector](https://github.com/a2aproject/a2a-inspector). Run the server locally first:
