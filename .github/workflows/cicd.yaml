@@ -294,9 +294,11 @@ jobs:
             dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
+            install-uv: true
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
+            install-uv: true
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
@@ -305,6 +307,7 @@ jobs:
             dockerfile: Dockerfile.migrate
           - path: services/ark-mcp
             image: ark-mcp
+            install-uv: true
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: tools/ark-cli
             image: ark-cli
@@ -323,7 +326,12 @@ jobs:
           path: out/
 
       - name: Install uv
+        if: matrix.install-uv
         uses: astral-sh/setup-uv@v7
+        with:
+          # Pinned to match the Dockerfile uv version and to skip setup-uv's
+          # "find latest" GitHub API lookup, which has stalled CI for minutes.
+          version: "0.11.21"
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
