@@ -65,6 +65,7 @@ class ExecutionEngineRequest(BaseModel):
     conversationId: str = ""
     query_annotations: dict[str, str] = {}
     execution_engine_annotations: dict[str, str] = {}
+    message_ttl_seconds: int | None = None
 
 
 class ExecutionEngineResponse(BaseModel):

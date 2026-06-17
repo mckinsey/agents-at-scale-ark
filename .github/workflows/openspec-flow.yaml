@@ -348,7 +348,7 @@ jobs:
         if: steps.check.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install OpenSpec CLI
         if: steps.check.outputs.run == 'true'
@@ -692,7 +692,7 @@ jobs:
         if: steps.verify-issue.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install OpenSpec CLI
         if: steps.verify-issue.outputs.run == 'true'
@@ -934,7 +934,7 @@ jobs:
         if: steps.check.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install OpenSpec CLI
         if: steps.check.outputs.run == 'true'
