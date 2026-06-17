@@ -112,6 +112,8 @@ jobs:
       - name: Install uv
         if: steps.check-coverage.outputs.found == 'false'
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Install Helm
         if: steps.check-coverage.outputs.found == 'false'

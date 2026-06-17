@@ -77,6 +77,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Export uv lockfiles to requirements.txt for Xray
         shell: bash
@@ -244,6 +246,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -394,6 +398,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Build libraries
         run: make libs-build-all
