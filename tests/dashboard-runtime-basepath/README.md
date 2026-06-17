@@ -1,20 +1,20 @@
 # Dashboard runtime basepath
 
-Validates that the published `ark-dashboard` image honours `ARK_DASHBOARD_BASE_PATH` at container startup — same image, different runtime prefix — without rebuild.
+Verifies the published `ark-dashboard` image honours `ARK_DASHBOARD_BASE_PATH` at container startup — the entrypoint substitutes a sentinel into the standalone Next.js output and the dashboard serves correctly under a non-empty URL prefix, no image rebuild required.
 
 ## What it tests
-- With `ARK_DASHBOARD_BASE_PATH=/tenant-a`, the pod serves the dashboard at `/tenant-a` and returns 404 at `/`.
-- With `ARK_DASHBOARD_BASE_PATH=""` (or unset), the pod serves at `/` (legacy behaviour).
-- Static asset URLs emitted in the HTML are prefixed with the configured base path.
+- Installing the chart with `app.config.basePath=/tenant-a` produces a pod that serves at `/tenant-a` and returns 404 at `/`.
+- Static asset URLs emitted in the rendered HTML are prefixed with `/tenant-a/`.
 - No sentinel string (`/__ark_base_path__`) leaks into the served HTML.
+
+The empty-basepath case is implicitly covered by every other dashboard usage (`devspace deploy`, `ark dashboard`) and isn't duplicated here.
 
 ## Running
 ```bash
 chainsaw test
 ```
 
-A successful run confirms the placeholder-substitution mechanism in `services/ark-dashboard/entrypoint.sh` produces a working dashboard under any prefix, including the empty default.
+A successful run confirms the placeholder-substitution mechanism in `services/ark-dashboard/entrypoint.sh` produces a working dashboard under any prefix.
 
-## Limitations
-- Does not exercise the cluster Ingress that routes `/<basePath>/api/v1/*` to ark-api. That is the cluster operator's responsibility (see `docs/operations-guide/multi-tenant-dashboard-hosting.mdx`); a full e2e of that path requires an ingress controller in the test cluster, which this test does not assume.
-- Requires the image label `requires-images: "true"` because it depends on the dashboard image built from the same commit.
+## CI
+Labelled `requires-images: "true"`. CI plumbs `ARK_DASHBOARD_IMAGE` and `ARK_DASHBOARD_IMAGE_TAG` into the standard E2E step so the test uses the image built from the current commit.
