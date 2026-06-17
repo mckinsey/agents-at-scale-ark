@@ -1,9 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useMemo, useState } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  buildUrlWithoutNewSessionParams,
+  hasNewSessionParams,
+} from '@/lib/utils/session-params';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
@@ -19,6 +23,7 @@ export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const initialParticipant = searchParams.get('participant');
@@ -27,6 +32,19 @@ export default function SessionDetailPage() {
 
   const [hasSentMessage, setHasSentMessage] = useState(() => !initialParticipant);
   const isNewSession = !hasSentMessage;
+
+  const handleMessageSent = useCallback(() => {
+    setHasSentMessage(true);
+
+    if (!hasNewSessionParams(searchParams)) {
+      return;
+    }
+    router.replace(buildUrlWithoutNewSessionParams(searchParams, pathname));
+  }, [searchParams, router, pathname]);
+
+  const handleBackToSessions = useCallback(() => {
+    router.push(buildUrlWithoutNewSessionParams(searchParams, '/session-history'));
+  }, [router, searchParams]);
 
   // Skip API call for new sessions (avoid 404 errors)
   const { data: backendSession, isLoading, isError } = useGetSession(session_id, {
@@ -99,7 +117,7 @@ export default function SessionDetailPage() {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <button
-          onClick={() => router.push('/session-history')}
+          onClick={handleBackToSessions}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
           <ChevronLeft className="size-4" />
@@ -126,10 +144,10 @@ export default function SessionDetailPage() {
   const formattedDate = `${dateStr} ${timeStr}`;
 
   return (
-    <div className="flex flex-col space-y-6 p-8">
+    <div className="flex h-full min-h-0 flex-col gap-6 p-8">
       <button
-        onClick={() => router.push('/session-history')}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        onClick={handleBackToSessions}
+        className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer self-start"
       >
         <ChevronLeft className="size-4" />
         Back to all sessions
@@ -137,9 +155,9 @@ export default function SessionDetailPage() {
 
       <SessionConversationHeader session={session} formattedDate={formattedDate} />
 
-      <div className="flex justify-start items-center overflow-hidden">
-        <Tabs defaultValue={HISTORY_TAB} className="flex-1 max-w-[1344px] flex flex-col">
-          <TabsList className="flex-1 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
+      <div className="flex min-h-0 flex-1 justify-start overflow-hidden">
+        <Tabs defaultValue={HISTORY_TAB} className="flex min-h-0 flex-1 max-w-[1344px] flex-col">
+          <TabsList className="shrink-0 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
             <TabsTrigger
               value={HISTORY_TAB}
               className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
@@ -154,17 +172,17 @@ export default function SessionDetailPage() {
             </TabsTrigger>
           </TabsList>
 
-        <TabsContent value={HISTORY_TAB} className="flex flex-col">
+        <TabsContent value={HISTORY_TAB} className="flex min-h-0 flex-1 flex-col">
           <ConversationsTab
             sessionId={session_id}
             initialParticipant={memoizedInitialParticipant}
             initialConversationId={memoizedInitialConversationId}
             hasSentMessage={hasSentMessage}
-            onMessageSent={() => setHasSentMessage(true)}
+            onMessageSent={handleMessageSent}
           />
         </TabsContent>
 
-          <TabsContent value={LOGS_TAB} className="flex flex-col">
+          <TabsContent value={LOGS_TAB} className="flex min-h-0 flex-1 flex-col">
             <LogsTab sessionId={session_id} />
           </TabsContent>
         </Tabs>

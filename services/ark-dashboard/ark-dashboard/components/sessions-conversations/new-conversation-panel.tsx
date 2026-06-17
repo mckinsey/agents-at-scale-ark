@@ -10,6 +10,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useParticipants } from '@/lib/services/participants-hooks';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
@@ -64,21 +69,29 @@ export function NewConversationPanel({
     setSearch('');
   };
 
-  const renderListItem = (participant: Participant) => (
-    <button
-      key={`${participant.type}-${participant.name}`}
-      type="button"
-      onClick={() => handleSelect(participant)}
-      className="text-fg-secondary hover:bg-stateslayer-overlay-hover flex w-full items-center gap-2 py-2 pr-2 pl-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-stroke-status-focus"
-    >
-      <IconShell size="sm" variant="secondary">
-        {getParticipantIcon(participant.type)}
-      </IconShell>
-      <span className="truncate text-sm tracking-[-0.028px]">
-        {stripNamespace(participant.name)}
-      </span>
-    </button>
-  );
+  const renderListItem = (participant: Participant) => {
+    const label = stripNamespace(participant.name);
+    return (
+      <button
+        key={`${participant.type}-${participant.name}`}
+        type="button"
+        onClick={() => handleSelect(participant)}
+        className="text-fg-secondary hover:bg-stateslayer-overlay-hover flex w-full min-w-0 items-center gap-2 py-2 pr-2 pl-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-stroke-status-focus"
+      >
+        <IconShell size="sm" variant="secondary">
+          {getParticipantIcon(participant.type)}
+        </IconShell>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="min-w-0 flex-1 truncate text-sm tracking-[-0.028px]">
+              {label}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      </button>
+    );
+  };
 
   const renderSection = (title: string, items: Participant[]) => {
     if (items.length === 0) return null;
@@ -99,7 +112,7 @@ export function NewConversationPanel({
   return (
     <div
       data-testid="new-conversation-panel"
-      className="bg-surface-bg-primary flex h-full flex-col px-3 pt-3 pb-3"
+      className="bg-surface-bg-primary flex min-h-0 flex-1 flex-col px-3 pt-3 pb-3"
     >
       <InputGroup>
         <InputGroupAddon>
@@ -108,21 +121,21 @@ export function NewConversationPanel({
           </IconShell>
         </InputGroupAddon>
         <InputGroupInput
-          placeholder="Search participants..."
+          placeholder="Search a target..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search participants"
+          aria-label="Search a target"
           autoFocus
         />
       </InputGroup>
 
-      <ScrollArea className="-mx-3 mt-4 min-h-0 flex-1">
+      <ScrollArea className="-mx-3 mt-4 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
         <div className="flex flex-col gap-[30px] px-3">
           {renderSection('In this session', inSession)}
-          {renderSection('All participants', filteredAllParticipants)}
+          {renderSection('All available targets', filteredAllParticipants)}
           {inSession.length === 0 && filteredAllParticipants.length === 0 && (
             <div className="text-fg-tertiary py-8 text-center text-sm">
-              No participants found
+              No targets found
             </div>
           )}
         </div>

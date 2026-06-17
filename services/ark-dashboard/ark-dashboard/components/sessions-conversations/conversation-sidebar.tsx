@@ -3,6 +3,11 @@
 import { Badge } from '@/components/ui/badge';
 import { ChatBubble, Handyman, Schedule } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
@@ -61,20 +66,25 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
             onClick={() => onSelect(conv.conversationId)}
           >
             <div className={cn('w-px self-stretch', getStatusBorderClass(status))} />
-            <div className="flex-1 px-3 py-2 flex flex-col justify-start items-start gap-3">
-              <div className="self-stretch flex justify-between items-center">
-                <div className="flex justify-start items-center gap-1">
+            <div className="flex-1 min-w-0 px-3 py-2 flex flex-col justify-start items-start gap-3">
+              <div className="self-stretch flex justify-between items-center gap-2">
+                <div className="flex min-w-0 justify-start items-center gap-1">
                   <IconShell size="sm" className="opacity-100">
                     {getParticipantIcon(conv.participantType, { name: conv.name, size: '4' })}
                   </IconShell>
-                  <span
-                    className="text-sm font-normal leading-5 line-clamp-1 text-fg-primary"
-                    data-testid="conversation-participant-name"
-                  >
-                    {stripNamespace(conv.name)}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="min-w-0 flex-1 truncate text-sm font-normal leading-5 text-fg-primary"
+                        data-testid="conversation-participant-name"
+                      >
+                        {stripNamespace(conv.name)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{stripNamespace(conv.name)}</TooltipContent>
+                  </Tooltip>
                 </div>
-                <span className="text-xs font-normal leading-4 text-fg-secondary">
+                <span className="shrink-0 text-xs font-normal leading-4 text-fg-secondary">
                   {formatAbsoluteTime(conv.startTime)}
                 </span>
               </div>

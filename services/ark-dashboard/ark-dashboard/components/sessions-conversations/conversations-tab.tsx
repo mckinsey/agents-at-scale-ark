@@ -2,12 +2,13 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAtom } from 'jotai';
-import { ChevronLeft, ChevronRight, Plus } from '@/components/icons';
+import { Plus } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import type { Participant } from '@/lib/services/participants';
+import type { Participant as SessionParticipant } from '@/lib/services/broker-sessions';
 import { sessionPendingMessagesAtom, sessionProcessingStateAtom } from '@/atoms/session-pending-messages';
 import { ConversationSidebar } from './conversation-sidebar';
 import { MessageDisplay } from './message-display';
@@ -42,7 +43,6 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   }, []);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showToolCalls, setShowToolCalls] = useState(false);
 
   // Skip API call for new sessions before first message is sent
@@ -105,6 +105,25 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
     return allConversations.find(c => c.conversationId === selectedConversationId) || null;
   }, [allConversations, selectedConversationId]);
 
+  // Targets already in this session: prefer backend session participants, falling back
+  // to the targets of existing conversations so new sessions populate "In this session".
+  const sessionTargets = useMemo<SessionParticipant[]>(() => {
+    const targets = new Map<string, SessionParticipant>();
+    for (const participant of session?.participants ?? []) {
+      targets.set(participant.name, participant);
+    }
+    for (const conv of allConversations) {
+      if (!targets.has(conv.name)) {
+        targets.set(conv.name, {
+          id: conv.name,
+          name: conv.name,
+          type: conv.participantType ?? 'agent',
+        });
+      }
+    }
+    return Array.from(targets.values());
+  }, [session, allConversations]);
+
   const handleSelectParticipant = (participant: Participant) => {
     const conversationId = generateUUID();
     const newConversation: Conversation = {
@@ -158,9 +177,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   }
 
   return (
-    <div className="flex flex-col space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col">
       {allConversations.length === 0 ? (
-        <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex flex-1 items-center justify-center">
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No conversations yet</EmptyTitle>
@@ -169,57 +188,40 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       ) : (
         <div
-          className="grid h-[720px] min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
-          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
+          className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden"
+          style={{ gridTemplateColumns: 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
         >
           <div className="flex h-full flex-col border-r border-stroke-divider overflow-hidden">
             <div className="flex items-center justify-between h-14 bg-surface-bg-secondary px-5 py-2">
-              {!isSidebarCollapsed && <h3 className="text-sm font-semibold text-fg-primary">Conversations</h3>}
-              <div className="flex items-center gap-1">
-                {!isSidebarCollapsed && (
-                  <Button
-                    ref={createButtonRef}
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsCreatingConversation(true)}
-                    className="size-6"
-                    aria-label="Create new conversation"
-                    title="Create new conversation"
-                    disabled={isCreatingConversation}
-                  >
-                    <IconShell size="sm" variant="secondary">
-                      <Plus />
-                    </IconShell>
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                  className="size-6"
-                  title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                  <IconShell size="sm" variant="secondary">
-                    {isSidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
-                  </IconShell>
-                </Button>
-              </div>
+              <h3 className="text-sm font-semibold text-fg-primary">Conversations</h3>
+              <Button
+                ref={createButtonRef}
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsCreatingConversation(true)}
+                className="size-6"
+                aria-label="Create new conversation"
+                title="Create new conversation"
+                disabled={isCreatingConversation}
+              >
+                <IconShell size="sm" variant="secondary">
+                  <Plus />
+                </IconShell>
+              </Button>
             </div>
-            {!isSidebarCollapsed && isCreatingConversation ? (
+            {isCreatingConversation ? (
               <NewConversationPanel
-                sessionParticipants={session?.participants || []}
+                sessionParticipants={sessionTargets}
                 onSelectParticipant={handleSelectParticipant}
                 onCancel={closeNewConversationPanel}
               />
             ) : (
-              <ScrollArea className="flex-1 h-0">
-                {!isSidebarCollapsed && (
-                  <ConversationSidebar
-                    conversations={allConversations}
-                    selectedId={selectedConversationId}
-                    onSelect={setSelectedConversationId}
-                  />
-                )}
+              <ScrollArea className="flex-1 h-0 [&_[data-slot=scroll-area-viewport]>div]:!block">
+                <ConversationSidebar
+                  conversations={allConversations}
+                  selectedId={selectedConversationId}
+                  onSelect={setSelectedConversationId}
+                />
               </ScrollArea>
             )}
           </div>

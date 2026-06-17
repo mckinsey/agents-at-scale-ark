@@ -43,7 +43,7 @@ export function SessionConversationHeader({ session, formattedDate }: SessionCon
     <div className="flex justify-start items-center overflow-hidden">
       <div className="flex-1 max-w-[1344px] p-5 bg-surface-bg-secondary outline outline-1 outline-offset-[-1px] outline-stroke-divider flex flex-col justify-center items-start gap-5">
         <div className="self-stretch flex justify-between items-start">
-          <div className="flex justify-start items-end gap-3">
+          <div className="flex justify-start items-end gap-9">
             <div className="flex flex-col justify-center items-start gap-1">
               <div className="text-fg-secondary text-xs font-normal leading-4 tracking-tight line-clamp-1">
                 {formattedDate}
@@ -79,11 +79,11 @@ export function SessionConversationHeader({ session, formattedDate }: SessionCon
                     </div>
                   </div>
                   <div className="text-fg-secondary text-sm font-normal leading-5 line-clamp-1">
-                    Participants
+                    Targets
                   </div>
                 </div>
               </div>
-              <div className="w-px h-5 bg-stroke-divider shrink-0" />
+              <div className="w-px h-5 bg-stroke-divider shrink-0 -mx-2" />
               <div className="flex justify-start items-center gap-2">
                 <StatusBadge variant="error" size="default" />
                 <div className="flex justify-start items-center gap-1">

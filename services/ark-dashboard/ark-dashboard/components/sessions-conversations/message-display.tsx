@@ -8,6 +8,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { SessionMessage } from './session-message';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
@@ -231,12 +236,19 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-stroke-tertiary bg-surface-bg-secondary px-5 py-4">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <IconShell size="sm" className="opacity-100">
             {getParticipantIcon(participantType, { size: '4' })}
           </IconShell>
-          <span className="text-base font-semibold leading-6 text-fg-primary">{stripNamespace(participantName)}</span>
-          <span className="text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="min-w-0 truncate text-base font-semibold leading-6 text-fg-primary">
+                {stripNamespace(participantName)}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{stripNamespace(participantName)}</TooltipContent>
+          </Tooltip>
+          <span className="shrink-0 text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
       </div>
       <ScrollArea className="flex-1 h-0 border-r border-stroke-divider">

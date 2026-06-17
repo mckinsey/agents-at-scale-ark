@@ -192,7 +192,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
               <SwapVert />
             </IconShell>
           </button>
-          <div className="border-b border-stroke-tertiary h-12 flex items-center px-3">Participants</div>
+          <div className="border-b border-stroke-tertiary h-12 flex items-center px-3">Targets</div>
           <div className="text-right border-b border-stroke-tertiary h-12 flex items-center justify-end px-3">Convos</div>
         </div>
 

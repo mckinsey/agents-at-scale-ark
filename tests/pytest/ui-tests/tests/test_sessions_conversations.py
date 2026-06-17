@@ -132,7 +132,7 @@ class TestSessionsAndConversations:
 
         sessions.navigate_to_session_detail(session_id)
         sessions.wait_for_session_detail_page()
-        conv_count = sessions.get_conversation_count_from_header()
+        conv_count = sessions.wait_for_conversation_count_in_header(min_count=1, timeout_s=30)
         assert conv_count >= 1, \
             f"Session {session_id} should show at least 1 conversation in the detail header, got {conv_count}"
         sessions.navigate_back_to_sessions()
@@ -262,7 +262,7 @@ class TestSessionsAndConversations:
         sessions.navigate_to_session_detail(session_id)
         sessions.wait_for_session_detail_page()
 
-        conv_count = sessions.get_conversation_count_from_header()
+        conv_count = sessions.wait_for_conversation_count_in_header(min_count=1, timeout_s=30)
         assert conv_count >= 1, \
             f"Session detail header should show at least 1 conversation, got {conv_count}"
 
