@@ -57,11 +57,12 @@ async def discover_broker_url(namespace: str) -> Optional[str]:
 class BrokerClient:
     """Sends OpenAI-format completion chunks to the ark-broker streaming endpoint."""
 
-    def __init__(self, base_url: str, query_name: str, session_id: str = "", agent_name: str = ""):
+    def __init__(self, base_url: str, query_name: str, session_id: str = "", agent_name: str = "", message_ttl_seconds: Optional[int] = None):
         self.base_url = base_url
         self.query_name = query_name
         self.session_id = session_id
         self.agent_name = agent_name
+        self.message_ttl_seconds = message_ttl_seconds
 
     def _build_chunk(self, content: str, finish_reason: Optional[str] = None) -> bytes:
         chunk = {
@@ -111,11 +112,13 @@ class BrokerClient:
 
     async def send_messages(self, conversation_id: str, messages: list[dict]) -> None:
         url = f"{self.base_url}/messages"
-        payload = {
+        payload: dict = {
             "conversation_id": conversation_id,
             "query_id": self.query_name,
             "messages": messages,
         }
+        if self.message_ttl_seconds is not None:
+            payload["ttl_seconds"] = self.message_ttl_seconds
         try:
             async with httpx.AsyncClient(timeout=_MESSAGES_TIMEOUT) as http:
                 resp = await http.post(url, json=payload)
