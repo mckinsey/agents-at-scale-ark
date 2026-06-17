@@ -1,0 +1,96 @@
+# Identity and impersonation
+
+This page explains how ARK maps an authenticated user's OIDC identity to a Kubernetes
+user, and why Kubernetes RBAC must bind that same identity. For configuration steps and
+provider examples, see the [authentication guide](/developer-guide/authentication).
+
+## From OIDC identity to Kubernetes user
+
+ARK authenticates dashboard and API users with OpenID Connect (OIDC), then talks to the
+Kubernetes API on their behalf. Without impersonation, every call would use the ark-api
+service account, so per-user RBAC would never apply.
+
+Impersonation closes that gap. ark-api reads the user's identity from a configurable JWT
+claim and forwards it to Kubernetes using the standard `Impersonate-User` and
+`Impersonate-Group` headers. Kubernetes then evaluates RBAC against the impersonated
+identity, not the service account.
+
+The chain is:
+
+1. The OIDC provider issues a JWT containing the user's claims.
+2. ark-api extracts the username from the claim named by `IMPERSONATION_USERNAME_CLAIM`
+   and the groups from `IMPERSONATION_GROUPS_CLAIM`.
+3. ark-api sets `Impersonate-User` (and `Impersonate-Group`, when groups are present) on
+   the Kubernetes API client.
+4. Kubernetes authorizes the request against that user and those groups via RBAC.
+
+## The username claim
+
+The impersonated Kubernetes username comes from one OIDC claim, selected by the
+`IMPERSONATION_USERNAME_CLAIM` environment variable on ark-api. It defaults to `email`.
+
+Different providers carry identity in different claims, so the claim is configurable.
+Dot-path notation addresses nested claims (for example, `realm_access.roles`). The groups
+claim works the same way through `IMPERSONATION_GROUPS_CLAIM`, which defaults to `groups`.
+
+The chosen claim defines the exact string Kubernetes sees as the username. That string is
+what RBAC must bind. For example, the [public demo](https://github.com/dwmkerr/ark-demo)
+sets `IMPERSONATION_USERNAME_CLAIM` to `preferred_username`, so the impersonated user is
+the GitHub login rather than an email address.
+
+If impersonation is enabled but a token lacks the configured claim, ark-api rejects the
+request with `401` rather than silently falling back to the service account.
+
+## RBAC must bind the impersonated identity
+
+Kubernetes authorizes the impersonated user, so RoleBindings and ClusterRoleBindings must
+reference that exact identity. If `IMPERSONATION_USERNAME_CLAIM` resolves to a GitHub
+login, bind the GitHub login; if it resolves to an email, bind the email. A binding that
+names a different form of the identity grants nothing, and the user receives `403`.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-viewers-agents
+  namespace: default
+subjects:
+  # Must match the value of the configured username/groups claim.
+  - kind: User
+    name: octocat              # e.g. preferred_username = GitHub login
+    apiGroup: rbac.authorization.k8s.io
+  - kind: Group
+    name: my-oidc-group        # e.g. a value from the groups claim
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: agent-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+A common source of unexpected `403`s is a mismatch between the claim ARK forwards and the
+identity named in the binding.
+
+## Where impersonation applies
+
+Impersonation applies only when ARK has a human user identity to forward. With API-key
+(`basic`) access the caller is a machine identity, and in `open` mode there is no
+authentication, so both run as the service account. ark-api enforces impersonation across
+its routes, so authenticated user requests are authorized as the user rather than the
+service account ([PR #2376](https://github.com/mckinsey/agents-at-scale-ark/pull/2376)).
+Clients cannot supply their own `Impersonate-*` headers; ark-api rejects such requests.
+
+| Auth mode | Impersonated identity | Why |
+|-----------|----------------------|-----|
+| `sso` | User from the username claim | User identity is present in the JWT. |
+| `hybrid` (JWT path) | User from the username claim | Same as `sso`. |
+| `hybrid` (API-key path) | Service account | API keys are machine identities. |
+| `basic` | Service account | Service-to-service, no human user. |
+| `open` | Service account | No authentication. |
+
+## Related
+
+- [Authentication guide](/developer-guide/authentication) — configuration, provider
+  claim mapping, and the RBAC migration path.
+- [PR #2376](https://github.com/mckinsey/agents-at-scale-ark/pull/2376) — enforcement of
+  user impersonation across ark-api routes.
