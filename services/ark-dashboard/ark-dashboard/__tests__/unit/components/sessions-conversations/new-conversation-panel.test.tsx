@@ -109,7 +109,7 @@ describe('NewConversationPanel', () => {
     await user.type(screen.getByPlaceholderText('Search a target...'), 'nonexistent');
 
     await waitFor(() => {
-      expect(screen.getByText('No participants found')).toBeInTheDocument();
+      expect(screen.getByText('No targets found')).toBeInTheDocument();
     });
   });
 

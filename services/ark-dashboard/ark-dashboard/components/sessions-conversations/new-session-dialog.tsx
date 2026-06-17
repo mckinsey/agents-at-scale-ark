@@ -193,7 +193,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     if (items.length === 0) return null;
 
     return (
-      <div className="flex w-full flex-col gap-3">
+      <div className="flex w-full flex-col gap-3" role="group" aria-label={title}>
         <div className="text-fg-primary flex items-center gap-1 text-sm tracking-[-0.112px]">
           <span>{title}</span>
           <span>({items.length})</span>
@@ -209,7 +209,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     if (isLoading) {
       return (
         <div className="text-fg-tertiary flex flex-1 items-center justify-center py-8 text-center text-sm">
-          Loading participants...
+          Loading targets...
         </div>
       );
     }
@@ -217,14 +217,14 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     if (filteredParticipants.length === 0) {
       return (
         <div className="text-fg-tertiary flex flex-1 items-center justify-center py-8 text-center text-sm">
-          No participants found
+          No targets found
         </div>
       );
     }
 
     return (
       <ScrollArea className="min-h-0 flex-1 pr-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-        <div className="flex flex-col gap-6">
+        <div role="listbox" aria-label="Targets" className="flex flex-col gap-6">
           {renderSection('Agents', groupedParticipants.agentsGroup)}
           {renderSection('Teams', groupedParticipants.teamsGroup)}
           {renderSection('Tools', groupedParticipants.toolsGroup)}

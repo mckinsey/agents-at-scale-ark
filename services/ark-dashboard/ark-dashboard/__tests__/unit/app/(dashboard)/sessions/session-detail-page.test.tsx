@@ -21,8 +21,13 @@ vi.mock('next/navigation', () => ({
 
 // Mock child components
 vi.mock('@/components/sessions-conversations/conversations-tab', () => ({
-  ConversationsTab: ({ sessionId }: any) => (
-    <div data-testid="conversations-tab">{sessionId}</div>
+  ConversationsTab: ({ sessionId, onMessageSent }: any) => (
+    <div data-testid="conversations-tab">
+      {sessionId}
+      <button data-testid="trigger-message-sent" onClick={() => onMessageSent?.()}>
+        send
+      </button>
+    </div>
   ),
 }));
 vi.mock('@/components/sessions-conversations/logs-tab', () => ({
@@ -155,5 +160,54 @@ describe('SessionDetailPage', () => {
       // QBDS uses outline classes for status colors
       expect(badge).toHaveClass('outline-status-error');
     });
+  });
+
+  it('strips new-session query params after the first message is sent', async () => {
+    const user = userEvent.setup();
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('participant=test-agent&type=agent&conversationId=conv-1'),
+    );
+
+    render(<SessionDetailPage />);
+
+    await user.click(screen.getByTestId('trigger-message-sent'));
+
+    expect(mockReplace).toHaveBeenCalledWith('/sessions/session-123');
+  });
+
+  it('preserves unrelated query params when cleaning up after first message', async () => {
+    const user = userEvent.setup();
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('participant=test-agent&type=agent&namespace=demo'),
+    );
+
+    render(<SessionDetailPage />);
+
+    await user.click(screen.getByTestId('trigger-message-sent'));
+
+    expect(mockReplace).toHaveBeenCalledWith('/sessions/session-123?namespace=demo');
+  });
+
+  it('does not modify the URL when there are no new-session params', async () => {
+    const user = userEvent.setup();
+
+    render(<SessionDetailPage />);
+
+    await user.click(screen.getByTestId('trigger-message-sent'));
+
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('navigates back to the sessions list, stripping new-session params', async () => {
+    const user = userEvent.setup();
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('participant=test-agent&type=agent&namespace=demo'),
+    );
+
+    render(<SessionDetailPage />);
+
+    await user.click(screen.getByText('Back to all sessions'));
+
+    expect(mockPush).toHaveBeenCalledWith('/session-history?namespace=demo');
   });
 });

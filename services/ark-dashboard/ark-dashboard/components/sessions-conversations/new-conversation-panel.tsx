@@ -124,7 +124,7 @@ export function NewConversationPanel({
           placeholder="Search a target..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search participants"
+          aria-label="Search a target"
           autoFocus
         />
       </InputGroup>
@@ -135,7 +135,7 @@ export function NewConversationPanel({
           {renderSection('All available targets', filteredAllParticipants)}
           {inSession.length === 0 && filteredAllParticipants.length === 0 && (
             <div className="text-fg-tertiary py-8 text-center text-sm">
-              No participants found
+              No targets found
             </div>
           )}
         </div>

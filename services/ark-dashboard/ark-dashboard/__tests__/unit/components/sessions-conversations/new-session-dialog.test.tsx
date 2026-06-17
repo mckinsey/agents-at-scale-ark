@@ -90,7 +90,7 @@ describe('NewSessionDialog', () => {
       </QueryClientProvider>
     );
 
-    expect(screen.getByText('Loading participants...')).toBeInTheDocument();
+    expect(screen.getByText('Loading targets...')).toBeInTheDocument();
   });
 
   it('should display all participants when loaded', async () => {
@@ -200,7 +200,7 @@ describe('NewSessionDialog', () => {
     await user.type(searchInput, 'nonexistent');
 
     await waitFor(() => {
-      expect(screen.getByText('No participants found')).toBeInTheDocument();
+      expect(screen.getByText('No targets found')).toBeInTheDocument();
     });
   });
 });

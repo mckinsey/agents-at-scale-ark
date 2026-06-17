@@ -4,7 +4,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import {
+  buildUrlWithoutNewSessionParams,
+  hasNewSessionParams,
+} from '@/lib/utils/session-params';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
@@ -19,7 +22,6 @@ const LOGS_TAB = 'logs';
 export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
-  const { push } = useNamespacedNavigation();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -34,16 +36,15 @@ export default function SessionDetailPage() {
   const handleMessageSent = useCallback(() => {
     setHasSentMessage(true);
 
-    const next = new URLSearchParams(searchParams?.toString() ?? '');
-    if (!next.has('participant') && !next.has('type') && !next.has('conversationId')) {
+    if (!hasNewSessionParams(searchParams)) {
       return;
     }
-    next.delete('participant');
-    next.delete('type');
-    next.delete('conversationId');
-    const queryString = next.toString();
-    router.replace(queryString ? `${pathname}?${queryString}` : pathname);
+    router.replace(buildUrlWithoutNewSessionParams(searchParams, pathname));
   }, [searchParams, router, pathname]);
+
+  const handleBackToSessions = useCallback(() => {
+    router.push(buildUrlWithoutNewSessionParams(searchParams, '/session-history'));
+  }, [router, searchParams]);
 
   // Skip API call for new sessions (avoid 404 errors)
   const { data: backendSession, isLoading, isError } = useGetSession(session_id, {
@@ -116,7 +117,7 @@ export default function SessionDetailPage() {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <button
-          onClick={() => push('/session-history')}
+          onClick={handleBackToSessions}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
           <ChevronLeft className="size-4" />
@@ -145,7 +146,7 @@ export default function SessionDetailPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 p-8">
       <button
-        onClick={() => push('/session-history')}
+        onClick={handleBackToSessions}
         className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer self-start"
       >
         <ChevronLeft className="size-4" />
