@@ -137,6 +137,28 @@ describe('MemoryBroker', () => {
     });
   });
 
+  describe('deleteByQuery', () => {
+    test('should delete all messages for a query regardless of conversation', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv2', 'query1', 'message2');
+      await broker.addMessage('conv1', 'query2', 'message3');
+
+      await broker.deleteByQuery('query1');
+
+      const allMessages = await broker.all();
+      expect(allMessages).toHaveLength(1);
+      expect(allMessages[0].data.queryId).toBe('query2');
+    });
+
+    test('should be a no-op when the query has no messages', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+
+      await broker.deleteByQuery('nonexistent');
+
+      expect(await broker.all()).toHaveLength(1);
+    });
+  });
+
   describe('delete', () => {
     test('should delete all messages when called without predicate', async () => {
       await broker.addMessage('conv1', 'query1', 'message1');

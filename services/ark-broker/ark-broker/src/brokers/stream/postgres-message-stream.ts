@@ -115,6 +115,11 @@ export class PostgresMessageStream implements Stream<MessageData> {
       .db`DELETE FROM messages WHERE sequence_number = ANY(${toDelete})`;
   }
 
+  async deleteByQuery(queryId: string): Promise<void> {
+    this.logger.info({queryId}, 'deleting messages by query');
+    await this.db`DELETE FROM messages WHERE query_id = ${queryId}`;
+  }
+
   async save(): Promise<void> {}
 
   async getCurrentSequence(): Promise<number> {

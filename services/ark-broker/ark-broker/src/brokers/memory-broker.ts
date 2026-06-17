@@ -2,6 +2,18 @@ import {BrokerItem} from './stream/broker-item.js';
 import type {Stream} from './stream/stream.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
+interface WithDeleteByQuery {
+  deleteByQuery(queryId: string): Promise<void>;
+}
+
+function hasDeleteByQuery(
+  stream: Stream<MessageData>
+): stream is Stream<MessageData> & WithDeleteByQuery {
+  return (
+    typeof (stream as unknown as WithDeleteByQuery).deleteByQuery === 'function'
+  );
+}
+
 export type Message = unknown;
 
 export interface MessageData {
@@ -83,6 +95,12 @@ export class MemoryBroker {
         item.data.conversationId === conversationId &&
         item.data.queryId === queryId
     );
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    if (hasDeleteByQuery(this.stream))
+      return this.stream.deleteByQuery(queryId);
+    return this.stream.delete((item) => item.data.queryId === queryId);
   }
 
   subscribe(callback: (item: BrokerItem<MessageData>) => void): () => void {
