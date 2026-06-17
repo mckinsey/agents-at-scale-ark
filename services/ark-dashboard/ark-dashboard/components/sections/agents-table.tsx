@@ -5,13 +5,8 @@ import { useState } from 'react';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { IconActionButton } from '@/components/ui/icon-action-button';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
@@ -87,17 +82,14 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
           role="cell"
           className={cn(rowCellClass, COL.description, 'relative z-10')}>
           {agent.description ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <NamespacedLink
-                  href={`/agents/${encodeURIComponent(agent.name)}`}
-                  tabIndex={-1}
-                  className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
-                  {agent.description}
-                </NamespacedLink>
-              </TooltipTrigger>
-              <TooltipContent>{agent.description}</TooltipContent>
-            </Tooltip>
+            <TruncatedTooltip label={agent.description}>
+              <NamespacedLink
+                href={`/agents/${encodeURIComponent(agent.name)}`}
+                tabIndex={-1}
+                className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                {agent.description}
+              </NamespacedLink>
+            </TruncatedTooltip>
           ) : (
             <NamespacedLink
               href={`/agents/${encodeURIComponent(agent.name)}`}
@@ -117,28 +109,20 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             COL.action,
             'relative z-10 justify-center gap-2',
           )}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Chat with agent"
+          <IconActionButton
+            label="Chat with agent"
             className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
             onClick={() => toggleFloatingChat(agent.name, 'agent')}>
-            <IconShell size="sm" variant="secondary">
-              <ChatBubble />
-            </IconShell>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete agent"
+            <ChatBubble />
+          </IconActionButton>
+          <IconActionButton
+            label="Delete agent"
             disabled={isChatOpen || readOnlyMode}
             onClick={() => {
               if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
             }}>
-            <IconShell size="sm" variant="secondary">
-              <Trash />
-            </IconShell>
-          </Button>
+            <Trash />
+          </IconActionButton>
         </div>
       </div>
       <ConfirmationDialog

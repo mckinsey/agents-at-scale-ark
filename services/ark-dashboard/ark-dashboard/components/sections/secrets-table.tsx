@@ -4,8 +4,7 @@ import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Edit, Trash } from '@/components/icons';
-import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import { Tag } from '@/components/ui/tag';
 import {
   Tooltip,
@@ -177,30 +176,22 @@ function SecretTableRow({
         <div
           role="cell"
           className={cn(rowCellClass, COL.action, 'justify-center gap-2')}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Edit secret"
+          <IconActionButton
+            label="Edit secret"
             disabled={readOnlyMode}
             onClick={() => {
               if (!readOnlyMode) onEdit(secret);
             }}>
-            <IconShell size="sm" variant="secondary">
-              <Edit />
-            </IconShell>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete secret"
+            <Edit />
+          </IconActionButton>
+          <IconActionButton
+            label="Delete secret"
             disabled={isInUse || readOnlyMode}
             onClick={() => {
               if (!isInUse && !readOnlyMode) setDeleteConfirmOpen(true);
             }}>
-            <IconShell size="sm" variant="secondary">
-              <Trash />
-            </IconShell>
-          </Button>
+            <Trash />
+          </IconActionButton>
         </div>
       </div>
       <ConfirmationDialog

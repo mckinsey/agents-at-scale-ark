@@ -3,11 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { ChatBubble, Handyman, Schedule } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
@@ -72,17 +68,14 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
                   <IconShell size="sm" className="opacity-100">
                     {getParticipantIcon(conv.participantType, { name: conv.name, size: '4' })}
                   </IconShell>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        className="min-w-0 flex-1 truncate text-sm font-normal leading-5 text-fg-primary"
-                        data-testid="conversation-participant-name"
-                      >
-                        {stripNamespace(conv.name)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>{stripNamespace(conv.name)}</TooltipContent>
-                  </Tooltip>
+                  <TruncatedTooltip label={stripNamespace(conv.name)}>
+                    <span
+                      className="block min-w-0 flex-1 truncate text-sm font-normal leading-5 text-fg-primary"
+                      data-testid="conversation-participant-name"
+                    >
+                      {stripNamespace(conv.name)}
+                    </span>
+                  </TruncatedTooltip>
                 </div>
                 <span className="shrink-0 text-xs font-normal leading-4 text-fg-secondary">
                   {formatAbsoluteTime(conv.startTime)}
