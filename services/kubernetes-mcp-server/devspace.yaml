@@ -14,6 +14,8 @@ deployments:
         name: oci://ghcr.io/containers/charts/kubernetes-mcp-server
         version: 0.1.0
       values:
+        config:
+          read_only: true
         ingress:
           enabled: false
         httpRoute:
