@@ -6,7 +6,7 @@ Five existing pieces of Ark infrastructure shape this design — without them th
 2. **The chat + session/conversation stack already exists.** `chatService` (`lib/services/chat.ts`), `conversationsService` (`lib/services/conversations.ts`), and the broker sessions were shipped with the recent sessions/conversations view. The author UI is a new consumer of that stack, not a new stack.
 3. **The Ark MCP server is already wired up.** `services/ark-mcp/ark-mcp/src/ark_mcp/tools.py` exposes `list_agents` and `query_agent` today and uses `ark_sdk.client.with_ark_client`; the Agent CRD's `tools` block can reference an MCP server. Adding `list_models`, `list_teams`, and `list_workflow_templates` is a localised change.
 4. **`WorkflowTemplate` read/write already goes through the resources passthrough.** `workflowTemplatesService` (`lib/services/workflow-templates.ts`) exposes `list`, `get`, `getYaml(name)`, and `run`. `getYaml` loads a template for the edit flow; `run()` already POSTs a `Workflow` to `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow`, proving the passthrough accepts POST. Save adds a `WorkflowTemplate` POST through the same endpoint — no new backend.
-5. **The `Query` CR is the integration point between Argo and Ark.** `ark/api/v1alpha1/query_types.go` defines the contract: a query completes on `status.conditions[Completed]`, exposes `status.phase` (`done`/`error`/…) and a **single** `status.response` (since v0.1.50 the plural `responses[]` was collapsed). For a team target the controller sets `response.content` to the last assistant message (`ExtractLastAssistantMessageContent` in `executors/completions/message_helpers.go`). The per-member turns are persisted elsewhere keyed by `conversationId` — in memory (`executors/completions/memory.go`, `AddMessages`) and in the broker (`services/ark-broker/.../brokers/memory-broker.ts`, `getByConversation`) — **not** in the Query CR.
+5. **The `Query` CR is the integration point between Argo and Ark.** `ark/api/v1alpha1/query_types.go` defines the contract: a query completes on `status.conditions[Completed]`, exposes `status.phase` (`done`/`error`/…) and a **single** `status.response` (since v0.1.50 the plural `responses[]` was collapsed). For a team target the completions executor returns the final assistant message, which the controller stores verbatim as `response.content` (`query_controller.go` sets `Response{Content: responseText}` from the executor's A2A reply). The per-member turns are persisted elsewhere keyed by `conversationId` — in memory (`executors/completions/memory.go`, `AddMessages`) and in the broker (`services/ark-broker/.../brokers/memory-broker.ts`, `getByConversation`) — **not** in the Query CR.
 
 Three existing in-repo samples encode the canonical pattern for invoking an Ark resource from inside an Argo step (`kubectl apply` a `Query`, `kubectl wait --for=condition=Completed`, extract `status.response.content`, exit non-zero on `error`):
 - `services/argo-workflows/samples/a2a-arithmetic-workflow.yaml`
@@ -37,13 +37,13 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 - Versioning of saved templates (Save overwrites, with confirmation on new / silently on edit)
 - A broker-backed per-member transcript output for the `ark-query` template (the `conversation-id` output is the seam)
 - Starter-prompt gallery / template marketplace
-- Shipping the author Agent or the `ark-query` template in the Helm chart (sample-first; promote once stable)
+- Shipping the `ark-query` template in the Helm chart (sample-first; promote once stable). The author Agent ships bundled in the ark-api image — neither a chart resource nor a kubectl sample
 
 ## Decisions
 
 ### 1. Author lives as an Ark Agent CRD, not a new service
 
-The LLM that drives authoring is `kind: Agent` in `services/argo-workflows/samples/argo-make-author.yaml`. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the Ark MCP server.
+The LLM that drives authoring is `kind: Agent`, whose manifest is bundled in the **ark-api** image and installed on demand from the dashboard (Decision 2 / 15) — not a kubectl sample. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the Ark MCP server.
 
 The author Agent lives in the **currently-selected namespace**, created there on demand from the dashboard (Decision 15), not hand-applied. The dashboard dispatches each authoring turn to the author Agent **in that selected namespace** — so browsing namespace X chats with X's author Agent. Only the agent *name* is configured (Decision 13); the namespace is always the one the user is currently in, exactly like every other resource the dashboard shows.
 
@@ -233,7 +233,7 @@ The fenced-block extractor lives in a small utility module under `lib/utils/`. I
 The dashboard must know **which** Agent to dispatch authoring turns to. The **namespace** is not configured — it is always the currently-selected namespace (Decision 1), resolved the same way every other resource view resolves it via the `NamespaceProvider`. Only the agent **name** comes from configuration, read at runtime, with **no dashboard UI for it in v1**:
 
 - One env var, following the existing `NEXT_PUBLIC_*` pattern (the route is a client component, like the `NEXT_PUBLIC_ARGO_URL` already read by the workflow-templates detail page):
-  - `NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT` — the author Agent name. Defaults to `argo-make-author` (matching the shipped sample) when unset.
+  - `NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT` — the author Agent name. Defaults to `argo-make-author` (the name stamped on the ark-api-bundled manifest) when unset.
 - The chat panel dispatches every authoring turn to `{selectedNamespace}/{configuredName}`. The same `NamespaceProvider` scopes which resources the MCP `list_*` tools surface for composition, so the author Agent and the resources it can reference are always in the namespace the user is looking at.
 
 **Rationale:**
@@ -252,7 +252,7 @@ The chat is an **enhancement layer over a manual editor that always works** — 
   - On `/[id]/edit`: the loaded template renders in the preview and stays hand-editable and saveable. **Editing an existing template never depends on the agent being present** — load and Save both go through the resources passthrough, not the agent.
 - **Disappears mid-session** (agent deleted, or a dispatch call fails): surface the error inline in the chat and re-run the existence check to flip into the banner state. The `draftYaml` buffer is untouched, so no in-progress work is lost.
 
-**Rationale:** sample-first means the agent legitimately may not be applied yet (or not in *this* namespace). Coupling the whole route to its presence would make the workflow-template editor unusable for the exact YAML-literate users who can work without the agent. Degrading to a manual editor keeps the page useful in every state.
+**Rationale:** install-on-demand means the agent legitimately may not be created yet (or not in *this* namespace). Coupling the whole route to its presence would make the workflow-template editor unusable for the exact YAML-literate users who can work without the agent. Degrading to a manual editor keeps the page useful in every state.
 
 ### 15. Installing the author Agent from the dashboard (reuse the resources passthrough)
 
@@ -304,13 +304,13 @@ The single source of truth for the default prompt is one manifest file bundled i
 
 - **The `ark-query` template's `target` parsing is string-based.** A malformed `target` (no `/`, unknown type) only fails at query-create time. **Mitigation:** the script validates the `type/name` split and the enum (`agent|team|model|tool`) up front and exits non-zero with a clear message, so the failure is an Argo node error rather than a confusing K8s rejection.
 
-- **Author Agent quality depends on prompt engineering.** The whole experience rises and falls on the system prompt. **Mitigation:** sample-first lets us iterate without releases; few-shot examples drawn from real samples; chainsaw tests exercise the fail-fast rule and the grounding contract.
+- **Author Agent quality depends on prompt engineering.** The whole experience rises and falls on the system prompt. **Mitigation:** the prompt lives in one place — the ark-api-bundled manifest — so it can be revised centrally (at the cost of an ark-api build, per Decision 2); few-shot examples drawn from real samples; chainsaw tests exercise the fail-fast rule and the grounding contract.
 
 ## Open Questions
 
 1. **"+ New conversation" — within-session or new-session?** Default v1 answer: within-session. Final decision deferred until implementation reads the existing `conversations.ts` semantics from the recent sessions/conversations PR.
 
-2. **What namespace does the author Agent run in?** *Resolved (Decision 1 / 13):* it is installed alongside Ark in each install's namespace, and the dashboard dispatches to the author Agent in the **currently-selected namespace**. Only the agent name is configured (`NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT`, default `argo-make-author`); the namespace always follows the `NamespaceProvider`, which also scopes the MCP `list_*` tools.
+2. **What namespace does the author Agent run in?** *Resolved (Decision 1 / 13 / 15):* it is installed on demand from the dashboard into the **currently-selected namespace**, and the dashboard dispatches to the author Agent in that same namespace. Only the agent name is configured (`NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT`, default `argo-make-author`); the namespace always follows the `NamespaceProvider`, which also scopes the MCP `list_*` tools.
 
 3. **Should `list_workflow_templates` filter to templates the user could plausibly riff on (e.g., excluding system templates)?** Initial answer: return everything; let the system prompt decide what to surface. Revisit if it produces noise.
 
