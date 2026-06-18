@@ -2,7 +2,7 @@
 
 In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
 
-- In-memory message storage, or optionally peristed to disk / persistent volume
+- In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages store
 - Implements the [Memory API](/reference/resources/memory#memory-api-specification)
 - Supports [streaming queries](/developer-guide/queries/streaming)
 
@@ -45,6 +45,40 @@ Environment variables:
 | STREAM_FILE_PATH | Path to persist stream data | Not set (no persistence) |
 
 The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.
+
+## Message backend (Postgres)
+
+By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. Only the messages store is affected — chunks, traces, events, and sessions remain in memory (or file-based, as above).
+
+This is separate from the controller's [PostgreSQL storage backend](/operations-guide/postgres-storage-backend), which stores Ark resources (CRDs) via the aggregated API server. The two use different databases and serve different purposes.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  message: postgres
+
+database:
+  url: "postgres://user:password@host:5432/ark_broker"
+```
+
+When enabled, the chart renders a `migrate/migrate` init container (image `ark-broker-migrate`) that applies pending schema migrations before the broker starts. The broker image itself carries no migration tooling and never runs DDL.
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MESSAGE_BACKEND` | `memory` | Message storage backend: `memory` or `postgres` |
+| `DATABASE_URL` | — | Postgres connection string. Required when `MESSAGE_BACKEND=postgres`. |
+| `DATABASE_POOL_MAX` | `10` | Max connections in the pool |
+| `DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
+| `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
+| `DATABASE_DEBUG_QUERIES` | `false` | Log SQL at debug level (SQL text + parameter count, never values) |
+
+Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
+
+See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
 
 ## Sessions Endpoint
 
