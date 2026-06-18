@@ -18,10 +18,10 @@ vi.mock('@/providers/UserProvider', () => ({
   useUser: () => ({ user: { email: 'dwmkerr-agent@example.com' } }),
 }));
 
-function renderWithData(data: unknown) {
+function renderWithData(data: unknown, enabled = true) {
   mockGetContext.mockReturnValue({ data, isPending: false, error: null });
   return render(
-    <ContextProvider>
+    <ContextProvider enabled={enabled}>
       <div data-testid="app">app</div>
     </ContextProvider>,
   );
@@ -39,7 +39,7 @@ describe('ContextProvider gate', () => {
       error: new APIError('Unauthorized', 401),
     });
     render(
-      <ContextProvider>
+      <ContextProvider enabled>
         <div data-testid="app">app</div>
       </ContextProvider>,
     );
@@ -98,5 +98,35 @@ describe('ContextProvider gate', () => {
   it('renders the app when permissions are absent (open mode)', () => {
     renderWithData({ namespace: 'demo', cluster: null, read_only_mode: false });
     expect(screen.getByTestId('app')).toBeInTheDocument();
+  });
+
+  it('renders children while the context call is pending (no gate)', () => {
+    mockGetContext.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      error: null,
+    });
+    render(
+      <ContextProvider enabled>
+        <div data-testid="app">app</div>
+      </ContextProvider>,
+    );
+    expect(screen.getByTestId('app')).toBeInTheDocument();
+  });
+
+  it('never gates in open mode (enabled=false), even when access is denied', () => {
+    renderWithData(
+      {
+        namespace: 'demo',
+        cluster: null,
+        read_only_mode: false,
+        permissions: { status: 'ok', reason: null, rules: {} },
+      },
+      false,
+    );
+    expect(screen.getByTestId('app')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No access to this namespace/i),
+    ).not.toBeInTheDocument();
   });
 });

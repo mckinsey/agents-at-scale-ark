@@ -26,24 +26,34 @@ interface ContextValue {
 
 const Context = createContext<ContextValue | undefined>(undefined);
 
-function ContextProvider({ children }: PropsWithChildren) {
+interface Props {
+  // Access gating only applies when auth is enabled. In open mode the preflight
+  // cannot identify a user, so the gate is disabled and /v1/context isn't fetched.
+  enabled?: boolean;
+}
+
+function ContextProvider({ children, enabled = false }: PropsWithChildren<Props>) {
   const searchParams = useSearchParams();
   const namespaceFromQueryParams = searchParams.get('namespace');
   const { user } = useUser();
 
   const { data, isPending, error } = useGetContext(
     namespaceFromQueryParams || undefined,
+    enabled,
   );
 
   const permissions = data?.permissions;
 
+  // permissions is derived from data, so data is the only dependency that matters.
   const value = useMemo<ContextValue>(
-    () => ({ context: data, permissions, isPending, error }),
-    [data, permissions, isPending, error],
+    () => ({ context: data, permissions: data?.permissions, isPending, error }),
+    [data, isPending, error],
   );
 
   let gate: ReactNode = null;
-  if (isUnauthorized(error)) {
+  if (!enabled) {
+    gate = null;
+  } else if (isUnauthorized(error)) {
     // A failed token (e.g. IdP key rotation, expired session) 401s /v1/context;
     // prompt re-auth instead of falling through to a wall of broken cards.
     gate = <SessionExpired />;

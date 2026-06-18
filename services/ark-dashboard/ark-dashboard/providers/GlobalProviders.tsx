@@ -28,7 +28,7 @@ export function GlobalProviders({ children }: PropsWithChildren) {
                   Loading...
                 </div>
               }>
-              <ContextProvider>
+              <ContextProvider enabled={isSSOEnabled}>
                 <NamespaceProvider>
                   <AnalyticsProvider>{children}</AnalyticsProvider>
                 </NamespaceProvider>
