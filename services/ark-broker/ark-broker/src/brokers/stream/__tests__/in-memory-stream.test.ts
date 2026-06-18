@@ -3,15 +3,184 @@ import {join} from 'path';
 import {tmpdir} from 'os';
 import {InMemoryStream} from '../in-memory-stream.js';
 import {createLogger} from '@ark-broker/logging/logger.js';
-import {runStreamContract} from '../stream-contract.js';
 
 const silentLogger = createLogger({level: 'silent', pretty: false});
 
 describe('InMemoryStream — Stream<T> contract', () => {
-  runStreamContract(
-    () => new InMemoryStream<string>(silentLogger, 'test'),
-    (label) => label
-  );
+  let stream: InMemoryStream<string>;
+
+  beforeEach(() => {
+    stream = new InMemoryStream<string>(silentLogger, 'test');
+  });
+
+  describe('append', () => {
+    it('assigns sequenceNumber starting at 1', async () => {
+      const item = await stream.append('a');
+      expect(item.sequenceNumber).toBe(1);
+    });
+
+    it('increments sequenceNumber monotonically', async () => {
+      const a = await stream.append('a');
+      const b = await stream.append('b');
+      const c = await stream.append('c');
+      expect(a.sequenceNumber).toBe(1);
+      expect(b.sequenceNumber).toBe(2);
+      expect(c.sequenceNumber).toBe(3);
+    });
+
+    it('returns item with timestamp as Date', async () => {
+      const item = await stream.append('a');
+      expect(item.timestamp).toBeInstanceOf(Date);
+    });
+
+    it('fires subscribe callback synchronously during append', async () => {
+      const received: string[] = [];
+      stream.subscribe((item) => received.push(item.data));
+      const appendPromise = stream.append('x');
+      expect(received).toHaveLength(1);
+      await appendPromise;
+      expect(received).toHaveLength(1);
+    });
+  });
+
+  describe('all', () => {
+    it('returns empty array initially', async () => {
+      expect(await stream.all()).toEqual([]);
+    });
+
+    it('returns all appended items in order', async () => {
+      await stream.append('a');
+      await stream.append('b');
+      const all = await stream.all();
+      expect(all).toHaveLength(2);
+      expect(all[0].sequenceNumber).toBe(1);
+      expect(all[1].sequenceNumber).toBe(2);
+    });
+  });
+
+  describe('filter', () => {
+    it('returns only matching items', async () => {
+      const a = await stream.append('a');
+      await stream.append('b');
+      const result = await stream.filter(
+        (item) => item.sequenceNumber === a.sequenceNumber
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].sequenceNumber).toBe(a.sequenceNumber);
+    });
+
+    it('returns empty array when nothing matches', async () => {
+      await stream.append('a');
+      expect(await stream.filter(() => false)).toHaveLength(0);
+    });
+  });
+
+  describe('paginate', () => {
+    beforeEach(async () => {
+      for (let i = 0; i < 5; i++) {
+        await stream.append(`item-${i}`);
+      }
+    });
+
+    it('returns up to limit items', async () => {
+      const result = await stream.paginate({limit: 2});
+      expect(result.items).toHaveLength(2);
+      expect(result.total).toBe(5);
+      expect(result.hasMore).toBe(true);
+      expect(result.nextCursor).toBe(2);
+    });
+
+    it('applies cursor to skip already-seen items', async () => {
+      const result = await stream.paginate({limit: 2, cursor: 2});
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].sequenceNumber).toBe(3);
+    });
+
+    it('sets hasMore=false and nextCursor=undefined on last page', async () => {
+      const result = await stream.paginate({limit: 10});
+      expect(result.hasMore).toBe(false);
+      expect(result.nextCursor).toBeUndefined();
+    });
+
+    it('applies predicate before pagination', async () => {
+      const result = await stream.paginate(
+        {limit: 10},
+        (item) => item.sequenceNumber % 2 === 1
+      );
+      expect(result.items).toHaveLength(3);
+      expect(result.total).toBe(3);
+    });
+  });
+
+  describe('delete', () => {
+    it('removes all items and resets sequence when called without predicate', async () => {
+      await stream.append('a');
+      await stream.append('b');
+      await stream.delete();
+      expect(await stream.all()).toHaveLength(0);
+      const next = await stream.append('c');
+      expect(next.sequenceNumber).toBe(1);
+    });
+
+    it('removes only matching items when predicate is provided', async () => {
+      const a = await stream.append('a');
+      await stream.append('b');
+      await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
+      const all = await stream.all();
+      expect(all).toHaveLength(1);
+      expect(all[0].sequenceNumber).toBe(2);
+    });
+
+    it('does not reset sequence when using predicate', async () => {
+      const a = await stream.append('a');
+      await stream.delete((item) => item.sequenceNumber === a.sequenceNumber);
+      const next = await stream.append('b');
+      expect(next.sequenceNumber).toBe(2);
+    });
+  });
+
+  describe('getCurrentSequence', () => {
+    it('returns 0 when stream is empty', async () => {
+      expect(await stream.getCurrentSequence()).toBe(0);
+    });
+
+    it('returns last assigned sequence number', async () => {
+      await stream.append('a');
+      await stream.append('b');
+      expect(await stream.getCurrentSequence()).toBe(2);
+    });
+  });
+
+  describe('subscribe / unsubscribe', () => {
+    it('notifies subscriber for each append', async () => {
+      const seqs: number[] = [];
+      stream.subscribe((item) => seqs.push(item.sequenceNumber));
+      await stream.append('a');
+      await stream.append('b');
+      expect(seqs).toEqual([1, 2]);
+    });
+
+    it('stops notifying after returned unsubscribe is called', async () => {
+      const seqs: number[] = [];
+      const unsubscribe = stream.subscribe((item) =>
+        seqs.push(item.sequenceNumber)
+      );
+      await stream.append('a');
+      unsubscribe();
+      await stream.append('b');
+      expect(seqs).toEqual([1]);
+    });
+
+    it('multiple subscribers all receive events', async () => {
+      const a: number[] = [];
+      const b: number[] = [];
+      stream.subscribe((item) => a.push(item.sequenceNumber));
+      stream.subscribe((item) => b.push(item.sequenceNumber));
+      await stream.append('x');
+      expect(a).toEqual([1]);
+      expect(b).toEqual([1]);
+    });
+  });
 });
 
 describe('InMemoryStream — persistence', () => {

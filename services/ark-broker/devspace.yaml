@@ -3,20 +3,37 @@ version: v2beta1
 
 pipelines:
   deploy: |-
+    if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ]; then
+      create_deployments ark-storage-dev
+      kubectl rollout status deployment/ark-storage-dev -n default --timeout=120s
+    fi
     build_images --all
     create_deployments --all
   dev: |-
+    if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ]; then
+      create_deployments ark-storage-dev
+      kubectl rollout status deployment/ark-storage-dev -n default --timeout=120s
+    fi
     build_images --all
     create_deployments --all
 
     echo "Waiting for restart-controller hook job to complete..."
     kubectl wait --for=condition=complete job -l app.kubernetes.io/component=restart-hook -n ${DEVSPACE_NAMESPACE:-default} --timeout=120s 2>/dev/null || true
 
-    # Patch deployment to add PVC for node modules
-    kubectl patch deployment ark-broker -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
-      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-broker-node-modules"}}],"containers":[{"name":"ark-broker","volumeMounts":[{"name":"node-modules","mountPath":"/app/node_modules"}]}]}}}}' || true
+    # Patch deployment to add PVC for node modules.
+    # Skip in postgres mode: the PVC shadows the image's node_modules before the dev
+    # container swap, causing a transient crash. The dev container runs npm install anyway.
+    if [ "${BROKER_MESSAGE_BACKEND}" != "postgres" ]; then
+      kubectl patch deployment ark-broker -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
+        '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-broker-node-modules"}}],"containers":[{"name":"ark-broker","volumeMounts":[{"name":"node-modules","mountPath":"/app/node_modules"}]}]}}}}' || true
+    fi
 
     start_dev --all
+
+vars:
+  BROKER_POSTGRES_PASSWORD:
+    source: env
+    default: arkdev123
 
 images:
   ark-broker:
@@ -91,3 +108,40 @@ dev:
           - node_modules/
     ssh:
       enabled: true
+
+profiles:
+  - name: broker-postgres
+    activation:
+      - vars:
+          BROKER_MESSAGE_BACKEND: postgres
+    patches:
+      - op: add
+        path: images.ark-broker-migrate
+        value:
+          image: ark-broker-migrate
+          dockerfile: ./ark-broker/Dockerfile.migrate
+          context: ./ark-broker
+          docker:
+            useBuildKit: true
+      - op: add
+        path: deployments.ark-storage-dev
+        value:
+          namespace: default
+          helm:
+            chart:
+              path: ../../charts/ark-storage-dev
+            releaseName: ark-storage-dev
+      - op: add
+        path: deployments.ark-broker.helm.values.backends
+        value:
+          message: postgres
+      - op: add
+        path: deployments.ark-broker.helm.values.database
+        value:
+          url: "postgres://postgres:${BROKER_POSTGRES_PASSWORD}@ark-storage-dev:5432/ark?sslmode=disable"
+      - op: add
+        path: deployments.ark-broker.helm.values.migrate
+        value:
+          image:
+            repository: ${runtime.images.ark-broker-migrate.image}
+            tag: ${runtime.images.ark-broker-migrate.tag}

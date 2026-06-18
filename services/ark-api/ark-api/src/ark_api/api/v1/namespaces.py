@@ -13,6 +13,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
 from ...core.namespace import get_current_context
+from ...core.permissions import get_ark_permissions
 from ...models.context import ContextResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
@@ -78,7 +79,10 @@ async def create_namespace(body: NamespaceCreateRequest, impersonation: Optional
 
 
 @router.get("/context", response_model=ContextResponse)
-async def get_context_endpoint(namespace: str = None) -> ContextResponse:
+async def get_context_endpoint(
+    namespace: str = None,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> ContextResponse:
     """
     Get the current Kubernetes context information.
 
@@ -127,8 +131,11 @@ async def get_context_endpoint(namespace: str = None) -> ContextResponse:
         # Fall back to environment variable if we can't check the namespace
         read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
 
+    permissions = await get_ark_permissions(impersonation, target_namespace)
+
     return ContextResponse(
         namespace=target_namespace,
         cluster=current_context["cluster"],
-        read_only_mode=read_only_mode
+        read_only_mode=read_only_mode,
+        permissions=permissions,
     )

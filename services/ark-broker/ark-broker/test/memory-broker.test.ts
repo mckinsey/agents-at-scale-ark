@@ -1,11 +1,17 @@
 import {createLogger} from '../src/logging/logger.js';
 import {MemoryBroker} from '../src/brokers/memory-broker.js';
+import {InMemoryStream} from '../src/brokers/stream/in-memory-stream.js';
+import type {MessageData} from '../src/brokers/memory-broker.js';
+
+const silentLogger = createLogger({level: 'silent', pretty: false});
 
 describe('MemoryBroker', () => {
   let broker: MemoryBroker;
 
   beforeEach(() => {
-    broker = new MemoryBroker(createLogger({level: 'silent', pretty: false}));
+    broker = new MemoryBroker(
+      new InMemoryStream<MessageData>(silentLogger, 'Memory')
+    );
   });
 
   describe('addMessage', () => {
