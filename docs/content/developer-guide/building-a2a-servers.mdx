@@ -92,15 +92,13 @@ curl -X POST http://localhost:8000/ \
 
 Ark can discover the agent running in an A2A server and create an agent resource from it. This allows you to query the agent, put it into teams, expose it via APIs and so on.
 
-Rather than running the sample agent locally, you can run it in the cluster. For **development**, [`devspace`](http://devspace.sh) runs your code in a container with live reload so edits are reflected without a rebuild:
+Rather than running the sample agent locally, you can run it in the cluster with [`devspace`](http://devspace.sh), which runs your code in a container with live reload so edits are reflected without a rebuild:
 
 ```bash
-# Start the a2a server with live reload (development).
+# Start the a2a server with live reload.
 cd samples/a2a/simple-agent
 devspace dev
 ```
-
-For a **staging or production** deployment, build a versioned image and apply the manifests instead — see [Deploying to staging or production](#deploying-to-staging-or-production) below.
 
 Running with devspace applies the resources in the `manifests.yaml` file. These are:
 
@@ -165,48 +163,6 @@ You can uninstall / cleanup your deployment with:
 ```bash
 devspace purge
 ```
-
-## Deploying to staging or production
-
-`devspace dev` is a development convenience — it swaps in a live-reload container and only lasts as long as the command runs. For staging or production you deploy a **fixed, versioned image** through your normal delivery mechanism. The sample's `manifests.yaml` is plain Kubernetes (a `Deployment` and `Service`) plus a single Ark `A2AServer`, so it drops into `kubectl`, Kustomize, Helm, or a GitOps tool (Argo CD / Flux) unchanged.
-
-**1. Build and push a versioned image** to a registry your cluster can pull from:
-
-```bash
-cd samples/a2a/simple-agent
-docker build -t <registry>/simple-agent:v1.0.0 .
-docker push <registry>/simple-agent:v1.0.0
-```
-
-**2. Point the manifests at that image.** In `manifests.yaml`, set the `Deployment` image to the pushed tag and avoid the floating `:latest` tag so rollouts are deterministic:
-
-```yaml
-spec:
-  template:
-    spec:
-      containers:
-      - name: simple-agent
-        image: <registry>/simple-agent:v1.0.0
-        imagePullPolicy: IfNotPresent
-```
-
-**3. Apply the manifests** to the target cluster (commit them to your GitOps repo instead if that's your workflow):
-
-```bash
-kubectl apply -f manifests.yaml
-```
-
-**4. Verify** exactly as in development — the `A2AServer` becomes `Ready`, Ark creates the `Agent`, and it answers queries:
-
-```bash
-kubectl get a2aserver simple-agent
-kubectl get agents
-ark agent query simple-agent "who are you?"
-```
-
-Discovery takes a few seconds. Wait for the `A2AServer` to report `READY True` (and the `Agent` to appear) before querying — until then the agent does not yet exist and queries are rejected.
-
-For production, harden the `Deployment` the way you would any workload: pin the image tag, set `replicas`, keep resource requests/limits (the sample already sets them), and add liveness/readiness probes against the `/health` endpoint. If the A2A server needs its own credentials (API keys for the framework behind it), mount them from a `Secret` rather than baking them into the image — this is separate from the per-query header overrides Ark forwards to the agent.
 
 ## Timeout Configuration
 
