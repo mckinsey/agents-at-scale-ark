@@ -4,7 +4,7 @@ Five existing pieces of Ark infrastructure shape this design — without them th
 
 1. **`WorkflowDagViewer` parses YAML locally.** `services/ark-dashboard/ark-dashboard/components/workflow-dag-viewer.tsx` imports `js-yaml` and uses `@xyflow/react` + `dagre` to render any `WorkflowTemplate` manifest as a DAG. It does not need the workflow to be submitted to Argo first. The same component will happily render whatever YAML it is handed — the block the agent just finished emitting, or YAML the user is hand-editing — with no Argo round-trip.
 2. **The chat + session/conversation stack already exists.** `chatService` (`lib/services/chat.ts`), `conversationsService` (`lib/services/conversations.ts`), and the broker sessions were shipped with the recent sessions/conversations view. The author UI is a new consumer of that stack, not a new stack.
-3. **The Ark MCP server is already wired up.** `services/ark-mcp/ark-mcp/src/ark_mcp/tools.py` exposes `list_agents` and `query_agent` today and uses `ark_sdk.client.with_ark_client`; the Agent CRD's `tools` block can reference an MCP server. Adding `list_models`, `list_teams`, and `list_workflow_templates` is a localised change.
+3. **The `kubernetes-mcp-server` provides generic resource access.** A separate change deploys the [`kubernetes-mcp-server`](https://github.com/containers/kubernetes-mcp-server) and registers it as an Ark `MCPServer`, so the Agent CRD's `tools` block can reference it. Its generic `resources_list` (and `resources_get`) tools list any resource by `apiVersion`/`kind` — so `Agent`, `Model`, `Team`, and `WorkflowTemplate` are all reachable with no Ark-specific tool code. It is deployed read-only, which is all this feature needs: the author Agent only reads the catalogue; every write goes through ark-api.
 4. **`WorkflowTemplate` read/write already goes through the resources passthrough.** `workflowTemplatesService` (`lib/services/workflow-templates.ts`) exposes `list`, `get`, `getYaml(name)`, and `run`. `getYaml` loads a template for the edit flow; `run()` already POSTs a `Workflow` to `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow`, proving the passthrough accepts POST. Save adds a `WorkflowTemplate` POST through the same endpoint — no new backend.
 5. **The `Query` CR is the integration point between Argo and Ark.** `ark/api/v1alpha1/query_types.go` defines the contract: a query completes on `status.conditions[Completed]`, exposes `status.phase` (`done`/`error`/…) and a **single** `status.response` (since v0.1.50 the plural `responses[]` was collapsed). For a team target the completions executor returns the final assistant message, which the controller stores verbatim as `response.content` (`query_controller.go` sets `Response{Content: responseText}` from the executor's A2A reply). The per-member turns are persisted elsewhere keyed by `conversationId` — in memory (`executors/completions/memory.go`, `AddMessages`) and in the broker (`services/ark-broker/.../brokers/memory-broker.ts`, `getByConversation`) — **not** in the Query CR.
 
@@ -43,7 +43,7 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 
 ### 1. Author lives as an Ark Agent CRD, not a new service
 
-The LLM that drives authoring is `kind: Agent`, whose manifest is bundled in the **ark-api** image and installed on demand from the dashboard (Decision 2 / 15) — not a kubectl sample. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the Ark MCP server.
+The LLM that drives authoring is `kind: Agent`, whose manifest is bundled in the **ark-api** image and installed on demand from the dashboard (Decision 2 / 15) — not a kubectl sample. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the `kubernetes-mcp-server`'s `MCPServer` registration.
 
 The author Agent lives in the **currently-selected namespace**, created there on demand from the dashboard (Decision 15), not hand-applied. The dashboard dispatches each authoring turn to the author Agent **in that selected namespace** — so browsing namespace X chats with X's author Agent. Only the agent *name* is configured (Decision 13); the namespace is always the one the user is currently in, exactly like every other resource the dashboard shows.
 
@@ -111,20 +111,20 @@ A dedicated `/workflow-templates/[id]/edit` route (the `[id]` segment is the tem
 
 ### 6. Grounding the catalogue via MCP tools (not prompt-injected)
 
-The author Agent calls `list_agents`, `list_models`, `list_teams` at runtime via the Ark MCP server. It does **not** receive the catalogue baked into its system prompt.
+The author Agent calls the `kubernetes-mcp-server`'s generic `resources_list` at runtime — once per kind (`Agent`, `Model`, `Team`) — to read the user's catalogue. It does **not** receive the catalogue baked into its system prompt.
 
 **Rationale:**
 - A tenant with hundreds of agents would blow the prompt budget
 - The catalogue stays fresh — newly-created agents are visible without restarting anything
-- Dynamic calls cost two tool-call hops but are the only honest answer for a multi-tenant system
+- Dynamic calls cost a tool-call hop per kind but are the only honest answer for a multi-tenant system
 
-`list_workflow_templates` is included so the model can answer "build something like the X template" — useful for PMs working from a partial example.
+Listing `WorkflowTemplate` (via the same `resources_list`) lets the model answer "build something like the X template" — useful for PMs working from a partial example.
 
 ### 7. Fail-and-tell-user is a system-prompt rule, not code
 
 The author Agent's prompt contains a hard rule:
 
-> Before referencing any Ark agent, model, or team, call the matching `list_*` tool. If the user names a resource that is not in the returned list, do not generate YAML that references it. Reply with the available alternatives and ask which to use.
+> Before referencing any Ark agent, model, or team, call `resources_list` for that kind. If the user names a resource that is not in the returned list, do not generate YAML that references it. Reply with the available alternatives and ask which to use.
 
 No webhook, no validator, no policy engine. The enforcement mechanism is the LLM following its instructions, which is consistent with how Ark agents work generally.
 
@@ -150,25 +150,22 @@ Save POSTs `draftYaml` to `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowT
 
 No template versioning history is maintained — Argo does not natively model this, and inventing it would expand scope significantly. The conversation history in the session preserves the prompt-and-YAML trail; users who want history save under a new name.
 
-### 10. ark-mcp tool additions
+### 10. Grounding tools: the generic `kubernetes-mcp-server`, no bespoke Ark MCP code
 
-Three new tools in `services/ark-mcp/ark-mcp/src/ark_mcp/tools.py`, each following the existing `list_agents` shape:
+The author Agent grounds itself through the `kubernetes-mcp-server`'s generic `resources_list` tool, parameterised by `apiVersion`/`kind` — **no new Ark-specific MCP tool functions are written**. The system prompt maps each catalogue lookup to a `resources_list` call:
 
-```python
-@mcp.tool
-async def list_models(namespace: str = DEFAULT_NAMESPACE) -> list[dict]:
-    """List all models in the specified namespace."""
+| Catalogue lookup | `resources_list` arguments |
+|---|---|
+| Agents | `apiVersion: ark.mckinsey.com/v1alpha1`, `kind: Agent` |
+| Models | `apiVersion: ark.mckinsey.com/v1alpha1`, `kind: Model` |
+| Teams | `apiVersion: ark.mckinsey.com/v1alpha1`, `kind: Team` |
+| Workflow templates | `apiVersion: argoproj.io/v1alpha1`, `kind: WorkflowTemplate` |
 
-@mcp.tool
-async def list_teams(namespace: str = DEFAULT_NAMESPACE) -> list[dict]:
-    """List all teams in the specified namespace."""
+`resources_list` accepts an optional namespace and returns the full resource objects; the system prompt instructs the Agent to read only the fields it needs (name, key spec fields, status phase) and to ignore the rest. The server is deployed read-only (Context 3), so these list calls are the only operations the Agent performs against it.
 
-@mcp.tool
-async def list_workflow_templates(namespace: str = DEFAULT_NAMESPACE) -> list[dict]:
-    """List all Argo WorkflowTemplates in the specified namespace."""
-```
+**Rationale:** one generic tool covers every present and future Ark kind, the prompt does the projection, and there is no Ark MCP tool surface to maintain or keep in sync with the CRDs.
 
-Each returns a minimal projection: name, namespace, key spec fields (e.g., `members` for teams, annotations for workflow templates), and status phase. Tools use `ark_sdk.client.with_ark_client` for Ark resources; `list_workflow_templates` calls the K8s API directly (Argo types are not in the Ark SDK).
+**Alternative considered:** bespoke `list_models` / `list_teams` / `list_workflow_templates` tools in a custom Ark MCP server (the original design). Rejected — that duplicates what `resources_list` already does generically, and ties catalogue grounding to a service this change would otherwise not need to own.
 
 ### 11. The `ark-query` template
 
@@ -278,7 +275,8 @@ The single source of truth for the default prompt is one manifest file bundled i
 ### 16. Test strategy
 
 - **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); and the missing-agent gating (agent present → composer enabled; `getByName` returns `null` → banner shown, composer disabled, editor + Save still enabled).
-- **Unit (Python):** the new MCP tools — namespace-scoped, empty-namespace, error mapping; and the author-agent manifest endpoint — returns the bundled manifest with the configured name stamped in.
+- **Unit (Python):** the author-agent manifest endpoint — returns the bundled manifest with the configured name stamped in.
+- **Helm (lint/template):** the `kubernetes-mcp-server` umbrella chart renders with `config.read_only: true`, the namespace-scoped read-only RBAC, and the `HTTPRoute` enabled / Ingress disabled — matching the dev configuration.
 - **Chainsaw (e2e):**
   - **Authoring happy path:** mock-llm seeded with a canned `WorkflowTemplate` response → assert the template is created and the user lands on the detail page.
   - **Install author agent:** open the route in a namespace with no author Agent → click Install → assert the Agent is created in that namespace (manifest GET + create via the resources passthrough), the banner clears, and the composer enables.
@@ -286,9 +284,31 @@ The single source of truth for the default prompt is one manifest file bundled i
   - **Edit + hand-edit grounding:** load an existing template, hand-edit the YAML, send a turn → assert the agent's next message is grounded on the edited draft (the prefix carried the manual edit).
   - **`ark-query` template:** run it against an agent target and a team target → assert `response` / `query-json` / `phase` / `conversation-id` outputs on success; force a query `error` → assert the node is Failed **and** the outputs are still readable.
 
+### 17. Production deployment of `kubernetes-mcp-server` (umbrella chart, not just devspace)
+
+The separate change that adds `kubernetes-mcp-server` wires it into `devspace dev` only. This feature depends on it at runtime, so it must also be installable in a production Ark deployment. Rather than re-deriving the dev config, add a `services/kubernetes-mcp-server/chart/` umbrella chart that mirrors `services/argo-workflows/chart/`:
+
+- `Chart.yaml` declares the upstream chart as a dependency:
+  ```yaml
+  dependencies:
+    - name: kubernetes-mcp-server
+      version: 0.1.0
+      repository: oci://ghcr.io/containers/charts
+  ```
+- `values.yaml` layers the same Ark configuration the dev deployment uses: `config.read_only: true`, a namespace-scoped read-only `Role`/`RoleBinding` (`get`/`list`/`watch`), and the `localhost-gateway` `HTTPRoute` with Ingress disabled.
+- `manifest.yaml` + `build.mk` register the service so `make services` offers install/uninstall/dev, and the `deploy` workflow packages the chart and pushes it to the OCI chart registry next to the other service charts.
+
+**Scope boundary:** the Ark `MCPServer` resource that registers this server with the cluster is **owned by the kubernetes-mcp-server change** (Context 3 / Open Question on registration was resolved to that change), not duplicated here. This chart deploys the server image; whatever registration that change ships applies equally in production.
+
+**Rationale:**
+- The umbrella-chart pattern is already proven in-repo (`argo-workflows`), so this adds no new deployment mechanism.
+- Wrapping the upstream OCI chart keeps Ark's read-only/RBAC/routing opinions in one values file instead of scattered flags, and tracks upstream by bumping a single dependency version.
+
+**Alternative considered:** inlining the deployment into an existing umbrella/bundle. Rejected — a dedicated service chart matches how every other optional service (argo-workflows, observability) is packaged and keeps it independently installable via `make services`.
+
 ## Risks / Trade-offs
 
-- **The LLM can still emit invalid Argo YAML.** Without a lint loop, schema errors surface only at Save time as K8s API errors. **Mitigation:** the few-shot examples cover the patterns users actually need, and the `ark-query` template removes the most error-prone hand-written piece (a `templateRef` is far harder to get wrong than the full inline recipe). If error rate proves painful, add `lint_workflow` as a follow-up — the plug-in point is a check before Save.
+- **The LLM can still emit invalid Argo YAML.** Without a lint loop, schema errors surface only at Save time as K8s API errors. **Mitigation:** the few-shot examples cover the patterns users actually need, and the `ark-query` template removes the most error-prone hand-written piece (a `templateRef` is far harder to get wrong than the full inline recipe). If error rate proves painful, add a workflow-lint step as a follow-up — the plug-in point is a check before Save.
 
 - **No live/progressive DAG while the agent streams.** By explicit requirement (Decision 3) the preview updates only when the agent finishes, so the user watches the chat stream and the DAG appears in one step at the end rather than building live. **Trade-off accepted:** this is the desired behaviour — it removes mid-stream flicker and transient invalid DAGs entirely (no debounce, no partial-parse handling needed). Manual edits still reflect live, so the canvas is never frozen.
 
@@ -312,9 +332,9 @@ The single source of truth for the default prompt is one manifest file bundled i
 
 2. **What namespace does the author Agent run in?** *Resolved (Decision 1 / 13 / 15):* it is installed on demand from the dashboard into the **currently-selected namespace**, and the dashboard dispatches to the author Agent in that same namespace. Only the agent name is configured (`NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT`, default `argo-make-author`); the namespace always follows the `NamespaceProvider`, which also scopes the MCP `list_*` tools.
 
-3. **Should `list_workflow_templates` filter to templates the user could plausibly riff on (e.g., excluding system templates)?** Initial answer: return everything; let the system prompt decide what to surface. Revisit if it produces noise.
+3. **Should the `WorkflowTemplate` listing filter to templates the user could plausibly riff on (e.g., excluding system templates)?** `resources_list` returns everything for the kind; the system prompt decides what to surface. Revisit if it produces noise.
 
-4. **Empty-namespace UX.** When `list_agents` returns `[]`, the author Agent should still be useful for generic Argo steps. Confirm the system prompt handles this case explicitly.
+4. **Empty-namespace UX.** When `resources_list` for `Agent` returns `[]`, the author Agent should still be useful for generic Argo steps. Confirm the system prompt handles this case explicitly.
 
 5. **Argo lint plug-in point.** Not in scope for v1, but a follow-up should decide: lint as an MCP tool the author calls during composition, or as a dashboard-side check before Save? The latter is simpler and matches the "no prompt re-roll" feel.
 
