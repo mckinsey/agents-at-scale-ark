@@ -19,6 +19,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -186,6 +187,14 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 // checkExecutionEngineDependency validates execution engine dependency
 func (r *AgentReconciler) checkExecutionEngineDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
 	engineName := agent.Spec.ExecutionEngine.Name
+
+	// The "a2a" engine is built into the controller, not a deployed
+	// ExecutionEngine resource, so there is no CR to look up. Availability for
+	// A2A agents is governed by the owning A2AServer (checkA2AServerDependency).
+	if engineName == arka2a.ExecutionEngineA2A {
+		return true, "", ""
+	}
+
 	engineNamespace := agent.Namespace
 
 	if agent.Spec.ExecutionEngine.Namespace != "" {
