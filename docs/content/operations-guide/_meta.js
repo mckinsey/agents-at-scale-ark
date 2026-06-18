@@ -5,6 +5,7 @@ export default {
   'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
   'multi-tenant-dashboard-hosting': 'Multi-Tenant Dashboard Hosting',
+  marketplace: 'Marketplace',
   monitoring: 'Monitoring',
   'disaster-recovery': 'Disaster Recovery',
 
