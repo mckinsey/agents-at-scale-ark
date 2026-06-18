@@ -60,7 +60,7 @@
     "prettier": "^3.8.4",
     "supertest": "^7.0.0",
     "testcontainers": "^12.0.1",
-    "ts-jest": "^29.4.6",
+    "ts-jest": "^29.4.11",
     "tsc-alias": "^1.8.10",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
