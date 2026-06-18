@@ -381,5 +381,52 @@ describe('ApprovalNotification', () => {
         screen.queryByRole('button', { name: /approve/i }),
       ).not.toBeInTheDocument();
     });
+
+    it('invokes onExpired when the approval is already expired', () => {
+      const onExpired = vi.fn();
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          expired
+          onExpired={onExpired}
+        />,
+      );
+
+      expect(onExpired).toHaveBeenCalledTimes(1);
+    });
+
+    it('invokes onExpired exactly once when expiresAtMs is reached', async () => {
+      const onExpired = vi.fn();
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          expiresAtMs={Date.now() + 100}
+          onExpired={onExpired}
+        />,
+      );
+
+      await waitFor(
+        () => {
+          expect(onExpired).toHaveBeenCalled();
+        },
+        { timeout: 1000 },
+      );
+      // No duplicate firing on re-render.
+      expect(onExpired).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not invoke onExpired when a decision is already set', () => {
+      const onExpired = vi.fn();
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          expired
+          existingDecision="approved"
+          onExpired={onExpired}
+        />,
+      );
+
+      expect(onExpired).not.toHaveBeenCalled();
+    });
   });
 });

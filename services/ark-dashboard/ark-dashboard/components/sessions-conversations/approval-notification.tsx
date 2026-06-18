@@ -9,7 +9,7 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
@@ -85,7 +85,7 @@ function ApprovalToolCard({
         {expired && !decision && (
           <div className="ml-auto flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
             <TimerOff className="size-3" />
-            <span>Approval expired</span>
+            <span>Approval expired — agent may retry</span>
           </div>
         )}
       </div>
@@ -155,6 +155,10 @@ interface ApprovalNotificationProps {
   readonly expiresAtMs?: number;
   readonly onApprove: () => Promise<void>;
   readonly onReject: () => Promise<void>;
+  // Called once when the approval expires without user action. Lets callers
+  // start polling for the agent's retry attempt so a cascading approval is
+  // surfaced rather than leaving the user looking at a stale "expired" badge.
+  readonly onExpired?: () => Promise<void> | void;
 }
 
 export function ApprovalNotification({
@@ -165,12 +169,28 @@ export function ApprovalNotification({
   expiresAtMs,
   onApprove,
   onReject,
+  onExpired,
 }: ApprovalNotificationProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [decision, setDecision] = useState<'approved' | 'rejected' | null>(
     existingDecision,
   );
   const [expired, setExpired] = useState<boolean>(expiredProp);
+  const onExpiredCalled = useRef(false);
+  const triggerOnExpired = useCallback(() => {
+    if (onExpiredCalled.current || !onExpired) return;
+    onExpiredCalled.current = true;
+    try {
+      const ret = onExpired();
+      if (ret && typeof (ret as Promise<void>).catch === 'function') {
+        (ret as Promise<void>).catch(err =>
+          console.error('onExpired callback failed:', err),
+        );
+      }
+    } catch (err) {
+      console.error('onExpired callback threw:', err);
+    }
+  }, [onExpired]);
 
   useEffect(() => {
     if (existingDecision && !decision) {
@@ -180,7 +200,10 @@ export function ApprovalNotification({
 
   useEffect(() => {
     setExpired(expiredProp);
-  }, [expiredProp]);
+    if (expiredProp && !decision) {
+      triggerOnExpired();
+    }
+  }, [expiredProp, decision, triggerOnExpired]);
 
   // Schedule a re-render exactly when the approval expires so the UI flips
   // without waiting for the next poll.
@@ -189,11 +212,15 @@ export function ApprovalNotification({
     const delay = expiresAtMs - Date.now();
     if (delay <= 0) {
       setExpired(true);
+      triggerOnExpired();
       return;
     }
-    const timer = setTimeout(() => setExpired(true), delay);
+    const timer = setTimeout(() => {
+      setExpired(true);
+      triggerOnExpired();
+    }, delay);
     return () => clearTimeout(timer);
-  }, [expiresAtMs, expired, decision]);
+  }, [expiresAtMs, expired, decision, triggerOnExpired]);
 
   const handleApprove = async () => {
     setIsSubmitting(true);

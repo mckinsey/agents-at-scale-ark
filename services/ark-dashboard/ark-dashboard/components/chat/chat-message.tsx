@@ -244,6 +244,7 @@ export function ChatMessage({
           existingDecision={approvalDecision}
           onApprove={handleApprove}
           onReject={handleReject}
+          onExpired={pollAfterApproval}
         />
       </div>
     );
