@@ -25,6 +25,8 @@ The API and dashboard are stateless and can be scaled horizontally by increasing
 
 The broker stores messages, streaming chunks, traces, events, and sessions in memory. It is not stateless — each replica maintains its own state, so it runs as a single replica by default. If scaling beyond a single replica is needed, consider enabling file-based persistence or a sticky session strategy.
 
+The **messages** store can opt in to a Postgres backend (`backends.message: postgres`) so messages survive pod restarts. This adds durability for the messages store; it does not by itself make the broker horizontally scalable, since the other stores remain in-memory per replica.
+
 ### Storage backend
 
 When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
@@ -62,7 +64,7 @@ For production planning, consider:
 
 - **Query throughput** — Each active query involves a controller reconciliation, an A2A dispatch to an executor, and one or more LLM provider calls. The controller and executor are the primary bottlenecks.
 - **Resource count** — A large number of Agent, Tool, or Team definitions increases the controller's reconciliation workload and etcd/PostgreSQL storage requirements.
-- **Conversation history** — If the broker has persistence enabled, or if you use an external memory backend, storage grows with conversation volume. Plan retention and cleanup accordingly.
+- **Conversation history** — If the broker has persistence enabled, or if you use an external memory backend, storage grows with conversation volume. Plan retention and cleanup accordingly. With the Postgres message backend, message storage is bounded by the TTL-based expiry rather than item-count limits.
 
 ### Cluster-level capacity
 
