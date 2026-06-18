@@ -77,7 +77,6 @@ runs:
       with:
         metrics-enabled: false
         traefik-enabled: false
-        k3s-channel: stable
 
     - name: Run setup-e2e script
       shell: bash

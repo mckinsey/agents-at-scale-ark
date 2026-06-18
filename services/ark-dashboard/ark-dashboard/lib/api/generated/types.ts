@@ -1216,6 +1216,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/namespaces/{namespace}/marketplace-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Items
+         * @description Aggregate marketplace items across the namespace's sources. Always HTTP 200.
+         */
+        get: operations["list_marketplace_items_v1_namespaces__namespace__marketplace_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Sources
+         * @description List marketplace sources for a namespace. Missing ConfigMap returns [].
+         */
+        get: operations["list_marketplace_sources_v1_namespaces__namespace__marketplace_sources_get"];
+        put?: never;
+        /**
+         * Create Marketplace Source
+         * @description Create a source via server-side apply (creates the ConfigMap if absent).
+         */
+        post: operations["create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketplace Source Permissions
+         * @description Probe edit permission via SSAR. Fail-closed: canEdit=False on any error.
+         */
+        get: operations["get_marketplace_source_permissions_v1_namespaces__namespace__marketplace_sources_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketplace Source
+         * @description Get a single marketplace source by name.
+         */
+        get: operations["get_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Marketplace Source
+         * @description Delete a marketplace source entry by removing its ConfigMap data key.
+         */
+        delete: operations["delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Marketplace Source
+         * @description Update a source via server-side apply. Replaces the value (omitting displayName clears it).
+         */
+        patch: operations["update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch"];
+        trace?: never;
+    };
     "/v1/proxy/services": {
         parameters: {
             query?: never;
@@ -3407,6 +3499,73 @@ export interface components {
         };
         "MCPServerValueSource-Output": {
             [key: string]: unknown;
+        };
+        /**
+         * MarketplaceItemError
+         * @description Per-source failure detail returned by the aggregator.
+         */
+        MarketplaceItemError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * MarketplaceItemsSourceResult
+         * @description Aggregator result for one source: items on success, error on failure.
+         */
+        MarketplaceItemsSourceResult: {
+            /** Displayname */
+            displayName: string;
+            error?: components["schemas"]["MarketplaceItemError"] | null;
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Source */
+            source: string;
+        };
+        /**
+         * MarketplacePermissionsResponse
+         * @description Response of the permission probe endpoint.
+         */
+        MarketplacePermissionsResponse: {
+            /** Canedit */
+            canEdit: boolean;
+        };
+        /**
+         * MarketplaceSourceCreate
+         * @description Request body for creating a marketplace source.
+         */
+        MarketplaceSourceCreate: {
+            /** Displayname */
+            displayName?: string | null;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MarketplaceSourceResponse
+         * @description A single marketplace source entry.
+         */
+        MarketplaceSourceResponse: {
+            /** Displayname */
+            displayName?: string | null;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MarketplaceSourceUpdate
+         * @description Request body for updating a marketplace source.
+         */
+        MarketplaceSourceUpdate: {
+            /** Displayname */
+            displayName?: string | null;
+            /** Url */
+            url: string;
         };
         /**
          * Memory
@@ -6560,6 +6719,232 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NamespaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_items_v1_namespaces__namespace__marketplace_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceItemsSourceResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_sources_v1_namespaces__namespace__marketplace_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceSourceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_source_permissions_v1_namespaces__namespace__marketplace_sources_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplacePermissionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
                 };
             };
             /** @description Validation Error */
