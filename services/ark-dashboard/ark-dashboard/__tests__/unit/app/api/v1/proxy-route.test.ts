@@ -1,13 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DELETE,
-  GET,
-  PATCH,
-  POST,
-  PUT,
-} from '@/app/api/v1/[...proxy]/route';
+import { DELETE, GET, PATCH, POST, PUT } from '@/app/api/v1/[...proxy]/route';
 
 vi.mock('next-auth/jwt', () => ({
   getToken: vi.fn().mockResolvedValue(null),
@@ -20,22 +14,36 @@ vi.mock('@/lib/auth/auth-config', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-function makeBackendResponse(init?: { status?: number; body?: BodyInit | null; headers?: HeadersInit }): Response {
+function makeBackendResponse(init?: {
+  status?: number;
+  body?: BodyInit | null;
+  headers?: HeadersInit;
+}): Response {
   // Preserve explicit `body: null` (status 204 forbids a body per the spec).
   const body = init && 'body' in init ? init.body : '{}';
   return new Response(body ?? null, {
     status: init?.status ?? 200,
     statusText: 'OK',
-    headers: new Headers(init?.headers ?? { 'content-type': 'application/json' }),
+    headers: new Headers(
+      init?.headers ?? { 'content-type': 'application/json' },
+    ),
   });
 }
 
 function makeRequest(
   pathname: string,
-  options: { method?: string; search?: string; headers?: Record<string, string>; body?: ReadableStream | null } = {},
+  options: {
+    method?: string;
+    search?: string;
+    headers?: Record<string, string>;
+    body?: ReadableStream | null;
+  } = {},
 ): NextRequest {
   const search = options.search ?? '';
-  const headers = new Headers({ host: 'example.com', ...(options.headers ?? {}) });
+  const headers = new Headers({
+    host: 'example.com',
+    ...(options.headers ?? {}),
+  });
   return {
     nextUrl: {
       pathname,
@@ -73,7 +81,9 @@ describe('app/api/v1/[...proxy]/route', () => {
     it('proxies to ark-api at /v1/<path> using the configured service env', async () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse());
 
-      const request = makeRequest('/api/v1/agents', { search: '?namespace=default' });
+      const request = makeRequest('/api/v1/agents', {
+        search: '?namespace=default',
+      });
       const response = await GET(request, makeContext(['agents']));
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -98,7 +108,10 @@ describe('app/api/v1/[...proxy]/route', () => {
     it('sets X-Forwarded-* headers and drops the browser Host header', async () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse());
 
-      await GET(makeRequest('/api/v1/agents', { headers: { host: 'mydomain.com' } }), makeContext(['agents']));
+      await GET(
+        makeRequest('/api/v1/agents', { headers: { host: 'mydomain.com' } }),
+        makeContext(['agents']),
+      );
 
       const [, init] = mockFetch.mock.calls[0];
       const headers = (init as RequestInit).headers as Headers;
@@ -164,17 +177,22 @@ describe('app/api/v1/[...proxy]/route', () => {
     });
 
     it('strips hop-by-hop response headers (content-length, transfer-encoding, connection)', async () => {
-      mockFetch.mockResolvedValueOnce(makeBackendResponse({
-        headers: {
-          'content-type': 'application/json',
-          'content-length': '42',
-          'transfer-encoding': 'chunked',
-          connection: 'keep-alive',
-          'x-custom': 'kept',
-        },
-      }));
+      mockFetch.mockResolvedValueOnce(
+        makeBackendResponse({
+          headers: {
+            'content-type': 'application/json',
+            'content-length': '42',
+            'transfer-encoding': 'chunked',
+            connection: 'keep-alive',
+            'x-custom': 'kept',
+          },
+        }),
+      );
 
-      const response = await GET(makeRequest('/api/v1/agents'), makeContext(['agents']));
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
 
       expect(response.headers.get('content-length')).toBeNull();
       expect(response.headers.get('transfer-encoding')).toBeNull();
@@ -192,7 +210,9 @@ describe('app/api/v1/[...proxy]/route', () => {
       expect(mockFetch).not.toHaveBeenCalled();
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toBe('text/yaml');
-      expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="my-agent.yaml"');
+      expect(response.headers.get('Content-Disposition')).toBe(
+        'attachment; filename="my-agent.yaml"',
+      );
       const body = await response.text();
       expect(body).toContain('kind: Agent');
       expect(body).toContain('name: my-agent');
@@ -220,7 +240,10 @@ describe('app/api/v1/[...proxy]/route', () => {
 
     it('proxies (does not YAML-mock) when the path does not match the export shape', async () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse());
-      await GET(makeRequest('/api/v1/agents/export'), makeContext(['agents', 'export']));
+      await GET(
+        makeRequest('/api/v1/agents/export'),
+        makeContext(['agents', 'export']),
+      );
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url] = mockFetch.mock.calls[0];
       expect(url).toBe('http://ark-api:80/v1/agents/export');
@@ -232,28 +255,36 @@ describe('app/api/v1/[...proxy]/route', () => {
       ['POST', POST],
       ['PUT', PUT],
       ['PATCH', PATCH],
-    ] as const)('proxies %s with request body and duplex: half', async (method, handler) => {
-      mockFetch.mockResolvedValueOnce(makeBackendResponse());
-      const body = new ReadableStream();
+    ] as const)(
+      'proxies %s with request body and duplex: half',
+      async (method, handler) => {
+        mockFetch.mockResolvedValueOnce(makeBackendResponse());
+        const body = new ReadableStream();
 
-      await handler(
-        makeRequest('/api/v1/queries', { method, body }),
-        makeContext(['queries']),
-      );
+        await handler(
+          makeRequest('/api/v1/queries', { method, body }),
+          makeContext(['queries']),
+        );
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const [url, init] = mockFetch.mock.calls[0];
-      expect(url).toBe('http://ark-api:80/v1/queries');
-      const fetchInit = init as RequestInit & { duplex?: 'half' };
-      expect(fetchInit.method).toBe(method);
-      expect(fetchInit.body).toBe(body);
-      expect(fetchInit.duplex).toBe('half');
-    });
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const [url, init] = mockFetch.mock.calls[0];
+        expect(url).toBe('http://ark-api:80/v1/queries');
+        const fetchInit = init as RequestInit & { duplex?: 'half' };
+        expect(fetchInit.method).toBe(method);
+        expect(fetchInit.body).toBe(body);
+        expect(fetchInit.duplex).toBe('half');
+      },
+    );
 
     it('DELETE proxies and does NOT attach a body or duplex flag', async () => {
-      mockFetch.mockResolvedValueOnce(makeBackendResponse({ status: 204, body: null }));
+      mockFetch.mockResolvedValueOnce(
+        makeBackendResponse({ status: 204, body: null }),
+      );
 
-      const response = await DELETE(makeRequest('/api/v1/agents/foo', { method: 'DELETE' }), makeContext(['agents', 'foo']));
+      const response = await DELETE(
+        makeRequest('/api/v1/agents/foo', { method: 'DELETE' }),
+        makeContext(['agents', 'foo']),
+      );
 
       const [url, init] = mockFetch.mock.calls[0];
       expect(url).toBe('http://ark-api:80/v1/agents/foo');
@@ -268,7 +299,10 @@ describe('app/api/v1/[...proxy]/route', () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse());
 
       await GET(
-        makeRequest('/api/v1/agents', { method: 'GET', body: new ReadableStream() }),
+        makeRequest('/api/v1/agents', {
+          method: 'GET',
+          body: new ReadableStream(),
+        }),
         makeContext(['agents']),
       );
 
@@ -283,15 +317,23 @@ describe('app/api/v1/[...proxy]/route', () => {
     it('forwards the backend status code', async () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse({ status: 422 }));
 
-      const response = await POST(makeRequest('/api/v1/queries', { method: 'POST' }), makeContext(['queries']));
+      const response = await POST(
+        makeRequest('/api/v1/queries', { method: 'POST' }),
+        makeContext(['queries']),
+      );
 
       expect(response.status).toBe(422);
     });
 
     it('forwards the backend response body', async () => {
-      mockFetch.mockResolvedValueOnce(makeBackendResponse({ body: '{"items":[]}' }));
+      mockFetch.mockResolvedValueOnce(
+        makeBackendResponse({ body: '{"items":[]}' }),
+      );
 
-      const response = await GET(makeRequest('/api/v1/agents'), makeContext(['agents']));
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
 
       expect(await response.text()).toBe('{"items":[]}');
     });
