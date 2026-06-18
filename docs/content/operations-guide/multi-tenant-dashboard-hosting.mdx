@@ -4,7 +4,9 @@ Host one Ark dashboard per tenant namespace behind a single domain, with each te
 
 ## When to use this
 
-Use this pattern when clients can only access one external domain but need a separate dashboard and API per tenant. Each tenant's namespace, secrets, models, agents, and runtime resources stay isolated — only the URL space is shared.
+Use this when you only have one external domain available but need a separate dashboard and API per tenant. Each tenant's namespace, secrets, models, agents, and runtime resources stay isolated — only the URL space is shared.
+
+`basePath` is the runtime knob that makes this work. It tells the dashboard which URL prefix it lives under, so every static asset, internal navigation link, and OIDC callback resolves under that prefix instead of the domain root. The value is applied at container startup — no image rebuild is required to change it.
 
 ## Topology
 
@@ -13,12 +15,13 @@ For each tenant namespace, install:
 - One `ark-api` Helm release (in the tenant's namespace).
 - One `ark-dashboard` Helm release (in the tenant's namespace) with `app.config.basePath` set to the tenant's URL prefix.
 
-A single cluster-wide Ingress (or Gateway API HTTPRoute) routes:
+A single cluster-wide Ingress (or Gateway API HTTPRoute) routes one rule per tenant:
 
-- `mydomain.com/<ns>/api/v1/*` → tenant `ark-api`, with `/<ns>` stripped before the request reaches ark-api.
 - `mydomain.com/<ns>/*` → tenant `ark-dashboard`.
 
-The dashboard does not proxy API traffic itself. The Ingress is the routing point.
+The dashboard's built-in proxy (`app/api/v1/[...proxy]/route.ts`) forwards `/api/v1/*` requests to the configured ark-api Service, minting a Bearer token from the user's NextAuth session. The Ingress does **not** need a separate rule for `/<ns>/api/v1/*` — the dashboard pod is the only public surface per tenant.
+
+You can still expose ark-api with a dedicated Ingress rule (`/<ns>/api/v1/*` with prefix-strip) if you want direct API access for CI jobs or other clients. That topology is shown later in this guide. Either way, **ark-api itself is the auth boundary** — see [Access modes](#access-modes) below.
 
 ## Install per tenant
 
@@ -36,9 +39,62 @@ helm install ark-dashboard-ns1 ./services/ark-dashboard/chart \
 
 Repeat per tenant, substituting namespace and prefix. A ready-to-use values file lives at `services/ark-dashboard/chart/values-multi-tenant.example.yaml`.
 
-`ARK_DASHBOARD_BASE_PATH` is applied at container startup by the dashboard's entrypoint, which substitutes a sentinel inside the published image. No image rebuild is required to change the prefix.
+## Access modes
+
+Choose one of the two modes below before exposing the dashboard externally. Each tenant's dashboard and ark-api must agree — running the dashboard in SSO while ark-api stays open leaves the API publicly callable behind the same domain.
+
+### Unauthenticated access (anyone can access any namespace)
+
+Both the dashboard and ark-api run with `AUTH_MODE=open`. There is no sign-in, no token validation, and no per-tenant boundary at the application layer. Anyone who can reach `mydomain.com/<ns>/...` can read and write every Ark resource in that namespace.
+
+Use this only when the cluster sits behind a separate auth boundary (corporate VPN, mTLS at the edge, allow-listed source IPs) that you trust to gate access. It is appropriate for local dev clusters and shared internal sandboxes; it is **not** appropriate for any environment reachable from the public internet.
+
+Configuration:
+
+```bash
+# Dashboard (per tenant)
+--set 'app.env[0].name=AUTH_MODE,app.env[0].value=open'
+
+# ark-api (per tenant)
+--set 'env[0].name=AUTH_MODE,env[0].value=open'    # or simply leave unset
+```
+
+`BASE_URL` and `AUTH_URL` are still required on the dashboard so internal links and the (dummy) sign-in redirect resolve under the tenant prefix.
+
+### Isolated access (per-tenant OIDC)
+
+Both the dashboard and ark-api run with `AUTH_MODE=sso`. The dashboard runs NextAuth and stores the OIDC access token in a session cookie scoped to the tenant's basepath. The proxy route mints `Authorization: Bearer <token>` from that cookie on every forwarded request. ark-api validates the JWT against the OIDC issuer and returns **401** for any request without a valid token.
+
+What this guarantees:
+
+- Unauthenticated callers (no session, no Bearer) get **401** from ark-api. The same is true whether they hit the dashboard proxy or call ark-api directly through a dedicated Ingress rule.
+- A user signed into `/namespace-a` has their NextAuth cookie scoped to `/namespace-a/` by Next.js's basepath handling. The browser does not send the cookie on requests to `/namespace-b/...`, so casual cross-tenant navigation lands at a sign-in screen.
+
+What this does **not** guarantee on its own:
+
+- If every tenant trusts the same OIDC client, the JWT issued to a user authenticated for `/namespace-a` is structurally valid against `/namespace-b`'s ark-api too. A deliberate attacker who copies their `/namespace-a` cookie into a request against `/namespace-b/api/v1/...` will be accepted by ark-api, which then queries its own namespace with its own service account. RBAC on the *user* is not applied unless impersonation is enabled (see [Tenant isolation](#tenant-isolation)).
+- For full cross-tenant isolation, register a distinct OIDC client per tenant and set `OIDC_APPLICATION_ID` to that tenant's client ID on its ark-api. The JWT's `aud` claim is then checked per tenant and tokens from one tenant are rejected at another.
+
+Configuration:
+
+```bash
+# Dashboard (per tenant)
+--set 'app.env[0].name=AUTH_MODE,app.env[0].value=sso'
+--set 'app.env[1].name=BASE_URL,app.env[1].value=https://mydomain.com/namespace1'
+--set 'app.env[2].name=AUTH_URL,app.env[2].value=https://mydomain.com/namespace1/api/auth'
+# plus your provider-specific AUTH_<PROVIDER>_ID / SECRET / ISSUER variables
+
+# ark-api (per tenant)
+--set 'env[0].name=AUTH_MODE,env[0].value=sso'
+--set 'env[1].name=OIDC_ISSUER_URL,env[1].value=https://idp.example.com/realms/ark'
+--set 'env[2].name=OIDC_APPLICATION_ID,env[2].value=ark-namespace1'   # distinct per tenant for isolation
+```
+
+The OIDC provider's allow-list must contain `https://mydomain.com/<ns>/api/auth/callback/<provider>` for each tenant — without that entry, the IdP rejects the redirect and sign-in fails.
 
 ## Example Ingress (NGINX)
+
+The recommended topology routes only `/<ns>/*` to the dashboard. The dashboard's proxy handles API forwarding internally — no API-specific Ingress rule is needed.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -46,29 +102,12 @@ kind: Ingress
 metadata:
   name: ark-multi-tenant
   namespace: ingress-shared
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /v1/$2
-    nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   ingressClassName: nginx
   rules:
     - host: mydomain.com
       http:
         paths:
-          # /namespace1/api/v1/<rest> -> ark-api in namespace1 as /v1/<rest>
-          - path: /namespace1/api/v1(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: ark-api
-                port: { number: 80 }
-          # /namespace2/api/v1/<rest> -> ark-api in namespace2 as /v1/<rest>
-          - path: /namespace2/api/v1(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: ark-api
-                port: { number: 80 }
           # /namespace1/<rest> -> dashboard in namespace1, no rewrite
           - path: /namespace1
             pathType: Prefix
@@ -85,32 +124,70 @@ spec:
                 port: { number: 3000 }
 ```
 
-NGINX's `rewrite-target` annotation is set per-Ingress; the rewrite applies only to the api-prefixed paths. The dashboard paths do *not* strip the prefix because Next.js needs to see `/<ns>/...` to route under its baked `basePath`.
+The dashboard paths do *not* strip the prefix — Next.js needs to see `/<ns>/...` to route under its runtime `basePath`.
 
-`ExternalName` services or per-namespace `Ingress` resources are equivalent alternatives — the important property is that one rule per tenant captures the API prefix and rewrites it, and one rule per tenant captures the dashboard prefix without rewrite.
+For Gateway API, pass each dashboard prefix through with a single `HTTPRoute` rule per tenant — no `URLRewrite` filter is required.
 
-For Gateway API, use `URLRewrite` filters on the API-prefixed `HTTPRoute` rules and pass through the dashboard-prefixed ones.
+### Alternative: direct API Ingress per tenant
+
+If you also want to expose ark-api directly (for CI, scripts, or a non-browser client that holds its own bearer), add a second rule per tenant that strips the prefix:
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /v1/$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  rules:
+    - host: mydomain.com
+      http:
+        paths:
+          # /namespace1/api/v1/<rest> -> ark-api in namespace1 as /v1/<rest>
+          - path: /namespace1/api/v1(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ark-api
+                port: { number: 80 }
+          # ... then the dashboard rule from the example above
+```
+
+This Ingress receives requests that **bypass** the dashboard pod — the request never sees the dashboard's NextAuth cookie or its bearer minting. Ark-api alone enforces auth on this path, so you must run it in `AUTH_MODE=sso` (or basic/hybrid) for this rule to be safe.
 
 ## Tenant isolation
 
-The per-tenant `ark-api` Role + RoleBinding isolates secrets, configmaps, pods, services, and all Ark CRDs to the tenant's namespace. Tenants cannot read or modify each other's resources through their `ark-api` instance.
+The per-tenant `ark-api` Role + RoleBinding isolates secrets, configmaps, pods, services, and all Ark CRDs to the tenant's namespace. Tenants cannot read or modify each other's resources through their `ark-api` instance regardless of access mode.
 
 Caveats (current state of the `ark-api` chart):
 
 - The chart's `ClusterRole` grants every tenant's ark-api full CRUD on the cluster-scoped `ArkConfig` resource. Tenants can read and modify the cluster's `ArkConfig`. Do not store cross-tenant defaults in `ArkConfig` if your trust model requires strict isolation.
 - If `impersonation.enabled=true` in the ark-api chart, every tenant's service account can impersonate arbitrary users and groups cluster-wide. Keep impersonation disabled for cross-organisation tenancy.
+- Without per-tenant audience separation (distinct `OIDC_APPLICATION_ID` per tenant), a JWT issued for one tenant's user is structurally valid against every tenant's ark-api. The Role + RoleBinding still scopes ark-api's *service account* to its own namespace, so the attacker only sees data from the ark-api they reached — but they can reach it.
 
 The full audit lives in the `dashboard-runtime-basepath` OpenSpec change (`openspec/changes/dashboard-runtime-basepath/rbac-audit.md`).
 
 ## Verifying a deployment
 
-After installing two tenants, the following should hold:
+After installing two tenants, the following should hold regardless of access mode:
 
 - `curl https://mydomain.com/namespace1/` returns the Ark Dashboard HTML, with every asset reference under `/namespace1/`.
-- `curl https://mydomain.com/namespace1/api/v1/context?namespace=namespace1` is routed to the `namespace1` ark-api and returns its context.
-- `curl https://mydomain.com/namespace2/api/v1/context?namespace=namespace2` is routed to the `namespace2` ark-api.
-- `curl https://mydomain.com/api/v1/context` (no prefix) is not routed to any tenant's ark-api.
+- `curl https://mydomain.com/api/v1/context` (no prefix) is not routed to any tenant.
 - A user signing into `mydomain.com/namespace1/` stays under `/namespace1/` for every subsequent navigation, including OIDC callbacks — provided `BASE_URL` and `AUTH_URL` include the prefix.
+
+In **isolated** (`AUTH_MODE=sso`) mode, additionally check:
+
+- `curl https://mydomain.com/namespace1/api/v1/context?namespace=namespace1` (no Authorization header) returns **401** from the underlying ark-api. If it returns data, ark-api is running in `AUTH_MODE=open` and the API is publicly readable — fix this before exposing the domain.
+- A browser session signed into `/namespace1/` keeps its NextAuth cookie scoped to `/namespace1/`: requests it makes to `/namespace2/api/v1/...` arrive at namespace2's dashboard pod without a session cookie and end up returning 401 from namespace2's ark-api.
+
+In **unauthenticated** (`AUTH_MODE=open`) mode, the equivalent `curl` calls return data without any Authorization header. This is expected — confirm you trust the network boundary that fronts the cluster.
+
+## Troubleshooting
+
+- **Assets 404 with paths like `/_next/static/...` instead of `/<ns>/_next/static/...`** — the dashboard pod started before `ARK_DASHBOARD_BASE_PATH` was set, or the sentinel substitution was skipped. Check the entrypoint log for the line `entrypoint: ARK_DASHBOARD_BASE_PATH=...` and re-roll the pod.
+- **Sign-in loops back to `/api/auth/signin`** — `BASE_URL` or `AUTH_URL` is missing the prefix, or the OIDC provider's registered redirect URI does not include the prefix. Both must match the tenant prefix exactly.
+- **API calls 404 at the dashboard** — `app.config.arkApiService.host` does not resolve, or it points at a Service in a different namespace. The dashboard proxy fetches `<protocol>://<host>:<port>/v1/...` and the failure surfaces as 404 (or 502) at the dashboard. Verify `kubectl get svc -n <tenant>` shows the expected `ark-api` Service.
+- **`/<ns>/api/v1/*` requests bypass the dashboard** — only relevant if you added the optional direct-API Ingress rule. Check the rewrite target strips `/<ns>` so ark-api sees `/v1/...`, not `/<ns>/api/v1/...`.
+- **Dashboard renders but namespace switcher is empty** — ark-api is reachable but the user has no RBAC for any namespace. Check the per-tenant `Role` / `RoleBinding` installed by the ark-api chart.
 
 ## Rolling back
 
