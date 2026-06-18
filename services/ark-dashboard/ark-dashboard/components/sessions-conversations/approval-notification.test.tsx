@@ -313,4 +313,73 @@ describe('ApprovalNotification', () => {
       expect(card?.className).toContain('border-red');
     });
   });
+
+  describe('Expired Approvals', () => {
+    it('hides approve/reject buttons when expired', () => {
+      render(<ApprovalNotification {...defaultProps} expired />);
+
+      expect(screen.getByText('write-file')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /approve/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /reject/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders the Approval expired indicator when expired', () => {
+      render(<ApprovalNotification {...defaultProps} expired />);
+
+      expect(screen.getByText(/approval expired/i)).toBeInTheDocument();
+    });
+
+    it('applies amber styling when expired and no decision', () => {
+      render(<ApprovalNotification {...defaultProps} expired />);
+
+      const card = screen.getByText('write-file').closest('div.border');
+      expect(card?.className).toContain('border-amber');
+    });
+
+    it('flips to expired automatically once expiresAtMs is reached', async () => {
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          expiresAtMs={Date.now() + 100}
+        />,
+      );
+
+      // Before expiry: buttons still visible
+      expect(
+        screen.getByRole('button', { name: /approve/i }),
+      ).toBeInTheDocument();
+
+      await waitFor(
+        () => {
+          expect(
+            screen.queryByRole('button', { name: /approve/i }),
+          ).not.toBeInTheDocument();
+          expect(screen.getByText(/approval expired/i)).toBeInTheDocument();
+        },
+        { timeout: 1000 },
+      );
+    });
+
+    it('still shows decision state when expired-with-decision', () => {
+      render(
+        <ApprovalNotification
+          {...defaultProps}
+          expired
+          existingDecision="approved"
+        />,
+      );
+
+      // Decision wins: no expired indicator, no buttons
+      expect(
+        screen.queryByText(/approval expired/i),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /approve/i }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

@@ -411,6 +411,13 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		},
 	}
 
+	// For HITL approval tasks the executor publishes the approval timeout in
+	// task metadata. Surface it on Spec.Timeout so the API does not return the
+	// misleading 12h polling default.
+	if approvalTimeout, ok := extractApprovalTimeout(task.Metadata); ok {
+		a2aTask.Spec.Timeout = &metav1.Duration{Duration: approvalTimeout}
+	}
+
 	// Populate status before creation (for informational purposes)
 	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
 	now := metav1.NewTime(time.Now())
@@ -469,4 +476,26 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 
 	log.Error(updateErr, "failed to update A2ATask status after retries", "taskId", task.ID)
 	return fmt.Errorf("failed to update A2ATask status: %w", updateErr)
+}
+
+// extractApprovalTimeout reads the approval timeout (Go duration string) from
+// the protocol task metadata. The HITL approval flow publishes "timeout" via
+// task metadata; other tasks do not, so this is a no-op for them.
+func extractApprovalTimeout(metadata map[string]any) (time.Duration, bool) {
+	if metadata == nil {
+		return 0, false
+	}
+	raw, ok := metadata["timeout"]
+	if !ok {
+		return 0, false
+	}
+	str, ok := raw.(string)
+	if !ok || str == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(str)
+	if err != nil {
+		return 0, false
+	}
+	return d, true
 }

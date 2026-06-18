@@ -339,3 +339,29 @@ func TestStatusSnapshotDetectsChanges(t *testing.T) {
 		assert.Equal(t, before, snapshotA2ATaskStatus(&same))
 	})
 }
+
+func TestReconcileTimeout_SkipsHITLTasks(t *testing.T) {
+	// HITL approval tasks have no A2A server to poll, so the polling timeout
+	// must not flip them to failed; their expiry is governed by
+	// checkApprovalTimeout (driven by status.protocolMetadata.timeout) instead.
+	r := &A2ATaskReconciler{}
+	task := &arkv1alpha1.A2ATask{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "hitl-task",
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-24 * time.Hour)),
+		},
+		Spec: arkv1alpha1.A2ATaskSpec{
+			TaskID:       "hitl-1",
+			A2AServerRef: nil,
+			Timeout:      &metav1.Duration{Duration: 1 * time.Minute},
+		},
+		Status: arkv1alpha1.A2ATaskStatus{Phase: arka2a.PhaseInputRequired},
+	}
+
+	handled, err := r.reconcileTimeout(context.Background(), task)
+	assert.NoError(t, err)
+	assert.False(t, handled, "reconcileTimeout must be a no-op for HITL tasks")
+	assert.Equal(t, arka2a.PhaseInputRequired, task.Status.Phase, "phase must not change")
+	assert.Empty(t, task.Status.Error, "error must not be set")
+}

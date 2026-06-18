@@ -297,3 +297,22 @@ func IsUserRejection(task *arkv1alpha1.A2ATask) bool {
 	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
 	return cond != nil && cond.Reason == ConditionReasonApprovalRejected
 }
+
+// IsResumableDenial reports whether the agent should resume to handle the denial
+// gracefully. Covers both explicit user rejection and timeout-driven rejection so
+// that the agent can respond to the user in either case.
+func IsResumableDenial(task *arkv1alpha1.A2ATask) bool {
+	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+	if cond == nil {
+		return false
+	}
+	return cond.Reason == ConditionReasonApprovalRejected ||
+		cond.Reason == ConditionReasonApprovalTimeoutRejected
+}
+
+// IsTimeoutRejection reports whether the A2ATask was rejected because the
+// approval timeout expired (as opposed to an explicit user rejection).
+func IsTimeoutRejection(task *arkv1alpha1.A2ATask) bool {
+	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+	return cond != nil && cond.Reason == ConditionReasonApprovalTimeoutRejected
+}

@@ -1,10 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Wrench, CheckCircle, XCircle, Clock } from 'lucide-react';
+import {
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  TimerOff,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { ToolCall as ToolCallComponent } from '@/components/chat/tool-call';
 
 interface ToolCall {
   id: string;
@@ -21,6 +28,7 @@ interface ApprovalToolCardProps {
   readonly isSubmitting: boolean;
   readonly timeout?: string;
   readonly decision?: 'approved' | 'rejected' | null;
+  readonly expired?: boolean;
   readonly onApprove: () => Promise<void>;
   readonly onReject: () => Promise<void>;
 }
@@ -31,6 +39,7 @@ function ApprovalToolCard({
   isSubmitting,
   timeout,
   decision,
+  expired,
   onApprove,
   onReject,
 }: ApprovalToolCardProps) {
@@ -41,25 +50,42 @@ function ApprovalToolCard({
 
   try {
     if (toolCall.function?.arguments) {
-      parsedArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+      parsedArgs = JSON.parse(toolCall.function.arguments) as Record<
+        string,
+        unknown
+      >;
     }
   } catch {
     parseArgsError = true;
   }
 
-  const cardClassName = decision === 'rejected'
-    ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 rounded-lg border p-3 text-sm shadow-sm"
-    : "bg-card border-border rounded-lg border p-3 text-sm shadow-sm";
+  let cardClassName =
+    'bg-card border-border rounded-lg border p-3 text-sm shadow-sm';
+  if (decision === 'rejected') {
+    cardClassName =
+      'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 rounded-lg border p-3 text-sm shadow-sm';
+  } else if (expired && !decision) {
+    cardClassName =
+      'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 rounded-lg border p-3 text-sm shadow-sm';
+  }
 
   return (
     <div className={cardClassName}>
       <div className="flex items-center gap-2 px-2 py-1.5">
         <Wrench className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-        <span className="font-semibold">{toolCall.function?.name || toolCall.type}</span>
-        {timeout && (
-          <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="font-semibold">
+          {toolCall.function?.name || toolCall.type}
+        </span>
+        {timeout && !expired && (
+          <div className="text-muted-foreground ml-auto flex items-center gap-1 text-xs">
             <Clock className="size-3" />
             <span>{timeout}</span>
+          </div>
+        )}
+        {expired && !decision && (
+          <div className="ml-auto flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <TimerOff className="size-3" />
+            <span>Approval expired</span>
           </div>
         )}
       </div>
@@ -67,14 +93,15 @@ function ApprovalToolCard({
       <div className="mt-2">
         <button
           onClick={() => setIsInputExpanded(!isInputExpanded)}
-          className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
-        >
+          className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors">
           {isInputExpanded ? (
             <ChevronDown className="h-3 w-3 flex-shrink-0" />
           ) : (
             <ChevronRight className="h-3 w-3 flex-shrink-0" />
           )}
-          <span className="text-muted-foreground text-xs font-medium">Input</span>
+          <span className="text-muted-foreground text-xs font-medium">
+            Input
+          </span>
         </button>
         {isInputExpanded && (
           <div className="mt-1 px-2">
@@ -92,13 +119,12 @@ function ApprovalToolCard({
       </div>
 
       {showButtons && !isSubmitting && (
-        <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+        <div className="border-border mt-3 flex items-center gap-2 border-t pt-3">
           <Button
             onClick={onApprove}
             disabled={isSubmitting}
             size="sm"
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
+            className="bg-green-600 text-white hover:bg-green-700">
             <CheckCircle className="mr-1.5 size-3.5" />
             Approve
           </Button>
@@ -106,8 +132,7 @@ function ApprovalToolCard({
             onClick={onReject}
             disabled={isSubmitting}
             size="sm"
-            variant="destructive"
-          >
+            variant="destructive">
             <XCircle className="mr-1.5 size-3.5" />
             Reject
           </Button>
@@ -126,76 +151,76 @@ interface ApprovalNotificationProps {
   readonly onTimeout?: string;
   readonly agentName?: string;
   readonly existingDecision?: 'approved' | 'rejected' | null;
+  readonly expired?: boolean;
+  readonly expiresAtMs?: number;
   readonly onApprove: () => Promise<void>;
   readonly onReject: () => Promise<void>;
 }
 
 export function ApprovalNotification({
-  queryName,
-  queryNamespace,
-  taskId,
   toolCalls,
   timeout,
-  onTimeout,
-  agentName,
   existingDecision = null,
+  expired: expiredProp = false,
+  expiresAtMs,
   onApprove,
-  onReject
+  onReject,
 }: ApprovalNotificationProps) {
-  console.log('[HITL Debug] ApprovalNotification rendering with props:', {
-    queryName,
-    queryNamespace,
-    taskId,
-    toolCalls,
-    timeout,
-    onTimeout,
-    agentName,
-    existingDecision,
-  });
-
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittingAction, setSubmittingAction] = useState<'approve' | 'reject' | null>(null);
-  const [decision, setDecision] = useState<'approved' | 'rejected' | null>(existingDecision);
+  const [decision, setDecision] = useState<'approved' | 'rejected' | null>(
+    existingDecision,
+  );
+  const [expired, setExpired] = useState<boolean>(expiredProp);
 
-  // Update decision state when existingDecision changes (e.g., after async data loads)
   useEffect(() => {
     if (existingDecision && !decision) {
-      console.log('[HITL Debug] existingDecision changed to:', existingDecision);
       setDecision(existingDecision);
     }
   }, [existingDecision, decision]);
 
+  useEffect(() => {
+    setExpired(expiredProp);
+  }, [expiredProp]);
+
+  // Schedule a re-render exactly when the approval expires so the UI flips
+  // without waiting for the next poll.
+  useEffect(() => {
+    if (expired || decision || !expiresAtMs) return;
+    const delay = expiresAtMs - Date.now();
+    if (delay <= 0) {
+      setExpired(true);
+      return;
+    }
+    const timer = setTimeout(() => setExpired(true), delay);
+    return () => clearTimeout(timer);
+  }, [expiresAtMs, expired, decision]);
+
   const handleApprove = async () => {
     setIsSubmitting(true);
-    setSubmittingAction('approve');
     try {
       await onApprove();
       setDecision('approved');
     } catch (error) {
       console.error('Failed to approve:', error);
       setIsSubmitting(false);
-      setSubmittingAction(null);
     }
   };
 
   const handleReject = async () => {
     setIsSubmitting(true);
-    setSubmittingAction('reject');
     try {
       await onReject();
       setDecision('rejected');
     } catch (error) {
       console.error('Failed to reject:', error);
       setIsSubmitting(false);
-      setSubmittingAction(null);
     }
   };
 
   if (decision) {
-    // Show the tool calls in read-only mode (without approve/reject buttons)
     return (
       <div className="space-y-2">
-        {toolCalls.map((toolCall) => (
+        {toolCalls.map(toolCall => (
           <ApprovalToolCard
             key={toolCall.id}
             toolCall={toolCall}
@@ -210,18 +235,18 @@ export function ApprovalNotification({
     );
   }
 
-  console.log('[HITL Debug] ApprovalNotification rendering notification UI');
-
+  const buttonsAllowed = !expired;
   return (
     <div className="space-y-2">
       {toolCalls.map((toolCall, index) => (
         <ApprovalToolCard
           key={toolCall.id}
           toolCall={toolCall}
-          showButtons={index === toolCalls.length - 1}
+          showButtons={buttonsAllowed && index === toolCalls.length - 1}
           isSubmitting={isSubmitting}
           timeout={index === 0 ? timeout : undefined}
           decision={null}
+          expired={expired}
           onApprove={handleApprove}
           onReject={handleReject}
         />

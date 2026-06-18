@@ -110,6 +110,8 @@ interface ApprovalData {
   timeout?: string;
   onTimeout?: string;
   agentName?: string;
+  expired?: boolean;
+  expiresAtMs?: number;
 }
 
 interface MessageContentProps {
@@ -218,6 +220,8 @@ const MessageContent = memo(function MessageContent({
               timeout={approvalData.timeout}
               onTimeout={approvalData.onTimeout}
               agentName={approvalData.agentName}
+              expired={approvalData.expired}
+              expiresAtMs={approvalData.expiresAtMs}
               existingDecision={existingDecision || null}
               onApprove={onApprove}
               onReject={onReject}

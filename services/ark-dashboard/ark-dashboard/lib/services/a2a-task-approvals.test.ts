@@ -136,4 +136,56 @@ describe('buildApprovalDetails', () => {
     expect(details!.toolCalls).toEqual([]);
     expect(details!.agentName).toBeUndefined();
   });
+
+  describe('expired flag', () => {
+    const taskWithTiming = (
+      startTime: string | undefined,
+      timeout: string | undefined,
+    ): A2ATaskDetailResponse =>
+      baseTask({
+        status: {
+          startTime,
+          protocolMetadata: {
+            toolCalls: '[]',
+            ...(timeout ? { timeout } : {}),
+          },
+        },
+      });
+
+    it('marks not-expired when start + timeout is in the future', () => {
+      const fiveMinutesFromNow = new Date(Date.now() - 60_000).toISOString();
+      const details = buildApprovalDetails(taskWithTiming(fiveMinutesFromNow, '5m'));
+      expect(details!.expired).toBe(false);
+      expect(details!.expiresAtMs).toBeDefined();
+      expect(details!.expiresAtMs!).toBeGreaterThan(Date.now());
+    });
+
+    it('marks expired when start + timeout has elapsed', () => {
+      const longAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+      const details = buildApprovalDetails(taskWithTiming(longAgo, '5m'));
+      expect(details!.expired).toBe(true);
+      expect(details!.expiresAtMs).toBeDefined();
+      expect(details!.expiresAtMs!).toBeLessThan(Date.now());
+    });
+
+    it('defaults expired to false when startTime is missing', () => {
+      const details = buildApprovalDetails(taskWithTiming(undefined, '5m'));
+      expect(details!.expired).toBe(false);
+      expect(details!.expiresAtMs).toBeUndefined();
+    });
+
+    it('defaults expired to false when timeout is missing', () => {
+      const now = new Date().toISOString();
+      const details = buildApprovalDetails(taskWithTiming(now, undefined));
+      expect(details!.expired).toBe(false);
+      expect(details!.expiresAtMs).toBeUndefined();
+    });
+
+    it('defaults expired to false when timeout is unparseable', () => {
+      const now = new Date().toISOString();
+      const details = buildApprovalDetails(taskWithTiming(now, 'gibberish'));
+      expect(details!.expired).toBe(false);
+      expect(details!.expiresAtMs).toBeUndefined();
+    });
+  });
 });

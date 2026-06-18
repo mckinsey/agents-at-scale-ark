@@ -70,11 +70,13 @@ export function useChatSession({
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
-  const conversationId = (chatSession as { conversationId?: string }).conversationId;
+  const conversationId = (chatSession as { conversationId?: string })
+    .conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      const sessionIdToUse =
+        pendingSessionIdRef.current ?? createNewSessionId(name);
       pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
@@ -151,14 +153,15 @@ export function useChatSession({
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
-  const [isWaitingForApprovalResponse, setIsWaitingForApprovalResponse] = useState(false);
+  const [isWaitingForApprovalResponse, setIsWaitingForApprovalResponse] =
+    useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatStreamAbortControllerRef = useRef(new AbortController())
+  const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -189,12 +192,15 @@ export function useChatSession({
     [],
   );
 
-  const lastQueryName = useRef('')
-  const pendingApprovalQueryRef = useRef<{queryName: string, messageIndex: number} | null>(null)
+  const lastQueryName = useRef('');
+  const pendingApprovalQueryRef = useRef<{
+    queryName: string;
+    messageIndex: number;
+  } | null>(null);
 
   const handleStreamChatResponse = useCallback(
     async (userMessage: string) => {
-      chatStreamAbortControllerRef.current = new AbortController()
+      chatStreamAbortControllerRef.current = new AbortController();
 
       const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
@@ -280,7 +286,7 @@ export function useChatSession({
 
       const stopPhasePolling = await chatService.streamQueryStatus(
         streamQueryName,
-        (status) => {
+        status => {
           if (status && typeof status === 'object' && 'phase' in status) {
             const phase = (status as { phase?: string }).phase;
             setProcessingPhase(phase);
@@ -291,21 +297,40 @@ export function useChatSession({
       for await (const chunk of chunks) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
-        console.log('[HITL Debug] Received chunk:', JSON.stringify(chunk).slice(0, 200));
+        console.log(
+          '[HITL Debug] Received chunk:',
+          JSON.stringify(chunk).slice(0, 200),
+        );
 
-        if ('type' in typedChunk && typedChunk.type === 'tool_approval_request') {
-          console.log('[HITL Debug] Detected tool_approval_request event!', typedChunk);
-          const approvalRequest = typedChunk as unknown as import('@/lib/types/chat-message').ToolApprovalRequest;
+        if (
+          'type' in typedChunk &&
+          typedChunk.type === 'tool_approval_request'
+        ) {
+          console.log(
+            '[HITL Debug] Detected tool_approval_request event!',
+            typedChunk,
+          );
+          const approvalRequest: import('@/lib/types/chat-message').ToolApprovalRequest =
+            {
+              ...(typedChunk as unknown as import('@/lib/types/chat-message').ToolApprovalRequest),
+              receivedAtMs: Date.now(),
+            };
           hasPendingApproval = true;
 
           pendingApprovalQueryRef.current = {
             queryName,
             messageIndex: currentMessageIndex,
           };
-          console.log('[HITL Debug] Stored pending approval query info:', pendingApprovalQueryRef.current);
+          console.log(
+            '[HITL Debug] Stored pending approval query info:',
+            pendingApprovalQueryRef.current,
+          );
 
           updateChatMessages(prev => {
-            console.log('[HITL Debug] updateChatMessages called, prev messages:', prev.length);
+            console.log(
+              '[HITL Debug] updateChatMessages called, prev messages:',
+              prev.length,
+            );
             const updated = [...prev];
             updated[currentMessageIndex] = {
               role: 'assistant',
@@ -315,16 +340,26 @@ export function useChatSession({
                 queryName,
               },
             } as ExtendedChatMessage;
-            console.log('[HITL Debug] Message at index', currentMessageIndex, 'updated with approval:', updated[currentMessageIndex]);
+            console.log(
+              '[HITL Debug] Message at index',
+              currentMessageIndex,
+              'updated with approval:',
+              updated[currentMessageIndex],
+            );
             return updated;
           });
 
-          console.log('[HITL Debug] Updated message with approval request at index:', currentMessageIndex);
+          console.log(
+            '[HITL Debug] Updated message with approval request at index:',
+            currentMessageIndex,
+          );
           console.log('[HITL Debug] Continuing to next chunk...');
           continue;
         }
 
-        console.log('[HITL Debug] Processing regular chunk (not approval request)');
+        console.log(
+          '[HITL Debug] Processing regular chunk (not approval request)',
+        );
 
         if ('error' in typedChunk && typedChunk.error) {
           hasError = true;
@@ -334,7 +369,12 @@ export function useChatSession({
           break;
         }
 
-        if ('id' in typedChunk && typedChunk.id === 'chatcmpl-final' && 'ark' in typedChunk && typedChunk.ark) {
+        if (
+          'id' in typedChunk &&
+          typedChunk.id === 'chatcmpl-final' &&
+          'ark' in typedChunk &&
+          typedChunk.ark
+        ) {
           const arkData = typedChunk.ark;
 
           const returnedConversationId =
@@ -359,8 +399,7 @@ export function useChatSession({
             }
           }
 
-          const arkTokenUsage =
-            arkData.completedQuery?.status?.tokenUsage;
+          const arkTokenUsage = arkData.completedQuery?.status?.tokenUsage;
           const usage: TokenUsage | null = arkTokenUsage
             ? {
                 prompt_tokens: arkTokenUsage.promptTokens || 0,
@@ -412,7 +451,8 @@ export function useChatSession({
           }
         }
 
-        const delta = 'choices' in typedChunk ? typedChunk?.choices?.[0]?.delta : undefined;
+        const delta =
+          'choices' in typedChunk ? typedChunk?.choices?.[0]?.delta : undefined;
         if (delta?.content) {
           accumulatedContent += delta.content;
         }
@@ -466,7 +506,10 @@ export function useChatSession({
           return updated;
         });
 
-        const finishReason = 'choices' in typedChunk ? typedChunk?.choices?.[0]?.finish_reason : undefined;
+        const finishReason =
+          'choices' in typedChunk
+            ? typedChunk?.choices?.[0]?.finish_reason
+            : undefined;
         if (finishReason === 'stop') {
           turnComplete = true;
         }
@@ -475,10 +518,14 @@ export function useChatSession({
       stopPhasePolling();
 
       if (!hasPendingApproval) {
-        console.log('[HITL Debug] Finalizing current message (no pending approval)');
+        console.log(
+          '[HITL Debug] Finalizing current message (no pending approval)',
+        );
         finalizeCurrentMessage();
       } else {
-        console.log('[HITL Debug] Skipping finalize because we have a pending approval');
+        console.log(
+          '[HITL Debug] Skipping finalize because we have a pending approval',
+        );
       }
 
       if (messageTokenUsage) {
@@ -582,7 +629,10 @@ export function useChatSession({
         });
       }
 
-      console.log('[HITL Debug] Stream processing completed', { hasPendingApproval, queryName });
+      console.log('[HITL Debug] Stream processing completed', {
+        hasPendingApproval,
+        queryName,
+      });
     },
     [
       buildChatMessages,
@@ -614,7 +664,7 @@ export function useChatSession({
         queryTimeout,
       );
 
-      lastQueryName.current = query.name
+      lastQueryName.current = query.name;
 
       let pollingStopped = false;
       stopPollingRef.current = () => {
@@ -795,7 +845,7 @@ export function useChatSession({
 
         if (err instanceof Error) {
           if (err.name === 'AbortError') {
-            return
+            return;
           }
           if (err.message.includes('Failed to fetch')) {
             errMsg =
@@ -848,21 +898,21 @@ export function useChatSession({
   }, [chatKey, name, setChatHistory, setLastConversationId]);
 
   const cancelQuery = useCallback(async () => {
-    chatStreamAbortControllerRef.current.abort()
-    stopPollingRef.current?.()
+    chatStreamAbortControllerRef.current.abort();
+    stopPollingRef.current?.();
 
-    setIsProcessing(false)
+    setIsProcessing(false);
 
-    updateChatMessages(prev => [...prev, {
-      role: 'system',
-      content: 'Conversation stopped by user',
-    }])
+    updateChatMessages(prev => [
+      ...prev,
+      {
+        role: 'system',
+        content: 'Conversation stopped by user',
+      },
+    ]);
 
-    await chatService.cancelQuery(lastQueryName.current).catch(() => {})
-  }, [
-    setIsProcessing,
-    updateChatMessages,
-  ])
+    await chatService.cancelQuery(lastQueryName.current).catch(() => {});
+  }, [setIsProcessing, updateChatMessages]);
 
   const pollAfterApproval = useCallback(async () => {
     if (!pendingApprovalQueryRef.current) {
@@ -908,14 +958,25 @@ export function useChatSession({
 
         // Check for cascading approval (query returned to input-required state)
         if (result.status === 'input-required') {
-          console.log('[HITL Debug] Detected cascading approval - query returned to input-required');
+          console.log(
+            '[HITL Debug] Detected cascading approval - query returned to input-required',
+          );
 
           // Fetch full query to get A2A task info
           const query = await chatService.getQuery(queryName);
-          if (query?.status && typeof query.status === 'object' && 'response' in query.status) {
-            const response = query.status.response as { a2a?: { taskId?: string; contextId?: string } };
+          if (
+            query?.status &&
+            typeof query.status === 'object' &&
+            'response' in query.status
+          ) {
+            const response = query.status.response as {
+              a2a?: { taskId?: string; contextId?: string };
+            };
             if (response.a2a?.taskId) {
-              console.log('[HITL Debug] Found new A2A task for cascading approval:', response.a2a.taskId);
+              console.log(
+                '[HITL Debug] Found new A2A task for cascading approval:',
+                response.a2a.taskId,
+              );
 
               // Fetch the A2A task details
               try {
@@ -923,13 +984,21 @@ export function useChatSession({
                 const taskName = `a2a-task-${response.a2a.taskId}`;
                 const a2aTask = await chatService.getA2ATask(taskName);
                 if (a2aTask?.status?.protocolMetadata?.toolCalls) {
-                  const toolCallsStr = a2aTask.status.protocolMetadata.toolCalls;
+                  const toolCallsStr =
+                    a2aTask.status.protocolMetadata.toolCalls;
                   const toolCalls = JSON.parse(toolCallsStr);
                   const timeout = a2aTask.status.protocolMetadata.timeout;
                   const onTimeout = a2aTask.status.protocolMetadata.onTimeout;
                   const agentName = a2aTask.agentRef?.name;
+                  const taskStartTime = a2aTask.status?.startTime;
+                  const receivedAtMs = taskStartTime
+                    ? new Date(taskStartTime).getTime()
+                    : Date.now();
 
-                  console.log('[HITL Debug] Showing cascading approval UI for task:', taskName);
+                  console.log(
+                    '[HITL Debug] Showing cascading approval UI for task:',
+                    taskName,
+                  );
 
                   // Append a new message for the cascading approval (don't replace existing message)
                   const taskId = response.a2a.taskId;
@@ -948,6 +1017,7 @@ export function useChatSession({
                         timeout,
                         onTimeout,
                         agentName,
+                        receivedAtMs,
                       },
                       metadata: {
                         queryName,
@@ -968,61 +1038,72 @@ export function useChatSession({
                   break;
                 }
               } catch (err) {
-                console.error('[HITL Debug] Error fetching cascading approval task:', err);
+                console.error(
+                  '[HITL Debug] Error fetching cascading approval task:',
+                  err,
+                );
               }
             }
           }
         }
 
         if (result.terminal) {
-          console.log('[HITL Debug] Query reached terminal state:', result.status);
+          console.log(
+            '[HITL Debug] Query reached terminal state:',
+            result.status,
+          );
           stopPollingRef.current = null;
 
           if (result.status === 'done') {
-            console.log('[HITL Debug] Query completed successfully with messages:', result.messages?.length);
+            console.log(
+              '[HITL Debug] Query completed successfully with messages:',
+              result.messages?.length,
+            );
             if (result.messages && result.messages.length > 0) {
               console.log('[HITL Debug] Updating chat messages with result');
               updateChatMessages(prev => {
                 const beforeApproval = prev.slice(0, messageIndex);
-                const afterMessages = result.messages!.map((msg): ExtendedChatMessage => {
-                  if (msg.role === 'tool') {
-                    return {
-                      role: 'tool',
-                      content: msg.content || '',
-                      tool_call_id: msg.tool_call_id || '',
-                    } as ExtendedChatMessage;
-                  } else if (msg.role === 'assistant') {
-                    const baseMsg: {
-                      role: 'assistant';
-                      content: string;
-                      name?: string;
-                      tool_calls?: Array<{
-                        id: string;
-                        type: 'function';
-                        function: { name: string; arguments: string };
-                      }>;
-                    } = {
-                      role: 'assistant' as const,
-                      content: msg.content || '',
-                    };
-                    if (msg.name) {
-                      baseMsg.name = msg.name;
+                const afterMessages = result.messages!.map(
+                  (msg): ExtendedChatMessage => {
+                    if (msg.role === 'tool') {
+                      return {
+                        role: 'tool',
+                        content: msg.content || '',
+                        tool_call_id: msg.tool_call_id || '',
+                      } as ExtendedChatMessage;
+                    } else if (msg.role === 'assistant') {
+                      const baseMsg: {
+                        role: 'assistant';
+                        content: string;
+                        name?: string;
+                        tool_calls?: Array<{
+                          id: string;
+                          type: 'function';
+                          function: { name: string; arguments: string };
+                        }>;
+                      } = {
+                        role: 'assistant' as const,
+                        content: msg.content || '',
+                      };
+                      if (msg.name) {
+                        baseMsg.name = msg.name;
+                      }
+                      if (msg.tool_calls && msg.tool_calls.length > 0) {
+                        baseMsg.tool_calls = msg.tool_calls.map(tc => ({
+                          id: tc.id,
+                          type: 'function' as const,
+                          function: tc.function,
+                        }));
+                      }
+                      return baseMsg as ExtendedChatMessage;
+                    } else {
+                      return {
+                        role: msg.role as 'user' | 'system',
+                        content: msg.content || '',
+                      } as ExtendedChatMessage;
                     }
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                      baseMsg.tool_calls = msg.tool_calls.map(tc => ({
-                        id: tc.id,
-                        type: 'function' as const,
-                        function: tc.function,
-                      }));
-                    }
-                    return baseMsg as ExtendedChatMessage;
-                  } else {
-                    return {
-                      role: msg.role as 'user' | 'system',
-                      content: msg.content || '',
-                    } as ExtendedChatMessage;
-                  }
-                });
+                  },
+                );
                 return [...beforeApproval, ...afterMessages];
               });
             }

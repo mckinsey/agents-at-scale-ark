@@ -127,7 +127,12 @@ func (r *A2ATaskReconciler) reconcileTTL(ctx context.Context, a2aTask *arkv1alph
 }
 
 // reconcileTimeout marks the task failed once it has exceeded its timeout. Returns true when handled.
+// Skipped for HITL approval tasks: there's no remote A2A server to poll, so the spec.timeout
+// is not meaningful for them. checkApprovalTimeout handles their expiry instead.
 func (r *A2ATaskReconciler) reconcileTimeout(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	if a2aTask.Spec.A2AServerRef == nil {
+		return false, nil
+	}
 	timeout := defaultTaskTimeout
 	if a2aTask.Spec.Timeout != nil {
 		timeout = a2aTask.Spec.Timeout.Duration

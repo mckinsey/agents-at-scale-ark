@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
@@ -8,6 +8,7 @@ import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { submitApproval } from '@/lib/services/a2a-task-approvals';
 import type { ToolApprovalRequest } from '@/lib/types/chat-message';
 import { getResourceEventsUrl } from '@/lib/utils/events';
+import { parseDurationToMs } from '@/lib/utils/time';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system';
@@ -85,6 +86,15 @@ export function ChatMessage({
   const [approvalDecision, setApprovalDecision] = useState<
     'approved' | 'rejected' | null
   >(taskDecision || null);
+
+  const approvalExpiresAtMs = useMemo(() => {
+    if (!approvalRequest?.timeout || !approvalRequest.receivedAtMs) {
+      return undefined;
+    }
+    const timeoutMs = parseDurationToMs(approvalRequest.timeout);
+    if (timeoutMs === null) return undefined;
+    return approvalRequest.receivedAtMs + timeoutMs;
+  }, [approvalRequest?.timeout, approvalRequest?.receivedAtMs]);
 
   const handleApprove = async () => {
     if (!approvalRequest?.taskId) return;
@@ -216,13 +226,6 @@ export function ChatMessage({
   const hasToolCalls = toolCalls && toolCalls.length > 0;
 
   if (approvalRequest) {
-    console.log(
-      '[HITL Debug] ChatMessage rendering approval request:',
-      approvalRequest,
-    );
-    console.log('[HITL Debug] ChatMessage queryName:', queryName);
-    console.log('[HITL Debug] ChatMessage namespace:', namespace);
-
     // Generate a unique key from tool call IDs to reset component state on new approvals
     const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
     return (
@@ -237,6 +240,7 @@ export function ChatMessage({
           timeout={approvalRequest.timeout}
           onTimeout={approvalRequest.onTimeout}
           agentName={approvalRequest.agentName}
+          expiresAtMs={approvalExpiresAtMs}
           existingDecision={approvalDecision}
           onApprove={handleApprove}
           onReject={handleReject}

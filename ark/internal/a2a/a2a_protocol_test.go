@@ -1008,3 +1008,102 @@ func TestIsUserRejection(t *testing.T) {
 		}
 	})
 }
+
+func TestIsResumableDenial(t *testing.T) {
+	completedType := string(arkv1alpha1.A2ATaskCompleted)
+
+	t.Run("returns false when conditions are empty", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{}
+		if IsResumableDenial(task) {
+			t.Error("expected false for empty conditions")
+		}
+	})
+
+	t.Run("returns true for explicit user rejection", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalRejected,
+				}},
+			},
+		}
+		if !IsResumableDenial(task) {
+			t.Error("expected true for explicit user rejection")
+		}
+	})
+
+	t.Run("returns true for timeout rejection", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalTimeoutRejected,
+				}},
+			},
+		}
+		if !IsResumableDenial(task) {
+			t.Error("expected true for timeout-driven rejection")
+		}
+	})
+
+	t.Run("returns false for granted approval", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalGranted,
+				}},
+			},
+		}
+		if IsResumableDenial(task) {
+			t.Error("expected false for approved task")
+		}
+	})
+
+	t.Run("returns false for timeout-proceeded reason", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalTimeoutProceeded,
+				}},
+			},
+		}
+		if IsResumableDenial(task) {
+			t.Error("expected false for timeout-proceeded task")
+		}
+	})
+}
+
+func TestIsTimeoutRejection(t *testing.T) {
+	completedType := string(arkv1alpha1.A2ATaskCompleted)
+
+	t.Run("returns true only for timeout-rejected", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalTimeoutRejected,
+				}},
+			},
+		}
+		if !IsTimeoutRejection(task) {
+			t.Error("expected true for timeout-rejected task")
+		}
+	})
+
+	t.Run("returns false for explicit rejection", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{
+				Conditions: []metav1.Condition{{
+					Type:   completedType,
+					Reason: ConditionReasonApprovalRejected,
+				}},
+			},
+		}
+		if IsTimeoutRejection(task) {
+			t.Error("expected false for explicit user rejection")
+		}
+	})
+}

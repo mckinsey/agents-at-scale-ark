@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -291,4 +292,48 @@ func TestExtractTextFromParts(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExtractApprovalTimeout(t *testing.T) {
+	t.Run("nil metadata returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(nil)
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("missing timeout key returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"other": "value"})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("non-string timeout returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": 42})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("empty string returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": ""})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("malformed duration returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": "not-a-duration"})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("valid duration is parsed", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": "5m"})
+		assert.True(t, ok)
+		assert.Equal(t, 5*time.Minute, d)
+	})
+
+	t.Run("compound duration is parsed", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": "1h30m"})
+		assert.True(t, ok)
+		assert.Equal(t, 90*time.Minute, d)
+	})
 }

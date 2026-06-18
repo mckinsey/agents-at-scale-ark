@@ -729,19 +729,18 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 
 	log.Info("A2ATask status", "taskId", taskID, "phase", a2aTask.Status.Phase)
 
-	// Check if task is completed (approval) or failed with user rejection
+	// Check if task is completed (approval) or denied in a way the agent can react to
 	if a2aTask.Status.Phase == arka2a.PhaseCompleted {
 		log.Info("A2ATask completed, resuming", "taskId", taskID)
 		return true, &a2aTask
 	}
 
-	// Check if this is a user rejection (not timeout or other failure)
-	if arka2a.IsUserRejection(&a2aTask) {
-		log.Info("Detected user rejection, will resume to let agent handle gracefully", "taskId", taskID)
+	if arka2a.IsResumableDenial(&a2aTask) {
+		log.Info("Detected resumable denial, will resume to let agent handle gracefully", "taskId", taskID)
 		return true, &a2aTask
 	}
 
-	log.Info("A2ATask not completed/rejected, not resuming", "taskId", taskID, "phase", a2aTask.Status.Phase)
+	log.Info("A2ATask not completed/denied, not resuming", "taskId", taskID, "phase", a2aTask.Status.Phase)
 	return false, nil
 }
 
@@ -780,11 +779,15 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 	// Check if this is approval or rejection
 	isApproved := a2aTask.Status.Phase == arka2a.PhaseCompleted
 	isRejected := a2aTask.Status.Phase == arka2a.PhaseFailed
+	rejectionError := "Tool execution rejected by user"
+	if isRejected && arka2a.IsTimeoutRejection(a2aTask) {
+		rejectionError = "Tool execution rejected: approval timeout exceeded"
+	}
 
 	if isApproved {
 		log.Info("Executing approved tool calls", "count", len(toolCallsData))
 	} else if isRejected {
-		log.Info("Handling rejected tool calls - will return error results", "count", len(toolCallsData))
+		log.Info("Handling rejected tool calls - will return error results", "count", len(toolCallsData), "reason", rejectionError)
 	}
 
 	// Fetch the agent CRD - needed for both approval and rejection to resume conversation
@@ -853,7 +856,7 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 			approvedResults = append(approvedResults, ToolResult{
 				ID:      tc.ID,
 				Name:    tc.Function.Name,
-				Error:   "Tool execution rejected by user",
+				Error:   rejectionError,
 				Content: "",
 			})
 		}

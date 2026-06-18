@@ -33,6 +33,9 @@ export interface ToolApprovalRequest {
   timeout?: string;
   onTimeout?: string;
   agentName?: string;
+  // Wall-clock timestamp (ms since epoch) when this approval request was
+  // received by the dashboard. Used to compute approval expiry on the client.
+  receivedAtMs?: number;
 }
 
 export type ArkExtendedChunk =
@@ -45,7 +48,6 @@ export type ArkExtendedChunk =
       };
     })
   | ToolApprovalRequest;
-
 
 export interface GraphEdge {
   from: string;

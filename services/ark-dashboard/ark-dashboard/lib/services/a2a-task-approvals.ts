@@ -1,5 +1,6 @@
 import type { A2ATaskDetailResponse } from '@/lib/api/a2a-tasks-types';
 import { apiClient } from '@/lib/api/client';
+import { parseDurationToMs } from '@/lib/utils/time';
 
 export type ApprovalDecision = 'approved' | 'rejected';
 
@@ -19,6 +20,9 @@ export interface ApprovalDetails {
   onTimeout?: string;
   agentName?: string;
   phase: string;
+  startTime?: string;
+  expiresAtMs?: number;
+  expired: boolean;
 }
 
 export interface ApprovalSubmissionResponse {
@@ -63,6 +67,18 @@ export function buildApprovalDetails(
     }
   }
 
+  const startTime = task.status?.startTime;
+  const timeoutMs = parseDurationToMs(protocolMetadata.timeout);
+  let expiresAtMs: number | undefined;
+  let expired = false;
+  if (startTime && timeoutMs !== null) {
+    const startMs = new Date(startTime).getTime();
+    if (!Number.isNaN(startMs)) {
+      expiresAtMs = startMs + timeoutMs;
+      expired = Date.now() > expiresAtMs;
+    }
+  }
+
   return {
     taskId: task.taskId,
     toolCalls,
@@ -70,6 +86,9 @@ export function buildApprovalDetails(
     onTimeout: protocolMetadata.onTimeout,
     agentName,
     phase: task.status?.phase ?? '',
+    startTime,
+    expiresAtMs,
+    expired,
   };
 }
 

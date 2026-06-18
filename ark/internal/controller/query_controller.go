@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -29,12 +30,19 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
 )
+
+// maxApprovalCascades caps the number of times the agent can be resumed after
+// an approval denial. Without a cap, an LLM that ignores rejection (e.g. when
+// the user prompt strongly insists on the tool) can spin a new approval task
+// after every denial, never terminating.
+const maxApprovalCascades = 3
 
 const (
 	targetTypeAgent = "agent"
@@ -215,6 +223,12 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 		// Note: Don't clear taskID here - executor needs it to detect resumption
 		// The executor will clear it after processing (handler.go line 165)
 
+		// Approval was granted: reset the cascade counter so legitimate
+		// multi-step flows aren't penalised by earlier denials in the chain.
+		if err := r.resetApprovalCascadeCount(ctx, obj); err != nil {
+			log.Error(err, "failed to reset approval cascade counter")
+		}
+
 		r.clearOperationCacheForResumption(ctx, obj, "task completed")
 
 		if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
@@ -224,26 +238,26 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 		return ctrl.Result{Requeue: true}, nil
 
 	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
-		// Check if this is a user rejection (should resume) vs actual failure (should error)
-		isRejection := arka2a.IsUserRejection(&a2aTask)
-
-		if isRejection {
-			// User rejected tool execution - resume query to let agent handle gracefully
-			log.Info("A2ATask rejected by user, resuming query execution for graceful handling", "taskId", taskID)
-			// Note: Don't clear taskID here - executor needs it to detect resumption
-			// The executor will clear it after processing (handler.go line 165)
-
-			r.clearOperationCacheForResumption(ctx, obj, "user rejection")
-
-			if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Immediately requeue to trigger executor resumption with rejection
-			return ctrl.Result{Requeue: true}, nil
+		// A denial that the agent can react to (explicit reject or timeout-reject)
+		// resumes execution so the agent produces a final response. Only true
+		// failures (e.g. controller errors, cancellation for non-approval reasons)
+		// land the query in error.
+		if arka2a.IsResumableDenial(&a2aTask) {
+			return r.handleResumableDenial(ctx, obj, taskID, expiry)
 		}
 
-		// Task failed or was cancelled (not user rejection) - transition to error
 		log.Info("A2ATask failed or cancelled, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase, "error", a2aTask.Status.Error)
+		if a2aTask.Status.Error != "" {
+			var target arkv1alpha1.QueryTarget
+			if obj.Status.Response != nil {
+				target = obj.Status.Response.Target
+			}
+			obj.Status.Response = &arkv1alpha1.Response{
+				Target:  target,
+				Content: a2aTask.Status.Error,
+				Phase:   statusError,
+			}
+		}
 		if err := r.updateStatus(ctx, obj, statusError); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -868,6 +882,123 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 	}
 
 	return impersonatedClient, nil
+}
+
+// handleResumableDenial runs the resumption path for a denial the agent can
+// react to (explicit reject or timeout-reject). It enforces the cascade cap to
+// stop an LLM that keeps retrying a denied tool from spinning forever.
+func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1alpha1.Query, taskID string, expiry time.Time) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	count := readApprovalCascadeCount(obj)
+	if count >= maxApprovalCascades {
+		log.Info("approval cascade cap reached, ending query", "taskId", taskID, "count", count, "cap", maxApprovalCascades)
+		target := arkv1alpha1.QueryTarget{}
+		if obj.Status.Response != nil {
+			target = obj.Status.Response.Target
+		}
+		obj.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: fmt.Sprintf("Approval cascade limit reached (%d). The agent kept retrying a denied tool; aborting.", maxApprovalCascades),
+			Phase:   statusError,
+		}
+		if err := r.updateStatus(ctx, obj, statusError); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+	}
+
+	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
+	if err := r.incrementApprovalCascadeCount(ctx, obj, count); err != nil {
+		log.Error(err, "failed to increment approval cascade counter")
+		return ctrl.Result{}, err
+	}
+
+	r.clearOperationCacheForResumption(ctx, obj, "approval denial")
+	if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// readApprovalCascadeCount returns the number of times the agent has been
+// resumed after an approval denial on this query. Unparseable annotations
+// are treated as zero so the cap re-engages from scratch.
+func readApprovalCascadeCount(query *arkv1alpha1.Query) int {
+	if query.Annotations == nil {
+		return 0
+	}
+	value, ok := query.Annotations[annotations.ApprovalCascadeCount]
+	if !ok {
+		return 0
+	}
+	count, err := strconv.Atoi(value)
+	if err != nil || count < 0 {
+		return 0
+	}
+	return count
+}
+
+// incrementApprovalCascadeCount persists count+1 to the query annotations.
+// Uses retry-on-conflict so concurrent reconciles don't drop the increment.
+func (r *QueryReconciler) incrementApprovalCascadeCount(ctx context.Context, query *arkv1alpha1.Query, current int) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &arkv1alpha1.Query{}
+		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, latest); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if latest.Annotations == nil {
+			latest.Annotations = map[string]string{}
+		}
+		latest.Annotations[annotations.ApprovalCascadeCount] = strconv.Itoa(current + 1)
+		if err := r.Update(ctx, latest); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		query.Annotations = latest.Annotations
+		query.ResourceVersion = latest.ResourceVersion
+		return nil
+	})
+}
+
+// resetApprovalCascadeCount removes the cascade annotation after a successful
+// approval so the cap doesn't penalise later legitimate denials.
+func (r *QueryReconciler) resetApprovalCascadeCount(ctx context.Context, query *arkv1alpha1.Query) error {
+	if query.Annotations == nil {
+		return nil
+	}
+	if _, present := query.Annotations[annotations.ApprovalCascadeCount]; !present {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &arkv1alpha1.Query{}
+		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, latest); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if latest.Annotations == nil {
+			return nil
+		}
+		if _, present := latest.Annotations[annotations.ApprovalCascadeCount]; !present {
+			return nil
+		}
+		delete(latest.Annotations, annotations.ApprovalCascadeCount)
+		if err := r.Update(ctx, latest); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		query.Annotations = latest.Annotations
+		query.ResourceVersion = latest.ResourceVersion
+		return nil
+	})
 }
 
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {
