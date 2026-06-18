@@ -125,11 +125,6 @@ A platform team SHALL be able to provision an authenticated source at install/up
 - **WHEN** an authenticated source is provisioned via Helm
 - **THEN** the credential value is not present in `values.yaml` or the rendered manifests — only the non-secret `scheme` + `secretRef` are templated; the credential is supplied entirely by the pre-existing Secret (the seed Job creates no Secret), and the source resolves normally against that Secret
 
-#### Scenario: Viewer outside the credential binding errors visibly
-
-- **WHEN** an Ark user who is not bound `get` on a seeded source's service-credential Secret loads the catalogue
-- **THEN** that source reports a per-source authorization error for that user (the service credential is never borrowed on their behalf), rather than silently dropping from the grid
-
 ### Requirement: Document operating authenticated sources for platform teams
 
 Documentation SHALL explain how a platform team operates authenticated sources: the namespace-scoped `Role`/`RoleBinding` that grants editors credential-Secret access (and why it is never a `ClusterRole`), how a user's `get` on a credential Secret governs use of a private source, and the steps to add a bearer source and an Azure DevOps Basic source. The existing "No authentication for source URLs" limitation bullet (PR #2336) SHALL be removed once shipped.
