@@ -1,6 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: placeholder-agent
-spec:
-  prompt: "placeholder agent for ttl webhook validation"

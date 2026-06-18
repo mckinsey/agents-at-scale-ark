@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -165,7 +164,16 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	opCtx, cancel := context.WithCancel(ctx)
+	queryTimeout := time.Hour
+	if obj.Spec.TTL != nil {
+		queryTimeout = obj.Spec.TTL.Duration
+	}
+	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
+	if remaining <= 0 {
+		return ctrl.Result{}, nil
+	}
+
+	opCtx, cancel := context.WithTimeout(ctx, remaining)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
@@ -697,33 +705,31 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		tokenUsage:     query.Status.TokenUsage,
 		conversationId: query.Status.ConversationId,
 	}
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if ctx.Err() != nil {
+	if ctx.Err() != nil {
+		return nil
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
+		if errors.IsNotFound(err) {
 			return nil
 		}
-		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
-			if errors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-		query.Status.Phase = status
-		saved.restoreOnto(query)
-		r.setConditionForPhase(query, status)
-		if duration != nil {
-			query.Status.Duration = duration
-		}
-		err := r.Status().Update(ctx, query)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				return nil
-			}
-			if !errors.IsConflict(err) {
-				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
-			}
-		}
 		return err
-	})
+	}
+	query.Status.Phase = status
+	saved.restoreOnto(query)
+	r.setConditionForPhase(query, status)
+	if duration != nil {
+		query.Status.Duration = duration
+	}
+	err := r.Status().Update(ctx, query)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		if !errors.IsConflict(err) {
+			logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+		}
+	}
+	return err
 }
 
 func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {

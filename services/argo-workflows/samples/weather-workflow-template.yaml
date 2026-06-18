@@ -58,8 +58,8 @@ spec:
               workflow: "{{workflow.name}}"
           spec:
             input: "{{inputs.parameters.prompt}}"
-            targets:
-            - name: "default"
+            target:
+              name: "default"
               type: model
             timeout: 3m
             ttl: 1h

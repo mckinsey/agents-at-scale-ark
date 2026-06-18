@@ -202,6 +202,44 @@ Check the status of ARK services and components:
 ark status
 ```
 
+### ark mcp auth
+
+Drive interactive OAuth flows for MCP servers whose `status.authorization.state` is `Required`. The CLI port-forwards to ark-api, asks it to start the flow, opens the IdP authorize URL in the user's browser, and polls until the IdP redirects back to ark-api with the authorization code. ark-api performs the token exchange and writes the result to the Kubernetes Secret named in `spec.authorization.tokenSecretRef`.
+
+The CLI never reads or writes Secrets directly — every Kubernetes resource operation goes through ark-api endpoints. The only `kubectl` shell-out is `port-forward` against the ark-api Service, the same as every other `ark` command.
+
+#### Login
+
+```bash
+ark mcp auth login <server-name>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--namespace`, `-n` | MCPServer namespace. Defaults to the active kubeconfig context's namespace, then `default`. |
+| `--force` | Bypass the preflight refusal when already `Authorized` and force fresh client registration. |
+| `--no-open` | Print the authorization URL but do not invoke the system browser. |
+| `--timeout <duration>` | Maximum time to wait for the user to complete the flow. Go-duration string (e.g. `60s`, `5m`, `1h`). Default `5m`. |
+| `--scope <scope>` | Space- or comma-separated list of OAuth scopes to request. |
+
+Successful exit prints `authorized (token expires at <RFC 3339>)`. Failure exits non-zero with a single `mcp auth failed: <reason>` line — the IdP's OAuth `error` is surfaced verbatim.
+
+#### Logout
+
+```bash
+ark mcp auth logout <server-name>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--namespace`, `-n` | MCPServer namespace. Same fallback as login. |
+| `--keep-client` | Preserve the cached `client_id` / `client_secret` so the next login skips DCR. |
+| `--delete-secret` | Delete the referenced Secret entirely instead of clearing keys. Mutually exclusive with `--keep-client`. |
+
+The default behaviour clears `access_token`, `refresh_token`, `expires_at`, `client_id`, and `client_secret`. Logout is idempotent — calling it against a server with no Secret returns `logout: nothing to clear` and exits zero. A missing MCPServer exits non-zero with `MCPServer not found`.
+
+For operator-side configuration (the callback URL, RBAC, port-forward recipe), see [MCP OAuth Callback](/operations-guide/mcp-oauth-callback).
+
 ## Common Use Cases
 
 ### Development Workflow

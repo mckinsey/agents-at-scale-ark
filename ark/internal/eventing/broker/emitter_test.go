@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,6 +32,7 @@ func newTestEmitter(endpoints map[string]string) *BrokerEventEmitter {
 	return &BrokerEventEmitter{
 		httpClient: &http.Client{},
 		endpoints:  endpoints,
+		sem:        semaphore.NewWeighted(64),
 	}
 }
 
@@ -158,6 +160,26 @@ func TestEmitStructured_IgnoresNonQueryObjects(t *testing.T) {
 	e.EmitStructured(context.Background(), obj, corev1.EventTypeNormal, "SomeEvent", "msg", nil)
 
 	assert.False(t, called)
+}
+
+func TestEmitStructured_DropsEventWhenSemaphoreFull(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	e := &BrokerEventEmitter{
+		httpClient: &http.Client{},
+		endpoints:  map[string]string{"test-ns": srv.URL + "/events"},
+		sem:        semaphore.NewWeighted(0),
+	}
+	query := newTestQuery("test-ns")
+
+	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", nil)
+
+	assert.False(t, called, "event should be dropped when semaphore is full")
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

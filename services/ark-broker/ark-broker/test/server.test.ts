@@ -2,11 +2,15 @@ import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
+import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 
+const config = loadConfig({});
+const logger = createLogger({level: 'silent', pretty: false});
 const {app} = buildApp({
-  config: loadConfig({}),
-  logger: createLogger({level: 'silent', pretty: false}),
+  config,
+  logger,
   version: 'test',
+  messageStream: createMessageStream(config, logger),
 });
 
 describe('ARK Broker API', () => {
@@ -19,6 +23,13 @@ describe('ARK Broker API', () => {
   describe('Health Check', () => {
     test('GET /health should return OK', async () => {
       const response = await request(app).get('/health');
+
+      expect(response.status).toBe(200);
+      expect(response.text).toBe('OK');
+    });
+
+    test('GET /readyz should return OK when no db is configured', async () => {
+      const response = await request(app).get('/readyz');
 
       expect(response.status).toBe(200);
       expect(response.text).toBe('OK');

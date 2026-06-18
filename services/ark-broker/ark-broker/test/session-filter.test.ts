@@ -2,22 +2,26 @@ import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
+import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {OTELSpan} from '../src/brokers/trace-broker.js';
 import {EventData} from '../src/brokers/event-broker.js';
 
+const config = loadConfig({});
+const logger = createLogger({level: 'silent', pretty: false});
 const {
   app,
   brokers: {traces, events},
 } = buildApp({
-  config: loadConfig({}),
-  logger: createLogger({level: 'silent', pretty: false}),
+  config,
+  logger,
   version: 'test',
+  messageStream: createMessageStream(config, logger),
 });
 
 describe('Session ID Filtering', () => {
-  afterEach(() => {
-    traces.delete();
-    events.delete();
+  afterEach(async () => {
+    await traces.delete();
+    await events.delete();
   });
 
   describe('GET /traces with session_id filter', () => {
@@ -52,9 +56,9 @@ describe('Session ID Filtering', () => {
         ],
       };
 
-      traces.addSpan(span1);
-      traces.addSpan(span2);
-      traces.addSpan(span3);
+      await traces.addSpan(span1);
+      await traces.addSpan(span2);
+      await traces.addSpan(span3);
 
       const response = await request(app).get('/traces?session_id=session-123');
 
@@ -83,8 +87,8 @@ describe('Session ID Filtering', () => {
         ],
       };
 
-      traces.addSpan(span1);
-      traces.addSpan(span2);
+      await traces.addSpan(span1);
+      await traces.addSpan(span2);
 
       const response = await request(app).get('/traces');
 
@@ -102,7 +106,7 @@ describe('Session ID Filtering', () => {
         ],
       };
 
-      traces.addSpan(span1);
+      await traces.addSpan(span1);
 
       const response = await request(app).get(
         '/traces?session_id=session-nonexistent'
@@ -141,8 +145,8 @@ describe('Session ID Filtering', () => {
         },
       };
 
-      events.addEvent(event1);
-      events.addEvent(event2);
+      await events.addEvent(event1);
+      await events.addEvent(event2);
 
       const response = await request(app).get('/events?session_id=session-123');
 
@@ -178,8 +182,8 @@ describe('Session ID Filtering', () => {
         },
       };
 
-      events.addEvent(event1);
-      events.addEvent(event2);
+      await events.addEvent(event1);
+      await events.addEvent(event2);
 
       const response = await request(app).get('/events');
 
@@ -201,7 +205,7 @@ describe('Session ID Filtering', () => {
         },
       };
 
-      events.addEvent(event1);
+      await events.addEvent(event1);
 
       const response = await request(app).get(
         '/events?session_id=session-nonexistent'

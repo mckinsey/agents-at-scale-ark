@@ -1,87 +1,84 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {BrokerItemStream} from './stream/broker-item-stream.js';
-import type {Logger} from '@ark-broker/logging/logger.js';
+import type {Stream} from './stream/stream.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
-/** OpenAI-format message (role, content, etc.) */
 export type Message = unknown;
 
-/** Data payload for memory broker items */
 export interface MessageData {
   conversationId: string;
   queryId: string;
   message: Message;
 }
 
-/**
- * Broker for storing conversation messages.
- * Messages are grouped by conversation and query IDs.
- */
 export class MemoryBroker {
-  private stream: BrokerItemStream<MessageData>;
+  private readonly stream: Stream<MessageData>;
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<MessageData>(
-      logger,
-      'Memory',
-      path,
-      maxItems
-    );
+  constructor(stream: Stream<MessageData>) {
+    this.stream = stream;
   }
 
-  addMessage(
+  async addMessage(
     conversationId: string,
     queryId: string,
-    message: Message
-  ): BrokerItem<MessageData> {
-    return this.stream.append({conversationId, queryId, message});
+    message: Message,
+    ttlSeconds?: number
+  ): Promise<BrokerItem<MessageData>> {
+    return this.stream.append({conversationId, queryId, message}, ttlSeconds);
   }
 
-  addMessages(
+  async addMessages(
     conversationId: string,
     queryId: string,
-    messages: Message[]
-  ): BrokerItem<MessageData>[] {
-    return messages.map((message) =>
-      this.addMessage(conversationId, queryId, message)
-    );
+    messages: Message[],
+    ttlSeconds?: number
+  ): Promise<BrokerItem<MessageData>[]> {
+    const items: BrokerItem<MessageData>[] = [];
+    for (const message of messages) {
+      items.push(
+        await this.addMessage(conversationId, queryId, message, ttlSeconds)
+      );
+    }
+    return items;
   }
 
-  getByConversation(conversationId: string): BrokerItem<MessageData>[] {
+  async getByConversation(
+    conversationId: string
+  ): Promise<BrokerItem<MessageData>[]> {
     return this.stream.filter(
       (item) => item.data.conversationId === conversationId
     );
   }
 
-  getByQuery(queryId: string): BrokerItem<MessageData>[] {
+  async getByQuery(queryId: string): Promise<BrokerItem<MessageData>[]> {
     return this.stream.filter((item) => item.data.queryId === queryId);
   }
 
-  getConversationIds(): string[] {
-    const ids = new Set(
-      this.stream.all().map((item) => item.data.conversationId)
-    );
+  async getConversationIds(): Promise<string[]> {
+    const all = await this.stream.all();
+    const ids = new Set(all.map((item) => item.data.conversationId));
     return Array.from(ids);
   }
 
-  all(): BrokerItem<MessageData>[] {
+  all(): Promise<BrokerItem<MessageData>[]> {
     return this.stream.all();
   }
 
-  save(): void {
-    this.stream.save();
+  save(): Promise<void> {
+    return this.stream.save();
   }
 
-  delete(): void {
-    this.stream.delete();
+  async delete(): Promise<void> {
+    return this.stream.delete();
   }
 
-  deleteConversation(conversationId: string): void {
-    this.stream.delete((item) => item.data.conversationId === conversationId);
+  async deleteConversation(conversationId: string): Promise<void> {
+    return this.stream.delete(
+      (item) => item.data.conversationId === conversationId
+    );
   }
 
-  deleteQuery(conversationId: string, queryId: string): void {
-    this.stream.delete(
+  async deleteQuery(conversationId: string, queryId: string): Promise<void> {
+    return this.stream.delete(
       (item) =>
         item.data.conversationId === conversationId &&
         item.data.queryId === queryId
@@ -103,10 +100,10 @@ export class MemoryBroker {
     });
   }
 
-  paginate(
+  async paginate(
     params: PaginationParams,
     filters?: {conversationId?: string; queryId?: string}
-  ): PaginatedList<BrokerItem<MessageData>> {
+  ): Promise<PaginatedList<BrokerItem<MessageData>>> {
     const predicate = filters
       ? (item: BrokerItem<MessageData>): boolean => {
           if (
@@ -122,7 +119,7 @@ export class MemoryBroker {
     return this.stream.paginate(params, predicate);
   }
 
-  getCurrentSequence(): number {
+  async getCurrentSequence(): Promise<number> {
     return this.stream.getCurrentSequence();
   }
 }

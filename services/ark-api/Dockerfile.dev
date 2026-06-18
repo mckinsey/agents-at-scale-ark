@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 RUN adduser --system --uid 1001 --home /home/ark ark && \
   apt-get update && \
@@ -6,7 +6,7 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
   rm -rf /var/lib/apt/lists/* && \
   curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
 
 WORKDIR /app/ark-api
 COPY ark-api/pyproject.toml ark-api/uv.lock ./

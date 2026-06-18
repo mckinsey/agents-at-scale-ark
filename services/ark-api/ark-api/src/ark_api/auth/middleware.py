@@ -74,6 +74,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self.impersonation_settings = ImpersonationSettings.from_env()
         self._validate_auth_config()
 
+        auth_mode = os.getenv("AUTH_MODE", "").lower()
+        if auth_mode in [AuthMode.SSO, AuthMode.HYBRID]:
+            self._token_validator = TokenValidator()
+        else:
+            self._token_validator = None
+
     def _validate_auth_config(self):
         auth_mode = os.getenv("AUTH_MODE", "").lower()
         oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
@@ -156,8 +162,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if not token:
                     auth_error = "Missing token"
                 else:
-                    validator = TokenValidator()
-                    jwt_payload = validator.validate_token(token)
+                    jwt_payload = self._token_validator.validate_token(token)
                     auth_success = True
                     logger.debug("JWT authentication successful")
 

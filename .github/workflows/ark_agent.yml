@@ -132,7 +132,7 @@ jobs:
         if: steps.check.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       # Clone the upstream claude-code-action repo at the pinned version.
       # We run it directly instead of using `uses:` because external actions

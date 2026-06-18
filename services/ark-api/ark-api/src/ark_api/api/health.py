@@ -3,7 +3,7 @@ import logging
 
 from fastapi import APIRouter
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
+from ark_sdk.k8s import create_api_client
 
 from ..models.health import HealthResponse, ReadinessResponse
 
@@ -31,7 +31,7 @@ async def readiness_check() -> ReadinessResponse:
     Returns: ReadinessResponse: Readiness status with Kubernetes connectivity check
     """
     try:
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.VersionApi(api)
             await v1.get_code()
         return ReadinessResponse(status="ready", service="ark-api")

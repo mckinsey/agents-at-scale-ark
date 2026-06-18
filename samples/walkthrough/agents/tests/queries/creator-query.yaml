@@ -22,6 +22,6 @@ spec:
     - Establish clear governance policies
     
     Please create a comprehensive document and save it to the filesystem.
-  targets:
-    - type: agent
-      name: creator
+  target:
+    type: agent
+    name: creator

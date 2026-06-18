@@ -10,6 +10,7 @@ spec:
   reportFormat: JSON                     # Output test reports in JSON format
   reportName: /tmp/chainsaw-report/chainsaw-report.json  # Path where the test report will be saved
   forceTerminationGracePeriod: 5s
+  fastNamespaceDeletion: true            # Won't poll to see when namespace is deleted
   timeouts:
     apply: 60s                           # Increased timeout for 'apply' operations
     assert: 90s

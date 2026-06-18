@@ -1,0 +1,75 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: global-ttl
+  labels:
+    etcd-only: "true"
+spec:
+  description: ArkConfig queryTTL - fallback to 720h when absent, injected from config, and preserved when explicitly set
+  concurrent: false
+  steps:
+  - name: setup
+    try:
+    - script:
+        content: kubectl delete arkconfig default --ignore-not-found || true
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+
+  - name: assert-fallback-ttl
+    try:
+    - apply:
+        file: manifests/a02-query-fallback.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-fallback-ttl
+          spec:
+            ttl: 720h0m0s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-fallback-ttl
+
+  - name: assert-arkconfig-ttl
+    try:
+    - apply:
+        file: manifests/a03-arkconfig.yaml
+    - apply:
+        file: manifests/a04-query-inject.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-inject-ttl
+          spec:
+            ttl: 1h0m0s
+    - apply:
+        file: manifests/a05-query-override.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-override-ttl
+          spec:
+            ttl: 5m0s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-inject-ttl
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-override-ttl
+    cleanup:
+    - script:
+        content: kubectl delete arkconfig default --ignore-not-found || true

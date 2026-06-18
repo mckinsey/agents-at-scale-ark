@@ -1,14 +1,75 @@
-# Tools
+---
+title: Tools
+description: Tool CRD reference — the five tool types, fields, templating, and validation
+---
 
-Tools extend agent capabilities by providing access to external functions, APIs, and services.
+# Tool
 
-## Tool Resource Types
+A `Tool` is a callable an agent can invoke: an HTTP endpoint, a function on an MCP server, another agent or team, or a built-in. For a task-oriented walkthrough see [User Guide → Tools and MCP servers](/user-guide/tools); this page is the field-by-field reference.
 
-### HTTP Tools
+## Spec
 
-HTTP API calls with URL and body template substitution.
+Every `Tool` has a `type`, an optional `description` and `inputSchema`, and exactly one type-specific block matching the `type`. A complete example (HTTP):
 
-#### GET Request Example
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: example-tool
+spec:
+  # Required: one of http | mcp | agent | team | builtin
+  type: http
+
+  # Description the LLM reads to decide when to call the tool
+  description: "What this tool does"
+
+  # JSON Schema describing the arguments the LLM must supply
+  inputSchema:
+    type: object
+    properties:
+      city:
+        type: string
+    required: ["city"]
+
+  # Optional MCP-style hints
+  annotations:
+    readOnlyHint: true
+    title: "Get coordinates"
+
+  # The type-specific block (http here). For other types use mcp / agent /
+  # team / builtin instead — see the sections below.
+  http:
+    url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
+    method: GET
+    timeout: 30s
+```
+
+The type-specific block must match `type`: `http` → `spec.http`, `mcp` → `spec.mcp`, `agent` → `spec.agent`, `team` → `spec.team`, `builtin` → `spec.builtin`. Each is documented below.
+
+## Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.type` | enum (`http`, `mcp`, `agent`, `team`, `builtin`) | yes | Which kind of tool this is. Drives which type-specific block is required. |
+| `spec.description` | string | no | Shown to the LLM as the tool description. Drives whether the model calls it. |
+| `spec.inputSchema` | JSON Schema | no | Schema for the arguments the LLM supplies. Validated as JSON Schema by the admission webhook. |
+| `spec.annotations` | object | no | MCP-style hints: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`. |
+| `spec.http` | object | for `http` | HTTP request config (see [HTTP tools](#http-tools)). |
+| `spec.mcp` | object | for `mcp` | Reference to a function on an MCP server (`mcpServerRef` + `toolName`). |
+| `spec.agent` | object | for `agent` | `{ name }` of the Agent to wrap. |
+| `spec.team` | object | for `team` | `{ name }` of the Team to wrap. |
+| `spec.builtin` | object | for `builtin` | `{ name }` — must be `terminate` or `noop`. |
+
+`status.state` is `Ready` with message `Tool configuration is valid` when the tool is usable.
+
+## HTTP tools
+
+HTTP API calls with two distinct templating syntaxes:
+
+- **URL parameters** — single braces `{name}`, substituted from the tool-call arguments and URL-encoded.
+- **Body templates** — Go template syntax: `{{.input.fieldName}}` for arguments, `{{.paramName}}` for `bodyParameters`.
+
+### GET
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -17,6 +78,7 @@ metadata:
   name: get-coordinates
 spec:
   type: http
+  description: "Returns coordinates for the given city name"
   inputSchema:
     type: object
     properties:
@@ -24,14 +86,13 @@ spec:
         type: string
         description: City name to get coordinates for
     required: ["city"]
-  description: "Returns coordinates for the given city name"
   http:
     url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
     method: GET
     timeout: 30s
 ```
 
-#### POST Request with Body Template Example
+### POST with body template
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -40,24 +101,20 @@ metadata:
   name: create-user
 spec:
   type: http
+  description: "Creates a new user"
   inputSchema:
     type: object
     properties:
-      name:
-        type: string
-        description: User name
-      email:
-        type: string
-        description: User email
+      name: { type: string }
+      email: { type: string }
     required: ["name", "email"]
-  description: "Creates a new user"
   http:
     url: https://api.example.com/users
     method: POST
     headers:
-      - name: "Content-Type"
+      - name: Content-Type
         value:
-          value: "application/json"
+          value: application/json
     body: |
       {
         "name": "{{.input.name}}",
@@ -76,65 +133,82 @@ spec:
     timeout: 30s
 ```
 
-## Template Syntax
+### `http` fields
 
-HTTP tools support golang template syntax for dynamic content generation:
+| Field | Required | Description |
+| --- | --- | --- |
+| `url` | yes | Endpoint. Must match `^https?://.*`. URL `{param}` placeholders are filled from the tool-call arguments. |
+| `method` | no | `GET` (default), `POST`, `PUT`, `DELETE`, `PATCH` (also `HEAD`/`OPTIONS`). |
+| `headers[]` | no | List of `{ name, value }`. Each `value` is either an inline `value`, or a `valueFrom` with a `configMapKeyRef` or `secretKeyRef`. |
+| `timeout` | no | Per-request timeout, e.g. `30s`. |
+| `body` | no | Go-template body for POST/PUT/PATCH. `{{.input.x}}` = arguments; `{{.name}}` = `bodyParameters`. |
+| `bodyParameters[]` | no | Values for the body template: inline `value`, or `valueFrom` (`configMapKeyRef` / `secretKeyRef`). |
 
-### Template Data Structure
+## MCP tools
 
-Templates have access to structured data:
-
-- **`.input.fieldName`** - User input from the inputSchema
-- **`.parameterName`** - Values from bodyParameters
-
-### Parameter Sources
-
-```yaml
-bodyParameters:
-  # Direct values
-  - name: api_version
-    value: "v1.0"
-
-  # ConfigMap references
-  - name: endpoint
-    valueFrom:
-      configMapKeyRef:
-        name: api-config
-        key: base-url
-
-  # Secret references
-  - name: token
-    valueFrom:
-      secretKeyRef:
-        name: api-secrets
-        key: auth-token
-```
-
-### Builtin Tools
-
-System-provided tools with predefined functionality.
-
-#### Noop Tool Example
+Tools provided by a Model Context Protocol server. **These are normally auto-created** by the MCP server controller — when you apply an `MCPServer`, Ark discovers the functions it advertises and creates one `Tool` per function, named `<mcp-server>-<tool>` and labelled `mcp/server: <server>`. You rarely write these by hand. The generated shape:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
-  name: noop
+  name: filesys-server-read-file
+  labels:
+    mcp/server: filesys-server
 spec:
-  type: builtin
-  description: "A no-operation tool that does nothing and returns success"
+  type: mcp
+  description: "Read contents of a file"
   inputSchema:
     type: object
     properties:
-      message:
-        type: string
-        description: Optional message to include in the response
-  builtin:
-    name: noop
+      path: { type: string }
+    required: ["path"]
+  mcp:
+    mcpServerRef:
+      name: filesys-server
+      namespace: default
+    toolName: read_file
 ```
 
-#### Terminate Tool Example
+## Agent and team tools
+
+Wrap an Agent or Team so another agent can call it as a tool. Invoked with a single `input` argument.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-research-agent
+spec:
+  type: agent
+  description: "Delegate a research question to the research agent"
+  inputSchema:
+    type: object
+    properties:
+      input: { type: string }
+    required: ["input"]
+  agent:
+    name: research-agent
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: research-team-tool
+spec:
+  type: team
+  description: "Hand a topic to the research team"
+  inputSchema:
+    type: object
+    properties:
+      input: { type: string }
+    required: ["input"]
+  team:
+    name: research-team
+```
+
+## Built-in tools
+
+System functions implemented inside Ark. The `ark-tenant` chart seeds them as `Tool` resources, so on a standard install they already exist and you reference them by name. The set of built-ins is fixed in Ark's code — `terminate` and `noop`. The seeded shape:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -149,150 +223,67 @@ spec:
     properties:
       response:
         type: string
-        description: The response to send before terminating the conversation
+        description: The response to send before terminating
     required: ["response"]
   builtin:
     name: terminate
 ```
 
-Available builtin tools:
-- **noop** - No-operation tool for testing and debugging
-- **terminate** - Ends conversation with final response
+| Built-in | Behaviour |
+| --- | --- |
+| `terminate` | Ends the conversation / team turn with a final response. |
+| `noop` | Does nothing and returns success — useful for testing and debugging. |
 
-### MCP Tools
+## Referencing tools from an agent
 
-Tools provided by Model Context Protocol servers.
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Tool
-metadata:
-  name: mcp-filesystem-read-file
-spec:
-  type: mcp
-  inputSchema:
-    type: object
-    properties:
-      path:
-        type: string
-        description: File path to read
-    required: ["path"]
-  description: "Read contents of a file"
-  mcp:
-    mcpServerRef:
-      name: filesys-server
-      namespace: default
-    toolName: read_file
-```
-
-### Agent as Tools
-
-Agents can be declared and exposed as tools, which means they can be called by other agents in the system.This lets one agent delegate a task to another specialized agent instead of handling everything itself.Also, this lets an agent behave like an API, handling specific, self-contained tasks without being burdened by irrelevant context, which makes development simpler.
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Tool
-metadata:
-  name: call-research-agent
-spec:
-  type: agent
-  inputSchema:
-    type: object
-    properties:
-      input:
-        type: string
-        description: "The research query or topic that the agent should investigate and provide insights on."
-    required: ["input"]
-  agent:
-    name: research-agent
-```
-
-### Team as Tools
-
-Teams can be declared and exposed as tools, which means they can be called by agents in the system. This lets an agent delegate complex multi-agent workflows to a team, enabling sophisticated orchestration patterns where agents can leverage entire teams as reusable tools.
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Tool
-metadata:
-  name: research-team-tool
-spec:
-  type: team
-  description: Multi-agent team that researches a topic and provides analysis
-  inputSchema:
-    type: object
-    properties:
-      input:
-        type: string
-        description: "The topic to research"
-    required: ["input"]
-  team:
-    name: research-team
-```
-
-## Agent Tool Reference Types
-
-Agents reference tools using the `tools` field in their spec. Tools are referenced by name and type, where the type matches the Tool resource type.
-
-### Tool References
-
-Reference Tool resources using the same type as defined in the Tool resource:
+Agents reference tools in `spec.tools`, each with a `type` matching the Tool's type and the Tool's `name`:
 
 ```yaml
 tools:
   - type: http
-    name: get-coordinates            # HTTP tool
+    name: get-coordinates
   - type: mcp
-    name: mcp-filesystem-read-file   # MCP tool
-  - type: agent
-    name: call-research-agent        # Agent tool
-  - type: team
-    name: research-team-tool         # Team tool
-  - type: builtin
-    name: noop                       # Builtin tool
-```
-
-**Note**: `type: custom` is deprecated. Use the explicit tool type instead.
-
-### Built-in Tools
-
-Reference system-provided builtin tools by name:
-
-```yaml
-tools:
-  - type: builtin
-    name: terminate  # End conversation with final response
-  - type: builtin
-    name: noop       # No-operation (testing/debugging)
-```
-
-Note: Built-in tools must be defined as Tool resources with `type: builtin` before they can be referenced by agents.
-### Agent as Tools
-
-Agent used as tools:
-
-```yaml
-tools:
+    name: filesys-server-read-file
   - type: agent
     name: call-research-agent
+  - type: team
+    name: research-team-tool
+  - type: builtin
+    name: terminate
 ```
+
+> `type: custom` is deprecated. Use the explicit tool type instead — the mutating webhook stamps a migration warning on agents that still use it.
 
 ### Partial tools
 
-The partial tool calling feature in allows to pre-configure certain parameters of a tool at the agent configuration level, while leaving other parameters to be filled by the Agent at runtime. This enables parameter injection, template resolution, and simplified tool interfaces for the Agents.
+`partial` pre-configures some of a tool's parameters at the agent level and hides them from the LLM, exposing only the rest. `partial.name` is the real Tool CRD; the outer `name`/`description` are what the agent sees.
 
 ```yaml
 tools:
   - type: http
-    name: weather-forecast  # Name exposed to Agent
-    description: "Get latest weather forecast"  # Description exposed to Agent
+    name: weather-forecast            # name exposed to the agent
+    description: "Get the latest weather forecast"
     partial:
-      name: weather-api  # Actual Tool CRD name (type: http)
+      name: weather-api               # the real Tool CRD (type: http)
       parameters:
         - name: city
-          value: "{{ .Query.city }}"  # From query parameters
+          value: "{{ .Query.city }}"  # sourced from a query parameter
         - name: units
-          value: "metric"  # Static value
-        - name: language
-          value: nil  # Explicitly exclude parameter to be provided by Agent
+          value: "metric"             # pinned static value
 ```
+
+## Validation
+
+Enforced by `ark/internal/validation/tool.go`:
+
+- `inputSchema`, if set, must be valid JSON Schema.
+- `type: http` requires `http.url`; the method (if set) must be a valid HTTP verb.
+- `type: mcp` requires `mcp.mcpServerRef` and `mcp.toolName`.
+- `type: agent` requires `agent.name`; `type: team` requires `team.name`.
+- `type: builtin` requires the resource name to be a supported built-in (`terminate`, `noop`).
+
+## Related
+
+- [User Guide → Tools and MCP servers](/user-guide/tools) — task-oriented walkthrough.
+- [Reference → MCPServer](/reference/resources/mcpserver) — registering MCP servers.
+- [Agents](/reference/resources/agent) — `spec.tools` and partial-tool injection.

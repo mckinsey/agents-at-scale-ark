@@ -1,26 +1,22 @@
 import {EventEmitter} from 'events';
 import {BrokerItem} from './stream/broker-item.js';
-import {BrokerItemStream} from './stream/broker-item-stream.js';
+import {InMemoryStream} from './stream/in-memory-stream.js';
+import type {Stream} from './stream/stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
-/** Data payload for OpenAI chat completion streaming chunks */
 export interface CompletionChunkData {
   queryId: string;
   chunk: unknown;
   complete?: boolean;
 }
 
-/**
- * Broker for storing OpenAI chat completion streaming chunks.
- * Chunks are grouped by query ID and track completion status.
- */
 export class CompletionChunkBroker {
-  private stream: BrokerItemStream<CompletionChunkData>;
+  private readonly stream: Stream<CompletionChunkData>;
   public eventEmitter = new EventEmitter();
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<CompletionChunkData>(
+    this.stream = new InMemoryStream<CompletionChunkData>(
       logger,
       'CompletionChunk',
       path,
@@ -28,49 +24,60 @@ export class CompletionChunkBroker {
     );
   }
 
-  addChunk(queryId: string, chunk: unknown): BrokerItem<CompletionChunkData> {
-    const item = this.stream.append({queryId, chunk});
+  async addChunk(
+    queryId: string,
+    chunk: unknown
+  ): Promise<BrokerItem<CompletionChunkData>> {
+    const item = await this.stream.append({queryId, chunk});
     this.eventEmitter.emit(`chunk:${queryId}`, chunk);
     return item;
   }
 
-  completeQuery(queryId: string): BrokerItem<CompletionChunkData> {
-    const item = this.stream.append({queryId, chunk: '[DONE]', complete: true});
+  async completeQuery(
+    queryId: string
+  ): Promise<BrokerItem<CompletionChunkData>> {
+    const item = await this.stream.append({
+      queryId,
+      chunk: '[DONE]',
+      complete: true,
+    });
     this.eventEmitter.emit(`complete:${queryId}`);
-    this.save();
+    await this.save();
     return item;
   }
 
-  getByQuery(queryId: string): BrokerItem<CompletionChunkData>[] {
+  async getByQuery(
+    queryId: string
+  ): Promise<BrokerItem<CompletionChunkData>[]> {
     return this.stream.filter((item) => item.data.queryId === queryId);
   }
 
-  getChunksByQuery(queryId: string): unknown[] {
-    return this.getByQuery(queryId).map((item) => item.data.chunk);
+  async getChunksByQuery(queryId: string): Promise<unknown[]> {
+    return (await this.getByQuery(queryId)).map((item) => item.data.chunk);
   }
 
-  isComplete(queryId: string): boolean {
-    return this.stream
-      .all()
-      .some(
-        (item) => item.data.queryId === queryId && item.data.complete === true
-      );
+  async isComplete(queryId: string): Promise<boolean> {
+    return (await this.stream.all()).some(
+      (item) => item.data.queryId === queryId && item.data.complete === true
+    );
   }
 
-  hasQuery(queryId: string): boolean {
-    return this.stream.all().some((item) => item.data.queryId === queryId);
+  async hasQuery(queryId: string): Promise<boolean> {
+    return (await this.stream.all()).some(
+      (item) => item.data.queryId === queryId
+    );
   }
 
-  all(): BrokerItem<CompletionChunkData>[] {
+  all(): Promise<BrokerItem<CompletionChunkData>[]> {
     return this.stream.all();
   }
 
-  save(): void {
-    this.stream.save();
+  save(): Promise<void> {
+    return this.stream.save();
   }
 
-  delete(): void {
-    this.stream.delete();
+  async delete(): Promise<void> {
+    return this.stream.delete();
   }
 
   subscribe(
@@ -90,10 +97,10 @@ export class CompletionChunkBroker {
     });
   }
 
-  paginate(
+  async paginate(
     params: PaginationParams,
     queryId?: string
-  ): PaginatedList<BrokerItem<CompletionChunkData>> {
+  ): Promise<PaginatedList<BrokerItem<CompletionChunkData>>> {
     const predicate = queryId
       ? (item: BrokerItem<CompletionChunkData>): boolean =>
           item.data.queryId === queryId
@@ -101,7 +108,7 @@ export class CompletionChunkBroker {
     return this.stream.paginate(params, predicate);
   }
 
-  getCurrentSequence(): number {
+  async getCurrentSequence(): Promise<number> {
     return this.stream.getCurrentSequence();
   }
 }

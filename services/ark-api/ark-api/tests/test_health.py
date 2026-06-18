@@ -28,7 +28,7 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(data["service"], "ark-api")
     
     @patch('ark_api.api.health.client.VersionApi')
-    @patch('ark_api.api.health.client.ApiClient')
+    @patch('ark_api.api.health.create_api_client')
     def test_readiness_check_success(self, mock_api_client, mock_version_api):
         """Test successful readiness check."""
         # Setup async context manager mock
@@ -51,7 +51,7 @@ class TestHealthEndpoints(unittest.TestCase):
         mock_version_instance.get_code.assert_called_once()
     
     @patch('ark_api.api.health.client.VersionApi')
-    @patch('ark_api.api.health.client.ApiClient')
+    @patch('ark_api.api.health.create_api_client')
     def test_readiness_check_kubernetes_error(self, mock_api_client, mock_version_api):
         """Test readiness check when Kubernetes is unavailable."""
         # Setup async context manager mock
@@ -76,7 +76,7 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(data["error"], "An internal error occurred during readiness check.")
     
     @patch('ark_api.api.health.client.VersionApi')
-    @patch('ark_api.api.health.client.ApiClient')
+    @patch('ark_api.api.health.create_api_client')
     def test_readiness_check_connection_error(self, mock_api_client, mock_version_api):
         """Test readiness check when connection fails."""
         # Setup async context manager mock

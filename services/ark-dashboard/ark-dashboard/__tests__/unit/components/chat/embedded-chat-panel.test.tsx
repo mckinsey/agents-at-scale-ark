@@ -40,21 +40,23 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-global.EventSource = vi.fn(() => ({
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  close: vi.fn(),
-  readyState: 0,
-  url: '',
-  withCredentials: false,
-  CONNECTING: 0,
-  OPEN: 1,
-  CLOSED: 2,
-  onerror: null,
-  onmessage: null,
-  onopen: null,
-  dispatchEvent: vi.fn(),
-})) as unknown as typeof EventSource;
+global.EventSource = vi.fn(function () {
+  return {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    readyState: 0,
+    url: '',
+    withCredentials: false,
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSED: 2,
+    onerror: null,
+    onmessage: null,
+    onopen: null,
+    dispatchEvent: vi.fn(),
+  };
+}) as unknown as typeof EventSource;
 
 global.fetch = vi.fn(() =>
   Promise.resolve({
