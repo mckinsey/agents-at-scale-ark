@@ -29,7 +29,7 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 - Argo workflows have an **Ark-native, reusable template** to run a `Query` with structured outputs and Argo-integrated error handling
 
 **Non-Goals (v1):**
-- Output types other than `WorkflowTemplate` (no `CronWorkflow`, no one-shot `Workflow`) from the authoring flow
+- Output types other than `WorkflowTemplate` (no `CronWorkflow` for scheduled runs, no one-shot `Workflow` for run-now) from the authoring flow
 - Lint / dry-run loop before Save (revisit if error rate hurts)
 - Inline creation of missing Ark agents/models/teams as part of the same flow
 - Canvas direct-manipulation (click-node-to-edit on the DAG); manual editing is raw-YAML only

@@ -40,7 +40,7 @@ There is also a gap on the workflow-authoring side itself: there is **no Ark-nat
     - **Resolving inexact names:** the listing is also used to resolve the exact target name when the user does not give one (e.g. "the weather agent" → `agent/weather`). If the author is **100% sure** of the match, it uses the resolved name. If it is **not certain** the guess is correct, it does **not** guess — it asks the user to confirm which target they meant from the listed candidates
   - Refuses to invent resources that aren't in the returned list (fail-and-tell-user) — replying with the available alternatives and asking which to use
   - Teaches embedding Ark queries inside Argo steps by **referencing the shipped `ark-query` template** (below) via `templateRef`, with the inline `kubectl apply` recipe retained as a fallback few-shot example
-- Output is restricted to `kind: WorkflowTemplate` for v1
+- Output is restricted to `kind: WorkflowTemplate` for v1. The natural follow-on output kinds are `CronWorkflow` (scheduled runs) and a one-shot `Workflow` (run-now, no reusable template) — both deferred to later versions (see Out of scope)
 
 ### Ark-native query template
 
