@@ -188,7 +188,7 @@ export function ToolsSection() {
           <Button
             onClick={() => setToolEditorOpen(true)}
             disabled={readOnlyMode}>
-            Add Tool
+            Add tool
           </Button>
         )}
       </div>
@@ -212,7 +212,7 @@ export function ToolsSection() {
               <Button
                 onClick={() => setToolEditorOpen(true)}
                 disabled={readOnlyMode}>
-                Add Tool
+                Add tool
               </Button>
               <a href={LEARN_MORE_URL} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline">Learn more</Button>
