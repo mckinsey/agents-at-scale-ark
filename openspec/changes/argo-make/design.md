@@ -125,6 +125,14 @@ The author Agent's prompt contains a hard rule:
 
 > Before referencing any Ark agent, model, or team, call `resources_list` for that kind. If the user names a resource that is not in the returned list, do not generate YAML that references it. Reply with the available alternatives and ask which to use.
 
+This applies most directly to **query targets**: when the user asks for a template that queries a given target (e.g. "run this through the `weather` agent"), the author must list that kind, confirm the named target is present and available (not in a failed/unavailable status), and only then emit a query step (via the `ark-query` `templateRef`) that addresses it. Verifying the target up front is the whole point of grounding the author through the `kubernetes-mcp-server` — the generated workflow submits real `Query` resources, so a target that does not exist turns into a runtime failure the user only sees after Save and Run.
+
+The verification rule is scoped to keep it cheap and non-repetitive:
+
+- **Once per target.** A target is verified the **first time it is mentioned in the conversation**. After it is confirmed, the author does not call `resources_list` for it again on later turns — the result holds for the rest of the conversation.
+- **Loaded templates are not re-verified.** When the author opens an existing `WorkflowTemplate` to edit (Decision 5), it does **not** verify the targets already referenced in that YAML. It only verifies a target the first time the **user** mentions it in the conversation, so editing an existing workflow does not fan out a `resources_list` call per pre-existing target.
+- **Name resolution.** The listing also resolves the exact target name when the user gives an inexact one ("the weather agent" → `agent/weather`). If the author is **100% sure** of the match it uses the resolved name; if it is **not certain**, it does **not** guess — it asks the user to confirm which of the listed candidates they meant. This makes the listing serve double duty: existence check and name disambiguation.
+
 No webhook, no validator, no policy engine. The enforcement mechanism is the LLM following its instructions, which is consistent with how Ark agents work generally.
 
 **Risk:** A poorly-tuned model could violate the rule. **Mitigation:** Few-shot examples in the prompt demonstrate the refusal pattern; a chainsaw test exercises the negative case with mock-llm.
