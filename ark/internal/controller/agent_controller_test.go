@@ -333,6 +333,88 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Message).To(ContainSubstring("ExecutionEngine 'non-existent-engine' not found"))
 		})
 
+		It("should mark an A2A agent available without an ExecutionEngine resource", func() {
+			const a2aServerName = "test-a2a-server-ready"
+			const a2aEngineAgentName = "test-a2a-engine-agent"
+			a2aEngineAgentNamespacedName := types.NamespacedName{
+				Name:      a2aEngineAgentName,
+				Namespace: "default",
+			}
+
+			By("creating a Ready A2AServer that owns the agent")
+			a2aServer := &arkv1prealpha1.A2AServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aServerName,
+					Namespace: "default",
+				},
+				Spec: arkv1prealpha1.A2AServerSpec{
+					Address: arkv1prealpha1.ValueSource{
+						Value: "http://test-a2a-server:80",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aServer)).To(Succeed())
+			a2aServer.Status.Conditions = []metav1.Condition{{
+				Type:               "Ready",
+				Status:             metav1.ConditionTrue,
+				Reason:             "Ready",
+				Message:            "A2AServer is ready",
+				LastTransitionTime: metav1.Now(),
+			}}
+			Expect(k8sClient.Status().Update(ctx, a2aServer)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, a2aServer)).To(Succeed())
+			}()
+
+			By("creating an A2A agent (executionEngine 'a2a') with no ExecutionEngine resource present")
+			a2aEngineAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aEngineAgentName,
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "ark.mckinsey.com/v1prealpha1",
+						Kind:       "A2AServer",
+						Name:       a2aServerName,
+						UID:        a2aServer.UID,
+					}},
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Prompt: "test prompt",
+					ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{
+						Name: "a2a",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aEngineAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, a2aEngineAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aEngineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aEngineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the agent is Available even though no 'a2a' ExecutionEngine resource exists")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, a2aEngineAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		})
+
 		It("should mark agent unavailable when execution engine is not ready", func() {
 			const notReadyEngineAgentName = "test-not-ready-engine-agent"
 			const notReadyEngineName = "not-ready-engine"
