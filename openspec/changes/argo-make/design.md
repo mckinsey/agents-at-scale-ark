@@ -5,7 +5,7 @@ Five existing pieces of Ark infrastructure shape this design — without them th
 1. **`WorkflowDagViewer` parses YAML locally.** `services/ark-dashboard/ark-dashboard/components/workflow-dag-viewer.tsx` imports `js-yaml` and uses `@xyflow/react` + `dagre` to render any `WorkflowTemplate` manifest as a DAG. It does not need the workflow to be submitted to Argo first. The same component will happily render whatever YAML it is handed — the block the agent just finished emitting, or YAML the user is hand-editing — with no Argo round-trip.
 2. **The chat + session/conversation stack already exists.** `chatService` (`lib/services/chat.ts`), `conversationsService` (`lib/services/conversations.ts`), and the broker sessions were shipped with the recent sessions/conversations view. The author UI is a new consumer of that stack, not a new stack.
 3. **The `kubernetes-mcp-server` provides generic resource access.** A separate change deploys the [`kubernetes-mcp-server`](https://github.com/containers/kubernetes-mcp-server) and registers it as an Ark `MCPServer`, so the Agent CRD's `tools` block can reference it. Its generic `resources_list` (and `resources_get`) tools list any resource by `apiVersion`/`kind` — so `Agent`, `Model`, `Team`, and `WorkflowTemplate` are all reachable with no Ark-specific tool code. It is deployed read-only, which is all this feature needs: the author Agent only reads the catalogue; every write goes through ark-api.
-4. **`WorkflowTemplate` read/write already goes through the resources passthrough.** `workflowTemplatesService` (`lib/services/workflow-templates.ts`) exposes `list`, `get`, `getYaml(name)`, and `run`. `getYaml` loads a template for the edit flow; `run()` already POSTs a `Workflow` to `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow`, proving the passthrough accepts POST. Save adds a `WorkflowTemplate` POST through the same endpoint — no new backend.
+4. **`WorkflowTemplate` read/write already goes through the resources passthrough.** `workflowTemplatesService` (`lib/services/workflow-templates.ts`) exposes `list`, `get`, `getYaml(name)`, and `run`. `getYaml` loads a template for the edit flow; `run()` already POSTs a `Workflow` to `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow`, proving the passthrough accepts POST. Save creates a new template with that same POST and overwrites an existing one through a new generic resource-**update** (PUT) endpoint added to the passthrough (Decision 9).
 5. **The `Query` CR is the integration point between Argo and Ark.** `ark/api/v1alpha1/query_types.go` defines the contract: a query completes on `status.conditions[Completed]`, exposes `status.phase` (`done`/`error`/…) and a **single** `status.response` (since v0.1.50 the plural `responses[]` was collapsed). For a team target the completions executor returns the final assistant message, which the controller stores verbatim as `response.content` (`query_controller.go` sets `Response{Content: responseText}` from the executor's A2A reply). The per-member turns are persisted elsewhere keyed by `conversationId` — in memory (`executors/completions/memory.go`, `AddMessages`) and in the broker (`services/ark-broker/.../brokers/memory-broker.ts`, `getByConversation`) — **not** in the Query CR.
 
 Three existing in-repo samples encode the canonical pattern for invoking an Ark resource from inside an Argo step (`kubectl apply` a `Query`, `kubectl wait --for=condition=Completed`, extract `status.response.content`, exit non-zero on `error`):
@@ -150,9 +150,9 @@ The route opens in the context of an Ark `Session`. The chat panel shows a "+ Ne
 
 ### 9. Save semantics: new prompts, edit overwrites
 
-Save POSTs `draftYaml` to `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate` via a new method on `workflowTemplatesService`, then navigates to `/workflow-templates/[id]`.
+Save sends `draftYaml` to the resources passthrough via a new method on `workflowTemplatesService` — **POST** `.../WorkflowTemplate` to create, or **PUT** `.../WorkflowTemplate/{name}` to overwrite in place — then navigates to `/workflow-templates/[id]`. The PUT handler is a new generic resource-update endpoint on the passthrough (`replace` semantics, both the core and grouped path variants, mirroring the existing create/delete handlers).
 
-- **New-template Save** (`/new` route): on a name collision (HTTP 409 from the create passthrough), show a dialog — *"A template named X already exists. Overwrite?"* — Confirm → overwrite via **DELETE + POST** (the resources passthrough has no PUT/PATCH, only GET / POST / DELETE); Cancel → return to the chat, no destructive action.
+- **New-template Save** (`/new` route): the dashboard detects a name collision **client-side** via the existing `workflowTemplatesService.list` (it already lists templates — no new API), and if the name is taken shows a dialog — *"A template named X already exists. Overwrite?"* — Confirm → overwrite via the **update endpoint** (PUT, in-place replace); Cancel → return to the chat, no destructive action.
 - **Edit-mode Save** (`/edit` route): overwrite the same name silently — that is the whole intent of the edit flow — with "Save as new name" offered as a secondary action for users who want to fork.
 
 No template versioning history is maintained — Argo does not natively model this, and inventing it would expand scope significantly. The conversation history in the session preserves the prompt-and-YAML trail; users who want history save under a new name.
@@ -209,9 +209,9 @@ A non-zero exit marks the Argo node Failed, so `retryStrategy`, `continueOn`, an
    /workflow-templates/[id]/edit ── getYaml ──────▶ │   ark-api        │
                                     (seed draft)     │  resources       │
    ┌─────────────────────────┐                      │  passthrough     │
-   │  Chat (left pane)       │────────── Save ─────▶ │ POST WorkflowTpl │
+   │  Chat (left pane)       │────────── Save ─────▶ │ POST/PUT Workflow│
    │  - useSession()         │                       └─────────┬────────┘
-   │  - useConversation()    │                                 │ on 201
+   │  - useConversation()    │                                 │ on 2xx
    │  - chatService.submit   │  on submit:                     ▼
    │    (streaming)          │  if draft != lastAgentYaml,   push('/workflow-
    │                          │  prefix draft into input      templates/[id]')
@@ -270,7 +270,7 @@ POST /api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent?namespace=<ns>   →
 The single source of truth for the default prompt is one manifest file bundled in the **ark-api** image (spec + system prompt). The dashboard can't hold it without duplicating it, so the only genuinely new server surface is a **read-only** endpoint that serves it. The **"Install author agent"** button (Decision 14) then: GETs the manifest, stamps the configured name (Decision 13), and POSTs it through the resources passthrough into the currently-selected namespace. On success the route re-runs the existence check, the banner clears, and the chat composer enables — no page reload, no CLI.
 
 - **Idempotent:** the passthrough's create returns HTTP 409 if the Agent already exists (a second tab raced the install); the dashboard treats 409 as success. The banner only appears when the agent is absent (Decision 14), so the button's job is create-if-missing.
-- **No PUT/PATCH on the passthrough.** It exposes GET / POST / DELETE only, so there is no in-place update. "Upgrade an existing agent to the latest default prompt" is a parked follow-up and, when built, is a DELETE + re-create — not a PUT.
+- **Update via the new PUT endpoint.** The passthrough now exposes GET / POST / DELETE **and** a generic update (PUT) endpoint (Decision 9). "Upgrade an existing agent to the latest default prompt" remains a parked follow-up, but when built it is a straightforward PUT (in-place replace) rather than a DELETE + re-create.
 - The dashboard needs no bespoke CRD-authoring logic — it composes one manifest GET with the create passthrough it already uses for Save.
 
 **Rationale:**
@@ -282,7 +282,7 @@ The single source of truth for the default prompt is one manifest file bundled i
 ### 16. Test strategy
 
 - **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); and the missing-agent gating (agent present → composer enabled; `getByName` returns `null` → banner shown, composer disabled, editor + Save still enabled).
-- **Unit (Python):** the author-agent manifest endpoint — returns the bundled manifest with the configured name stamped in.
+- **Unit (Python):** the author-agent manifest endpoint — returns the bundled manifest with the configured name stamped in; the generic resource update (PUT) endpoint — replaces a named resource in place.
 - **Helm (lint/template):** the `kubernetes-mcp-server` umbrella chart renders with `config.read_only: true`, the namespace-scoped read-only RBAC, and the `HTTPRoute` enabled / Ingress disabled — matching the dev configuration.
 - **Chainsaw (e2e):**
   - **Authoring happy path:** mock-llm seeded with a canned `WorkflowTemplate` response → assert the template is created and the user lands on the detail page.
