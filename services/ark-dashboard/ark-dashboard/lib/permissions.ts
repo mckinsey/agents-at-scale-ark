@@ -29,7 +29,9 @@ export function canVerb(
     return false;
   }
   const rules = permissions.rules ?? {};
-  const verbs = rules[resource] ?? rules[WILDCARD] ?? [];
+  // RBAC rules are additive: a resource-specific rule and a "*" resource rule
+  // both apply, so union their verbs rather than letting one shadow the other.
+  const verbs = [...(rules[resource] ?? []), ...(rules[WILDCARD] ?? [])];
   return verbs.includes(verb) || verbs.includes(WILDCARD);
 }
 

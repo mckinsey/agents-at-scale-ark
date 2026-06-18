@@ -49,6 +49,14 @@ describe('canVerb', () => {
   it('matches a wildcard resource', () => {
     expect(canVerb(ok({ '*': ['list'] }), 'models', 'list')).toBe(true);
   });
+
+  it('unions a specific rule with a wildcard rule (additive RBAC)', () => {
+    // agents has only "create"; "list" is granted via the "*" rule. The two
+    // must combine — a specific rule must not shadow the wildcard.
+    const perms = ok({ agents: ['create'], '*': ['list'] });
+    expect(canVerb(perms, 'agents', 'list')).toBe(true);
+    expect(canVerb(perms, 'agents', 'create')).toBe(true);
+  });
 });
 
 describe('missingEssential / hasEssentialAccess', () => {
@@ -70,6 +78,14 @@ describe('missingEssential / hasEssentialAccess', () => {
 
   it('passes for a cluster-admin wildcard', () => {
     expect(hasEssentialAccess(ok({ '*': ['*'] }))).toBe(true);
+  });
+
+  it('passes when essentials come from a wildcard rule alongside specifics', () => {
+    // Specific rules grant non-essential verbs; "*" grants list everywhere.
+    // The user must not be walled out as missing essential access.
+    const perms = ok({ agents: ['create'], '*': ['list'] });
+    expect(missingEssential(perms)).toEqual([]);
+    expect(hasEssentialAccess(perms)).toBe(true);
   });
 
   it('reports the specific missing resource', () => {
