@@ -42,7 +42,7 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 
 ### 1. Author lives as an Ark Agent CRD, not a new service
 
-The LLM that drives authoring is `kind: Agent`, whose manifest is bundled in the **ark-api** image and installed on demand from the dashboard (Decision 2 / 15) — not a kubectl sample. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the `kubernetes-mcp-server`'s `MCPServer` registration.
+The LLM that drives authoring is `kind: Agent`, whose manifest is bundled **in the dashboard** and installed on demand from there (Decision 2 / 15) — not a kubectl sample. Its `spec.prompt` carries the schema crib, the canonical recipes, and the fail-fast rule. Its `spec.tools` reference the `kubernetes-mcp-server`'s `MCPServer` registration.
 
 The author Agent lives in the **currently-selected namespace**, created there on demand from the dashboard (Decision 15), not hand-applied. The dashboard dispatches each authoring turn to the author Agent **in that selected namespace** — so browsing namespace X chats with X's author Agent. Only the agent *name* is configured (Decision 13); the namespace is always the one the user is currently in, exactly like every other resource the dashboard shows.
 
@@ -54,17 +54,17 @@ The author Agent lives in the **currently-selected namespace**, created there on
 
 **Alternative considered:** Hard-code the author in a new dedicated service or inside `ark-api`. Rejected — it would create a parallel chat infrastructure and break the "everything is an Ark resource" story.
 
-### 2. Author manifest owned by ark-api; `ark-query` ships in the chart
+### 2. Author manifest bundled in the dashboard; `ark-query` ships in the chart
 
 The two new YAML artifacts have different homes, because they have different install paths:
 
 - **`ark-query` `WorkflowTemplate`** is a managed resource in the **argo-workflows Helm chart** (`services/argo-workflows/chart/templates/`), so it installs automatically on every Ark-with-Argo install — both via `devspace` (which deploys the chart as a dependency when `ENABLE_ARGO=true`) and via the production Helm install / OCI-published chart. It is referenced from hand-written workflows and from the author Agent's few-shots, so it must be reliably present wherever Argo is — a chart-managed resource guarantees that, where a `kubectl apply`-only sample would not.
-- **The `argo-make-author` Agent** is **not** a chart resource or a kubectl sample. Its manifest — spec plus the canonical system prompt — is bundled inside the **ark-api** image as the single source of truth for the prompt, and installed from the dashboard via an ark-api endpoint (Decision 15). There is no parallel sample file to drift from it.
+- **The `argo-make-author` Agent** is **not** a chart resource or a kubectl sample. Its manifest — spec plus the canonical system prompt — is a static artifact **bundled in the dashboard** (its only consumer) and the single source of truth for the prompt, installed from the dashboard via the existing resources passthrough (Decision 15). There is no parallel sample file to drift from it.
 
 **Rationale:**
 - The `ark-query` template is a runtime dependency of every workflow the author Agent generates; shipping it with the chart means it is always installed alongside Argo, with no separate `kubectl apply` step a user can forget.
-- The user installs the author Agent from the dashboard, not the CLI; owning the manifest in ark-api lets the install button materialise it without a `kubectl apply`.
-- Single source of truth: the prompt exists in exactly one place. No sample/chart/dashboard copy to keep in sync.
+- The user installs the author Agent from the dashboard, not the CLI; bundling the manifest in the dashboard lets the install button materialise it without a `kubectl apply` and without a bespoke ark-api endpoint.
+- Single source of truth: the prompt exists in exactly one place — the dashboard bundle. No sample or chart copy to keep in sync.
 
 ### 3. The draft buffer is the single source of truth
 
@@ -237,13 +237,13 @@ The fenced-block extractor lives in a small utility module under `lib/utils/`. I
 The dashboard must know **which** Agent to dispatch authoring turns to. The **namespace** is not configured — it is always the currently-selected namespace (Decision 1), resolved the same way every other resource view resolves it via the `NamespaceProvider`. Only the agent **name** comes from configuration, read at runtime, with **no dashboard UI for it in v1**:
 
 - One env var, following the existing `NEXT_PUBLIC_*` pattern (the route is a client component, like the `NEXT_PUBLIC_ARGO_URL` already read by the workflow-templates detail page):
-  - `NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT` — the author Agent name. Defaults to `argo-make-author` (the name stamped on the ark-api-bundled manifest) when unset.
+  - `NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT` — the author Agent name. Defaults to `argo-make-author` (the name on the dashboard-bundled manifest) when unset.
 - The chat panel dispatches every authoring turn to `{selectedNamespace}/{configuredName}`. The same `NamespaceProvider` scopes which resources the MCP `list_*` tools surface for composition, so the author Agent and the resources it can reference are always in the namespace the user is looking at.
 
 **Rationale:**
 - Per-namespace dispatch matches the user's mental model: switching namespaces switches to that install's author Agent, with no extra step.
 - Pinning the *name* in config — not the UI — keeps that choice an operator/deploy concern, which is what the user wants for now. An operator can point the dashboard at a customised or differently-named author Agent purely by setting the env var; no settings screen, no per-user state.
-- The default name means the out-of-the-box flow (apply the sample into the Ark namespace) works with zero configuration.
+- The default name means the out-of-the-box flow (install the bundled author Agent from the dashboard) works with zero configuration.
 
 **Follow-up (parked):** a dashboard-side setting to select the author Agent, once there is a reason to vary it without redeploying. Out of scope for v1 by explicit request.
 
@@ -251,7 +251,7 @@ The dashboard must know **which** Agent to dispatch authoring turns to. The **na
 
 The chat is an **enhancement layer over a manual editor that always works** — not a hard dependency. On mount (and whenever the selected namespace changes), the route checks for the configured author Agent in the current namespace via `agentsService.getByName(name)` (returns `null` if absent).
 
-- **Missing:** show a non-blocking banner — *"Author agent `argo-make-author` isn't installed in namespace `<ns>`"* — with an **"Install author agent"** button that calls the ark-api install endpoint for the current namespace (Decision 15); the chat composer is disabled until it succeeds. The **YAML editor, DAG preview, and Save remain fully functional** meanwhile:
+- **Missing:** show a non-blocking banner — *"Author agent `argo-make-author` isn't installed in namespace `<ns>`"* — with an **"Install author agent"** button that creates the Agent from the dashboard-bundled manifest in the current namespace via the resources passthrough (Decision 15); the chat composer is disabled until it succeeds. The **YAML editor, DAG preview, and Save remain fully functional** meanwhile:
   - On `/new`: a YAML-literate user can still hand-write or paste a template and Save it — the route degrades to a plain manual editor.
   - On `/[id]/edit`: the loaded template renders in the preview and stays hand-editable and saveable. **Editing an existing template never depends on the agent being present** — load and Save both go through the resources passthrough, not the agent.
 - **Disappears mid-session** (agent deleted, or a dispatch call fails): surface the error inline in the chat and re-run the existence check to flip into the banner state. The `draftYaml` buffer is untouched, so no in-progress work is lost.
@@ -263,30 +263,30 @@ The chat is an **enhancement layer over a manual editor that always works** — 
 Install is a button, not a `kubectl apply` — and it adds **no new write endpoint**. Creating the Agent reuses the existing generic resources passthrough, the same one Save uses for `WorkflowTemplate`:
 
 ```
-GET  /api/v1/argo-make/author-agent/manifest                  →  canonical Agent manifest (single source of truth)
+manifest bundled in the dashboard                             →  canonical Agent manifest (single source of truth)
 POST /api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent?namespace=<ns>   →  create it (existing passthrough, reused)
 ```
 
-The single source of truth for the default prompt is one manifest file bundled in the **ark-api** image (spec + system prompt). The dashboard can't hold it without duplicating it, so the only genuinely new server surface is a **read-only** endpoint that serves it. The **"Install author agent"** button (Decision 14) then: GETs the manifest, stamps the configured name (Decision 13), and POSTs it through the resources passthrough into the currently-selected namespace. On success the route re-runs the existence check, the banner clears, and the chat composer enables — no page reload, no CLI.
+The single source of truth for the default prompt is one manifest artifact bundled in the **dashboard** (spec + system prompt). Since the dashboard is its only consumer, there is no server surface to add — no ark-api endpoint at all. The **"Install author agent"** button (Decision 14) then: reads the bundled manifest, stamps the configured name (Decision 13), and POSTs it through the resources passthrough into the currently-selected namespace. On success the route re-runs the existence check, the banner clears, and the chat composer enables — no page reload, no CLI.
 
 - **Idempotent:** the passthrough's create returns HTTP 409 if the Agent already exists (a second tab raced the install); the dashboard treats 409 as success. The banner only appears when the agent is absent (Decision 14), so the button's job is create-if-missing.
 - **Update via the new PUT endpoint.** The passthrough now exposes GET / POST / DELETE **and** a generic update (PUT) endpoint (Decision 9). "Upgrade an existing agent to the latest default prompt" remains a parked follow-up, but when built it is a straightforward PUT (in-place replace) rather than a DELETE + re-create.
-- The dashboard needs no bespoke CRD-authoring logic — it composes one manifest GET with the create passthrough it already uses for Save.
+- The dashboard needs no bespoke CRD-authoring logic — it composes its bundled manifest with the create passthrough it already uses for Save.
 
 **Rationale:**
-- Keeps the prompt single-source: only the read-only manifest endpoint touches the one file in ark-api; nothing is duplicated into the dashboard bundle or a chart.
+- Keeps the prompt single-source: the one manifest artifact lives in the dashboard bundle; nothing is duplicated into ark-api or a chart.
 - Reuses the existing create passthrough for the write rather than adding a parallel write endpoint — fewer endpoints, and the same auth path as every other dashboard write.
 
-**Alternative considered:** a bespoke `POST .../argo-make/author-agent` that reads the file and creates the CRD server-side in one call. Rejected — it duplicates create logic the resources passthrough already provides; the GET-then-passthrough-POST split keeps all writes on the one generic endpoint. **Also rejected:** embedding the manifest in the dashboard build, or a chart ConfigMap — both keep a single source but couple prompt iteration to a dashboard release or add chart plumbing for an artifact ark-api can simply serve.
+**Alternative considered:** a bespoke ark-api surface for the manifest — either a read-only `GET .../argo-make/author-agent/manifest`, or a `POST .../argo-make/author-agent` that reads a bundled file and creates the CRD server-side. Rejected — the manifest is consumed only by the dashboard, so any ark-api endpoint adds a server surface no other caller uses; bundling the manifest in the dashboard and POSTing through the existing resources passthrough keeps every write on the one generic endpoint with no new endpoint at all. **Trade-off:** iterating on the prompt now ships with a dashboard release rather than an ark-api one — acceptable for v1, revisited if the prompt must vary independently of the dashboard.
 
 ### 16. Test strategy
 
-- **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); and the missing-agent gating (agent present → composer enabled; `getByName` returns `null` → banner shown, composer disabled, editor + Save still enabled).
-- **Unit (Python):** the author-agent manifest endpoint — returns the bundled manifest with the configured name stamped in; the generic resource update (PUT) endpoint — replaces a named resource in place.
+- **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); the install helper (stamps the configured name onto the bundled manifest before POSTing); and the missing-agent gating (agent present → composer enabled; `getByName` returns `null` → banner shown, composer disabled, editor + Save still enabled).
+- **Unit (Python):** the generic resource update (PUT) endpoint — replaces a named resource in place.
 - **Helm (lint/template):** the `kubernetes-mcp-server` umbrella chart renders with `config.read_only: true`, the namespace-scoped read-only RBAC, and the `HTTPRoute` enabled / Ingress disabled — matching the dev configuration.
 - **Chainsaw (e2e):**
   - **Authoring happy path:** mock-llm seeded with a canned `WorkflowTemplate` response → assert the template is created and the user lands on the detail page.
-  - **Install author agent:** open the route in a namespace with no author Agent → click Install → assert the Agent is created in that namespace (manifest GET + create via the resources passthrough), the banner clears, and the composer enables.
+  - **Install author agent:** open the route in a namespace with no author Agent → click Install → assert the Agent is created in that namespace (from the dashboard-bundled manifest via the resources passthrough), the banner clears, and the composer enables.
   - **Fail-and-tell-user:** the model is told to reference a non-existent agent → assert it refuses and no YAML is written.
   - **Edit + hand-edit grounding:** load an existing template, hand-edit the YAML, send a turn → assert the agent's next message is grounded on the edited draft (the prefix carried the manual edit).
   - **`ark-query` template:** run it against an agent target and a team target → assert `response` / `query-json` / `phase` / `conversation-id` outputs on success; force a query `error` → assert the node is Failed **and** the outputs are still readable.
@@ -325,13 +325,13 @@ The separate change that adds `kubernetes-mcp-server` wires it into `devspace de
 
 - **Grounding by prefix bloats history on every manual edit.** Each diverged turn carries a full YAML copy into the conversation/memory. **Mitigation:** inject only on divergence (not every turn); the volume is one template per manual-edit turn, which is acceptable. A server-side draft store would remove this entirely — tracked as the same follow-up that would enable the draft-inspection tool.
 
-- **Out-of-the-box users have no author Agent until they install it** — and per-namespace dispatch means it can be absent in some namespaces but present in others. **Mitigation:** Decisions 14 & 15 — the route detects the missing agent and offers a one-click "Install author agent" button (ark-api creates it in the current namespace from the bundled manifest); meanwhile the route degrades to a working manual YAML editor (Save still functions) rather than breaking.
+- **Out-of-the-box users have no author Agent until they install it** — and per-namespace dispatch means it can be absent in some namespaces but present in others. **Mitigation:** Decisions 14 & 15 — the route detects the missing agent and offers a one-click "Install author agent" button (the dashboard creates it in the current namespace from its bundled manifest via the resources passthrough); meanwhile the route degrades to a working manual YAML editor (Save still functions) rather than breaking.
 
 - **Overwrite is destructive (no versioning).** A user iterating on the same template loses earlier versions. **Mitigation:** new-template Save confirms on collision; edit-mode Save is explicitly an overwrite with "Save as new name" available; the session conversation preserves the prompt-and-YAML trail.
 
 - **The `ark-query` template's `target` parsing is string-based.** A malformed `target` (no `/`, unknown type) only fails at query-create time. **Mitigation:** the script validates the `type/name` split and the enum (`agent|team|model|tool`) up front and exits non-zero with a clear message, so the failure is an Argo node error rather than a confusing K8s rejection.
 
-- **Author Agent quality depends on prompt engineering.** The whole experience rises and falls on the system prompt. **Mitigation:** the prompt lives in one place — the ark-api-bundled manifest — so it can be revised centrally (at the cost of an ark-api build, per Decision 2); few-shot examples drawn from real samples; chainsaw tests exercise the fail-fast rule and the grounding contract.
+- **Author Agent quality depends on prompt engineering.** The whole experience rises and falls on the system prompt. **Mitigation:** the prompt lives in one place — the dashboard-bundled manifest — so it can be revised centrally (at the cost of a dashboard build, per Decision 2); few-shot examples drawn from real samples; chainsaw tests exercise the fail-fast rule and the grounding contract.
 
 ## Open Questions
 
