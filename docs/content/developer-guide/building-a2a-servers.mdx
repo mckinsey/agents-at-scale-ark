@@ -139,14 +139,14 @@ kubectl get a2aserver simple-agent -o yaml
 # Check if Ark created an Agent from the A2A server.
 kubectl get agents
 # NAME           MODEL   AVAILABLE   AGE
-# simple-agent           False       2m20s
+# simple-agent           True        2m20s
 
 # Query the agent you created.
 ark agent query simple-agent "who are you?"
 # I received your message: 'who are you?'. I'm a simple agent, so I can help with basic tasks like greetings, simple math, or just echoing your messages back to you. Try asking for help to see what I can do!
 ```
 
-The agent has no `modelRef` (A2A agents bring their own model) and uses the built-in `a2a` execution engine. It may report `AVAILABLE   False` with the message `ExecutionEngine 'a2a' not found` — this is an availability-probe artifact; the agent is still queryable, as the query above shows.
+The agent has no `modelRef` (A2A agents bring their own model) and uses the built-in `a2a` execution engine. It becomes `AVAILABLE   True` once its `A2AServer` is `Ready`.
 
 ### Viewing in the dashboard
 
