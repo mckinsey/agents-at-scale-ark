@@ -843,7 +843,7 @@ func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("broker returned HTTP %d for delete query messages", resp.StatusCode)
+		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", baseURL, resp.StatusCode, query.Name)
 	}
 
 	log.Info("deleted broker messages for query", "query", query.Name)

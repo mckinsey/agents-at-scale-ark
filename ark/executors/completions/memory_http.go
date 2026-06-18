@@ -339,7 +339,7 @@ func (m *HTTPMemory) DeleteQuery(ctx context.Context, queryID string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP status %d", resp.StatusCode)
+		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", requestURL, resp.StatusCode, queryID)
 	}
 
 	return nil
