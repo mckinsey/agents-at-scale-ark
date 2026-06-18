@@ -170,18 +170,27 @@ export function ToolsSection() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1">
-          <IconShell size="default" variant="primary">
-            <Handyman className="size-full" />
-          </IconShell>
-          <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-            Tools
-          </h1>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <IconShell size="default" variant="primary">
+              <Handyman className="size-full" />
+            </IconShell>
+            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+              Tools
+            </h1>
+          </div>
+          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+            Create and manage tools
+          </p>
         </div>
-        <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-          Create and manage tools
-        </p>
+        {!isEmpty && (
+          <Button
+            onClick={() => setToolEditorOpen(true)}
+            disabled={readOnlyMode}>
+            Add Tool
+          </Button>
+        )}
       </div>
 
       {showLoading ? (
@@ -213,38 +222,28 @@ export function ToolsSection() {
         />
       ) : (
         <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
-          <div className="flex flex-none items-end justify-between gap-3">
-            <div className="flex items-end gap-3">
-              <ResourceSearchInput
-                value={searchQuery}
-                onChange={setSearchQuery}
-              />
-              <div className="flex w-48 flex-col gap-2">
-                <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
-                  Type
-                </span>
-                <Select
-                  items={TYPE_ITEMS}
-                  value={typeFilter}
-                  onValueChange={v => setTypeFilter(v as TypeFilter)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TYPE_ITEMS.map(item => (
-                      <SelectItem key={item.value} value={item.value}>
-                        <SelectItemText>{item.label}</SelectItemText>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="flex flex-none items-end gap-3">
+            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <div className="flex w-48 flex-col gap-2">
+              <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                Type
+              </span>
+              <Select
+                items={TYPE_ITEMS}
+                value={typeFilter}
+                onValueChange={v => setTypeFilter(v as TypeFilter)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_ITEMS.map(item => (
+                    <SelectItem key={item.value} value={item.value}>
+                      <SelectItemText>{item.label}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Button
-              onClick={() => setToolEditorOpen(true)}
-              disabled={readOnlyMode}>
-              Add Tool
-            </Button>
           </div>
 
           {filteredTools.length === 0 ? (

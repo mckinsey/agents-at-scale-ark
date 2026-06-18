@@ -102,18 +102,25 @@ export function SecretsSection() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1">
-          <IconShell size="default" variant="primary">
-            <Shield className="size-full" />
-          </IconShell>
-          <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-            Secrets
-          </h1>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <IconShell size="default" variant="primary">
+              <Shield className="size-full" />
+            </IconShell>
+            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+              Secrets
+            </h1>
+          </div>
+          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+            Create and manage secrets for models and services
+          </p>
         </div>
-        <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-          Create and manage secrets for models and services
-        </p>
+        {!isEmpty && (
+          <Button onClick={handleOpenAddEditor} disabled={readOnlyMode}>
+            Add secret
+          </Button>
+        )}
       </div>
 
       {showLoading ? (
@@ -143,11 +150,8 @@ export function SecretsSection() {
         />
       ) : (
         <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
-          <div className="flex flex-none items-end justify-between gap-3">
+          <div className="flex flex-none items-end gap-3">
             <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
-            <Button onClick={handleOpenAddEditor} disabled={readOnlyMode}>
-              Add secret
-            </Button>
           </div>
 
           {filteredSecrets.length === 0 ? (
