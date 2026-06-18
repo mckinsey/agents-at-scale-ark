@@ -45,8 +45,23 @@ There is also a gap on the workflow-authoring side itself: there is **no Ark-nat
 ### Ark-native query template
 
 - Ship a reusable `WorkflowTemplate` (`ark-query`) **as a managed resource in the argo-workflows Helm chart** (`services/argo-workflows/chart/templates/`) so it is installed automatically whenever Ark-with-Argo is installed — both via `devspace` (which deploys the chart as a dependency when `ENABLE_ARGO=true`) and via the production Helm install. It submits an Ark `Query`, waits for completion, and returns its result. Workflows reference one canonical, tested template via `templateRef` instead of re-emitting the query-and-wait recipe. The step uses the existing `alpine/k8s` image (`kubectl` + `jq`):
-  - **Inputs:** `target` (required, `type/name` notation matching the ark CLI, e.g. `agent/weather`, `model/default`, `team/research`) and `input` (required, the prompt — mirrors `spec.input`). Optional, drawn from `QuerySpec`: `timeout` (default `5m`, also bounds the `kubectl wait`), `ttl`, `parameters` (JSON array merged into `spec.parameters` for `{{.param}}` templating), `session-id`, `memory`, `query-name` (else generated from the workflow/pod), and `service-account`
-  - **Outputs:** `response` (the final `status.response.content`), `query-json` (the full Query object for downstream steps that need token usage, target, etc.), `phase` (`done` / `error`), and `conversation-id` (`status.conversationId`)
+  - **Inputs:**
+    - *Required:*
+      - `target` — `type/name` notation matching the ark CLI (e.g. `agent/weather`, `model/default`, `team/research`)
+      - `input` — the prompt; mirrors `spec.input`
+    - *Optional* (drawn from `QuerySpec`):
+      - `timeout` — default `5m`; also bounds the `kubectl wait`
+      - `ttl`
+      - `parameters` — JSON array merged into `spec.parameters` for `{{.param}}` templating
+      - `session-id`
+      - `memory`
+      - `query-name` — else generated from the workflow/pod
+      - `service-account`
+  - **Outputs:**
+    - `response` — the final `status.response.content`
+    - `query-json` — the full Query object (for downstream steps that need token usage, target, etc.)
+    - `phase` — `done` / `error`
+    - `conversation-id` — `status.conversationId`
   - **Multiple team-member messages:** the Query CR exposes only the final assistant message in `status.response.content` (per-member turns live in the broker/memory keyed by `conversationId`, not in the CR). v1 outputs the final content plus the full Query JSON; the `conversation-id` output is the seam for a follow-up broker-backed transcript step
   - **Error handling:** the step always writes its output files *before* exiting — even on failure — so `continueOn: {failed: true}` consumers and Argo exit-handlers can still read `phase` / `response` / `query-json`. It exits `0` on `done` and non-zero on `error` or a wait-timeout / non-`done` phase, so the Argo node is marked Failed and `retryStrategy` / `continueOn` integrate naturally
 
