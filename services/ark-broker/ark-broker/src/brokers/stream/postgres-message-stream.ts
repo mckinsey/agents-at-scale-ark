@@ -9,7 +9,8 @@ import {
   type PaginatedList,
   type PaginationParams,
 } from '../pagination.js';
-import type {Stream, Predicate} from './stream.js';
+import type {Predicate} from './stream.js';
+import type {MessageStream} from './message-stream.js';
 
 type MessageRow = {
   sequence_number: string;
@@ -31,7 +32,7 @@ function rowToBrokerItem(row: MessageRow): BrokerItem<MessageData> {
   };
 }
 
-export class PostgresMessageStream implements Stream<MessageData> {
+export class PostgresMessageStream implements MessageStream {
   private readonly emitter = new EventEmitter();
 
   constructor(
