@@ -1,6 +1,7 @@
 """Tests for the marketplace-items aggregator endpoint."""
 import asyncio
 import json
+import socket
 import unittest
 from contextlib import ExitStack, asynccontextmanager
 from types import SimpleNamespace
@@ -56,18 +57,23 @@ class _FakeAsyncClient:
     async def __aexit__(self, *exc):
         return False
 
-    async def get(self, url, headers=None):
-        return await self._get_impl(url)
+    async def get(self, url, headers=None, extensions=None):
+        return await self._get_impl(str(url))
 
 
 def _patch(mock_core, get_impl, host_safe=True):
+    # Echo the host as the "pinned IP" so the fetched URL is unchanged and the
+    # functional assertions below still key off the original hostname.
+    async def _fake_resolve(host, port):
+        return host if host_safe else None
+
     stack = ExitStack()
     stack.enter_context(patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client))
     stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
     stack.enter_context(
         patch(f"{MODULE}.httpx.AsyncClient", lambda *a, **k: _FakeAsyncClient(get_impl))
     )
-    stack.enter_context(patch(f"{MODULE}._host_is_safe", AsyncMock(return_value=host_safe)))
+    stack.enter_context(patch(f"{MODULE}._resolve_safe_ip", _fake_resolve))
     return stack
 
 
@@ -193,6 +199,117 @@ class TestMarketplaceItemsAggregator(unittest.TestCase):
             response = client.get("/v1/namespaces/team-a/marketplace-items")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
+
+
+def _addrinfo(*ips, port=443):
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port)) for ip in ips]
+
+
+class TestResolveSafeIp(unittest.IsolatedAsyncioTestCase):
+    """Exercises the REAL resolver (not a mock) by faking socket.getaddrinfo."""
+
+    async def _resolve(self, *ips):
+        with patch(f"{MODULE}.socket.getaddrinfo", return_value=_addrinfo(*ips)):
+            return await items_module._resolve_safe_ip("host.test", 443)
+
+    async def test_metadata_ip_blocked(self):
+        self.assertIsNone(await self._resolve("169.254.169.254"))
+
+    async def test_loopback_blocked(self):
+        self.assertIsNone(await self._resolve("127.0.0.1"))
+
+    async def test_public_ip_returned(self):
+        self.assertEqual(await self._resolve("93.184.216.34"), "93.184.216.34")
+
+    async def test_private_ip_allowed_for_internal_mirrors(self):
+        self.assertEqual(await self._resolve("10.0.0.5"), "10.0.0.5")
+
+    async def test_any_unsafe_answer_rejects_whole_host(self):
+        # Multi-record rebinding: one safe, one metadata -> reject everything.
+        self.assertIsNone(await self._resolve("93.184.216.34", "169.254.169.254"))
+
+    async def test_unresolvable_host(self):
+        with patch(f"{MODULE}.socket.getaddrinfo", side_effect=socket.gaierror):
+            self.assertIsNone(await items_module._resolve_safe_ip("nope.test", 443))
+
+
+class TestFetchPinsResolvedIp(unittest.TestCase):
+    """Aggregator-level: the request must go to the validated IP, not a re-resolved host."""
+
+    def setUp(self):
+        items_module._items_cache.clear()
+
+    def _core(self, sources):
+        mock_core = MagicMock()
+        mock_core.read_namespaced_config_map = AsyncMock(
+            return_value=_sources_configmap(sources)
+        )
+        return mock_core
+
+    def test_request_targets_validated_ip_with_preserved_host(self):
+        mock_core = self._core([("cat", "https://catalog.test/m.json", None)])
+        recorded = {}
+
+        class _RecordingClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url, headers=None, extensions=None):
+                recorded["url"] = str(url)
+                recorded["headers"] = headers
+                recorded["extensions"] = extensions
+                return _FakeResponse({"items": []})
+
+        with ExitStack() as stack:
+            stack.enter_context(patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client))
+            stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
+            stack.enter_context(
+                patch(f"{MODULE}.httpx.AsyncClient", lambda *a, **k: _RecordingClient())
+            )
+            stack.enter_context(
+                patch(f"{MODULE}.socket.getaddrinfo", return_value=_addrinfo("93.184.216.34"))
+            )
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+
+        self.assertEqual(response.status_code, 200)
+        # Connected to the validated IP, not the hostname (no second lookup to rebind).
+        self.assertEqual(recorded["url"], "https://93.184.216.34/m.json")
+        # Original hostname preserved for Host header + TLS SNI / cert verification.
+        self.assertEqual(recorded["headers"]["Host"], "catalog.test")
+        self.assertEqual(recorded["extensions"]["sni_hostname"], "catalog.test")
+
+    def test_rebinding_to_metadata_is_blocked_and_not_fetched(self):
+        mock_core = self._core([("evil", "https://rebind.test/m.json", None)])
+        fetched = {"called": False}
+
+        class _Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url, headers=None, extensions=None):
+                fetched["called"] = True
+                return _FakeResponse({"items": []})
+
+        with ExitStack() as stack:
+            stack.enter_context(patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client))
+            stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
+            stack.enter_context(
+                patch(f"{MODULE}.httpx.AsyncClient", lambda *a, **k: _Client())
+            )
+            stack.enter_context(
+                patch(f"{MODULE}.socket.getaddrinfo", return_value=_addrinfo("169.254.169.254"))
+            )
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["error"]["code"], "network_error")
+        self.assertFalse(fetched["called"], "metadata host must not be fetched")
 
 
 if __name__ == "__main__":

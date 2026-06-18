@@ -40,14 +40,21 @@ router = APIRouter(
 )
 
 
-async def _host_is_safe(host: str) -> bool:
-    """Best-effort SSRF guard: reject non-routable hosts; RFC-1918 allowed for internal mirrors."""
+async def _resolve_safe_ip(host: str, port: int) -> Optional[str]:
+    """
+    Best-effort SSRF guard: reject non-routable hosts; RFC-1918 allowed for internal mirrors.
+    Resolve once and validate every answer; return one safe IP to pin, else None.
+    """
+
     try:
         infos = await asyncio.to_thread(
-            socket.getaddrinfo, host, 443, type=socket.SOCK_STREAM
+            socket.getaddrinfo, host, port, type=socket.SOCK_STREAM
         )
     except socket.gaierror:
-        return False
+        return None
+    if not infos:
+        return None
+    safe_ip: Optional[str] = None
     for info in infos:
         addr = ipaddress.ip_address(info[4][0])
         if (
@@ -57,8 +64,10 @@ async def _host_is_safe(host: str) -> bool:
             or addr.is_reserved
             or addr.is_unspecified
         ):
-            return False
-    return True
+            return None
+        if safe_ip is None:
+            safe_ip = str(info[4][0])
+    return safe_ip
 
 
 def _cache_get(key: tuple[str, str, str]) -> Optional[list]:
@@ -93,8 +102,11 @@ async def _fetch_source(
     if cached is not None:
         return MarketplaceItemsSourceResult(source=name, displayName=display_name, items=cached)
 
-    host = urlparse(url).hostname
-    if not host or not await _host_is_safe(host):
+    parsed = urlparse(url)
+    host = parsed.hostname
+    port = parsed.port or 443
+    safe_ip = await _resolve_safe_ip(host, port) if host else None
+    if safe_ip is None:
         return MarketplaceItemsSourceResult(
             source=name,
             displayName=display_name,
@@ -105,7 +117,12 @@ async def _fetch_source(
 
     logger.info("fetching marketplace items for source %s", name)
     try:
-        response = await http_client.get(url, headers={"Accept": "application/json"})
+        ip_url = httpx.URL(url).copy_with(host=safe_ip)
+        response = await http_client.get(
+            ip_url,
+            headers={"Accept": "application/json", "Host": parsed.netloc},
+            extensions={"sni_hostname": host},
+        )
         if response.is_redirect:
             return MarketplaceItemsSourceResult(
                 source=name,
