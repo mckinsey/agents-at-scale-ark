@@ -37,7 +37,6 @@ These are both the few-shot library for the author Agent **and** the boilerplate
 - Versioning of saved templates (Save overwrites, with confirmation on new / silently on edit)
 - A broker-backed per-member transcript output for the `ark-query` template (the `conversation-id` output is the seam)
 - Starter-prompt gallery / template marketplace
-- Shipping the `ark-query` template in the Helm chart (sample-first; promote once stable). The author Agent ships bundled in the ark-api image — neither a chart resource nor a kubectl sample
 
 ## Decisions
 
@@ -55,17 +54,17 @@ The author Agent lives in the **currently-selected namespace**, created there on
 
 **Alternative considered:** Hard-code the author in a new dedicated service or inside `ark-api`. Rejected — it would create a parallel chat infrastructure and break the "everything is an Ark resource" story.
 
-### 2. Author manifest owned by ark-api; `ark-query` stays sample-first
+### 2. Author manifest owned by ark-api; `ark-query` ships in the chart
 
 The two new YAML artifacts have different homes, because they have different install paths:
 
-- **`ark-query` `WorkflowTemplate`** lives under `services/argo-workflows/samples/` and is installed by `kubectl apply`, as before. It is referenced from hand-written workflows, so a file users can read and apply is the right shape. Promote to chart-shipped once stable.
-- **The `argo-make-author` Agent** is **not** a kubectl sample. Its manifest — spec plus the canonical system prompt — is bundled inside the **ark-api** image as the single source of truth for the prompt, and installed from the dashboard via an ark-api endpoint (Decision 15). There is no parallel sample file to drift from it.
+- **`ark-query` `WorkflowTemplate`** is a managed resource in the **argo-workflows Helm chart** (`services/argo-workflows/chart/templates/`), so it installs automatically on every Ark-with-Argo install — both via `devspace` (which deploys the chart as a dependency when `ENABLE_ARGO=true`) and via the production Helm install / OCI-published chart. It is referenced from hand-written workflows and from the author Agent's few-shots, so it must be reliably present wherever Argo is — a chart-managed resource guarantees that, where a `kubectl apply`-only sample would not.
+- **The `argo-make-author` Agent** is **not** a chart resource or a kubectl sample. Its manifest — spec plus the canonical system prompt — is bundled inside the **ark-api** image as the single source of truth for the prompt, and installed from the dashboard via an ark-api endpoint (Decision 15). There is no parallel sample file to drift from it.
 
 **Rationale:**
+- The `ark-query` template is a runtime dependency of every workflow the author Agent generates; shipping it with the chart means it is always installed alongside Argo, with no separate `kubectl apply` step a user can forget.
 - The user installs the author Agent from the dashboard, not the CLI; owning the manifest in ark-api lets the install button materialise it without a `kubectl apply`.
 - Single source of truth: the prompt exists in exactly one place. No sample/chart/dashboard copy to keep in sync.
-- Trade-off (accepted): iterating the prompt now means shipping an ark-api build rather than re-applying a sample. Acceptable — install-from-dashboard is the priority and the prompt is expected to stabilise. The `ark-query` template keeps the fast kubectl-iterate loop where it still matters.
 
 ### 3. The draft buffer is the single source of truth
 
@@ -169,7 +168,7 @@ The author Agent grounds itself through the `kubernetes-mcp-server`'s generic `r
 
 ### 11. The `ark-query` template
 
-`services/argo-workflows/samples/ark-query-template.yaml` is a `WorkflowTemplate` named `ark-query` with an inner template (`query`) that other workflows reference via Argo's step/task-level `templateRef: {name: ark-query, template: query}`. It factors out the inline recipe the three samples repeat today. The step runs the same `alpine/k8s` image those samples use (`kubectl` + `jq`).
+A chart-managed template in `services/argo-workflows/chart/templates/` (e.g. `ark-query-template.yaml`) renders a `WorkflowTemplate` named `ark-query` with an inner template (`query`) that other workflows reference via Argo's step/task-level `templateRef: {name: ark-query, template: query}`. It is installed with the argo-workflows chart on every Ark-with-Argo install (both `devspace` and production Helm). It factors out the inline recipe the three samples repeat today. The step runs the same `alpine/k8s` image those samples use (`kubectl` + `jq`).
 
 **Inputs** (Argo parameters are strings):
 - `target` (required) — `type/name` notation matching the ark CLI (e.g. `agent/weather`, `model/default`, `team/research`). The script splits on `/` into `spec.target.type` and `spec.target.name`.
