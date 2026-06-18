@@ -1251,7 +1251,8 @@ export interface paths {
         put?: never;
         /**
          * Create Marketplace Source
-         * @description Create a source via server-side apply (creates the ConfigMap if absent).
+         * @description Create a source via server-side apply. With a credential: validate it, store it
+         *     in a per-source Secret, and write only ``{scheme, secretRef}`` to the ConfigMap.
          */
         post: operations["create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post"];
         delete?: never;
@@ -1296,14 +1297,16 @@ export interface paths {
         post?: never;
         /**
          * Delete Marketplace Source
-         * @description Delete a marketplace source entry by removing its ConfigMap data key.
+         * @description Delete a source: remove its ConfigMap key and its credential Secret.
          */
         delete: operations["delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete"];
         options?: never;
         head?: never;
         /**
          * Update Marketplace Source
-         * @description Update a source via server-side apply. Replaces the value (omitting displayName clears it).
+         * @description Update a source via server-side apply. Omitting ``auth`` makes it anonymous and
+         *     deletes the credential Secret; changing the URL or scheme requires re-supplying the
+         *     credential (the existing Secret is never carried to a new URL).
          */
         patch: operations["update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch"];
         trace?: never;
@@ -3534,10 +3537,39 @@ export interface components {
             canEdit: boolean;
         };
         /**
+         * MarketplaceSourceAuthInfo
+         * @description Non-secret auth metadata returned to clients (never the credential).
+         */
+        MarketplaceSourceAuthInfo: {
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
+         * MarketplaceSourceAuthInput
+         * @description Auth config supplied on create/update.
+         *
+         *     ``credential`` is write-only (stored in a Secret, never returned). It has no
+         *     length constraint on purpose: a failed constraint would echo the token into the
+         *     422 body. Emptiness is checked in the endpoint, returning a clean 400.
+         */
+        MarketplaceSourceAuthInput: {
+            /** Credential */
+            credential?: string | null;
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
          * MarketplaceSourceCreate
          * @description Request body for creating a marketplace source.
          */
         MarketplaceSourceCreate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
             /** Displayname */
             displayName?: string | null;
             /** Name */
@@ -3547,11 +3579,17 @@ export interface components {
         };
         /**
          * MarketplaceSourceResponse
-         * @description A single marketplace source entry.
+         * @description A single marketplace source entry. Never carries the credential value.
          */
         MarketplaceSourceResponse: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInfo"] | null;
             /** Displayname */
             displayName?: string | null;
+            /**
+             * Hascredential
+             * @default false
+             */
+            hasCredential: boolean;
             /** Name */
             name: string;
             /** Url */
@@ -3562,6 +3600,7 @@ export interface components {
          * @description Request body for updating a marketplace source.
          */
         MarketplaceSourceUpdate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
             /** Displayname */
             displayName?: string | null;
             /** Url */
