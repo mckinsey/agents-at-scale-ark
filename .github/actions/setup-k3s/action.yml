@@ -105,6 +105,57 @@ runs:
     #       https://github.com/k3s-io/k3s/issues/5633
     #       and https://github.com/jupyterhub/action-k3s-helm/issues/59.
     #
+    # Restore the k3s binary from a per-version cache. GitHub release assets
+    # are immutable per tag, so version+arch is a safe key. On a hit, the
+    # install script below runs with INSTALL_K3S_SKIP_DOWNLOAD=true and never
+    # touches github.com/releases/download/... which is where the intermittent
+    # CURLE_SSL_CONNECT_ERROR / CURLE_RECV_ERROR flakes originate.
+    - name: Restore k3s binary from cache
+      id: k3s-cache
+      if: inputs.k3s-version != ''
+      uses: actions/cache@v4
+      with:
+        path: /tmp/k3s-bin/k3s
+        key: k3s-${{ runner.os }}-${{ runner.arch }}-${{ inputs.k3s-version }}
+
+    # Cache miss path: fetch the binary ourselves with both curl-level retries
+    # (--retry-all-errors handles single-request blips) and an outer attempt
+    # loop (handles post-download verification failures and longer outages).
+    - name: Download k3s binary (cache miss)
+      if: inputs.k3s-version != '' && steps.k3s-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        case "${{ runner.arch }}" in
+          X64)   bin_suffix=""       hash_suffix="amd64" ;;
+          ARM64) bin_suffix="-arm64" hash_suffix="arm64" ;;
+          ARM)   bin_suffix="-armhf" hash_suffix="arm"   ;;
+          *) echo "unsupported arch ${{ runner.arch }}"; exit 1 ;;
+        esac
+        ver="${{ inputs.k3s-version }}"
+        base="https://github.com/k3s-io/k3s/releases/download/${ver}"
+        mkdir -p /tmp/k3s-bin
+        for attempt in 1 2 3 4 5; do
+          if curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+               -o /tmp/k3s-bin/k3s "${base}/k3s${bin_suffix}" \
+             && curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+               -o /tmp/k3s-bin/sha256sum.txt "${base}/sha256sum-${hash_suffix}.txt"; then
+            expected=$(awk -v f="k3s${bin_suffix}" '$2==f {print $1}' /tmp/k3s-bin/sha256sum.txt | head -n1)
+            if [ -n "${expected}" ] && echo "${expected}  /tmp/k3s-bin/k3s" | sha256sum -c -; then
+              break
+            fi
+            echo "k3s sha256 verification failed on attempt ${attempt}/5"
+          fi
+          echo "k3s download attempt ${attempt}/5 failed; sleeping"
+          if [ "$attempt" -eq 5 ]; then exit 1; fi
+          sleep $((attempt * 10))
+        done
+      shell: bash
+
+    - name: Stage cached k3s binary
+      if: inputs.k3s-version != ''
+      run: sudo install -m 0755 /tmp/k3s-bin/k3s /usr/local/bin/k3s
+      shell: bash
+
     - name: Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}
       run: |
         echo "::group::Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}"
@@ -127,14 +178,37 @@ runs:
         if [[ "${{ inputs.extra-setup-args }}" != *--egress-selector-mode* ]]; then
           default_extra_setup_args=--egress-selector-mode=disabled
         fi
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${{ inputs.k3s-version }}" INSTALL_K3S_CHANNEL="${{ inputs.k3s-channel }}" sh -s - \
-          ${k3s_disable_metrics} \
-          ${k3s_disable_traefik} \
-          --disable-network-policy \
-          --flannel-backend=none \
-          ${k3s_docker} \
-          ${{ inputs.extra-setup-args }} \
-          ${default_extra_setup_args}
+        # Skip the install script's binary download when we've already staged
+        # one (which is the only path here, since k3s-version is required for
+        # the cache key). Fall back to letting the script download if the
+        # caller passed a channel instead of a pinned version.
+        if [[ -n "${{ inputs.k3s-version }}" ]]; then
+          skip_download_env="INSTALL_K3S_SKIP_DOWNLOAD=true"
+        fi
+        # Fetch the install script first so we can retry it independently from
+        # piping it straight into sh - which previously masked all errors from
+        # the inner curl behind a single opaque exit code.
+        for attempt in 1 2 3; do
+          if curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+               -o /tmp/k3s-install.sh https://get.k3s.io; then
+            if env INSTALL_K3S_VERSION="${{ inputs.k3s-version }}" \
+                   INSTALL_K3S_CHANNEL="${{ inputs.k3s-channel }}" \
+                   ${skip_download_env:-} \
+                 sh /tmp/k3s-install.sh \
+                   ${k3s_disable_metrics} \
+                   ${k3s_disable_traefik} \
+                   --disable-network-policy \
+                   --flannel-backend=none \
+                   ${k3s_docker} \
+                   ${{ inputs.extra-setup-args }} \
+                   ${default_extra_setup_args}; then
+              break
+            fi
+          fi
+          echo "k3s install attempt ${attempt}/3 failed; sleeping"
+          if [ "$attempt" -eq 3 ]; then exit 1; fi
+          sleep $((attempt * 10))
+        done
         echo "::endgroup::"
       shell: bash
 
