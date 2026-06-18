@@ -1,0 +1,158 @@
+# Marketplace
+
+Each namespace has its own marketplace catalogue, stored in a `marketplace-sources` ConfigMap and served to the dashboard through ark-api. Platform teams control three things, all with native Kubernetes mechanisms:
+
+- **What each namespace sees** — seeded defaults via the dashboard Helm chart, then edited live through ark-api.
+- **Who can edit it** — a ClusterRole bound per namespace with a RoleBinding.
+- **Where catalogues live** — one ConfigMap per namespace, governed independently.
+
+For the ConfigMap schema, RBAC rules, and ark-api endpoints, see the [Marketplace Sources](/reference/marketplace-sources) reference. This guide covers operation.
+
+## Seed catalogues with Helm
+
+The dashboard chart accepts a `marketplaceSources` values key. A `post-install,post-upgrade` Job writes each entry into the target namespace's `marketplace-sources` ConfigMap:
+
+```yaml
+marketplaceSources:
+  - name: agents-at-scale-marketplace
+    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    displayName: "Ark Marketplace"
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `name` | yes | ConfigMap key for the source. Unique per namespace. |
+| `url` | yes | Absolute `https` URL of a marketplace manifest. The filename is not constrained. |
+| `displayName` | no | Label shown in the dashboard. Defaults to `name`. |
+| `namespace` | no | Target namespace. Defaults to the install namespace. |
+
+Set `marketplaceSources: []` to seed nothing and skip the Job. The Job image is configurable via `marketplaceSourcesSeed.image`.
+
+### Apply the values
+
+Pass the values when installing or upgrading the dashboard chart:
+
+```bash
+helm upgrade --install ark-dashboard <dashboard-chart> \
+  -n <install-namespace> -f values.yaml
+```
+
+For a one-off change without a file, use `--set` (one index per entry):
+
+```bash
+helm upgrade --install ark-dashboard <dashboard-chart> -n <install-namespace> \
+  --set 'marketplaceSources[0].name=internal' \
+  --set 'marketplaceSources[0].url=https://internal.example.com/marketplace.json'
+```
+
+See [Deploying Ark](/operations-guide/deploying-ark) for the full install.
+
+## Seed multiple namespaces in one install
+
+Give entries different `namespace` values. A single `helm install`/`helm upgrade` seeds every listed namespace, each with its own `marketplace-sources` ConfigMap:
+
+```yaml
+marketplaceSources:
+  - name: agents-at-scale-marketplace
+    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    displayName: "Ark Marketplace"
+    namespace: team-a
+  - name: agents-at-scale-marketplace
+    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    displayName: "Ark Marketplace"
+    namespace: team-b
+  - name: internal-catalog
+    url: https://internal.example.com/marketplace.json
+    displayName: "Internal Catalog"
+    namespace: team-b
+```
+
+The same `name` may repeat across namespaces. To change which namespaces are seeded, edit `marketplaceSources` and run `helm upgrade` again — seeding happens at deploy time, not runtime.
+
+Target namespaces must already exist. The seed Job applies into each listed namespace, and a missing namespace fails the Job — which fails the whole `helm install`/`upgrade`. Create them first:
+
+```bash
+kubectl create namespace team-b
+```
+
+## Grant edit access
+
+The chart ships a `marketplace-source-editor` ClusterRole granting `get`, `update`, and `patch` on the `marketplace-sources` ConfigMap. It is **bound to no one by default** — the marketplace is read-only until a platform team binds it.
+
+Read access is already granted by the tenant role, so every dashboard user sees the catalogue regardless of edit permission.
+
+Bind the role per namespace to a user, group, or service account:
+
+```bash
+# A user
+kubectl create rolebinding marketplace-source-editor \
+  --clusterrole=marketplace-source-editor \
+  --user=alice@example.com -n team-a
+
+# A group
+kubectl create rolebinding marketplace-source-editor \
+  --clusterrole=marketplace-source-editor \
+  --group=platform-admins -n team-a
+```
+
+Or apply the sample at `samples/marketplace/marketplace-source-editor-binding.yaml` after editing the namespace and subjects.
+
+The dashboard shows add/edit/delete controls only when ark-api's permission probe reports `canEdit: true`; the probe runs a `SelfSubjectAccessReview` under the requesting user. The kube-apiserver is the real gate — a user without the binding gets HTTP 403 on writes even if the controls were forced.
+
+Revoke to return the namespace to read-only:
+
+```bash
+kubectl delete rolebinding marketplace-source-editor -n team-a
+```
+
+To disable editing everywhere — catalogues managed only through Helm/GitOps, never the dashboard — set `marketplaceSourceEditorRole.create: false`. The ClusterRole is not created, so no RoleBinding can grant edit access.
+
+## Manage many namespaces
+
+Edit access is per namespace, so grant it where each team operates. For N teams, create N RoleBindings — one per namespace — pointing at the same ClusterRole:
+
+```bash
+for ns in team-a team-b team-c; do
+  kubectl create rolebinding marketplace-source-editor \
+    --clusterrole=marketplace-source-editor \
+    --group=platform-admins -n "$ns"
+done
+```
+
+This keeps each namespace's catalogue and its editors independent: seeding decides what a namespace starts with, the RoleBinding decides who changes it afterward.
+
+## Persistence across upgrades
+
+The seed Job uses server-side apply with the field manager `helm-marketplace-seeder`, which owns only the keys it writes. Ownership is tracked per ConfigMap key:
+
+- A source a user **adds** through the dashboard is owned by ark-api — `helm upgrade` never touches it.
+- A seeded source a user **edits** transfers ownership to ark-api — the upgrade leaves it intact (the Job logs the apply conflict and preserves the key).
+- A seeded source **no one touched** stays owned by the seeder — the upgrade reconciles it to the chart value.
+- A seeded source **removed from `marketplaceSources`** is pruned on the next `helm upgrade` — but only if no user edited it. An edited source is owned by ark-api and survives.
+
+So user changes survive upgrades; only untouched seeded defaults track the chart.
+
+## Operational notes
+
+- **Source availability.** ark-api fetches each source concurrently with a 10s per-source timeout and a 30s aggregator deadline, and caches successful fetches for one hour. A failing source surfaces an inline error and does not block the others.
+- **Outbound restrictions.** Source URLs must be `https`. ark-api rejects non-routable hosts (loopback, link-local, multicast, reserved) and does not follow redirects. Private RFC-1918 hosts are allowed for internal mirrors.
+- **Items not appearing.** Check the source URL returns valid JSON with an `items` array, is reachable from the ark-api pod, and uses `https`. Authenticated sources are not yet supported (tracked in issue #2346).
+
+## Uninstall and cleanup
+
+`helm uninstall` of the dashboard chart does **not** remove catalogue data:
+
+- The `marketplace-sources` ConfigMap in each namespace **survives** — the seed Job writes it via apply, so it is not owned by the Helm release.
+- RoleBindings created with `kubectl` **survive** — they are not part of the release.
+- The `marketplace-source-editor` ClusterRole **is removed** — it is a release object.
+
+To remove the catalogue and access grants, delete them explicitly per namespace:
+
+```bash
+kubectl delete configmap marketplace-sources -n team-a
+kubectl delete rolebinding marketplace-source-editor -n team-a
+```
+
+## See also
+
+- [Marketplace Sources](/reference/marketplace-sources) — ConfigMap schema, RBAC rules, and ark-api endpoints.

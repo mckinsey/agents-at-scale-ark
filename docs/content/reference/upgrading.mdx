@@ -34,7 +34,7 @@ Your CRD instances (agents, models, teams, tools, mcpservers, a2aservers, querie
 
 <Callout type="info">
 What is not preserved:
-- **Broker state** — `ark-broker` is an in-memory event bus; messages, chunks, traces, events, sessions, and any conversation history held there are wiped when the broker pod restarts.
+- **Broker state** — `ark-broker` is an in-memory event bus by default; messages, chunks, traces, events, sessions, and any conversation history held there are wiped when the broker pod restarts. Exception: if the Postgres message backend is enabled (`backends.message: postgres`), **messages** persist across restarts — the other stores are still wiped.
 - **In-flight query execution** — the `Query` CRD record survives, but the executor pod processing it is gone. Such queries are typically stuck and need to be cleaned up manually.
 
 Also review the version-specific sections below for manual migration steps that apply to the version you upgraded to.
