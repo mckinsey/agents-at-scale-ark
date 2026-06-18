@@ -42,3 +42,8 @@ deployments:
               namespace: default
               roleRef:
                 name: namespace-reader
+  kubernetes-mcp-server-ark:
+    namespace: default
+    kubectl:
+      manifests:
+        - manifests/mcpserver.yaml
