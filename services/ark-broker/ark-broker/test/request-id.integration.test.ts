@@ -3,6 +3,7 @@ import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
+import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 
 class MemorySink extends Writable {
   public readonly lines: string[] = [];
@@ -15,10 +16,13 @@ class MemorySink extends Writable {
 
 describe('request-id middleware', () => {
   test('echoes the incoming X-Request-ID header', async () => {
+    const config = loadConfig({});
+    const logger = createLogger({level: 'silent', pretty: false});
     const {app} = buildApp({
-      config: loadConfig({}),
-      logger: createLogger({level: 'silent', pretty: false}),
+      config,
+      logger,
       version: 'test',
+      messageStream: createMessageStream(config, logger),
     });
 
     const res = await request(app)
@@ -30,10 +34,13 @@ describe('request-id middleware', () => {
   });
 
   test('generates a fresh X-Request-ID when none is provided', async () => {
+    const config = loadConfig({});
+    const logger = createLogger({level: 'silent', pretty: false});
     const {app} = buildApp({
-      config: loadConfig({}),
-      logger: createLogger({level: 'silent', pretty: false}),
+      config,
+      logger,
       version: 'test',
+      messageStream: createMessageStream(config, logger),
     });
 
     const res = await request(app).get('/health');
@@ -45,9 +52,15 @@ describe('request-id middleware', () => {
   });
 
   test('the per-request child logger carries the request id', async () => {
+    const config = loadConfig({});
     const sink = new MemorySink();
     const logger = createLogger({level: 'info', pretty: false}, sink);
-    const {app} = buildApp({config: loadConfig({}), logger, version: 'test'});
+    const {app} = buildApp({
+      config,
+      logger,
+      version: 'test',
+      messageStream: createMessageStream(config, logger),
+    });
 
     await request(app).get('/health').set('X-Request-ID', 'log-correlation-1');
 

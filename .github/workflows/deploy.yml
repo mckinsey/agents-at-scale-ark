@@ -91,6 +91,9 @@ jobs:
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: services/ark-broker/ark-broker
             image: ark-broker
+          - path: services/ark-broker/ark-broker
+            image: ark-broker-migrate
+            dockerfile: Dockerfile.migrate
           - path: tools/ark-cli
             image: ark-cli
             prebuild: "make ark-cli-build"
@@ -111,6 +114,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Build libraries
         run: make libs-build-all
@@ -264,7 +269,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
           
       - name: Build Docs
         run: |
@@ -301,7 +306,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
           registry-url: https://registry.npmjs.org/
 
       - name: Publish to npm
@@ -348,12 +353,11 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install published ark-cli from npm
         run: |

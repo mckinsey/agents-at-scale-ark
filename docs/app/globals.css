@@ -32,3 +32,30 @@
   margin-bottom: 0.03125rem !important;
 }
 
+/* Larger, more readable sidebar navigation text. The active item is marked by
+   its background highlight (bg-primary) and bold weight, not by recolouring the
+   text, so the text stays dark and readable. */
+.nextra-sidebar a,
+.nextra-sidebar button {
+  font-size: 1rem !important;
+  color: #1f2937 !important;
+}
+
+.dark .nextra-sidebar a,
+.dark .nextra-sidebar button {
+  color: #d4d4d8 !important;
+}
+
+/* Highlight href-based sidebar items on their target page. Nextra only
+   highlights real page-tree nodes, so menu items defined with a manual `href`
+   (the tutorial / how-to aliases) never light up. SidebarActiveSync marks the
+   matching link with data-active-alias; mirror Nextra's own active background. */
+.nextra-sidebar a[data-active-alias] {
+  background-color: var(--x-color-primary-100);
+  font-weight: 600;
+}
+
+.dark .nextra-sidebar a[data-active-alias] {
+  background-color: color-mix(in oklab, var(--x-color-primary-400) 10%, transparent);
+}
+

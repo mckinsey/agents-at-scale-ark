@@ -6,6 +6,7 @@ ARK_BROKER_OUT := $(OUT)/$(ARK_BROKER_SERVICE_NAME)
 
 # Service-specific variables
 ARK_BROKER_IMAGE := ark-broker
+ARK_BROKER_MIGRATE_IMAGE := ark-broker-migrate
 ARK_BROKER_TAG ?= latest
 ARK_BROKER_NAMESPACE ?= default
 
@@ -42,9 +43,10 @@ $(ARK_BROKER_STAMP_TEST): $(ARK_BROKER_STAMP_DEPS)
 	@touch $@
 
 # Build target
-$(ARK_BROKER_SERVICE_NAME)-build: $(ARK_BROKER_STAMP_BUILD) # HELP: Build ARK broker service Docker image
+$(ARK_BROKER_SERVICE_NAME)-build: $(ARK_BROKER_STAMP_BUILD) # HELP: Build ARK broker service Docker images
 $(ARK_BROKER_STAMP_BUILD): $(ARK_BROKER_STAMP_DEPS)
 	cd $(ARK_BROKER_SERVICE_DIR)/ark-broker && docker build -t $(ARK_BROKER_IMAGE):$(ARK_BROKER_TAG) .
+	cd $(ARK_BROKER_SERVICE_DIR)/ark-broker && docker build -f Dockerfile.migrate -t $(ARK_BROKER_MIGRATE_IMAGE):$(ARK_BROKER_TAG) .
 	@touch $@
 
 # Install target

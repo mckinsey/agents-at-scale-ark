@@ -1,5 +1,25 @@
 # ARK Broker chart values
 
+# Message backend: memory (default) or postgres
+backends:
+  message: memory
+
+# PostgreSQL connection — required when backends.message=postgres
+database:
+  url: ""
+  poolMax: 10
+  connectTimeoutMs: 10000
+  statementTimeoutMs: 30000
+  visibilityTtlSeconds: 2592000
+  debugQueries: false
+
+# Migration init container image — used when backends.message=postgres
+migrate:
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-broker-migrate
+    tag: ""
+    pullPolicy: IfNotPresent
+
 # Global annotations added to all resources
 global:
   annotations:

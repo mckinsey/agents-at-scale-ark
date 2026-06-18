@@ -18,6 +18,13 @@ describe('loadConfig', () => {
     expect(cfg.persistence.traceFilePath).toBeUndefined();
     expect(cfg.persistence.eventFilePath).toBeUndefined();
     expect(cfg.persistence.sessionsFilePath).toBeUndefined();
+    expect(cfg.backends.message).toBe('memory');
+    expect(cfg.backends.messageVisibilityTtlSeconds).toBe(2592000);
+    expect(cfg.database.url).toBeUndefined();
+    expect(cfg.database.poolMax).toBe(10);
+    expect(cfg.database.connectTimeoutMs).toBe(10000);
+    expect(cfg.database.statementTimeoutMs).toBe(30000);
+    expect(cfg.database.debugQueries).toBe(false);
   });
 
   it('honors provided values', () => {
@@ -77,6 +84,8 @@ describe('loadConfig', () => {
     expect(Object.isFrozen(cfg.server)).toBe(true);
     expect(Object.isFrozen(cfg.limits)).toBe(true);
     expect(Object.isFrozen(cfg.persistence)).toBe(true);
+    expect(Object.isFrozen(cfg.backends)).toBe(true);
+    expect(Object.isFrozen(cfg.database)).toBe(true);
   });
 
   it('throws when attempting to mutate the frozen object', () => {
@@ -88,5 +97,69 @@ describe('loadConfig', () => {
     expect(() =>
       Object.defineProperty(cfg.server, 'port', {value: 1234})
     ).toThrow();
+  });
+
+  describe('MESSAGE_BACKEND=postgres', () => {
+    it('accepts postgres backend with DATABASE_URL', () => {
+      const cfg = loadConfig({
+        MESSAGE_BACKEND: 'postgres',
+        DATABASE_URL: 'postgres://localhost:5432/broker',
+      });
+
+      expect(cfg.backends.message).toBe('postgres');
+      expect(cfg.database.url).toBe('postgres://localhost:5432/broker');
+    });
+
+    it('rejects postgres backend without DATABASE_URL', () => {
+      expect(() => loadConfig({MESSAGE_BACKEND: 'postgres'})).toThrow();
+    });
+
+    it('honors custom database pool and timeout values', () => {
+      const cfg = loadConfig({
+        MESSAGE_BACKEND: 'postgres',
+        DATABASE_URL: 'postgres://localhost:5432/broker',
+        DATABASE_POOL_MAX: '20',
+        DATABASE_CONNECT_TIMEOUT_MS: '5000',
+        DATABASE_STATEMENT_TIMEOUT_MS: '60000',
+      });
+
+      expect(cfg.database.poolMax).toBe(20);
+      expect(cfg.database.connectTimeoutMs).toBe(5000);
+      expect(cfg.database.statementTimeoutMs).toBe(60000);
+    });
+
+    it('honors MESSAGE_VISIBILITY_TTL_SECONDS', () => {
+      const cfg = loadConfig({
+        MESSAGE_BACKEND: 'postgres',
+        DATABASE_URL: 'postgres://localhost:5432/broker',
+        MESSAGE_VISIBILITY_TTL_SECONDS: '3600',
+      });
+
+      expect(cfg.backends.messageVisibilityTtlSeconds).toBe(3600);
+    });
+  });
+
+  describe('DATABASE_DEBUG_QUERIES', () => {
+    it('defaults to false', () => {
+      expect(loadConfig({}).database.debugQueries).toBe(false);
+    });
+
+    it('parses true', () => {
+      expect(
+        loadConfig({DATABASE_DEBUG_QUERIES: 'true'}).database.debugQueries
+      ).toBe(true);
+    });
+
+    it('parses false', () => {
+      expect(
+        loadConfig({DATABASE_DEBUG_QUERIES: 'false'}).database.debugQueries
+      ).toBe(false);
+    });
+
+    it('treats any non-"true" value as false', () => {
+      expect(
+        loadConfig({DATABASE_DEBUG_QUERIES: '1'}).database.debugQueries
+      ).toBe(false);
+    });
   });
 });

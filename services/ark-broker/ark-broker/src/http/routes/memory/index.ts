@@ -65,8 +65,12 @@ export function createMemoryRouter(
         sendValidationError(res, parse.error, req.id);
         return;
       }
-      const {conversation_id, query_id, messages}: PostMessagesBody =
-        parse.data;
+      const {
+        conversation_id,
+        query_id,
+        messages,
+        ttl_seconds,
+      }: PostMessagesBody = parse.data;
 
       try {
         req.log.info(
@@ -78,7 +82,12 @@ export function createMemoryRouter(
           'received messages'
         );
 
-        await memory.addMessages(conversation_id, query_id, messages);
+        await memory.addMessages(
+          conversation_id,
+          query_id,
+          messages,
+          ttl_seconds
+        );
         await memory.save();
 
         if (sessions && conversation_id) {

@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "ark-sdk-builder"
-version = "0.1.64rc0"
+version = "0.1.64"
 source = { virtual = "." }
 dependencies = [
     { name = "build" },

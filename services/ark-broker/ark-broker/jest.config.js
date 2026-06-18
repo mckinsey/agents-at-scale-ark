@@ -3,6 +3,7 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/test'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
+  testPathIgnorePatterns: ['/node_modules/', '/__tests__/testHelpers/'],
   transform: {
     '^.+\\.ts$': [
       'ts-jest',
@@ -14,7 +15,9 @@ export default {
         },
       },
     ],
+    '^.+\\.js$': ['ts-jest', {useESM: true}],
   },
+  transformIgnorePatterns: ['node_modules/(?!@faker-js/faker)'],
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/types/**/*'],
   coverageThreshold: {
     global: {
