@@ -2949,6 +2949,7 @@ export interface components {
             cluster: string | null;
             /** Namespace */
             namespace: string;
+            permissions?: components["schemas"]["PermissionsResponse"] | null;
             /** Read Only Mode */
             read_only_mode: boolean;
         };
@@ -3687,6 +3688,23 @@ export interface components {
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
             headers?: components["schemas"]["AgentHeader"][] | null;
+        };
+        /** PermissionsResponse */
+        PermissionsResponse: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Rules
+             * @default {}
+             */
+            rules: {
+                [key: string]: string[];
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
         };
         /**
          * QueryConfigMapKeyRef
