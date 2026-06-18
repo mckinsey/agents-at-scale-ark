@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   address:
-    value: http://kubernetes-mcp-server.default.svc.cluster.local:8080/mcp
+    value: http://kubernetes-mcp-server.default.svc.cluster.local:8080/mcp # NOSONAR - cluster-internal service communication
   description: k8s mcp server
   transport: http
   pollInterval: 1m
