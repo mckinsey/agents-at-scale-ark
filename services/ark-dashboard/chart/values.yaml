@@ -22,10 +22,21 @@ app:
       host: "ark-api"
       port: "80"
       protocol: "http"
+    # URL prefix under which the dashboard is served. Set when hosting under
+    # a subpath (e.g. multi-tenant "/namespace1") so emitted asset URLs,
+    # client navigation, and API calls are prefixed correctly. Default ""
+    # serves at the domain root. Substituted at container startup; no rebuild
+    # required to change the value.
+    basePath: ""
   
   # Other environment variables
   env:
-    # Authentication configuration
+    # Authentication configuration.
+    # NOTE: When app.config.basePath is set, these URLs SHOULD include the
+    # basepath so OIDC callback redirects resolve under the tenant prefix.
+    # Example for basePath "/namespace1":
+    #   BASE_URL: "https://mydomain.com/namespace1"
+    #   AUTH_URL: "https://mydomain.com/namespace1/api/auth"
     - name: BASE_URL
       value: ""
     - name: AUTH_URL
@@ -99,6 +110,9 @@ service:
 # Ingress configuration (legacy routing method)
 # Disabled by default. Use this for traditional Kubernetes Ingress routing.
 # For newer deployments, consider using HTTPRoute (below) with Gateway API instead.
+#
+# Multi-tenant hosting: set app.config.basePath and configure this Ingress
+# with a path rule for that prefix. See values-multi-tenant.example.yaml.
 ingress:
   enabled: false
   className: ""  # e.g., "nginx", "traefik", "kong"
