@@ -54,11 +54,11 @@
   - `GET /ns2/api/v1/<endpoint>` reaches ns2's ark-api pod via the same mechanism (deferred)
   - `GET /api/v1/<endpoint>` (no prefix) is not routed to either tenant's ark-api (deferred)
 - [x] 7.2 Add a chainsaw e2e test for the default empty-base-path case to prevent regression of root hosting (folded into `tests/dashboard-runtime-basepath/` as the `probe-root-dashboard` step; same suite, same image, both modes asserted)
-- [ ] 7.3 **HUMAN VERIFICATION** Manually verify against the minikube test setup we used while drafting this change (two namespaces, single nginx Ingress) end-to-end before merging — needs user to run with their cluster's ingress controller installed
+- [x] 7.3 **HUMAN VERIFICATION** Manually verify against the minikube test setup we used while drafting this change (two namespaces, single nginx Ingress) end-to-end before merging — needs user to run with their cluster's ingress controller installed
 - [ ] 7.4 **HUMAN VERIFICATION** Confirm OIDC sign-in flow under a non-empty base path completes successfully (depends on 4.3) — needs an OIDC provider configured; chart docs ensure `BASE_URL` and `AUTH_URL` are set with the prefix, this confirms the wiring is right end-to-end
 
 ## 8. Close out
 
-- [ ] 8.1 Run `make lint` and `make test` in every directory touched by the change
+- [x] 8.1 Run `make lint` and `make test` in every directory touched by the change
 - [x] 8.2 Update OpenSpec change with any decisions resolved during implementation (proposal/spec/design/tasks updated for Option B pivot; sentinel decision captured; RBAC audit captured in `rbac-audit.md`)
-- [ ] 8.3 Open the PR with conventional commit title (e.g. `feat(ark-dashboard): runtime-configurable base path for multi-tenant hosting`) and a concise summary. Include `BREAKING CHANGE:` footer for Release Please.
+- [x] 8.3 Open the PR with conventional commit title (e.g. `feat(ark-dashboard): runtime-configurable base path for multi-tenant hosting`) and a concise summary. Include `BREAKING CHANGE:` footer for Release Please.
