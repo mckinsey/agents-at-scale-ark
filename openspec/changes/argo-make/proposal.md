@@ -14,6 +14,15 @@ There is also a gap on the workflow-authoring side itself: there is **no Ark-nat
 
 ## What Changes
 
+This change has four parts that fit together — a dashboard authoring UI, the Agent that drives it, a reusable query template that Agent (and hand-written workflows) build on, and the production deployment of the MCP server the Agent grounds itself through:
+
+- **New dashboard pages** — `/workflow-templates/new` and `/workflow-templates/[id]/edit`: a two-pane chat + live DAG / editable-YAML experience for authoring and refining `WorkflowTemplate` resources.
+- **The author Agent and its prompt** — `argo-make-author`, an Ark `Agent` whose manifest (spec + system prompt) is bundled in the dashboard. Its prompt carries the schema crib, the grounding/fail-fast rules, and the canonical recipes; the dashboard dispatches each authoring turn to it.
+- **The `ark-query` Argo template** — a reusable `WorkflowTemplate` that submits an Ark `Query`, waits for completion, and returns structured outputs. It ships in the argo-workflows Helm chart.
+- **Production deployment of the `kubernetes-mcp-server`** — a Helm umbrella chart so the read-only MCP server ships with real Ark installs, not just `devspace dev`.
+
+**How they relate:** the dashboard pages host the chat that dispatches to the author Agent; the author Agent grounds itself on the user's existing Ark resources through the `kubernetes-mcp-server` (so the MCP deployment is its runtime dependency) and writes query steps by referencing the `ark-query` template via `templateRef` (which hand-written workflows can reuse too). The detailed changes for each part follow.
+
 ### Conversational authoring
 
 - Add a new dashboard route `/workflow-templates/new` with a two-pane layout:
