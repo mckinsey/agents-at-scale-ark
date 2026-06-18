@@ -168,7 +168,7 @@ The author Agent grounds itself through the `kubernetes-mcp-server`'s generic `r
 | Teams | `apiVersion: ark.mckinsey.com/v1alpha1`, `kind: Team` |
 | Workflow templates | `apiVersion: argoproj.io/v1alpha1`, `kind: WorkflowTemplate` |
 
-`resources_list` accepts an optional namespace and returns the full resource objects; the system prompt instructs the Agent to read only the fields it needs (name, key spec fields, status phase) and to ignore the rest. The server is deployed read-only (Context 3), so these list calls are the only operations the Agent performs against it.
+`resources_list` is scoped to the current namespace — Ark query targets are namespace-local (a `Query` addresses an `Agent`/`Model`/`Team` by name in its own namespace, and `QueryTarget` has no namespace field), so there is no reason to list other namespaces. It returns the full resource objects; the system prompt instructs the Agent to read only the fields it needs (name, key spec fields, status phase) and to ignore the rest. The server is deployed read-only (Context 3), so these list calls are the only operations the Agent performs against it.
 
 **Rationale:** one generic tool covers every present and future Ark kind, the prompt does the projection, and there is no Ark MCP tool surface to maintain or keep in sync with the CRDs.
 
