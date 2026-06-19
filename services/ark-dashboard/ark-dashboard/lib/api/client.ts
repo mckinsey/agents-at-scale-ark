@@ -53,10 +53,23 @@ class APIClient {
     method?: string,
   ): string {
     const isAbsolute = this.baseURL.startsWith('http') || this.baseURL.startsWith('//');
-    const base = isAbsolute || typeof globalThis.location === 'undefined'
+    const fullBase = isAbsolute || typeof globalThis.location === 'undefined'
       ? this.baseURL
       : `${globalThis.location.origin}${this.baseURL}`;
-    const url = new URL(endpoint, base);
+    // Concatenate base + endpoint with exactly one slash between them.
+    // `new URL(endpoint, base)` would treat a leading-slash endpoint as
+    // root-relative and drop the basePath segment of `base`, which breaks
+    // subpath-hosted deployments.
+    const baseNoTrailing = fullBase.endsWith('/') ? fullBase.slice(0, -1) : fullBase;
+    let normalizedEndpoint: string;
+    if (endpoint === '') {
+      normalizedEndpoint = '';
+    } else if (endpoint.startsWith('/')) {
+      normalizedEndpoint = endpoint;
+    } else {
+      normalizedEndpoint = `/${endpoint}`;
+    }
+    const url = new URL(baseNoTrailing + normalizedEndpoint);
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

@@ -1,15 +1,16 @@
 'use client';
 
 import { useAtomValue } from 'jotai';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
 const SETTINGS_KEYBOARD_SHORTCUT = 'e';
 
 export function SettingsKeyboardShortcut() {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const pathname = usePathname();
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
 
@@ -21,16 +22,16 @@ export function SettingsKeyboardShortcut() {
       ) {
         event.preventDefault();
         if (pathname.startsWith('/settings')) {
-          router.push(settingsEntryUrl ?? '/');
+          push(settingsEntryUrl ?? '/');
         } else {
-          router.push('/settings');
+          push('/settings');
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [router, pathname, settingsEntryUrl]);
+  }, [push, pathname, settingsEntryUrl]);
 
   return null;
 }
