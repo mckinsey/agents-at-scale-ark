@@ -1,6 +1,7 @@
 import { APIClient } from '@/lib/api/client';
+import { apiUrl } from '@/lib/api/config';
 
-const proxyApiClient = new APIClient('/api/v1/proxy/services');
+const proxyApiClient = new APIClient(apiUrl('/api/v1/proxy/services'));
 
 export interface ServiceListResponse {
   services: string[];
@@ -24,7 +25,7 @@ export const proxyService = {
       return 'not-installed';
     }
     try {
-      const res = await fetch('/api/v1/proxy/services/ark-broker/health');
+      const res = await fetch(apiUrl('/api/v1/proxy/services/ark-broker/health'));
       if (res.ok) {
         return 'available';
       }

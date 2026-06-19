@@ -611,6 +611,8 @@ jobs:
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
           ARK_MCP_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
           ARK_MCP_IMAGE_TAG: ${{ github.sha }}
+          ARK_DASHBOARD_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard
+          ARK_DASHBOARD_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report

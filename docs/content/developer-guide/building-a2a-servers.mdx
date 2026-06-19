@@ -5,13 +5,13 @@ description: Create and host your own A2A-compatible agents
 
 # Building A2A Servers
 
-This guide shows you how to create A2A servers that host custom agents. Exposing agents via A2A servers allows you to develop agents using your preferred tools and frameworks, such as LangChain, CrewAI, AutoGen, or custom agent code and expose them to Ark using the A2A protocol.
+This guide shows you how to create A2A servers that host custom agents. Exposing agents via A2A servers allows you to develop agents using your preferred tools and frameworks, such as LangChain, CrewAI, or custom agent code and expose them to Ark using the A2A protocol.
 
 If you want deeper Ark integration (automatic agent config resolution, tool definitions, conversation history), see [Building Execution Engines](/developer-guide/building-execution-engines) which uses the Ark Python SDK.
 
 ## Quickstart
 
-You can get started is with the [Simple Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/simple-agent). This sample has the following basic structure:
+The fastest way to get started is with the [Simple Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/simple-agent). This sample has the following basic structure:
 
 ```
 simple-agent/
@@ -35,6 +35,8 @@ This A2A server demonstrates:
 - ✅ How to respond to queries
 - ✅ Local in-cluster development with devspace
 - ✅ Required Kubernetes resources to deploy to a cluster
+
+The sample's response logic is a deliberately simple, dependency-free keyword matcher — it is not an LLM agent. The point is the A2A plumbing, not the intelligence. In `src/simple_a2a_server/main.py`, `SimpleAgentExecutor._process_message` is the seam where a real implementation would call your LLM client or agent framework (LangChain, CrewAI, custom code); everything around it — the agent card, the A2A server, and Ark discovery — stays the same.
 
 ## Running Locally and Testing with the A2A Inspector
 
@@ -90,7 +92,7 @@ curl -X POST http://localhost:8000/ \
 
 Ark can discover the agent running in an A2A server and create an agent resource from it. This allows you to query the agent, put it into teams, expose it via APIs and so on.
 
-Rather than running the sample agent locally, you can run it in the cluster with [`devspace`](http://devspace.sh). Devspace can run your code in a container with live reload as well as deploy Kubernetes resources:
+Rather than running the sample agent locally, you can run it in the cluster with [`devspace`](http://devspace.sh), which runs your code in a container with live reload so edits are reflected without a rebuild:
 
 ```bash
 # Start the a2a server with live reload.
@@ -98,7 +100,7 @@ cd samples/a2a/simple-agent
 devspace dev
 ```
 
-Running with devspace applies the resources in the `manifest.yaml` file. These are:
+Running with devspace applies the resources in the `manifests.yaml` file. These are:
 
 ```
 Deployment - simple-agent    # This tells kubernetes to deploy your sample agent server
@@ -119,7 +121,7 @@ kubectl get services
 
 kubectl get a2aservers
 # NAME           READY   DISCOVERING   ADDRESS                                             AGE
-# simple-agent   True    False         http://simple-agent.mock-llm.svc.cluster.local:80   6m13s
+# simple-agent   True    False         http://simple-agent.default.svc.cluster.local:80   6m13s
 ```
 
 Note that to enable live reload, devspace creates a special 'dev' deployment. Details are in the devspace docs.
@@ -130,7 +132,7 @@ Ark will monitor the `A2AServer` resource that has been created, and will attemp
 # Check the A2AServer status.
 kubectl get a2aserver simple-agent -o yaml
 # NAME           READY   DISCOVERING   ADDRESS                                             AGE
-# simple-agent   True    False         http://simple-agent.mock-llm.svc.cluster.local:80   6m13s
+# simple-agent   True    False         http://simple-agent.default.svc.cluster.local:80   6m13s
 
 # Check if Ark created an Agent from the A2A server.
 kubectl get agents
@@ -141,6 +143,20 @@ kubectl get agents
 ark agent query simple-agent "who are you?"
 # I received your message: 'who are you?'. I'm a simple agent, so I can help with basic tasks like greetings, simple math, or just echoing your messages back to you. Try asking for help to see what I can do!
 ```
+
+The agent has no `modelRef` (A2A agents bring their own model) and uses the built-in `a2a` execution engine. It becomes `AVAILABLE   True` once its `A2AServer` is `Ready`.
+
+### Viewing in the dashboard
+
+The dashboard surfaces both the A2A server and the agent Ark created from it. Open it with `ark dashboard`.
+
+The **A2A Servers** page lists the registered server with its status and resolved address:
+
+![Ark dashboard A2A Servers page showing the simple-agent server as Available](./images/a2a-dashboard-servers.png)
+
+Under **Agent Builder → Agents**, the discovered agent appears tagged as an **A2A Agent**:
+
+![Ark dashboard Agents list showing simple-agent tagged as an A2A Agent](./images/a2a-dashboard-agents.png)
 
 You can uninstall / cleanup your deployment with:
 
@@ -169,7 +185,8 @@ kind: A2AServer
 metadata:
   name: my-a2a-server
 spec:
-  address: "http://my-a2a-server:8000"
+  address:
+    value: "http://my-a2a-server:8000"
   timeout: "2m"  # Limit this server's calls to 2 minutes
 ```
 
@@ -197,11 +214,9 @@ kind: Query
 metadata:
   name: long-running-query
 spec:
-  input:
-  - content: "Complex analysis task"
-    role: user
+  input: "Complex analysis task"
   target:
-  - type: agent
+    type: agent
     name: my-agent
   timeout: "30m"  # 30 minutes for this specific query
 ```
