@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/sonner';
 
-import { ToolEditor } from '@/components/editors/tool-editor';
 import { Handyman } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import {
   ResourceEmptyState,
   ResourceNoResults,
@@ -57,7 +57,6 @@ export function ToolsSection() {
   const showLoading = useDelayedLoading(loading);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('All');
-  const [toolEditorOpen, setToolEditorOpen] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -140,28 +139,6 @@ export function ToolsSection() {
     }
   };
 
-  const handleSaveTool = async (toolSpec: {
-    name: string;
-    type: string;
-    description: string;
-    inputSchema?: Record<string, unknown>;
-    annotations?: Record<string, string>;
-    url?: string;
-  }) => {
-    try {
-      await toolsService.create({ ...toolSpec, namespace });
-      toast.success('Tool created successfully');
-      setTools(await toolsService.getAll());
-    } catch (error) {
-      toast.error('Failed to Create Tool', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
-    }
-  };
-
   const isEmpty = !loading && tools.length === 0;
 
   return (
@@ -180,13 +157,14 @@ export function ToolsSection() {
             Create and manage tools
           </p>
         </div>
-        {!isEmpty && (
-          <Button
-            onClick={() => setToolEditorOpen(true)}
-            disabled={readOnlyMode}>
-            Add tool
-          </Button>
-        )}
+        {!isEmpty &&
+          (readOnlyMode ? (
+            <Button disabled>Add tool</Button>
+          ) : (
+            <NamespacedLink href="/tools/new">
+              <Button>Add tool</Button>
+            </NamespacedLink>
+          ))}
       </div>
 
       {showLoading ? (
@@ -205,11 +183,13 @@ export function ToolsSection() {
           }
           actions={
             <>
-              <Button
-                onClick={() => setToolEditorOpen(true)}
-                disabled={readOnlyMode}>
-                Add tool
-              </Button>
+              {readOnlyMode ? (
+                <Button disabled>Add tool</Button>
+              ) : (
+                <NamespacedLink href="/tools/new">
+                  <Button>Add tool</Button>
+                </NamespacedLink>
+              )}
               <a href={LEARN_MORE_URL} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline">Learn more</Button>
               </a>
@@ -259,12 +239,6 @@ export function ToolsSection() {
         </div>
       )}
 
-      <ToolEditor
-        open={toolEditorOpen}
-        onOpenChange={setToolEditorOpen}
-        onSave={handleSaveTool}
-        namespace={namespace}
-      />
     </div>
   );
 }

@@ -12,7 +12,7 @@ export function TeamsSection() {
       title="Teams"
       subtitle="Create and manage teams of agents"
       createHref="/teams/new"
-      createLabel="Create Team"
+      createLabel="Create team"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/"
       entityLabel="Team"
       entityPluralLabel="teams"
