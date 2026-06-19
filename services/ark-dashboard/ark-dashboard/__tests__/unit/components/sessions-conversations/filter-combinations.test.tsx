@@ -6,7 +6,7 @@ import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 
 vi.mock('@/lib/services/broker-sessions-hooks');
-vi.mock('sonner');
+vi.mock('@/components/ui/sonner');
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({
   SessionTableRow: ({ session }: any) => (
     <div data-testid={`session-row-${session.sessionId}`}>{session.name}</div>

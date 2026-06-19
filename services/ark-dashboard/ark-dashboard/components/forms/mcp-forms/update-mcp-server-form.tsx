@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { mcpServersService } from '@/lib/services';
@@ -47,9 +47,7 @@ export function UpdateMcpServerForm({ server }: UpdateMcpServerFormProps) {
       await mcpServersService.update(server.name, {
         spec: buildSpec(values, nonEmptyHeaders),
       });
-      toast.success('Mcp Updated', {
-        description: `Successfully updated ${server.name}`,
-      });
+      toast.success('MCP server updated successfully');
       push('/mcp');
     } catch (error) {
       toast.error('Failed to Update MCP', {

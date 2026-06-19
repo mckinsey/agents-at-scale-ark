@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { Add, BarChart, SwapVert } from '@/components/icons';
 import { ResourceSearchInput } from '@/components/sections/resource-list-states';

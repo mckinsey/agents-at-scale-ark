@@ -4,11 +4,18 @@ import userEvent from '@testing-library/user-event';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('@/lib/services/broker-sessions');
-vi.mock('sonner');
+vi.mock('@/components/ui/sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({
   SessionTableRow: ({ session, isSelected, onSelect }: any) => (
     <div

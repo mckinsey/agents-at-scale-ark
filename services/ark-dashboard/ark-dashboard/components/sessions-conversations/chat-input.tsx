@@ -9,7 +9,7 @@ import { Send, SingleTool } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const FALLBACK_PARTICIPANT_NAME = 'participant';
 

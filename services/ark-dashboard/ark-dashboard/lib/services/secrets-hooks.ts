@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { APIError } from '@/lib/api/client';
 
@@ -52,7 +52,7 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       return { previousTodos };
     },
     onSuccess: data => {
-      toast.success('Secret created');
+      toast.success('Secret created successfully');
 
       if (props.onSuccess) {
         props.onSuccess(data);
@@ -100,7 +100,7 @@ export const useUpdateSecret = (props: UseUpdateSecretProps) => {
       return secretsService.update(name, password);
     },
     onSuccess: data => {
-      toast.success('Secret updated');
+      toast.success('Secret updated successfully');
 
       if (props.onSuccess) {
         props.onSuccess(data);
@@ -140,7 +140,7 @@ export const useDeleteSecret = (props?: UseDeleteSecretProps) => {
       return secretsService.delete(name);
     },
     onSuccess: () => {
-      toast.success('Secret deleted');
+      toast.success('Secret deleted successfully');
 
       if (props?.onSuccess) {
         props.onSuccess();
