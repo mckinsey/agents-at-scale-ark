@@ -143,10 +143,11 @@ const Toast = memo(function Toast({ id, message, type, options }: ToastProps) {
 
 function createToast(type: ToastType) {
   return (message: string, options?: ToastOptions) => {
-    // Extract action and cancel from options to prevent Sonner from rendering them separately
+    // Extract action, cancel, and description from options to prevent Sonner from rendering them separately
     const {
       action: _action,
       cancel: _cancel,
+      description: _description,
       ...sonnerOptions
     } = options || {};
 

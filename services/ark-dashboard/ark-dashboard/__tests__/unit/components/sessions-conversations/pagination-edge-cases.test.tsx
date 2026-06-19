@@ -12,7 +12,7 @@ import type { LogsResponse } from '@/lib/services/logs';
 vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('@/lib/services/logs-hooks');
 vi.mock('@/lib/services/logs');
-vi.mock('sonner');
+vi.mock('@/components/ui/sonner');
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({
   SessionTableRow: ({ session }: any) => (
     <div data-testid={`session-row-${session.sessionId}`}>{session.name}</div>

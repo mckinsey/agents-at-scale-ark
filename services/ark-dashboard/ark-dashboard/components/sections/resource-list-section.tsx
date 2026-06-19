@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
@@ -129,9 +129,7 @@ export function ResourceListSection<T extends ResourceListItem>({
         throw new Error(`${entityLabel} not found`);
       }
       await deleteItem(id);
-      toast.success(`${entityLabel} Deleted`, {
-        description: `Successfully deleted ${item.name}`,
-      });
+      toast.success(`${entityLabel} deleted successfully`);
       setLoading(true);
       try {
         setItems(await loadItemsRef.current());

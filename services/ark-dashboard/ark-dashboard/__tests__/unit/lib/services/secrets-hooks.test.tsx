@@ -12,7 +12,7 @@ import {
   useGetAllSecrets,
   useUpdateSecret,
 } from '@/lib/services/secrets-hooks';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 vi.mock('@/lib/services/secrets', () => ({
   secretsService: {
@@ -23,7 +23,7 @@ vi.mock('@/lib/services/secrets', () => ({
   },
 }));
 
-vi.mock('sonner', () => ({
+vi.mock('@/components/ui/sonner', () => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -115,7 +115,7 @@ describe('secrets-hooks', () => {
         'test-secret',
         'password123',
       );
-      expect(toast.success).toHaveBeenCalledWith('Secret created');
+      expect(toast.success).toHaveBeenCalledWith('Secret created successfully');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
     });
 
@@ -209,7 +209,7 @@ describe('secrets-hooks', () => {
         'updated-secret',
         'newpassword123',
       );
-      expect(toast.success).toHaveBeenCalledWith('Secret updated');
+      expect(toast.success).toHaveBeenCalledWith('Secret updated successfully');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
     });
 
@@ -300,7 +300,7 @@ describe('secrets-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(secretsService.delete).toHaveBeenCalledWith('delete-me');
-      expect(toast.success).toHaveBeenCalledWith('Secret deleted');
+      expect(toast.success).toHaveBeenCalledWith('Secret deleted successfully');
       expect(onSuccess).toHaveBeenCalled();
     });
 

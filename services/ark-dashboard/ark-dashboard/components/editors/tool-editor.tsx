@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLayoutEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import * as z from 'zod';
 
 import { CollapseContent, ExpandContent } from '@/components/icons';

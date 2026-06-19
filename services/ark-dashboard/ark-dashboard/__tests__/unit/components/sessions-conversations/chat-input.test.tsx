@@ -6,7 +6,7 @@ import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 
 vi.mock('@/lib/services/conversations-hooks');
-vi.mock('sonner', () => ({
+vi.mock('@/components/ui/sonner', () => ({
   toast: {
     error: vi.fn(),
   },

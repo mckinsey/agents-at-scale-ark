@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { mcpServersService } from '@/lib/services';
@@ -49,9 +49,7 @@ export function CreateMcpServerForm() {
     setIsSubmitting(true);
     try {
       await mcpServersService.create(createData);
-      toast.success('Mcp Created', {
-        description: `Successfully created ${createData.name}`,
-      });
+      toast.success('MCP server created successfully');
       push('/mcp');
     } catch (error) {
       toast.error('Failed to Create MCP', {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { ToolEditor } from '@/components/editors/tool-editor';
 import { Handyman } from '@/components/icons';
@@ -129,9 +129,7 @@ export function ToolsSection() {
     try {
       await toolsService.delete(tool.name);
       setTools(prev => prev.filter(t => t.id !== id));
-      toast.success('Tool Deleted', {
-        description: `Successfully deleted ${tool.name}`,
-      });
+      toast.success('Tool deleted successfully');
     } catch (error) {
       toast.error('Failed to Delete Tool', {
         description:
@@ -152,9 +150,7 @@ export function ToolsSection() {
   }) => {
     try {
       await toolsService.create({ ...toolSpec, namespace });
-      toast.success('Tool Created', {
-        description: `Successfully created ${toolSpec.name}`,
-      });
+      toast.success('Tool created successfully');
       setTools(await toolsService.getAll());
     } catch (error) {
       toast.error('Failed to Create Tool', {
