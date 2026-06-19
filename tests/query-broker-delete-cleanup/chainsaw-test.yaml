@@ -91,9 +91,10 @@ spec:
   - name: delete-query
     try:
     - delete:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: delete-cleanup-query
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: delete-cleanup-query
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
