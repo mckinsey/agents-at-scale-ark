@@ -101,7 +101,7 @@ describe('AgentsSection', () => {
     mockGetAll.mockResolvedValue(sampleAgents);
     render(<AgentsSection />);
     await screen.findByTestId('agents-table');
-    expect(screen.getByRole('button', { name: 'Create Agent' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Create agent' })).toBeDisabled();
   });
 
   it('renders Create Agent link when not readOnly', async () => {

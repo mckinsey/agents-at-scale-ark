@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import { Activity } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MetricCard } from '@/components/cards/metric-card';
@@ -15,7 +14,6 @@ describe('MetricCard', () => {
       <MetricCard
         title="Models"
         value={5}
-        Icon={Activity}
         href="/models"
         isLoading={false}
         hasError={false}

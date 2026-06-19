@@ -13,7 +13,7 @@ export function AgentsSection() {
       title="Agents"
       subtitle="Create and manage agents to automate tasks"
       createHref="/agents/new"
-      createLabel="Create Agent"
+      createLabel="Create agent"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
       entityLabel="Agent"
       entityPluralLabel="agents"

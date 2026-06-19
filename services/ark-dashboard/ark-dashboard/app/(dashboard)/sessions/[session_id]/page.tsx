@@ -52,7 +52,7 @@ export default function SessionDetailPage() {
   });
 
   // Create temporary session from query params for new sessions
-  const temporarySession = useMemo((): BrokerSession | null => {
+  const [temporarySession] = useState<BrokerSession | null>(() => {
     if (!initialParticipant || !initialType) {
       return null;
     }
@@ -71,7 +71,7 @@ export default function SessionDetailPage() {
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
     };
-  }, [initialParticipant, initialType, session_id]);
+  });
 
   const session = useMemo(() => {
     if (!backendSession) {
@@ -113,7 +113,7 @@ export default function SessionDetailPage() {
     );
   }
 
-  if (isError || !session) {
+  if (!session) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <button
