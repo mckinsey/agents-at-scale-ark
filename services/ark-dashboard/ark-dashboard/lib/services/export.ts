@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api/client';
-import { API_CONFIG } from '@/lib/api/config';
+import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import {
@@ -121,7 +121,7 @@ export const exportService = {
 
     // Call backend export endpoint using fetch directly for blob response
     const response = await fetch(
-      `${API_CONFIG.baseURL}/api/v1/export/resources`,
+      apiUrl('/api/v1/export/resources'),
       {
         method: 'POST',
         headers: {
@@ -145,7 +145,7 @@ export const exportService = {
   // Export all resources using the unified export endpoint
   async exportAll(): Promise<void> {
     // Call backend export endpoint without resource_types to export all
-    const response = await fetch(`${API_CONFIG.baseURL}/api/v1/export/resources`, {
+    const response = await fetch(apiUrl('/api/v1/export/resources'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
