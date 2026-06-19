@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -453,6 +454,131 @@ func TestGenericStorage_Delete_WithValidation(t *testing.T) {
 	_, _, err := gs.Delete(ctx, testAgentName, validator, &metav1.DeleteOptions{})
 	if err != validationErr {
 		t.Errorf("expected validation error, got %v", err)
+	}
+}
+
+func TestGenericStorage_Delete_WithFinalizers_SetsDeletionTimestamp(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+
+	resultAgent, ok := result.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", result)
+	}
+	if resultAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be set on returned object")
+	}
+
+	stored, ok := backend.objects["Agent/default/test-agent"]
+	if !ok {
+		t.Fatal("expected object to remain in backend while finalizers are present")
+	}
+	storedAgent := stored.(*arkv1alpha1.Agent)
+	if storedAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be persisted in backend")
+	}
+}
+
+func TestGenericStorage_Delete_WithFinalizers_DeletionTimestampNotReset(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	original := metav1.NewTime(time.Now().Add(-time.Hour))
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	agent.DeletionTimestamp = &original
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+
+	resultAgent := result.(*arkv1alpha1.Agent)
+	if !resultAgent.DeletionTimestamp.Equal(&original) {
+		t.Errorf("expected existing deletionTimestamp to be preserved, got %v", resultAgent.DeletionTimestamp)
+	}
+}
+
+func TestGenericStorage_Update_RemovingLastFinalizer_TriggersDelete(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	now := metav1.NewTime(time.Now())
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	agent.DeletionTimestamp = &now
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updated := &arkv1alpha1.Agent{}
+	updated.Name = testAgentName
+	updated.Namespace = testNS()
+	updated.DeletionTimestamp = &now
+	updated.Finalizers = nil
+
+	updater := &simpleUpdatedObjectInfo{obj: updated}
+	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if created {
+		t.Error("expected created to be false")
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; ok {
+		t.Error("expected object to be deleted after last finalizer removed")
+	}
+}
+
+func TestGenericStorage_Update_FinalizersRemaining_DoesNotDelete(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	now := metav1.NewTime(time.Now())
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"a", "b"}
+	agent.DeletionTimestamp = &now
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updated := &arkv1alpha1.Agent{}
+	updated.Name = testAgentName
+	updated.Namespace = testNS()
+	updated.DeletionTimestamp = &now
+	updated.Finalizers = []string{"b"}
+
+	updater := &simpleUpdatedObjectInfo{obj: updated}
+	_, _, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain while a finalizer is still present")
 	}
 }
 
