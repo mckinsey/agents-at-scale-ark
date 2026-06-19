@@ -6,10 +6,11 @@ import { namespacesService } from './namespaces';
 export const GET_CONTEXT_QUERY_KEY = 'get-context';
 export const GET_ALL_NAMESPACES_QUERY_KEY = 'get-all-namespaces';
 
-export const useGetContext = (namespace?: string) => {
+export const useGetContext = (namespace?: string, enabled = true) => {
   return useQuery({
     queryKey: [GET_CONTEXT_QUERY_KEY, namespace],
     queryFn: () => namespacesService.getContext(namespace),
+    enabled,
   });
 };
 
