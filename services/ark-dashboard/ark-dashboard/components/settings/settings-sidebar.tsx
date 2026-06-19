@@ -2,10 +2,11 @@
 
 import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
+import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
 
 import { type SettingPage, settingsSections } from './settings-types';
@@ -15,7 +16,8 @@ type SettingsSidebarProps = {
 };
 
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
-  const router = useRouter();
+  const { push, replace } = useNamespacedNavigation();
+  const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
@@ -33,11 +35,13 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   }));
 
   const handleSettingClick = (settingKey: SettingPage) => {
-    router.replace(`/settings/${settingKey}`);
+    replace(`/settings/${settingKey}`);
   };
 
+  // settingsEntryUrl is captured from the in-app location the user came from,
+  // so it may already carry a namespace query; push merges params and won't double it.
   const handleClose = () => {
-    router.push(settingsEntryUrl ?? '/');
+    push(settingsEntryUrl ?? '/');
   };
 
   return (
