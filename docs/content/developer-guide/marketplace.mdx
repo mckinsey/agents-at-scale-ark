@@ -179,10 +179,7 @@ A source whose manifest needs authentication can carry a credential. ark-api att
 - **Bearer / token** — private GitHub raw, GitHub Enterprise Server, and artifact stores (Artifactory, Nexus, Harbor).
 - **HTTP Basic** — Azure DevOps Repos (empty username + a Personal Access Token).
 
-### Add one from the dashboard
-
-In **Settings → Manage marketplace → Add new marketplace**, enter the manifest URL, pick **Bearer / token** or **HTTP Basic**, and paste the token. The token is
-sent once on save and validated against the manifest before the source is stored; it is never displayed again. For Azure DevOps, use HTTP Basic and paste the PAT (the empty username is handled for you).
+To add one from the dashboard, see [Add an authenticated source](#add-an-authenticated-source) above.
 
 ### Who can use it
 
