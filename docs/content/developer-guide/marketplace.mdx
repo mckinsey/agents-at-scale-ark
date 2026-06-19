@@ -174,32 +174,23 @@ The official marketplace publishes via [GitHub Actions on push to `main`](https:
 
 ## Authenticated sources
 
-A source whose manifest needs authentication can carry a credential. ark-api
-attaches the header server-side; the credential is stored in a Kubernetes Secret,
-never shown in the browser, and never logged. Two schemes are supported:
+A source whose manifest needs authentication can carry a credential. ark-api attaches the header server-side; the credential is stored in a Kubernetes Secret, never shown in the browser, and never logged. Two schemes are supported:
 
 - **Bearer / token** — private GitHub raw, GitHub Enterprise Server, and artifact stores (Artifactory, Nexus, Harbor).
 - **HTTP Basic** — Azure DevOps Repos (empty username + a Personal Access Token).
 
 ### Add one from the dashboard
 
-In **Settings → Manage marketplace → Add new marketplace**, enter the manifest
-URL, pick **Bearer / token** or **HTTP Basic**, and paste the token. The token is
-sent once on save and validated against the manifest before the source is stored;
-it is never displayed again. For Azure DevOps, use HTTP Basic and paste the PAT
-(the empty username is handled for you).
+In **Settings → Manage marketplace → Add new marketplace**, enter the manifest URL, pick **Bearer / token** or **HTTP Basic**, and paste the token. The token is
+sent once on save and validated against the manifest before the source is stored; it is never displayed again. For Azure DevOps, use HTTP Basic and paste the PAT (the empty username is handled for you).
 
 ### Who can use it
 
-ark-api reads the credential Secret under **your** identity, so you can only use
-a source whose credential Secret you are allowed to read. A shared authenticated
-source resolves only for users granted `get` on its credential Secret — typically
-a viewer-group `RoleBinding`. A user without that access sees an "authentication
-failed" error for the source instead of its items. Editing a source's URL
-requires re-entering the credential.
+ark-api reads the credential Secret under **your** identity, so you can only use a source whose credential Secret you are allowed to read. A shared authenticated
+source resolves only for users granted `get` on its credential Secret — typically a viewer-group `RoleBinding`. A user without that access sees an "authentication failed" error for the source instead of its items. 
+Editing a source's URL requires re-entering the credential.
 
-For the ConfigMap/Secret shapes, RBAC, and deploy-time seeding via Helm, see
-[Marketplace Sources](/reference/marketplace-sources).
+For the ConfigMap/Secret shapes, RBAC, and deploy-time seeding via Helm, see [Marketplace Sources](/reference/marketplace-sources).
 
 ## Limitations
 
