@@ -410,5 +410,65 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
             await self.client.delete_secret("protected-secret")
 
 
+class TestInitK8sCalledBeforeApiClient(unittest.IsolatedAsyncioTestCase):
+    """Verify init_k8s is called before ApiClient in every SecretClient method."""
+
+    def setUp(self):
+        self.client = SecretClient(namespace="test-namespace")
+
+    @patch('ark_sdk.k8s.create_api_client')
+    @patch('ark_sdk.k8s.init_k8s', new_callable=AsyncMock)
+    async def _run(self, method, mock_init_k8s, mock_create_api_client):
+        call_order = []
+        mock_init_k8s.side_effect = lambda: call_order.append('init_k8s')
+        mock_api = AsyncMock()
+        mock_api.__aenter__ = AsyncMock(return_value=mock_api)
+        mock_api.__aexit__ = AsyncMock(return_value=False)
+        mock_api.side_effect = lambda: call_order.append('create_api_client') or mock_api
+        mock_create_api_client.side_effect = lambda: (call_order.append('create_api_client'), mock_api)[1]
+
+        v1_mock = Mock()
+        v1_mock.list_namespaced_secret = AsyncMock(return_value=Mock(items=[]))
+        v1_mock.read_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(name='s', uid='u', annotations={}),
+            type='Opaque', data={'token': 'val'}
+        ))
+        v1_mock.create_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(name='s', uid='u', annotations={}), type='Opaque'
+        ))
+        v1_mock.replace_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(name='s', uid='u', annotations={}), type='Opaque'
+        ))
+        v1_mock.delete_namespaced_secret = AsyncMock(return_value=None)
+
+        with patch('ark_sdk.k8s.client.CoreV1Api', return_value=v1_mock):
+            try:
+                await method()
+            except Exception:
+                pass
+
+        self.assertIn('init_k8s', call_order, "init_k8s was not called")
+        self.assertLess(call_order.index('init_k8s'), call_order.index('create_api_client'),
+                        "init_k8s must be called before create_api_client")
+
+    async def test_list_secrets_calls_init_k8s_first(self):
+        await self._run(self.client.list_secrets)
+
+    async def test_get_secret_calls_init_k8s_first(self):
+        await self._run(lambda: self.client.get_secret('s'))
+
+    async def test_get_secret_value_calls_init_k8s_first(self):
+        await self._run(lambda: self.client.get_secret_value('s', 'token'))
+
+    async def test_create_secret_calls_init_k8s_first(self):
+        await self._run(lambda: self.client.create_secret('s', {'token': 'v'}))
+
+    async def test_update_secret_calls_init_k8s_first(self):
+        await self._run(lambda: self.client.update_secret('s', {'token': 'v'}))
+
+    async def test_delete_secret_calls_init_k8s_first(self):
+        await self._run(lambda: self.client.delete_secret('s'))
+
+
 if __name__ == '__main__':
     unittest.main()
