@@ -69,7 +69,9 @@ Click **Add new marketplace** to register a new one. This example adds a **publi
 | **Display name** | Optional label shown in the sidebar and item cards. Defaults to the `marketplace` field inside the manifest. |
 | **Authentication** | Leave on **None** for a public manifest — ark-api fetches it with no `Authorization` header, and the **Token** field stays empty. For a private source, see [Add an authenticated source](#add-an-authenticated-source) below. |
 
-Hit **Add**. The dashboard `POST`s the URL to its own `/api/marketplace/validate` endpoint, which fetches it server-side and confirms the manifest is well-formed before the source is saved. On the next reload of the Marketplace tab you'll see the new items alongside the defaults.
+Hit **Add**. The dashboard checks the URL format, then sends the source to ark-api, which validates the URL and saves it to the namespace's `marketplace-sources` ConfigMap. 
+(For an authenticated source, ark-api also test-fetches the manifest with the credential before saving — see [Add an authenticated source](#add-an-authenticated-source).) 
+On the next reload of the Marketplace tab you'll see the new items alongside the defaults.
 
 The **Refresh Data** button at the top of the Manage marketplace page re-pulls every source on demand without a page reload.
 
@@ -87,6 +89,19 @@ If the manifest sits behind authentication — a private GitHub/GHES repo, an Az
 | **Token** | The credential for the chosen scheme. Sent once on save, masked in the field, validated against the manifest before the source is saved, and never displayed again. |
 
 Pick the scheme your host expects — **Bearer / token** for GitHub-style hosts, **HTTP Basic** for Azure DevOps — paste the token, and hit **Add**. ark-api stores the token in a Kubernetes Secret and attaches the header server-side, so the browser never holds it. For who is allowed to use a shared authenticated source and the security model, see [Authenticated sources](#authenticated-sources).
+
+#### Finding the manifest URL on your host
+
+The URL must return the raw manifest bytes, not an HTML file-viewer page.
+
+- **GitHub** — open the file and click **Raw**, then copy the address: `https://raw.githubusercontent.com/<org>/<repo>/<branch>/marketplace.json` (private repos need a **Bearer / token** credential).
+- **Azure DevOps Repos** — there is no "Raw" button. Use the Items API, which returns raw content when you pass `$format=text`:
+
+  ```
+  https://dev.azure.com/<org>/<project>/_apis/git/repositories/<repo>/items?path=/marketplace.json&api-version=7.1&$format=text
+  ```
+
+  Without `$format=text` the endpoint returns file *metadata* instead of the manifest. For a non-default branch, append `&versionDescriptor.version=<branch>&versionDescriptor.versionType=branch`. Use **HTTP Basic** auth with a PAT scoped to **Code: Read**.
 
 ## `marketplace.json` schema
 
@@ -121,11 +136,13 @@ A minimal valid manifest looks like this:
 
 The chart this points at should bundle the `Agent` CRD (and any `Model`, `Tool`, or `MCPServer` resources the agent depends on) so that one `helm install` produces a working, queryable agent.
 
-The dashboard's manifest validator (`/api/marketplace/validate`) enforces three rules:
+A well-formed manifest follows three rules:
 
 - The top-level object must have `version`, `marketplace`, and `items[]` keys.
 - Every item must have at least a `name`.
 - The whole document must be valid JSON returned with HTTP 200.
+
+These describe what a valid manifest needs; they are not a save-time gate. ark-api stores the source once the URL validates, and a malformed or unreachable manifest surfaces as missing or broken items when the catalogue is fetched (an authenticated source is the exception — its manifest is test-fetched with the credential before saving).
 
 Beyond that, populate the optional fields for a good catalog entry:
 
