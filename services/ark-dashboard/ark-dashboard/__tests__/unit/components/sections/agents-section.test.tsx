@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsSection } from '@/components/sections/agents-section';
+import { toast } from '@/components/ui/sonner';
 import type { Agent } from '@/lib/services';
 
 const mockGetAll = vi.fn();
@@ -47,8 +48,13 @@ vi.mock('@/components/namespaced-link', () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+vi.mock('@/components/ui/sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
 }));
 
 const sampleAgents: Agent[] = [
@@ -113,7 +119,6 @@ describe('AgentsSection', () => {
   });
 
   it('shows error toast when getAll fails', async () => {
-    const { toast } = await import('sonner');
     mockGetAll.mockRejectedValue(new Error('boom'));
     render(<AgentsSection />);
     await waitFor(() => {
