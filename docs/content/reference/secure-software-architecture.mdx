@@ -31,7 +31,7 @@ The Ark API service has a namespace-scoped Role granting access to Ark resources
 
 ### Dashboard and broker
 
-The dashboard and broker are stateless services with no Kubernetes API permissions beyond their own service account identity. They do not read or write Ark custom resources directly.
+The dashboard and broker are stateless services with no Kubernetes API permissions beyond their own service account identity. They do not read or write Ark custom resources directly. When the broker's Postgres message backend is enabled, the broker additionally consumes a database credential (`DATABASE_URL`, typically supplied from a Secret); it still requires no extra Kubernetes API permissions, and it never runs schema migrations itself — those run in a separate init container as the `nobody` user.
 
 
 ## Input validation and error handling
