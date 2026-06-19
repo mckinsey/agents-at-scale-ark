@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { apiUrl } from '@/lib/api/config';
 import {
   createStreamEntryId,
   extractItemTimestamp,
@@ -71,7 +72,9 @@ export function useSSEStream(
       }
 
       setError(null);
-      let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
+      let url = apiUrl(
+        `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`,
+      );
       if (cursor !== undefined) {
         url += `&cursor=${cursor}`;
       }
@@ -126,7 +129,9 @@ export function useSSEStream(
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${pageSize}`;
+        let url = apiUrl(
+          `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${pageSize}`,
+        );
         if (cursor !== undefined) {
           url += `&cursor=${cursor}`;
         }
@@ -202,7 +207,7 @@ export function useSSEStream(
     if (!endpoint) return;
     try {
       const res = await fetch(
-        `/api${endpoint}?memory=${encodeURIComponent(memory)}`,
+        apiUrl(`/api${endpoint}?memory=${encodeURIComponent(memory)}`),
         { method: 'DELETE' },
       );
       if (!res.ok) {
