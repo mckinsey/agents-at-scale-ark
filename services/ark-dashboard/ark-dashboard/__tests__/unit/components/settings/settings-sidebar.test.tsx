@@ -65,7 +65,7 @@ describe('SettingsSidebar', () => {
 
     await user.click(screen.getByText('Memory'));
 
-    expect(mockPush).toHaveBeenCalledWith('/settings/memory?namespace=demo');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/memory?namespace=demo');
   });
 
   it('should navigate to entry URL preserving namespace when close button is clicked after soft navigation', async () => {

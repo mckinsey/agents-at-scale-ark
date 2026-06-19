@@ -4,6 +4,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(),
@@ -34,6 +35,7 @@ describe('SettingsPage', () => {
     vi.clearAllMocks();
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
       push: mockPush,
+      replace: mockReplace,
     });
     (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue(
       new URLSearchParams('namespace=demo'),
@@ -50,7 +52,7 @@ describe('SettingsPage', () => {
   it('should redirect to default page preserving namespace when no page segment is provided', () => {
     (useParams as ReturnType<typeof vi.fn>).mockReturnValue({ page: undefined });
     renderPage();
-    expect(mockPush).toHaveBeenCalledWith('/settings/a2a-servers?namespace=demo');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/a2a-servers?namespace=demo');
   });
 
   it('should redirect to default page preserving namespace when an invalid page is provided', () => {
@@ -58,7 +60,7 @@ describe('SettingsPage', () => {
       page: ['nonexistent'],
     });
     renderPage();
-    expect(mockPush).toHaveBeenCalledWith('/settings/a2a-servers?namespace=demo');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/a2a-servers?namespace=demo');
   });
 
   it('should not redirect when a valid page is provided', () => {
@@ -66,6 +68,7 @@ describe('SettingsPage', () => {
       page: ['secrets'],
     });
     renderPage();
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
 

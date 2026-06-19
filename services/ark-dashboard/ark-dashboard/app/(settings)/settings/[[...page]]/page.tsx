@@ -16,7 +16,7 @@ const VALID_SETTINGS_PAGES: SettingPage[] = settingsSections.flatMap(s =>
 
 export default function SettingsPage() {
   const params = useParams();
-  const { push } = useNamespacedNavigation();
+  const { replace } = useNamespacedNavigation();
 
   const pageSegments = params.page as string[] | undefined;
   const pageKey = pageSegments?.[0] as SettingPage | undefined;
@@ -26,9 +26,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!isValidPage) {
-      push(`/settings/${DEFAULT_SETTINGS_PAGE}`);
+      replace(`/settings/${DEFAULT_SETTINGS_PAGE}`);
     }
-  }, [isValidPage, push]);
+  }, [isValidPage, replace]);
 
   return (
     <div className="bg-sidebar flex h-full w-full overflow-hidden">

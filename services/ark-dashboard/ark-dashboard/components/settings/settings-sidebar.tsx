@@ -15,12 +15,12 @@ type SettingsSidebarProps = {
 };
 
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
-  const { push } = useNamespacedNavigation();
+  const { push, replace } = useNamespacedNavigation();
   const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
 
   const handleSettingClick = (settingKey: SettingPage) => {
-    push(`/settings/${settingKey}`);
+    replace(`/settings/${settingKey}`);
   };
 
   // settingsEntryUrl is captured from the in-app location the user came from,
