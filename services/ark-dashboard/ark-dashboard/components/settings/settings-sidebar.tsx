@@ -3,7 +3,6 @@
 import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
 
-import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
@@ -17,7 +16,6 @@ type SettingsSidebarProps = {
 
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   const { push, replace } = useNamespacedNavigation();
-  const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,

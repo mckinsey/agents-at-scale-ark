@@ -32,7 +32,7 @@ describe('SettingsSidebar', () => {
     );
   });
 
-  const renderWithStore = (activePage: SettingPage = 'a2a-servers') =>
+  const renderWithStore = (activePage: SettingPage = 'queries') =>
     render(
       <Provider store={store}>
         <SettingsSidebar activePage={activePage} />
