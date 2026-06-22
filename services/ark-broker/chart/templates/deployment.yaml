@@ -32,6 +32,8 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.database.urlSecretRef.name }}
                   key: {{ .Values.database.urlSecretRef.key | default "database-url" }}
+              {{- else if .Values.database.migrateUrl }}
+              value: {{ .Values.database.migrateUrl | quote }}
               {{- else }}
               value: {{ .Values.database.url | quote }}
               {{- end }}
@@ -98,6 +100,10 @@ spec:
             {{- if .Values.database.debugQueries }}
             - name: DATABASE_DEBUG_QUERIES
               value: "true"
+            {{- end }}
+            {{- if .Values.database.tls.enabled }}
+            - name: DATABASE_SSL_ROOT_CERT_PATH
+              value: {{ printf "%s/ca.crt" .Values.database.tls.mountPath | quote }}
             {{- end }}
             {{- end }}
             {{- if .Values.persistence.enabled }}
