@@ -27,51 +27,30 @@ The reason ARK uses Kubernetes as its foundation is to build upon battle-tested 
 
 ## Architecture concepts
 
-At a high level: you create ARK resources through the Kubernetes API (via `kubectl`, the `ark` CLI, the dashboard, or `ark-api`). The **Ark controller** reconciles them, and when a `Query` runs it delegates execution over the A2A protocol to the **completions engine** (the default executor), which calls model providers, MCP tools, and other A2A agents, streaming results through `ark-broker`.
+Ark runs in two parts. The **`ark-system` namespace** holds the platform: the controller that reconciles ARK resources and the default execution engine it dispatches queries to. A **tenant namespace** (e.g. `default`) holds the API and UI services you and your agents talk to, along with the ARK resources you create.
 
 ```mermaid
-flowchart TB
-    users["Users and clients<br/>kubectl · ark CLI · browser · REST/A2A · MCP clients"]
-
-    subgraph cluster["Kubernetes cluster"]
-        api["Kubernetes API server"]
-        store[("ARK resources — etcd or PostgreSQL<br/>Agent · Team · Model · Query · Tool<br/>MCPServer · A2AServer · A2ATask<br/>Memory · ExecutionEngine · ArkConfig")]
-
-        subgraph control["ark-system"]
-            ctrl["Ark controller<br/>reconcile + webhooks"]
-            engine["Completions engine<br/>default executor (A2A)"]
-        end
-
-        subgraph svcs["Ark services"]
-            arkapi["ark-api<br/>REST + A2A gateway"]
-            dash["ark-dashboard"]
-            mcp["ark-mcp<br/>exposes ARK over MCP"]
-            broker["ark-broker<br/>streaming + memory"]
-        end
+%%{init: {'themeVariables': {'fontSize': '18px'}, 'flowchart': {'rankSpacing': 80, 'nodeSpacing': 50}}}%%
+flowchart LR
+    subgraph arksystem["ark-system namespace"]
+        direction TB
+        controller["ark-controller<br/>operator + webhooks"]
+        completions["ark-completions<br/>default execution engine"]
     end
 
-    subgraph external["External / pluggable"]
-        models["Model providers<br/>OpenAI · Azure · Anthropic · Bedrock"]
-        tools["MCP servers<br/>(agent tools)"]
-        a2a["A2A servers and custom execution<br/>engines (e.g. LangChain — marketplace)"]
+    subgraph tenant["tenant namespace (e.g. default)"]
+        direction TB
+        api["ark-api<br/>REST + A2A gateway"]
+        dashboard["ark-dashboard<br/>web UI"]
+        mcp["ark-mcp<br/>exposes ARK over MCP"]
+        broker["ark-broker<br/>streaming + memory"]
     end
 
-    users --> dash
-    users --> arkapi
-    users --> mcp
-    users --> api
-    dash --> arkapi
-    arkapi --> api
-    mcp --> api
-    api <--> store
-    api <-->|"watch + status"| ctrl
-    ctrl -->|"A2A SendMessage"| engine
-    ctrl -.->|"custom engine"| a2a
-    engine --> models
-    engine --> tools
-    engine --> a2a
-    engine -->|"stream"| broker
-    arkapi -->|"stream"| broker
+    controller -->|"A2A · runs queries"| completions
+    controller -.->|"reconciles resources"| tenant
+    dashboard --> api
+    api -->|"stream"| broker
+    completions -->|"stream"| broker
 ```
 
 ### Core resources
