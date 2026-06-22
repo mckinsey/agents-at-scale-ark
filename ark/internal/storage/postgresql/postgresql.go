@@ -168,6 +168,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 	);
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS owner_references JSONB DEFAULT '[]';
+	ALTER TABLE resources ADD COLUMN IF NOT EXISTS deletion_timestamp TIMESTAMPTZ;
 
 	ALTER TABLE resources DROP CONSTRAINT IF EXISTS resources_kind_namespace_name_key;
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_unique_active ON resources(kind, namespace, name) WHERE deleted_at IS NULL;
@@ -297,7 +298,7 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at
+		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name)
 
@@ -305,20 +306,21 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 	var uid string
 	var spec, status, labels, annotations, finalizers, ownerRefs []byte
 	var createdAt, updatedAt time.Time
+	var deletionTimestamp sql.NullTime
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 }
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND deleted_at IS NULL`
 	args := []interface{}{kind}
@@ -379,12 +381,13 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
+		var deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -412,11 +415,12 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 
 	var resource struct {
 		Metadata struct {
-			ResourceVersion string            `json:"resourceVersion"`
-			Labels          map[string]string `json:"labels"`
-			Annotations     map[string]string `json:"annotations"`
-			Finalizers      []string          `json:"finalizers"`
-			OwnerReferences json.RawMessage   `json:"ownerReferences"`
+			ResourceVersion   string            `json:"resourceVersion"`
+			Labels            map[string]string `json:"labels"`
+			Annotations       map[string]string `json:"annotations"`
+			Finalizers        []string          `json:"finalizers"`
+			OwnerReferences   json.RawMessage   `json:"ownerReferences"`
+			DeletionTimestamp *string           `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -441,6 +445,14 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	ownerRefsJSON := string(resource.Metadata.OwnerReferences)
 	if ownerRefsJSON == "" || ownerRefsJSON == jsonNull {
 		ownerRefsJSON = "[]"
+	}
+
+	// deletionTimestamp is set-once: once a graceful delete records it, normal
+	// updates that omit it (most reconciles) must not clear it. COALESCE in the
+	// UPDATE keeps the stored value whenever the incoming object has none.
+	var deletionTS interface{}
+	if resource.Metadata.DeletionTimestamp != nil && *resource.Metadata.DeletionTimestamp != "" {
+		deletionTS = *resource.Metadata.DeletionTimestamp
 	}
 
 	specJSON := string(resource.Spec)
@@ -470,14 +482,15 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
+			    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
 			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10 AND deleted_at IS NULL
+			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
 		SELECT resource_version, generation, uid, created_at, true FROM upd
 		UNION ALL
 		SELECT 0, 0, '', NOW(), false WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -616,7 +629,14 @@ func (p *PostgreSQLBackend) Close() error {
 	return p.db.Close()
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time) (runtime.Object, error) {
+func nullTimePtr(t sql.NullTime) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Time
+}
+
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
 	var finalizersList []string
@@ -641,6 +661,9 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	}
 	if len(ownerRefsList) > 0 {
 		metadata["ownerReferences"] = ownerRefsList
+	}
+	if deletionTimestamp != nil {
+		metadata["deletionTimestamp"] = deletionTimestamp.UTC().Format(time.RFC3339)
 	}
 
 	obj := map[string]interface{}{
@@ -866,7 +889,7 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 	}
 
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND resource_version > $2`
 	args := []interface{}{w.kind, queryFromRV}
@@ -889,12 +912,12 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 
 // emitRow sends a single relist row downstream. Returns false if the watcher
 // should stop iterating (done/cancelled).
-func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt sql.NullTime) bool {
+func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
 	uidNew := !w.hasSeenUID(uid)
 	if w.markSeen(uid, rv) {
 		return true
 	}
-	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 	if err != nil {
 		return true
 	}
@@ -936,12 +959,12 @@ func (w *postgresWatcher) relist() {
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
-		var deletedAt sql.NullTime
+		var deletedAt, deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
 			return
 		}
-		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt) {
+		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
 			return
 		}
 	}
