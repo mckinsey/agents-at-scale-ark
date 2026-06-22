@@ -31,17 +31,28 @@ deployments:
         rbac:
           create: true
           extraRoles:
-            - name: namespace-reader
+            - name: ark-reader
               namespace: default
               rules:
-                - apiGroups: ["*"]
-                  resources: ["*"]
+                - apiGroups: ["ark.mckinsey.com"]
+                  resources:
+                    - agents
+                    - teams
+                    - queries
+                    - models
+                    - mcpservers
+                    - a2aservers
+                    - a2atasks
+                    - tools
+                    - memories
+                    - executionengines
+                    - arkconfigs
                   verbs: ["get", "list", "watch"]
           extraRoleBindings:
-            - name: namespace-reader
+            - name: ark-reader
               namespace: default
               roleRef:
-                name: namespace-reader
+                name: ark-reader
   kubernetes-mcp-server-ark:
     namespace: default
     kubectl:
