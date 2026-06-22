@@ -38,6 +38,11 @@ export interface ResourceListItem {
   available?: string | null;
 }
 
+export interface ResourceListFilter<T extends ResourceListItem> {
+  readonly label: string;
+  readonly getValue: (item: T) => string;
+}
+
 interface ResourceListSectionProps<T extends ResourceListItem> {
   /** Raw icon element (e.g. <Group />); wrapped in IconShell internally. */
   readonly icon: ReactNode;
@@ -53,6 +58,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly emptyTitle: string;
   readonly emptyDescription: ReactNode;
   readonly headerActions?: ReactNode;
+  readonly originFilter?: ResourceListFilter<T>;
   readonly loadItems: () => Promise<T[]>;
   readonly deleteItem: (id: string) => Promise<unknown>;
   readonly renderTable: (
@@ -73,6 +79,7 @@ export function ResourceListSection<T extends ResourceListItem>({
   emptyTitle,
   emptyDescription,
   headerActions,
+  originFilter,
   loadItems,
   deleteItem,
   renderTable,
@@ -81,11 +88,21 @@ export function ResourceListSection<T extends ResourceListItem>({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [originFilterValue, setOriginFilterValue] = useState('All');
   const showLoading = useDelayedLoading(loading);
   const { readOnlyMode, namespace } = useNamespace();
 
   const loadItemsRef = useRef(loadItems);
   loadItemsRef.current = loadItems;
+
+  const originFilterOptions = useMemo(() => {
+    if (!originFilter) return [];
+    const values = new Set<string>();
+    for (const item of items) {
+      values.add(originFilter.getValue(item));
+    }
+    return ['All', ...Array.from(values).sort((a, b) => a.localeCompare(b))];
+  }, [originFilter, items]);
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -97,9 +114,13 @@ export function ResourceListSection<T extends ResourceListItem>({
       const matchesStatus =
         statusFilter === 'All' ||
         (item.available ?? 'Unknown') === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesOrigin =
+        !originFilter ||
+        originFilterValue === 'All' ||
+        originFilter.getValue(item) === originFilterValue;
+      return matchesSearch && matchesStatus && matchesOrigin;
     });
-  }, [items, searchQuery, statusFilter]);
+  }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
 
   useEffect(() => {
     const load = async () => {
@@ -213,6 +234,31 @@ export function ResourceListSection<T extends ResourceListItem>({
         <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
             <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            {originFilter && (
+              <div className="flex w-48 flex-col gap-2">
+                <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                  {originFilter.label}
+                </span>
+                <Select
+                  items={originFilterOptions.map(value => ({
+                    value,
+                    label: value,
+                  }))}
+                  value={originFilterValue}
+                  onValueChange={value => setOriginFilterValue(String(value))}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {originFilterOptions.map(value => (
+                      <SelectItem key={value} value={value}>
+                        <SelectItemText>{value}</SelectItemText>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex w-48 flex-col gap-2">
               <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
                 Status

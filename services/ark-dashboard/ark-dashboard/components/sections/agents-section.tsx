@@ -4,7 +4,9 @@ import { AgentsApiAccess } from '@/components/dialogs/agents-api-access';
 import { SmartToy } from '@/components/icons';
 import { AgentsTable } from '@/components/sections/agents-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { agentsService } from '@/lib/services';
+import { getOriginLabel } from '@/lib/utils/origin-icon';
 
 export function AgentsSection() {
   return (
@@ -25,6 +27,11 @@ export function AgentsSection() {
         </>
       }
       headerActions={<AgentsApiAccess />}
+      originFilter={{
+        label: 'Origin',
+        getValue: agent =>
+          getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]),
+      }}
       loadItems={() => agentsService.getAll()}
       deleteItem={id => agentsService.deleteById(id)}
       renderTable={(agents, onDelete) => (

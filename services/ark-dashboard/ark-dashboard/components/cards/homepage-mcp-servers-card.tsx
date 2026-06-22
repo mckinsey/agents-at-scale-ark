@@ -31,7 +31,7 @@ export function HomepageMcpServersCard() {
   return (
     <MetricCard
       key={section.key}
-      title={section.title}
+      title="MCP servers"
       value={count}
       href={href}
       isLoading={isPending}
