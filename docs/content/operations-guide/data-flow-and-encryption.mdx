@@ -64,7 +64,7 @@ A single Query execution touches multiple storage and communication surfaces. Th
 | Controller / API → broker | HTTP | No. | Service mesh mTLS or a TLS-terminating sidecar. |
 | Controller → OTel collector | HTTP | No. Uses the URL in `OTEL_EXPORTER_OTLP_ENDPOINT`. | Set an `https://` endpoint URL. Per-namespace endpoint discovery is available via the `otel-environment-variables` Secret. |
 | Controller → PostgreSQL | TCP | No. `sslMode: disable` is the default. | Set `storage.postgresql.sslMode` to `require` or `verify-full` in Helm values. |
-| Broker → PostgreSQL | TCP | No. `sslmode=disable` is used in local dev. | Set `sslmode=require` (or stricter) in the broker's `DATABASE_URL` for production. |
+| Broker → PostgreSQL | TCP | No. `sslmode=disable` is used in local dev. | Set `sslmode=require` (or stricter) in the broker's `DATABASE_URL`. For `verify-full` with certificate mounting, see [Securing the Postgres connection](/developer-guide/services/ark-broker#securing-the-postgres-connection) in the broker service docs. |
 | Metrics scrape | HTTPS | Yes. Controller metrics on port 8443 are TLS-protected via cert-manager. | ServiceMonitor uses `insecureSkipVerify: false` by default. |
 
 ## Log sanitization

@@ -80,6 +80,79 @@ Messages carry a TTL-based expiry: each message is written with an `expires_at` 
 
 See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
 
+### Securing the Postgres connection
+
+The TLS configuration applies to both the broker container and the `migrate` init container — a single set of Helm values covers both.
+
+**In-transit encryption (`sslmode=require`)**
+
+No certificates to mount. Append `?sslmode=require` to the connection URL:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=require"
+```
+
+**CA verification (`sslmode=verify-full`) — recommended for production**
+
+Create a Kubernetes Secret containing the Postgres CA certificate:
+
+```bash
+kubectl create secret generic pg-tls \
+  --from-file=ca.crt=/path/to/postgres-ca.crt
+```
+
+Then enable the TLS mount and include the cert path in the URL:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt"
+  tls:
+    enabled: true
+    secretName: pg-tls
+    mountPath: /etc/pg-ssl
+```
+
+The chart mounts the Secret at `mountPath` in both the broker container and the migrate init container.
+
+**Mutual TLS (client certificate)**
+
+Add the client certificate and key to the Secret and reference them in the URL:
+
+```bash
+kubectl create secret generic pg-tls \
+  --from-file=ca.crt=/path/to/postgres-ca.crt \
+  --from-file=tls.crt=/path/to/client.crt \
+  --from-file=tls.key=/path/to/client.key
+```
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt&sslcert=/etc/pg-ssl/tls.crt&sslkey=/etc/pg-ssl/tls.key"
+  tls:
+    enabled: true
+    secretName: pg-tls
+    mountPath: /etc/pg-ssl
+```
+
+**Hiding the connection URL from Helm values**
+
+`database.url` embeds the password in plain text, which is visible in `kubectl get deployment -o yaml`. For production, store the full URL in a Secret and reference it instead:
+
+```bash
+kubectl create secret generic broker-db-url \
+  --from-literal=database-url="postgres://user:password@host:5432/ark_broker?sslmode=require"
+```
+
+```yaml
+database:
+  urlSecretRef:
+    name: broker-db-url
+    key: database-url   # default key; can be omitted
+```
+
+`urlSecretRef` takes priority over `database.url` and applies to both the broker container and the migrate init container.
+
 ## Sessions Endpoint
 
 The `/sessions` endpoint provides a live, event-sourced index of active sessions and their queries. It materializes state from the existing event and message streams — no additional data ingestion is needed.
