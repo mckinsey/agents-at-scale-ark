@@ -12,7 +12,7 @@ export function ModelsSection() {
       title="Models"
       subtitle="Add and manage all your models"
       createHref="/models/new"
-      createLabel="Add Model"
+      createLabel="Add model"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/models/"
       entityLabel="Model"
       entityPluralLabel="models"

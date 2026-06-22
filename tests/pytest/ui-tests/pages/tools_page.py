@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 class ToolsPage(BasePage):
 
-    ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
-    TOOL_NAME_INPUT = "input[name='name'], input[placeholder*='name' i], input#name, [role='dialog'] input:first-of-type"
+    ADD_TOOL_BUTTON = "a[href^='/tools/new'], button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
+    TOOL_NAME_INPUT = "input[name='name'], input#name, form input:first-of-type"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
@@ -61,16 +61,14 @@ class ToolsPage(BasePage):
         return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
-        
+
         self._close_any_dialog()
-        
+
         add_button = self.page.locator(self.ADD_TOOL_BUTTON).first
         add_button.click()
         self.wait_for_navigation_complete()
         self.wait_for_form_ready()
-        dialog = self.page.locator("[role='dialog']").first
-        self.wait_for_animations_complete(dialog)
-        
+
         name_input = self.page.locator(self.TOOL_NAME_INPUT).first
 
         for attempt in range(3):
@@ -86,7 +84,7 @@ class ToolsPage(BasePage):
         name_input.blur()
         logger.info(f"Name in name input is {name_input.input_value()}")
 
-        type_trigger = self.page.locator("[role='dialog'] [role='combobox']").first
+        type_trigger = self.page.locator("[role='combobox']").first
         type_trigger.scroll_into_view_if_needed()
         type_trigger.wait_for(state="visible", timeout=15000)
 
@@ -114,45 +112,29 @@ class ToolsPage(BasePage):
             logger.info("Name was cleared by type selection re-render, re-filling")
             name_input.fill(tool_name)
 
-        description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
+        description_input = self.page.locator("input#description, input[name='description']").first
         description_input.wait_for(state="visible", timeout=15000)
         description_input.fill(description)
-        
+
         input_schema = '{"type": "object", "properties": {"city": {"type": "string", "description": "City name to get coordinates for"}}, "required": ["city"]}'
-        schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema'], [role='dialog'] textarea").first
+        schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema']").first
         schema_textarea.wait_for(state="visible", timeout=15000)
         schema_textarea.fill(input_schema)
-        
-        dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
-        if dialog.count() > 0:
-            dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-        
+
         url_input = self.page.locator("input[name='httpUrl'], input#http-url, input#httpUrl, input[placeholder*='https://']").first
-        
-        for attempt in range(3):
-            try:
-                url_input.wait_for(state="visible", timeout=3000)
-                break
-            except:
-                logger.info(f"URL input not visible (attempt {attempt + 1}), scrolling dialog")
-                if dialog.count() > 0:
-                    dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-        
+        url_input.wait_for(state="visible", timeout=15000)
         url_input.scroll_into_view_if_needed()
         url_input.fill(url)
-        
-        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
-        
+
+        save_button = self.page.locator("button:has-text('Create'), button[type='submit']").first
         save_button.scroll_into_view_if_needed()
         save_button.click(force=True)
-        
+
         popup_visible = self._check_toast_popup()
         logger.info(f"Toast visible: {popup_visible}")
-        
-        self.wait_for_modal_close()
-        
+
+        self.wait_for_navigation_complete()
+
         in_table = self.is_tool_in_table(tool_name)
         logger.info(f"Tool '{tool_name}' in table after creation: {in_table}")
         
