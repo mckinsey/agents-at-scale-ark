@@ -1,17 +1,15 @@
-import json
-import subprocess
 import time
-import urllib.error
 
 import pytest
+import requests
 
+from helpers import k8s
 from helpers.broker_helper import (
     find_trace_for_query,
     get_agent_spans,
     get_llm_spans,
     get_root_query_span,
     get_team_spans,
-    get_tool_spans,
     get_traces,
     get_turn_spans,
     _span_attrs,
@@ -20,35 +18,17 @@ from helpers.queries_helper import QueriesHelper
 
 
 AGENT_NAME = "test-otel-agent"
-TOOL_AGENT_NAME = "test-otel-tool-agent"
 SEQUENTIAL_TEAM_NAME = "test-otel-seq-team"
 MODEL_NAME = "test-model-mock"
 
 PREFIX = "test-otel"
 
 
-def _apply_yaml(yaml_str: str) -> None:
-    result = subprocess.run(
-        ["kubectl", "apply", "-f", "-"],
-        input=yaml_str,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, f"kubectl apply failed: {result.stderr}"
-
-
-def _delete(kind: str, name: str, namespace: str = "default") -> None:
-    subprocess.run(
-        ["kubectl", "delete", kind, name, "-n", namespace, "--ignore-not-found=true"],
-        capture_output=True,
-    )
-
-
 def _broker_available() -> bool:
     try:
         get_traces(limit=1)
         return True
-    except (urllib.error.URLError, Exception):
+    except requests.RequestException:
         return False
 
 
@@ -68,8 +48,8 @@ class TestAgentQueryTrace:
 
     @classmethod
     def setup_class(cls):
-        _delete("agent", AGENT_NAME)
-        _apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
+        k8s.delete_resource("agent", AGENT_NAME)
+        ok, msg = k8s.apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: {AGENT_NAME}
@@ -79,11 +59,12 @@ spec:
     name: {MODEL_NAME}
   prompt: "You are a concise test agent."
 """)
+        assert ok, f"kubectl apply failed: {msg}"
 
     @classmethod
     def teardown_class(cls):
         cls.helper.cleanup_queries(f"{PREFIX}-agent-")
-        _delete("agent", AGENT_NAME)
+        k8s.delete_resource("agent", AGENT_NAME)
 
     def _run_query(self, suffix: str, text: str) -> str:
         name = f"{PREFIX}-agent-{suffix}"
@@ -95,11 +76,6 @@ spec:
         )
         assert ok, f"Query failed: {msg}"
         return name
-
-    def test_trace_exists_for_query(self):
-        query_name = self._run_query("exists", "Reply with: TRACE OK")
-        trace = find_trace_for_query(query_name, timeout=30)
-        assert trace is not None, f"No trace found for query {query_name}"
 
     def test_root_span_has_input_output(self):
         query_name = self._run_query("root-io", "Reply with: ROOT IO")
@@ -144,8 +120,6 @@ spec:
             user_msg_keys = [k for k in attrs if "input_messages" in k and "content" in k and "role" not in k]
             assert len(user_msg_keys) > 0, "LLM span has no input_messages content keys"
 
-            user_msgs = [attrs[k] for k in user_msg_keys if attrs.get(
-                k.replace("content", "role"), "") == "user" or "user" in str(attrs.get(k, "")).lower()]
             prompt_msg_key = [k for k in user_msg_keys
                               if attrs.get(k.replace(".content", ".role"), "") == "user"]
             assert len(prompt_msg_key) > 0, (
@@ -219,8 +193,8 @@ class TestSystemPromptInTrace:
 
     @classmethod
     def setup_class(cls):
-        _delete("agent", cls.agent_name)
-        _apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
+        k8s.delete_resource("agent", cls.agent_name)
+        ok, msg = k8s.apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: {cls.agent_name}
@@ -230,11 +204,12 @@ spec:
     name: {MODEL_NAME}
   prompt: "You are a specialized regression test agent. Always identify yourself."
 """)
+        assert ok, f"kubectl apply failed: {msg}"
 
     @classmethod
     def teardown_class(cls):
         cls.helper.cleanup_queries(f"{PREFIX}-sysprompt-")
-        _delete("agent", cls.agent_name)
+        k8s.delete_resource("agent", cls.agent_name)
 
     def test_system_prompt_content_not_empty(self):
         query_name = f"{PREFIX}-sysprompt-content"
@@ -281,10 +256,10 @@ class TestSequentialTeamTrace:
     @classmethod
     def setup_class(cls):
         for name in [cls.agent_a, cls.agent_b]:
-            _delete("agent", name)
-        _delete("team", cls.team_name)
+            k8s.delete_resource("agent", name)
+        k8s.delete_resource("team", cls.team_name)
 
-        _apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
+        ok, msg = k8s.apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: {cls.agent_a}
@@ -317,18 +292,19 @@ spec:
     - name: {cls.agent_b}
       type: agent
 """)
+        assert ok, f"kubectl apply failed: {msg}"
         time.sleep(3)
 
     @classmethod
     def teardown_class(cls):
         cls.helper.cleanup_queries(f"{PREFIX}-seq-")
-        _delete("team", cls.team_name)
-        _delete("agent", cls.agent_a)
-        _delete("agent", cls.agent_b)
+        k8s.delete_resource("team", cls.team_name)
+        k8s.delete_resource("agent", cls.agent_a)
+        k8s.delete_resource("agent", cls.agent_b)
 
     def _run_team_query(self, suffix: str, text: str) -> str:
         name = f"{PREFIX}-seq-{suffix}"
-        query_yaml = f"""apiVersion: ark.mckinsey.com/v1alpha1
+        ok, msg = k8s.apply_yaml(f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: {name}
@@ -341,23 +317,13 @@ spec:
   type: user
   timeout: 5m
   ttl: 1h
-"""
-        result = subprocess.run(
-            ["kubectl", "apply", "-f", "-"],
-            input=query_yaml,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, f"Team query apply failed: {result.stderr}"
+""")
+        assert ok, f"Team query apply failed: {msg}"
 
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
-            r = subprocess.run(
-                ["kubectl", "get", "query", name, "-n", "default",
-                 "-o", "jsonpath={.status.phase}"],
-                capture_output=True, text=True,
-            )
-            if r.stdout.strip() == "done":
+            _, query = self.helper.get_query(name)
+            if query and query.get("status", {}).get("phase") == "done":
                 break
             time.sleep(3)
 

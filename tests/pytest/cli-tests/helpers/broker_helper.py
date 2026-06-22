@@ -1,37 +1,50 @@
-import json
-import os
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any, Optional
+from urllib.parse import urljoin
+
+import requests
 
 from helpers.ark_api_helper import get_api_url
 
+# OTLP AnyValue is a oneof: exactly one of these keys is set per attribute value.
+# Order mirrors the broker's own extractValue (services/ark-broker .../otlp.ts).
+_ANY_VALUE_KEYS = (
+    "stringValue",
+    "intValue",
+    "doubleValue",
+    "boolValue",
+    "arrayValue",
+    "kvlistValue",
+    "bytesValue",
+)
+
 
 def get_broker_url() -> str:
-    api_url = get_api_url()
-    return f"{api_url}/v1/broker"
+    return f"{get_api_url()}/v1/broker"
 
 
 def _fetch_json(path: str, params: Optional[dict] = None, timeout: int = 10) -> Any:
-    url = f"{get_broker_url()}{path}"
-    if params:
-        url = f"{url}?{urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})}"
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        return json.loads(resp.read())
+    resp = requests.get(urljoin(f"{get_broker_url()}/", path.lstrip("/")), params=params, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _attr_value(value: Any) -> Any:
+    """Unwrap a single OTLP AnyValue ({"stringValue": "x"}) to its scalar."""
+    if not isinstance(value, dict):
+        return value
+    for key in _ANY_VALUE_KEYS:
+        if key in value:
+            return value[key]
+    return value
 
 
 def _span_attrs(span: dict) -> dict:
-    result = {}
-    for a in span.get("attributes", []):
-        v = a.get("value", {})
-        result[a["key"]] = list(v.values())[0] if isinstance(v, dict) and v else v
-    return result
+    return {a["key"]: _attr_value(a.get("value")) for a in span.get("attributes", [])}
 
 
 def get_traces(limit: int = 100, session_id: Optional[str] = None) -> list[dict]:
-    data = _fetch_json("/traces", {"limit": limit, "session_id": session_id})
+    data = _fetch_json("traces", {"limit": limit, "session_id": session_id})
     return data.get("items", [])
 
 
@@ -48,15 +61,13 @@ def find_trace_for_query(query_name: str, limit: int = 200, timeout: int = 30) -
     ensures we only return a complete trace and avoids grabbing a partial trace
     that only contains the early dispatch span.
     """
-    root_span_name = f"query.{query_name}"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             for trace in get_traces(limit=limit):
-                for span in trace.get("spans", []):
-                    if span["name"] == root_span_name:
-                        return trace
-        except (urllib.error.URLError, json.JSONDecodeError):
+                if get_root_query_span(trace, query_name) is not None:
+                    return trace
+        except requests.RequestException:
             pass
         time.sleep(2)
     return None
@@ -70,7 +81,7 @@ def find_traces_for_session(session_id: str, min_count: int = 1, timeout: int = 
             traces = get_traces_for_session(session_id)
             if len(traces) >= min_count:
                 return traces
-        except (urllib.error.URLError, json.JSONDecodeError):
+        except requests.RequestException:
             pass
         time.sleep(2)
     return []
