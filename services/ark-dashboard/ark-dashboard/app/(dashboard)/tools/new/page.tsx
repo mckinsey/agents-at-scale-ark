@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 
-import { CreateToolForm } from '@/components/forms/tool-form';
+import { ToolForm, ToolFormMode } from '@/components/forms/tool-form';
 import { toast } from '@/components/ui/sonner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
@@ -14,5 +14,5 @@ export default function ToolNewPage() {
     push('/tools');
   }, [push]);
 
-  return <CreateToolForm onSuccess={onSuccess} />;
+  return <ToolForm mode={ToolFormMode.CREATE} onSuccess={onSuccess} />;
 }

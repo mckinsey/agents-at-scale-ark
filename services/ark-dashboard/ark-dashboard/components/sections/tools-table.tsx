@@ -76,7 +76,7 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
   const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const href = `/tool/${encodeURIComponent(tool.name)}`;
+  const href = `/tools/${encodeURIComponent(tool.name)}`;
   const deleteDisabled = usage.inUse || readOnlyMode;
 
   return (

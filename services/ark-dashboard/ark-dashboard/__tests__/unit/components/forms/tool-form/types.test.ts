@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { TOOL_TYPE_OPTIONS, toolFormSchema } from '@/components/forms/tool-form/types';
+import {
+  TOOL_TYPE_OPTIONS,
+  ToolFormMode,
+  toolFormSchema,
+} from '@/components/forms/tool-form/types';
 
 const base = {
   name: 'search-tool',
@@ -63,6 +67,13 @@ describe('toolFormSchema', () => {
   it('accepts an mcp tool without type-specific fields', () => {
     const result = toolFormSchema.safeParse({ ...base, type: 'mcp' });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('ToolFormMode', () => {
+  it('exposes create and edit modes', () => {
+    expect(ToolFormMode.CREATE).toBe('create');
+    expect(ToolFormMode.EDIT).toBe('edit');
   });
 });
 

@@ -70,11 +70,11 @@ describe('ToolsTable', () => {
     render(<ToolsTable tools={tools} usage={noUsage} onDelete={vi.fn()} />);
     expect(screen.getByRole('link', { name: 'tool-one' })).toHaveAttribute(
       'href',
-      expect.stringContaining('/tool/tool-one'),
+      expect.stringContaining('/tools/tool-one'),
     );
     expect(screen.getByRole('link', { name: 'tool-two' })).toHaveAttribute(
       'href',
-      expect.stringContaining('/tool/tool-two'),
+      expect.stringContaining('/tools/tool-two'),
     );
   });
 

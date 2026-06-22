@@ -37,7 +37,8 @@ vi.mock('@/components/ui/form', () => ({
   ),
 }));
 
-import { CreateToolForm } from '@/components/forms/tool-form/create-tool-form';
+import { ToolForm } from '@/components/forms/tool-form/tool-form';
+import { ToolFormMode } from '@/components/forms/tool-form/types';
 
 function buildHook(stateOverrides: Record<string, unknown> = {}) {
   return {
@@ -47,7 +48,10 @@ function buildHook(stateOverrides: Record<string, unknown> = {}) {
       formState: { isSubmitting: false },
     },
     state: {
+      loading: false,
       saving: false,
+      tool: null,
+      hasChanges: false,
       agents: [],
       teams: [],
       agentsLoading: false,
@@ -61,7 +65,7 @@ function buildHook(stateOverrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('CreateToolForm', () => {
+describe('ToolForm — create mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockReadOnly.value = false;
@@ -69,7 +73,7 @@ describe('CreateToolForm', () => {
 
   it('renders breadcrumb, core fields, and Create button', () => {
     useToolFormMock.mockReturnValue(buildHook());
-    render(<CreateToolForm />);
+    render(<ToolForm mode={ToolFormMode.CREATE} />);
     expect(screen.getByText('Create tool')).toBeInTheDocument();
     expect(screen.getByText('New tool configuration')).toBeInTheDocument();
     expect(screen.getByText(/^Name/)).toBeInTheDocument();
@@ -83,7 +87,7 @@ describe('CreateToolForm', () => {
 
   it('Cancel link is wired to /tools', () => {
     useToolFormMock.mockReturnValue(buildHook());
-    render(<CreateToolForm />);
+    render(<ToolForm mode={ToolFormMode.CREATE} />);
     const cancel = screen.getByRole('link', { name: /cancel/i });
     expect(cancel).toHaveAttribute('href', '/tools');
   });
@@ -91,21 +95,21 @@ describe('CreateToolForm', () => {
   it('disables Create button when readOnlyMode is true', () => {
     mockReadOnly.value = true;
     useToolFormMock.mockReturnValue(buildHook());
-    render(<CreateToolForm />);
+    render(<ToolForm mode={ToolFormMode.CREATE} />);
     expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled();
   });
 
   it('clicking Create calls actions.onSubmit through form.handleSubmit', async () => {
     const hook = buildHook();
     useToolFormMock.mockReturnValue(hook);
-    render(<CreateToolForm />);
+    render(<ToolForm mode={ToolFormMode.CREATE} />);
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }));
     expect(hook.form.handleSubmit).toHaveBeenCalledWith(hook.actions.onSubmit);
   });
 
   it('does not render type-specific fields when no type is selected', () => {
     useToolFormMock.mockReturnValue(buildHook());
-    render(<CreateToolForm />);
+    render(<ToolForm mode={ToolFormMode.CREATE} />);
     expect(screen.queryByText(/^URL/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Agent/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Team/)).not.toBeInTheDocument();
@@ -113,7 +117,60 @@ describe('CreateToolForm', () => {
 
   it('renders the URL field when http type is selected', () => {
     useToolFormMock.mockReturnValue(buildHook({ selectedType: 'http' }));
-    render(<CreateToolForm />);
+    render(<ToolForm mode={ToolFormMode.CREATE} />);
     expect(screen.getByText(/^URL/)).toBeInTheDocument();
+  });
+});
+
+describe('ToolForm — edit mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadOnly.value = false;
+  });
+
+  it('shows a spinner while loading', () => {
+    useToolFormMock.mockReturnValue(buildHook({ loading: true }));
+    render(<ToolForm mode={ToolFormMode.EDIT} toolName="my-tool" />);
+    expect(screen.queryByText('Save changes')).not.toBeInTheDocument();
+  });
+
+  it('shows a not-found message when the tool is missing', () => {
+    useToolFormMock.mockReturnValue(buildHook({ loading: false, tool: null }));
+    render(<ToolForm mode={ToolFormMode.EDIT} toolName="my-tool" />);
+    expect(screen.getByText('Tool not found')).toBeInTheDocument();
+  });
+
+  it('renders the tool name and a Save changes button', () => {
+    useToolFormMock.mockReturnValue(
+      buildHook({ tool: { name: 'my-tool' }, hasChanges: false }),
+    );
+    render(<ToolForm mode={ToolFormMode.EDIT} toolName="my-tool" />);
+    expect(
+      screen.getByRole('button', { name: /save changes/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'my-tool' }),
+    ).toBeInTheDocument();
+  });
+
+  it('disables Save changes until there are unsaved changes', () => {
+    useToolFormMock.mockReturnValue(
+      buildHook({ tool: { name: 'my-tool' }, hasChanges: false }),
+    );
+    const { rerender } = render(
+      <ToolForm mode={ToolFormMode.EDIT} toolName="my-tool" />,
+    );
+    expect(
+      screen.getByRole('button', { name: /save changes/i }),
+    ).toBeDisabled();
+
+    useToolFormMock.mockReturnValue(
+      buildHook({ tool: { name: 'my-tool' }, hasChanges: true }),
+    );
+    rerender(<ToolForm mode={ToolFormMode.EDIT} toolName="my-tool" />);
+    expect(
+      screen.getByRole('button', { name: /save changes/i }),
+    ).toBeEnabled();
+    expect(screen.getByText('You have unsaved changes')).toBeInTheDocument();
   });
 });
