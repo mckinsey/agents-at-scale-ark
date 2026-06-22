@@ -35,6 +35,45 @@ interface ToolListResponse {
   count: number;
 }
 
+// Fields shared by tool create and update used to build the tool spec
+interface ToolSpecInput {
+  type: string;
+  description: string;
+  inputSchema?: Record<string, unknown> | string;
+  url?: string;
+  agent?: string;
+  team?: string;
+}
+
+// Build a Tool CR spec from form-level fields, parsing the input schema
+function buildToolSpec({
+  type,
+  description,
+  inputSchema,
+  url,
+  agent,
+  team,
+}: ToolSpecInput): Record<string, unknown> {
+  let parsedInputSchema: Record<string, unknown> | undefined = undefined;
+  if (typeof inputSchema === 'string' && inputSchema.trim()) {
+    try {
+      parsedInputSchema = JSON.parse(inputSchema);
+    } catch {
+      parsedInputSchema = undefined;
+    }
+  } else if (typeof inputSchema === 'object' && inputSchema !== null) {
+    parsedInputSchema = inputSchema;
+  }
+  return {
+    type,
+    description,
+    ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
+    ...(type === 'http' && url ? { http: { url } } : {}),
+    ...(type === 'agent' && agent ? { agent: { name: agent } } : {}),
+    ...(type === 'team' && team ? { team: { name: team } } : {}),
+  };
+}
+
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
@@ -63,51 +102,19 @@ export const toolsService = {
   },
 
   // Create a new tool
-  async create(tool: {
-    name: string;
-    type: string;
-    description: string;
-    inputSchema?: Record<string, unknown> | string;
-    annotations?: Record<string, string>;
-    url?: string;
-    agent?: string;
-    team?: string;
-    namespace?: string;
-  }): Promise<void> {
-    const {
-      name,
-      type,
-      description,
-      inputSchema,
-      annotations,
-      url,
-      agent,
-      team,
-      namespace,
-    } = tool;
-    let parsedInputSchema: Record<string, unknown> | undefined = undefined;
-    if (typeof inputSchema === 'string' && inputSchema.trim()) {
-      try {
-        parsedInputSchema = JSON.parse(inputSchema);
-      } catch {
-        parsedInputSchema = undefined;
-      }
-    } else if (typeof inputSchema === 'object' && inputSchema !== null) {
-      parsedInputSchema = inputSchema;
-    }
-    const spec: Record<string, unknown> = {
-      type,
-      description,
-      ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
-      ...(type === 'http' && url ? { http: { url } } : {}),
-      ...(type === 'agent' && agent ? { agent: { name: agent } } : {}),
-      ...(type === 'team' && team ? { team: { name: team } } : {}),
-    };
+  async create(
+    tool: ToolSpecInput & {
+      name: string;
+      annotations?: Record<string, string>;
+      namespace?: string;
+    },
+  ): Promise<void> {
+    const { name, type, annotations, namespace } = tool;
     const payload = {
       name,
       namespace: namespace || 'default',
       annotations,
-      spec,
+      spec: buildToolSpec(tool),
     };
     await apiClient.post(`/api/v1/tools`, payload);
 
@@ -123,39 +130,11 @@ export const toolsService = {
   // Update an existing tool
   async update(
     name: string,
-    tool: {
-      type: string;
-      description: string;
-      inputSchema?: Record<string, unknown> | string;
-      annotations?: Record<string, string>;
-      url?: string;
-      agent?: string;
-      team?: string;
-    },
+    tool: ToolSpecInput & { annotations?: Record<string, string> },
   ): Promise<void> {
-    const { type, description, inputSchema, annotations, url, agent, team } =
-      tool;
-    let parsedInputSchema: Record<string, unknown> | undefined = undefined;
-    if (typeof inputSchema === 'string' && inputSchema.trim()) {
-      try {
-        parsedInputSchema = JSON.parse(inputSchema);
-      } catch {
-        parsedInputSchema = undefined;
-      }
-    } else if (typeof inputSchema === 'object' && inputSchema !== null) {
-      parsedInputSchema = inputSchema;
-    }
-    const spec: Record<string, unknown> = {
-      type,
-      description,
-      ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
-      ...(type === 'http' && url ? { http: { url } } : {}),
-      ...(type === 'agent' && agent ? { agent: { name: agent } } : {}),
-      ...(type === 'team' && team ? { team: { name: team } } : {}),
-    };
     const payload = {
-      annotations,
-      spec,
+      annotations: tool.annotations,
+      spec: buildToolSpec(tool),
     };
     await apiClient.put(`/api/v1/tools/${name}`, payload);
 
@@ -163,7 +142,7 @@ export const toolsService = {
       name: 'tool_updated',
       properties: {
         toolName: name,
-        toolType: type,
+        toolType: tool.type,
       },
     });
   },

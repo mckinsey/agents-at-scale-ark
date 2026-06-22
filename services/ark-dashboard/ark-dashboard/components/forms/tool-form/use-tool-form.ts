@@ -167,37 +167,29 @@ export function useToolForm({
       return;
     }
 
+    const specFields = {
+      type: values.type.trim(),
+      description: values.description.trim(),
+      inputSchema: parsedInputSchema,
+      annotations: parsedAnnotations,
+      ...(values.type === 'http' ? { url: values.httpUrl?.trim() } : {}),
+      ...(values.type === 'agent'
+        ? { agent: values.selectedAgent?.trim() }
+        : {}),
+      ...(values.type === 'team'
+        ? { team: values.selectedTeam?.trim() }
+        : {}),
+    };
+
     setSaving(true);
     try {
       if (isEditing && toolName) {
-        await toolsService.update(toolName, {
-          type: values.type.trim(),
-          description: values.description.trim(),
-          inputSchema: parsedInputSchema,
-          annotations: parsedAnnotations,
-          ...(values.type === 'http' ? { url: values.httpUrl?.trim() } : {}),
-          ...(values.type === 'agent'
-            ? { agent: values.selectedAgent?.trim() }
-            : {}),
-          ...(values.type === 'team'
-            ? { team: values.selectedTeam?.trim() }
-            : {}),
-        });
+        await toolsService.update(toolName, specFields);
         reset(values);
       } else {
         await toolsService.create({
           name: values.name.trim(),
-          type: values.type.trim(),
-          description: values.description.trim(),
-          inputSchema: parsedInputSchema,
-          annotations: parsedAnnotations,
-          ...(values.type === 'http' ? { url: values.httpUrl?.trim() } : {}),
-          ...(values.type === 'agent'
-            ? { agent: values.selectedAgent?.trim() }
-            : {}),
-          ...(values.type === 'team'
-            ? { team: values.selectedTeam?.trim() }
-            : {}),
+          ...specFields,
           namespace,
         });
       }
