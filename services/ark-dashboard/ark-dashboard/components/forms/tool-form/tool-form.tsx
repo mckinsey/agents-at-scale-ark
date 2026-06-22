@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   CollapseContent,
   ExpandContent,
+  Warning,
 } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { TOOL_TYPE_OPTIONS, type ToolFormProps } from './types';
+import { TOOL_TYPE_OPTIONS, ToolFormMode, type ToolFormProps } from './types';
 import { useToolForm } from './use-tool-form';
 
 const RequiredMarker = () => (
@@ -51,64 +52,145 @@ const jsonTextareaClassName = (expanded: boolean) =>
       : 'max-h-[180px] min-h-[120px]',
   );
 
-export function CreateToolForm({
+export function ToolForm({
+  mode,
+  toolName,
   onSuccess,
   onCancel,
 }: Readonly<ToolFormProps>) {
   const { readOnlyMode } = useNamespace();
-  const { form, state, actions } = useToolForm({ onSuccess });
-  const { saving, agents, teams, agentsLoading, teamsLoading, selectedType } =
-    state;
+  const { form, state, actions } = useToolForm({ mode, toolName, onSuccess });
+  const {
+    loading,
+    saving,
+    tool,
+    hasChanges,
+    agents,
+    teams,
+    agentsLoading,
+    teamsLoading,
+    selectedType,
+  } = state;
   const { onSubmit } = actions;
 
   const [isInputSchemaExpanded, setIsInputSchemaExpanded] = useState(false);
   const [isAnnotationsExpanded, setIsAnnotationsExpanded] = useState(false);
 
+  const isEditing = mode === ToolFormMode.EDIT;
   const isDisabled = saving;
   const cancelHref = onCancel ? undefined : '/tools';
 
+  if (isEditing && loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Spinner className="h-8 w-8" />
+      </div>
+    );
+  }
+
+  if (isEditing && !tool) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-fg-secondary">Tool not found</div>
+      </div>
+    );
+  }
+
+  const displayName = tool?.name || toolName || '';
+
+  const header = isEditing ? (
+    <header className="flex flex-none flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+          <NamespacedLink
+            href="/tools"
+            className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+            <IconShell size="sm" className="opacity-100">
+              <ChevronLeft />
+            </IconShell>
+            Tools
+          </NamespacedLink>
+          <span aria-hidden="true" className="text-fg-secondary">
+            /
+          </span>
+          <span aria-current="page" className="text-fg-secondary">
+            {displayName}
+          </span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <NamespacedLink href="/tools">
+            <Button variant="outline">Back</Button>
+          </NamespacedLink>
+          <Button
+            onClick={form.handleSubmit(onSubmit)}
+            disabled={saving || !hasChanges || readOnlyMode}>
+            {saving && <Spinner className="mr-2 h-4 w-4" />}
+            Save changes
+          </Button>
+        </div>
+      </div>
+      <div className="flex items-end justify-between">
+        <h1 className="text-fg-primary text-xl leading-7">{displayName}</h1>
+        {hasChanges && (
+          <div className="flex items-center gap-1">
+            <IconShell size="sm" className="text-status-warning opacity-100">
+              <Warning />
+            </IconShell>
+            <span className="text-fg-primary text-sm leading-5 tracking-[-0.112px]">
+              You have unsaved changes
+            </span>
+          </div>
+        )}
+      </div>
+    </header>
+  ) : (
+    <header className="flex flex-none flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+          <ChevronLeft className="size-4 text-white/30" />
+          <NamespacedLink
+            href="/tools"
+            className="text-white/30 transition-colors hover:text-white/60">
+            Tools
+          </NamespacedLink>
+          <span aria-hidden="true" className="text-white/60">
+            /
+          </span>
+          <span aria-current="page" className="text-white/60">
+            Create tool
+          </span>
+        </nav>
+        <div className="flex items-center gap-2">
+          {cancelHref ? (
+            <NamespacedLink href={cancelHref}>
+              <Button variant="outline">Cancel</Button>
+            </NamespacedLink>
+          ) : (
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          <Button
+            onClick={form.handleSubmit(onSubmit)}
+            disabled={saving || readOnlyMode}>
+            {saving && <Spinner className="mr-2 h-4 w-4" />}
+            Create
+          </Button>
+        </div>
+      </div>
+      <h1 className="text-fg-primary text-xl leading-7">
+        New tool configuration
+      </h1>
+    </header>
+  );
+
   return (
     <div className="absolute inset-0 flex flex-col gap-5 overflow-hidden px-12 pt-10">
-      <header className="flex flex-none flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <ChevronLeft className="size-4 text-white/30" />
-            <NamespacedLink
-              href="/tools"
-              className="text-white/30 transition-colors hover:text-white/60">
-              Tools
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-white/60">
-              /
-            </span>
-            <span aria-current="page" className="text-white/60">
-              Create tool
-            </span>
-          </nav>
-          <div className="flex items-center gap-2">
-            {cancelHref ? (
-              <NamespacedLink href={cancelHref}>
-                <Button variant="outline">Cancel</Button>
-              </NamespacedLink>
-            ) : (
-              <Button variant="outline" onClick={onCancel}>
-                Cancel
-              </Button>
-            )}
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={saving || readOnlyMode}>
-              {saving && <Spinner className="mr-2 h-4 w-4" />}
-              Create
-            </Button>
-          </div>
-        </div>
-        <h1 className="text-fg-primary text-xl leading-7">
-          New tool configuration
-        </h1>
-      </header>
+      {header}
 
       <Form {...form}>
         <form
@@ -126,7 +208,7 @@ export function CreateToolForm({
                   <Input
                     variant="inline"
                     placeholder="e.g., search-tool"
-                    disabled={isDisabled}
+                    disabled={isDisabled || isEditing}
                     aria-invalid={!!fieldState.error}
                     {...field}
                   />

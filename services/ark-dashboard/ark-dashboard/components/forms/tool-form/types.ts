@@ -2,6 +2,7 @@ import type { UseFormReturn } from 'react-hook-form';
 import * as z from 'zod';
 
 import type { Agent, Team } from '@/lib/services';
+import type { ToolDetail } from '@/lib/services/tools';
 
 export const toolFormSchema = z
   .object({
@@ -53,6 +54,11 @@ export const toolFormSchema = z
 
 export type ToolFormValues = z.infer<typeof toolFormSchema>;
 
+export enum ToolFormMode {
+  CREATE = 'create',
+  EDIT = 'edit',
+}
+
 export const TOOL_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> =
   [
     { value: 'http', label: 'HTTP' },
@@ -62,7 +68,10 @@ export const TOOL_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> 
   ];
 
 export interface ToolFormState {
+  loading: boolean;
   saving: boolean;
+  tool: ToolDetail | null;
+  hasChanges: boolean;
   agents: Agent[];
   teams: Team[];
   agentsLoading: boolean;
@@ -81,6 +90,8 @@ export interface ToolFormContextValue {
 }
 
 export interface ToolFormProps {
+  mode: ToolFormMode;
+  toolName?: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }

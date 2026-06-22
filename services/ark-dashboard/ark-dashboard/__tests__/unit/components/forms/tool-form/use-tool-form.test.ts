@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/services', () => ({
   toolsService: {
     create: vi.fn(),
+    update: vi.fn(),
+    getDetail: vi.fn(),
   },
   agentsService: {
     getAll: vi.fn(),
@@ -37,7 +39,10 @@ import { toast } from '@/components/ui/sonner';
 import { agentsService, teamsService, toolsService } from '@/lib/services';
 
 import { useToolForm } from '@/components/forms/tool-form/use-tool-form';
-import type { ToolFormValues } from '@/components/forms/tool-form/types';
+import {
+  ToolFormMode,
+  type ToolFormValues,
+} from '@/components/forms/tool-form/types';
 
 const mockToolsService = vi.mocked(toolsService);
 const mockAgentsService = vi.mocked(agentsService);
@@ -63,11 +68,12 @@ beforeEach(() => {
   mockAgentsService.getAll.mockResolvedValue([]);
   mockTeamsService.getAll.mockResolvedValue([]);
   mockToolsService.create.mockResolvedValue(undefined);
+  mockToolsService.update.mockResolvedValue(undefined);
 });
 
 describe('useToolForm', () => {
   it('initializes with empty defaults and not saving', () => {
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
     expect(result.current.state.saving).toBe(false);
     expect(result.current.state.selectedType).toBe('');
     expect(result.current.form.getValues('name')).toBe('');
@@ -75,7 +81,7 @@ describe('useToolForm', () => {
 
   it('creates a tool and calls onSuccess on submit', async () => {
     const onSuccess = vi.fn();
-    const { result } = renderHook(() => useToolForm({ onSuccess }));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE, onSuccess }));
 
     await act(async () => {
       await result.current.actions.onSubmit(values());
@@ -94,7 +100,7 @@ describe('useToolForm', () => {
   });
 
   it('includes the url for http tools', async () => {
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     await act(async () => {
       await result.current.actions.onSubmit(
@@ -108,7 +114,7 @@ describe('useToolForm', () => {
   });
 
   it('includes agent/team for agent and team tools', async () => {
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     await act(async () => {
       await result.current.actions.onSubmit(
@@ -130,7 +136,7 @@ describe('useToolForm', () => {
   });
 
   it('rejects invalid input schema JSON without calling create', async () => {
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     await act(async () => {
       await result.current.actions.onSubmit(values({ inputSchema: '{bad' }));
@@ -144,7 +150,7 @@ describe('useToolForm', () => {
   });
 
   it('rejects invalid annotations JSON without calling create', async () => {
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     await act(async () => {
       await result.current.actions.onSubmit(
@@ -162,7 +168,7 @@ describe('useToolForm', () => {
   it('shows an error toast when create fails', async () => {
     mockToolsService.create.mockRejectedValue(new Error('Network error'));
     const onSuccess = vi.fn();
-    const { result } = renderHook(() => useToolForm({ onSuccess }));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE, onSuccess }));
 
     await act(async () => {
       await result.current.actions.onSubmit(values());
@@ -178,7 +184,7 @@ describe('useToolForm', () => {
 
   it('loads agents when type becomes agent', async () => {
     mockAgentsService.getAll.mockResolvedValue([{ name: 'agent-1' }] as never);
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     act(() => {
       result.current.form.setValue('type', 'agent');
@@ -195,7 +201,7 @@ describe('useToolForm', () => {
 
   it('loads teams when type becomes team', async () => {
     mockTeamsService.getAll.mockResolvedValue([{ name: 'team-1' }] as never);
-    const { result } = renderHook(() => useToolForm({}));
+    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     act(() => {
       result.current.form.setValue('type', 'team');
@@ -208,5 +214,95 @@ describe('useToolForm', () => {
       expect(result.current.state.teams).toEqual([{ name: 'team-1' }]);
     });
     expect(result.current.state.teamsLoading).toBe(false);
+  });
+});
+
+describe('useToolForm — edit mode', () => {
+  const detail = {
+    name: 'my-tool',
+    namespace: 'default',
+    description: 'desc',
+    annotations: { note: 'x' },
+    spec: {
+      type: 'http',
+      inputSchema: { a: 1 },
+      http: { url: 'https://x.dev' },
+    },
+  };
+
+  beforeEach(() => {
+    mockToolsService.getDetail.mockResolvedValue(detail as never);
+  });
+
+  it('fetches the tool and prefills the form', async () => {
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'my-tool' }),
+    );
+
+    await waitFor(() => {
+      expect(mockToolsService.getDetail).toHaveBeenCalledWith('my-tool');
+    });
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    expect(result.current.state.tool).toEqual(detail);
+    expect(result.current.form.getValues('name')).toBe('my-tool');
+    expect(result.current.form.getValues('type')).toBe('http');
+    expect(result.current.form.getValues('description')).toBe('desc');
+    expect(result.current.form.getValues('httpUrl')).toBe('https://x.dev');
+    expect(result.current.form.getValues('inputSchema')).toContain('"a": 1');
+    expect(result.current.form.getValues('annotations')).toContain('"note"');
+  });
+
+  it('updates the tool (not create) and calls onSuccess on submit', async () => {
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'my-tool', onSuccess }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit(
+        values({ type: 'http', httpUrl: 'https://y.dev' }),
+      );
+    });
+
+    expect(mockToolsService.update).toHaveBeenCalledWith(
+      'my-tool',
+      expect.objectContaining({
+        type: 'http',
+        description: 'desc',
+        inputSchema: { a: 1 },
+        url: 'https://y.dev',
+      }),
+    );
+    expect(mockToolsService.create).not.toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an error toast when update fails', async () => {
+    mockToolsService.update.mockRejectedValue(new Error('Boom'));
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'my-tool', onSuccess }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit(values());
+    });
+
+    expect(mockToast.error).toHaveBeenCalledWith(
+      'Failed to Update Tool',
+      expect.objectContaining({ description: 'Boom' }),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 });
