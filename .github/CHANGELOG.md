@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.1.65-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.64...v0.1.65-rc) (2026-06-19)
+
+
+### Features
+
+* **ark-api:** authorization preflight in /v1/context via SelfSubjectRulesReview ([#2526](https://github.com/mckinsey/agents-at-scale-ark/issues/2526)) ([988fb13](https://github.com/mckinsey/agents-at-scale-ark/commit/988fb13eaa9d349d62370fdf507ccabe2fb4afcb))
+* **ark-broker:** Phase 1 — messages on Postgres (opt-in durable backend) ([#2424](https://github.com/mckinsey/agents-at-scale-ark/issues/2424)) ([a61e331](https://github.com/mckinsey/agents-at-scale-ark/commit/a61e331531a2f9f9ced6ea49d2c73d690575b231))
+* **ark-dashboard:** access-denied gate from /v1/context permissions preflight ([#2529](https://github.com/mckinsey/agents-at-scale-ark/issues/2529)) ([9334274](https://github.com/mckinsey/agents-at-scale-ark/commit/9334274570c5399935f35304b5c5fae4fa1d9850))
+* Dashboard runtime basepath for multi-tenant ([#2512](https://github.com/mckinsey/agents-at-scale-ark/issues/2512)) ([893fb47](https://github.com/mckinsey/agents-at-scale-ark/commit/893fb47806a3e18d8845424ce6bf9c54d31be8aa))
+* marketplace sources configmap ([#2479](https://github.com/mckinsey/agents-at-scale-ark/issues/2479)) ([8baf3e6](https://github.com/mckinsey/agents-at-scale-ark/commit/8baf3e62c0c8952308eeb1045d5917844011dd74))
+* propagate query.spec.ttl to broker messages expires_at ([#2508](https://github.com/mckinsey/agents-at-scale-ark/issues/2508)) ([691328d](https://github.com/mckinsey/agents-at-scale-ark/commit/691328d80d208b6edc1b71d54f23416e7a5fbdaf))
+
+
+### Bug Fixes
+
+* **a2a:** repair simple-agent sample build and align A2A docs ([#2531](https://github.com/mckinsey/agents-at-scale-ark/issues/2531)) ([e385f90](https://github.com/mckinsey/agents-at-scale-ark/commit/e385f90ac701fcad840b782c0a2c72d216233833))
+* **ark-dashboard:** clear stale OIDC-flow cookies on logout to prevent error=Configuration ([#2528](https://github.com/mckinsey/agents-at-scale-ark/issues/2528)) ([51c0dd4](https://github.com/mckinsey/agents-at-scale-ark/commit/51c0dd4cd0d7671343d8260b6c71f904bafc8241))
+* **ark-dashboard:** preserve namespace on settings navigation ([#2569](https://github.com/mckinsey/agents-at-scale-ark/issues/2569)) ([3ce0836](https://github.com/mckinsey/agents-at-scale-ark/commit/3ce0836849b53d63ba6460448fb033c6d7b25aca))
+* **completions:** tolerate SSE keepalive/comment frames in streaming decoder ([#2567](https://github.com/mckinsey/agents-at-scale-ark/issues/2567)) ([f45f81b](https://github.com/mckinsey/agents-at-scale-ark/commit/f45f81b317c1a823c7f7e4fc7e57b92d81d39444))
+* CVE-2026-9697 issue ([#2571](https://github.com/mckinsey/agents-at-scale-ark/issues/2571)) ([41b944b](https://github.com/mckinsey/agents-at-scale-ark/commit/41b944ba7a8482c6875d47728a2f1f3d20725047))
+* report discovered A2A agents as available ([#2540](https://github.com/mckinsey/agents-at-scale-ark/issues/2540)) ([593b0d7](https://github.com/mckinsey/agents-at-scale-ark/commit/593b0d7de835ed19d78a37a266a83839f1612cac))
+* **sdk:** refetch JWKS on unknown kid to survive IdP key rotation ([#2568](https://github.com/mckinsey/agents-at-scale-ark/issues/2568)) ([143e02e](https://github.com/mckinsey/agents-at-scale-ark/commit/143e02e5a869297d9a25fbc6758e97e3afd64a38))
+* Security vulnerability updates (16 HIGH CVEs) ([#2489](https://github.com/mckinsey/agents-at-scale-ark/issues/2489)) ([a539f05](https://github.com/mckinsey/agents-at-scale-ark/commit/a539f05eeaf20cfaf56f0d0422f7aee04d8d65a0))
+* **security:** bump hono to 4.12.25 to address CVE-2026-54290 ([#2522](https://github.com/mckinsey/agents-at-scale-ark/issues/2522)) ([1b05059](https://github.com/mckinsey/agents-at-scale-ark/commit/1b0505956be24278dbb8b017a506759e9376982d))
+* Various small CICD issues ([#2445](https://github.com/mckinsey/agents-at-scale-ark/issues/2445)) ([342053d](https://github.com/mckinsey/agents-at-scale-ark/commit/342053dacbbdc06e68abe32d2c8bbe0b9800fb00))
+
+
+### Documentation
+
+* **ark-cli:** full rewrite — intro, how it works, command reference ([#2453](https://github.com/mckinsey/agents-at-scale-ark/issues/2453)) ([d145c5b](https://github.com/mckinsey/agents-at-scale-ark/commit/d145c5b6b6b8ab989839c7cc35bc11e533015703))
+* clean up Tutorials sidebar and reorder below Core Concepts ([#2480](https://github.com/mckinsey/agents-at-scale-ark/issues/2480)) ([d79c941](https://github.com/mckinsey/agents-at-scale-ark/commit/d79c94155403ed0356cb367541b136d0bda0c054))
+* document opt-in Postgres message backend for ark-broker ([#2525](https://github.com/mckinsey/agents-at-scale-ark/issues/2525)) ([350167d](https://github.com/mckinsey/agents-at-scale-ark/commit/350167d268267ec1a639279b4ee68fddebdf2d11))
+* improve sidebar readability and fix alias active-highlight ([#2475](https://github.com/mckinsey/agents-at-scale-ark/issues/2475)) ([e1d5cda](https://github.com/mckinsey/agents-at-scale-ark/commit/e1d5cdac4752e619804889d1de5eef1d35f54d9e))
+* Multi-tenant dashboard hosting ([#2565](https://github.com/mckinsey/agents-at-scale-ark/issues/2565)) ([76fbe25](https://github.com/mckinsey/agents-at-scale-ark/commit/76fbe257bc4214029183632c70a15a76c700b4a9))
+* spec for auth marketplace sources ([#2517](https://github.com/mckinsey/agents-at-scale-ark/issues/2517)) ([e7b86cf](https://github.com/mckinsey/agents-at-scale-ark/commit/e7b86cf81c035cbe806e5979a1c31e4d43f7356d))
+
 ## [0.1.64](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.64...v0.1.64) (2026-06-15)
 
 

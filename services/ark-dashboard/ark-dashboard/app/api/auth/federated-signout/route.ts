@@ -2,7 +2,11 @@ import { getToken } from 'next-auth/jwt';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { SESSION_COOKIE_NAME, useSecureCookies } from '@/lib/auth/auth-config';
+import {
+  OIDC_FLOW_COOKIE_NAMES,
+  SESSION_COOKIE_NAME,
+  useSecureCookies,
+} from '@/lib/auth/auth-config';
 import { openidConfigManager } from '@/lib/auth/openid-config-manager';
 
 // NextAuth splits a session JWT larger than ~4KB into `${name}.0`, `${name}.1`,
@@ -16,6 +20,9 @@ function clearSessionCookies(res: NextResponse) {
   for (let i = 0; i < MAX_COOKIE_CHUNKS; i++) {
     names.push(`${SESSION_COOKIE_NAME}.${i}`);
   }
+  // Also clear transient OIDC-flow cookies; a stale `state`/PKCE cookie
+  // surviving logout fails the next sign-in's callback (error=Configuration).
+  names.push(...OIDC_FLOW_COOKIE_NAMES);
   for (const name of names) {
     res.cookies.set(name, '', {
       path: '/',
@@ -39,7 +46,9 @@ export async function GET(request: NextRequest) {
   const redirectURL = `${baseURL}/signout`;
   if (!token?.id_token) {
     // no session, just go home
-    return clearSessionCookies(NextResponse.redirect(new URL('/signout', baseURL)));
+    return clearSessionCookies(
+      NextResponse.redirect(new URL('/signout', baseURL)),
+    );
   }
 
   // Get or fetch the openid config from the OIDC provider's well-known configuration

@@ -114,6 +114,20 @@ describe('MarketplacePage', () => {
     vi.clearAllMocks();
   });
 
+  it('silently discards the legacy localStorage marketplace-sources key on mount', () => {
+    mockUseGetMarketplaceItems.mockReturnValue({
+      data: mockMarketplaceData,
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    localStorage.setItem('marketplace-sources', JSON.stringify([{ url: 'https://x' }]));
+    renderWithProviders(<MarketplacePage />);
+    expect(localStorage.getItem('marketplace-sources')).toBeNull();
+  });
+
   it('should render marketplace page with items', async () => {
     mockUseGetMarketplaceItems.mockReturnValue({
       data: mockMarketplaceData,

@@ -216,6 +216,7 @@ class A2AExecutorAdapter(AgentExecutor):
             query_name=query_ref.name,
             session_id=conversation_id,
             agent_name=request.agent.name,
+            message_ttl_seconds=request.message_ttl_seconds,
         ) if broker_url else None
 
         self.executor._broker_client = broker

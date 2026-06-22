@@ -74,6 +74,14 @@ export default {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
   },
+  'multi-tenant-dashboard': {
+    title: 'Host the dashboard for multiple namespaces',
+    href: '/operations-guide/multi-tenant-dashboard-hosting'
+  },
+  'operate-marketplace': {
+    title: 'Marketplace',
+    href: '/operations-guide/marketplace'
+  },
   pipelines: {
     title: 'Build pipelines',
     href: '/operations-guide/build-pipelines'

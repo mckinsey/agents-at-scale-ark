@@ -12,6 +12,8 @@ from ark_sdk.extensions.query import (
     extract_query_ref,
     resolve_query,
     _resolve_value_source,
+    _parse_go_duration_to_seconds,
+    _resolve_from_query,
 )
 
 
@@ -736,6 +738,66 @@ class TestExtensionConstants(unittest.TestCase):
     def test_metadata_key_derived_from_uri(self):
         self.assertTrue(QUERY_EXTENSION_METADATA_KEY.startswith(QUERY_EXTENSION_URI))
         self.assertTrue(QUERY_EXTENSION_METADATA_KEY.endswith("/ref"))
+
+
+class TestParseGoDurationToSeconds(unittest.TestCase):
+    def test_1h(self):
+        self.assertEqual(_parse_go_duration_to_seconds("1h"), 3600)
+
+    def test_720h0m0s(self):
+        self.assertEqual(_parse_go_duration_to_seconds("720h0m0s"), 2592000)
+
+    def test_1h30m(self):
+        self.assertEqual(_parse_go_duration_to_seconds("1h30m"), 5400)
+
+    def test_90s(self):
+        self.assertEqual(_parse_go_duration_to_seconds("90s"), 90)
+
+    def test_none_returns_none(self):
+        self.assertIsNone(_parse_go_duration_to_seconds(None))
+
+    def test_empty_string_returns_none(self):
+        self.assertIsNone(_parse_go_duration_to_seconds(""))
+
+
+class TestResolveTtlFromQuery(unittest.IsolatedAsyncioTestCase):
+    def _make_mock_objects(self, ttl_value):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+        mock_query.spec.ttl = ttl_value
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        return mock_ark, mock_query
+
+    async def test_ttl_1h0m0s_sets_3600(self):
+        mock_ark, mock_query = self._make_mock_objects("1h0m0s")
+        request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
+        self.assertEqual(request.message_ttl_seconds, 3600)
+
+    async def test_ttl_720h_sets_2592000(self):
+        mock_ark, mock_query = self._make_mock_objects("720h0m0s")
+        request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
+        self.assertEqual(request.message_ttl_seconds, 2592000)
+
+    async def test_ttl_none_sets_message_ttl_seconds_none(self):
+        mock_ark, mock_query = self._make_mock_objects(None)
+        request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
+        self.assertIsNone(request.message_ttl_seconds)
 
 
 if __name__ == "__main__":
