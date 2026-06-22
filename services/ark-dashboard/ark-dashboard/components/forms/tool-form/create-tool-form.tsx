@@ -51,7 +51,10 @@ const jsonTextareaClassName = (expanded: boolean) =>
       : 'max-h-[180px] min-h-[120px]',
   );
 
-export function CreateToolForm({ onSuccess, onCancel }: ToolFormProps) {
+export function CreateToolForm({
+  onSuccess,
+  onCancel,
+}: Readonly<ToolFormProps>) {
   const { readOnlyMode } = useNamespace();
   const { form, state, actions } = useToolForm({ onSuccess });
   const { saving, agents, teams, agentsLoading, teamsLoading, selectedType } =

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/sonner';
 
 import { Handyman } from '@/components/icons';
@@ -141,6 +141,87 @@ export function ToolsSection() {
 
   const isEmpty = !loading && tools.length === 0;
 
+  const addToolButton = readOnlyMode ? (
+    <Button disabled>Add tool</Button>
+  ) : (
+    <NamespacedLink href="/tools/new">
+      <Button>Add tool</Button>
+    </NamespacedLink>
+  );
+
+  let body: ReactNode;
+  if (showLoading) {
+    body = (
+      <div className="mt-5 flex flex-1 items-center justify-center">
+        <div className="py-8 text-center">Loading...</div>
+      </div>
+    );
+  } else if (isEmpty) {
+    body = (
+      <ResourceEmptyState
+        icon={<Handyman className="size-full" />}
+        title="No tools yet"
+        description={
+          <>
+            <p className="mb-2">You haven&apos;t added any tools yet.</p>
+            <p>Get started by adding your first tool.</p>
+          </>
+        }
+        actions={
+          <>
+            {addToolButton}
+            <a href={LEARN_MORE_URL} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">Learn more</Button>
+            </a>
+          </>
+        }
+      />
+    );
+  } else {
+    body = (
+      <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
+        <div className="flex flex-none items-end gap-3">
+          <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+          <div className="flex w-48 flex-col gap-2">
+            <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+              Type
+            </span>
+            <Select
+              items={TYPE_ITEMS}
+              value={typeFilter}
+              onValueChange={v => setTypeFilter(v as TypeFilter)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPE_ITEMS.map(item => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {filteredTools.length === 0 ? (
+          <ResourceNoResults
+            icon={<Handyman className="size-full" />}
+            message="No tools match your search."
+          />
+        ) : (
+          <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+            <ToolsTable
+              tools={filteredTools}
+              usage={usage}
+              onDelete={handleDelete}
+            />
+          </ScrollArea>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between gap-3">
@@ -157,88 +238,10 @@ export function ToolsSection() {
             Create and manage tools
           </p>
         </div>
-        {!isEmpty &&
-          (readOnlyMode ? (
-            <Button disabled>Add tool</Button>
-          ) : (
-            <NamespacedLink href="/tools/new">
-              <Button>Add tool</Button>
-            </NamespacedLink>
-          ))}
+        {!isEmpty && addToolButton}
       </div>
 
-      {showLoading ? (
-        <div className="mt-5 flex flex-1 items-center justify-center">
-          <div className="py-8 text-center">Loading...</div>
-        </div>
-      ) : isEmpty ? (
-        <ResourceEmptyState
-          icon={<Handyman className="size-full" />}
-          title="No tools yet"
-          description={
-            <>
-              <p className="mb-2">You haven&apos;t added any tools yet.</p>
-              <p>Get started by adding your first tool.</p>
-            </>
-          }
-          actions={
-            <>
-              {readOnlyMode ? (
-                <Button disabled>Add tool</Button>
-              ) : (
-                <NamespacedLink href="/tools/new">
-                  <Button>Add tool</Button>
-                </NamespacedLink>
-              )}
-              <a href={LEARN_MORE_URL} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline">Learn more</Button>
-              </a>
-            </>
-          }
-        />
-      ) : (
-        <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
-          <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
-            <div className="flex w-48 flex-col gap-2">
-              <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
-                Type
-              </span>
-              <Select
-                items={TYPE_ITEMS}
-                value={typeFilter}
-                onValueChange={v => setTypeFilter(v as TypeFilter)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPE_ITEMS.map(item => (
-                    <SelectItem key={item.value} value={item.value}>
-                      <SelectItemText>{item.label}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {filteredTools.length === 0 ? (
-            <ResourceNoResults
-              icon={<Handyman className="size-full" />}
-              message="No tools match your search."
-            />
-          ) : (
-            <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-              <ToolsTable
-                tools={filteredTools}
-                usage={usage}
-                onDelete={handleDelete}
-              />
-            </ScrollArea>
-          )}
-        </div>
-      )}
-
+      {body}
     </div>
   );
 }
