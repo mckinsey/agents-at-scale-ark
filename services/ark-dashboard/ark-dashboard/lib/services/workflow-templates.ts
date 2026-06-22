@@ -182,6 +182,37 @@ export const workflowTemplatesService = {
     }
   },
 
+  async create(template: WorkflowTemplate): Promise<WorkflowTemplate> {
+    try {
+      const response = await apiClient.post<WorkflowTemplate>(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
+        template,
+      );
+      return response;
+    } catch (error) {
+      console.error('Error creating workflow template:', error);
+      if (error && typeof error === 'object' && 'status' in error) {
+        const apiError = error as {
+          status?: number;
+          data?: {
+            message?: string;
+            reason?: string;
+          };
+        };
+
+        if (apiError.status === 409) {
+          throw new Error(
+            `A workflow template named "${template.metadata.name}" already exists`,
+          );
+        }
+        if (apiError.data?.message) {
+          throw new Error(String(apiError.data.message));
+        }
+      }
+      throw error;
+    }
+  },
+
   async delete(name: string): Promise<void> {
     await apiClient.delete(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${name}`,
