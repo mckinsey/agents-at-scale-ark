@@ -35,7 +35,7 @@ def _broker_available() -> bool:
 @pytest.fixture(scope="module", autouse=True)
 def broker_available(ark_api_url):
     if not _broker_available():
-        pytest.skip("Broker traces endpoint not reachable — skip OTEL trace tests")
+        pytest.skip(f"Broker traces endpoint not reachable at {ark_api_url} — skip OTEL trace tests")
 
 
 class TestAgentQueryTrace:
@@ -293,7 +293,6 @@ spec:
       type: agent
 """)
         assert ok, f"kubectl apply failed: {msg}"
-        time.sleep(3)
 
     @classmethod
     def teardown_class(cls):
