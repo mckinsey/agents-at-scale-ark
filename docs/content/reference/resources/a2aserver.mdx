@@ -15,14 +15,26 @@ kind: A2AServer
 metadata:
   name: aws-operator-agent
 spec:
-  # Service address for the A2A server.
-  # Supports value, valueFrom.serviceRef, valueFrom.configMapKeyRef, valueFrom.secretKeyRef
+  # Required. Service address for the A2A server. Supports an inline `value`,
+  # or `valueFrom` with serviceRef, configMapKeyRef, or secretKeyRef.
   address:
     value: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
-  # Human-readable description of the A2A server
+  # Optional. Human-readable description of the A2A server.
   description: AWS operations agent with read-only access to AWS services
-  # How often to poll the server for updates (default: 1m)
+  # Optional. HTTP headers sent on every request to the server, e.g. for
+  # authentication. Each value may be inline or sourced from a Secret or
+  # ConfigMap via valueFrom.
+  headers:
+    - name: Authorization
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: a2a-credentials
+            key: token
+  # Optional. How often to poll the server for updates (default: 1m).
   pollInterval: 1m
+  # Optional. Timeout for A2A agent execution (default: 5m).
+  timeout: 5m
 status:
   conditions:
     # Ready: A2AServer is reachable and operational
