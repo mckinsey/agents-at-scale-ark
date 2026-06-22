@@ -1,26 +1,18 @@
-import {readFileSync, readdirSync} from 'fs';
+import {readFileSync, readdirSync, writeFileSync} from 'fs';
 import {join} from 'path';
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import postgres from 'postgres';
+import {generate as generateCert} from 'selfsigned';
+import tmp from 'tmp';
 import type {Db} from '@ark-broker/db/db.js';
 
+tmp.setGracefulCleanup();
+
 const MIGRATIONS_DIR = join(process.cwd(), 'src', 'db', 'migrations');
-const SSL_WRAPPER_SCRIPT = [
-  '#!/bin/sh',
-  'set -e',
-  'mkdir -p /tmp/pg-ssl',
-  'openssl req -newkey rsa:2048 -nodes \\',
-  '  -keyout /tmp/pg-ssl/server.key \\',
-  '  -x509 -days 1 \\',
-  '  -out /tmp/pg-ssl/server.crt \\',
-  '  -subj "/CN=localhost" 2>/dev/null',
-  'chown 999:999 /tmp/pg-ssl/server.key /tmp/pg-ssl/server.crt',
-  'chmod 600 /tmp/pg-ssl/server.key',
-  'exec docker-entrypoint.sh "$@"',
-].join('\n');
+const PG_SSL_DIR = '/etc/ssl/pg-test';
 
 export type StartedPgContainer = {
   container: StartedPostgreSqlContainer;
@@ -57,25 +49,44 @@ export async function startPgContainer(): Promise<StartedPgContainer> {
 }
 
 export async function startPgContainerSsl(): Promise<StartedPgContainer> {
+  const notAfterDate = new Date();
+  notAfterDate.setDate(notAfterDate.getDate() + 1);
+  const pems = await generateCert([{name: 'commonName', value: 'localhost'}], {
+    notAfterDate,
+    keySize: 2048,
+  });
+
+  const certDir = tmp.dirSync({prefix: 'pg-ssl-', unsafeCleanup: true});
+  const keyPath = join(certDir.name, 'server.key');
+  const certPath = join(certDir.name, 'server.crt');
+  writeFileSync(keyPath, pems.private, {mode: 0o600});
+  writeFileSync(certPath, pems.cert, {mode: 0o644});
+
   const container = await new PostgreSqlContainer('postgres:16')
     .withCopyContentToContainer([
       {
-        content: SSL_WRAPPER_SCRIPT,
-        target: '/tmp/pg-entrypoint.sh',
-        mode: 0o755,
+        content: readFileSync(keyPath),
+        target: `${PG_SSL_DIR}/server.key`,
+        mode: 0o644,
+      },
+      {
+        content: readFileSync(certPath),
+        target: `${PG_SSL_DIR}/server.crt`,
+        mode: 0o644,
       },
     ])
-    .withEntrypoint(['sh', '/tmp/pg-entrypoint.sh'])
     .withCommand([
       'postgres',
       '-c',
       'ssl=on',
       '-c',
-      'ssl_cert_file=/tmp/pg-ssl/server.crt',
+      `ssl_cert_file=${PG_SSL_DIR}/server.crt`,
       '-c',
-      'ssl_key_file=/tmp/pg-ssl/server.key',
+      `ssl_key_file=${PG_SSL_DIR}/server.key`,
     ])
     .start();
+
+  certDir.removeCallback();
 
   const connectionUrl = `${container.getConnectionUri()}?sslmode=require`;
   await runMigrations(connectionUrl);
