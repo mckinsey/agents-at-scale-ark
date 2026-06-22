@@ -6,7 +6,24 @@ backends:
 
 # PostgreSQL connection — required when backends.message=postgres
 database:
+  # Plain connection URL. Avoid in production — use urlSecretRef instead.
   url: ""
+
+  # Reference a k8s Secret that holds the full DATABASE_URL.
+  # When set, takes priority over database.url in both the app and the migrate init container.
+  urlSecretRef:
+    name: ""
+    key: "database-url"
+
+  # Mount a k8s Secret containing TLS certificates into both the app container
+  # and the migrate init container. Required for sslmode=verify-ca / verify-full.
+  # Include the cert paths in the DATABASE_URL query params, e.g.:
+  #   ?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt
+  tls:
+    enabled: false
+    secretName: ""
+    mountPath: /etc/pg-ssl
+
   poolMax: 10
   connectTimeoutMs: 10000
   statementTimeoutMs: 30000
