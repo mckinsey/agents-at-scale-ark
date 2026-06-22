@@ -1,7 +1,7 @@
 """Tests for SecretClient Kubernetes secret management - adapted from ark-api tests."""
 import unittest
 import base64
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, MagicMock, patch, call
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import SecretClient
@@ -411,21 +411,22 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
 
 
 class TestInitK8sCalledBeforeApiClient(unittest.IsolatedAsyncioTestCase):
-    """Verify init_k8s is called before ApiClient in every SecretClient method."""
+    """Verify init_k8s is called before create_api_client in every SecretClient method."""
 
     def setUp(self):
         self.client = SecretClient(namespace="test-namespace")
 
-    @patch('ark_sdk.k8s.create_api_client')
-    @patch('ark_sdk.k8s.init_k8s', new_callable=AsyncMock)
-    async def _run(self, method, mock_init_k8s, mock_create_api_client):
-        call_order = []
-        mock_init_k8s.side_effect = lambda: call_order.append('init_k8s')
+    async def _assert_init_k8s_called_first(self, coro):
+        mock_manager = Mock()
+        mock_init_k8s = AsyncMock()
+        mock_create_api_client = Mock()
         mock_api = AsyncMock()
         mock_api.__aenter__ = AsyncMock(return_value=mock_api)
         mock_api.__aexit__ = AsyncMock(return_value=False)
-        mock_api.side_effect = lambda: call_order.append('create_api_client') or mock_api
-        mock_create_api_client.side_effect = lambda: (call_order.append('create_api_client'), mock_api)[1]
+        mock_create_api_client.return_value = mock_api
+
+        mock_manager.attach_mock(mock_init_k8s, "init_k8s")
+        mock_manager.attach_mock(mock_create_api_client, "create_api_client")
 
         v1_mock = Mock()
         v1_mock.list_namespaced_secret = AsyncMock(return_value=Mock(items=[]))
@@ -441,33 +442,33 @@ class TestInitK8sCalledBeforeApiClient(unittest.IsolatedAsyncioTestCase):
         ))
         v1_mock.delete_namespaced_secret = AsyncMock(return_value=None)
 
-        with patch('ark_sdk.k8s.client.CoreV1Api', return_value=v1_mock):
+        with patch('ark_sdk.k8s.init_k8s', mock_init_k8s), \
+             patch('ark_sdk.k8s.create_api_client', mock_create_api_client), \
+             patch('ark_sdk.k8s.client.CoreV1Api', return_value=v1_mock):
             try:
-                await method()
+                await coro()
             except Exception:
                 pass
 
-        self.assertIn('init_k8s', call_order, "init_k8s was not called")
-        self.assertLess(call_order.index('init_k8s'), call_order.index('create_api_client'),
-                        "init_k8s must be called before create_api_client")
+        mock_manager.assert_has_calls([call.init_k8s(), call.create_api_client()])
 
     async def test_list_secrets_calls_init_k8s_first(self):
-        await self._run(self.client.list_secrets)
+        await self._assert_init_k8s_called_first(self.client.list_secrets)
 
     async def test_get_secret_calls_init_k8s_first(self):
-        await self._run(lambda: self.client.get_secret('s'))
+        await self._assert_init_k8s_called_first(lambda: self.client.get_secret('s'))
 
     async def test_get_secret_value_calls_init_k8s_first(self):
-        await self._run(lambda: self.client.get_secret_value('s', 'token'))
+        await self._assert_init_k8s_called_first(lambda: self.client.get_secret_value('s', 'token'))
 
     async def test_create_secret_calls_init_k8s_first(self):
-        await self._run(lambda: self.client.create_secret('s', {'token': 'v'}))
+        await self._assert_init_k8s_called_first(lambda: self.client.create_secret('s', {'token': 'v'}))
 
     async def test_update_secret_calls_init_k8s_first(self):
-        await self._run(lambda: self.client.update_secret('s', {'token': 'v'}))
+        await self._assert_init_k8s_called_first(lambda: self.client.update_secret('s', {'token': 'v'}))
 
     async def test_delete_secret_calls_init_k8s_first(self):
-        await self._run(lambda: self.client.delete_secret('s'))
+        await self._assert_init_k8s_called_first(lambda: self.client.delete_secret('s'))
 
 
 if __name__ == '__main__':
