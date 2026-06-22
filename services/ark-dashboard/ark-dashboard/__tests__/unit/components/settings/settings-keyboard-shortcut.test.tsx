@@ -8,6 +8,7 @@ import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(),
+  useSearchParams: vi.fn(() => new URLSearchParams('')),
 }));
 
 import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';

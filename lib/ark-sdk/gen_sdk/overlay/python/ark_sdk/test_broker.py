@@ -124,6 +124,40 @@ class TestBrokerClientSendMessages:
             assert payload["messages"] == messages
 
     @pytest.mark.anyio
+    async def test_with_ttl_sends_ttl_seconds(self):
+        client = BrokerClient("http://broker:3000", "my-query", "conv-1", "agent", message_ttl_seconds=3600)
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            await client.send_messages("conv-1", [{"role": "user", "content": "hi"}])
+
+            payload = mock_http.post.call_args[1]["json"]
+            assert payload["ttl_seconds"] == 3600
+
+    @pytest.mark.anyio
+    async def test_without_ttl_omits_ttl_seconds(self):
+        client = BrokerClient("http://broker:3000", "my-query", "conv-1", "agent", message_ttl_seconds=None)
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            await client.send_messages("conv-1", [{"role": "user", "content": "hi"}])
+
+            payload = mock_http.post.call_args[1]["json"]
+            assert "ttl_seconds" not in payload
+
+    @pytest.mark.anyio
     async def test_swallows_http_error(self):
         client = BrokerClient("http://broker", "q", "", "a")
         with patch("httpx.AsyncClient") as mock_client_cls:

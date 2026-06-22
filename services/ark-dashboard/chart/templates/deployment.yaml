@@ -54,6 +54,12 @@ spec:
             value: {{ required "app.config.arkApiService.port is required" .Values.app.config.arkApiService.port | quote }}
           - name: ARK_API_SERVICE_PROTOCOL
             value: {{ required "app.config.arkApiService.protocol is required" .Values.app.config.arkApiService.protocol | quote }}
+          {{- with .Values.app.config.basePath }}
+          - name: ARK_DASHBOARD_BASE_PATH
+            value: {{ . | quote }}
+          - name: NEXT_PUBLIC_BASE_PATH
+            value: {{ . | quote }}
+          {{- end }}
           {{- if .Values.app.env }}
           {{- range .Values.app.env }}
           - name: {{ .name }}

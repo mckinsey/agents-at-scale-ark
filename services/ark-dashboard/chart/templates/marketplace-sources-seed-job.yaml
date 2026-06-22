@@ -1,0 +1,151 @@
+{{- if .Values.marketplaceSources }}
+{{- /* One ConfigMap manifest per namespace (all keys in one apply) so the seeder owns every key without pruning. */}}
+{{- $byNs := dict }}
+{{- range .Values.marketplaceSources }}
+{{- $ns := .namespace | default $.Release.Namespace }}
+{{- $data := index $byNs $ns | default (dict) }}
+{{- $val := dict "url" .url }}
+{{- if .displayName }}{{- $_ := set $val "displayName" .displayName }}{{- end }}
+{{- $_ := set $data .name ($val | toJson) }}
+{{- $_ := set $byNs $ns $data }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seed-manifests
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+{{- range $ns, $data := $byNs }}
+{{- $cm := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" "marketplace-sources" "namespace" $ns) "data" $data }}
+  {{ $ns }}.yaml: |-
+{{ toYaml $cm | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seeder
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seeder-{{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  # create cannot be scoped by resourceName; needed to materialise the ConfigMap.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  # get/update/patch scoped to the single ConfigMap the seeder owns.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["marketplace-sources"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seeder-{{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.app.name }}-marketplace-seeder
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Values.app.name }}-marketplace-seeder-{{ .Release.Namespace }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.app.name }}-marketplace-seed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}
+    spec:
+      serviceAccountName: {{ .Values.app.name }}-marketplace-seeder
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: {{ .Values.marketplaceSourcesSeed.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            # uid 1001 has no home; give kubectl a writable cache dir.
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+              ephemeral-storage: 256Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              for f in /seed/*.yaml; do
+                if out=$(kubectl apply --server-side \
+                    --field-manager helm-marketplace-seeder -f "$f" 2>&1); then
+                  echo "$out"
+                elif echo "$out" | grep -qi conflict; then
+                  echo "preserving user-owned key in $f (apply conflict): $out"
+                else
+                  echo "$out" >&2
+                  exit 1
+                fi
+              done
+          volumeMounts:
+            - name: manifests
+              mountPath: /seed
+              readOnly: true
+      volumes:
+        - name: manifests
+          configMap:
+            name: {{ .Values.app.name }}-marketplace-seed-manifests
+{{- end }}
