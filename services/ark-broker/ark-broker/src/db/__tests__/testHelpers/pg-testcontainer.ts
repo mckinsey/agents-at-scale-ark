@@ -67,7 +67,7 @@ export async function startPgContainerSsl(): Promise<StartedPgContainer> {
       {
         content: readFileSync(keyPath),
         target: `${PG_SSL_DIR}/server.key`,
-        mode: 0o644,
+        mode: 0o600,
       },
       {
         content: readFileSync(certPath),
@@ -75,20 +75,66 @@ export async function startPgContainerSsl(): Promise<StartedPgContainer> {
         mode: 0o644,
       },
     ])
-    .withCommand([
-      'postgres',
-      '-c',
-      'ssl=on',
-      '-c',
-      `ssl_cert_file=${PG_SSL_DIR}/server.crt`,
-      '-c',
-      `ssl_key_file=${PG_SSL_DIR}/server.key`,
-    ])
     .start();
 
   certDir.removeCallback();
 
-  const connectionUrl = `${container.getConnectionUri()}?sslmode=require`;
+  const chownResult = await container.exec([
+    'chown',
+    'postgres:postgres',
+    `${PG_SSL_DIR}/server.key`,
+    `${PG_SSL_DIR}/server.crt`,
+  ]);
+  if (chownResult.exitCode !== 0) {
+    throw new Error(
+      `chown failed (exit ${chownResult.exitCode}): ${chownResult.output}`
+    );
+  }
+
+  const chmodResult = await container.exec([
+    'chmod',
+    '600',
+    `${PG_SSL_DIR}/server.key`,
+  ]);
+  if (chmodResult.exitCode !== 0) {
+    throw new Error(
+      `chmod failed (exit ${chmodResult.exitCode}): ${chmodResult.output}`
+    );
+  }
+
+  const adminDb = postgres(container.getConnectionUri(), {max: 1});
+  try {
+    await adminDb.unsafe(`ALTER SYSTEM SET ssl = on`);
+    await adminDb.unsafe(
+      `ALTER SYSTEM SET ssl_cert_file = '${PG_SSL_DIR}/server.crt'`
+    );
+    await adminDb.unsafe(
+      `ALTER SYSTEM SET ssl_key_file = '${PG_SSL_DIR}/server.key'`
+    );
+    await adminDb`SELECT pg_reload_conf()`;
+  } finally {
+    await adminDb.end();
+  }
+
+  const baseUrl = container.getConnectionUri();
+  let sslReady = false;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const probe = postgres(`${baseUrl}?sslmode=require`, {max: 1});
+    try {
+      await probe`SELECT 1`;
+      await probe.end();
+      sslReady = true;
+      break;
+    } catch {
+      await probe.end();
+      await new Promise<void>((r) => setTimeout(r, 200));
+    }
+  }
+  if (!sslReady) {
+    throw new Error('Postgres SSL did not become available after reload');
+  }
+
+  const connectionUrl = `${baseUrl}?sslmode=require`;
   await runMigrations(connectionUrl);
   return {
     container,
