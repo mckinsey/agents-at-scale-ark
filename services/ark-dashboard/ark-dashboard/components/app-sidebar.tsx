@@ -516,15 +516,15 @@ export function AppSidebar() {
                     )
                   }
                   tooltip={
-                    isExperimentalDarkModeEnabled ? 'Light mode' : 'Dark mode'
+                    isExperimentalDarkModeEnabled ? 'Dark mode' : 'Light mode'
                   }>
                   {isExperimentalDarkModeEnabled ? (
-                    <LightMode className="h-4 w-4" />
-                  ) : (
                     <Bedtime className="h-4 w-4" />
+                  ) : (
+                    <LightMode className="h-4 w-4" />
                   )}
                   <span>
-                    {isExperimentalDarkModeEnabled ? 'Light mode' : 'Dark mode'}
+                    {isExperimentalDarkModeEnabled ? 'Dark mode' : 'Light mode'}
                   </span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
