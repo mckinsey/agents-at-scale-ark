@@ -72,6 +72,22 @@ spec:
         kind: Query
         name: ttl-broker-query
 
+  - name: verify-ssl-connection
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          SSL=$(bash ../shared/psql-query.sh \
+            "SELECT ssl FROM pg_stat_ssl WHERE pid IN (SELECT pid FROM pg_stat_activity WHERE application_name='postgres.js' AND datname='ark') LIMIT 1;" \
+            | tr -d ' \n')
+          echo "broker SSL: ${SSL}"
+          [ "${SSL}" = "t" ] || { echo "expected ssl=t, got '${SSL}'"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
   - name: verify-expires-at-in-postgres
     try:
     - script:
