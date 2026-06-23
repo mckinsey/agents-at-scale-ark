@@ -19,7 +19,7 @@ export function ResourceSearchInput({
   className,
 }: ResourceSearchInputProps) {
   return (
-    <div className={cn('relative w-full max-w-[493px]', className)}>
+    <div className={cn('relative w-[304px] max-w-full', className)}>
       <span className="text-fg-tertiary pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
         <IconShell size="sm" variant="secondary">
           <Search />

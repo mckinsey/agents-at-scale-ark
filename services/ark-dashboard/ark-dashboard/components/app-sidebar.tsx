@@ -293,7 +293,7 @@ export function AppSidebar() {
           <SidebarMenu className="mt-2 group-data-[collapsible=icon]:hidden">
             <SidebarMenuItem>
               <div
-                className="flex flex-col items-start justify-center gap-0 rounded-none px-3 py-2"
+                className="bg-surface-bg-tertiary flex flex-col items-start justify-center gap-0 rounded-none px-3 py-2"
                 data-testid="namespace-display">
                 <span className="text-fg-secondary text-xs leading-4">
                   Namespace
