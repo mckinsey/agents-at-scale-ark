@@ -143,7 +143,7 @@ function Tag({
   onClick,
   onKeyDown,
   ...props
-}: TagProps) {
+}: Readonly<TagProps>) {
   const isInteractive = !!onClick;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {

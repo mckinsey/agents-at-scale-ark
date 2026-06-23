@@ -50,7 +50,10 @@ const RequiredMarker = () => (
   </span>
 );
 
-export function CreateAgentForm({ onSuccess, onCancel }: AgentFormProps) {
+export function CreateAgentForm({
+  onSuccess,
+  onCancel,
+}: Readonly<AgentFormProps>) {
   const { readOnlyMode } = useNamespace();
 
   const { form, state, actions } = useAgentForm({

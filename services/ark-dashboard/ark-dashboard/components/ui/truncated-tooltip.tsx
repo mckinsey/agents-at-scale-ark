@@ -36,7 +36,7 @@ export function TruncatedTooltip({
   children,
   side,
   contentClassName,
-}: TruncatedTooltipProps) {
+}: Readonly<TruncatedTooltipProps>) {
   const ref = React.useRef<HTMLElement>(null);
   const [open, setOpen] = React.useState(false);
 

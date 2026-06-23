@@ -58,7 +58,10 @@ const MAX_VISIBLE_TOOL_TAGS = 4;
 const inlineFieldTriggerClass =
   'border-stroke-tertiary hover:border-stroke-secondary focus-visible:border-stroke-status-focus w-full rounded-none border-0 border-b bg-transparent px-0 py-2 text-left transition-colors focus:ring-0 focus-visible:ring-0';
 
-export function ViewAgentForm({ agentName, onSuccess }: AgentFormProps) {
+export function ViewAgentForm({
+  agentName,
+  onSuccess,
+}: Readonly<AgentFormProps>) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);

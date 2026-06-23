@@ -101,7 +101,7 @@ export function SecretsSection() {
   const isEmpty = !secretsLoading && secrets.length === 0;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full w-full max-w-[1344px] flex-col">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1">
@@ -149,7 +149,7 @@ export function SecretsSection() {
           }
         />
       ) : (
-        <div className="mx-auto mt-5 flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-2">
+        <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
             <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
           </div>

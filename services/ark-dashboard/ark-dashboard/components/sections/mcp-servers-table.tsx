@@ -6,6 +6,14 @@ import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServer } from '@/lib/services/mcp-servers';
 import { cn } from '@/lib/utils';
@@ -25,21 +33,19 @@ const STATUS_CONFIG = {
 } as const;
 
 const COL = {
-  name: 'w-[260px] shrink-0',
-  address: 'flex-1 min-w-0',
-  transport: 'w-[160px] shrink-0',
-  tools: 'w-[100px] shrink-0',
-  status: 'w-[120px] shrink-0',
-  action: 'w-[72px] shrink-0',
+  name: 'w-[260px]',
+  transport: 'w-[160px]',
+  tools: 'w-[100px]',
+  status: 'w-[120px]',
+  action: 'w-[72px]',
 };
 
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
-
-function McpServerStatus({ status }: { status?: MCPServer['available'] | null }) {
+function McpServerStatus({
+  status,
+}: Readonly<{ status?: MCPServer['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -57,63 +63,61 @@ interface McpServerTableRowProps {
   readonly onDelete: (id: string) => void;
 }
 
-function McpServerTableRow({ server, onDelete }: McpServerTableRowProps) {
+function McpServerTableRow({
+  server,
+  onDelete,
+}: Readonly<McpServerTableRowProps>) {
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+      <TableRow className="relative isolate cursor-pointer transition-colors">
+        <TableCell size="small">
+          <span aria-hidden className={rowHoverOverlayClass} />
           <NamespacedLink
             href={`/mcp/${encodeURIComponent(server.id)}/update`}
             title={server.name}
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
+            className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
             {server.name}
           </NamespacedLink>
-        </div>
+        </TableCell>
         <OriginCell origin={server.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <div role="cell" className={cn(rowCellClass, COL.address)}>
+        <TableCell size="small">
           <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
+            className="text-fg-primary block truncate"
             title={server.address ?? ''}>
             {server.address ?? '—'}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.transport)}>
+        </TableCell>
+        <TableCell size="small" className={COL.transport}>
           <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
+            className="text-fg-primary block truncate"
             title={server.transport ?? ''}>
             {server.transport ?? '—'}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.tools)}>
-          <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+        </TableCell>
+        <TableCell size="small" className={COL.tools}>
+          <span className="text-fg-primary block truncate">
             {server.tool_count ?? '—'}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.status)}>
+        </TableCell>
+        <TableCell size="small">
           <McpServerStatus status={server.available} />
-        </div>
-        <div
-          role="cell"
-          className={cn(
-            rowCellClass,
-            COL.action,
-            'relative z-10 justify-center',
-          )}>
-          <IconActionButton
-            label="Delete MCP server"
-            disabled={readOnlyMode}
-            onClick={() => {
-              if (!readOnlyMode) setDeleteConfirmOpen(true);
-            }}>
-            <Trash />
-          </IconActionButton>
-        </div>
-      </div>
+        </TableCell>
+        <TableCell size="small" className="relative z-10">
+          <div className="flex items-center justify-center">
+            <IconActionButton
+              label="Delete MCP server"
+              disabled={readOnlyMode}
+              onClick={() => {
+                if (!readOnlyMode) setDeleteConfirmOpen(true);
+              }}>
+              <Trash />
+            </IconActionButton>
+          </div>
+        </TableCell>
+      </TableRow>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -128,31 +132,36 @@ function McpServerTableRow({ server, onDelete }: McpServerTableRowProps) {
   );
 }
 
-export function McpServersTable({ servers, onDelete }: McpServersTableProps) {
+export function McpServersTable({
+  servers,
+  onDelete,
+}: Readonly<McpServersTableProps>) {
   return (
-    <div role="table" aria-label="MCP Servers" className="flex w-full flex-col">
-      <div role="row" className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <OriginColumnHeader tooltip="Where the MCP server was first created" />
-        <div role="columnheader" className={cn(headerCellClass, COL.address)}>
-          Address
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.transport)}>
-          Transport
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.tools)}>
-          Tools
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.status)}>
-          Status
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <Table
+      aria-label="MCP Servers"
+      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <TableHeader>
+        <TableRow>
+          <TableHead size="small" className={COL.name}>
+            Name
+          </TableHead>
+          <OriginColumnHeader tooltip="Where the MCP server was first created" />
+          <TableHead size="small">Address</TableHead>
+          <TableHead size="small" className={COL.transport}>
+            Transport
+          </TableHead>
+          <TableHead size="small" className={COL.tools}>
+            Tools
+          </TableHead>
+          <TableHead size="small" className={COL.status}>
+            Status
+          </TableHead>
+          <TableHead size="small" className={COL.action}>
+            <span className="sr-only">Action</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {servers.map(server => (
           <McpServerTableRow
             key={server.id}
@@ -160,7 +169,7 @@ export function McpServersTable({ servers, onDelete }: McpServersTableProps) {
             onDelete={onDelete}
           />
         ))}
-      </div>
-    </div>
+      </TableBody>
+    </Table>
   );
 }

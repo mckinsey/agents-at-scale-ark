@@ -6,11 +6,18 @@ import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Tool } from '@/lib/services/tools';
-import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { OriginCell, OriginColumnHeader } from './origin-column';
@@ -53,17 +60,13 @@ interface ToolsTableProps {
 }
 
 const COL = {
-  name: 'w-[240px] shrink-0',
-  type: 'w-[120px] shrink-0',
-  description: 'flex-1 min-w-0',
-  action: 'w-[100px] shrink-0',
+  name: 'w-[240px]',
+  type: 'w-[120px]',
+  action: 'w-[100px]',
 };
 
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
-
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 interface ToolTableRowProps {
   readonly tool: Tool;
@@ -71,7 +74,7 @@ interface ToolTableRowProps {
   readonly onDelete: (id: string) => void;
 }
 
-function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
+function ToolTableRow({ tool, usage, onDelete }: Readonly<ToolTableRowProps>) {
   const { readOnlyMode } = useNamespace();
   const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -81,32 +84,29 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+      <TableRow className="relative isolate cursor-pointer transition-colors">
+        <TableCell size="small">
+          <span aria-hidden className={rowHoverOverlayClass} />
           <NamespacedLink
             href={href}
             title={tool.name}
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
+            className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
             {tool.name}
           </NamespacedLink>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.type)}>
-          <span className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]">
+        </TableCell>
+        <TableCell size="small" className={COL.type}>
+          <span className="text-fg-secondary block truncate">
             {getToolTypeLabel(tool)}
           </span>
-        </div>
+        </TableCell>
         <OriginCell origin={tool.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <div
-          role="cell"
-          className={cn(rowCellClass, COL.description, 'relative z-10')}>
+        <TableCell size="small" className="relative z-10">
           {tool.description ? (
             <TruncatedTooltip label={tool.description}>
               <NamespacedLink
                 href={href}
                 tabIndex={-1}
-                className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                className="text-fg-primary block w-full truncate">
                 {tool.description}
               </NamespacedLink>
             </TruncatedTooltip>
@@ -114,38 +114,34 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
             <NamespacedLink
               href={href}
               tabIndex={-1}
-              className="text-fg-secondary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+              className="text-fg-secondary block w-full truncate">
               No description
             </NamespacedLink>
           )}
-        </div>
-        <div
-          role="cell"
-          className={cn(
-            rowCellClass,
-            COL.action,
-            'relative z-10 justify-center gap-2',
-          )}>
-          <IconActionButton
-            label="Query tool"
-            onClick={() => push(`/query/new?target_tool=${tool.name}`)}>
-            <ChatBubble />
-          </IconActionButton>
-          <IconActionButton
-            label="Delete tool"
-            tooltip={
-              usage.inUse
-                ? (usage.reason ?? 'Tool is used by agents')
-                : 'Delete tool'
-            }
-            disabled={deleteDisabled}
-            onClick={() => {
-              if (!deleteDisabled) setDeleteConfirmOpen(true);
-            }}>
-            <Trash />
-          </IconActionButton>
-        </div>
-      </div>
+        </TableCell>
+        <TableCell size="small" className="relative z-10">
+          <div className="flex items-center justify-center gap-2">
+            <IconActionButton
+              label="Query tool"
+              onClick={() => push(`/query/new?target_tool=${tool.name}`)}>
+              <ChatBubble />
+            </IconActionButton>
+            <IconActionButton
+              label="Delete tool"
+              tooltip={
+                usage.inUse
+                  ? (usage.reason ?? 'Tool is used by agents')
+                  : 'Delete tool'
+              }
+              disabled={deleteDisabled}
+              onClick={() => {
+                if (!deleteDisabled) setDeleteConfirmOpen(true);
+              }}>
+              <Trash />
+            </IconActionButton>
+          </div>
+        </TableCell>
+      </TableRow>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -160,27 +156,31 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
   );
 }
 
-export function ToolsTable({ tools, usage, onDelete }: ToolsTableProps) {
+export function ToolsTable({
+  tools,
+  usage,
+  onDelete,
+}: Readonly<ToolsTableProps>) {
   return (
-    <div role="table" aria-label="Tools" className="flex w-full flex-col">
-      <div role="row" className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.type)}>
-          Type
-        </div>
-        <OriginColumnHeader tooltip="Where the tool was first created" />
-        <div
-          role="columnheader"
-          className={cn(headerCellClass, COL.description)}>
-          Description
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <Table
+      aria-label="Tools"
+      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <TableHeader>
+        <TableRow>
+          <TableHead size="small" className={COL.name}>
+            Name
+          </TableHead>
+          <TableHead size="small" className={COL.type}>
+            Type
+          </TableHead>
+          <OriginColumnHeader tooltip="Where the tool was first created" />
+          <TableHead size="small">Description</TableHead>
+          <TableHead size="small" className={COL.action}>
+            <span className="sr-only">Action</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {tools.map(tool => (
           <ToolTableRow
             key={tool.id}
@@ -189,7 +189,7 @@ export function ToolsTable({ tools, usage, onDelete }: ToolsTableProps) {
             onDelete={onDelete}
           />
         ))}
-      </div>
-    </div>
+      </TableBody>
+    </Table>
   );
 }

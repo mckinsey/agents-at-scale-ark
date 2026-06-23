@@ -26,7 +26,7 @@ export function IconActionButton({
   disabled,
   className,
   children,
-}: IconActionButtonProps) {
+}: Readonly<IconActionButtonProps>) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>

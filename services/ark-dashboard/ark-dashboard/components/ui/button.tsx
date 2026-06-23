@@ -166,7 +166,7 @@ function Button({
   asChild = false,
   children,
   ...props
-}: ButtonProps) {
+}: Readonly<ButtonProps>) {
   const Comp = asChild ? Slot : 'button';
   const processedChildren = wrapTextNodes(children);
 

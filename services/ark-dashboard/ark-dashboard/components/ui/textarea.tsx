@@ -62,7 +62,7 @@ function TextareaRoot({
   maxCharacters,
   size,
   ...props
-}: TextareaRootProps) {
+}: Readonly<TextareaRootProps>) {
   const [count, setCount] = React.useState(0);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
@@ -129,7 +129,7 @@ function TextareaRoot({
 function TextareaCounter({
   className,
   ...props
-}: Omit<React.ComponentProps<'div'>, 'children'>) {
+}: Readonly<Omit<React.ComponentProps<'div'>, 'children'>>) {
   const { count, maxCharacters } = React.useContext(TextareaContext);
 
   if (!maxCharacters) {

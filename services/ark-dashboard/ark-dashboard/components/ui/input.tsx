@@ -198,7 +198,13 @@ export interface InputProps
  * <Input size="lg" placeholder="Large input" />
  * ```
  */
-function Input({ className, type, variant, size, ...props }: InputProps) {
+function Input({
+  className,
+  type,
+  variant,
+  size,
+  ...props
+}: Readonly<InputProps>) {
   return (
     <input
       type={type}

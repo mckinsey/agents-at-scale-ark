@@ -20,7 +20,9 @@ type UpdateMcpServerFormProps = {
   server: MCPServerDetail;
 };
 
-export function UpdateMcpServerForm({ server }: UpdateMcpServerFormProps) {
+export function UpdateMcpServerForm({
+  server,
+}: Readonly<UpdateMcpServerFormProps>) {
   const { push } = useNamespacedNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const headerRows = useHeaderRows(mapDetailHeaders(server.headers));

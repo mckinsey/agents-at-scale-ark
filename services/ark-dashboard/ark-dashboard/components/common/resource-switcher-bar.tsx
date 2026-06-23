@@ -31,7 +31,7 @@ export function ResourceSwitcherBar({
   onSelect,
   showYaml,
   onToggleYaml,
-}: ResourceSwitcherBarProps) {
+}: Readonly<ResourceSwitcherBarProps>) {
   return (
     <div className="bg-surface-secondary border-stroke-divider flex items-center gap-2 border-b px-5 py-2">
       <Select value={value} onValueChange={v => onSelect(v as string)}>
