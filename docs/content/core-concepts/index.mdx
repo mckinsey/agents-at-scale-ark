@@ -46,11 +46,17 @@ flowchart LR
         broker["ark-broker<br/>streaming + memory"]
     end
 
+    postgres[("PostgreSQL<br/>persist messages")]
+
     controller -->|"A2A · runs queries"| completions
     controller -.->|"reconciles resources"| tenant
     dashboard --> api
     api -->|"stream"| broker
     completions -->|"stream"| broker
+    broker -.->|"optional · recommended"| postgres
+
+    classDef optional stroke-dasharray:5 5,stroke:#888,color:#555;
+    class postgres optional;
 ```
 
 ### Core resources
