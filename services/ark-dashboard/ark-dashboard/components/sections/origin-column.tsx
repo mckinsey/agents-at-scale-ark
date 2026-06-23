@@ -11,7 +11,7 @@ import { getOriginLabel } from '@/lib/utils/origin-icon';
 const ORIGIN_COL = 'w-[160px] shrink-0';
 
 const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
@@ -22,7 +22,7 @@ interface OriginColumnHeaderProps {
 
 export function OriginColumnHeader({ tooltip }: OriginColumnHeaderProps) {
   return (
-    <div role="columnheader" className={cn(headerCellClass, ORIGIN_COL)}>
+    <th className={cn(headerCellClass, ORIGIN_COL)}>
       <span className="flex items-center gap-1">
         Origin
         <Tooltip>
@@ -39,7 +39,7 @@ export function OriginColumnHeader({ tooltip }: OriginColumnHeaderProps) {
           <TooltipContent>{tooltip}</TooltipContent>
         </Tooltip>
       </span>
-    </div>
+    </th>
   );
 }
 
@@ -49,10 +49,10 @@ interface OriginCellProps {
 
 export function OriginCell({ origin }: OriginCellProps) {
   return (
-    <div role="cell" className={cn(rowCellClass, ORIGIN_COL)}>
+    <td className={cn(rowCellClass, ORIGIN_COL)}>
       <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
         {getOriginLabel(origin)}
       </span>
-    </div>
+    </td>
   );
 }

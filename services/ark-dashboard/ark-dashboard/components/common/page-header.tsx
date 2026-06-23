@@ -106,7 +106,7 @@ export function PageHeader({
   actions,
   customBreadcrumb,
   className,
-}: PageHeaderProps) {
+}: Readonly<PageHeaderProps>) {
   const firstCrumb =
     (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.[0] : undefined;
   const crumbsInDropdown =

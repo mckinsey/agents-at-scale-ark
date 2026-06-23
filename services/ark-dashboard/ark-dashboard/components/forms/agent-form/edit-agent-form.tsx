@@ -42,7 +42,7 @@ export function EditAgentForm({
   agentName,
   onSuccess,
   onCancel,
-}: AgentFormProps) {
+}: Readonly<AgentFormProps>) {
   const { readOnlyMode } = useNamespace();
 
   const { form, state, actions } = useAgentForm({

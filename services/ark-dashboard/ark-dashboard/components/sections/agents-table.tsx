@@ -35,12 +35,14 @@ const COL = {
 };
 
 const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
 
-function AgentStatus({ status }: { status?: Agent['available'] | null }) {
+function AgentStatus({
+  status,
+}: Readonly<{ status?: Agent['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -66,21 +68,17 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
+        <td className={cn(rowCellClass, COL.name)}>
           <NamespacedLink
             href={`/agents/${encodeURIComponent(agent.name)}`}
             title={agent.name}
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {agent.name}
           </NamespacedLink>
-        </div>
+        </td>
         <OriginCell origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <div
-          role="cell"
-          className={cn(rowCellClass, COL.description, 'relative z-10')}>
+        <td className={cn(rowCellClass, COL.description, 'relative z-10')}>
           {agent.description ? (
             <TruncatedTooltip label={agent.description}>
               <NamespacedLink
@@ -98,12 +96,11 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
               No description
             </NamespacedLink>
           )}
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.status)}>
+        </td>
+        <td className={cn(rowCellClass, COL.status)}>
           <AgentStatus status={agent.available} />
-        </div>
-        <div
-          role="cell"
+        </td>
+        <td
           className={cn(
             rowCellClass,
             COL.action,
@@ -123,8 +120,8 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             }}>
             <Trash />
           </IconActionButton>
-        </div>
-      </div>
+        </td>
+      </tr>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -141,38 +138,23 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
 
 export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
   return (
-    <div
-      role="table"
-      aria-label="Agents"
-      className="flex w-full flex-col">
-      <div
-        role="row"
-        className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <OriginColumnHeader tooltip="Where the agent was first created" />
-        <div
-          role="columnheader"
-          className={cn(headerCellClass, COL.description)}>
-          Description
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.status)}>
-          Status
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <table aria-label="Agents" className="flex w-full flex-col">
+      <thead>
+        <tr className="flex items-center gap-x-4">
+          <th className={cn(headerCellClass, COL.name)}>Name</th>
+          <OriginColumnHeader tooltip="Where the agent was first created" />
+          <th className={cn(headerCellClass, COL.description)}>Description</th>
+          <th className={cn(headerCellClass, COL.status)}>Status</th>
+          <th className={cn(headerCellClass, COL.action)}>
+            <span className="sr-only">Action</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="flex flex-col">
         {agents.map(agent => (
-          <AgentTableRow
-            key={agent.id}
-            agent={agent}
-            onDelete={onDelete}
-          />
+          <AgentTableRow key={agent.id} agent={agent} onDelete={onDelete} />
         ))}
-      </div>
-    </div>
+      </tbody>
+    </table>
   );
 }

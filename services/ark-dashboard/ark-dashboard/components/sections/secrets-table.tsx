@@ -34,7 +34,7 @@ const COL = {
 };
 
 const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
@@ -72,7 +72,7 @@ function modelUsesSecret(model: Model, secretName: string): boolean {
   return false;
 }
 
-function SecretStatus({ inUse }: { inUse: boolean }) {
+function SecretStatus({ inUse }: Readonly<{ inUse: boolean }>) {
   return (
     <span className="inline-flex items-center gap-2">
       <span
@@ -88,7 +88,7 @@ function SecretStatus({ inUse }: { inUse: boolean }) {
   );
 }
 
-function ModelsInUse({ models }: { models: readonly Model[] }) {
+function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
   if (models.length === 0) {
     return <span className="text-fg-secondary text-sm leading-5">-</span>;
   }
@@ -152,30 +152,26 @@ function SecretTableRow({
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex items-center gap-x-4 transition-colors">
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+      <tr className="hover:bg-stateslayer-overlay-hover relative flex items-center gap-x-4 transition-colors">
+        <td className={cn(rowCellClass, COL.name)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={secret.name}>
             {secret.name}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.usedBy)}>
+        </td>
+        <td className={cn(rowCellClass, COL.usedBy)}>
           <span className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]">
             {usageCount} model{usageCount === 1 ? '' : 's'}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.models)}>
+        </td>
+        <td className={cn(rowCellClass, COL.models)}>
           <ModelsInUse models={usingModels} />
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.status)}>
+        </td>
+        <td className={cn(rowCellClass, COL.status)}>
           <SecretStatus inUse={isInUse} />
-        </div>
-        <div
-          role="cell"
-          className={cn(rowCellClass, COL.action, 'justify-center gap-2')}>
+        </td>
+        <td className={cn(rowCellClass, COL.action, 'justify-center gap-2')}>
           <IconActionButton
             label="Edit secret"
             disabled={readOnlyMode}
@@ -192,8 +188,8 @@ function SecretTableRow({
             }}>
             <Trash />
           </IconActionButton>
-        </div>
-      </div>
+        </td>
+      </tr>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -215,25 +211,19 @@ export function SecretsTable({
   onDelete,
 }: SecretsTableProps) {
   return (
-    <div role="table" aria-label="Secrets" className="flex w-full flex-col">
-      <div role="row" className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.usedBy)}>
-          Used by
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.models)}>
-          Models in use
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.status)}>
-          Status
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <table aria-label="Secrets" className="flex w-full flex-col">
+      <thead>
+        <tr className="flex items-center gap-x-4">
+          <th className={cn(headerCellClass, COL.name)}>Name</th>
+          <th className={cn(headerCellClass, COL.usedBy)}>Used by</th>
+          <th className={cn(headerCellClass, COL.models)}>Models in use</th>
+          <th className={cn(headerCellClass, COL.status)}>Status</th>
+          <th className={cn(headerCellClass, COL.action)}>
+            <span className="sr-only">Action</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="flex flex-col">
         {secrets.map(secret => (
           <SecretTableRow
             key={secret.id}
@@ -243,7 +233,7 @@ export function SecretsTable({
             onDelete={onDelete}
           />
         ))}
-      </div>
-    </div>
+      </tbody>
+    </table>
   );
 }

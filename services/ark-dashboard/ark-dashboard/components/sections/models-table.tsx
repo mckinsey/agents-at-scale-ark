@@ -53,12 +53,14 @@ const COL = {
 };
 
 const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
 
-function ModelStatus({ status }: { status?: Model['available'] | null }) {
+function ModelStatus({
+  status,
+}: Readonly<{ status?: Model['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -87,10 +89,8 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <div role="cell" className={cn(rowCellClass, COL.name, 'gap-2')}>
+      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
+        <td className={cn(rowCellClass, COL.name, 'gap-2')}>
           {CustomImg ? (
             <CustomImg className="size-4 shrink-0 object-contain" />
           ) : (
@@ -108,27 +108,26 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {model.name}
           </NamespacedLink>
-        </div>
+        </td>
         <OriginCell origin={model.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <div role="cell" className={cn(rowCellClass, COL.model)}>
+        <td className={cn(rowCellClass, COL.model)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={model.model}>
             {model.model}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.provider)}>
+        </td>
+        <td className={cn(rowCellClass, COL.provider)}>
           <span
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={getModelProviderDisplayName(model.provider)}>
             {getModelProviderDisplayName(model.provider)}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.status)}>
+        </td>
+        <td className={cn(rowCellClass, COL.status)}>
           <ModelStatus status={model.available} />
-        </div>
-        <div
-          role="cell"
+        </td>
+        <td
           className={cn(
             rowCellClass,
             COL.action,
@@ -142,8 +141,8 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
             }}>
             <Trash />
           </IconActionButton>
-        </div>
-      </div>
+        </td>
+      </tr>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -160,32 +159,24 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
 
 export function ModelsTable({ models, onDelete }: ModelsTableProps) {
   return (
-    <div role="table" aria-label="Models" className="flex w-full flex-col">
-      <div
-        role="row"
-        className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <OriginColumnHeader tooltip="Where the model was first created" />
-        <div role="columnheader" className={cn(headerCellClass, COL.model)}>
-          Model
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.provider)}>
-          Provider
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.status)}>
-          Status
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <table aria-label="Models" className="flex w-full flex-col">
+      <thead>
+        <tr className="flex items-center gap-x-4">
+          <th className={cn(headerCellClass, COL.name)}>Name</th>
+          <OriginColumnHeader tooltip="Where the model was first created" />
+          <th className={cn(headerCellClass, COL.model)}>Model</th>
+          <th className={cn(headerCellClass, COL.provider)}>Provider</th>
+          <th className={cn(headerCellClass, COL.status)}>Status</th>
+          <th className={cn(headerCellClass, COL.action)}>
+            <span className="sr-only">Action</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="flex flex-col">
         {models.map(model => (
           <ModelTableRow key={model.id} model={model} onDelete={onDelete} />
         ))}
-      </div>
-    </div>
+      </tbody>
+    </table>
   );
 }

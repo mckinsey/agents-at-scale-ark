@@ -139,7 +139,7 @@ function TabsRoot({
   hideBaseline = false,
   padded = true,
   ...props
-}: TabsProps) {
+}: Readonly<TabsProps>) {
   return (
     <TabsSizeContext.Provider value={{ size }}>
       <TabsLayoutContext.Provider value={{ hideBaseline, padded }}>
@@ -183,7 +183,7 @@ function TabsTrigger({
   children,
   className,
   ...props
-}: TabsTriggerProps) {
+}: Readonly<TabsTriggerProps>) {
   const sizeContext = useTabsSizeContext();
   const size = triggerSize ?? sizeContext?.size ?? 'default';
   const layoutContext = useTabsLayoutContext();

@@ -5,7 +5,7 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function CheckmarkIcon({ size }: { size: 'default' | 'lg' }) {
+function CheckmarkIcon({ size }: Readonly<{ size: 'default' | 'lg' }>) {
   const isRegular = size === 'default';
 
   return (
@@ -74,7 +74,7 @@ function Checkbox({
   checked,
   defaultChecked,
   ...props
-}: CheckboxProps) {
+}: Readonly<CheckboxProps>) {
   const isRegular = size === 'default';
   const boundingBoxClass = isRegular ? 'size-5' : 'size-6';
   const visibleBoxClass = isRegular ? 'size-4' : 'size-5';

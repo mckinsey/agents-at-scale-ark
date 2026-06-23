@@ -60,7 +60,7 @@ const COL = {
 };
 
 const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
@@ -81,26 +81,22 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
+        <td className={cn(rowCellClass, COL.name)}>
           <NamespacedLink
             href={href}
             title={tool.name}
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {tool.name}
           </NamespacedLink>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.type)}>
+        </td>
+        <td className={cn(rowCellClass, COL.type)}>
           <span className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]">
             {getToolTypeLabel(tool)}
           </span>
-        </div>
+        </td>
         <OriginCell origin={tool.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <div
-          role="cell"
-          className={cn(rowCellClass, COL.description, 'relative z-10')}>
+        <td className={cn(rowCellClass, COL.description, 'relative z-10')}>
           {tool.description ? (
             <TruncatedTooltip label={tool.description}>
               <NamespacedLink
@@ -118,9 +114,8 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
               No description
             </NamespacedLink>
           )}
-        </div>
-        <div
-          role="cell"
+        </td>
+        <td
           className={cn(
             rowCellClass,
             COL.action,
@@ -144,8 +139,8 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
             }}>
             <Trash />
           </IconActionButton>
-        </div>
-      </div>
+        </td>
+      </tr>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -162,25 +157,19 @@ function ToolTableRow({ tool, usage, onDelete }: ToolTableRowProps) {
 
 export function ToolsTable({ tools, usage, onDelete }: ToolsTableProps) {
   return (
-    <div role="table" aria-label="Tools" className="flex w-full flex-col">
-      <div role="row" className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.type)}>
-          Type
-        </div>
-        <OriginColumnHeader tooltip="Where the tool was first created" />
-        <div
-          role="columnheader"
-          className={cn(headerCellClass, COL.description)}>
-          Description
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <table aria-label="Tools" className="flex w-full flex-col">
+      <thead>
+        <tr className="flex items-center gap-x-4">
+          <th className={cn(headerCellClass, COL.name)}>Name</th>
+          <th className={cn(headerCellClass, COL.type)}>Type</th>
+          <OriginColumnHeader tooltip="Where the tool was first created" />
+          <th className={cn(headerCellClass, COL.description)}>Description</th>
+          <th className={cn(headerCellClass, COL.action)}>
+            <span className="sr-only">Action</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="flex flex-col">
         {tools.map(tool => (
           <ToolTableRow
             key={tool.id}
@@ -189,7 +178,7 @@ export function ToolsTable({ tools, usage, onDelete }: ToolsTableProps) {
             onDelete={onDelete}
           />
         ))}
-      </div>
-    </div>
+      </tbody>
+    </table>
   );
 }

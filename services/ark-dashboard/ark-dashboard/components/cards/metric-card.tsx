@@ -19,7 +19,13 @@ export type Props = {
   hasError: boolean;
 };
 
-export function MetricCard({ title, value, href, isLoading, hasError }: Props) {
+export function MetricCard({
+  title,
+  value,
+  href,
+  isLoading,
+  hasError,
+}: Readonly<Props>) {
   return (
     <Card className="gap-3 bg-transparent p-3">
       <p

@@ -33,12 +33,14 @@ const COL = {
 };
 
 const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px]';
+  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
 
 const rowCellClass =
   'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
 
-function TeamStatus({ status }: { status?: Team['available'] | null }) {
+function TeamStatus({
+  status,
+}: Readonly<{ status?: Team['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -72,28 +74,24 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
 
   return (
     <>
-      <div
-        role="row"
-        className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
+      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
         {leading && (
-          <span
+          <td
             className="relative z-10 flex shrink-0 items-center"
             onClick={e => e.stopPropagation()}
             onKeyDown={e => e.stopPropagation()}>
             {leading}
-          </span>
+          </td>
         )}
-        <div role="cell" className={cn(rowCellClass, COL.name)}>
+        <td className={cn(rowCellClass, COL.name)}>
           <NamespacedLink
             href={`/teams/${encodeURIComponent(team.name)}`}
             title={team.name}
             className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
             {team.name}
           </NamespacedLink>
-        </div>
-        <div
-          role="cell"
-          className={cn(rowCellClass, COL.description, 'relative z-10')}>
+        </td>
+        <td className={cn(rowCellClass, COL.description, 'relative z-10')}>
           {team.description ? (
             <TruncatedTooltip label={team.description}>
               <NamespacedLink
@@ -111,19 +109,18 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
               No description
             </NamespacedLink>
           )}
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.members)}>
+        </td>
+        <td className={cn(rowCellClass, COL.members)}>
           <span
             className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]"
             title={`${memberCount} ${memberLabel} · ${strategyLabel}`}>
             {memberCount} {memberLabel} · {strategyLabel}
           </span>
-        </div>
-        <div role="cell" className={cn(rowCellClass, COL.status)}>
+        </td>
+        <td className={cn(rowCellClass, COL.status)}>
           <TeamStatus status={team.available} />
-        </div>
-        <div
-          role="cell"
+        </td>
+        <td
           className={cn(
             rowCellClass,
             COL.action,
@@ -143,8 +140,8 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
             }}>
             <Trash />
           </IconActionButton>
-        </div>
-      </div>
+        </td>
+      </tr>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -161,36 +158,23 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
 
 export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
   return (
-    <div
-      role="table"
-      aria-label="Teams"
-      className="flex w-full flex-col">
-      <div
-        role="row"
-        className="flex items-center gap-x-4">
-        <div role="columnheader" className={cn(headerCellClass, COL.name)}>
-          Name
-        </div>
-        <div
-          role="columnheader"
-          className={cn(headerCellClass, COL.description)}>
-          Description
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.members)}>
-          Members
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.status)}>
-          Status
-        </div>
-        <div role="columnheader" className={cn(headerCellClass, COL.action)}>
-          <span className="sr-only">Action</span>
-        </div>
-      </div>
-      <div role="rowgroup" className="flex flex-col">
+    <table aria-label="Teams" className="flex w-full flex-col">
+      <thead>
+        <tr className="flex items-center gap-x-4">
+          <th className={cn(headerCellClass, COL.name)}>Name</th>
+          <th className={cn(headerCellClass, COL.description)}>Description</th>
+          <th className={cn(headerCellClass, COL.members)}>Members</th>
+          <th className={cn(headerCellClass, COL.status)}>Status</th>
+          <th className={cn(headerCellClass, COL.action)}>
+            <span className="sr-only">Action</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="flex flex-col">
         {teams.map(team => (
           <TeamTableRow key={team.id} team={team} onDelete={onDelete} />
         ))}
-      </div>
-    </div>
+      </tbody>
+    </table>
   );
 }

@@ -31,7 +31,7 @@ function getToolIconColor(toolCall: ToolCallData): string {
     : 'bg-viz-categorical-08/5 text-viz-categorical-08';
 }
 
-function ToolCallTreeItem({ toolCall }: { toolCall: ToolCallData }) {
+function ToolCallTreeItem({ toolCall }: Readonly<{ toolCall: ToolCallData }>) {
   const [inputOpen, setInputOpen] = useState(false);
   const [outputOpen, setOutputOpen] = useState(false);
   const toolColor = getToolIconColor(toolCall);

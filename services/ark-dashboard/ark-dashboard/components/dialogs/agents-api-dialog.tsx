@@ -37,7 +37,10 @@ interface AgentsAPIDialogProps {
 const codeBlockClass =
   'bg-fill-onsurface-ui-2 text-fg-primary overflow-x-auto p-3 text-xs';
 
-export function AgentsAPIDialog({ open, onOpenChange }: AgentsAPIDialogProps) {
+export function AgentsAPIDialog({
+  open,
+  onOpenChange,
+}: Readonly<AgentsAPIDialogProps>) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);

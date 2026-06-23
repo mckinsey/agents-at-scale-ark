@@ -123,7 +123,7 @@ function Avatar({
   disabled,
   children,
   ...props
-}: AvatarProps) {
+}: Readonly<AvatarProps>) {
   return (
     <AvatarContext.Provider
       value={{ size: size ?? undefined, disabled: disabled ?? undefined }}>
@@ -180,7 +180,7 @@ function AvatarFallback({
   disabled: disabledProp,
   size: sizeProp,
   ...props
-}: AvatarFallbackProps) {
+}: Readonly<AvatarFallbackProps>) {
   const context = useAvatarContext();
   const size = sizeProp !== undefined ? sizeProp : context.size;
   const disabled = disabledProp !== undefined ? disabledProp : context.disabled;

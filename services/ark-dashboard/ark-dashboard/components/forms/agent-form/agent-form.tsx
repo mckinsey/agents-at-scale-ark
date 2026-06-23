@@ -18,7 +18,7 @@ import { ViewAgentForm } from './view-agent-form';
  * Shared form state lives in the `useAgentForm` hook, which each mode calls
  * directly — only one mounts per route, so there's no duplicate fetching.
  */
-export function AgentForm(props: AgentFormProps) {
+export function AgentForm(props: Readonly<AgentFormProps>) {
   switch (props.mode) {
     case AgentFormMode.CREATE:
       return <CreateAgentForm {...props} />;

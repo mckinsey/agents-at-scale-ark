@@ -161,7 +161,7 @@ function CollapsibleGroup({
   label,
   defaultOpen = true,
   children,
-}: CollapsibleGroupProps) {
+}: Readonly<CollapsibleGroupProps>) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (

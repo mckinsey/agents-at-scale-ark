@@ -82,7 +82,7 @@ export function ParameterEditor({
   className,
   variant = 'default',
   compactRowsClassName,
-}: ParameterEditorProps) {
+}: Readonly<ParameterEditorProps>) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const promptParams = useMemo(() => extractPromptParameters(prompt), [prompt]);
   const definedParamNames = new Set(
