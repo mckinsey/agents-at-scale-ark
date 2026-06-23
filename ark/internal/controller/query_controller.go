@@ -823,7 +823,7 @@ func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1
 		baseURL = strings.TrimSuffix(resolved, "/")
 	}
 
-	requestURL := fmt.Sprintf("%s/queries/%s/messages", baseURL, url.PathEscape(query.Name))
+	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, baseURL, url.PathEscape(query.Name))
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)

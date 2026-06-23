@@ -21,7 +21,6 @@ const (
 	MessagesEndpoint         = "/messages"
 	ConversationsEndpoint    = "/conversations"
 	CompletionEndpoint       = "/stream/%s/complete"
-	QueryMessagesEndpointFmt = "/queries/%s/messages"
 	MaxRetries               = 3
 	RetryDelay               = 100 * time.Millisecond
 	UserAgent                = "ark-memory-client/1.0"

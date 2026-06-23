@@ -321,7 +321,7 @@ func (m *HTTPMemory) DeleteQuery(ctx context.Context, queryID string) error {
 		return fmt.Errorf("failed to resolve memory address: %w", err)
 	}
 
-	requestURL := fmt.Sprintf("%s"+QueryMessagesEndpointFmt, m.baseURL, url.PathEscape(queryID))
+	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, m.baseURL, url.PathEscape(queryID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
