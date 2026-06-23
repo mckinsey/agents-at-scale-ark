@@ -172,4 +172,4 @@ storage:
     user: ""
     passwordSecretName: ""
     passwordSecretKey: "password"
-    sslMode: "disable"
+    sslMode: "require"

@@ -1,0 +1,51 @@
+/* Copyright 2025. McKinsey & Company */
+
+package postgresql
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestBuildConnString(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      Config
+		contains []string
+		absent   []string
+	}{
+		{
+			name:     "mode only",
+			cfg:      Config{Host: "db", Port: 5432, User: "ark", Password: "pw", Database: "ark", SSLMode: "require"},
+			contains: []string{"host=db", "port=5432", "sslmode=require"},
+			absent:   []string{"sslrootcert=", "sslcert=", "sslkey="},
+		},
+		{
+			name:     "verify-full with ca bundle",
+			cfg:      Config{SSLMode: "verify-full", SSLRootCert: "/etc/ark/postgres-tls/ca.crt"},
+			contains: []string{"sslmode=verify-full", "sslrootcert=/etc/ark/postgres-tls/ca.crt"},
+			absent:   []string{"sslcert=", "sslkey="},
+		},
+		{
+			name:     "mutual tls",
+			cfg:      Config{SSLMode: "verify-full", SSLRootCert: "/c/ca.crt", SSLCert: "/c/tls.crt", SSLKey: "/c/tls.key"},
+			contains: []string{"sslrootcert=/c/ca.crt", "sslcert=/c/tls.crt", "sslkey=/c/tls.key"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildConnString(tt.cfg)
+			for _, want := range tt.contains {
+				if !strings.Contains(got, want) {
+					t.Errorf("conn string %q missing %q", got, want)
+				}
+			}
+			for _, no := range tt.absent {
+				if strings.Contains(got, no) {
+					t.Errorf("conn string %q should not contain %q", got, no)
+				}
+			}
+		})
+	}
+}
