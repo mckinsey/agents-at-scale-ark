@@ -14,6 +14,27 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
+      {{- if .Values.ssl.enabled }}
+      initContainers:
+        - name: ssl-setup
+          image: alpine:3
+          securityContext:
+            runAsUser: 0
+          command: [sh, -c]
+          args:
+            - |
+              cp /ssl-secret/tls.crt /ssl/server.crt
+              cp /ssl-secret/tls.key /ssl/server.key
+              chown 70:70 /ssl/server.crt /ssl/server.key
+              chmod 600 /ssl/server.key
+              chmod 644 /ssl/server.crt
+          volumeMounts:
+            - name: ssl-secret
+              mountPath: /ssl-secret
+              readOnly: true
+            - name: ssl
+              mountPath: /ssl
+      {{- end }}
       containers:
         - name: postgresql
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -24,6 +45,14 @@ spec:
             - "max_wal_senders=4"
             - "-c"
             - "max_replication_slots=4"
+            {{- if .Values.ssl.enabled }}
+            - "-c"
+            - "ssl=on"
+            - "-c"
+            - "ssl_cert_file=/etc/postgres-ssl/server.crt"
+            - "-c"
+            - "ssl_key_file=/etc/postgres-ssl/server.key"
+            {{- end }}
           ports:
             - containerPort: 5432
           env:
@@ -40,14 +69,26 @@ spec:
               value: /var/lib/postgresql/data/pgdata
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.persistence.enabled }}
           volumeMounts:
+            {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: /var/lib/postgresql/data
-          {{- end }}
-      {{- if .Values.persistence.enabled }}
+            {{- end }}
+            {{- if .Values.ssl.enabled }}
+            - name: ssl
+              mountPath: /etc/postgres-ssl
+              readOnly: true
+            {{- end }}
       volumes:
+        {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-data
-      {{- end }}
+        {{- end }}
+        {{- if .Values.ssl.enabled }}
+        - name: ssl-secret
+          secret:
+            secretName: {{ .Release.Name }}-tls
+        - name: ssl
+          emptyDir: {}
+        {{- end }}

@@ -34,6 +34,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       connectTimeoutMs: parsed.DATABASE_CONNECT_TIMEOUT_MS,
       statementTimeoutMs: parsed.DATABASE_STATEMENT_TIMEOUT_MS,
       debugQueries: parsed.DATABASE_DEBUG_QUERIES,
+      sslRootCertPath: parsed.DATABASE_SSL_ROOT_CERT_PATH,
     }),
   });
 }
