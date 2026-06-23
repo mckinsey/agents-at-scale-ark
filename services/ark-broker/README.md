@@ -36,6 +36,7 @@ BROKER_MESSAGE_BACKEND=postgres devspace dev
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL queries at debug level (SQL text + param count, never values) |
+| `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate file. When set, the broker passes it to the Postgres driver for server certificate verification. Set automatically by the Helm chart when `database.tls.enabled=true`. |
 
 ## Database backend
 
