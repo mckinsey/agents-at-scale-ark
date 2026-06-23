@@ -42,6 +42,7 @@ export const envSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
+    DATABASE_SSL_ROOT_CERT_PATH: z.string().min(1).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.MESSAGE_BACKEND === 'postgres' && !data.DATABASE_URL) {

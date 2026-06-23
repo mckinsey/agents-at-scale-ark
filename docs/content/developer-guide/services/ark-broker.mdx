@@ -75,10 +75,80 @@ Key environment variables:
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL at debug level (SQL text + parameter count, never values) |
+| `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate. When set, the broker reads the file and passes it to the Postgres driver for server certificate verification (`sslmode=verify-full`). Set automatically by the Helm chart when `database.tls.enabled=true`. |
 
 Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
 
 See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
+
+### Securing the Postgres connection
+
+**In-transit encryption (`sslmode=require`)**
+
+No certificates to mount. Append `?sslmode=require` to the connection URL:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=require"
+```
+
+**CA verification (`sslmode=verify-full`) — recommended for production**
+
+Create a Kubernetes Secret containing the Postgres CA certificate:
+
+```bash
+kubectl create secret generic pg-tls \
+  --from-file=ca.crt=/path/to/postgres-ca.crt
+```
+
+Then enable the TLS mount:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full"
+  tls:
+    enabled: true
+    secretName: pg-tls
+    mountPath: /etc/pg-ssl
+```
+
+When `tls.enabled=true`, the chart automatically sets `DATABASE_SSL_ROOT_CERT_PATH={mountPath}/ca.crt` in the broker container. The broker reads the CA certificate from that path and passes it to the Postgres driver for server certificate verification.
+
+Do **not** add `sslrootcert=` to `DATABASE_URL`. The postgres.js driver does not read certificate files from URL parameters — it forwards unknown query parameters to PostgreSQL as `SET` commands, which the server rejects. Certificate loading happens through `DATABASE_SSL_ROOT_CERT_PATH` instead.
+
+**`database.migrateUrl`**
+
+The migrate init container uses golang-migrate, which reads `sslrootcert` from the URL as a client-side file path (different from postgres.js). When using `sslmode=verify-full`, set `database.migrateUrl` separately so the migrate container can verify the server certificate:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full"
+  migrateUrl: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt"
+  tls:
+    enabled: true
+    secretName: pg-tls
+    mountPath: /etc/pg-ssl
+```
+
+When `migrateUrl` is not set, the migrate container falls back to `database.url`.
+
+**Hiding the connection URL from Helm values**
+
+`database.url` embeds the password in plain text, which is visible in `kubectl get deployment -o yaml`. For production, store the full URL in a Secret and reference it instead:
+
+```bash
+kubectl create secret generic broker-db-url \
+  --from-literal=database-url="postgres://user:password@host:5432/ark_broker?sslmode=require"
+```
+
+```yaml
+database:
+  urlSecretRef:
+    name: broker-db-url
+    key: database-url   # default key; can be omitted
+```
+
+`urlSecretRef` takes priority over `database.url` and applies to both the broker container and the migrate init container.
 
 ## Sessions Endpoint
 
