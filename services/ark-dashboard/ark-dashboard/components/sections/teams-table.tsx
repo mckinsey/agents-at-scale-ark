@@ -1,11 +1,19 @@
 'use client';
 
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
@@ -25,18 +33,14 @@ const STATUS_CONFIG = {
 } as const;
 
 const COL = {
-  name: 'w-[240px] shrink-0',
-  description: 'flex-1 min-w-0',
-  members: 'w-[180px] shrink-0',
-  status: 'w-[120px] shrink-0',
-  action: 'w-[100px] shrink-0',
+  name: 'w-[240px]',
+  members: 'w-[180px]',
+  status: 'w-[120px]',
+  action: 'w-[100px]',
 };
 
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
-
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function TeamStatus({
   status,
@@ -56,10 +60,9 @@ function TeamStatus({
 interface TeamTableRowProps {
   readonly team: Team;
   readonly onDelete: (id: string) => void;
-  readonly leading?: ReactNode;
 }
 
-export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
+export function TeamTableRow({ team, onDelete }: Readonly<TeamTableRowProps>) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const { readOnlyMode } = useNamespace();
@@ -74,30 +77,23 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
 
   return (
     <>
-      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        {leading && (
-          <td
-            className="relative z-10 flex shrink-0 items-center"
-            onClick={e => e.stopPropagation()}
-            onKeyDown={e => e.stopPropagation()}>
-            {leading}
-          </td>
-        )}
-        <td className={cn(rowCellClass, COL.name)}>
+      <TableRow className="relative isolate cursor-pointer transition-colors">
+        <TableCell size="small">
+          <span aria-hidden className={rowHoverOverlayClass} />
           <NamespacedLink
             href={`/teams/${encodeURIComponent(team.name)}`}
             title={team.name}
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
+            className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
             {team.name}
           </NamespacedLink>
-        </td>
-        <td className={cn(rowCellClass, COL.description, 'relative z-10')}>
+        </TableCell>
+        <TableCell size="small" className="relative z-10">
           {team.description ? (
             <TruncatedTooltip label={team.description}>
               <NamespacedLink
                 href={`/teams/${encodeURIComponent(team.name)}`}
                 tabIndex={-1}
-                className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                className="text-fg-primary block w-full truncate">
                 {team.description}
               </NamespacedLink>
             </TruncatedTooltip>
@@ -105,43 +101,40 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
             <NamespacedLink
               href={`/teams/${encodeURIComponent(team.name)}`}
               tabIndex={-1}
-              className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+              className="text-fg-primary block w-full truncate">
               No description
             </NamespacedLink>
           )}
-        </td>
-        <td className={cn(rowCellClass, COL.members)}>
+        </TableCell>
+        <TableCell size="small" className={COL.members}>
           <span
-            className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]"
+            className="text-fg-secondary block truncate"
             title={`${memberCount} ${memberLabel} · ${strategyLabel}`}>
             {memberCount} {memberLabel} · {strategyLabel}
           </span>
-        </td>
-        <td className={cn(rowCellClass, COL.status)}>
+        </TableCell>
+        <TableCell size="small">
           <TeamStatus status={team.available} />
-        </td>
-        <td
-          className={cn(
-            rowCellClass,
-            COL.action,
-            'relative z-10 justify-center gap-2',
-          )}>
-          <IconActionButton
-            label="Chat with team"
-            className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
-            onClick={() => toggleFloatingChat(team.name, 'team')}>
-            <ChatBubble />
-          </IconActionButton>
-          <IconActionButton
-            label="Delete team"
-            disabled={isChatOpen || readOnlyMode}
-            onClick={() => {
-              if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
-            }}>
-            <Trash />
-          </IconActionButton>
-        </td>
-      </tr>
+        </TableCell>
+        <TableCell size="small" className="relative z-10">
+          <div className="flex items-center justify-center gap-2">
+            <IconActionButton
+              label="Chat with team"
+              className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
+              onClick={() => toggleFloatingChat(team.name, 'team')}>
+              <ChatBubble />
+            </IconActionButton>
+            <IconActionButton
+              label="Delete team"
+              disabled={isChatOpen || readOnlyMode}
+              onClick={() => {
+                if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
+              }}>
+              <Trash />
+            </IconActionButton>
+          </div>
+        </TableCell>
+      </TableRow>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -156,25 +149,33 @@ export function TeamTableRow({ team, onDelete, leading }: TeamTableRowProps) {
   );
 }
 
-export function TeamsTable({ teams, onDelete }: TeamsTableProps) {
+export function TeamsTable({ teams, onDelete }: Readonly<TeamsTableProps>) {
   return (
-    <table aria-label="Teams" className="flex w-full flex-col">
-      <thead>
-        <tr className="flex items-center gap-x-4">
-          <th className={cn(headerCellClass, COL.name)}>Name</th>
-          <th className={cn(headerCellClass, COL.description)}>Description</th>
-          <th className={cn(headerCellClass, COL.members)}>Members</th>
-          <th className={cn(headerCellClass, COL.status)}>Status</th>
-          <th className={cn(headerCellClass, COL.action)}>
+    <Table
+      aria-label="Teams"
+      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <TableHeader>
+        <TableRow>
+          <TableHead size="small" className={COL.name}>
+            Name
+          </TableHead>
+          <TableHead size="small">Description</TableHead>
+          <TableHead size="small" className={COL.members}>
+            Members
+          </TableHead>
+          <TableHead size="small" className={COL.status}>
+            Status
+          </TableHead>
+          <TableHead size="small" className={COL.action}>
             <span className="sr-only">Action</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="flex flex-col">
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {teams.map(team => (
           <TeamTableRow key={team.id} team={team} onDelete={onDelete} />
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

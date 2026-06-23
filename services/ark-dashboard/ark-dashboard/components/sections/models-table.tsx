@@ -3,9 +3,25 @@
 import { type ComponentType, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Azure, Bedrock, Claude, Gemini, Meta, OpenAI, Trash } from '@/components/icons';
+import {
+  Azure,
+  Bedrock,
+  Claude,
+  Gemini,
+  Meta,
+  OpenAI,
+  Trash,
+} from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelProviderDisplayName } from '@/lib/constants/model-types';
@@ -45,18 +61,14 @@ const DEFAULT_PROVIDER_ICON = {
 };
 
 const COL = {
-  name: 'w-[260px] shrink-0',
-  model: 'flex-1 min-w-0',
-  provider: 'w-[200px] shrink-0',
-  status: 'w-[120px] shrink-0',
-  action: 'w-[72px] shrink-0',
+  name: 'w-[260px]',
+  provider: 'w-[200px]',
+  status: 'w-[120px]',
+  action: 'w-[72px]',
 };
 
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
-
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function ModelStatus({
   status,
@@ -78,7 +90,7 @@ interface ModelTableRowProps {
   readonly onDelete: (id: string) => void;
 }
 
-function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
+function ModelTableRow({ model, onDelete }: Readonly<ModelTableRowProps>) {
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -89,60 +101,58 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
 
   return (
     <>
-      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <td className={cn(rowCellClass, COL.name, 'gap-2')}>
-          {CustomImg ? (
-            <CustomImg className="size-4 shrink-0 object-contain" />
-          ) : (
-            <span
-              className={cn(
-                'flex size-4 shrink-0 items-center justify-center',
-                colorClass,
-              )}>
-              <ProviderIcon className="size-4" />
-            </span>
-          )}
-          <NamespacedLink
-            href={`/models/${encodeURIComponent(model.id)}/update`}
-            title={model.name}
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
-            {model.name}
-          </NamespacedLink>
-        </td>
+      <TableRow className="relative isolate cursor-pointer transition-colors">
+        <TableCell size="small">
+          <span aria-hidden className={rowHoverOverlayClass} />
+          <div className="flex items-center gap-2">
+            {CustomImg ? (
+              <CustomImg className="size-4 shrink-0 object-contain" />
+            ) : (
+              <span
+                className={cn(
+                  'flex size-4 shrink-0 items-center justify-center',
+                  colorClass,
+                )}>
+                <ProviderIcon className="size-4" />
+              </span>
+            )}
+            <NamespacedLink
+              href={`/models/${encodeURIComponent(model.id)}/update`}
+              title={model.name}
+              className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
+              {model.name}
+            </NamespacedLink>
+          </div>
+        </TableCell>
         <OriginCell origin={model.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <td className={cn(rowCellClass, COL.model)}>
-          <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={model.model}>
+        <TableCell size="small">
+          <span className="text-fg-primary block truncate" title={model.model}>
             {model.model}
           </span>
-        </td>
-        <td className={cn(rowCellClass, COL.provider)}>
+        </TableCell>
+        <TableCell size="small" className={COL.provider}>
           <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
+            className="text-fg-primary block truncate"
             title={getModelProviderDisplayName(model.provider)}>
             {getModelProviderDisplayName(model.provider)}
           </span>
-        </td>
-        <td className={cn(rowCellClass, COL.status)}>
+        </TableCell>
+        <TableCell size="small">
           <ModelStatus status={model.available} />
-        </td>
-        <td
-          className={cn(
-            rowCellClass,
-            COL.action,
-            'relative z-10 justify-center',
-          )}>
-          <IconActionButton
-            label="Delete model"
-            disabled={readOnlyMode}
-            onClick={() => {
-              if (!readOnlyMode) setDeleteConfirmOpen(true);
-            }}>
-            <Trash />
-          </IconActionButton>
-        </td>
-      </tr>
+        </TableCell>
+        <TableCell size="small" className="relative z-10">
+          <div className="flex items-center justify-center">
+            <IconActionButton
+              label="Delete model"
+              disabled={readOnlyMode}
+              onClick={() => {
+                if (!readOnlyMode) setDeleteConfirmOpen(true);
+              }}>
+              <Trash />
+            </IconActionButton>
+          </div>
+        </TableCell>
+      </TableRow>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -157,26 +167,34 @@ function ModelTableRow({ model, onDelete }: ModelTableRowProps) {
   );
 }
 
-export function ModelsTable({ models, onDelete }: ModelsTableProps) {
+export function ModelsTable({ models, onDelete }: Readonly<ModelsTableProps>) {
   return (
-    <table aria-label="Models" className="flex w-full flex-col">
-      <thead>
-        <tr className="flex items-center gap-x-4">
-          <th className={cn(headerCellClass, COL.name)}>Name</th>
+    <Table
+      aria-label="Models"
+      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <TableHeader>
+        <TableRow>
+          <TableHead size="small" className={COL.name}>
+            Name
+          </TableHead>
           <OriginColumnHeader tooltip="Where the model was first created" />
-          <th className={cn(headerCellClass, COL.model)}>Model</th>
-          <th className={cn(headerCellClass, COL.provider)}>Provider</th>
-          <th className={cn(headerCellClass, COL.status)}>Status</th>
-          <th className={cn(headerCellClass, COL.action)}>
+          <TableHead size="small">Model</TableHead>
+          <TableHead size="small" className={COL.provider}>
+            Provider
+          </TableHead>
+          <TableHead size="small" className={COL.status}>
+            Status
+          </TableHead>
+          <TableHead size="small" className={COL.action}>
             <span className="sr-only">Action</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="flex flex-col">
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {models.map(model => (
           <ModelTableRow key={model.id} model={model} onDelete={onDelete} />
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

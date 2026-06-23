@@ -1,28 +1,24 @@
 import { Info } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
+import { TableCell, TableHead } from '@/components/ui/table';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
 import { getOriginLabel } from '@/lib/utils/origin-icon';
 
-const ORIGIN_COL = 'w-[160px] shrink-0';
-
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
-
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
+const ORIGIN_COL = 'w-[160px]';
 
 interface OriginColumnHeaderProps {
   readonly tooltip: string;
 }
 
-export function OriginColumnHeader({ tooltip }: OriginColumnHeaderProps) {
+export function OriginColumnHeader({
+  tooltip,
+}: Readonly<OriginColumnHeaderProps>) {
   return (
-    <th className={cn(headerCellClass, ORIGIN_COL)}>
+    <TableHead size="small" className={ORIGIN_COL}>
       <span className="flex items-center gap-1">
         Origin
         <Tooltip>
@@ -39,7 +35,7 @@ export function OriginColumnHeader({ tooltip }: OriginColumnHeaderProps) {
           <TooltipContent>{tooltip}</TooltipContent>
         </Tooltip>
       </span>
-    </th>
+    </TableHead>
   );
 }
 
@@ -47,12 +43,12 @@ interface OriginCellProps {
   readonly origin?: string | null;
 }
 
-export function OriginCell({ origin }: OriginCellProps) {
+export function OriginCell({ origin }: Readonly<OriginCellProps>) {
   return (
-    <td className={cn(rowCellClass, ORIGIN_COL)}>
-      <span className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]">
+    <TableCell size="small">
+      <span className="text-fg-primary block truncate">
         {getOriginLabel(origin)}
       </span>
-    </td>
+    </TableCell>
   );
 }

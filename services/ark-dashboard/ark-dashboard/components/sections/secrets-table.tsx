@@ -5,6 +5,14 @@ import { useState } from 'react';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Edit, Trash } from '@/components/icons';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tag } from '@/components/ui/tag';
 import {
   Tooltip,
@@ -26,18 +34,14 @@ interface SecretsTableProps {
 const MAX_VISIBLE_MODELS = 3;
 
 const COL = {
-  name: 'w-[280px] shrink-0',
-  usedBy: 'w-[120px] shrink-0',
-  models: 'flex-1 min-w-0',
-  status: 'w-[140px] shrink-0',
-  action: 'w-[100px] shrink-0',
+  name: 'w-[280px]',
+  usedBy: 'w-[120px]',
+  status: 'w-[140px]',
+  action: 'w-[100px]',
 };
 
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
-
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function modelUsesSecret(model: Model, secretName: string): boolean {
   const config = model.config;
@@ -140,7 +144,7 @@ function SecretTableRow({
   models,
   onEdit,
   onDelete,
-}: SecretTableRowProps) {
+}: Readonly<SecretTableRowProps>) {
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -152,44 +156,45 @@ function SecretTableRow({
 
   return (
     <>
-      <tr className="hover:bg-stateslayer-overlay-hover relative flex items-center gap-x-4 transition-colors">
-        <td className={cn(rowCellClass, COL.name)}>
-          <span
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px]"
-            title={secret.name}>
+      <TableRow className="relative isolate transition-colors">
+        <TableCell size="small">
+          <span aria-hidden className={rowHoverOverlayClass} />
+          <span className="text-fg-primary block truncate" title={secret.name}>
             {secret.name}
           </span>
-        </td>
-        <td className={cn(rowCellClass, COL.usedBy)}>
-          <span className="text-fg-secondary block truncate text-sm leading-5 tracking-[-0.112px]">
+        </TableCell>
+        <TableCell size="small" className={COL.usedBy}>
+          <span className="text-fg-secondary block truncate">
             {usageCount} model{usageCount === 1 ? '' : 's'}
           </span>
-        </td>
-        <td className={cn(rowCellClass, COL.models)}>
+        </TableCell>
+        <TableCell size="small">
           <ModelsInUse models={usingModels} />
-        </td>
-        <td className={cn(rowCellClass, COL.status)}>
+        </TableCell>
+        <TableCell size="small" className={COL.status}>
           <SecretStatus inUse={isInUse} />
-        </td>
-        <td className={cn(rowCellClass, COL.action, 'justify-center gap-2')}>
-          <IconActionButton
-            label="Edit secret"
-            disabled={readOnlyMode}
-            onClick={() => {
-              if (!readOnlyMode) onEdit(secret);
-            }}>
-            <Edit />
-          </IconActionButton>
-          <IconActionButton
-            label="Delete secret"
-            disabled={isInUse || readOnlyMode}
-            onClick={() => {
-              if (!isInUse && !readOnlyMode) setDeleteConfirmOpen(true);
-            }}>
-            <Trash />
-          </IconActionButton>
-        </td>
-      </tr>
+        </TableCell>
+        <TableCell size="small" className={COL.action}>
+          <div className="flex items-center justify-center gap-2">
+            <IconActionButton
+              label="Edit secret"
+              disabled={readOnlyMode}
+              onClick={() => {
+                if (!readOnlyMode) onEdit(secret);
+              }}>
+              <Edit />
+            </IconActionButton>
+            <IconActionButton
+              label="Delete secret"
+              disabled={isInUse || readOnlyMode}
+              onClick={() => {
+                if (!isInUse && !readOnlyMode) setDeleteConfirmOpen(true);
+              }}>
+              <Trash />
+            </IconActionButton>
+          </div>
+        </TableCell>
+      </TableRow>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -209,21 +214,29 @@ export function SecretsTable({
   models,
   onEdit,
   onDelete,
-}: SecretsTableProps) {
+}: Readonly<SecretsTableProps>) {
   return (
-    <table aria-label="Secrets" className="flex w-full flex-col">
-      <thead>
-        <tr className="flex items-center gap-x-4">
-          <th className={cn(headerCellClass, COL.name)}>Name</th>
-          <th className={cn(headerCellClass, COL.usedBy)}>Used by</th>
-          <th className={cn(headerCellClass, COL.models)}>Models in use</th>
-          <th className={cn(headerCellClass, COL.status)}>Status</th>
-          <th className={cn(headerCellClass, COL.action)}>
+    <Table
+      aria-label="Secrets"
+      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <TableHeader>
+        <TableRow>
+          <TableHead size="small" className={COL.name}>
+            Name
+          </TableHead>
+          <TableHead size="small" className={COL.usedBy}>
+            Used by
+          </TableHead>
+          <TableHead size="small">Models in use</TableHead>
+          <TableHead size="small" className={COL.status}>
+            Status
+          </TableHead>
+          <TableHead size="small" className={COL.action}>
             <span className="sr-only">Action</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="flex flex-col">
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {secrets.map(secret => (
           <SecretTableRow
             key={secret.id}
@@ -233,7 +246,7 @@ export function SecretsTable({
             onDelete={onDelete}
           />
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

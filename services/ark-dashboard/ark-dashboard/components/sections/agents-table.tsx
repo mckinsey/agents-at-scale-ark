@@ -6,6 +6,14 @@ import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
@@ -28,17 +36,13 @@ const STATUS_CONFIG = {
 } as const;
 
 const COL = {
-  name: 'w-[240px] shrink-0',
-  description: 'flex-1 min-w-0',
-  status: 'w-[120px] shrink-0',
-  action: 'w-[100px] shrink-0',
+  name: 'w-[240px]',
+  status: 'w-[120px]',
+  action: 'w-[100px]',
 };
 
-const headerCellClass =
-  'text-fg-secondary border-stroke-tertiary flex h-12 items-end border-b px-3 pt-3 pb-4 text-sm leading-5 tracking-[-0.112px] font-normal text-left';
-
-const rowCellClass =
-  'border-stroke-tertiary flex h-[60px] items-center border-b px-3';
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function AgentStatus({
   status,
@@ -60,7 +64,7 @@ interface AgentTableRowProps {
   readonly onDelete: (id: string) => void;
 }
 
-function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
+function AgentTableRow({ agent, onDelete }: Readonly<AgentTableRowProps>) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const { readOnlyMode } = useNamespace();
@@ -68,23 +72,24 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
 
   return (
     <>
-      <tr className="hover:bg-stateslayer-overlay-hover relative flex cursor-pointer items-center gap-x-4 transition-colors">
-        <td className={cn(rowCellClass, COL.name)}>
+      <TableRow className="relative isolate cursor-pointer transition-colors">
+        <TableCell size="small">
+          <span aria-hidden className={rowHoverOverlayClass} />
           <NamespacedLink
             href={`/agents/${encodeURIComponent(agent.name)}`}
             title={agent.name}
-            className="text-fg-primary block truncate text-sm leading-5 tracking-[-0.112px] after:absolute after:inset-0 after:content-['']">
+            className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
             {agent.name}
           </NamespacedLink>
-        </td>
+        </TableCell>
         <OriginCell origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <td className={cn(rowCellClass, COL.description, 'relative z-10')}>
+        <TableCell size="small" className="relative z-10">
           {agent.description ? (
             <TruncatedTooltip label={agent.description}>
               <NamespacedLink
                 href={`/agents/${encodeURIComponent(agent.name)}`}
                 tabIndex={-1}
-                className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+                className="text-fg-primary block w-full truncate">
                 {agent.description}
               </NamespacedLink>
             </TruncatedTooltip>
@@ -92,36 +97,33 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
             <NamespacedLink
               href={`/agents/${encodeURIComponent(agent.name)}`}
               tabIndex={-1}
-              className="text-fg-primary block w-full truncate text-sm leading-5 tracking-[-0.112px]">
+              className="text-fg-primary block w-full truncate">
               No description
             </NamespacedLink>
           )}
-        </td>
-        <td className={cn(rowCellClass, COL.status)}>
+        </TableCell>
+        <TableCell size="small">
           <AgentStatus status={agent.available} />
-        </td>
-        <td
-          className={cn(
-            rowCellClass,
-            COL.action,
-            'relative z-10 justify-center gap-2',
-          )}>
-          <IconActionButton
-            label="Chat with agent"
-            className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
-            onClick={() => toggleFloatingChat(agent.name, 'agent')}>
-            <ChatBubble />
-          </IconActionButton>
-          <IconActionButton
-            label="Delete agent"
-            disabled={isChatOpen || readOnlyMode}
-            onClick={() => {
-              if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
-            }}>
-            <Trash />
-          </IconActionButton>
-        </td>
-      </tr>
+        </TableCell>
+        <TableCell size="small" className="relative z-10">
+          <div className="flex items-center justify-center gap-2">
+            <IconActionButton
+              label="Chat with agent"
+              className={cn(isChatOpen && 'text-brand-accents-qb-accent')}
+              onClick={() => toggleFloatingChat(agent.name, 'agent')}>
+              <ChatBubble />
+            </IconActionButton>
+            <IconActionButton
+              label="Delete agent"
+              disabled={isChatOpen || readOnlyMode}
+              onClick={() => {
+                if (!isChatOpen && !readOnlyMode) setDeleteConfirmOpen(true);
+              }}>
+              <Trash />
+            </IconActionButton>
+          </div>
+        </TableCell>
+      </TableRow>
       <ConfirmationDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -136,25 +138,31 @@ function AgentTableRow({ agent, onDelete }: AgentTableRowProps) {
   );
 }
 
-export function AgentsTable({ agents, onDelete }: AgentsTableProps) {
+export function AgentsTable({ agents, onDelete }: Readonly<AgentsTableProps>) {
   return (
-    <table aria-label="Agents" className="flex w-full flex-col">
-      <thead>
-        <tr className="flex items-center gap-x-4">
-          <th className={cn(headerCellClass, COL.name)}>Name</th>
+    <Table
+      aria-label="Agents"
+      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <TableHeader>
+        <TableRow>
+          <TableHead size="small" className={COL.name}>
+            Name
+          </TableHead>
           <OriginColumnHeader tooltip="Where the agent was first created" />
-          <th className={cn(headerCellClass, COL.description)}>Description</th>
-          <th className={cn(headerCellClass, COL.status)}>Status</th>
-          <th className={cn(headerCellClass, COL.action)}>
+          <TableHead size="small">Description</TableHead>
+          <TableHead size="small" className={COL.status}>
+            Status
+          </TableHead>
+          <TableHead size="small" className={COL.action}>
             <span className="sr-only">Action</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="flex flex-col">
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {agents.map(agent => (
           <AgentTableRow key={agent.id} agent={agent} onDelete={onDelete} />
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
