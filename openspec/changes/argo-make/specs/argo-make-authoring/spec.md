@@ -72,6 +72,21 @@ The author Agent SHALL ground query steps on the user's existing Ark resources v
 - **WHEN** the author opens an existing `WorkflowTemplate` to edit
 - **THEN** it does not call `resources_list` for the targets already referenced in that YAML
 
+### Requirement: Generated YAML collapsed by default in the authoring chat
+
+The authoring route SHALL render the chat with code blocks collapsed by default, so the author Agent's full-replacement ` ```yaml ` block does not flood the conversation. The user SHALL be able to expand any block manually. The default-collapsed setting SHALL be scoped to this route — it SHALL NOT change the default elsewhere the chat component is used. The collapse state SHALL be presentation only and SHALL NOT affect `draftYaml`, the diverge-check grounding, or the DAG preview.
+
+#### Scenario: Agent YAML arrives collapsed
+
+- **WHEN** the author Agent finishes a turn containing a fenced ` ```yaml ` block
+- **THEN** the block renders collapsed in the chat by default
+- **AND** the user can expand it manually
+
+#### Scenario: Collapse does not affect the draft or grounding
+
+- **WHEN** the user collapses or expands the agent's YAML block in the chat
+- **THEN** `draftYaml`, the diverge-check, and the DAG preview are unchanged
+
 ### Requirement: Output restricted to WorkflowTemplate
 
 For v1 the authoring flow SHALL produce only `kind: WorkflowTemplate` output. `CronWorkflow` and one-shot `Workflow` output SHALL be out of scope for v1.

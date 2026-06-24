@@ -37,6 +37,7 @@ Sequenced so each numbered group is a self-contained commit that passes lint and
 - [ ] 4.7 Missing-agent gating: check `agentsService.getByName` on mount and namespace change; banner + disabled composer when absent; YAML editor / DAG / Save stay functional; re-check on mid-session disappearance with `draftYaml` preserved.
 - [ ] 4.8 "Install author agent" button: read the dashboard-bundled manifest, stamp the configured name, POST via the resources passthrough into the current namespace, treat 409 as success, clear banner, enable composer.
 - [ ] 4.9 Per-namespace dispatch to `{selectedNamespace}/{configuredName}` (`NEXT_PUBLIC_ARGO_MAKE_AUTHOR_AGENT`, default `argo-make-author`); explicit "+ New conversation" within the current `Session`.
+- [ ] 4.10 Collapsible fenced code blocks in the shared chat renderer: wrap each fenced block in `renderMarkdown` with a header (language label + chevron toggle) and per-block collapse state; thread a default-collapse setting from `ChatMessage` (default expanded — additive, no caller required to pass it); the argo-make authoring route opts into default-collapsed. Collapse is presentation-only — never touches message content, agent input, or `draftYaml`.
 
 ## 5. Author Agent manifest (dashboard-bundled)
 
@@ -46,6 +47,6 @@ Sequenced so each numbered group is a self-contained commit that passes lint and
 
 ## 6. Tests
 
-- [ ] 6.1 Unit (TS): YAML extraction (single/multiple fences, surrounding prose, malformed, no-fence); commit-on-completion; diverge-check; install helper name-stamping; missing-agent gating.
+- [ ] 6.1 Unit (TS): YAML extraction (single/multiple fences, surrounding prose, malformed, no-fence); commit-on-completion; diverge-check; install helper name-stamping; missing-agent gating; collapsible-code-block renderer (toggle hides/reveals one block, default-collapse setting, default expanded when unset).
 - [ ] 6.2 Chainsaw e2e: authoring happy path (mock-llm → create → land on detail); install author agent into a namespace lacking it; fail-and-tell-user (non-existent target → refuses, no YAML); edit + hand-edit grounding (next turn grounded on the manual edit).
 - [ ] 6.3 Run lint + tests in every touched stack (Go/Helm, Python, TypeScript) — clean before push.
