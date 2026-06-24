@@ -27,11 +27,6 @@ vi.mock('@/components/sessions-conversations/session-table-row', () => ({
     </div>
   ),
 }));
-vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
-  NewSessionDialog: ({ open }: any) => (
-    open ? <div data-testid="new-session-dialog">Dialog</div> : null
-  ),
-}));
 vi.mock('@/components/ui/pagination', () => ({
   Pagination: ({ currentPage, totalPages, onPageChange }: any) => (
     <div
@@ -283,23 +278,6 @@ describe('SessionsTable', () => {
       expect(toast.error).toHaveBeenCalledWith('Failed to load sessions', {
         description: 'Failed',
       });
-    });
-  });
-
-  it('should open new session dialog', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <SessionsTable
-        onSelectSession={mockOnSelectSession}
-        selectedSessionId={null}
-      />
-    );
-
-    await user.click(screen.getByText('New session'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('new-session-dialog')).toBeInTheDocument();
     });
   });
 
