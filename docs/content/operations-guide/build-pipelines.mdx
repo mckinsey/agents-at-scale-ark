@@ -42,7 +42,7 @@ For the complete release process including RC and stable release cycles, artifac
    - Release Please runs after all CI checks pass (the `release-please` step inside the `check-release` job in `.github/workflows/cicd.yaml`)
    - Analyzes all commits since the last release using conventional commit format
    - Determines version bump based on commit types and current version:
-     - For versions < 0.1.64 (current: 0.1.63): {/* x-release-please-version */}
+     - For versions < 0.1.65 (current: 0.1.63): {/* x-release-please-version */}
        - `feat:` → Patch version bump (e.g. `0.1.x` → `0.1.(x+1)`) due to `bump-patch-for-minor-pre-major: true`
        - `fix:` → Patch version bump
        - `feat!:` or `BREAKING CHANGE:` → Minor version bump (e.g. `0.1.x` → `0.2.0`)
