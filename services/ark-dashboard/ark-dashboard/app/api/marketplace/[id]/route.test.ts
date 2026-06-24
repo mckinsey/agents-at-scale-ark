@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET } from './route';
 
-vi.mock('@/lib/services/marketplace-fetcher', () => ({
+vi.mock('@/lib/services/marketplace-server', () => ({
   getMarketplaceItemById: vi.fn(),
 }));
 
-import { getMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import { getMarketplaceItemById } from '@/lib/services/marketplace-server';
 
 function createRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost'));
@@ -37,7 +37,7 @@ describe('GET /api/marketplace/[id]', () => {
   it('should return detailed item when found', async () => {
     vi.mocked(getMarketplaceItemById).mockResolvedValueOnce(mockItem);
 
-    const request = createRequest('http://localhost/api/marketplace/phoenix');
+    const request = createRequest('http://localhost/api/marketplace/phoenix?namespace=team-a');
     const response = await GET(request, { params: Promise.resolve({ id: 'phoenix' }) });
     const data = await response.json();
 
@@ -55,7 +55,7 @@ describe('GET /api/marketplace/[id]', () => {
   it('should return 404 when item not found', async () => {
     vi.mocked(getMarketplaceItemById).mockResolvedValueOnce(null);
 
-    const request = createRequest('http://localhost/api/marketplace/nonexistent');
+    const request = createRequest('http://localhost/api/marketplace/nonexistent?namespace=team-a');
     const response = await GET(request, { params: Promise.resolve({ id: 'nonexistent' }) });
     const data = await response.json();
 
@@ -63,10 +63,20 @@ describe('GET /api/marketplace/[id]', () => {
     expect(data.error).toBe('Marketplace item not found');
   });
 
+  it('should return 400 when namespace is missing', async () => {
+    const request = createRequest('http://localhost/api/marketplace/phoenix');
+    const response = await GET(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe('namespace query parameter is required');
+    expect(getMarketplaceItemById).not.toHaveBeenCalled();
+  });
+
   it('should return 500 on error', async () => {
     vi.mocked(getMarketplaceItemById).mockRejectedValueOnce(new Error('fetch failed'));
 
-    const request = createRequest('http://localhost/api/marketplace/phoenix');
+    const request = createRequest('http://localhost/api/marketplace/phoenix?namespace=team-a');
     const response = await GET(request, { params: Promise.resolve({ id: 'phoenix' }) });
     const data = await response.json();
 
@@ -77,7 +87,7 @@ describe('GET /api/marketplace/[id]', () => {
   it('should preserve all base item fields in detailed response', async () => {
     vi.mocked(getMarketplaceItemById).mockResolvedValueOnce(mockItem);
 
-    const request = createRequest('http://localhost/api/marketplace/phoenix');
+    const request = createRequest('http://localhost/api/marketplace/phoenix?namespace=team-a');
     const response = await GET(request, { params: Promise.resolve({ id: 'phoenix' }) });
     const data = await response.json();
 

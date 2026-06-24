@@ -27,7 +27,22 @@ spec:
           args: ["-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
           env:
             - name: DATABASE_URL
+              {{- if .Values.database.urlSecretRef.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.urlSecretRef.name }}
+                  key: {{ .Values.database.urlSecretRef.key | default "database-url" }}
+              {{- else if .Values.database.migrateUrl }}
+              value: {{ .Values.database.migrateUrl | quote }}
+              {{- else }}
               value: {{ .Values.database.url | quote }}
+              {{- end }}
+          {{- if .Values.database.tls.enabled }}
+          volumeMounts:
+            - name: pg-tls
+              mountPath: {{ .Values.database.tls.mountPath }}
+              readOnly: true
+          {{- end }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -66,7 +81,14 @@ spec:
               value: {{ .Values.backends.message | quote }}
             {{- if eq .Values.backends.message "postgres" }}
             - name: DATABASE_URL
+              {{- if .Values.database.urlSecretRef.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.urlSecretRef.name }}
+                  key: {{ .Values.database.urlSecretRef.key | default "database-url" }}
+              {{- else }}
               value: {{ .Values.database.url | quote }}
+              {{- end }}
             - name: DATABASE_POOL_MAX
               value: {{ .Values.database.poolMax | quote }}
             - name: DATABASE_CONNECT_TIMEOUT_MS
@@ -78,6 +100,10 @@ spec:
             {{- if .Values.database.debugQueries }}
             - name: DATABASE_DEBUG_QUERIES
               value: "true"
+            {{- end }}
+            {{- if .Values.database.tls.enabled }}
+            - name: DATABASE_SSL_ROOT_CERT_PATH
+              value: {{ printf "%s/ca.crt" .Values.database.tls.mountPath | quote }}
             {{- end }}
             {{- end }}
             {{- if .Values.persistence.enabled }}
@@ -96,6 +122,11 @@ spec:
             {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+            {{- if .Values.database.tls.enabled }}
+            - name: pg-tls
+              mountPath: {{ .Values.database.tls.mountPath }}
+              readOnly: true
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
@@ -131,6 +162,11 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "ark-broker.fullname" . }}-data
           {{- end }}
+        {{- end }}
+        {{- if .Values.database.tls.enabled }}
+        - name: pg-tls
+          secret:
+            secretName: {{ required "database.tls.secretName is required when database.tls.enabled=true" .Values.database.tls.secretName }}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
