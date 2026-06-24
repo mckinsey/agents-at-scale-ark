@@ -219,6 +219,7 @@ export function CreateAgentForm({
                   <div
                     id="tools-trigger"
                     role="combobox"
+                    aria-controls="tools-listbox"
                     aria-expanded={toolsPopoverOpen}
                     aria-haspopup="listbox"
                     aria-disabled={toolsTriggerDisabled || undefined}
@@ -289,7 +290,7 @@ export function CreateAgentForm({
                     </p>
                   ) : (
                     <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
-                      <ul className="flex flex-col">
+                      <ul id="tools-listbox" className="flex flex-col">
                         {availableTools.map(tool => {
                           const checked = isToolSelected(tool.name);
                           const description = tool.description?.trim();

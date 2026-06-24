@@ -53,7 +53,7 @@ export const conversationsService = {
       const queryNames = new Set(conversationQueries.map((q: SessionQuery) => q.name));
 
       // Internal tools that shouldn't be counted (team coordination)
-      const internalTools = ['select-next-speaker'];
+      const internalTools = new Set(['select-next-speaker']);
 
       const toolCallCount = events
         ? events.items.filter(e => {
@@ -66,7 +66,7 @@ export const conversationsService = {
             const toolName = e.data.toolName;
             if (!toolName || typeof toolName !== 'string') return false;
 
-            return !internalTools.includes(toolName);
+            return !internalTools.has(toolName);
           }).length
         : 0;
 

@@ -3,7 +3,6 @@
 import { Badge, StatusBadge, NumericBadge } from '@/components/ui/badge';
 import { Tag } from '@/components/ui/tag';
 import { IconShell } from '@/components/ui/icon-shell';
-import { Separator } from '@/components/ui/separator';
 import { ChatBubble, Group } from '@/components/icons';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';

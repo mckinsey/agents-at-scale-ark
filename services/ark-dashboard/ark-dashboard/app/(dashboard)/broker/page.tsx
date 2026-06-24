@@ -117,23 +117,16 @@ function StreamView({
                     key={entry.id}
                     className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
                     <div className="flex min-w-0 items-center gap-1">
-                      <span
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         aria-expanded={isExpanded}
                         className="flex shrink-0 cursor-pointer items-center gap-1"
-                        onClick={() => toggleExpanded(entry.id)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            toggleExpanded(entry.id);
-                          }
-                        }}>
+                        onClick={() => toggleExpanded(entry.id)}>
                         <IconShell size="sm" className="shrink-0">
                           {isExpanded ? <ChevronDown /> : <ChevronRight />}
                         </IconShell>
                         <span>{entry.timestamp}</span>
-                      </span>
+                      </button>
                       {!isExpanded && (
                         <span className="text-muted-foreground w-0 flex-1 truncate">
                           {JSON.stringify(entry.data)}
@@ -344,7 +337,7 @@ export default function BrokerPage() {
         setMemories(data);
         if (
           data.length > 0 &&
-          !data.find(m => m.name === selectedMemoryRef.current)
+          !data.some(m => m.name === selectedMemoryRef.current)
         ) {
           setSelectedMemory(data[0].name);
         }

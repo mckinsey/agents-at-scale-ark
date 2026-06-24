@@ -162,6 +162,13 @@ export function ChatMessage({
     );
   }
 
+  let bubbleClass = 'bg-surface-bg-secondary text-fg-primary';
+  if (isUser) {
+    bubbleClass = 'bg-surface-bg-tertiary text-fg-primary';
+  } else if (isFailed) {
+    bubbleClass = 'bg-status-error/10 text-status-error';
+  }
+
   return (
     <div
       data-testid="chat-message"
@@ -175,11 +182,7 @@ export function ChatMessage({
           className={cn(
             'px-3 py-2',
             needsExpansion ? '' : 'max-w-[80%]',
-            isUser
-              ? 'bg-surface-bg-tertiary text-fg-primary'
-              : isFailed
-                ? 'bg-status-error/10 text-status-error'
-                : 'bg-surface-bg-secondary text-fg-primary',
+            bubbleClass,
           )}
           style={
             needsExpansion && expandedWidth

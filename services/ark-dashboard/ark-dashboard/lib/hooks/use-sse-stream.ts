@@ -11,7 +11,7 @@ import {
   type StreamEntry,
 } from '@/lib/utils/sse-stream';
 
-export type { StreamEntry };
+export type { StreamEntry } from '@/lib/utils/sse-stream';
 
 const DEFAULT_PAGE_SIZE = 100;
 
@@ -242,18 +242,20 @@ export function useSSEStream(
     if (initialFetchDoneRef.current) return;
     initialFetchDoneRef.current = true;
 
+    async function paginateAll(): Promise<number | undefined> {
+      let cursor: number | undefined;
+      while (mountedRef.current) {
+        const result = await fetchPage(cursor);
+        if (!result || !mountedRef.current) break;
+        if (!result.hasMore || result.nextCursor === undefined) break;
+        cursor = result.nextCursor;
+      }
+      return cursor;
+    }
+
     async function init() {
       if (fetchAllPages) {
-        let cursor: number | undefined;
-        while (mountedRef.current) {
-          const result = await fetchPage(cursor);
-          if (!result || !mountedRef.current) break;
-          if (result.hasMore && result.nextCursor !== undefined) {
-            cursor = result.nextCursor;
-          } else {
-            break;
-          }
-        }
+        const cursor = await paginateAll();
         if (mountedRef.current) connect(cursor);
       } else {
         const result = await fetchPage();

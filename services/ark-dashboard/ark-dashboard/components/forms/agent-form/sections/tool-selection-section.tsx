@@ -173,6 +173,9 @@ export function ToolSelectionSection({
     [filteredTools],
   );
 
+  const noTools =
+    availableTools.length === 0 && unavailableTools.length === 0;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -192,16 +195,18 @@ export function ToolSelectionSection({
         </span>
       </div>
 
-      {toolsLoading ? (
+      {toolsLoading && (
         <div className="text-fg-secondary flex items-center gap-2 text-sm">
           <Spinner className="h-4 w-4" />
           Loading tools...
         </div>
-      ) : availableTools.length === 0 && unavailableTools.length === 0 ? (
+      )}
+      {!toolsLoading && noTools && (
         <div className="text-fg-secondary text-sm">
           No tools available in this namespace
         </div>
-      ) : (
+      )}
+      {!toolsLoading && !noTools && (
         <div className="space-y-2">
           <Input
             placeholder="Filter tools..."

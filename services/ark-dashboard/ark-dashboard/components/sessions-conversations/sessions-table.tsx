@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/sonner';
 
-import { Add, BarChart, SwapVert } from '@/components/icons';
+import { BarChart, SwapVert } from '@/components/icons';
 import { ResourceSearchInput } from '@/components/sections/resource-list-states';
-import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,7 +13,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { SessionTableRow } from './session-table-row';
-import { NewSessionDialog } from './new-session-dialog';
 
 interface Props {
   readonly onSelectSession: (sessionId: string) => void;
@@ -32,7 +30,6 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   const [dateFilter, setDateFilter] = useState<'' | '24h' | '7d' | '30d'>('');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
@@ -139,7 +136,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
         </div>
       </div>
 
-      <div className="flex w-full items-end justify-between gap-3">
+      <div className="flex w-full items-end gap-3">
         <div className="flex items-end gap-3">
           <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
           <div className="flex w-48 flex-col gap-2">
@@ -173,12 +170,6 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
             </Select>
           </div>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="h-9">
-          <IconShell size="sm">
-            <Add />
-          </IconShell>
-          New session
-        </Button>
       </div>
 
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -223,11 +214,6 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
           </div>
         )}
       </div>
-
-      <NewSessionDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-      />
     </div>
   );
 }

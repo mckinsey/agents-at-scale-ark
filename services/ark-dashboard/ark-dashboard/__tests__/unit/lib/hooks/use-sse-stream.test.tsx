@@ -107,6 +107,39 @@ describe('useSSEStream', () => {
     );
   });
 
+  it('fetchAllPages walks every page then connects with the final cursor', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(
+        makeFetchResponse({
+          items: [{ timestamp: 't1' }],
+          total: 2,
+          hasMore: true,
+          nextCursor: 100,
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeFetchResponse({
+          items: [{ timestamp: 't2' }],
+          total: 2,
+          hasMore: false,
+          nextCursor: undefined,
+        }),
+      );
+
+    const { result } = renderHook(() =>
+      useSSEStream('/v1/broker/messages', 'mem', { fetchAllPages: true }),
+    );
+    await flush();
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0],
+    ).toContain('cursor=100');
+    expect(esInstances).toHaveLength(1);
+    expect(latestES().url).toContain('cursor=100');
+    expect(result.current.entries).toHaveLength(2);
+  });
+
   it('disconnects and clears state when endpoint transitions to null', async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeFetchResponse({ items: [{ timestamp: 't' }], total: 1, hasMore: false }),

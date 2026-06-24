@@ -88,21 +88,22 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
           const paramName = match?.[1] || '';
           const isDefined = definedParams.has(paramName);
 
+          let spanClass: string;
+          if (isCompact) {
+            spanClass = isDefined ? 'text-[#08bdba]' : 'text-status-warning';
+          } else {
+            spanClass = cn(
+              'rounded-sm',
+              isDefined
+                ? 'bg-emerald-500/25 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.3)] dark:text-emerald-400'
+                : 'bg-amber-500/25 text-amber-700 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.4)] dark:text-amber-400',
+            );
+          }
+
           return (
             <span
               key={index}
-              className={
-                isCompact
-                  ? isDefined
-                    ? 'text-[#08bdba]'
-                    : 'text-status-warning'
-                  : cn(
-                      'rounded-sm',
-                      isDefined
-                        ? 'bg-emerald-500/25 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.3)] dark:text-emerald-400'
-                        : 'bg-amber-500/25 text-amber-700 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.4)] dark:text-amber-400',
-                    )
-              }
+              className={spanClass}
               title={
                 isDefined
                   ? `Parameter: ${paramName}`
