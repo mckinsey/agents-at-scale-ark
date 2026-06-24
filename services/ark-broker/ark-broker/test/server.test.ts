@@ -356,6 +356,32 @@ describe('ARK Broker API', () => {
     });
   });
 
+  describe('DELETE /queries/:queryId/messages', () => {
+    test('should delete all messages for a query across conversations', async () => {
+      await request(app)
+        .post('/messages')
+        .send({conversation_id: 'conv-a', query_id: 'q-del', messages: ['m1']});
+      await request(app)
+        .post('/messages')
+        .send({conversation_id: 'conv-b', query_id: 'q-del', messages: ['m2']});
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'conv-a',
+          query_id: 'q-keep',
+          messages: ['m3'],
+        });
+
+      const delRes = await request(app).delete('/queries/q-del/messages');
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.status).toBe('success');
+
+      const remaining = await request(app).get('/messages');
+      expect(remaining.body.items).toHaveLength(1);
+      expect(remaining.body.items[0].query_id).toBe('q-keep');
+    });
+  });
+
   describe('Error Handling', () => {
     test('should return 404 for unknown routes', async () => {
       const response = await request(app).get('/unknown');

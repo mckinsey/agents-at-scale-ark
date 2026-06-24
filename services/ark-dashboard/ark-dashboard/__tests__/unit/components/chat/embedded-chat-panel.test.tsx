@@ -20,6 +20,12 @@ vi.mock('@/lib/services/chat', () => ({
   },
 }));
 
+vi.mock('@/lib/services/agents', () => ({
+  agentsService: {
+    getByName: vi.fn().mockResolvedValue({ parameters: [] }),
+  },
+}));
+
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
@@ -87,7 +93,11 @@ beforeEach(() => {
   vi.mocked(chatService.startStreamChatResponse).mockImplementation(
     async (...args: unknown[]) => ({
       queryName: 'test-query',
-      chunks: (chatService.streamChatResponse as (...a: unknown[]) => AsyncGenerator<Record<string, unknown>>)(...args),
+      chunks: (
+        chatService.streamChatResponse as (
+          ...a: unknown[]
+        ) => AsyncGenerator<Record<string, unknown>>
+      )(...args),
     }),
   );
   vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});

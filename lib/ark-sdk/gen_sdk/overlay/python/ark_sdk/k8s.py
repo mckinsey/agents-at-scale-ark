@@ -7,6 +7,7 @@ from functools import lru_cache
 from kubernetes import config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes_asyncio import client, config as async_config
+from kubernetes_asyncio.client import Configuration
 import base64
 from typing import Dict, List, Optional
 from kubernetes import client as sync_client
@@ -117,14 +118,12 @@ def _init_k8s():
 
 async def init_k8s():
     """Initialize Kubernetes async client configuration by wrapping sync init."""
-    # First ensure sync config is loaded in case we need it
+    if Configuration.get_default_copy().host:
+        return
     _init_k8s()
-    
-    # Then load the async config using the same method
     try:
         await async_config.load_kube_config()
     except:
-        # If that fails, try in-cluster config
         async_config.load_incluster_config()
 
 
@@ -171,6 +170,7 @@ class SecretClient:
     
     async def list_secrets(self, label_selector: Optional[str] = None):
         """List all secrets in namespace."""
+        await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
@@ -195,11 +195,11 @@ class SecretClient:
     async def create_secret(self, name: str, string_data: Dict[str, str], secret_type: str = "Opaque"):
         """Create a new secret."""
         validated_data = self.validate_and_encode_token(string_data)
-
+        await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
-            
+
             secret = client.V1Secret(
                 api_version="v1",
                 kind="Secret",
@@ -223,14 +223,15 @@ class SecretClient:
     
     async def get_secret(self, name: str):
         """Get a specific secret."""
+        await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             secret = await v1.read_namespaced_secret(
-                name=name, 
+                name=name,
                 namespace=self.namespace
             )
-            
+
             return {
                 "name": secret.metadata.name,
                 "id": str(secret.metadata.uid),
@@ -238,9 +239,10 @@ class SecretClient:
                 "secret_length": self.calculate_secret_length(secret.data or {}),
                 "annotations": secret.metadata.annotations
             }
-    
+
     async def get_secret_value(self, name: str, key: str):
         """Get a specific secret."""
+        await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
@@ -262,11 +264,11 @@ class SecretClient:
     async def update_secret(self, name: str, string_data: Dict[str, str]):
         """Update an existing secret."""
         validated_data = self.validate_and_encode_token(string_data)
-
+        await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
-            
+
             existing_secret = await v1.read_namespaced_secret(
                 name=name, 
                 namespace=self.namespace
@@ -290,6 +292,7 @@ class SecretClient:
     
     async def delete_secret(self, name: str) -> bool:
         """Delete a secret."""
+        await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
