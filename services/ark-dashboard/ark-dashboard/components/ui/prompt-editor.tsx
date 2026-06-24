@@ -156,7 +156,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
                 placeholder=""
                 disabled={disabled}
                 className={cn(
-                  'relative z-10 h-full w-full resize-none',
+                  'absolute inset-0 z-10 h-full w-full resize-none',
                   'border-0 bg-transparent p-0',
                   'text-sm leading-5 tracking-[-0.028px]',
                   'focus:outline-none focus-visible:outline-none',
@@ -165,7 +165,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
                 )}
                 style={{
                   color: 'transparent',
-                  caretColor: 'var(--foreground)',
+                  caretColor: 'var(--text-primary)',
                   WebkitTextFillColor: 'transparent',
                 }}
               />
@@ -231,7 +231,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
           placeholder=""
           disabled={disabled}
           className={cn(
-            'relative z-10 h-full w-full resize-none',
+            'absolute inset-0 z-10 h-full w-full resize-none',
             'rounded-md border bg-transparent p-3',
             'font-mono text-sm leading-relaxed',
             'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
@@ -240,7 +240,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
           )}
           style={{
             color: 'transparent',
-            caretColor: 'var(--foreground)',
+            caretColor: 'var(--text-primary)',
             WebkitTextFillColor: 'transparent',
           }}
         />
