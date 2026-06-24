@@ -171,6 +171,28 @@ async def _delete_secret(core, namespace: str, secret_ref: str) -> None:
             raise
 
 
+async def _can_edit_sources(api, namespace: str) -> bool:
+    review = client.V1SelfSubjectAccessReview(
+        spec=client.V1SelfSubjectAccessReviewSpec(
+            resource_attributes=client.V1ResourceAttributes(
+                namespace=namespace,
+                verb="update",
+                resource="configmaps",
+                name=CONFIGMAP_NAME,
+            )
+        )
+    )
+    result = await client.AuthorizationV1Api(api).create_self_subject_access_review(review)
+    return bool(result.status and result.status.allowed)
+
+
+async def _authorize_edit(api, namespace: str) -> None:
+    if not await _can_edit_sources(api, namespace):
+        raise HTTPException(
+            status_code=403, detail="not authorized to edit marketplace sources"
+        )
+
+
 @router.get("/permissions", response_model=MarketplacePermissionsResponse)
 async def get_marketplace_source_permissions(
     namespace: str,
@@ -179,18 +201,9 @@ async def get_marketplace_source_permissions(
     """Probe edit permission via SSAR. Fail-closed: canEdit=False on any error."""
     try:
         async with get_impersonating_api_client(impersonation) as api:
-            review = client.V1SelfSubjectAccessReview(
-                spec=client.V1SelfSubjectAccessReviewSpec(
-                    resource_attributes=client.V1ResourceAttributes(
-                        namespace=namespace,
-                        verb="update",
-                        resource="configmaps",
-                        name=CONFIGMAP_NAME,
-                    )
-                )
+            return MarketplacePermissionsResponse(
+                canEdit=await _can_edit_sources(api, namespace)
             )
-            result = await client.AuthorizationV1Api(api).create_self_subject_access_review(review)
-            return MarketplacePermissionsResponse(canEdit=bool(result.status.allowed))
     except Exception:
         logger.warning("marketplace-sources permission probe failed", exc_info=True)
         return MarketplacePermissionsResponse(canEdit=False)
@@ -243,16 +256,9 @@ async def create_marketplace_source(
     """
     scheme: Optional[AuthScheme] = None
     secret_ref: Optional[str] = None
-    auth_header: Optional[dict[str, str]] = None
-    if body.auth is not None:
-        if not body.auth.credential:
-            raise HTTPException(status_code=400, detail="auth.credential is required")
-        scheme = body.auth.scheme
-        secret_ref = derive_secret_name(body.name)
-        auth_header = build_auth_header(scheme, body.auth.credential)
-        await _validate_source(body.url, auth_header)
+    if body.auth is not None and not body.auth.credential:
+        raise HTTPException(status_code=400, detail="auth.credential is required")
 
-    value_json = _encode_value(body.url, body.displayName, scheme, secret_ref)
     async with get_impersonating_api_client(impersonation) as api:
         core = client.CoreV1Api(api)
         try:
@@ -265,7 +271,13 @@ async def create_marketplace_source(
             if e.status != 404:
                 raise
         if body.auth is not None:
+            await _authorize_edit(api, namespace)
+            scheme = body.auth.scheme
+            secret_ref = derive_secret_name(body.name)
+            auth_header = build_auth_header(scheme, body.auth.credential)
+            await _validate_source(body.url, auth_header)
             await _write_secret(core, namespace, secret_ref, body.auth.credential)
+        value_json = _encode_value(body.url, body.displayName, scheme, secret_ref)
         await core.patch_namespaced_config_map(
             CONFIGMAP_NAME,
             namespace,
@@ -310,6 +322,7 @@ async def update_marketplace_source(
         credential_to_write: Optional[str] = None
 
         if body.auth is not None:
+            await _authorize_edit(api, namespace)
             scheme = body.auth.scheme
             secret_ref = existing.secretRef or derive_secret_name(name)
             if body.auth.credential:

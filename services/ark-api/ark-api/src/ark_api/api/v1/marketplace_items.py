@@ -106,7 +106,13 @@ async def _resolve_auth_header(
         return None, _error_result(
             source.name, display_name, "credential is not accessible", "auth_error"
         )
-    value = base64.b64decode(raw).decode()
+    try:
+        value = base64.b64decode(raw).decode()
+    except ValueError:
+        logger.info("credential malformed for source %s", source.name)
+        return None, _error_result(
+            source.name, display_name, "credential is not accessible", "auth_error"
+        )
     return build_auth_header(source.scheme, value), None
 
 

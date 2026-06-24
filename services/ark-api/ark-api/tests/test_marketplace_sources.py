@@ -33,11 +33,16 @@ def _entry(url, display_name=None, auth=None):
     return json.dumps(value)
 
 
-def _patch_core(mock_core, validate_ok=True):
-    """Patch the impersonated API client, CoreV1Api, and the validate fetch."""
+def _patch_core(mock_core, validate_ok=True, can_edit=True):
+    """Patch the impersonated API client, CoreV1Api, the SSAR probe, and the validate fetch."""
     stack = ExitStack()
     stack.enter_context(patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client))
     stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
+    mock_auth = MagicMock()
+    mock_auth.create_self_subject_access_review = AsyncMock(
+        return_value=SimpleNamespace(status=SimpleNamespace(allowed=can_edit))
+    )
+    stack.enter_context(patch(f"{MODULE}.client.AuthorizationV1Api", return_value=mock_auth))
     if validate_ok is True:
         stack.enter_context(patch(f"{MODULE}.fetch_manifest", AsyncMock(return_value={"items": []})))
     elif validate_ok is not None:
@@ -267,6 +272,28 @@ class TestMarketplaceSourceAuth(unittest.TestCase):
                 },
             )
         self.assertEqual(response.status_code, 400)
+
+    def test_create_with_credential_denied_returns_403_before_validate(self):
+        mock_core = MagicMock()
+        mock_core.read_namespaced_config_map = AsyncMock(side_effect=ApiException(status=404))
+        mock_core.patch_namespaced_config_map = AsyncMock(return_value=None)
+        mock_core.patch_namespaced_secret = AsyncMock(return_value=None)
+        fetch = AsyncMock(return_value={"items": []})
+        with _patch_core(mock_core, validate_ok=None, can_edit=False), patch(
+            f"{MODULE}.fetch_manifest", fetch
+        ):
+            response = client.post(
+                "/v1/namespaces/team-a/marketplace-sources",
+                json={
+                    "name": "priv",
+                    "url": "https://internal.example.com/marketplace.json",
+                    "auth": {"scheme": "bearer", "credential": "tok"},
+                },
+            )
+        self.assertEqual(response.status_code, 403)
+        fetch.assert_not_called()
+        mock_core.patch_namespaced_secret.assert_not_awaited()
+        mock_core.patch_namespaced_config_map.assert_not_awaited()
 
     def test_update_url_change_requires_resupplied_credential(self):
         mock_core = MagicMock()

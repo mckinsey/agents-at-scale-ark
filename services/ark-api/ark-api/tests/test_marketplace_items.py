@@ -318,6 +318,34 @@ class TestMarketplaceItemsAuth(unittest.TestCase):
         self.assertEqual(response.json()[0]["error"]["code"], "auth_error")
         self.assertEqual(len(recorded), 0)
 
+    def test_malformed_secret_value_isolated_as_auth_error(self):
+        good = SimpleNamespace(data={"value": base64.b64encode(b"tok").decode()})
+        bad = SimpleNamespace(data={"value": base64.b64encode(b"\xff\xfe").decode()})
+        mock_core = MagicMock()
+        mock_core.read_namespaced_config_map = AsyncMock(
+            return_value=_sources_configmap(
+                [
+                    ("a", "https://a.test/m.json", "A", {"scheme": "bearer", "secretRef": "sec-a"}),
+                    ("b", "https://b.test/m.json", "B", {"scheme": "bearer", "secretRef": "sec-b"}),
+                ]
+            )
+        )
+
+        async def _read_secret(name, namespace):
+            return good if name == "sec-a" else bad
+
+        mock_core.read_namespaced_secret = AsyncMock(side_effect=_read_secret)
+
+        async def get_impl(url):
+            return _FakeResponse({"items": [{"name": "x"}]})
+
+        with _patch(mock_core, get_impl):
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+        self.assertEqual(response.status_code, 200)
+        by_source = {r["source"]: r for r in response.json()}
+        self.assertEqual(by_source["b"]["error"]["code"], "auth_error")
+        self.assertEqual(by_source["a"]["items"], [{"name": "x"}])
+
     def test_fetch_401_maps_to_auth_error(self):
         mock_core = _make_core(
             [("a", "https://a.test/m.json", None, {"scheme": "bearer", "secretRef": "sec-a"})],
