@@ -206,11 +206,12 @@ export function ResourceListSection<T extends ResourceListItem>({
         )}
       </div>
 
-      {showLoading ? (
+      {showLoading && (
         <div className="mt-5 flex flex-1 items-center justify-center">
           <div className="py-8 text-center">Loading...</div>
         </div>
-      ) : isEmpty ? (
+      )}
+      {!showLoading && isEmpty && (
         <ResourceEmptyState
           icon={icon}
           title={emptyTitle}
@@ -230,7 +231,8 @@ export function ResourceListSection<T extends ResourceListItem>({
             </>
           }
         />
-      ) : (
+      )}
+      {!showLoading && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
             <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />

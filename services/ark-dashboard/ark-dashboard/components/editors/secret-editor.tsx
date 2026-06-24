@@ -80,6 +80,8 @@ export function SecretEditor({
     onSave(values.name, values.password);
   };
 
+  const submitLabel = secret ? 'Update secret' : 'Add secret';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -144,11 +146,7 @@ export function SecretEditor({
                 type="submit"
                 disabled={form.formState.isSubmitting}
                 className="w-full sm:w-auto">
-                {form.formState.isSubmitting
-                  ? 'Saving...'
-                  : secret
-                    ? 'Update secret'
-                    : 'Add secret'}
+                {form.formState.isSubmitting ? 'Saving...' : submitLabel}
               </Button>
             </DialogFooter>
           </form>

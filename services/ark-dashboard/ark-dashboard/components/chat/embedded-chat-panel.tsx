@@ -207,18 +207,11 @@ function DebugStreamView({
                 );
                 return (
                   <div key={sessionId} className="mb-2">
-                    <div
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
                       aria-expanded={isSessionExpanded}
-                      className="bg-surface-bg-tertiary mb-1 flex cursor-pointer items-center gap-1 p-1 font-semibold"
-                      onClick={() => toggleSessionExpanded(sessionId)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleSessionExpanded(sessionId);
-                        }
-                      }}>
+                      className="bg-surface-bg-tertiary mb-1 flex w-full cursor-pointer items-center gap-1 p-1 font-semibold"
+                      onClick={() => toggleSessionExpanded(sessionId)}>
                       <IconShell size="sm" className="shrink-0">
                         {isSessionExpanded ? <ChevronDown /> : <ChevronRight />}
                       </IconShell>
@@ -236,7 +229,7 @@ function DebugStreamView({
                         {sessionEntries.length}{' '}
                         {sessionEntries.length === 1 ? 'entry' : 'entries'}
                       </span>
-                    </div>
+                    </button>
                     {isSessionExpanded && (
                       <div className="ml-4">
                         {sessionEntries.map(entry => {
@@ -246,18 +239,11 @@ function DebugStreamView({
                               key={entry.id}
                               className="border-stroke-divider mb-1 overflow-hidden border-b pb-1 last:border-b-0">
                               <div className="flex min-w-0 items-center gap-1">
-                                <span
-                                  role="button"
-                                  tabIndex={0}
+                                <button
+                                  type="button"
                                   aria-expanded={isExpanded}
                                   className="flex shrink-0 cursor-pointer items-center gap-1"
-                                  onClick={() => toggleExpanded(entry.id)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      toggleExpanded(entry.id);
-                                    }
-                                  }}>
+                                  onClick={() => toggleExpanded(entry.id)}>
                                   <IconShell size="sm" className="shrink-0">
                                     {isExpanded ? (
                                       <ChevronDown />
@@ -268,7 +254,7 @@ function DebugStreamView({
                                   <span className="text-fg-tertiary">
                                     {entry.timestamp}
                                   </span>
-                                </span>
+                                </button>
                                 {!isExpanded && (
                                   <span className="text-fg-tertiary w-0 flex-1 truncate">
                                     {JSON.stringify(entry.data)}

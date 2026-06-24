@@ -389,6 +389,7 @@ export function ViewAgentForm({
                             <PopoverTrigger asChild>
                               <div
                                 role="combobox"
+                                aria-controls="view-tools-listbox"
                                 aria-expanded={toolsPopoverOpen}
                                 aria-haspopup="listbox"
                                 aria-disabled={
@@ -469,7 +470,7 @@ export function ViewAgentForm({
                                 </p>
                               ) : (
                                 <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
-                                  <ul className="flex flex-col">
+                                  <ul id="view-tools-listbox" className="flex flex-col">
                                     {availableTools.map(tool => {
                                       const checked = isToolSelected(tool.name);
                                       const description =

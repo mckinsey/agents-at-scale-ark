@@ -87,6 +87,7 @@ export function MembersSection({
         <PopoverTrigger asChild>
           <div
             role="combobox"
+            aria-controls="members-listbox"
             aria-expanded={open}
             aria-haspopup="listbox"
             aria-disabled={triggerDisabled || undefined}
@@ -164,7 +165,7 @@ export function MembersSection({
             </p>
           ) : (
             <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
-              <ul className="flex flex-col">
+              <ul id="members-listbox" className="flex flex-col">
                 {agents.map(agent => {
                   const checked = selectedMembers.some(
                     m => m.name === agent.name,

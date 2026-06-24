@@ -90,7 +90,8 @@ export function ToolsSection() {
     agents.forEach(agent => {
       agent.tools?.forEach((tool: AgentTool) => {
         if (tool.name) {
-          (agentsByTool[tool.name] ??= []).push(agent.name);
+          agentsByTool[tool.name] ??= [];
+          agentsByTool[tool.name].push(agent.name);
         }
       });
     });
