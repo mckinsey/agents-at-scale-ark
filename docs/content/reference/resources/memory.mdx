@@ -116,6 +116,7 @@ Stores messages for an existing conversation. The `conversation_id` is required.
 {
   "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
   "query_id": "query-uuid",
+  "ttl_seconds": 2592000,
   "messages": [
     {
       "role": "user",
@@ -128,6 +129,8 @@ Stores messages for an existing conversation. The `conversation_id` is required.
   ]
 }
 ```
+
+`ttl_seconds` (optional) sets a per-message expiry: each stored message is stamped with an `expires_at` snapshot and filtered out on read once it elapses. This **expires** messages on a timer — it does not delete them; see [Delete Query Messages](#delete-query-messages) for explicit removal. When omitted, the backend applies its default visibility TTL.
 
 ### Get Conversation
 
