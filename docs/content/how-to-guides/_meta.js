@@ -80,6 +80,10 @@ export default {
     title: 'Host the dashboard for multiple namespaces',
     href: '/operations-guide/multi-tenant-dashboard-hosting'
   },
+  'tenant-namespaces': {
+    title: 'Manage tenants and namespaces',
+    href: '/operations-guide/tenant-namespace-management'
+  },
   'operate-marketplace': {
     title: 'Marketplace',
     href: '/operations-guide/marketplace'
@@ -99,6 +103,10 @@ export default {
   'artifact-analysis': {
     title: 'Artifact analysis',
     href: '/operations-guide/artifact-analysis-reports'
+  },
+  'data-flow': {
+    title: 'Data flow and encryption',
+    href: '/operations-guide/data-flow-and-encryption'
   }
 }
 
