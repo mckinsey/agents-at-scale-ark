@@ -110,8 +110,8 @@ const marketplaceService = {
     );
   },
 
-  async uninstallMarketplaceItem(id: string, namespace: string): Promise<void> {
-    await apiClient.delete(`/api/marketplace/${id}/install`, {
+  async uninstallMarketplaceItem(id: string, namespace: string): Promise<unknown> {
+    return await apiClient.delete(`/api/marketplace/${id}/install`, {
       params: { namespace },
     });
   },
