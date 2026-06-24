@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	DefaultTimeoutSeconds = 30 // Default timeout in seconds
-	ContentTypeJSON       = "application/json"
-	MessagesEndpoint      = "/messages"
-	ConversationsEndpoint = "/conversations"
-	CompletionEndpoint    = "/stream/%s/complete"
-	MaxRetries            = 3
-	RetryDelay            = 100 * time.Millisecond
-	UserAgent             = "ark-memory-client/1.0"
+	DefaultTimeoutSeconds    = 30 // Default timeout in seconds
+	ContentTypeJSON          = "application/json"
+	MessagesEndpoint         = "/messages"
+	ConversationsEndpoint    = "/conversations"
+	CompletionEndpoint       = "/stream/%s/complete"
+	MaxRetries               = 3
+	RetryDelay               = 100 * time.Millisecond
+	UserAgent                = "ark-memory-client/1.0"
 )
 
 // getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
@@ -40,6 +40,7 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	DeleteQuery(ctx context.Context, queryID string) error
 	Close() error
 }
 

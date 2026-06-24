@@ -338,6 +338,59 @@ export function createMemoryRouter(
 
   /**
    * @swagger
+   * /queries/{queryId}/messages:
+   *   delete:
+   *     summary: Delete all messages for a specific query
+   *     description: Removes all messages for a specific query across all conversations
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: queryId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Query ID to delete messages for
+   *     responses:
+   *       200:
+   *         description: Query messages deleted successfully
+   *       400:
+   *         description: Invalid query ID
+   *       500:
+   *         description: Failed to delete query messages
+   */
+  router.delete<{queryId: string}>(
+    '/queries/:queryId/messages',
+    async (req, res) => {
+      const {queryId} = req.params;
+
+      if (!queryId) {
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Query ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
+        return;
+      }
+
+      try {
+        req.log.info({queryId}, 'deleting messages for query');
+        await memory.deleteByQuery(queryId);
+        res.json({
+          status: 'success',
+          message: `Query ${queryId} messages deleted`,
+        });
+      } catch (error) {
+        req.log.error({err: error}, 'failed to delete query messages');
+        sendInternalError(res, req.id);
+      }
+    }
+  );
+
+  /**
+   * @swagger
    * /conversations:
    *   delete:
    *     summary: Delete all conversations
