@@ -150,10 +150,20 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
     --namespace ark-system \
     --create-namespace \
+    --set ssl.enabled=true \
     --wait --timeout=120s
 
   echo "=== Waiting for PostgreSQL Pod Readiness ==="
   kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+
+  echo "=== Copying ark-storage-dev TLS secret to default namespace ==="
+  kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
+    python3 -c "
+import sys, json
+s = json.load(sys.stdin)
+out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
+print(json.dumps(out))
+" | kubectl apply -f -
 fi
 
 BROKER_PID=""
@@ -234,7 +244,19 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
     --wait --timeout=300s
   )
   if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
-    BROKER_HELM_ARGS+=(--set memory.createMemoryCRD=false)
+    POSTGRES_PASSWORD=$(kubectl -n ark-system get secret ark-storage-dev-password \
+      -o jsonpath='{.data.password}' | base64 -d)
+    BROKER_HELM_ARGS+=(
+      --set memory.createMemoryCRD=false
+      --set backends.message=postgres
+      --set "database.url=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=verify-full"
+      --set "database.migrateUrl=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt"
+      --set database.tls.enabled=true
+      --set database.tls.secretName=ark-storage-dev-tls
+      --set database.tls.mountPath=/etc/pg-ssl
+      --set migrate.image.repository="${REGISTRY}/ark-broker-migrate"
+      --set migrate.image.tag="${ARK_IMAGE_TAG}"
+    )
   fi
   helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
     "${BROKER_HELM_ARGS[@]}" &
@@ -261,6 +283,9 @@ fi
 if [ -n "${BROKER_PID}" ]; then
   echo "=== Waiting for ARK Broker ==="
   wait "${BROKER_PID}"
+  if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+    kubectl rollout status deployment/ark-broker -n default --timeout=120s
+  fi
 fi
 
 if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then

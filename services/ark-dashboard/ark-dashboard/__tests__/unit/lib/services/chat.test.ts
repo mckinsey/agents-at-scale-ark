@@ -106,7 +106,8 @@ describe('chatService', () => {
         'session-123',
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
         expect.objectContaining({
           name: 'chat-query-mock-uuid',
           type: 'user',
@@ -137,7 +138,8 @@ describe('chatService', () => {
         true,
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
         expect.objectContaining({
           type: 'user',
           input: 'Hello',
@@ -168,9 +170,60 @@ describe('chatService', () => {
         'session-123',
       );
 
-      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<string, unknown>;
+      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       expect(callArgs.metadata).toBeUndefined();
       expect(result).toEqual(mockResponse);
+    });
+
+    it('should forward parameters when provided', async () => {
+      const mockResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: 'Hello',
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
+
+      await chatService.submitChatQuery(
+        'Hello',
+        'agent',
+        'test-agent',
+        'session-123',
+        undefined,
+        undefined,
+        undefined,
+        [{ name: 'agent_name', value: 'Alice' }],
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({
+          parameters: [{ name: 'agent_name', value: 'Alice' }],
+        }),
+      );
+    });
+
+    it('should omit parameters when none are provided', async () => {
+      const mockResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: 'Hello',
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
+
+      await chatService.submitChatQuery('Hello', 'agent', 'test-agent');
+
+      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(callArgs.parameters).toBeUndefined();
     });
   });
 

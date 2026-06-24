@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	DefaultTimeoutSeconds = 30 // Default timeout in seconds
-	ContentTypeJSON       = "application/json"
-	MessagesEndpoint      = "/messages"
-	ConversationsEndpoint = "/conversations"
-	CompletionEndpoint    = "/stream/%s/complete"
-	MaxRetries            = 3
-	RetryDelay            = 100 * time.Millisecond
-	UserAgent             = "ark-memory-client/1.0"
+	DefaultTimeoutSeconds    = 30 // Default timeout in seconds
+	ContentTypeJSON          = "application/json"
+	MessagesEndpoint         = "/messages"
+	ConversationsEndpoint    = "/conversations"
+	CompletionEndpoint       = "/stream/%s/complete"
+	MaxRetries               = 3
+	RetryDelay               = 100 * time.Millisecond
+	UserAgent                = "ark-memory-client/1.0"
 )
 
 // getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
@@ -40,6 +40,7 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	DeleteQuery(ctx context.Context, queryID string) error
 	Close() error
 }
 
@@ -49,12 +50,14 @@ type Config struct {
 	RetryDelay     time.Duration
 	ConversationId string
 	QueryName      string
+	TtlSeconds     *int64
 }
 
 type MessagesRequest struct {
 	ConversationID string                                   `json:"conversation_id,omitempty"`
 	QueryID        string                                   `json:"query_id"`
 	Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	TtlSeconds     *int64                                   `json:"ttl_seconds,omitempty"`
 }
 
 type MessageRecord struct {
@@ -80,6 +83,14 @@ func DefaultConfig() Config {
 	}
 }
 
+func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
+	if query.Spec.TTL == nil {
+		return nil
+	}
+	secs := int64(query.Spec.TTL.Seconds())
+	return &secs
+}
+
 func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	return NewMemoryWithConfig(ctx, k8sClient, memoryName, namespace, DefaultConfig(), memoryRecorder)
 }
@@ -88,10 +99,11 @@ func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryNam
 	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, config, memoryRecorder)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, ttlSeconds *int64, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	config := DefaultConfig()
 	config.ConversationId = conversationId
 	config.QueryName = queryName
+	config.TtlSeconds = ttlSeconds
 
 	var memoryName, memoryNamespace string
 

@@ -81,12 +81,15 @@ app:
     # loopback literal (127.0.0.1, [::1] bracketed per RFC 3986 §3.2.2, or
     # localhost). The path /v1/mcp/auth/callback is appended automatically
     # if the configured URL has no path.
-    # The default matches ark-api's HTTPRoute hostname on the localhost-gateway
-    # (httpRoute.hostnames below, enabled in devspace dev), so the IdP redirect
-    # reaches ark-api through the gateway for both the CLI and dashboard flows.
-    # Override with a public https ingress URL for real deployments.
+    # The default is a loopback literal, which RFC 8252-strict IdPs (Notion,
+    # Google) accept as an OAuth redirect_uri. `ark mcp auth login` already
+    # port-forwards ark-api to 127.0.0.1:34780, so the IdP redirect reaches
+    # ark-api through that forward with no manual setup. A non-literal host
+    # that merely resolves to loopback (e.g. nip.io) is rejected by strict IdPs.
+    # Dashboard-only flows need a manual loopback port-forward or a public https
+    # ingress. Override with a public https ingress URL for real deployments.
     - name: ARK_API_PUBLIC_CALLBACK_URL
-      value: "http://ark-api.default.127.0.0.1.nip.io:8080/v1/mcp/auth/callback"
+      value: "http://127.0.0.1:34780/v1/mcp/auth/callback"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"

@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  name: delete-cleanup-memory
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-broker
+        namespace: default
+        port: http

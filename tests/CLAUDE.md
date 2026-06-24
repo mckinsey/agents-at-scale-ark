@@ -12,7 +12,7 @@ Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
 |---|---|---|
 | *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
 | `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
-| `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `postgresql: "true"` | Requires PostgreSQL backend + broker with postgres backend | Excluded from etcd-only runs |
 | `etcd-only: "true"` | Requires etcd backend (e.g., uses cluster-scoped CRDs not served by embedded apiserver) | Excluded from postgresql backend runs |
 | `requires-images: "true"` | Requires built container images | Conditional |
 | `standard: "true"` | Explicit standard marker | Always runs |
@@ -998,3 +998,31 @@ If options are still detaching after this, the likely cause is a parent componen
 
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events
+
+## PostgreSQL Broker Tests
+
+Tests labeled `postgresql: "true"` run in the `storage-backend: postgresql` CI matrix, where the broker uses a Postgres backend (MESSAGE_BACKEND=postgres). This means broker messages are persisted in the `messages` table of the `ark-storage-dev` Postgres instance in `ark-system`.
+
+Use this label when a test needs to verify broker message persistence, `expires_at`, or other Postgres-specific behavior.
+
+### Querying Postgres from a chainsaw test
+
+Use the shared `psql-query.sh` script to run SQL against `ark-storage-dev`:
+
+```yaml
+- name: verify-postgres
+  try:
+  - script:
+      timeout: 30s
+      content: |
+        TTL=$(bash ../shared/psql-query.sh \
+          "SELECT EXTRACT(EPOCH FROM (expires_at - created_at))::int FROM messages WHERE query_id='my-query' LIMIT 1;" \
+          | tr -d ' \n')
+        echo "ttl_seconds: ${TTL}"
+        [ "${TTL}" = "3600" ] || { echo "expected 3600, got ${TTL}"; exit 1; }
+      env:
+      - name: NAMESPACE
+        value: ($namespace)
+```
+
+The script reads the password from the `ark-storage-dev-password` secret in `ark-system` and execs psql on the `ark-storage-dev` deployment.

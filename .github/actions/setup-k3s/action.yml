@@ -25,7 +25,9 @@ inputs:
   k3s-version:
     description: K3S version (https://github.com/rancher/k3s/releases)
     required: false
-    default: ""
+    # Pinned to avoid intermittent failures resolving the "stable" channel via
+    # update.k3s.io, which the upstream install script does not handle gracefully.
+    default: "v1.35.5+k3s1"
   k3s-channel:
     description: K3S channel (https://update.k3s.io/v1-release/channels)
     required: false
