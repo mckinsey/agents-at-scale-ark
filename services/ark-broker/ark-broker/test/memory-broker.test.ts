@@ -1,7 +1,6 @@
 import {createLogger} from '../src/logging/logger.js';
 import {MemoryBroker} from '../src/brokers/memory-broker.js';
-import {InMemoryStream} from '../src/brokers/stream/in-memory-stream.js';
-import type {MessageData} from '../src/brokers/memory-broker.js';
+import {InMemoryMessageStream} from '../src/brokers/stream/in-memory-message-stream.js';
 
 const silentLogger = createLogger({level: 'silent', pretty: false});
 
@@ -10,7 +9,7 @@ describe('MemoryBroker', () => {
 
   beforeEach(() => {
     broker = new MemoryBroker(
-      new InMemoryStream<MessageData>(silentLogger, 'Memory')
+      new InMemoryMessageStream(silentLogger, 'Memory')
     );
   });
 
@@ -134,6 +133,28 @@ describe('MemoryBroker', () => {
       const allMessages = await broker.all();
       expect(allMessages).toHaveLength(1);
       expect(allMessages[0].data.queryId).toBe('query2');
+    });
+  });
+
+  describe('deleteByQuery', () => {
+    test('should delete all messages for a query regardless of conversation', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv2', 'query1', 'message2');
+      await broker.addMessage('conv1', 'query2', 'message3');
+
+      await broker.deleteByQuery('query1');
+
+      const allMessages = await broker.all();
+      expect(allMessages).toHaveLength(1);
+      expect(allMessages[0].data.queryId).toBe('query2');
+    });
+
+    test('should be a no-op when the query has no messages', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+
+      await broker.deleteByQuery('nonexistent');
+
+      expect(await broker.all()).toHaveLength(1);
     });
   });
 

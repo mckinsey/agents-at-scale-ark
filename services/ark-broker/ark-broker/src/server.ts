@@ -8,8 +8,8 @@ import {
 } from './http/middleware/error-handler.js';
 import {createHttpLogger} from './http/middleware/http-logger.js';
 import {requestId} from './http/middleware/request-id.js';
-import {MemoryBroker, type MessageData} from './brokers/memory-broker.js';
-import type {Stream} from './brokers/stream/stream.js';
+import {MemoryBroker} from './brokers/memory-broker.js';
+import type {MessageStream} from './brokers/stream/message-stream.js';
 import {type Db, pingDb} from './db/db.js';
 import {CompletionChunkBroker} from './brokers/chunks-broker.js';
 import {TraceBroker} from './brokers/trace-broker.js';
@@ -40,7 +40,7 @@ export function buildApp(deps: {
   config: AppConfig;
   logger: Logger;
   version: string;
-  messageStream: Stream<MessageData>;
+  messageStream: MessageStream;
   db?: Db;
 }): AppBundle {
   const {config, logger, version, messageStream, db} = deps;
