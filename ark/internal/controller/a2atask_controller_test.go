@@ -365,3 +365,157 @@ func TestReconcileTimeout_SkipsHITLTasks(t *testing.T) {
 	assert.Equal(t, arka2a.PhaseInputRequired, task.Status.Phase, "phase must not change")
 	assert.Empty(t, task.Status.Error, "error must not be set")
 }
+
+func TestCheckApprovalTimeout(t *testing.T) {
+	r := &A2ATaskReconciler{}
+	ctx := context.Background()
+	past := metav1.NewTime(time.Now().Add(-2 * time.Hour))
+	future := metav1.NewTime(time.Now().Add(2 * time.Hour))
+
+	taskWith := func(meta map[string]string, start *metav1.Time) *arkv1alpha1.A2ATask {
+		return &arkv1alpha1.A2ATask{
+			Spec:   arkv1alpha1.A2ATaskSpec{TaskID: "t"},
+			Status: arkv1alpha1.A2ATaskStatus{ProtocolMetadata: meta, StartTime: start, Phase: arka2a.PhaseInputRequired},
+		}
+	}
+
+	t.Run("no protocol metadata", func(t *testing.T) {
+		handled, err := r.checkApprovalTimeout(ctx, &arkv1alpha1.A2ATask{})
+		assert.NoError(t, err)
+		assert.False(t, handled)
+	})
+
+	t.Run("no timeout key", func(t *testing.T) {
+		handled, err := r.checkApprovalTimeout(ctx, taskWith(map[string]string{"onTimeout": "reject"}, &past))
+		assert.NoError(t, err)
+		assert.False(t, handled)
+	})
+
+	t.Run("invalid timeout format returns error", func(t *testing.T) {
+		handled, err := r.checkApprovalTimeout(ctx, taskWith(map[string]string{"timeout": "not-a-duration"}, &past))
+		assert.Error(t, err)
+		assert.False(t, handled)
+	})
+
+	t.Run("no start time", func(t *testing.T) {
+		handled, err := r.checkApprovalTimeout(ctx, taskWith(map[string]string{"timeout": "1m"}, nil))
+		assert.NoError(t, err)
+		assert.False(t, handled)
+	})
+
+	t.Run("not yet expired", func(t *testing.T) {
+		handled, err := r.checkApprovalTimeout(ctx, taskWith(map[string]string{"timeout": "1m"}, &future))
+		assert.NoError(t, err)
+		assert.False(t, handled)
+	})
+
+	t.Run("expired with proceed policy completes", func(t *testing.T) {
+		task := taskWith(map[string]string{"timeout": "1m", "onTimeout": "proceed"}, &past)
+		handled, err := r.checkApprovalTimeout(ctx, task)
+		assert.NoError(t, err)
+		assert.True(t, handled)
+		assert.Equal(t, arka2a.PhaseCompleted, task.Status.Phase)
+		assert.NotNil(t, task.Status.CompletionTime)
+	})
+
+	t.Run("expired with reject policy fails", func(t *testing.T) {
+		task := taskWith(map[string]string{"timeout": "1m", "onTimeout": "reject"}, &past)
+		handled, err := r.checkApprovalTimeout(ctx, task)
+		assert.NoError(t, err)
+		assert.True(t, handled)
+		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
+		assert.Contains(t, task.Status.Error, "Approval timeout exceeded")
+	})
+
+	t.Run("expired with empty policy defaults to reject", func(t *testing.T) {
+		task := taskWith(map[string]string{"timeout": "1m"}, &past)
+		handled, err := r.checkApprovalTimeout(ctx, task)
+		assert.NoError(t, err)
+		assert.True(t, handled)
+		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
+	})
+
+	t.Run("expired with invalid policy returns error", func(t *testing.T) {
+		task := taskWith(map[string]string{"timeout": "1m", "onTimeout": "bogus"}, &past)
+		handled, err := r.checkApprovalTimeout(ctx, task)
+		assert.Error(t, err)
+		assert.False(t, handled)
+	})
+}
+
+func TestProcessApprovalDecision(t *testing.T) {
+	r := &A2ATaskReconciler{}
+	ctx := context.Background()
+
+	taskWith := func(input string) *arkv1alpha1.A2ATask {
+		return &arkv1alpha1.A2ATask{
+			Spec:   arkv1alpha1.A2ATaskSpec{TaskID: "t", Input: input},
+			Status: arkv1alpha1.A2ATaskStatus{Phase: arka2a.PhaseInputRequired},
+		}
+	}
+
+	t.Run("invalid json marks failed and handled", func(t *testing.T) {
+		task := taskWith("{not json")
+		assert.True(t, r.processApprovalDecision(ctx, task))
+		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
+		assert.Contains(t, task.Status.Error, "Invalid approval decision")
+	})
+
+	t.Run("empty decision is not handled", func(t *testing.T) {
+		task := taskWith(`{"decision":""}`)
+		assert.False(t, r.processApprovalDecision(ctx, task))
+		assert.Equal(t, arka2a.PhaseInputRequired, task.Status.Phase)
+	})
+
+	t.Run("approved marks completed", func(t *testing.T) {
+		task := taskWith(`{"decision":"approved"}`)
+		assert.True(t, r.processApprovalDecision(ctx, task))
+		assert.Equal(t, arka2a.PhaseCompleted, task.Status.Phase)
+	})
+
+	t.Run("rejected marks failed", func(t *testing.T) {
+		task := taskWith(`{"decision":"rejected"}`)
+		assert.True(t, r.processApprovalDecision(ctx, task))
+		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
+		assert.Equal(t, "Tool execution rejected by user", task.Status.Error)
+	})
+
+	t.Run("unknown decision marks failed and handled", func(t *testing.T) {
+		task := taskWith(`{"decision":"maybe"}`)
+		assert.True(t, r.processApprovalDecision(ctx, task))
+		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
+		assert.Contains(t, task.Status.Error, "Invalid decision value")
+	})
+}
+
+func TestPollIntervalOrDefault(t *testing.T) {
+	t.Run("returns spec interval when set", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Spec: arkv1alpha1.A2ATaskSpec{PollInterval: &metav1.Duration{Duration: 7 * time.Second}},
+		}
+		assert.Equal(t, 7*time.Second, pollIntervalOrDefault(task))
+	})
+
+	t.Run("returns default when unset", func(t *testing.T) {
+		assert.Equal(t, defaultPollInterval, pollIntervalOrDefault(&arkv1alpha1.A2ATask{}))
+	})
+}
+
+func TestGetFailureCount(t *testing.T) {
+	r := &A2ATaskReconciler{}
+	ctx := context.Background()
+
+	t.Run("nil annotations returns zero", func(t *testing.T) {
+		assert.Equal(t, 0, r.getFailureCount(ctx, &arkv1alpha1.A2ATask{}))
+	})
+
+	t.Run("valid annotation returns count", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{pollFailureCountAnnotation: "3"}}}
+		assert.Equal(t, 3, r.getFailureCount(ctx, task))
+	})
+
+	t.Run("invalid annotation resets to zero", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{pollFailureCountAnnotation: "abc"}}}
+		assert.Equal(t, 0, r.getFailureCount(ctx, task))
+	})
+}

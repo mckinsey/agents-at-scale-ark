@@ -1015,6 +1015,69 @@ func TestHandleApprovalRequired(t *testing.T) {
 	assert.Equal(t, "default", roundtripCtx.AgentNamespace)
 }
 
+func TestHandleApprovalRequiredEmitsStreamEvent(t *testing.T) {
+	h := newTestHandler()
+	tracer := telemetrynoop.NewTracer()
+	ctx, span := tracer.Start(context.Background(), "test")
+
+	stream := &mockEventStream{}
+	state := &executionState{
+		query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}},
+		conversationId: "conv-stream",
+		querySpan:      span,
+		targetSpan:     span,
+		eventStream:    stream,
+	}
+
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{
+			{
+				ID:       "call-1",
+				Function: openai.ChatCompletionMessageToolCallFunction{Name: "deploy-application", Arguments: "{}"},
+			},
+		},
+		Config: &arkv1alpha1.ToolApprovalConfig{
+			Required:  true,
+			Timeout:   &metav1.Duration{Duration: 30 * time.Second},
+			OnTimeout: "proceed",
+		},
+		Context: &ExecutionContext{ConversationID: "conv-stream", AgentName: "deploy-agent", AgentNamespace: "default"},
+	}
+
+	result := h.handleApprovalRequired(ctx, state, approvalErr)
+
+	task, ok := result.Result.(*protocol.Task)
+	require.True(t, ok)
+	assert.Equal(t, protocol.TaskStateInputRequired, task.Status.State)
+	assert.Equal(t, "conv-stream", task.ContextID)
+	require.NotEmpty(t, stream.chunks, "approval request event should be streamed")
+}
+
+func TestBuildA2AResponse(t *testing.T) {
+	h := newTestHandler()
+	tracer := telemetrynoop.NewTracer()
+	ctx, span := tracer.Start(context.Background(), "test")
+
+	state := &executionState{
+		query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}},
+		target:         &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"},
+		conversationId: "conv-1",
+		querySpan:      span,
+		targetSpan:     span,
+	}
+
+	responseMessages := []Message{NewAssistantMessage("the final answer")}
+	execResult := &ExecutionResult{Messages: responseMessages}
+
+	result := h.buildA2AResponse(ctx, state, responseMessages, execResult)
+
+	require.NotNil(t, result)
+	msg, ok := result.Result.(*protocol.Message)
+	require.True(t, ok, "expected Result to be *protocol.Message")
+	assert.Equal(t, protocol.MessageRoleAgent, msg.Role)
+	require.NotEmpty(t, msg.Parts)
+}
+
 type stubMemory struct {
 	addCalls    int
 	receivedIDs []string

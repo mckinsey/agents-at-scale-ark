@@ -170,6 +170,58 @@ describe('ChatMessage', () => {
     });
   });
 
+  describe('token usage', () => {
+    it('should display token usage for assistant messages', () => {
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Answer"
+          tokenUsage={{
+            prompt_tokens: 1200,
+            completion_tokens: 340,
+            total_tokens: 1540,
+          }}
+        />,
+      );
+
+      expect(screen.getByText(/1,540 tokens/)).toBeInTheDocument();
+      expect(screen.getByText(/1,200 in/)).toBeInTheDocument();
+      expect(screen.getByText(/340 out/)).toBeInTheDocument();
+    });
+
+    it('should not display token usage when total is zero', () => {
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Answer"
+          tokenUsage={{
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+          }}
+        />,
+      );
+
+      expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    });
+
+    it('should not display token usage for user messages', () => {
+      render(
+        <ChatMessage
+          role="user"
+          content="Question"
+          tokenUsage={{
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+          }}
+        />,
+      );
+
+      expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    });
+  });
+
   describe('custom styling', () => {
     it('should apply custom className', () => {
       const { container } = render(
