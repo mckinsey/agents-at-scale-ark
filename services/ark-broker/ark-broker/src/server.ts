@@ -12,6 +12,7 @@ import {MemoryBroker} from './brokers/memory-broker.js';
 import type {MessageStream} from './brokers/stream/message-stream.js';
 import {type Db, pingDb} from './db/db.js';
 import {CompletionChunkBroker} from './brokers/chunks-broker.js';
+import {InMemoryChunkStream} from './brokers/stream/in-memory-chunk-stream.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
 import {SessionsBroker} from './brokers/sessions-broker.js';
@@ -47,11 +48,12 @@ export function buildApp(deps: {
   const app = express();
 
   const memory = new MemoryBroker(messageStream);
-  const chunks = new CompletionChunkBroker(
+  const chunkStream = new InMemoryChunkStream(
     logger.child({broker: 'chunks'}),
     config.persistence.streamFilePath,
     config.limits.maxChunks
   );
+  const chunks = new CompletionChunkBroker(chunkStream);
   const traces = new TraceBroker(
     logger.child({broker: 'traces'}),
     config.persistence.traceFilePath,
