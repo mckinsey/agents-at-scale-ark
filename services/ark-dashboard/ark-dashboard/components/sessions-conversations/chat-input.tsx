@@ -160,6 +160,12 @@ export function ChatInput({
           </Button>
         </div>
 
+        {hasUnsuppliedParameters && (
+          <p className="self-stretch text-xs text-fg-tertiary">
+            {parameterHint}
+          </p>
+        )}
+
         <div className="self-stretch flex justify-between items-center pb-2">
           <div className="flex justify-start items-center gap-5">
             <div className="relative">

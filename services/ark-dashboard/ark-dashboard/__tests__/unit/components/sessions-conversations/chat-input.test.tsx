@@ -371,11 +371,7 @@ describe('ChatInput', () => {
     };
 
     const findSendButton = () =>
-      screen
-        .getAllByRole('button')
-        .find(btn =>
-          btn.querySelector('svg')?.classList.contains('lucide-send'),
-        );
+      screen.getByRole('button', { name: 'Send message' });
 
     it('shows the parameter editor and keeps send disabled until required params are filled', async () => {
       mockGetByName.mockResolvedValue({
