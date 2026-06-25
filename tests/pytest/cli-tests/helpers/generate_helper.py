@@ -94,3 +94,36 @@ class GenerateHelper:
             timeout=60,
         )
         return ok, (err or out)
+
+    def apply(self, manifest_path: str) -> Tuple[bool, str]:
+        ok, out, err = self._run(
+            ["kubectl", "apply", "-n", self.namespace, "-f", manifest_path],
+            timeout=60,
+        )
+        return ok, (err or out)
+
+    def create_secret(self, name: str, key: str) -> Tuple[bool, str]:
+        manifest = (
+            "apiVersion: v1\n"
+            "kind: Secret\n"
+            f"metadata:\n  name: {name}\n"
+            "type: Opaque\n"
+            f"stringData:\n  {key}: placeholder\n"
+        )
+        try:
+            result = subprocess.run(
+                ["kubectl", "apply", "-n", self.namespace, "-f", "-"],
+                input=manifest, capture_output=True, text=True, timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "kubectl apply timed out"
+        return result.returncode == 0, (result.stderr or result.stdout)
+
+    def delete(self, kind: str, name: str) -> None:
+        self._run(
+            [
+                "kubectl", "delete", kind, name,
+                "-n", self.namespace, "--ignore-not-found=true",
+            ],
+            timeout=60,
+        )

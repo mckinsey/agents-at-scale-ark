@@ -9,6 +9,14 @@ from helpers.generate_helper import GenerateHelper
 
 MODEL_PROVIDERS = ["openai", "gemini", "claude", "azure"]
 
+# Secrets the generated models reference via secretKeyRef (name, key).
+PREREQ_SECRETS = [
+    ("default-secret", "token"),
+    ("default-model-token", "token"),
+    ("default-api-key", "apiKey"),
+]
+PREREQ_AGENT = "sample-agent"
+
 
 def _load_docs(path: Path):
     with open(path) as f:
@@ -38,8 +46,23 @@ class TestArkGenerate:
         )
         cls.projects = {}
 
+        # Server-side admission validates references: models need their API-key
+        # secret and queries/teams need the sample agent to exist in-cluster.
+        for name, key in PREREQ_SECRETS:
+            ok, msg = cls.helper.create_secret(name, key)
+            assert ok, f"failed to create prerequisite secret {name}: {msg}"
+
+        ok, out, err = cls.helper.generate_project("prereq", cls.tmp_root, "openai")
+        assert ok, f"ark generate prereq project failed: {err or out}"
+        agent_path = Path(cls.tmp_root) / "prereq" / "agents" / f"{PREREQ_AGENT}.yaml"
+        ok, msg = cls.helper.apply(str(agent_path))
+        assert ok, f"failed to apply prerequisite agent {PREREQ_AGENT}: {msg}"
+
     @classmethod
     def teardown_class(cls):
+        cls.helper.delete("agent", PREREQ_AGENT)
+        for name, _ in PREREQ_SECRETS:
+            cls.helper.delete("secret", name)
         if cls.tmp_root:
             shutil.rmtree(cls.tmp_root, ignore_errors=True)
 
