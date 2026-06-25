@@ -1,8 +1,23 @@
 import shutil
+import string
 import subprocess
 from typing import List, Optional, Tuple
 
 import pexpect
+
+# Generated model manifests carry ${VAR} placeholders meant to be substituted
+# before apply; the model webhook validates baseUrl is a valid HTTPS URL.
+RENDER_ENV = {
+    "OPENAI_BASE_URL": "https://api.openai.com/v1",
+    "GEMINI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "CLAUDE_BASE_URL": "https://api.anthropic.com/v1",
+    "AZURE_BASE_URL": "https://example.openai.azure.com",
+    "AZURE_API_VERSION": "2024-10-21",
+    "OPENAI_API_KEY": "placeholder",
+    "GEMINI_API_KEY": "placeholder",
+    "CLAUDE_API_KEY": "placeholder",
+    "AZURE_API_KEY": "placeholder",
+}
 
 
 class GenerateHelper:
@@ -86,14 +101,19 @@ class GenerateHelper:
         )
 
     def dry_run_apply(self, manifest_path: str) -> Tuple[bool, str]:
-        ok, out, err = self._run(
-            [
-                "kubectl", "apply", "--dry-run=server",
-                "-n", self.namespace, "-f", manifest_path,
-            ],
-            timeout=60,
-        )
-        return ok, (err or out)
+        with open(manifest_path) as f:
+            rendered = string.Template(f.read()).safe_substitute(RENDER_ENV)
+        try:
+            result = subprocess.run(
+                [
+                    "kubectl", "apply", "--dry-run=server",
+                    "-n", self.namespace, "-f", "-",
+                ],
+                input=rendered, capture_output=True, text=True, timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "kubectl apply timed out"
+        return result.returncode == 0, (result.stderr or result.stdout)
 
     def apply(self, manifest_path: str) -> Tuple[bool, str]:
         ok, out, err = self._run(
