@@ -324,7 +324,7 @@ spec:
             _, query = self.helper.get_query(name)
             if query and query.get("status", {}).get("phase") == "done":
                 break
-            time.sleep(3)
+            time.sleep(1)
 
         return name
 
