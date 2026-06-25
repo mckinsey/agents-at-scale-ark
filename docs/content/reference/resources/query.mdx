@@ -218,6 +218,17 @@ kubectl patch query slow-q1 --type='merge' -p='{"spec":{"cancel": true}}'
 
 The controller transitions the query to `phase: canceled` once the in-flight dispatch acknowledges. The dashboard chat panel does the same when you click **Stop** on an embedded chat.
 
+## Deletion and cleanup
+
+When a `Query` is deleted, a controller finalizer removes the messages that query wrote to its `Memory` backend, so deleting a Query does not leave orphaned history behind.
+
+- **Memory resolution** mirrors execution: the controller uses `spec.memory` if set, otherwise a `Memory` named `default` in the query's namespace. If neither exists, cleanup is skipped.
+- The controller resolves the backend address from the `Memory` resource (`status.lastResolvedAddress`, falling back to `spec.address`) and issues `DELETE /queries/{queryId}/messages` against it — see the [Memory delete endpoint](/reference/resources/memory#delete-query-messages).
+- **Scope:** messages only. Events, chunks, and traces are not affected. A backend that does not implement the delete endpoint returns `404`/`405`, which the controller treats as "not supported" and skips.
+- **Failure policy:** if the backend is unreachable the finalizer retries every 15s; after a 5-minute grace period it gives up and removes itself, so a Query is never stuck in `Deleting`.
+
+This is complementary to `spec.ttl`: TTL expires history on a timer, while deletion cleans it up immediately when the Query is removed.
+
 ## Status
 
 ```yaml

@@ -1,7 +1,7 @@
 """Tests for SecretClient Kubernetes secret management - adapted from ark-api tests."""
 import unittest
 import base64
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, MagicMock, patch, call
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import SecretClient
@@ -13,6 +13,9 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         """Set up test client."""
         self.client = SecretClient(namespace="test-namespace")
+        patcher = patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+        self.mock_init_k8s = patcher.start()
+        self.addCleanup(patcher.stop)
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -405,6 +408,67 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         # Test that exception is propagated
         with self.assertRaises(ApiException):
             await self.client.delete_secret("protected-secret")
+
+
+class TestInitK8sCalledBeforeApiClient(unittest.IsolatedAsyncioTestCase):
+    """Verify init_k8s is called before create_api_client in every SecretClient method."""
+
+    def setUp(self):
+        self.client = SecretClient(namespace="test-namespace")
+
+    async def _assert_init_k8s_called_first(self, coro):
+        mock_manager = Mock()
+        mock_init_k8s = AsyncMock()
+        mock_create_api_client = Mock()
+        mock_api = AsyncMock()
+        mock_api.__aenter__ = AsyncMock(return_value=mock_api)
+        mock_api.__aexit__ = AsyncMock(return_value=False)
+        mock_create_api_client.return_value = mock_api
+
+        mock_manager.attach_mock(mock_init_k8s, "init_k8s")
+        mock_manager.attach_mock(mock_create_api_client, "create_api_client")
+
+        v1_mock = Mock()
+        v1_mock.list_namespaced_secret = AsyncMock(return_value=Mock(items=[]))
+        v1_mock.read_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(name='s', uid='u', annotations={}),
+            type='Opaque', data={'token': 'val'}
+        ))
+        v1_mock.create_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(name='s', uid='u', annotations={}), type='Opaque'
+        ))
+        v1_mock.replace_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(name='s', uid='u', annotations={}), type='Opaque'
+        ))
+        v1_mock.delete_namespaced_secret = AsyncMock(return_value=None)
+
+        with patch('ark_sdk.k8s.init_k8s', mock_init_k8s), \
+             patch('ark_sdk.k8s.create_api_client', mock_create_api_client), \
+             patch('ark_sdk.k8s.client.CoreV1Api', return_value=v1_mock):
+            try:
+                await coro()
+            except Exception:
+                pass
+
+        mock_manager.assert_has_calls([call.init_k8s(), call.create_api_client()])
+
+    async def test_list_secrets_calls_init_k8s_first(self):
+        await self._assert_init_k8s_called_first(self.client.list_secrets)
+
+    async def test_get_secret_calls_init_k8s_first(self):
+        await self._assert_init_k8s_called_first(lambda: self.client.get_secret('s'))
+
+    async def test_get_secret_value_calls_init_k8s_first(self):
+        await self._assert_init_k8s_called_first(lambda: self.client.get_secret_value('s', 'token'))
+
+    async def test_create_secret_calls_init_k8s_first(self):
+        await self._assert_init_k8s_called_first(lambda: self.client.create_secret('s', {'token': 'v'}))
+
+    async def test_update_secret_calls_init_k8s_first(self):
+        await self._assert_init_k8s_called_first(lambda: self.client.update_secret('s', {'token': 'v'}))
+
+    async def test_delete_secret_calls_init_k8s_first(self):
+        await self._assert_init_k8s_called_first(lambda: self.client.delete_secret('s'))
 
 
 if __name__ == '__main__':
