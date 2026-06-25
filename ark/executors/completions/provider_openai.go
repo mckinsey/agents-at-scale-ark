@@ -266,6 +266,7 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 }
 
 func (op *OpenAIProvider) initClients() {
+	registerKeepaliveTolerantSSEDecoder()
 	op.httpClient = &http.Client{Transport: common.NewLoggingTransport(common.NewSharedTransport())}
 	op.probeClient = common.NewHTTPClientWithoutTracing()
 }

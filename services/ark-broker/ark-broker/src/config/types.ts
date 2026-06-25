@@ -43,6 +43,7 @@ export type DatabaseConfig = Readonly<{
   connectTimeoutMs: number;
   statementTimeoutMs: number;
   debugQueries: boolean;
+  sslRootCertPath?: string;
 }>;
 
 export type AppConfig = Readonly<{

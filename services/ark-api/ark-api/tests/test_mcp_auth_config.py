@@ -3,17 +3,24 @@ from __future__ import annotations
 
 import socket
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+
+import yaml
 
 from ark_api.core.mcp_auth_config import (
     CALLBACK_PATH,
     McpAuthConfigError,
     _has_embedded_loopback_ip,
     _is_loopback_host,
+    _is_loopback_literal,
     _read_int,
     _validate_callback_url,
+    is_strict_idp_acceptable,
     load_mcp_auth_config,
 )
+
+_WARN_LOGGER = "ark_api.core.mcp_auth_config"
 
 
 class TestValidateCallbackUrl(unittest.TestCase):
@@ -75,6 +82,73 @@ class TestValidateCallbackUrl(unittest.TestCase):
         result = _validate_callback_url("https://ark.example.com/proxy")
         self.assertTrue(result.endswith(CALLBACK_PATH))
         self.assertIn("/proxy", result)
+
+
+class TestStrictIdpWarning(unittest.TestCase):
+    def test_nip_io_loopback_is_accepted_but_warns(self):
+        with self.assertLogs(_WARN_LOGGER, level="WARNING") as ctx:
+            result = _validate_callback_url(
+                "http://ark-api.default.127.0.0.1.nip.io:8080/v1/mcp/auth/callback"
+            )
+        self.assertIn("nip.io", result)
+        self.assertTrue(any("loopback literal" in msg for msg in ctx.output))
+
+    def test_loopback_literal_does_not_warn(self):
+        for url in (
+            "http://127.0.0.1:34780/v1/mcp/auth/callback",
+            "http://[::1]:34780/v1/mcp/auth/callback",
+            "http://localhost:34780/v1/mcp/auth/callback",
+        ):
+            with self.assertNoLogs(_WARN_LOGGER, level="WARNING"):
+                _validate_callback_url(url)
+
+    def test_https_public_host_does_not_warn(self):
+        with self.assertNoLogs(_WARN_LOGGER, level="WARNING"):
+            _validate_callback_url("https://ark.example.com/v1/mcp/auth/callback")
+
+
+class TestIsLoopbackLiteral(unittest.TestCase):
+    def test_literal_hosts_are_literals(self):
+        for host in ("127.0.0.1", "::1", "[::1]", "localhost"):
+            self.assertTrue(_is_loopback_literal(host), host)
+
+    def test_resolved_loopback_name_is_not_a_literal(self):
+        self.assertFalse(_is_loopback_literal("ark-api.default.127.0.0.1.nip.io"))
+
+    def test_public_host_is_not_a_literal(self):
+        self.assertFalse(_is_loopback_literal("ark.example.com"))
+
+
+class TestIsStrictIdpAcceptable(unittest.TestCase):
+    def test_https_is_acceptable(self):
+        self.assertTrue(is_strict_idp_acceptable("https://ark.example.com/v1/mcp/auth/callback"))
+
+    def test_http_loopback_literal_is_acceptable(self):
+        self.assertTrue(is_strict_idp_acceptable("http://127.0.0.1:34780/v1/mcp/auth/callback"))
+        self.assertTrue(is_strict_idp_acceptable("http://[::1]:34780/v1/mcp/auth/callback"))
+        self.assertTrue(is_strict_idp_acceptable("http://localhost:34780/v1/mcp/auth/callback"))
+
+    def test_http_nip_io_is_not_acceptable(self):
+        self.assertFalse(
+            is_strict_idp_acceptable(
+                "http://ark-api.default.127.0.0.1.nip.io:8080/v1/mcp/auth/callback"
+            )
+        )
+
+
+class TestChartDefaultIsStrictIdpAcceptable(unittest.TestCase):
+    def test_chart_default_callback_is_accepted_by_strict_idps(self):
+        values_path = Path(__file__).parents[2] / "chart" / "values.yaml"
+        values = yaml.safe_load(values_path.read_text())
+        env = values["app"]["env"]
+        match = next(
+            (e for e in env if e.get("name") == "ARK_API_PUBLIC_CALLBACK_URL"), None
+        )
+        self.assertIsNotNone(match, "ARK_API_PUBLIC_CALLBACK_URL missing from chart values")
+        self.assertTrue(
+            is_strict_idp_acceptable(match["value"]),
+            f"chart default {match['value']!r} is not accepted by RFC 8252-strict IdPs",
+        )
 
 
 class TestHasEmbeddedLoopbackIp(unittest.TestCase):

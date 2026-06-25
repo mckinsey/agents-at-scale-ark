@@ -70,6 +70,60 @@ class TestTokenValidator(unittest.TestCase):
         mock_get.assert_called_once()
 
     @patch('ark_sdk.auth.validator.requests.get')
+    def test_get_jwks_force_refresh_bypasses_cache(self, mock_get):
+        """force_refresh refetches even when the cache is warm."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"keys": [{"kid": "k1"}]}
+        mock_get.return_value = mock_response
+
+        self.validator._get_jwks()
+        self.validator._get_jwks(force_refresh=True)
+
+        self.assertEqual(mock_get.call_count, 2)
+
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_get_jwks_refetches_after_ttl(self, mock_get):
+        """The cache expires after its TTL and refetches."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"keys": [{"kid": "k1"}]}
+        mock_get.return_value = mock_response
+
+        with patch('ark_sdk.auth.validator.time.monotonic', side_effect=[0.0, 10_000.0]):
+            self.validator._get_jwks()
+            self.validator._get_jwks()
+
+        self.assertEqual(mock_get.call_count, 2)
+
+    @patch.object(TokenValidator, '_jwk_to_pem', return_value="PEM")
+    @patch.object(TokenValidator, '_fetch_jwks')
+    @patch('ark_sdk.auth.validator.jwt.get_unverified_header')
+    def test_get_signing_key_refetches_on_unknown_kid(self, mock_header, mock_fetch, _mock_pem):
+        """A kid missing from the cached JWKS triggers a single refetch (key rotation)."""
+        mock_header.return_value = {"kid": "rotated-kid"}
+        # Stale cache lacks the kid; the refetch returns the rotated key.
+        mock_fetch.side_effect = [
+            {"keys": [{"kid": "old-kid"}]},
+            {"keys": [{"kid": "rotated-kid"}]},
+        ]
+
+        result = self.validator._get_signing_key("token")
+
+        self.assertEqual(result, "PEM")
+        self.assertEqual(mock_fetch.call_count, 2)
+
+    @patch.object(TokenValidator, '_fetch_jwks')
+    @patch('ark_sdk.auth.validator.jwt.get_unverified_header')
+    def test_get_signing_key_unknown_kid_after_refetch_raises(self, mock_header, mock_fetch):
+        """A kid absent even after refetch raises rather than looping."""
+        mock_header.return_value = {"kid": "ghost-kid"}
+        mock_fetch.return_value = {"keys": [{"kid": "other-kid"}]}
+
+        with self.assertRaises(TokenValidationError) as context:
+            self.validator._get_signing_key("token")
+
+        self.assertIn("Unable to find key with kid: ghost-kid", str(context.exception))
+
+    @patch('ark_sdk.auth.validator.requests.get')
     def test_fetch_jwks_exception(self, mock_get):
         """Test JWKS fetching with exception."""
         import requests

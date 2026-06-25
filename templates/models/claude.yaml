@@ -14,7 +14,7 @@ kind: Model
 metadata:
   name: {{ .Values.modelName }}
 spec:
-  type: openai
+  provider: openai
   model:
     value: claude-opus-4-20250514
   config:
