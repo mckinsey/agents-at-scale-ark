@@ -1,12 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ark-completions
-  namespace: {{ .Values.namespace }}
+  name: {{ include "ark-completions.fullname" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
   labels:
     app: ark-completions
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: ark-completions
@@ -14,8 +14,15 @@ spec:
     metadata:
       labels:
         app: ark-completions
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
-      serviceAccountName: {{ .Values.serviceAccountName }} # NOSONAR - RBAC defined in ark-controller chart
+      serviceAccountName: {{ include "ark-completions.serviceAccountName" . }} # NOSONAR - RBAC defined in ark-controller chart (shared install) or rbac.yaml (per-tenant)
       automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}

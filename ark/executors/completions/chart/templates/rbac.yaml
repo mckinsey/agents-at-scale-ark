@@ -1,0 +1,56 @@
+{{- if .Values.rbac.create }}
+# Namespace-scoped RBAC for a per-tenant completions pod. The pod resolves
+# Query/Agent/Model/MCPServer config locally using its ServiceAccount, so it
+# needs read access to those resources plus the secrets/configmaps referenced
+# by model credentials and MCP headers, and services so it can resolve the
+# streaming/memory broker ServiceReference to a URL. The shared install reuses
+# the ark-controller SA (cluster RBAC) and does not need this.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-completions.fullname" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
+  labels:
+    app: ark-completions
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - agents
+  - teams
+  - models
+  - queries
+  - mcpservers
+  - memories
+  - tools
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - configmaps
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-completions.fullname" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
+  labels:
+    app: ark-completions
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-completions.serviceAccountName" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-completions.fullname" . }}
+{{- end }}

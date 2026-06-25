@@ -6,9 +6,64 @@ image:
 port: 80
 targetPort: 9090
 
+# Number of completions engine replicas. Exposed so per-tenant deployments can
+# scale independently of the central install.
+replicaCount: 1
+
+# Override the generated resource name. Defaults to "ark-completions" so the
+# central install keeps a stable Service name (the controller's
+# --completions-addr and the dispatch fallback both expect ark-completions).
+nameOverride: ""
+fullnameOverride: ""
+
+# Namespace the chart's resources are created in. Leave empty to follow the
+# Helm release namespace (-n / --namespace). The central install is deployed
+# with `-n ark-system`; per-tenant installs simply use the tenant namespace.
+# Kept as an explicit override for backward compatibility.
+namespace: ""
+
+# ServiceAccount the completions pod runs as.
+#
+# Central (shared) install: serviceAccount.create=false and the pod reuses the
+# operator's ark-controller SA (its RBAC is defined in the ark-controller
+# chart). This is the default and preserves existing behavior.
+#
+# Per-tenant install: set serviceAccount.create=true so the chart provisions a
+# namespace-local SA. Add annotations (e.g. Azure Workload Identity client-id)
+# here to give each tenant its own cloud identity.
+serviceAccount:
+  create: false
+  # Name of the SA to create or use. Defaults to the chart fullname when
+  # creating, or serviceAccountName below when create=false.
+  name: ""
+  annotations: {}
+  # azure.workload.identity/client-id: "<client-id>"
+
+# ServiceAccount name used when serviceAccount.create=false (shared install).
 serviceAccountName: ark-controller
 
-namespace: ark-system
+# Namespace-scoped RBAC for a per-tenant completions pod. The pod resolves
+# Query/Agent/Model/MCPServer config locally using its SA, so a tenant SA needs
+# read access to those resources plus secrets/configmaps. Not needed for the
+# shared install (ark-controller already has cluster RBAC) — default off.
+rbac:
+  create: false
+
+# Register this deployment as an ExecutionEngine named "ark-completions" in its
+# namespace. The controller's dispatch prefers a namespace-local ExecutionEngine
+# of this name over the central address, so enabling this is what makes a
+# per-tenant completions engine actually receive that tenant's built-in-Agent
+# traffic. Off by default so the central install is unchanged.
+executionEngine:
+  create: false
+  name: ark-completions
+  # Streaming chunks are emitted to the broker, so advertise streaming support.
+  streamingSupported: true
+
+# Pod metadata. podLabels is required to opt a pod into Azure Workload Identity
+# (azure.workload.identity/use: "true") without forking the chart.
+podLabels: {}
+podAnnotations: {}
 
 resources:
   limits:
