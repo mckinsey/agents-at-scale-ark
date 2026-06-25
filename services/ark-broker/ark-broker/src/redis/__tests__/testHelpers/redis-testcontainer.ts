@@ -1,5 +1,6 @@
 import {join} from 'path';
 import {writeFileSync, readFileSync} from 'fs';
+import {randomBytes} from 'crypto';
 import {
   RedisContainer,
   type StartedRedisContainer,
@@ -32,7 +33,7 @@ export async function startRedisContainer(): Promise<StartedRedisTestContainer> 
 export async function startRedisContainerWithAuth(): Promise<
   StartedRedisTestContainer & {password: string}
 > {
-  const password = 'testpass123';
+  const password = randomBytes(16).toString('hex');
   const container = await new RedisContainer('redis:7-alpine')
     .withCommand(['redis-server', '--requirepass', password])
     .start();
@@ -50,7 +51,7 @@ export async function startRedisContainerWithAuth(): Promise<
 export async function startRedisContainerTls(): Promise<
   StartedRedisTestContainer & {caCertPath: string; password: string}
 > {
-  const password = 'tlspass456';
+  const password = randomBytes(16).toString('hex');
   const notAfterDate = new Date();
   notAfterDate.setDate(notAfterDate.getDate() + 1);
   const pems = await generateCert([{name: 'commonName', value: 'localhost'}], {

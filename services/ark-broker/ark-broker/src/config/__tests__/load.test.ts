@@ -172,7 +172,7 @@ describe('loadConfig', () => {
         CHUNK_BACKEND: 'redis',
         REDIS_URL: 'rediss://redis.example.com:6380',
         REDIS_USERNAME: 'alice',
-        REDIS_PASSWORD: 's3cr3t',
+        REDIS_PASSWORD: 'test-redis-password',
         REDIS_TLS_CA_CERT_PATH: '/certs/ca.crt',
         REDIS_KEY_PREFIX: 'my-prefix',
         REDIS_STREAM_TTL_SECONDS: '7200',
@@ -180,7 +180,7 @@ describe('loadConfig', () => {
       });
 
       expect(cfg.redis.username).toBe('alice');
-      expect(cfg.redis.password).toBe('s3cr3t');
+      expect(cfg.redis.password).toBe('test-redis-password');
       expect(cfg.redis.tlsCaCertPath).toBe('/certs/ca.crt');
       expect(cfg.redis.keyPrefix).toBe('my-prefix');
       expect(cfg.redis.streamTtlSeconds).toBe(7200);
