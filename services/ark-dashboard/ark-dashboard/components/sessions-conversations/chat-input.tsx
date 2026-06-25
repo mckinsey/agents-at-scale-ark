@@ -1,8 +1,6 @@
 'use client';
 
-import { Send, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
@@ -69,7 +67,6 @@ export function ChatInput({
         missingParameters.length > 1 ? 's' : ''
       } before you can send a message.`
     : '';
-
 
   // Workflow conversations have multiple different participants (not teams)
   // In workflows, we don't know which agent to target for new messages

@@ -144,8 +144,6 @@ export function ChatPanel({
             </Button>
           ) : (
             <Button
-          ) : (
-            <Button
               onClick={handleSendMessage}
               disabled={!currentMessage.trim() || missingParameters.length > 0}
               size="sm"
