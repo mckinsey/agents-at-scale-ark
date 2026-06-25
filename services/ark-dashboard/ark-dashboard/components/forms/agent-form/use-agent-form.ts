@@ -29,6 +29,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
+  agentParametersChanged,
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
@@ -98,7 +99,7 @@ export function useAgentForm({
                 ? executionEnginesService.getAll()
                 : Promise.resolve([]),
             ]);
-          
+
           if (!agentData) {
             toast.error('Agent not found');
             onSuccessRef.current?.();
@@ -269,13 +270,10 @@ export function useAgentForm({
     return selectedNames.some((name, i) => name !== initialNames[i]);
   }, [selectedTools, initialTools]);
 
-  const hasParametersChanged = useCallback(() => {
-    if (parameters.length !== initialParameters.length) return true;
-    return parameters.some((param, i) => {
-      const initial = initialParameters[i];
-      return param.name !== initial?.name || param.value !== initial?.value;
-    });
-  }, [parameters, initialParameters]);
+  const hasParametersChanged = useCallback(
+    () => agentParametersChanged(parameters, initialParameters),
+    [parameters, initialParameters],
+  );
 
   const hasChanges =
     form.formState.isDirty || hasToolsChanged() || hasParametersChanged();

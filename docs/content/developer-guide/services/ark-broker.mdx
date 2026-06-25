@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Ark Broker
 
 In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
@@ -62,6 +64,10 @@ database:
   url: "postgres://user:password@host:5432/ark_broker"
 ```
 
+<Callout type="warning">
+  In a multi-tenant deployment, each broker release must use its own database (or schema): the `messages` table has no per-tenant row separation (no `tenant_id` column, no row-level security). Never share a `DATABASE_URL` across brokers of different tenants. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
 When enabled, the chart renders a `migrate/migrate` init container (image `ark-broker-migrate`) that applies pending schema migrations before the broker starts. The broker image itself carries no migration tooling and never runs DDL.
 
 Key environment variables:
@@ -78,6 +84,8 @@ Key environment variables:
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate. When set, the broker reads the file and passes it to the Postgres driver for server certificate verification (`sslmode=verify-full`). Set automatically by the Helm chart when `database.tls.enabled=true`. |
 
 Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
+
+Messages are also removed when their originating `Query` is deleted: the controller issues `DELETE /queries/{queryId}/messages`, which hard-deletes every message for that query across all conversations. On the Postgres backend this is a single indexed delete. This complements the TTL above — TTL is time-based, this is triggered by the Query's removal. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
 See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
 

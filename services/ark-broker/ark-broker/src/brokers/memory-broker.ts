@@ -1,5 +1,5 @@
 import {BrokerItem} from './stream/broker-item.js';
-import type {Stream} from './stream/stream.js';
+import type {MessageStream} from './stream/message-stream.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 export type Message = unknown;
@@ -11,9 +11,9 @@ export interface MessageData {
 }
 
 export class MemoryBroker {
-  private readonly stream: Stream<MessageData>;
+  private readonly stream: MessageStream;
 
-  constructor(stream: Stream<MessageData>) {
+  constructor(stream: MessageStream) {
     this.stream = stream;
   }
 
@@ -83,6 +83,10 @@ export class MemoryBroker {
         item.data.conversationId === conversationId &&
         item.data.queryId === queryId
     );
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    return this.stream.deleteByQuery(queryId);
   }
 
   subscribe(callback: (item: BrokerItem<MessageData>) => void): () => void {

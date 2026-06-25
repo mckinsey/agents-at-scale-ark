@@ -770,6 +770,86 @@ func TestNewMemoryForQueryTtl(t *testing.T) {
 	})
 }
 
+func TestHTTPMemoryDeleteQuery(t *testing.T) {
+	t.Run("sends DELETE to /queries/:queryId/messages", func(t *testing.T) {
+		var capturedMethod, capturedPath string
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedMethod = r.Method
+			capturedPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		resolvedAddress := server.URL
+		mem := &arkv1alpha1.Memory{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-memory", Namespace: "default"},
+			Spec: arkv1alpha1.MemorySpec{
+				Address: arkv1alpha1.ValueSource{Value: server.URL},
+			},
+			Status: arkv1alpha1.MemoryStatus{
+				LastResolvedAddress: &resolvedAddress,
+				Phase:               "ready",
+			},
+		}
+
+		httpMemory := &HTTPMemory{
+			client:           setupMemoryTestClient([]client.Object{mem}),
+			httpClient:       server.Client(),
+			baseURL:          server.URL,
+			conversationId:   "conv-1",
+			name:             "test-memory",
+			namespace:        "default",
+			headers:          map[string]string{},
+			eventingRecorder: &noOpMemoryRecorder{},
+		}
+
+		err := httpMemory.DeleteQuery(context.Background(), "my-query")
+		require.NoError(t, err)
+		require.Equal(t, http.MethodDelete, capturedMethod)
+		require.Equal(t, "/queries/my-query/messages", capturedPath)
+	})
+
+	t.Run("returns error on non-2xx status", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		resolvedAddress := server.URL
+		mem := &arkv1alpha1.Memory{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-memory", Namespace: "default"},
+			Spec: arkv1alpha1.MemorySpec{
+				Address: arkv1alpha1.ValueSource{Value: server.URL},
+			},
+			Status: arkv1alpha1.MemoryStatus{
+				LastResolvedAddress: &resolvedAddress,
+				Phase:               "ready",
+			},
+		}
+
+		httpMemory := &HTTPMemory{
+			client:           setupMemoryTestClient([]client.Object{mem}),
+			httpClient:       server.Client(),
+			baseURL:          server.URL,
+			conversationId:   "conv-1",
+			name:             "test-memory",
+			namespace:        "default",
+			headers:          map[string]string{},
+			eventingRecorder: &noOpMemoryRecorder{},
+		}
+
+		err := httpMemory.DeleteQuery(context.Background(), "my-query")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "500")
+	})
+}
+
+func TestNoopMemoryDeleteQuery(t *testing.T) {
+	noop := NewNoopMemory()
+	require.NoError(t, noop.DeleteQuery(context.Background(), "any-query"))
+}
+
 func TestAddMessagesTtlSeconds(t *testing.T) {
 	ttl := int64(3600)
 
