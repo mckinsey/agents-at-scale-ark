@@ -1,8 +1,10 @@
 # ARK Broker chart values
 
 # Message backend: memory (default) or postgres
+# Chunk backend: memory (default) or redis
 backends:
   message: memory
+  chunk: memory
 
 # PostgreSQL connection — required when backends.message=postgres
 database:
@@ -35,6 +37,34 @@ database:
   statementTimeoutMs: 30000
   visibilityTtlSeconds: 2592000
   debugQueries: false
+
+# Redis connection — required when backends.chunk=redis
+redis:
+  # Plain connection URL. Avoid in production — use urlSecretRef instead.
+  url: ""
+
+  # Reference a k8s Secret that holds the full REDIS_URL.
+  # When set, takes priority over redis.url.
+  urlSecretRef:
+    name: ""
+    key: "redis-url"
+
+  # Reference a k8s Secret for REDIS_PASSWORD (optional, for ACL auth).
+  passwordSecretRef:
+    name: ""
+    key: "redis-password"
+
+  # Mount a k8s Secret containing TLS certificates.
+  # Set url to rediss:// scheme when TLS is enabled.
+  tls:
+    enabled: false
+    secretName: ""
+    mountPath: /etc/redis-ssl
+
+  keyPrefix: "ark-broker"
+  streamTtlSeconds: 3600
+  connectTimeoutMs: 10000
+  debugCommands: false
 
 # Migration init container image — used when backends.message=postgres
 migrate:
