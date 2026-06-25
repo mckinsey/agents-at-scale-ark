@@ -1,0 +1,134 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-broker-chunks-redis
+  labels:
+    requires-images: "true"
+spec:
+  description: Completion chunks are stored and served from Redis Streams when backends.chunk=redis
+  steps:
+  - name: setup-redis-and-broker
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-redis-dev ../../charts/ark-redis-dev \
+            --namespace $NAMESPACE \
+            --wait --timeout=120s
+
+          helm upgrade --install ark-broker ../../services/ark-broker/chart \
+            --namespace $NAMESPACE \
+            ${ARK_BROKER_IMAGE:+--set app.image.repository=${ARK_BROKER_IMAGE}} \
+            ${ARK_BROKER_IMAGE_TAG:+--set app.image.tag=${ARK_BROKER_IMAGE_TAG}} \
+            --set backends.chunk=redis \
+            --set "redis.url=redis://:arkredisdev123@ark-redis-dev:6379" \
+            --set restartController.enabled=false \
+            --set otelEndpoint.enabled=false \
+            --set persistence.enabled=false \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Events ==="
+          kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp'
+          echo "=== ark-broker logs ==="
+          kubectl -n $NAMESPACE logs -l app.kubernetes.io/name=ark-broker --tail=100 || true
+          echo "=== ark-redis-dev logs ==="
+          kubectl -n $NAMESPACE logs -l app=ark-redis-dev --tail=50 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: redis-chunks-query
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: redis-chunks-query
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: redis-chunks-query
+
+  - name: verify-chunks-served
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          RESULT=$(kubectl exec -n $NAMESPACE deploy/ark-broker -- \
+            wget -qO- "http://localhost:8080/stream/redis-chunks-query" 2>&1)
+          echo "chunk response: $RESULT"
+          [ -n "$RESULT" ] || { echo "empty response from chunk endpoint"; exit 1; }
+          echo "$RESULT" | grep -q '"complete"' || { echo "no complete marker in chunk stream"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-broker --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-redis-dev --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
