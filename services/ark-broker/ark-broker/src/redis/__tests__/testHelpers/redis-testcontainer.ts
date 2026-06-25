@@ -1,5 +1,5 @@
 import {join} from 'path';
-import {writeFileSync} from 'fs';
+import {writeFileSync, readFileSync} from 'fs';
 import {
   RedisContainer,
   type StartedRedisContainer,
@@ -138,4 +138,65 @@ export function useRedisContainer(): {
   connectionUrl: () => string;
 } {
   return useRedisContainerFrom(startRedisContainer);
+}
+
+export function useRedisContainerWithAuth(): {
+  client: () => RedisClient;
+  connectionUrl: () => string;
+} {
+  let _client: RedisClient;
+  let _stop: () => Promise<void>;
+  let _connectionUrl: string;
+
+  beforeAll(async () => {
+    const started = await startRedisContainerWithAuth();
+    _stop = started.stop;
+    _connectionUrl = started.connectionUrl;
+    _client = new Redis(_connectionUrl, {
+      password: started.password,
+      maxRetriesPerRequest: null,
+    });
+  });
+
+  afterAll(async () => {
+    await _client.quit();
+    await _stop();
+  });
+
+  beforeEach(async () => {
+    await _client.flushall();
+  });
+
+  return {client: () => _client, connectionUrl: () => _connectionUrl};
+}
+
+export function useRedisContainerTls(): {
+  client: () => RedisClient;
+  connectionUrl: () => string;
+} {
+  let _client: RedisClient;
+  let _stop: () => Promise<void>;
+  let _connectionUrl: string;
+
+  beforeAll(async () => {
+    const started = await startRedisContainerTls();
+    _stop = started.stop;
+    _connectionUrl = started.connectionUrl;
+    _client = new Redis(_connectionUrl, {
+      password: started.password,
+      tls: {ca: readFileSync(started.caCertPath)},
+      maxRetriesPerRequest: null,
+    });
+  });
+
+  afterAll(async () => {
+    await _client.quit();
+    await _stop();
+  });
+
+  beforeEach(async () => {
+    await _client.flushall();
+  });
+
+  return {client: () => _client, connectionUrl: () => _connectionUrl};
 }

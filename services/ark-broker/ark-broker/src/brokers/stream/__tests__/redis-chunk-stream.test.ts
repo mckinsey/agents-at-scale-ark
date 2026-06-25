@@ -1,5 +1,9 @@
 import {createLogger} from '@ark-broker/logging/logger';
-import {useRedisContainer} from '@ark-broker/redis/__tests__/testHelpers/redis-testcontainer';
+import {
+  useRedisContainer,
+  useRedisContainerWithAuth,
+  useRedisContainerTls,
+} from '@ark-broker/redis/__tests__/testHelpers/redis-testcontainer';
 import {RedisChunkStream} from '../redis-chunk-stream';
 import {runChunkStreamContract} from './testHelpers/chunk-stream-contract';
 
@@ -14,6 +18,22 @@ const TTL = 300;
 
 describeIntegration('RedisChunkStream — chunk stream contract', () => {
   const {client} = useRedisContainer();
+
+  runChunkStreamContract(
+    () => new RedisChunkStream(client(), logger, PREFIX, TTL)
+  );
+});
+
+describeIntegration('RedisChunkStream — with auth', () => {
+  const {client} = useRedisContainerWithAuth();
+
+  runChunkStreamContract(
+    () => new RedisChunkStream(client(), logger, PREFIX, TTL)
+  );
+});
+
+describeIntegration('RedisChunkStream — with TLS + auth', () => {
+  const {client} = useRedisContainerTls();
 
   runChunkStreamContract(
     () => new RedisChunkStream(client(), logger, PREFIX, TTL)
