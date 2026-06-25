@@ -89,6 +89,31 @@ describeIntegration('postgres backend — HTTP integration', () => {
     await request(app).get('/readyz').expect(200);
   });
 
+  it('DELETE /queries/:queryId/messages removes only that query rows', async () => {
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'del-conv-1', query_id: 'del-q', messages: ['a']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'del-conv-2', query_id: 'del-q', messages: ['b']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'del-conv-1',
+        query_id: 'keep-q',
+        messages: ['c'],
+      })
+      .expect(200);
+
+    await request(app).delete('/queries/del-q/messages').expect(200);
+
+    const res = await request(app).get('/messages').expect(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].query_id).toBe('keep-q');
+  });
+
   it('expired messages are not returned by GET /messages', async () => {
     await request(app)
       .post('/messages')

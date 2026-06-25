@@ -9,7 +9,8 @@ import {
   type PaginatedList,
   type PaginationParams,
 } from '../pagination.js';
-import type {Stream, Predicate} from './stream.js';
+import type {Predicate} from './stream.js';
+import type {MessageStream} from './message-stream.js';
 
 type MessageRow = {
   sequence_number: string;
@@ -31,7 +32,7 @@ function rowToBrokerItem(row: MessageRow): BrokerItem<MessageData> {
   };
 }
 
-export class PostgresMessageStream implements Stream<MessageData> {
+export class PostgresMessageStream implements MessageStream {
   private readonly emitter = new EventEmitter();
 
   constructor(
@@ -113,6 +114,11 @@ export class PostgresMessageStream implements Stream<MessageData> {
     if (toDelete.length === 0) return;
     await this
       .db`DELETE FROM messages WHERE sequence_number = ANY(${toDelete})`;
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    this.logger.info({queryId}, 'deleting messages by query');
+    await this.db`DELETE FROM messages WHERE query_id = ${queryId}`;
   }
 
   async save(): Promise<void> {}
