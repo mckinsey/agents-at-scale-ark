@@ -17,6 +17,8 @@ Sequenced so each numbered group is a self-contained commit that passes lint and
 - [ ] 2.2 Implement read-then-replace: `get` the live object, copy its `metadata.resourceVersion` onto the submitted body, then `replace` — so a body with no `resourceVersion` succeeds against an existing object.
 - [ ] 2.3 Unit (Python): replace a named resource in place; body with no `resourceVersion` succeeds; both core and grouped variants covered.
 - [ ] 2.4 Confirm no argo-make-specific or author-agent-specific endpoint is added.
+- [ ] 2.5 Add a generic access-review endpoint (`group`/`resource`/`verb`, optional `?namespace=`) that creates a `SelfSubjectAccessReview` under the impersonated identity and returns `{ allowed: bool }`; defaults to the context namespace; generic, not WorkflowTemplate-specific.
+- [ ] 2.6 Unit (Python): allowed → `true`, denied → `false`, namespace defaults to context, runs under impersonated identity (service account when impersonation disabled).
 
 ## 3. kubernetes-mcp-server production umbrella chart
 
@@ -29,6 +31,7 @@ Sequenced so each numbered group is a self-contained commit that passes lint and
 ## 4. Dashboard authoring routes and components
 
 - [ ] 4.1 Add `/workflow-templates/new` and `/workflow-templates/[id]/edit` routes plus an "Edit" button on the detail page; share one two-pane component (mode flag = initial draft + Save semantics).
+- [ ] 4.1a RBAC gating: on mount and namespace change, call the ark-api access-review endpoint for `create`/`update` on `workflowtemplates` (`argoproj.io`) in the selected namespace via a `workflowTemplatesService` method; hide/disable the "New" control and per-template "Edit" button accordingly; show a "not authorized" state (no Save) on direct navigation to `/new` or `/[id]/edit` without permission; keep the detail page read-only view available; fail closed on error.
 - [ ] 4.2 Implement the `draftYaml` single source of truth with two writers (agent fence on stream completion, manual edits live) and three readers (DAG preview, Save, grounding).
 - [ ] 4.3 Add the fenced-block extractor under `lib/utils/` — runs once per turn on stream completion; parse with `js-yaml`; keep previous draft and surface an error on malformed/no-fence output.
 - [ ] 4.4 Add the editable YAML tab (controlled `<textarea>`, no new deps); keep `CodeViewer` read-only elsewhere.

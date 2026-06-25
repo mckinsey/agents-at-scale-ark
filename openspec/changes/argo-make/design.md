@@ -251,16 +251,31 @@ The dashboard must know **which** Agent to dispatch authoring turns to. The **na
 
 **Follow-up (parked):** a dashboard-side setting to select the author Agent, once there is a reason to vary it without redeploying. Out of scope for v1 by explicit request.
 
-### 14. When the author Agent is not installed
+### 14. Preflight checks before authoring (errors block dispatch, warnings inform)
 
-The chat is an **enhancement layer over a manual editor that always works** — not a hard dependency. On mount (and whenever the selected namespace changes), the route checks for the configured author Agent in the current namespace via `agentsService.getByName(name)` (returns `null` if absent).
+The chat is an **enhancement layer over a manual editor that always works** — not a hard dependency. On mount (and whenever the selected namespace changes), the route runs a preflight check over the configured author Agent and its grounding dependencies, and surfaces the result inline. The check distinguishes two severities:
 
-- **Missing:** show a non-blocking banner — *"Author agent `argo-make-author` isn't installed in namespace `<ns>`"* — with an **"Install author agent"** button that creates the Agent from the dashboard-bundled manifest in the current namespace via the resources passthrough (Decision 15); the chat composer is disabled until it succeeds. The **YAML editor, DAG preview, and Save remain fully functional** meanwhile:
-  - On `/new`: a YAML-literate user can still hand-write or paste a template and Save it — the route degrades to a plain manual editor.
-  - On `/[id]/edit`: the loaded template renders in the preview and stays hand-editable and saveable. **Editing an existing template never depends on the agent being present** — load and Save both go through the resources passthrough, not the agent.
-- **Disappears mid-session** (agent deleted, or a dispatch call fails): surface the error inline in the chat and re-run the existence check to flip into the banner state. The `draftYaml` buffer is untouched, so no in-progress work is lost.
+- **Errors** mean a chat turn cannot run at all (no agent, or an agent that can't execute), so they **block dispatch** — the composer is disabled. The manual YAML editor stays fully usable.
+- **Warnings** mean a chat turn *can* run, but the agent cannot ground itself on the catalogue (no `resources_list` / `resources_get`), so it cannot list or verify query targets (Decision 7). Authoring **proceeds**; the warning tells the user grounding/target-verification is off and the agent may reference targets it cannot confirm exist.
 
-**Rationale:** install-on-demand means the agent legitimately may not be created yet (or not in *this* namespace). Coupling the whole route to its presence would make the workflow-template editor unusable for the exact YAML-literate users who can work without the agent. Degrading to a manual editor keeps the page useful in every state.
+All four states are derived from data the dashboard already fetches — no new ark-api surface:
+
+| State | Severity | Signal | UI |
+|---|---|---|---|
+| Author Agent missing | **error** | `agentsService.getByName(name)` returns `null` (404) | Banner + **"Install author agent"** button (Decision 15); composer disabled |
+| Author Agent present but not ready | **error** | the fetched agent's `available` (`AvailabilityStatus`, derived from the `Available` condition) is not `True` (i.e. `False` / `Unknown`) | Banner showing the failing status; composer disabled |
+| Agent lacks the k8s MCP tools | **warning** | the fetched agent's `tools` array contains no `{type: mcp, name: resources_list}` / `resources_get` entry | Non-blocking warning; composer enabled, grounding off |
+| k8s MCP tools not installed in namespace | **warning** | `toolsService.getAll()` for the namespace contains no `resources_list` / `resources_get` `Tool` CRD (the `kubernetes-mcp-server` isn't deployed/registered, per Context 3) | Non-blocking warning; composer enabled, grounding off |
+
+The two warnings have the same consequence (the agent can't verify targets) but distinct causes, so each names its own fix — install the MCP server vs. add its tools to the agent's `spec.tools`. They are not mutually exclusive with each other, but the readiness errors take precedence: if the agent is missing or not ready, the route shows only that (there is no point warning about tools on an agent that can't run).
+
+In every gated state — error or warning — the **YAML editor, DAG preview, and Save remain fully functional**:
+- On `/new`: a YAML-literate user can still hand-write or paste a template and Save it — the route degrades to a plain manual editor.
+- On `/[id]/edit`: the loaded template renders in the preview and stays hand-editable and saveable. **Editing an existing template never depends on the agent being present** — load and Save both go through the resources passthrough, not the agent.
+
+**Disappears mid-session** (agent deleted, or a dispatch call fails): surface the error inline in the chat and re-run the preflight check to flip into the banner state. The `draftYaml` buffer is untouched, so no in-progress work is lost.
+
+**Rationale:** install-on-demand means the agent legitimately may not be created yet (or not in *this* namespace), and PR #2536 (the MCP server) may not have landed in a given cluster — so each dependency can be independently absent. Coupling the whole route to all of them would make the workflow-template editor unusable for the exact YAML-literate users who can work without the agent. Splitting blocking (can't run) from informational (runs without grounding) keeps the page useful in every state while telling the user exactly what's degraded and how to fix it.
 
 ### 15. Installing the author Agent from the dashboard (reuse the resources passthrough)
 
@@ -285,7 +300,7 @@ The single source of truth for the default prompt is one manifest artifact bundl
 
 ### 16. Test strategy
 
-- **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); the install helper (stamps the configured name onto the bundled manifest before POSTing); and the missing-agent gating (agent present → composer enabled; `getByName` returns `null` → banner shown, composer disabled, editor + Save still enabled).
+- **Unit (TypeScript):** the YAML extraction utility run on a complete message (single fence, multiple fences, fence with surrounding prose, malformed YAML, no-fence messages); the commit-on-completion behaviour (no `draftYaml` change from partial input, one commit when the turn ends); the draft-grounding diverge-check (equal → no prefix; diverged → prefix; freshly-loaded template → prefix on first turn); the install helper (stamps the configured name onto the bundled manifest before POSTing); and the preflight gating — ready agent with MCP tools → composer enabled, no warning; `getByName` returns `null` → error banner, composer disabled; `available !== "True"` → not-ready error banner, composer disabled; agent missing `resources_list`/`resources_get` in `tools` → warning, composer enabled; `toolsService.getAll()` lacks those `Tool` CRDs → warning, composer enabled; and in every gated state editor + Save stay enabled.
 - **Unit (Python):** the generic resource update (PUT) endpoint — reads the live object, carries its `metadata.resourceVersion` onto the submitted body, and replaces the named resource in place (including the case where the submitted body has no `resourceVersion`).
 - **Helm (lint/template):** the `kubernetes-mcp-server` umbrella chart renders with `config.read_only: true`, the namespace-scoped read-only RBAC, and the `HTTPRoute` enabled / Ingress disabled — matching the dev configuration.
 - **Chainsaw (e2e):**

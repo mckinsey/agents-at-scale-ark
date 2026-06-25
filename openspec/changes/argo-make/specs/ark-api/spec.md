@@ -16,6 +16,28 @@ ark-api SHALL add a generic resource update endpoint to the existing resources p
 - **WHEN** ark-api's routes are inspected
 - **THEN** there is no argo-make or author-agent specific endpoint; the author-agent manifest is bundled in the dashboard and Agent creation reuses the resources passthrough
 
+### Requirement: Generic access-review endpoint
+
+ark-api SHALL add a generic access-review endpoint that answers whether the requesting user may perform a given verb on a given resource in a given namespace, so the dashboard can gate write affordances before offering them. It SHALL create a Kubernetes `SelfSubjectAccessReview` under the requesting user's identity via the existing impersonation middleware — so the answer reflects the user's own RBAC, not the ark-api service account's — and return a minimal `{ "allowed": <bool> }` body. The endpoint SHALL accept `group`, `resource`, and `verb`, and SHALL honour the optional `?namespace=<ns>` query parameter the same way the resources passthrough does, defaulting to the current context namespace when omitted. No argo-make-specific or WorkflowTemplate-specific endpoint SHALL be added; the endpoint SHALL be generic over `group`/`resource`/`verb`.
+
+When impersonation is disabled, the `SelfSubjectAccessReview` runs as the ark-api service account, so the result honestly reflects the effective identity the user's requests run as.
+
+#### Scenario: Allowed write returns allowed true
+- **WHEN** a user permitted to create `workflowtemplates` in namespace `team-a` calls the access-review endpoint with `group=argoproj.io`, `resource=workflowtemplates`, `verb=create`, `namespace=team-a`
+- **THEN** ark-api creates a `SelfSubjectAccessReview` under that user's identity and returns `{ "allowed": true }`
+
+#### Scenario: Denied write returns allowed false
+- **WHEN** a user without permission to update `workflowtemplates` in namespace `team-a` calls the access-review endpoint with `verb=update` for that resource and namespace
+- **THEN** ark-api returns `{ "allowed": false }`
+
+#### Scenario: Namespace defaults to context namespace
+- **WHEN** the access-review endpoint is called without a `?namespace=` parameter
+- **THEN** the `SelfSubjectAccessReview` is scoped to the current context namespace
+
+#### Scenario: Endpoint is generic, not WorkflowTemplate-specific
+- **WHEN** ark-api's routes are inspected
+- **THEN** the access-review endpoint is generic over `group`/`resource`/`verb` and there is no argo-make or WorkflowTemplate-specific access-review route
+
 ### Requirement: resourceVersion reconciliation on replace
 
 Because a hand-edited or agent-regenerated `draftYaml` carries no usable `metadata.resourceVersion`, the update (PUT) handler SHALL reconcile the `resourceVersion` itself: it SHALL `get` the live object, copy its `metadata.resourceVersion` onto the submitted body, and then `replace`. A submitted body with no `resourceVersion` SHALL therefore succeed against an existing object rather than being rejected.
