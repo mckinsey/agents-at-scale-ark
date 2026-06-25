@@ -22,6 +22,23 @@ interface AgentParameterOutput {
   };
 }
 
+export function agentParametersChanged(
+  current: Parameter[],
+  initial: Parameter[],
+): boolean {
+  if (current.length !== initial.length) return true;
+  return current.some((param, i) => {
+    const original = initial[i];
+    return (
+      param.name !== original?.name ||
+      param.value !== original?.value ||
+      param.source !== original?.source ||
+      param.queryParameterName !== original?.queryParameterName ||
+      param.overrideQueryName !== original?.overrideQueryName
+    );
+  });
+}
+
 export function transformAgentParametersToForm(
   agentParameters: AgentParameterInput[] | null | undefined,
 ): Parameter[] {

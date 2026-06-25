@@ -25,6 +25,7 @@ flags:
 
 ignore:
   - "ark/internal/storage/postgresql/wal_connection.go"
+  - "ark/internal/storage/postgresql/postgresql.go"
   - "**/zz_generated.*.go"
 
 comment:

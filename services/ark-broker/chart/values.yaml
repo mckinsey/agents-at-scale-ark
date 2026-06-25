@@ -6,7 +6,30 @@ backends:
 
 # PostgreSQL connection — required when backends.message=postgres
 database:
+  # Plain connection URL. Avoid in production — use urlSecretRef instead.
   url: ""
+
+  # URL used only by the migrate init container. Falls back to database.url when not set.
+  # Use this when the migrate URL needs extra parameters that the app URL must not have,
+  # e.g. sslrootcert= (golang-migrate reads it as a client-side path; postgres.js sends
+  # it as a GUC SET command, which PostgreSQL rejects).
+  migrateUrl: ""
+
+  # Reference a k8s Secret that holds the full DATABASE_URL.
+  # When set, takes priority over database.url in both the app and the migrate init container.
+  urlSecretRef:
+    name: ""
+    key: "database-url"
+
+  # Mount a k8s Secret containing TLS certificates into both the app container
+  # and the migrate init container. Required for sslmode=verify-ca / verify-full.
+  # Set sslmode in DATABASE_URL, e.g.: ?sslmode=verify-full
+  # The CA cert is loaded automatically from <mountPath>/ca.crt via DATABASE_SSL_ROOT_CERT_PATH.
+  tls:
+    enabled: false
+    secretName: ""
+    mountPath: /etc/pg-ssl
+
   poolMax: 10
   connectTimeoutMs: 10000
   statementTimeoutMs: 30000

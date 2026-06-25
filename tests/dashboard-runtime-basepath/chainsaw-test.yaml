@@ -1,0 +1,112 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: dashboard-runtime-basepath
+  labels:
+    requires-images: "true"
+spec:
+  description: |
+    Verifies the ark-dashboard image's entrypoint substitutes the build-time
+    base-path sentinel with the operator-supplied ARK_DASHBOARD_BASE_PATH at
+    container startup, producing a dashboard that serves correctly under a
+    non-empty URL prefix.
+  steps:
+  - name: install-prefixed-dashboard
+    try:
+    - script:
+        content: |
+          helm upgrade --install ark-dashboard-prefixed ../../services/ark-dashboard/chart \
+            --namespace $NAMESPACE \
+            --set app.name=ark-dashboard-prefixed \
+            --set service.name=ark-dashboard-prefixed \
+            --set serviceAccount.name=ark-dashboard-prefixed-sa \
+            --set app.config.basePath=/tenant-a \
+            ${ARK_DASHBOARD_IMAGE:+--set app.image.repository=${ARK_DASHBOARD_IMAGE}} \
+            ${ARK_DASHBOARD_IMAGE_TAG:+--set app.image.tag=${ARK_DASHBOARD_IMAGE_TAG}} \
+            --wait --timeout=240s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 300s
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Events ==="
+          kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp'
+          echo "=== Describe ark-dashboard-prefixed pod ==="
+          kubectl -n $NAMESPACE describe pod -l app=ark-dashboard-prefixed
+          echo "=== Logs ark-dashboard-prefixed ==="
+          kubectl -n $NAMESPACE logs -l app=ark-dashboard-prefixed --tail=200 --all-containers || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: deploy-probe-pod
+    try:
+    - apply:
+        file: manifests/a00-probe.yaml
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: dashboard-probe
+        timeout: 1m
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: probe-prefixed-dashboard
+    try:
+    - script:
+        content: |
+          set -eu
+          # /tenant-a serves the dashboard
+          STATUS=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -s -o /dev/null -w '%{http_code}' \
+            http://ark-dashboard-prefixed:3000/tenant-a)
+          echo "GET /tenant-a -> $STATUS"
+          [ "$STATUS" = "200" ]
+
+          # / returns 404 (nothing at root when basepath is set)
+          STATUS=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -s -o /dev/null -w '%{http_code}' \
+            http://ark-dashboard-prefixed:3000/)
+          echo "GET / -> $STATUS"
+          [ "$STATUS" = "404" ]
+
+          # HTML at /tenant-a includes Ark Dashboard title
+          BODY=$(kubectl exec -n $NAMESPACE dashboard-probe -- \
+            curl -sS http://ark-dashboard-prefixed:3000/tenant-a)
+          echo "$BODY" | grep -q '<title>Ark Dashboard</title>'
+
+          # Every emitted /_next/ reference must be prefixed with /tenant-a.
+          # Scrub /tenant-a/_next/... first, then anything matching /_next/ is unprefixed.
+          UNPREFIXED=$(printf '%s' "$BODY" | sed 's|/tenant-a/_next/[^"\\ ]*||g' | grep -c '/_next/' || true)
+          if [ "$UNPREFIXED" != "0" ]; then
+            echo "FAIL: $UNPREFIXED unprefixed /_next/ reference(s) found in HTML"
+            exit 1
+          fi
+
+          # No sentinel residue
+          if echo "$BODY" | grep -q '__ark_base_path__'; then
+            echo "FAIL: sentinel '__ark_base_path__' still present in HTML"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 60s
+    catch:
+    - events: {}
+    - podLogs:
+        name: ark-dashboard-prefixed
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-dashboard-prefixed --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

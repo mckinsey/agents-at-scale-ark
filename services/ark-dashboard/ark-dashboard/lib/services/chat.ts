@@ -11,6 +11,7 @@ interface AxiosError extends Error {
   };
 }
 
+export type QueryParameter = components['schemas']['QueryParameter'];
 export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
@@ -200,6 +201,7 @@ export const chatService = {
     conversationId?: string,
     enableStreaming?: boolean,
     timeout?: string,
+    parameters?: QueryParameter[],
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -212,6 +214,7 @@ export const chatService = {
       sessionId,
       conversationId,
       timeout,
+      ...(parameters && parameters.length > 0 ? { parameters } : {}),
     };
 
     if (enableStreaming) {
@@ -390,6 +393,7 @@ export const chatService = {
     conversationId?: string,
     timeout?: string,
     abortSignal?: AbortSignal,
+    parameters?: QueryParameter[],
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
@@ -402,12 +406,17 @@ export const chatService = {
       conversationId,
       true,
       timeout,
+      parameters,
     );
 
     const queryName = query.name;
     const self = this;
 
-    async function* generateChunks(): AsyncGenerator<Record<string, unknown>, void, unknown> {
+    async function* generateChunks(): AsyncGenerator<
+      Record<string, unknown>,
+      void,
+      unknown
+    > {
       const response = await fetch(
         `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
         {
@@ -475,6 +484,6 @@ export const chatService = {
   },
 
   async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
-    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`)
-  }
+    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`);
+  },
 };

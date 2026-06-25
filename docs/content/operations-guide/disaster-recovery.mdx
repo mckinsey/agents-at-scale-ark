@@ -11,7 +11,7 @@ This guide outlines what needs to be protected and the general approach to recov
 - **RBAC bindings** — Any RoleBindings or ClusterRoleBindings that grant users access to Ark resources (relevant if you use [user impersonation](/developer-guide/authentication#user-impersonation)).
 - **Helm values** — The configuration used to deploy Ark and its dependencies. Store these in version control.
 - **Memory backend** — If you use an external database for conversation memory, back it up using your database provider's tooling. Ark does not manage the memory backend lifecycle.
-- **Broker persistence** — The broker stores messages, streaming chunks, traces, events, and sessions in memory by default. If you have enabled file-based persistence (`persistence.enabled: true` in the broker Helm values), the backing PVC should be included in your backup.
+- **Broker persistence** — The broker stores messages, streaming chunks, traces, events, and sessions in memory by default. If you have enabled file-based persistence (`persistence.enabled: true` in the broker Helm values), the backing PVC should be included in your backup. If you have enabled the Postgres message backend (`backends.message: postgres`), the broker's **messages** live in an external Postgres database — back it up with your provider's tooling, separately from the PVC. The other stores remain in memory or on the PVC.
 
 ## Recovery approach
 
@@ -19,7 +19,7 @@ This guide outlines what needs to be protected and the general approach to recov
 
 Install the Ark Helm charts with your stored values. This re-creates the CRDs, controller, webhooks, API, dashboard, broker, and any marketplace components (executors, MCP servers). Wait for all services to become ready before restoring data.
 
-If you use a PostgreSQL storage backend, restore the database before deploying Ark.
+If you use a PostgreSQL storage backend, restore the database before deploying Ark. Likewise, if the broker uses the Postgres message backend, restore its database before the broker starts so the migration init container adopts the existing schema cleanly.
 
 ### 2. Restore custom resources
 
