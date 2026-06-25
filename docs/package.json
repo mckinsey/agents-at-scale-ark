@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.64-rc.1",
+  "version": "0.1.65",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -27,7 +27,7 @@
     "sharp": "^0.34.2"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.0.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.5",
     "http-server": "^14.1.1",
@@ -46,7 +46,7 @@
   },
   "overrides": {
     "brace-expansion": ">=5.0.6",
-    "undici": "^7.24.0",
+    "undici": "^7.28.0",
     "rollup": "4.59.0",
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
@@ -57,6 +57,8 @@
     "lodash-es": "4.18.1",
     "tough-cookie": "^5.0.0",
     "urlobj": "0.0.11",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0",
+    "form-data": "^4.0.6",
+    "vite": "^8.0.16"
   }
 }

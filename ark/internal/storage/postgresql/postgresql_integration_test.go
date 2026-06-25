@@ -7,6 +7,7 @@ package postgresql
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"testing"
@@ -419,6 +420,136 @@ func TestWatchAddedForFirstSeenUID_Integration(t *testing.T) {
 			testNS, firstName, firstEventType)
 	} else {
 		t.Logf("Correctly received watch.Added for first-seen UID")
+	}
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+}
+
+type gracefulDeleteTestObject struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name              string   `json:"name"`
+		Namespace         string   `json:"namespace"`
+		UID               string   `json:"uid"`
+		ResourceVersion   string   `json:"resourceVersion,omitempty"`
+		Finalizers        []string `json:"finalizers,omitempty"`
+		DeletionTimestamp *string  `json:"deletionTimestamp,omitempty"`
+	} `json:"metadata"`
+	Spec map[string]interface{} `json:"spec,omitempty"`
+}
+
+func (t *gracefulDeleteTestObject) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
+
+func (t *gracefulDeleteTestObject) DeepCopyObject() runtime.Object {
+	data, _ := json.Marshal(t)
+	c := &gracefulDeleteTestObject{}
+	_ = json.Unmarshal(data, c)
+	return c
+}
+
+func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testName := "graceful-delete-resource"
+	testNS := "integration-test"
+	testKind := "TestResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+
+	obj := &integrationTestObject{
+		APIVersion: "ark.mckinsey.com/v1alpha1",
+		Kind:       testKind,
+		Metadata: struct {
+			Name            string            `json:"name"`
+			Namespace       string            `json:"namespace"`
+			UID             string            `json:"uid"`
+			ResourceVersion string            `json:"resourceVersion,omitempty"`
+			Labels          map[string]string `json:"labels,omitempty"`
+		}{
+			Name:      testName,
+			Namespace: testNS,
+			UID:       "test-uid-graceful",
+		},
+		Spec: map[string]interface{}{"k": "v"},
+	}
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	deletionTimestamp := func() *string {
+		var ts sql.NullTime
+		_ = backend.db.QueryRowContext(ctx,
+			"SELECT deletion_timestamp FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+			testKind, testNS, testName).Scan(&ts)
+		if !ts.Valid {
+			return nil
+		}
+		formatted := ts.Time.UTC().Format(time.RFC3339)
+		return &formatted
+	}
+	currentRV := func() string {
+		got, getErr := backend.Get(ctx, testKind, testNS, testName)
+		if getErr != nil {
+			t.Fatalf("Get failed: %v", getErr)
+		}
+		return got.(*integrationTestObject).Metadata.ResourceVersion
+	}
+
+	if dt := deletionTimestamp(); dt != nil {
+		t.Fatalf("expected no deletion_timestamp on fresh resource, got %v", *dt)
+	}
+
+	// Mark for deletion: set deletionTimestamp while a finalizer is present.
+	ts := "2026-01-02T15:04:05Z"
+	markObj := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	markObj.Metadata.Name = testName
+	markObj.Metadata.Namespace = testNS
+	markObj.Metadata.UID = "test-uid-graceful"
+	markObj.Metadata.ResourceVersion = currentRV()
+	markObj.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	markObj.Metadata.DeletionTimestamp = &ts
+	if err := backend.Update(ctx, testKind, testNS, testName, markObj); err != nil {
+		t.Fatalf("Update marking deletion failed: %v", err)
+	}
+
+	if dt := deletionTimestamp(); dt == nil {
+		t.Fatal("expected deletion_timestamp to be persisted after marking deletion")
+	}
+
+	// Remove the finalizer without resending deletionTimestamp: COALESCE must keep it.
+	clearObj := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	clearObj.Metadata.Name = testName
+	clearObj.Metadata.Namespace = testNS
+	clearObj.Metadata.UID = "test-uid-graceful"
+	clearObj.Metadata.ResourceVersion = currentRV()
+	clearObj.Metadata.Finalizers = nil
+	clearObj.Metadata.DeletionTimestamp = nil
+	if err := backend.Update(ctx, testKind, testNS, testName, clearObj); err != nil {
+		t.Fatalf("Update clearing finalizer failed: %v", err)
+	}
+
+	if dt := deletionTimestamp(); dt == nil {
+		t.Error("expected deletion_timestamp to be preserved by COALESCE after an update that omitted it")
 	}
 
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)

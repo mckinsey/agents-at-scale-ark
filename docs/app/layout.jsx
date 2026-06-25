@@ -3,6 +3,7 @@ import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import 'nextra-theme-docs/style.css'
 import './globals.css'
+import SidebarActiveSync from './sidebar-active-sync'
  
 export const metadata = {
   // Define your metadata here
@@ -36,13 +37,14 @@ export default async function RootLayout({ children }) {
         {/* Your additional tags should be passed as `children` of `<Head>` element */}
       </Head>
       <body>
+        <SidebarActiveSync />
         <Layout
           navbar={navbar}
           pageMap={await getPageMap()}
           docsRepositoryBase="https://github.com/mckinsey/agents-at-scale-ark/tree/main/docs"
           footer={footer}
           sidebar={{
-            defaultMenuCollapseLevel: 1,
+            defaultMenuCollapseLevel: 6,
             autoCollapse: false
           }}
           // ... Your additional layout options

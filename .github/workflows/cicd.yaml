@@ -76,7 +76,9 @@ jobs:
           cp ark/config/crd/bases/*.yaml ark/internal/apiserver/crds/
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Export uv lockfiles to requirements.txt for Xray
         shell: bash
@@ -243,7 +245,9 @@ jobs:
             tools/fark/go.sum
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -254,7 +258,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - run: make -j24 services-build-all
 
@@ -294,14 +298,20 @@ jobs:
             dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
+            install-uv: true
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
+            install-uv: true
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
+          - path: services/ark-broker/ark-broker
+            image: ark-broker-migrate
+            dockerfile: Dockerfile.migrate
           - path: services/ark-mcp
             image: ark-mcp
+            install-uv: true
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: tools/ark-cli
             image: ark-cli
@@ -320,7 +330,12 @@ jobs:
           path: out/
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        if: matrix.install-uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # Pinned to match the Dockerfile uv version and to skip setup-uv's
+          # "find latest" GitHub API lookup, which has stalled CI for minutes.
+          version: "0.11.21"
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -354,6 +369,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-broker
+          - ark-broker-migrate
           - ark-mcp
           - ark-cli
           - ark-tools
@@ -381,7 +397,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Build libraries
         run: make libs-build-all
@@ -593,6 +611,8 @@ jobs:
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
           ARK_MCP_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
           ARK_MCP_IMAGE_TAG: ${{ github.sha }}
+          ARK_DASHBOARD_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard
+          ARK_DASHBOARD_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -650,14 +670,36 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Warm up network connectivity
+        env:
+          AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
-          echo "Warming up egress network paths..."
+          echo "Warming up egress network paths to LLM providers..."
           for i in {1..5}; do
-            echo "Attempt $i: Testing connectivity to external APIs"
-            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            echo "Attempt $i:"
+            azure_ok=1
+            if [ -n "$AZURE_BASE_URL" ]; then
+              azure_ok=0
+              if curl -s -m 10 -o /dev/null "$AZURE_BASE_URL"; then
+                echo "✓ Azure OpenAI reachable"
+                azure_ok=1
+              else
+                echo "✗ Azure OpenAI unreachable (will retry)"
+              fi
+            fi
+            openai_ok=0
+            if curl -s -m 10 -o /dev/null "$OPENAI_BASE_URL"; then
+              echo "✓ OpenAI reachable"
+              openai_ok=1
+            else
+              echo "✗ OpenAI unreachable (will retry)"
+            fi
+            if [ "$azure_ok" = 1 ] && [ "$openai_ok" = 1 ]; then
+              echo "Network warm-up complete - LLM providers reachable"
+              break
+            fi
             sleep 3
           done
-          echo "Network warm-up complete - egress connectivity established"
 
       - name: Run multi-provider LLM tests
         env:
@@ -876,7 +918,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build and install ark-cli
         run: |
@@ -912,6 +954,17 @@ jobs:
           kubectl wait --for=condition=available -n ark-system --timeout=300s deployment/ark-controller
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+
+      - name: Deploy localhost-gateway
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
+          helm upgrade --install localhost-gateway services/localhost-gateway/chart \
+            --namespace ark-system \
+            --create-namespace \
+            --wait \
+            --timeout=10m
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ark-system --timeout=120s
+          kubectl wait --for=condition=Programmed gateway/localhost-gateway -n ark-system --timeout=120s
 
       - name: Install mock-llm
         run: |
@@ -1009,7 +1062,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build ARK CLI
         run: |
@@ -1072,6 +1125,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.2"
+          # Coverage tooling only; no project build, so module caching has no value here.
+          cache: false
 
       - name: Install Python coverage tools
         run: |
@@ -1312,6 +1367,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.2'
+          # goreleaser builds tools/fark; cache against its go.sum.
+          cache-dependency-path: tools/fark/go.sum
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
@@ -1379,12 +1436,11 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install published ark-cli from npm
         run: |

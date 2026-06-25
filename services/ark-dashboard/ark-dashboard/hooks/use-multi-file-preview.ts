@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
+import { apiUrl } from '@/lib/api/config';
 import { filesApiClient } from '@/lib/api/files-client';
 import {
   getLanguageFromExtension,
@@ -107,7 +108,7 @@ export function useMultiFilePreview() {
           const base64Content = await base64Promise;
 
           // Call the API endpoint
-          const apiResponse = await fetch('/api/v1/file-preview/spreadsheet', {
+          const apiResponse = await fetch(apiUrl('/api/v1/file-preview/spreadsheet'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

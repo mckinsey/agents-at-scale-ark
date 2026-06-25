@@ -72,9 +72,8 @@ spec:
         name: overrides-test-query
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     catch:
     - events: {}
     - describe:
@@ -91,7 +90,6 @@ spec:
           metadata:
             name: overrides-test-query
           status:
-            (response != null): true
             (response.target.name): 'overrides-test-agent'
     - script:
         env:
@@ -138,9 +136,8 @@ spec:
         name: overrides-test-query-tool
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     - script:
         env:
         - name: NAMESPACE

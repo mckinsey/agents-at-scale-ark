@@ -1,6 +1,6 @@
 {
   "name": "@agents-at-scale/ark",
-  "version": "0.1.64-rc.1",
+  "version": "0.1.65",
   "description": "Ark CLI - Interactive terminal interface for ARK agents",
   "main": "dist/index.js",
   "type": "module",
@@ -88,12 +88,14 @@
     "brace-expansion": ">=5.0.6",
     "minimatch": "^10.2.3",
     "rollup": "4.59.0",
-    "hono": "^4.12.18",
+    "hono": "^4.12.25",
     "@hono/node-server": "^1.19.13",
     "flatted": "^3.4.2",
     "tar": "^7.5.11",
     "express-rate-limit": "^8.3.0",
     "fast-uri": "^3.1.1",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0",
+    "esbuild": "^0.28.1",
+    "form-data": "^4.0.6"
   }
 }

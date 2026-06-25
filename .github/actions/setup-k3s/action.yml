@@ -25,7 +25,9 @@ inputs:
   k3s-version:
     description: K3S version (https://github.com/rancher/k3s/releases)
     required: false
-    default: ""
+    # Pinned to avoid intermittent failures resolving the "stable" channel via
+    # update.k3s.io, which the upstream install script does not handle gracefully.
+    default: "v1.35.5+k3s1"
   k3s-channel:
     description: K3S channel (https://update.k3s.io/v1-release/channels)
     required: false
@@ -146,6 +148,38 @@ runs:
         sudo cat /etc/rancher/k3s/k3s.yaml > "$HOME/.kube/config"
         chmod 600 "$HOME/.kube/config"
         echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+        echo "::endgroup::"
+      shell: bash
+
+    # Wait for k3s to finish creating the bootstrap RBAC the cloud-controller
+    # manager needs before we apply anything on top of it. If we don't, the
+    # cloud-controller can race against its own rolebinding, hit a 403 reading
+    # kube-system/extension-apiserver-authentication, treat that as fatal, and
+    # take the rest of k3s down with it mid-calico-rollout. Symptom: calico-node
+    # never goes ready and every follow-up kubectl call returns "connection to
+    # 127.0.0.1:6443 was refused".
+    - name: Wait for k3s bootstrap RBAC
+      run: |
+        echo "::group::Wait for k3s bootstrap RBAC"
+        # Probe the actual auth chain (rolebinding + configmap + apiserver
+        # cache) instead of pattern-matching resource names; the rolebinding
+        # the cloud-controller uses has been renamed across k3s versions.
+        for attempt in $(seq 1 24); do
+          if kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+               --as=k3s-cloud-controller-manager >/dev/null 2>&1; then
+            echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
+            break
+          fi
+          echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          sleep 2
+          if [ "$attempt" -eq 24 ]; then
+            echo "Timed out waiting for k3s bootstrap RBAC"
+            kubectl -n kube-system get rolebinding,configmap || true
+            kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+              --as=k3s-cloud-controller-manager -v=6 || true
+            exit 1
+          fi
+        done
         echo "::endgroup::"
       shell: bash
 

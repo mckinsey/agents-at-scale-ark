@@ -65,8 +65,12 @@ export function createMemoryRouter(
         sendValidationError(res, parse.error, req.id);
         return;
       }
-      const {conversation_id, query_id, messages}: PostMessagesBody =
-        parse.data;
+      const {
+        conversation_id,
+        query_id,
+        messages,
+        ttl_seconds,
+      }: PostMessagesBody = parse.data;
 
       try {
         req.log.info(
@@ -78,7 +82,12 @@ export function createMemoryRouter(
           'received messages'
         );
 
-        await memory.addMessages(conversation_id, query_id, messages);
+        await memory.addMessages(
+          conversation_id,
+          query_id,
+          messages,
+          ttl_seconds
+        );
         await memory.save();
 
         if (sessions && conversation_id) {
@@ -324,6 +333,59 @@ export function createMemoryRouter(
         status: 'success',
         message: `Query ${queryId} messages deleted from conversation ${conversationId}`,
       });
+    }
+  );
+
+  /**
+   * @swagger
+   * /queries/{queryId}/messages:
+   *   delete:
+   *     summary: Delete all messages for a specific query
+   *     description: Removes all messages for a specific query across all conversations
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: queryId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Query ID to delete messages for
+   *     responses:
+   *       200:
+   *         description: Query messages deleted successfully
+   *       400:
+   *         description: Invalid query ID
+   *       500:
+   *         description: Failed to delete query messages
+   */
+  router.delete<{queryId: string}>(
+    '/queries/:queryId/messages',
+    async (req, res) => {
+      const {queryId} = req.params;
+
+      if (!queryId) {
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Query ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
+        return;
+      }
+
+      try {
+        req.log.info({queryId}, 'deleting messages for query');
+        await memory.deleteByQuery(queryId);
+        res.json({
+          status: 'success',
+          message: `Query ${queryId} messages deleted`,
+        });
+      } catch (error) {
+        req.log.error({err: error}, 'failed to delete query messages');
+        sendInternalError(res, req.id);
+      }
     }
   );
 

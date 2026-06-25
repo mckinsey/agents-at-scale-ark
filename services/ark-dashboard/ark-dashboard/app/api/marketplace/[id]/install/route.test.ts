@@ -11,12 +11,12 @@ vi.mock('node:child_process', () => {
   return { default: mod, ...mod };
 });
 
-vi.mock('@/lib/services/marketplace-fetcher', () => ({
+vi.mock('@/lib/services/marketplace-server', () => ({
   getRawMarketplaceItemById: vi.fn(),
 }));
 
 import { POST, DELETE } from './route';
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-server';
 
 const mockGetRawMarketplaceItemById = vi.mocked(getRawMarketplaceItemById);
 
@@ -69,7 +69,11 @@ function mockSpawnFailure(error: Error) {
 }
 
 function createRequest(url: string, options?: RequestInit) {
-  return new NextRequest(new URL(url, 'http://localhost'), options);
+  const parsed = new URL(url, 'http://localhost');
+  if (!parsed.searchParams.has('namespace')) {
+    parsed.searchParams.set('namespace', 'team-a');
+  }
+  return new NextRequest(parsed, options);
 }
 
 const baseItem = {
@@ -201,25 +205,8 @@ describe('POST /api/marketplace/[id]/install', () => {
     expect(data.arkCommand).toBe('ark install marketplace/executors/my-executor');
   });
 
-  it('should execute helm and return success in direct mode when helm available', async () => {
+  it('always returns command mode and never spawns helm, even when mode is not command', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'v3.12.0', stderr: '' });
-    mockSpawnSuccess({ stdout: 'release "phoenix" installed', stderr: '' });
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'direct' }),
-    });
-    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(data.status).toBe('installed');
-    expect(data.message).toBe('Successfully installed Phoenix');
-  });
-
-  it('should fall back to command response when helm not available in direct mode', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnFailure(new Error('helm not found'));
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -230,22 +217,7 @@ describe('POST /api/marketplace/[id]/install', () => {
 
     expect(data.status).toBe('command');
     expect(data.helmCommand).toBeDefined();
-  });
-
-  it('should fall back to command response when helm execution fails in direct mode', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'v3.12.0', stderr: '' });
-    mockSpawnFailure(new Error('helm install failed'));
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'direct' }),
-    });
-    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(data.status).toBe('command');
-    expect(data.helmCommand).toBeDefined();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('should default to command mode when request body is invalid', async () => {
@@ -272,36 +244,6 @@ describe('POST /api/marketplace/[id]/install', () => {
 
     expect(response.status).toBe(500);
     expect(data.error).toBe('Failed to install marketplace item');
-  });
-
-  it('should log stderr when helm produces non-WARNING stderr in direct mode', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'v3.12.0', stderr: '' });
-    mockSpawnSuccess({ stdout: 'installed', stderr: 'some error output' });
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'direct' }),
-    });
-    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(data.status).toBe('installed');
-  });
-
-  it('should not log stderr when it only contains WARNING in direct mode', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'v3.12.0', stderr: '' });
-    mockSpawnSuccess({ stdout: 'installed', stderr: 'WARNING: some warning' });
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'direct' }),
-    });
-    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(data.status).toBe('installed');
   });
 
   it('should reject invalid helmReleaseName', async () => {

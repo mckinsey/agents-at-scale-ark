@@ -17,6 +17,10 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
+import {
+  type ApiQueryParameter,
+  useAgentQueryParameters,
+} from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
@@ -43,6 +47,10 @@ interface UseChatSessionReturn {
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
   pollAfterApproval: () => Promise<void>;
+  requiredParameters: string[];
+  parameterValues: Record<string, string>;
+  setParameterValue: (name: string, value: string) => void;
+  missingParameters: string[];
 }
 
 export function useChatSession({
@@ -163,6 +171,14 @@ export function useChatSession({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
+  const {
+    requiredParameters,
+    values: parameterValues,
+    setValue: setParameterValue,
+    missingParameters,
+    toApiParameters,
+  } = useAgentQueryParameters(name, type);
+
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -199,7 +215,7 @@ export function useChatSession({
   } | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const messageArray = buildChatMessages(chatMessages, userMessage);
@@ -279,6 +295,7 @@ export function useChatSession({
           conversationId,
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
+          apiParameters,
         );
 
       queryName = streamQueryName;
@@ -651,7 +668,7 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -662,6 +679,7 @@ export function useChatSession({
         conversationId,
         undefined,
         queryTimeout,
+        apiParameters,
       );
 
       lastQueryName.current = query.name;
@@ -816,6 +834,18 @@ export function useChatSession({
     async (userMessage: string) => {
       setError(null);
 
+      if (missingParameters.length > 0) {
+        const plural = missingParameters.length > 1;
+        setError(
+          `This agent needs the ${missingParameters.join(', ')} parameter${
+            plural ? 's' : ''
+          } — supply ${plural ? 'them' : 'it'} above, or use the Queries form to create the query.`,
+        );
+        return;
+      }
+
+      const apiParameters = toApiParameters();
+
       trackEvent({
         name: 'chat_message_sent',
         properties: {
@@ -835,9 +865,9 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage);
+          await handleStreamChatResponse(userMessage, apiParameters);
         } else {
-          await handlePollChatResponse(userMessage);
+          await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -875,7 +905,9 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
+      missingParameters,
       name,
+      toApiParameters,
       type,
       updateChatMessages,
     ],
@@ -1146,5 +1178,9 @@ export function useChatSession({
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,
     pollAfterApproval,
+    requiredParameters,
+    parameterValues,
+    setParameterValue,
+    missingParameters,
   };
 }

@@ -1,7 +1,5 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {InMemoryStream} from './stream/in-memory-stream.js';
-import type {Stream} from './stream/stream.js';
-import type {Logger} from '@ark-broker/logging/logger.js';
+import type {MessageStream} from './stream/message-stream.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 export type Message = unknown;
@@ -13,33 +11,32 @@ export interface MessageData {
 }
 
 export class MemoryBroker {
-  private readonly stream: Stream<MessageData>;
+  private readonly stream: MessageStream;
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new InMemoryStream<MessageData>(
-      logger,
-      'Memory',
-      path,
-      maxItems
-    );
+  constructor(stream: MessageStream) {
+    this.stream = stream;
   }
 
   async addMessage(
     conversationId: string,
     queryId: string,
-    message: Message
+    message: Message,
+    ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>> {
-    return this.stream.append({conversationId, queryId, message});
+    return this.stream.append({conversationId, queryId, message}, ttlSeconds);
   }
 
   async addMessages(
     conversationId: string,
     queryId: string,
-    messages: Message[]
+    messages: Message[],
+    ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>[]> {
     const items: BrokerItem<MessageData>[] = [];
     for (const message of messages) {
-      items.push(await this.addMessage(conversationId, queryId, message));
+      items.push(
+        await this.addMessage(conversationId, queryId, message, ttlSeconds)
+      );
     }
     return items;
   }
@@ -86,6 +83,10 @@ export class MemoryBroker {
         item.data.conversationId === conversationId &&
         item.data.queryId === queryId
     );
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    return this.stream.deleteByQuery(queryId);
   }
 
   subscribe(callback: (item: BrokerItem<MessageData>) => void): () => void {
