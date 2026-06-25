@@ -4,6 +4,9 @@ image:
 
 password: arkredisdev123
 
+tls:
+  enabled: false
+
 resources:
   requests:
     memory: "128Mi"

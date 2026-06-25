@@ -21,6 +21,20 @@ spec:
             - redis-server
             - --requirepass
             - $(REDIS_PASSWORD)
+            {{- if .Values.tls.enabled }}
+            - --tls-port
+            - "6379"
+            - --port
+            - "0"
+            - --tls-cert-file
+            - /etc/redis-tls/tls.crt
+            - --tls-key-file
+            - /etc/redis-tls/tls.key
+            - --tls-ca-cert-file
+            - /etc/redis-tls/ca.crt
+            - --tls-auth-clients
+            - "no"
+            {{- end }}
           ports:
             - containerPort: 6379
           env:
@@ -29,5 +43,17 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-password
                   key: password
+          {{- if .Values.tls.enabled }}
+          volumeMounts:
+            - name: redis-tls
+              mountPath: /etc/redis-tls
+              readOnly: true
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.tls.enabled }}
+      volumes:
+        - name: redis-tls
+          secret:
+            secretName: {{ .Release.Name }}-tls
+      {{- end }}
