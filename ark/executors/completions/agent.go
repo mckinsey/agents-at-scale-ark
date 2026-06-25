@@ -74,6 +74,12 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 		if signalResult, handled := a.handleSignalError(ctx, span, result, err, operationData); handled {
 			return signalResult, nil
 		}
+		var approvalErr *ApprovalRequiredError
+		if errors.As(err, &approvalErr) {
+			a.telemetryRecorder.RecordSuccess(span)
+			a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution paused for tool approval", operationData)
+			return result, err
+		}
 		a.telemetryRecorder.RecordError(span, err)
 		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
 		return nil, err

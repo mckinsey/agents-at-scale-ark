@@ -6,11 +6,40 @@ import (
 	"time"
 
 	"github.com/openai/openai-go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
+
+// recordingAgentRecorder captures operation lifecycle calls for assertions.
+type recordingAgentRecorder struct {
+	completes []string
+	fails     []string
+}
+
+func (r *recordingAgentRecorder) InitializeQueryContext(ctx context.Context, _ *arkv1alpha1.Query) context.Context {
+	return ctx
+}
+
+func (r *recordingAgentRecorder) Start(ctx context.Context, _, _ string, _ map[string]string) context.Context {
+	return ctx
+}
+
+func (r *recordingAgentRecorder) Complete(_ context.Context, operation, _ string, _ map[string]string) {
+	r.completes = append(r.completes, operation)
+}
+
+func (r *recordingAgentRecorder) Cancel(_ context.Context, _, _ string, _ map[string]string) {}
+
+func (r *recordingAgentRecorder) Fail(_ context.Context, operation, _ string, _ error, _ map[string]string) {
+	r.fails = append(r.fails, operation)
+}
+
+func (r *recordingAgentRecorder) DependencyUnavailable(_ context.Context, _ runtime.Object, _ string) {
+}
 
 func TestRequiresApproval(t *testing.T) {
 	timeout := metav1.Duration{Duration: 5 * time.Minute}
@@ -361,4 +390,48 @@ func TestRejectionCreatesErrorResults(t *testing.T) {
 		require.Equal(t, "Tool execution rejected by user", result.Error, "Should have rejection error message")
 		require.Empty(t, result.Content, "Content should be empty for rejected tools")
 	}
+}
+
+// TestAgentExecute_ApprovalDoesNotEmitErrorEvent verifies that pausing for tool
+// approval emits a normal completion event, not an AgentExecution error event.
+// Emitting an error here previously caused the broker to record the query as
+// failed (errorCount=1) even after the approved query completed successfully.
+func TestAgentExecute_ApprovalDoesNotEmitErrorEvent(t *testing.T) {
+	provider := &mockChatProvider{
+		response: &openai.ChatCompletion{
+			ID:    "cmpl-1",
+			Model: "test-model",
+			Choices: []openai.ChatCompletionChoice{
+				{
+					Message: openai.ChatCompletionMessage{
+						Role: "assistant",
+						ToolCalls: []openai.ChatCompletionMessageToolCall{
+							{
+								ID: "call-1",
+								Function: openai.ChatCompletionMessageToolCallFunction{
+									Name:      "dangerous-tool",
+									Arguments: "{}",
+								},
+							},
+						},
+					},
+					FinishReason: "tool_calls",
+				},
+			},
+		},
+	}
+
+	rec := &recordingAgentRecorder{}
+	agent := newTestAgent("approval-agent", provider)
+	agent.eventingRecorder = rec
+	agent.approvalRequiredTools = map[string]*arkv1alpha1.ToolApprovalConfig{
+		"dangerous-tool": {Required: true},
+	}
+
+	_, err := agent.Execute(context.Background(), NewUserMessage("do it"), nil, nil, nil, ExecuteOptions{})
+
+	var approvalErr *ApprovalRequiredError
+	require.ErrorAs(t, err, &approvalErr, "Execute should propagate ApprovalRequiredError")
+	assert.Contains(t, rec.completes, "AgentExecution", "approval pause should emit a completion event")
+	assert.NotContains(t, rec.fails, "AgentExecution", "approval pause must not emit an error event")
 }

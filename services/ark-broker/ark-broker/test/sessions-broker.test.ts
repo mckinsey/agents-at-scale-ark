@@ -142,6 +142,31 @@ describe('SessionsBroker', () => {
       expect(query.error).toBe('something broke');
     });
 
+    test('clears error phase when query later completes (HITL approval)', () => {
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'AgentExecutionError',
+        error: 'approval required for 1 tool call(s)',
+      });
+
+      let session = broker.getSession('sess-1')!;
+      expect(session.queries['query-1'].phase).toBe('error');
+      expect(session.errorCount).toBe(1);
+
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      session = broker.getSession('sess-1')!;
+      expect(session.queries['query-1'].phase).toBe('done');
+      expect(session.queries['query-1'].error).toBeUndefined();
+      expect(session.errorCount).toBe(0);
+      expect(session.status).toBe('idle');
+    });
+
     test('ignores events without sessionId', () => {
       broker.applyEvent({
         queryName: 'query-1',
