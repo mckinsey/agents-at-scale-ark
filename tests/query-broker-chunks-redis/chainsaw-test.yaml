@@ -5,7 +5,7 @@ metadata:
   labels:
     requires-images: "true"
 spec:
-  description: Completion chunks are stored and served from Redis Streams when backends.chunk=redis
+  description: Completion chunks stored in Redis Streams; cross-replica fan-out verified with 2 replicas
   steps:
   - name: setup-redis-and-broker
     try:
@@ -20,6 +20,7 @@ spec:
             --namespace $NAMESPACE \
             ${ARK_BROKER_IMAGE:+--set app.image.repository=${ARK_BROKER_IMAGE}} \
             ${ARK_BROKER_IMAGE_TAG:+--set app.image.tag=${ARK_BROKER_IMAGE_TAG}} \
+            --set replicaCount=2 \
             --set backends.chunk=redis \
             --set "redis.url=redis://:arkredisdev123@ark-redis-dev:6379" \
             --set restartController.enabled=false \
@@ -117,6 +118,55 @@ spec:
           echo "chunk response: $RESULT"
           [ -n "$RESULT" ] || { echo "empty response from chunk endpoint"; exit 1; }
           echo "$RESULT" | grep -q '"complete"' || { echo "no complete marker in chunk stream"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  - name: verify-cross-replica
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          POD_A=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | awk 'NR==1')
+          POD_B=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | awk 'NR==2')
+
+          if [ -z "$POD_A" ] || [ -z "$POD_B" ]; then
+            echo "Need 2 broker pods, got A='$POD_A' B='$POD_B'"
+            exit 1
+          fi
+          echo "Writing to $POD_A, reading from $POD_B"
+
+          cat > /tmp/xreplica-write.mjs << 'NODEEOF'
+          import http from 'http';
+          const post = (path, body, ct) => new Promise((ok, err) => {
+            const h = {'Content-Length': String(Buffer.byteLength(body))};
+            if (ct) h['Content-Type'] = ct;
+            const r = http.request(
+              {hostname: 'localhost', port: 8080, path, method: 'POST', headers: h},
+              res => { res.resume(); res.on('end', ok); }
+            );
+            r.on('error', err);
+            r.end(body);
+          });
+          const chunk = JSON.stringify({choices: [{delta: {content: 'xreplica'}}]}) + '\n';
+          await post('/stream/xreplica-q', chunk, 'application/x-ndjson');
+          await post('/stream/xreplica-q/complete', '');
+          console.log('wrote chunk+complete to replica A');
+          NODEEOF
+
+          kubectl cp /tmp/xreplica-write.mjs $NAMESPACE/$POD_A:/tmp/xreplica-write.mjs
+          kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-write.mjs
+
+          RESULT=$(kubectl exec -n $NAMESPACE $POD_B -- \
+            wget -qO- "http://localhost:8080/stream/xreplica-q" 2>&1)
+          echo "Read from replica B ($POD_B): $RESULT"
+          [ -n "$RESULT" ] || { echo "empty response from replica B"; exit 1; }
+          echo "$RESULT" | grep -q '"complete"' || { echo "no complete marker on replica B"; exit 1; }
+          echo "Cross-replica verified: written to $POD_A, read from $POD_B"
         env:
         - name: NAMESPACE
           value: ($namespace)
