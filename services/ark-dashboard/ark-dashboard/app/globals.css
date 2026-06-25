@@ -7,6 +7,47 @@
 /* Radius mode variant - for rounded corners (sharp is default) */
 @custom-variant radius-mode (&:where(.radius-mode, .radius-mode *));
 
+/* Subtle, auto-hiding native scrollbars app-wide — match the Radix ScrollArea bar
+   (thin, fg-tertiary, rounded). Hidden at rest; revealed when the scroll container
+   (or an ancestor under the pointer) is hovered/focused, mimicking Radix
+   type="hover". Radix ScrollArea viewports hide the native scrollbar themselves via
+   a higher-specificity rule, so they keep their own styled bar and are unaffected. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover,
+*:focus-within {
+  scrollbar-color: color-mix(in oklab, var(--color-fg-tertiary) 40%, transparent)
+    transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+  background-color: transparent;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--color-fg-tertiary) 40%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--color-fg-tertiary) 60%, transparent);
+}
+
 @theme inline {
   /** Font Tokens */
   --font-display: 'Inter';

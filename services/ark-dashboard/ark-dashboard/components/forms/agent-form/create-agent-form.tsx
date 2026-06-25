@@ -279,7 +279,6 @@ export function CreateAgentForm({
                   side="bottom"
                   align="start"
                   sideOffset={4}
-                  avoidCollisions={false}
                   collisionPadding={8}
                   role="listbox"
                   aria-multiselectable="true"

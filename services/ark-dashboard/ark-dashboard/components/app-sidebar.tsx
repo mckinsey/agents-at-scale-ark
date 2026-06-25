@@ -16,7 +16,6 @@ import {
   Bedtime,
   Dashboard,
   Database,
-  Dns,
   Earthquake,
   Handyman,
   Help,
@@ -435,16 +434,6 @@ export function AppSidebar() {
                   tooltip="A2A">
                   <PlaylistAddCheck />
                   <span>A2A</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('services')}
-                  isActive={getCurrentSection() === 'services'}
-                  tooltip="ARK Services">
-                  <Dns />
-                  <span>ARK Services</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
