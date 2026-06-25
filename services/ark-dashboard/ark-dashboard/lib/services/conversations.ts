@@ -3,6 +3,7 @@ import type { ChatMessage } from '@/lib/types/chat-message';
 import type { BrokerSession, ConversationSummary } from './broker-sessions';
 import { logsService } from './logs';
 import { chatService } from './chat';
+import type { QueryParameter } from './chat';
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
 
@@ -91,6 +92,7 @@ export const conversationsService = {
     sessionId: string;
     agentName: string;
     participantType?: ParticipantType;
+    parameters?: QueryParameter[];
   }): Promise<void> {
     const targetName = params.agentName.includes('/')
       ? params.agentName.split('/').pop() || params.agentName
@@ -101,7 +103,10 @@ export const conversationsService = {
       params.participantType || 'agent',
       targetName,
       params.sessionId,
-      params.conversationId
+      params.conversationId,
+      undefined,
+      undefined,
+      params.parameters
     );
   },
 

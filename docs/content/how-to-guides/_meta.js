@@ -28,25 +28,13 @@ export default {
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-selector-strategy'
+    href: '/user-guide/samples/teams/github-team'
   },
   
   '---extend': { type: 'separator', title: 'Advanced use' },
-  'local-development': {
-    title: 'Build and run locally',
-    href: '/developer-guide/local-development'
-  },
   marketplace: {
     title: 'Publish to the Marketplace',
     href: '/developer-guide/marketplace'
-  },
-  build: {
-    title: 'Build system overview',
-    href: '/developer-guide/build'
-  },
-  services: {
-    title: 'Implement APIs and services',
-    href: '/developer-guide/services'
   },
   'a2a-servers': {
     title: 'Build A2A servers',
@@ -56,15 +44,29 @@ export default {
     title: 'Add workflows',
     href: '/developer-guide/workflows'
   },
-  testing: {
-    title: 'End to end testing',
-    href: '/developer-guide/testing'
-  },
   observability: {
     title: 'Observability',
     href: '/developer-guide/observability'
   },
-  
+
+  '---develop': { type: 'separator', title: 'Develop ARK' },
+  'local-development': {
+    title: 'Build and run locally',
+    href: '/developer-guide/local-development'
+  },
+  build: {
+    title: 'Build system overview',
+    href: '/developer-guide/build'
+  },
+  services: {
+    title: 'Implement APIs and services',
+    href: '/developer-guide/services'
+  },
+  testing: {
+    title: 'End to end testing',
+    href: '/developer-guide/testing'
+  },
+
   '---operate': { type: 'separator', title: 'Operate ARK (operators / SRE)' },
   provisioning: {
     title: 'Cloud infrastructure',
@@ -77,6 +79,10 @@ export default {
   'multi-tenant-dashboard': {
     title: 'Host the dashboard for multiple namespaces',
     href: '/operations-guide/multi-tenant-dashboard-hosting'
+  },
+  'tenant-namespaces': {
+    title: 'Manage tenants and namespaces',
+    href: '/operations-guide/tenant-namespace-management'
   },
   'operate-marketplace': {
     title: 'Marketplace',
@@ -97,6 +103,10 @@ export default {
   'artifact-analysis': {
     title: 'Artifact analysis',
     href: '/operations-guide/artifact-analysis-reports'
+  },
+  'data-flow': {
+    title: 'Data flow and encryption',
+    href: '/operations-guide/data-flow-and-encryption'
   }
 }
 

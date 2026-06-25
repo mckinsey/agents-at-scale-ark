@@ -1,8 +1,8 @@
 export default {
   index: 'Introduction',
   quickstart: 'Quickstart',
-  'how-to-guides': 'How-to Guides',
   'core-concepts': 'Core Concepts',
+  'how-to-guides': 'How-to Guides',
   tutorials: 'Tutorials',
   reference: 'Reference',
   
