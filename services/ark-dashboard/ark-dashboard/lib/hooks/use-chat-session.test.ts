@@ -3,7 +3,7 @@ import { Provider } from 'jotai';
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { chatService } from '@/lib/services';
+import { agentsService, chatService } from '@/lib/services';
 
 import { useChatSession } from './use-chat-session';
 
@@ -15,6 +15,9 @@ vi.mock('@/lib/services', () => ({
     getQuery: vi.fn(),
     submitChatQuery: vi.fn(),
     cancelQuery: vi.fn(),
+  },
+  agentsService: {
+    getByName: vi.fn(),
   },
 }));
 
@@ -35,6 +38,7 @@ describe('useChatSession - Approval Handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
+    vi.mocked(agentsService.getByName).mockResolvedValue(null);
   });
 
   describe('Tool Approval Detection', () => {
