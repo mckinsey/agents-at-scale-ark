@@ -5,6 +5,17 @@ import type {CompletionChunkData} from '../../chunk-stream.js';
 const textChunk = {choices: [{delta: {content: 'hello'}}]};
 const finishChunk = {choices: [{finish_reason: 'stop'}]};
 
+async function waitUntilLength(
+  arr: unknown[],
+  expected: number,
+  timeoutMs = 3000
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (arr.length < expected && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 export function runChunkStreamContract(factory: () => ChunkStream): void {
   let stream: ChunkStream;
 
@@ -82,6 +93,7 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
       await stream.appendChunk('q1', textChunk);
       await stream.appendChunk('q2', finishChunk);
 
+      await waitUntilLength(received, 1);
       expect(received).toHaveLength(1);
       expect(received[0]).toEqual(textChunk);
     });
@@ -95,6 +107,7 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
       await stream.appendChunk('q1', textChunk);
       await stream.completeQuery('q1');
 
+      await waitUntilLength(flags, 2);
       expect(flags).toHaveLength(2);
       expect(flags[1]).toBe(true);
     });
@@ -108,9 +121,11 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
       );
 
       await stream.appendChunk('q1', textChunk);
+      await waitUntilLength(received, 1);
       unsub();
       await stream.appendChunk('q1', finishChunk);
 
+      await new Promise((r) => setTimeout(r, 100));
       expect(received).toHaveLength(1);
     });
   });
@@ -125,6 +140,7 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
       await stream.appendChunk('q1', textChunk);
       await stream.appendChunk('q2', finishChunk);
 
+      await waitUntilLength(received, 2);
       expect(received).toEqual(['q1', 'q2']);
     });
 
@@ -136,9 +152,11 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
       );
 
       await stream.appendChunk('q1', textChunk);
+      await waitUntilLength(received, 1);
       unsub();
       await stream.appendChunk('q1', finishChunk);
 
+      await new Promise((r) => setTimeout(r, 100));
       expect(received).toHaveLength(1);
     });
   });
