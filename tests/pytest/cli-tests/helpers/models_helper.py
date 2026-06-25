@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from helpers import k8s
+
 
 class ModelsHelper:
     NAMESPACE = "default"
@@ -30,18 +32,8 @@ class ModelsHelper:
             return False, "", str(e)
 
     def _apply_yaml(self, resource: Dict[str, Any]) -> Tuple[bool, str]:
-        try:
-            yaml_str = yaml.safe_dump(resource, default_flow_style=False)
-            result = subprocess.run(
-                ["kubectl", "apply", "-f", "-"],
-                input=yaml_str,
-                capture_output=True,
-                text=True,
-                timeout=self.TIMEOUT_CREATE,
-            )
-            return result.returncode == 0, result.stderr if result.returncode != 0 else result.stdout
-        except Exception as e:
-            return False, str(e)
+        yaml_str = yaml.safe_dump(resource, default_flow_style=False)
+        return k8s.apply_yaml(yaml_str, timeout=self.TIMEOUT_CREATE)
 
     def create_secret(self, name: str, token: str) -> Tuple[bool, str]:
         encoded = base64.b64encode(token.encode()).decode()
