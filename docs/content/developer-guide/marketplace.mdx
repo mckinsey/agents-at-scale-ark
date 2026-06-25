@@ -59,18 +59,49 @@ Open **Settings → Manage marketplace**. The default Ark marketplace appears at
 
 ![Manage marketplace screen with the default Ark source](/marketplace/sources.png)
 
-Click **Add new marketplace** to register a new one:
+Click **Add new marketplace** to register a new one. This example adds a **public** source — leave **Authentication** on **None**; the authenticated case is covered right after, in [Add an authenticated source](#add-an-authenticated-source).
 
-![Add new marketplace form](/marketplace/add-source.png)
+![Add new marketplace form for a public source](/marketplace/add-source.png)
 
 | Field | Notes |
 | --- | --- |
 | **Marketplace JSON URL** | Required. HTTPS URL that returns a JSON manifest in the [schema below](#marketplacejson-schema). Common pattern: `https://raw.githubusercontent.com/<org>/<repo>/main/marketplace.json`. |
 | **Display name** | Optional label shown in the sidebar and item cards. Defaults to the `marketplace` field inside the manifest. |
+| **Authentication** | Leave on **None** for a public manifest — ark-api fetches it with no `Authorization` header, and the **Token** field stays empty. For a private source, see [Add an authenticated source](#add-an-authenticated-source) below. |
 
-Hit **Add**. The dashboard `POST`s the URL to its own `/api/marketplace/validate` endpoint, which fetches it server-side and confirms the manifest is well-formed before the source is saved. On the next reload of the Marketplace tab you'll see the new items alongside the defaults.
+Hit **Add**. The dashboard checks the URL format, then sends the source to ark-api, which validates the URL and saves it to the namespace's `marketplace-sources` ConfigMap. 
+(For an authenticated source, ark-api also test-fetches the manifest with the credential before saving — see [Add an authenticated source](#add-an-authenticated-source).) 
+On the next reload of the Marketplace tab you'll see the new items alongside the defaults.
 
 The **Refresh Data** button at the top of the Manage marketplace page re-pulls every source on demand without a page reload.
+
+### Add an authenticated source
+
+If the manifest sits behind authentication — a private GitHub/GHES repo, an Azure DevOps repo, or an authenticated artifact store — the **Add new marketplace** form exposes an **Authentication** selector and a **Token** field:
+
+![Add new marketplace form with an authentication scheme and token](/marketplace/auth-source.png)
+
+| Field | What it does |
+| --- | --- |
+| **Marketplace JSON URL** | Required. HTTPS URL of the manifest. |
+| **Display name** | Optional label shown in the sidebar and item cards. |
+| **Authentication** | How ark-api authenticates the fetch. **None** — public source, no header. **Bearer / token** — sends `Authorization: Bearer <token>`; use for GitHub raw, GitHub Enterprise, and most artifact stores (Artifactory, Nexus, Harbor). **HTTP Basic (Azure DevOps)** — sends `Authorization: Basic …` with an empty username and the token as the password, the format Azure DevOps Repos expects. |
+| **Token** | The credential for the chosen scheme. Sent once on save, masked in the field, validated against the manifest before the source is saved, and never displayed again. |
+
+Pick the scheme your host expects — **Bearer / token** for GitHub-style hosts, **HTTP Basic** for Azure DevOps — paste the token, and hit **Add**. ark-api stores the token in a Kubernetes Secret and attaches the header server-side, so the browser never holds it. For who is allowed to use a shared authenticated source and the security model, see [Authenticated sources](#authenticated-sources).
+
+#### Finding the manifest URL on your host
+
+The URL must return the raw manifest bytes, not an HTML file-viewer page.
+
+- **GitHub** — open the file and click **Raw**, then copy the address: `https://raw.githubusercontent.com/<org>/<repo>/<branch>/marketplace.json` (private repos need a **Bearer / token** credential).
+- **Azure DevOps Repos** — there is no "Raw" button. Use the Items API, which returns raw content when you pass `$format=text`:
+
+  ```
+  https://dev.azure.com/<org>/<project>/_apis/git/repositories/<repo>/items?path=/marketplace.json&api-version=7.1&$format=text
+  ```
+
+  Without `$format=text` the endpoint returns file *metadata* instead of the manifest. For a non-default branch, append `&versionDescriptor.version=<branch>&versionDescriptor.versionType=branch`. Use **HTTP Basic** auth with a PAT scoped to **Code: Read**.
 
 ## `marketplace.json` schema
 
@@ -105,11 +136,13 @@ A minimal valid manifest looks like this:
 
 The chart this points at should bundle the `Agent` CRD (and any `Model`, `Tool`, or `MCPServer` resources the agent depends on) so that one `helm install` produces a working, queryable agent.
 
-The dashboard's manifest validator (`/api/marketplace/validate`) enforces three rules:
+A well-formed manifest follows three rules:
 
 - The top-level object must have `version`, `marketplace`, and `items[]` keys.
 - Every item must have at least a `name`.
 - The whole document must be valid JSON returned with HTTP 200.
+
+These describe what a valid manifest needs; they are not a save-time gate. ark-api stores the source once the URL validates, and a malformed or unreachable manifest surfaces as missing or broken items when the catalogue is fetched (an authenticated source is the exception — its manifest is test-fetched with the credential before saving).
 
 Beyond that, populate the optional fields for a good catalog entry:
 
@@ -132,19 +165,19 @@ Only the manifest itself sits on a critical path.
 
 | Field | Fetched by | Hosting requirement |
 | --- | --- | --- |
-| The manifest URL | **Dashboard pod**, server-side, no `Authorization` header | Must be reachable from the cluster and return the manifest without authentication. |
+| The manifest URL | **ark-api**, server-side | Must be reachable from the cluster. Anonymous by default; a source can carry a credential for authenticated fetch (see [Authenticated sources](#authenticated-sources)). |
 | `ark.chartPath` (OCI) | **The user's local `helm` CLI** | Doesn't have to be public. If the registry is private, users run `helm registry login` first. Public OCI registries just remove that step. |
 
-"Reachable" doesn't mean internet-public — it just means **the dashboard pod can `GET` the URL and the server returns the manifest without an `Authorization` header**. Common patterns:
+"Reachable" doesn't mean internet-public — it just means **ark-api can `GET` the URL from the cluster**, either anonymously or with a configured credential (see [Authenticated sources](#authenticated-sources)). Common anonymous patterns:
 
 - **Public HTTPS** — e.g. `https://raw.githubusercontent.com/{owner}/{repo}/{branch}/marketplace.json` for a public GitHub repo. Anyone on the internet, including the dashboard pod, can fetch it.
 - **Internal GitHub Enterprise Server** — a repo on a corp-network GHES instance with anonymous read enabled. The cluster needs network routing to the GHES host.
 - **Internal artifact repo** — Artifactory / Nexus / Harbor serving the file at a static URL with anonymous read enabled, reachable from the cluster.
 - **In-cluster `ConfigMap` + nginx (or similar)** — the manifest lives in a `ConfigMap`, an in-cluster `Service` serves it at `http://marketplace.my-ns.svc.cluster.local/marketplace.json`. Zero internet egress required — ideal for air-gapped installs.
 
-> `raw.githubusercontent.com` is GitHub's host for raw file contents in **public** repos. A file at `https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}` is fetchable by anyone over HTTPS with no auth, which makes it a low-effort way to publish a manifest without setting up GitHub Pages or a CDN. Private repos return 404 from this host because the dashboard doesn't authenticate.
+> `raw.githubusercontent.com` is GitHub's host for raw file contents in **public** repos. A file at `https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}` is fetchable by anyone over HTTPS with no auth, which makes it a low-effort way to publish a manifest without setting up GitHub Pages or a CDN. Private repos return 404 from this host for anonymous fetches; to use one, register the source with a credential (see [Authenticated sources](#authenticated-sources)).
 
-Practical implication: for a fully-internal marketplace, you need exactly one URL the dashboard pod can fetch without auth — the manifest. Charts can live in your private OCI registry.
+Practical implication: for a fully-internal marketplace, you need exactly one URL the dashboard pod can fetch — the manifest, anonymously or with a credential. Charts can live in your private OCI registry.
 
 ## Publish your own marketplace items
 
@@ -156,14 +189,29 @@ To make a new item installable from the dashboard:
 
 The official marketplace publishes via [GitHub Actions on push to `main`](https://github.com/mckinsey/agents-at-scale-marketplace) — use that repo's workflows as a starting point for your own pipeline.
 
+## Authenticated sources
+
+A source whose manifest needs authentication can carry a credential. ark-api attaches the header server-side; the credential is stored in a Kubernetes Secret, never shown in the browser, and never logged. Two schemes are supported:
+
+- **Bearer / token** — private GitHub raw, GitHub Enterprise Server, and artifact stores (Artifactory, Nexus, Harbor).
+- **HTTP Basic** — Azure DevOps Repos (empty username + a Personal Access Token).
+
+To add one from the dashboard, see [Add an authenticated source](#add-an-authenticated-source) above.
+
+### Who can use it
+
+ark-api reads the credential Secret under **your** identity, so you can only use a source whose credential Secret you are allowed to read. A shared authenticated
+source resolves only for users granted `get` on its credential Secret — typically a viewer-group `RoleBinding`. A user without that access sees an "authentication failed" error for the source instead of its items. 
+Editing a source's URL requires re-entering the credential.
+
+For the ConfigMap/Secret shapes, RBAC, and deploy-time seeding via Helm, see [Marketplace Sources](/reference/marketplace-sources).
+
 ## Limitations
 
 Things the Marketplace tab does **not** do today. Track these before relying on it for production rollout:
 
 - **No in-dashboard install.** Clicking **Get** generates a terminal command; the user still has to paste and run it in a shell with `kubectl` configured. There's no progress bar or status tracking for in-progress installs.
-- **Source list is cluster-backed and RBAC-governed.** Sources live in a per-namespace `marketplace-sources` ConfigMap fronted by ark-api, shared across users of the namespace and seeded at deploy time via Helm. Editing requires the `marketplace-source-editor` role; users without it see a read-only list. See [Marketplace Sources](/reference/marketplace-sources) for the ConfigMap shape, RBAC, and Helm seeding.
 - **The "Marketplace" sources UI is experimental.** It's hidden until you flip the toggle under **Settings → Experimental Features → Marketplace**. Until that lands as a default, document the toggle for your users.
-- **No authentication for source URLs.** The dashboard fetches manifests with no `Authorization` header (see [What needs to be reachable by the dashboard?](#what-needs-to-be-reachable-by-the-dashboard)). Private GitHub repos and authenticated endpoints can't host a manifest unless you front them with an anonymously-readable URL.
 - **No version selector.** Each item card shows a single advertised version from the manifest, and `ark install` uses whatever tag the OCI chart reference resolves to. To pin to an older version, use the Helm command form with an explicit `--version`.
 - **"Installed" detection matches by helm release name.** The badge compares `ark.helmReleaseName` against helm releases in the cluster. If you installed the chart under a different release name, the card still says **Get**.
 - **No client-side schema enforcement.** The validate endpoint checks only that `version`, `marketplace`, and `items[].name` exist. Items missing `ark.chartPath` show in the grid but produce a broken install command; missing `type`/`category` produce a card with no badge or filter membership.
