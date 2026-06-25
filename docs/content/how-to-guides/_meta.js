@@ -28,7 +28,7 @@ export default {
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-selector-strategy'
+    href: '/user-guide/samples/teams/github-team'
   },
   
   '---extend': { type: 'separator', title: 'Advanced use' },
