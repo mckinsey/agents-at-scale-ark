@@ -370,13 +370,9 @@ func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target ark
 	return engineCRD.Status.LastResolvedAddress, nil
 }
 
-// resolveDefaultEngineAddress returns the dispatch address for queries that do
-// not name an execution engine (built-in Agents, teams, models, tools). It
-// prefers a namespace-local ExecutionEngine named "ark-completions" (a
-// per-tenant completions deployment), so a tenant's traffic stays on the
-// tenant's own engine — its ServiceAccount, RBAC, and workload identity. When
-// no such engine exists or its address is not yet resolved, it falls back to
-// the central --completions-addr, preserving existing single-install behavior.
+// resolveDefaultEngineAddress returns the dispatch address for queries with no
+// named engine: a namespace-local "ark-completions" ExecutionEngine if present,
+// else the central --completions-addr.
 func (r *QueryReconciler) resolveDefaultEngineAddress(ctx context.Context, namespace string) string {
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	key := types.NamespacedName{Name: defaultCompletionsEngineName, Namespace: namespace}
