@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { RestartAlt, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -50,6 +51,10 @@ export function ChatPanel({
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
+    requiredParameters,
+    parameterValues,
+    setParameterValue,
+    missingParameters,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -104,6 +109,16 @@ export function ChatPanel({
       </ScrollArea>
 
       <div className="border-stroke-divider flex-shrink-0 border-t">
+        {requiredParameters.length > 0 && (
+          <div className="px-4 pt-4">
+            <ChatParameterFields
+              requiredParameters={requiredParameters}
+              values={parameterValues}
+              onChange={setParameterValue}
+              disabled={isProcessing}
+            />
+          </div>
+        )}
         <div className="flex gap-2 p-4">
           <div className="relative flex-1">
             <Input
@@ -129,8 +144,10 @@ export function ChatPanel({
             </Button>
           ) : (
             <Button
+          ) : (
+            <Button
               onClick={handleSendMessage}
-              disabled={!currentMessage.trim()}
+              disabled={!currentMessage.trim() || missingParameters.length > 0}
               size="sm"
               variant="default"
               aria-label="Send message">
@@ -179,12 +196,14 @@ export function ChatPanel({
                     <div className="space-y-1 text-xs">
                       <div>
                         Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
+                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
                       </div>
                       <div>
                         Completion:{' '}
                         {tokenUsage.completion_tokens.toLocaleString()}
                       </div>
                       <div className="border-t pt-1 font-medium">
+                        Total: {tokenUsage.total_tokens.toLocaleString()}
                         Total: {tokenUsage.total_tokens.toLocaleString()}
                       </div>
                     </div>

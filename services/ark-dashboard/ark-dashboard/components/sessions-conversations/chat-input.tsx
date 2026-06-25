@@ -1,7 +1,11 @@
 'use client';
 
+import { Send, Wrench } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
+import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { NumericBadge } from '@/components/ui/badge';
@@ -10,6 +14,7 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import { toast } from '@/components/ui/sonner';
+import { useAgentQueryParameters } from '@/lib/hooks/use-agent-query-parameters';
 
 const FALLBACK_PARTICIPANT_NAME = 'participant';
 
@@ -17,20 +22,54 @@ interface Props {
   readonly conversationId: string;
   readonly sessionId: string;
   readonly conversation: Conversation | null;
-  readonly onAddPendingMessage: (conversationId: string, content: string) => void;
-  readonly onSetProcessing: (conversationId: string, isProcessing: boolean) => void;
+  readonly onAddPendingMessage: (
+    conversationId: string,
+    content: string,
+  ) => void;
+  readonly onSetProcessing: (
+    conversationId: string,
+    isProcessing: boolean,
+  ) => void;
   readonly onEnableQueries: () => void;
   readonly showToolCalls: boolean;
   readonly onShowToolCallsChange: (show: boolean) => void;
 }
 
-export function ChatInput({ conversationId, sessionId, conversation, onAddPendingMessage, onSetProcessing, onEnableQueries, showToolCalls, onShowToolCallsChange }: Props) {
+export function ChatInput({
+  conversationId,
+  sessionId,
+  conversation,
+  onAddPendingMessage,
+  onSetProcessing,
+  onEnableQueries,
+  showToolCalls,
+  onShowToolCallsChange,
+}: Props) {
   const [message, setMessage] = useState('');
   const { mutate: sendMessage, isPending } = useSendMessage();
 
-  const participantName = conversation?.participants?.[0] || conversation?.name || FALLBACK_PARTICIPANT_NAME;
+  const participantName =
+    conversation?.participants?.[0] ||
+    conversation?.name ||
+    FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType;
   const toolCallCount = conversation?.toolCallCount || 0;
+
+  const {
+    requiredParameters,
+    values: parameterValues,
+    setValue: setParameterValue,
+    missingParameters,
+    toApiParameters,
+  } = useAgentQueryParameters(participantName, participantType);
+
+  const hasUnsuppliedParameters = missingParameters.length > 0;
+  const parameterHint = hasUnsuppliedParameters
+    ? `This agent needs the ${missingParameters.join(', ')} parameter${
+        missingParameters.length > 1 ? 's' : ''
+      } before you can send a message.`
+    : '';
+
 
   // Workflow conversations have multiple different participants (not teams)
   // In workflows, we don't know which agent to target for new messages
@@ -42,6 +81,13 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
 
   const handleSend = () => {
     if (!message.trim() || isPending) return;
+
+    if (hasUnsuppliedParameters) {
+      toast.error('This agent needs query parameters', {
+        description: parameterHint,
+      });
+      return;
+    }
 
     const messageToSend = message.trim();
 
@@ -56,18 +102,20 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
         message: messageToSend,
         agentName: participantName,
         participantType,
+        parameters: toApiParameters(),
       },
       {
         onSuccess: () => {
           onEnableQueries();
         },
-        onError: (error) => {
+        onError: error => {
           onSetProcessing(conversationId, false);
           toast.error('Failed to send message', {
-            description: error instanceof Error ? error.message : 'Unknown error',
+            description:
+              error instanceof Error ? error.message : 'Unknown error',
           });
         },
-      }
+      },
     );
   };
 
@@ -80,6 +128,16 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
 
   return (
     <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden">
+      {requiredParameters.length > 0 && (
+        <div className="px-8 pt-4">
+          <ChatParameterFields
+            requiredParameters={requiredParameters}
+            values={parameterValues}
+            onChange={setParameterValue}
+            disabled={isPending}
+          />
+        </div>
+      )}
       <div className="self-stretch px-4 pt-3 flex flex-col justify-start items-start gap-4">
         <div className="w-full h-16 p-3 bg-surface-bg-primary flex justify-start items-center gap-2">
           <Input
@@ -93,7 +151,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
 
           <Button
             onClick={handleSend}
-            disabled={!message.trim() || isDisabled}
+            disabled={!message.trim() || isDisabled || hasUnsuppliedParameters}
             variant="ghost"
             size="icon"
             aria-label="Send message"

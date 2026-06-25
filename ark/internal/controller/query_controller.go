@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +30,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/common"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
@@ -39,6 +43,9 @@ const (
 	targetTypeTeam  = "team"
 	targetTypeModel = "model"
 	targetTypeTool  = "tool"
+
+	messageCleanupGracePeriod   = 5 * time.Minute
+	messageCleanupRetryInterval = 15 * time.Second
 )
 
 type QueryReconciler struct {
@@ -56,6 +63,7 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=memories,verbs=get
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
@@ -112,7 +120,16 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 	}
 
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
-		r.finalize(ctx, obj)
+		if err := r.finalize(ctx, obj); err != nil {
+			log := logf.FromContext(ctx)
+			if time.Since(obj.DeletionTimestamp.Time) > messageCleanupGracePeriod {
+				log.Error(err, "giving up on broker message cleanup after grace period", "query", obj.Name)
+				controllerutil.RemoveFinalizer(obj, finalizer)
+				return &ctrl.Result{}, r.Update(ctx, obj)
+			}
+			log.Error(err, "broker message cleanup failed, will retry", "query", obj.Name)
+			return &ctrl.Result{RequeueAfter: messageCleanupRetryInterval}, nil
+		}
 		controllerutil.RemoveFinalizer(obj, finalizer)
 		return &ctrl.Result{}, r.Update(ctx, obj)
 	}
@@ -754,7 +771,7 @@ func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) s
 	return statusDone
 }
 
-func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
+func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) error {
 	log := logf.FromContext(ctx)
 	log.Info("finalizing query", "name", query.Name, "namespace", query.Namespace)
 
@@ -766,6 +783,71 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		r.operations.Delete(nsName)
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
 	}
+
+	return r.deleteBrokerMessages(ctx, query)
+}
+
+func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1alpha1.Query) error {
+	log := logf.FromContext(ctx)
+
+	var memoryName, memoryNamespace string
+	if query.Spec.Memory != nil {
+		memoryName = query.Spec.Memory.Name
+		memoryNamespace = query.Spec.Memory.Namespace
+		if memoryNamespace == "" {
+			memoryNamespace = query.Namespace
+		}
+	} else {
+		memoryName = "default" //nolint:goconst
+		memoryNamespace = query.Namespace
+	}
+
+	var memory arkv1alpha1.Memory
+	if err := r.Get(ctx, client.ObjectKey{Name: memoryName, Namespace: memoryNamespace}, &memory); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			log.Info("memory not found, skipping broker message cleanup", "memory", memoryName, "query", query.Name)
+			return nil
+		}
+		return fmt.Errorf("failed to get memory %s/%s: %w", memoryNamespace, memoryName, err)
+	}
+
+	var baseURL string
+	if memory.Status.LastResolvedAddress != nil && *memory.Status.LastResolvedAddress != "" {
+		baseURL = strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
+	} else {
+		resolver := common.NewValueSourceResolver(r.Client)
+		resolved, err := resolver.ResolveValueSource(ctx, memory.Spec.Address, memoryNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to resolve memory address: %w", err)
+		}
+		baseURL = strings.TrimSuffix(resolved, "/")
+	}
+
+	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, baseURL, url.PathEscape(query.Name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+	req.Header.Set("User-Agent", "ark-controller/1.0")
+
+	httpClient := common.NewHTTPClientWithLogging()
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		log.Info("broker does not support delete query messages, skipping", "query", query.Name, "status", resp.StatusCode)
+		return nil
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", baseURL, resp.StatusCode, query.Name)
+	}
+
+	log.Info("deleted broker messages for query", "query", query.Name)
+	return nil
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {

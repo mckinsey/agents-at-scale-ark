@@ -4,16 +4,29 @@ import type {
   MarketplaceItem,
   MarketplaceItemDetail,
   MarketplaceResponse,
+  MarketplaceSourceError,
 } from '@/lib/api/generated/marketplace-types';
 import {
   buildItemsFromGroups,
   type MarketplaceItemsGroup,
 } from '@/lib/services/marketplace-transform';
 
+export type MarketplaceAuthScheme = 'bearer' | 'basic';
+
+// Sent on create/update only; the credential is write-only and never returned.
+export interface MarketplaceSourceAuthInput {
+  scheme: MarketplaceAuthScheme;
+  credential?: string;
+}
+
 export interface MarketplaceSourceEntry {
   name: string;
   url: string;
   displayName?: string;
+  // On responses: scheme only (never the credential). On create/update: include
+  // the credential. hasCredential is a server-set flag for list/get responses.
+  auth?: MarketplaceSourceAuthInput | null;
+  hasCredential?: boolean;
 }
 
 export interface MarketplacePermissions {
@@ -90,7 +103,18 @@ const marketplaceService = {
     );
     const allItems = await buildItemsFromGroups(groups, namespace);
     const items = applyFilters(allItems, filters);
-    return { items, total: items.length, page: 1, pageSize: items.length };
+    const sourceErrors: MarketplaceSourceError[] = [];
+    for (const group of groups) {
+      if (group.error) {
+        sourceErrors.push({
+          source: group.source,
+          displayName: group.displayName,
+          message: group.error.message,
+          code: group.error.code,
+        });
+      }
+    }
+    return { items, total: items.length, page: 1, pageSize: items.length, sourceErrors };
   },
 
   async getMarketplaceItemById(

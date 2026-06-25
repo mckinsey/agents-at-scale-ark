@@ -3,7 +3,8 @@
 Each namespace has its own marketplace catalogue, stored in a `marketplace-sources` ConfigMap and served to the dashboard through ark-api. Platform teams control three things, all with native Kubernetes mechanisms:
 
 - **What each namespace sees** — seeded defaults via the dashboard Helm chart, then edited live through ark-api.
-- **Who can edit it** — a ClusterRole bound per namespace with a RoleBinding.
+- **Who can edit it** — a namespace-scoped Role bound per namespace with a RoleBinding.
+- **Who can use a private source** — a user's `get` on the source's credential Secret, under impersonation.
 - **Where catalogues live** — one ConfigMap per namespace, governed independently.
 
 For the ConfigMap schema, RBAC rules, and ark-api endpoints, see the [Marketplace Sources](/reference/marketplace-sources) reference. This guide covers operation.
@@ -25,6 +26,7 @@ marketplaceSources:
 | `url` | yes | Absolute `https` URL of a marketplace manifest. The filename is not constrained. |
 | `displayName` | no | Label shown in the dashboard. Defaults to `name`. |
 | `namespace` | no | Target namespace. Defaults to the install namespace. |
+| `auth` | no | Authenticated fetch: `{ scheme: bearer\|basic, secretRef }` referencing a pre-existing credential Secret. See [Authenticated sources](#authenticated-sources). |
 
 Set `marketplaceSources: []` to seed nothing and skip the Job. The Job image is configurable via `marketplaceSourcesSeed.image`.
 
@@ -77,25 +79,18 @@ kubectl create namespace team-b
 
 ## Grant edit access
 
-The chart ships a `marketplace-source-editor` ClusterRole granting `get`, `update`, and `patch` on the `marketplace-sources` ConfigMap. It is **bound to no one by default** — the marketplace is read-only until a platform team binds it.
+The chart ships a `marketplace-source-editor` **Role** (namespace-scoped, never a `ClusterRole`) granting `get`/`update`/`patch` on the `marketplace-sources` ConfigMap and `create`/`get`/`update`/`patch`/`delete` on `secrets` (editors manage per-source credential Secrets too). It is created in the install namespace and **bound to no one by default** — the marketplace is read-only until a platform team binds it.
 
-Read access is already granted by the tenant role, so every dashboard user sees the catalogue regardless of edit permission.
+It is a Role, not a ClusterRole, because RBAC cannot scope `create` on secrets by name — a namespaced Role bounds the blast radius to the namespace. The trade-off is that editing other namespaces needs the Role replicated there.
 
-Bind the role per namespace to a user, group, or service account:
+Read access to the catalogue is already granted by the tenant role, so every dashboard user sees the sources regardless of edit permission.
+
+Bind it in the install namespace, or replicate the Role and bind it in another namespace. The sample ships both objects:
 
 ```bash
-# A user
-kubectl create rolebinding marketplace-source-editor \
-  --clusterrole=marketplace-source-editor \
-  --user=alice@example.com -n team-a
-
-# A group
-kubectl create rolebinding marketplace-source-editor \
-  --clusterrole=marketplace-source-editor \
-  --group=platform-admins -n team-a
+# Edit namespace + subjects first, then apply (creates the Role + RoleBinding).
+kubectl apply -f samples/marketplace/marketplace-source-editor-binding.yaml
 ```
-
-Or apply the sample at `samples/marketplace/marketplace-source-editor-binding.yaml` after editing the namespace and subjects.
 
 The dashboard shows add/edit/delete controls only when ark-api's permission probe reports `canEdit: true`; the probe runs a `SelfSubjectAccessReview` under the requesting user. The kube-apiserver is the real gate — a user without the binding gets HTTP 403 on writes even if the controls were forced.
 
@@ -105,21 +100,52 @@ Revoke to return the namespace to read-only:
 kubectl delete rolebinding marketplace-source-editor -n team-a
 ```
 
-To disable editing everywhere — catalogues managed only through Helm/GitOps, never the dashboard — set `marketplaceSourceEditorRole.create: false`. The ClusterRole is not created, so no RoleBinding can grant edit access.
+To disable editing everywhere — catalogues managed only through Helm/GitOps, never the dashboard — set `marketplaceSourceEditorRole.create: false`. The Role is not created, so no RoleBinding can grant edit access.
 
 ## Manage many namespaces
 
-Edit access is per namespace, so grant it where each team operates. For N teams, create N RoleBindings — one per namespace — pointing at the same ClusterRole:
+Edit access is per namespace, and the Role is namespace-scoped, so each namespace needs its own Role **and** RoleBinding. For N teams, replicate both into each namespace:
 
 ```bash
 for ns in team-a team-b team-c; do
-  kubectl create rolebinding marketplace-source-editor \
-    --clusterrole=marketplace-source-editor \
-    --group=platform-admins -n "$ns"
+  kubectl apply -n "$ns" -f samples/marketplace/marketplace-source-editor-binding.yaml
 done
 ```
 
 This keeps each namespace's catalogue and its editors independent: seeding decides what a namespace starts with, the RoleBinding decides who changes it afterward.
+
+## Authenticated sources
+
+A source can fetch a manifest that requires authentication (private GitHub/GHES, Azure DevOps, authenticated artifact stores). The token lives in a per-source Kubernetes Secret; ark-api attaches the header server-side and reads the Secret **under the requesting user's identity**, so a user's `get` on that Secret is the "may use this private source" grant.
+
+### Seed one at deploy time
+
+An authenticated source is a credential Secret plus a `marketplaceSources` entry with an `auth` block. Provision it declaratively — the token never goes in `values.yaml`:
+
+1. **Create the credential Secret out-of-band** (External Secrets Operator, sealed-secrets, SOPS, Vault), named `marketplace-source-<name>-auth` with a single key `value`:
+
+   ```bash
+   kubectl create secret generic marketplace-source-internal-mirror-auth \
+     -n team-a --from-literal=value=<token>   # prefer a managed Secret store over this
+   ```
+
+2. **Declare the source** with its `auth` block (`scheme` is `bearer` or `basic`). The seed Job writes only the ConfigMap entry — it never creates the Secret:
+
+   ```yaml
+   marketplaceSources:
+     - name: internal-mirror
+       url: https://internal.example.com/marketplace.json
+       namespace: team-a
+       auth:
+         scheme: bearer                                     # "basic" for Azure DevOps
+         secretRef: marketplace-source-internal-mirror-auth
+   ```
+
+3. **Grant the viewer group `get`** on the credential Secret so the source resolves for them (sample: `samples/marketplace/authenticated-source-rbac.yaml`). A user outside that binding sees an "authentication failed" error and the credential is never borrowed.
+
+Deploy-time writes skip the dashboard's validate-before-save and re-auth-on-URL-change guards (UX guards, not security invariants); a wrong credential surfaces the per-source auth error at fetch time and does not fail the install.
+
+See [Marketplace Sources](/reference/marketplace-sources) for the schema and RBAC details.
 
 ## Persistence across upgrades
 
@@ -135,22 +161,23 @@ So user changes survive upgrades; only untouched seeded defaults track the chart
 ## Operational notes
 
 - **Source availability.** ark-api fetches each source concurrently with a 10s per-source timeout and a 30s aggregator deadline, and caches successful fetches for one hour. A failing source surfaces an inline error and does not block the others.
-- **Outbound restrictions.** Source URLs must be `https`. ark-api rejects non-routable hosts (loopback, link-local, multicast, reserved) and does not follow redirects. Private RFC-1918 hosts are allowed for internal mirrors.
-- **Items not appearing.** Check the source URL returns valid JSON with an `items` array, is reachable from the ark-api pod, and uses `https`. Authenticated sources are not yet supported (tracked in issue #2346).
+- **Outbound restrictions.** Source URLs must be `https`. ark-api rejects non-routable hosts (loopback, link-local, multicast, reserved) and does not follow redirects — including for credentialed fetches, so a credential cannot be used to reach internal/metadata services or leaked to a redirect target. Private RFC-1918 hosts are allowed for internal mirrors.
+- **Items not appearing.** Check the source URL returns valid JSON with an `items` array, is reachable from the ark-api pod, and uses `https`. For an authenticated source, an `auth_error` means the credential Secret is missing, the user lacks `get` on it, or the upstream rejected it (401/403).
 
 ## Uninstall and cleanup
 
 `helm uninstall` of the dashboard chart does **not** remove catalogue data:
 
 - The `marketplace-sources` ConfigMap in each namespace **survives** — the seed Job writes it via apply, so it is not owned by the Helm release.
-- RoleBindings created with `kubectl` **survive** — they are not part of the release.
-- The `marketplace-source-editor` ClusterRole **is removed** — it is a release object.
+- Credential Secrets **survive** — they are provisioned out-of-band, never by the release.
+- Roles and RoleBindings you applied with `kubectl` **survive** — they are not part of the release.
+- The `marketplace-source-editor` Role in the install namespace **is removed** — it is a release object.
 
 To remove the catalogue and access grants, delete them explicitly per namespace:
 
 ```bash
 kubectl delete configmap marketplace-sources -n team-a
-kubectl delete rolebinding marketplace-source-editor -n team-a
+kubectl delete role,rolebinding marketplace-source-editor -n team-a
 ```
 
 ## See also

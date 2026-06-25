@@ -401,7 +401,10 @@ describe('conversationsService', () => {
         'agent',
         'test-agent',
         'session-1',
-        'conv-1'
+        'conv-1',
+        undefined,
+        undefined,
+        undefined
       );
     });
 
@@ -421,7 +424,10 @@ describe('conversationsService', () => {
         'agent',
         'test-agent',
         'session-1',
-        'conv-1'
+        'conv-1',
+        undefined,
+        undefined,
+        undefined
       );
     });
 
@@ -440,7 +446,10 @@ describe('conversationsService', () => {
         'agent',
         'test-agent',
         'session-1',
-        'conv-1'
+        'conv-1',
+        undefined,
+        undefined,
+        undefined
       );
     });
   });
