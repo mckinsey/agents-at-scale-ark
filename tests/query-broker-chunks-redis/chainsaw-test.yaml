@@ -113,11 +113,13 @@ spec:
     - script:
         timeout: 30s
         content: |
-          RESULT=$(kubectl exec -n $NAMESPACE deploy/ark-broker -- \
-            wget -qO- "http://localhost:8080/stream/redis-chunks-query" 2>&1)
+          BROKER_POD=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | head -1)
+          RESULT=$(kubectl exec -n $NAMESPACE $BROKER_POD -- sh -c \
+            'wget -O- "http://127.0.0.1:8080/stream/redis-chunks-query?from-beginning=true" 2>&1')
           echo "chunk response: $RESULT"
           [ -n "$RESULT" ] || { echo "empty response from chunk endpoint"; exit 1; }
-          echo "$RESULT" | grep -q '"complete"' || { echo "no complete marker in chunk stream"; exit 1; }
+          echo "$RESULT" | grep -qF '[DONE]' || { echo "no [DONE] marker in chunk stream"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -161,11 +163,11 @@ spec:
           kubectl cp /tmp/xreplica-write.mjs $NAMESPACE/$POD_A:/tmp/xreplica-write.mjs
           kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-write.mjs
 
-          RESULT=$(kubectl exec -n $NAMESPACE $POD_B -- \
-            wget -qO- "http://localhost:8080/stream/xreplica-q" 2>&1)
+          RESULT=$(kubectl exec -n $NAMESPACE $POD_B -- sh -c \
+            'wget -O- "http://127.0.0.1:8080/stream/xreplica-q?from-beginning=true" 2>&1')
           echo "Read from replica B ($POD_B): $RESULT"
           [ -n "$RESULT" ] || { echo "empty response from replica B"; exit 1; }
-          echo "$RESULT" | grep -q '"complete"' || { echo "no complete marker on replica B"; exit 1; }
+          echo "$RESULT" | grep -qF '[DONE]' || { echo "no [DONE] marker on replica B"; exit 1; }
           echo "Cross-replica verified: written to $POD_A, read from $POD_B"
         env:
         - name: NAMESPACE
