@@ -824,7 +824,7 @@ describe('useChatSession', () => {
       ],
     };
 
-    it('blocks sending and sets an error when a required parameter is missing', async () => {
+    it('blocks sending without setting an error when a required parameter is missing', async () => {
       mockGetByName.mockResolvedValue(agentWithQueryParam);
 
       const { result } = renderHook(
@@ -840,7 +840,7 @@ describe('useChatSession', () => {
         await result.current.sendMessage('Hello');
       });
 
-      expect(result.current.error).toMatch(/muting/);
+      expect(result.current.error).toBeNull();
       expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
       expect(mockSubmitChatQuery).not.toHaveBeenCalled();
     });

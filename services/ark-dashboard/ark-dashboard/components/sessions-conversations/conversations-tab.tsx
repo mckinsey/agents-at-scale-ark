@@ -228,15 +228,17 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
 
           {selectedConversationId ? (
             <div className="flex h-full flex-col overflow-hidden">
-              <MessageDisplay
-                conversationId={selectedConversationId}
-                sessionId={sessionId}
-                conversation={selectedConversation}
-                pendingMessages={pendingMessagesMap[selectedConversationId] || []}
-                onClearPending={() => handleClearPendingMessages(selectedConversationId)}
-                isProcessing={processingStateMap[selectedConversationId] || false}
-                showToolCalls={showToolCalls}
-              />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <MessageDisplay
+                  conversationId={selectedConversationId}
+                  sessionId={sessionId}
+                  conversation={selectedConversation}
+                  pendingMessages={pendingMessagesMap[selectedConversationId] || []}
+                  onClearPending={() => handleClearPendingMessages(selectedConversationId)}
+                  isProcessing={processingStateMap[selectedConversationId] || false}
+                  showToolCalls={showToolCalls}
+                />
+              </div>
               <ChatInput
                 conversationId={selectedConversationId}
                 sessionId={sessionId}

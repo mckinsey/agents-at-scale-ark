@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
-import { RestartAlt, Send, Stop } from '@/components/icons';
+import { Info, RestartAlt, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -91,6 +91,17 @@ export function ChatPanel({
     <>
       <ScrollArea className="h-0 min-h-0 flex-1">
         <div className="space-y-4 p-4">
+          {missingParameters.length > 0 && (
+            <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 rounded-full px-4 py-2">
+              <IconShell className="text-status-information shrink-0">
+                <Info />
+              </IconShell>
+              <span className="text-sm">
+                This {type === 'team' ? 'team' : 'agent'} needs a value
+                definition before you can send a message. Please add it below.
+              </span>
+            </div>
+          )}
           <ChatMessageList
             messages={messages}
             type={type}

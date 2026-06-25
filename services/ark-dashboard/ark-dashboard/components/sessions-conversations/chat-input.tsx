@@ -7,7 +7,7 @@ import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { NumericBadge } from '@/components/ui/badge';
-import { Send, SingleTool } from '@/components/icons';
+import { Info, Send, SingleTool } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
@@ -124,7 +124,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden">
+    <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden shrink-0">
       {requiredParameters.length > 0 && (
         <div className="px-8 pt-4">
           <ChatParameterFields
@@ -161,9 +161,15 @@ export function ChatInput({
         </div>
 
         {hasUnsuppliedParameters && (
-          <p className="self-stretch text-xs text-fg-tertiary">
-            {parameterHint}
-          </p>
+          <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 self-stretch rounded-full px-4 py-2">
+            <IconShell className="text-status-information shrink-0">
+              <Info />
+            </IconShell>
+            <span className="text-sm">
+              This {participantType === 'team' ? 'team' : 'agent'} needs a value
+              definition before you can send a message. Please add it above.
+            </span>
+          </div>
         )}
 
         <div className="self-stretch flex justify-between items-center pb-2">

@@ -386,7 +386,7 @@ describe('ChatInput', () => {
       render(<ChatInput {...baseProps} conversation={agentConversation} />);
 
       expect(
-        await screen.findByText(/needs the agent_name parameter/i),
+        await screen.findByText(/needs a value definition/i),
       ).toBeInTheDocument();
 
       await userEvent.type(
