@@ -191,6 +191,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/a2a-tasks/{task_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit A2A Task Approval
+         * @description Submit an approval decision for a HITL A2ATask.
+         *
+         *     The task must be in the 'input-required' phase. The decision is written to
+         *     spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+         *     controller picks it up and transitions the task to completed or failed.
+         */
+        post: operations["submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -1488,42 +1512,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/queries/{query_name}/approval": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Approval Details
-         * @description Get pending approval details for a query.
-         *
-         *     Returns approval information including tool calls, timeout, and agent context.
-         *     Only available when query is in 'input-required' phase.
-         */
-        get: operations["get_approval_details_v1_queries__query_name__approval_get"];
-        put?: never;
-        /**
-         * Submit Approval
-         * @description Submit approval or rejection for a query's tool calls.
-         *
-         *     Args:
-         *         query_name: Name of the query
-         *         request: Approval action (approved/rejected)
-         *         namespace: Namespace for the query
-         *         impersonation: Impersonation configuration for RBAC enforcement
-         *
-         *     Returns:
-         *         ApprovalResponse with status and query information
-         */
-        post: operations["submit_approval_v1_queries__query_name__approval_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/queries/{query_name}/cancel": {
         parameters: {
             query?: never;
@@ -2663,54 +2651,30 @@ export interface components {
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
-         * ApprovalAction
-         * @description Approval action enumeration.
+         * ApprovalDecision
+         * @description Approval decision for a HITL tool call.
          * @enum {string}
          */
-        ApprovalAction: "approved" | "rejected";
+        ApprovalDecision: "approved" | "rejected";
         /**
-         * ApprovalActionRequest
-         * @description Request body for approving or rejecting tool calls.
+         * ApprovalSubmissionRequest
+         * @description Request body to approve or reject an A2ATask's pending tool calls.
          */
-        ApprovalActionRequest: {
-            action: components["schemas"]["ApprovalAction"];
-            /** Toolcallid */
-            toolCallId?: string | null;
-            /** Toolcallids */
-            toolCallIds?: string[] | null;
+        ApprovalSubmissionRequest: {
+            decision: components["schemas"]["ApprovalDecision"];
         };
         /**
-         * ApprovalDetails
-         * @description Details about pending approval request.
+         * ApprovalSubmissionResponse
+         * @description Response after submitting an approval decision.
          */
-        ApprovalDetails: {
-            /** Agentname */
-            agentName?: string | null;
-            /** Ontimeout */
-            onTimeout?: string | null;
-            /** Phase */
-            phase: string;
+        ApprovalSubmissionResponse: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
             /** Taskid */
             taskId: string;
-            /** Timeout */
-            timeout?: string | null;
-            /** Toolcalls */
-            toolCalls: components["schemas"]["ToolCall"][];
-        };
-        /**
-         * ApprovalResponse
-         * @description Response after submitting approval action.
-         */
-        ApprovalResponse: {
-            action: components["schemas"]["ApprovalAction"];
-            /** Queryname */
-            queryName: string;
-            /** Querynamespace */
-            queryNamespace: string;
-            /** Status */
-            status: string;
-            /** Taskid */
-            taskId?: string | null;
         };
         /**
          * ArkConfigResponse
@@ -4463,20 +4427,6 @@ export interface components {
             /** Strategy */
             strategy?: string | null;
         };
-        /**
-         * ToolCall
-         * @description Tool call information for approval.
-         */
-        ToolCall: {
-            /** Function */
-            function?: {
-                [key: string]: unknown;
-            } | null;
-            /** Id */
-            id: string;
-            /** Type */
-            type: string;
-        };
         /** ToolDetailResponse */
         ToolDetailResponse: {
             /** Annotations */
@@ -4796,6 +4746,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalSubmissionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -7565,78 +7553,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_approval_details_v1_queries__query_name__approval_get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                query_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApprovalDetails"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_approval_v1_queries__query_name__approval_post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                query_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApprovalActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApprovalResponse"];
-                };
             };
             /** @description Validation Error */
             422: {
