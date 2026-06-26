@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -66,6 +67,13 @@ type QueryReconciler struct {
 	// the workqueue (cheap, object keys only) holds the backlog instead of
 	// the controller heap. Set to 0 to disable enforcement.
 	MaxConcurrentQueries int
+
+	// MaxConcurrentReconciles sets how many Query keys can be reconciled in
+	// parallel. The controller-runtime workqueue dedupes per-key, so concurrent
+	// reconciles only run for different Query objects — Reconcile() for the
+	// same key is still serialized. Set to 0 to use the controller-runtime
+	// default (1).
+	MaxConcurrentReconciles int
 
 	sem        *semaphore.Weighted
 	operations sync.Map
@@ -915,8 +923,13 @@ func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.MaxConcurrentQueries > 0 {
 		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
 	}
+	opts := controller.Options{}
+	if r.MaxConcurrentReconciles > 0 {
+		opts.MaxConcurrentReconciles = r.MaxConcurrentReconciles
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Query{}).
 		Named("query").
+		WithOptions(opts).
 		Complete(r)
 }
