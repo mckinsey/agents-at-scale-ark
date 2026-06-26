@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
+import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -193,6 +194,12 @@ export default function MarketplacePage() {
             Installed
           </Button>
         </div>
+
+        {!isPending && (
+          <div className="mb-4">
+            <MarketplaceSourceErrors errors={data?.sourceErrors} />
+          </div>
+        )}
 
         {/* Loading state */}
         {isPending && (
