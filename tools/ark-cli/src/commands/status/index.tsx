@@ -329,11 +329,21 @@ export async function checkStatus(
     spinner.text = 'Checking ARK services';
 
     // Run status check and version fetch in parallel
-    const [statusData, versionInfo, detection] = await Promise.all([
+    const [statusData, versionInfo] = await Promise.all([
       statusChecker.checkAll(),
       fetchVersionInfo(),
-      describeStorageBackend(),
     ]);
+
+    // Only probe for the storage backend if the cluster is reachable; probing an
+    // unreachable cluster would just retry to its timeout.
+    const detection: BackendDetection = statusData.clusterAccess
+      ? await describeStorageBackend()
+      : {
+          backend: 'unknown',
+          status: 'unreachable',
+          message:
+            'Cluster is not reachable — cannot determine the storage backend.',
+        };
 
     spinner.stop();
 
@@ -422,6 +432,7 @@ export async function checkStatus(
       const remainingSeconds = Math.max(1, timeoutSeconds - elapsedSeconds);
       const deepResults = await runReadinessChecks(
         remainingSeconds,
+        backend,
         (r: ReadinessCheckResult) => {
           const icon = r.passed ? chalk.green('✓') : chalk.red('✗');
           const dur = `${(r.durationMs / 1000).toFixed(1)}s`;

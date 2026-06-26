@@ -235,19 +235,19 @@ async function waitForApiGroup(
 
 export async function runReadinessChecks(
   timeoutSeconds: number,
+  backend: DetectedBackend,
   onProgress?: ReadinessProgress
 ): Promise<ReadinessCheckResult[]> {
-  const detection = await describeStorageBackend();
-  if (detection.backend === 'etcd') {
+  if (backend === 'etcd') {
     return [];
   }
-  if (detection.backend === 'unknown') {
-    const start = Date.now();
+  if (backend === 'unknown') {
     const result: ReadinessCheckResult = {
       name: 'Storage backend',
       passed: false,
-      durationMs: Date.now() - start,
-      message: detection.message,
+      durationMs: 0,
+      message:
+        'could not determine storage backend (ARK not installed, cluster unreachable, or access denied)',
     };
     onProgress?.(result);
     return [result];

@@ -153,30 +153,22 @@ describe('runReadinessChecks', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an empty array on etcd without running further checks', async () => {
-    mockedExeca.mockResolvedValueOnce(kubectlOk());
-
-    const results = await runReadinessChecks(60);
+  it('returns an empty array on etcd without running any checks', async () => {
+    const results = await runReadinessChecks(60, 'etcd');
 
     expect(results).toEqual([]);
-    expect(mockedExeca).toHaveBeenCalledTimes(1);
+    expect(mockedExeca).not.toHaveBeenCalled();
   });
 
   it('runs APIServices + API group checks on postgresql and returns both results', async () => {
     mockedExeca.mockImplementation(((_cmd: string, args: string[]) => {
-      if (args[0] === 'get' && args[1] === 'crd') {
-        return Promise.resolve(kubectlNotFound());
-      }
-      if (args[0] === 'get' && args[1] === 'apiservice') {
-        return Promise.resolve(kubectlOk('apiservice/v1alpha1.ark.mckinsey.com'));
-      }
       if (args[0] === 'api-resources') {
         return Promise.resolve(kubectlOk('agents.ark.mckinsey.com'));
       }
       return Promise.resolve(kubectlOk());
     }) as any);
 
-    const results = await runReadinessChecks(120);
+    const results = await runReadinessChecks(120, 'postgresql');
 
     expect(results).toHaveLength(2);
     expect(results.map((r) => r.name)).toEqual([
@@ -188,44 +180,27 @@ describe('runReadinessChecks', () => {
 
   it('stops after APIServices failure and does not check API group', async () => {
     mockedExeca
-      .mockResolvedValueOnce(kubectlNotFound())
-      .mockResolvedValueOnce(kubectlOk('apiservice/v1alpha1.ark.mckinsey.com'))
       .mockResolvedValueOnce(kubectlFail('timed out'))
       .mockResolvedValueOnce(kubectlOk());
 
-    const results = await runReadinessChecks(60);
+    const results = await runReadinessChecks(60, 'postgresql');
 
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe('APIServices available');
     expect(results[0].passed).toBe(false);
   });
 
-  it('returns a single failed result when the backend is unknown', async () => {
-    mockedExeca.mockResolvedValue(
-      kubectlFail('The connection to the server localhost:8080 was refused')
-    );
-
-    const results = await runReadinessChecks(60);
+  it('returns a single failed result when the backend is unknown, without probing', async () => {
+    const results = await runReadinessChecks(60, 'unknown');
 
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe('Storage backend');
     expect(results[0].passed).toBe(false);
-    expect(mockedExeca).toHaveBeenCalledTimes(3);
-    expect(
-      mockedExeca.mock.calls.every(
-        (call: any) => call[1][0] === 'get' && call[1][1] === 'crd'
-      )
-    ).toBe(true);
+    expect(mockedExeca).not.toHaveBeenCalled();
   });
 
   it('invokes the progress callback per check', async () => {
     mockedExeca.mockImplementation(((_cmd: string, args: string[]) => {
-      if (args[0] === 'get' && args[1] === 'crd') {
-        return Promise.resolve(kubectlNotFound());
-      }
-      if (args[0] === 'get' && args[1] === 'apiservice') {
-        return Promise.resolve(kubectlOk('apiservice/v1alpha1.ark.mckinsey.com'));
-      }
       if (args[0] === 'api-resources') {
         return Promise.resolve(kubectlOk('agents.ark.mckinsey.com'));
       }
@@ -233,7 +208,7 @@ describe('runReadinessChecks', () => {
     }) as any);
 
     const onProgress = vi.fn();
-    await runReadinessChecks(60, onProgress);
+    await runReadinessChecks(60, 'postgresql', onProgress);
 
     expect(onProgress).toHaveBeenCalledTimes(2);
     expect(onProgress.mock.calls[0][0]).toMatchObject({
