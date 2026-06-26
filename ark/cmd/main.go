@@ -67,6 +67,7 @@ type config struct {
 	enableHTTP2                                      bool
 	completionsAddr                                  string
 	role                                             string
+	maxConcurrentQueries                             int
 }
 
 const (
@@ -162,6 +163,10 @@ func parseFlags() struct {
 		"Address of the completions engine for A2A communication")
 	flag.StringVar(&cfg.role, "role", "",
 		"Required: process role — 'apiserver' (runs only the aggregated API server) or 'controller' (runs only reconcilers and webhooks)")
+	flag.IntVar(&cfg.maxConcurrentQueries, "max-concurrent-queries", 32,
+		"Maximum number of Query executions running concurrently in goroutines. "+
+			"When the cap is reached, Reconcile requeues so the workqueue holds the backlog "+
+			"instead of the controller heap. Set to 0 to disable enforcement (not recommended).")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -286,11 +291,12 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"Query", &controller.QueryReconciler{
-			Client:          mgr.GetClient(),
-			Scheme:          mgr.GetScheme(),
-			Telemetry:       telemetryProvider,
-			Eventing:        eventingProvider,
-			CompletionsAddr: cfg.completionsAddr,
+			Client:               mgr.GetClient(),
+			Scheme:               mgr.GetScheme(),
+			Telemetry:            telemetryProvider,
+			Eventing:             eventingProvider,
+			CompletionsAddr:      cfg.completionsAddr,
+			MaxConcurrentQueries: cfg.maxConcurrentQueries,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},

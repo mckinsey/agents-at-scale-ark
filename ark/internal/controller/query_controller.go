@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +47,11 @@ const (
 
 	messageCleanupGracePeriod   = 5 * time.Minute
 	messageCleanupRetryInterval = 15 * time.Second
+
+	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
+	// when MaxConcurrentQueries is reached. Short enough to be responsive,
+	// long enough to avoid a busy-loop while in-flight queries drain.
+	queryCapacityRequeueDelay = 250 * time.Millisecond
 )
 
 type QueryReconciler struct {
@@ -54,7 +60,15 @@ type QueryReconciler struct {
 	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
 	CompletionsAddr string
-	operations      sync.Map
+
+	// MaxConcurrentQueries caps the number of Query executions running in
+	// goroutines at once. When the cap is reached, Reconcile() requeues so
+	// the workqueue (cheap, object keys only) holds the backlog instead of
+	// the controller heap. Set to 0 to disable enforcement.
+	MaxConcurrentQueries int
+
+	sem        *semaphore.Weighted
+	operations sync.Map
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -190,6 +204,11 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
+	if r.sem != nil && !r.sem.TryAcquire(1) {
+		log.V(1).Info("query execution capacity reached, requeuing", "query", req.NamespacedName.String(), "cap", r.MaxConcurrentQueries)
+		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
+	}
+
 	opCtx, cancel := context.WithTimeout(ctx, remaining)
 	r.operations.Store(req.NamespacedName, cancel)
 
@@ -203,11 +222,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	startTime := time.Now()
 
 	defer func() {
-		if r := recover(); r != nil {
-			log.Error(fmt.Errorf("query execution goroutine panic: %v", r), "Query execution goroutine panicked")
+		if rec := recover(); rec != nil {
+			log.Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
 		}
 		if cleanupCache {
 			r.operations.Delete(namespacedName)
+		}
+		if r.sem != nil {
+			r.sem.Release(1)
 		}
 	}()
 
@@ -228,7 +250,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	queryInput := extractUserInput(opCtx, obj, r.Client)
 
-	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
+	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(
+		opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, obj.Name),
@@ -889,6 +912,9 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.MaxConcurrentQueries > 0 {
+		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Query{}).
 		Named("query").

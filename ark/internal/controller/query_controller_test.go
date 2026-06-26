@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -290,6 +291,64 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 					CreationTimestamp: metav1.Time{
 						Time: time.Now().Add(-2 * time.Hour),
 					},
+				},
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+		})
+	})
+
+	Context("MaxConcurrentQueries enforcement", func() {
+		It("requeues without spawning execution when the semaphore is full", func() {
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "pre-condition: semaphore should start drainable")
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "capacity-requeue-query",
+					Namespace:         "default",
+					CreationTimestamp: metav1.Time{Time: time.Now()},
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					TTL: &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(queryCapacityRequeueDelay))
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeFalse(), "should not register an operation when capacity is exhausted")
+		})
+
+		It("does not enforce a cap when MaxConcurrentQueries is 0", func() {
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				MaxConcurrentQueries: 0,
+			}
+			Expect(r.sem).To(BeNil(), "nil semaphore means enforcement is disabled")
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "capacity-disabled-query",
+					Namespace:         "default",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-2 * time.Hour)},
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					TTL: &metav1.Duration{Duration: time.Hour},
 				},
 			}
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
