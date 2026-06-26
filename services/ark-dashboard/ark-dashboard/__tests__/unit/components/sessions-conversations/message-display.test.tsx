@@ -1,9 +1,12 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MessageDisplay } from '@/components/sessions-conversations/message-display';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
+import { useGetQuery } from '@/lib/services/queries-hooks';
+import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
+import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 
 vi.mock('@/lib/services/conversations-hooks');
@@ -246,5 +249,100 @@ describe('MessageDisplay', () => {
     // The pending "Hello" should be filtered out as duplicate
     const userMessages = screen.getAllByTestId('message-user');
     expect(userMessages).toHaveLength(1);
+  });
+
+  describe('tool approval', () => {
+    const approvalA2ATask = {
+      name: 'a2a-task-task-123',
+      namespace: 'default',
+      taskId: 'task-123',
+      agentRef: { name: 'deploy-agent' },
+      queryRef: { name: 'q1' },
+      status: {
+        phase: 'input-required',
+        protocolMetadata: {
+          toolCalls: JSON.stringify([
+            {
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'write-file', arguments: '{"path":"/tmp/x"}' },
+            },
+          ]),
+          timeout: '5m',
+          onTimeout: 'reject',
+          context: JSON.stringify({ AgentName: 'deploy-agent' }),
+        },
+      },
+    };
+
+    const mutateAsync = vi.fn().mockResolvedValue(undefined);
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      vi.mocked(useGetQuery).mockReturnValue({
+        data: {
+          status: {
+            phase: 'input-required',
+            response: { a2a: { taskId: 'task-123' } },
+          },
+        },
+        isLoading: false,
+      } as any);
+      vi.mocked(useA2ATask).mockReturnValue({
+        data: approvalA2ATask,
+        isLoading: false,
+      } as any);
+      vi.mocked(useSubmitApproval).mockReturnValue({
+        mutate: vi.fn(),
+        mutateAsync,
+        isPending: false,
+      } as any);
+    });
+
+    function renderApproval() {
+      return render(
+        <MessageDisplay
+          conversationId="conv-1"
+          sessionId="session-1"
+          conversation={mockConversation}
+          pendingMessages={[]}
+          onClearPending={mockOnClearPending}
+          isProcessing={true}
+          showToolCalls={true}
+        />,
+        { wrapper: createWrapper() },
+      );
+    }
+
+    it('renders the approval notification when a query awaits approval', () => {
+      renderApproval();
+
+      expect(
+        screen.getByRole('button', { name: /approve/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /reject/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('submits an approval when approve is clicked', async () => {
+      renderApproval();
+
+      fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+      await waitFor(() =>
+        expect(mutateAsync).toHaveBeenCalledWith('approved'),
+      );
+    });
+
+    it('submits a rejection when reject is clicked', async () => {
+      renderApproval();
+
+      fireEvent.click(screen.getByRole('button', { name: /reject/i }));
+
+      await waitFor(() =>
+        expect(mutateAsync).toHaveBeenCalledWith('rejected'),
+      );
+    });
   });
 });

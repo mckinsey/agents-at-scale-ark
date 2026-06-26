@@ -1,13 +1,18 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import { submitApproval } from '@/lib/services/a2a-task-approvals';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),
   }),
   useSearchParams: vi.fn(() => new URLSearchParams()),
+}));
+
+vi.mock('@/lib/services/a2a-task-approvals', () => ({
+  submitApproval: vi.fn(),
 }));
 
 describe('ChatMessage', () => {
@@ -219,6 +224,98 @@ describe('ChatMessage', () => {
       );
 
       expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('approval request', () => {
+    const approvalRequest = {
+      type: 'tool_approval_request' as const,
+      taskId: 'task-123',
+      toolCalls: [
+        {
+          id: 'call-1',
+          type: 'function',
+          function: { name: 'write-file', arguments: '{"path":"/tmp/x"}' },
+        },
+      ],
+      timeout: '5m',
+      onTimeout: 'reject',
+      agentName: 'deploy-agent',
+      receivedAtMs: Date.now(),
+    };
+
+    beforeEach(() => {
+      vi.mocked(submitApproval).mockResolvedValue(undefined as never);
+      sessionStorage.clear();
+    });
+
+    it('renders the approval notification with approve/reject controls', () => {
+      render(
+        <ChatMessage role="assistant" content="" approvalRequest={approvalRequest} />,
+      );
+
+      expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument();
+    });
+
+    it('submits an approval decision when approve is clicked', async () => {
+      const pollAfterApproval = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ChatMessage
+          role="assistant"
+          content=""
+          approvalRequest={approvalRequest}
+          queryName="q-1"
+          namespace="default"
+          pollAfterApproval={pollAfterApproval}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+      await waitFor(() =>
+        expect(submitApproval).toHaveBeenCalledWith(
+          'a2a-task-task-123',
+          'default',
+          'approved',
+        ),
+      );
+      await waitFor(() => expect(pollAfterApproval).toHaveBeenCalled());
+    });
+
+    it('submits a rejection decision when reject is clicked', async () => {
+      const pollAfterApproval = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ChatMessage
+          role="assistant"
+          content=""
+          approvalRequest={approvalRequest}
+          queryName="q-1"
+          namespace="default"
+          pollAfterApproval={pollAfterApproval}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /reject/i }));
+
+      await waitFor(() =>
+        expect(submitApproval).toHaveBeenCalledWith(
+          'a2a-task-task-123',
+          'default',
+          'rejected',
+        ),
+      );
+      await waitFor(() => expect(pollAfterApproval).toHaveBeenCalled());
+    });
+
+    it('tolerates malformed submitted-approval sessionStorage', () => {
+      sessionStorage.setItem('submitted-approval-tasks', 'not-json');
+
+      render(
+        <ChatMessage role="assistant" content="" approvalRequest={approvalRequest} />,
+      );
+
+      expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
     });
   });
 
