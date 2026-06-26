@@ -16,8 +16,9 @@ import {
 } from '../../lib/waitForReady.js';
 import {
   runReadinessChecks,
-  detectStorageBackend,
+  describeStorageBackend,
   type ReadinessCheckResult,
+  type BackendDetection,
 } from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
@@ -72,9 +73,34 @@ function enrichServiceDetails(service: ServiceStatus): {
   };
 }
 
+/** Render the detected storage backend as a line in the `ark status:` section. */
+function backendStatusLine(detection: BackendDetection) {
+  const display: Record<
+    BackendDetection['status'],
+    {color: StatusColor; details: string}
+  > = {
+    etcd: {color: 'green', details: 'etcd'},
+    postgresql: {color: 'green', details: 'postgresql'},
+    'not-installed': {color: 'yellow', details: 'not installed'},
+    unreachable: {color: 'yellow', details: 'cluster unreachable'},
+    forbidden: {color: 'yellow', details: 'access denied'},
+    undetermined: {color: 'yellow', details: 'undetermined'},
+  };
+  const {color, details} = display[detection.status];
+  return {
+    icon: '●',
+    iconColor: color,
+    status: 'storage backend',
+    statusColor: color,
+    name: '',
+    details,
+  };
+}
+
 function buildStatusSections(
   data: StatusData & {clusterAccess?: boolean; clusterInfo?: any},
-  versionInfo?: ArkVersionInfo
+  versionInfo?: ArkVersionInfo,
+  backend?: BackendDetection
 ): StatusSection[] {
   const sections: StatusSection[] = [];
 
@@ -280,6 +306,10 @@ function buildStatusSections(
       }
     }
   }
+  if (backend) {
+    arkStatusLines.push(backendStatusLine(backend));
+  }
+
   sections.push({title: 'ark status:', lines: arkStatusLines});
 
   return sections;
@@ -299,20 +329,27 @@ export async function checkStatus(
 
     spinner.text = 'Checking ARK services';
 
-    // Run status check and version fetch in parallel
-    const [statusData, versionInfo] = await Promise.all([
+    // Run status check, version fetch, and backend detection in parallel
+    const [statusData, versionInfo, detection] = await Promise.all([
       statusChecker.checkAll(),
       fetchVersionInfo(),
+      describeStorageBackend(),
     ]);
 
     spinner.stop();
 
-    const sections = buildStatusSections(statusData, versionInfo);
+    const sections = buildStatusSections(statusData, versionInfo, detection);
     StatusFormatter.printSections(sections);
 
     if (options?.waitForReady) {
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
-      const backend = await detectStorageBackend();
+      const backend = detection.backend;
+
+      if (backend === 'unknown') {
+        output.warning(
+          `${detection.message} Skipping backend-specific readiness checks.`
+        );
+      }
 
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
