@@ -73,7 +73,6 @@ function enrichServiceDetails(service: ServiceStatus): {
   };
 }
 
-/** Render the detected storage backend as a line in the `ark status:` section. */
 function backendStatusLine(detection: BackendDetection) {
   const display: Record<
     BackendDetection['status'],
@@ -329,7 +328,7 @@ export async function checkStatus(
 
     spinner.text = 'Checking ARK services';
 
-    // Run status check, version fetch, and backend detection in parallel
+    // Run status check and version fetch in parallel
     const [statusData, versionInfo, detection] = await Promise.all([
       statusChecker.checkAll(),
       fetchVersionInfo(),

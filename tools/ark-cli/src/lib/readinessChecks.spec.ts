@@ -55,7 +55,6 @@ describe('detectStorageBackend', () => {
       kubectlFail('The connection to the server localhost:8080 was refused')
     );
     await expect(detectStorageBackend()).resolves.toBe('unknown');
-    // 1 initial + 2 retries, all on the CRD probe (never reaches apiservice)
     expect(mockedExeca).toHaveBeenCalledTimes(3);
     expect(
       mockedExeca.mock.calls.every(
@@ -77,14 +76,12 @@ describe('detectStorageBackend', () => {
       kubectlFail('Error from server (Forbidden): customresourcedefinitions is forbidden')
     );
     await expect(detectStorageBackend()).resolves.toBe('unknown');
-    // Forbidden is authoritative — no retry, no apiservice probe
     expect(mockedExeca).toHaveBeenCalledTimes(1);
   });
 
   it('returns unknown when stderr is empty or unrecognized', async () => {
     mockedExeca.mockResolvedValue(kubectlFail(''));
     await expect(detectStorageBackend()).resolves.toBe('unknown');
-    // empty stderr is treated as transient → retried
     expect(mockedExeca).toHaveBeenCalledTimes(3);
   });
 });
@@ -191,9 +188,9 @@ describe('runReadinessChecks', () => {
 
   it('stops after APIServices failure and does not check API group', async () => {
     mockedExeca
-      .mockResolvedValueOnce(kubectlNotFound()) // get crd → absent
-      .mockResolvedValueOnce(kubectlOk('apiservice/v1alpha1.ark.mckinsey.com')) // get apiservice → exists
-      .mockResolvedValueOnce(kubectlFail('timed out')) // wait apiservice → fail
+      .mockResolvedValueOnce(kubectlNotFound())
+      .mockResolvedValueOnce(kubectlOk('apiservice/v1alpha1.ark.mckinsey.com'))
+      .mockResolvedValueOnce(kubectlFail('timed out'))
       .mockResolvedValueOnce(kubectlOk());
 
     const results = await runReadinessChecks(60);
@@ -213,7 +210,6 @@ describe('runReadinessChecks', () => {
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe('Storage backend');
     expect(results[0].passed).toBe(false);
-    // only CRD probes ran (1 + 2 retries) — no apiservice/wait/api-resources calls
     expect(mockedExeca).toHaveBeenCalledTimes(3);
     expect(
       mockedExeca.mock.calls.every(
