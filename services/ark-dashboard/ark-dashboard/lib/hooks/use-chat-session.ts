@@ -22,10 +22,91 @@ import {
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
+import type { ChatResponse } from '@/lib/services/chat';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
+
+type ResultMessage = NonNullable<ChatResponse['messages']>[number];
+
+// Converts a query-result message (OpenAI-ish shape) into the dashboard's
+// ExtendedChatMessage. Extracted to keep pollAfterApproval's complexity low.
+function convertResultMessage(msg: ResultMessage): ExtendedChatMessage {
+  if (msg.role === 'tool') {
+    return {
+      role: 'tool',
+      content: msg.content || '',
+      tool_call_id: msg.tool_call_id || '',
+    } as ExtendedChatMessage;
+  }
+  if (msg.role === 'assistant') {
+    const baseMsg: {
+      role: 'assistant';
+      content: string;
+      name?: string;
+      tool_calls?: Array<{
+        id: string;
+        type: 'function';
+        function: { name: string; arguments: string };
+      }>;
+    } = {
+      role: 'assistant',
+      content: msg.content || '',
+    };
+    if (msg.name) {
+      baseMsg.name = msg.name;
+    }
+    if (msg.tool_calls && msg.tool_calls.length > 0) {
+      baseMsg.tool_calls = msg.tool_calls.map(tc => ({
+        id: tc.id,
+        type: 'function' as const,
+        function: tc.function,
+      }));
+    }
+    return baseMsg as ExtendedChatMessage;
+  }
+  return {
+    role: msg.role as 'user' | 'system',
+    content: msg.content || '',
+  } as ExtendedChatMessage;
+}
+
+// Builds the chat message that surfaces a cascading approval request from an
+// A2ATask, or null when the task carries no tool calls to approve.
+function buildCascadingApprovalMessage(
+  a2aTask: Awaited<ReturnType<typeof chatService.getA2ATask>>,
+  queryName: string,
+  queryNamespace: string,
+  taskId: string,
+): ExtendedChatMessage | null {
+  const meta = a2aTask?.status?.protocolMetadata;
+  if (!meta?.toolCalls) return null;
+
+  const taskStartTime = a2aTask?.status?.startTime;
+  const receivedAtMs = taskStartTime
+    ? new Date(taskStartTime).getTime()
+    : Date.now();
+
+  return {
+    role: 'assistant',
+    content: '',
+    approvalRequest: {
+      type: 'tool_approval_request',
+      taskId,
+      queryName,
+      queryNamespace,
+      toolCalls: JSON.parse(meta.toolCalls),
+      timeout: meta.timeout,
+      onTimeout: meta.onTimeout,
+      agentName: a2aTask?.agentRef?.name,
+      receivedAtMs,
+    },
+    metadata: {
+      queryName,
+    },
+  } as ExtendedChatMessage;
+}
 
 interface UseChatSessionParams {
   name: string;
@@ -946,15 +1027,75 @@ export function useChatSession({
     await chatService.cancelQuery(lastQueryName.current).catch(() => {});
   }, [setIsProcessing, updateChatMessages]);
 
+  const handleCascadingApproval = useCallback(
+    async (queryName: string): Promise<boolean> => {
+      const query = await chatService.getQuery(queryName);
+      const status = query?.status as
+        | { response?: { a2a?: { taskId?: string } } }
+        | undefined;
+      const taskId = status?.response?.a2a?.taskId;
+      if (!taskId) return false;
+
+      try {
+        const a2aTask = await chatService.getA2ATask(`a2a-task-${taskId}`);
+        const message = buildCascadingApprovalMessage(
+          a2aTask,
+          queryName,
+          query?.namespace || 'default',
+          taskId,
+        );
+        if (!message) return false;
+
+        updateChatMessages(prev => [...prev, message]);
+        pendingApprovalQueryRef.current = { queryName, messageIndex: -1 };
+        stopPollingRef.current = null;
+        setIsProcessing(false);
+        return true;
+      } catch (err) {
+        console.error(
+          '[HITL Debug] Error fetching cascading approval task:',
+          err,
+        );
+        return false;
+      }
+    },
+    [updateChatMessages, setIsProcessing],
+  );
+
+  const applyTerminalResult = useCallback(
+    (result: ChatResponse, messageIndex: number, queryName: string): void => {
+      stopPollingRef.current = null;
+
+      if (result.status === 'done') {
+        if (result.messages && result.messages.length > 0) {
+          updateChatMessages(prev => [
+            ...prev.slice(0, messageIndex),
+            ...result.messages!.map(convertResultMessage),
+          ]);
+        }
+      } else if (result.status === 'error') {
+        updateChatMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.response || 'Query failed after approval',
+            metadata: {
+              status: 'failed',
+              queryName,
+            },
+          } as ExtendedChatMessage,
+        ]);
+      }
+
+      setIsProcessing(false);
+    },
+    [updateChatMessages, setIsProcessing],
+  );
+
   const pollAfterApproval = useCallback(async () => {
-    if (!pendingApprovalQueryRef.current) {
-      console.log('[HITL Debug] No pending approval query to poll');
-      return;
-    }
+    if (!pendingApprovalQueryRef.current) return;
 
     const { queryName, messageIndex } = pendingApprovalQueryRef.current;
-    console.log('[HITL Debug] Starting polling after approval for:', queryName);
-
     setIsWaitingForApprovalResponse(true);
 
     let pollingStopped = false;
@@ -966,10 +1107,7 @@ export function useChatSession({
     const timeoutMs = 120000;
 
     while (!pollingStopped) {
-      console.log('[HITL Debug] Polling iteration...');
-
       if (Date.now() - startTime > timeoutMs) {
-        console.log('[HITL Debug] Polling timeout reached after 120s');
         updateChatMessages(prev => [
           ...prev,
           {
@@ -984,185 +1122,31 @@ export function useChatSession({
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       try {
-        console.log('[HITL Debug] Fetching query result for:', queryName);
         const result = await chatService.getQueryResult(queryName);
-        console.log('[HITL Debug] Query result:', result);
 
-        // Check for cascading approval (query returned to input-required state)
-        if (result.status === 'input-required') {
-          console.log(
-            '[HITL Debug] Detected cascading approval - query returned to input-required',
-          );
-
-          // Fetch full query to get A2A task info
-          const query = await chatService.getQuery(queryName);
-          if (
-            query?.status &&
-            typeof query.status === 'object' &&
-            'response' in query.status
-          ) {
-            const response = query.status.response as {
-              a2a?: { taskId?: string; contextId?: string };
-            };
-            if (response.a2a?.taskId) {
-              console.log(
-                '[HITL Debug] Found new A2A task for cascading approval:',
-                response.a2a.taskId,
-              );
-
-              // Fetch the A2A task details
-              try {
-                // A2A task names are prefixed with "a2a-task-"
-                const taskName = `a2a-task-${response.a2a.taskId}`;
-                const a2aTask = await chatService.getA2ATask(taskName);
-                if (a2aTask?.status?.protocolMetadata?.toolCalls) {
-                  const toolCallsStr =
-                    a2aTask.status.protocolMetadata.toolCalls;
-                  const toolCalls = JSON.parse(toolCallsStr);
-                  const timeout = a2aTask.status.protocolMetadata.timeout;
-                  const onTimeout = a2aTask.status.protocolMetadata.onTimeout;
-                  const agentName = a2aTask.agentRef?.name;
-                  const taskStartTime = a2aTask.status?.startTime;
-                  const receivedAtMs = taskStartTime
-                    ? new Date(taskStartTime).getTime()
-                    : Date.now();
-
-                  console.log(
-                    '[HITL Debug] Showing cascading approval UI for task:',
-                    taskName,
-                  );
-
-                  // Append a new message for the cascading approval (don't replace existing message)
-                  const taskId = response.a2a.taskId;
-                  updateChatMessages(prev => {
-                    const updated = [...prev];
-                    // Add new approval message at the end
-                    updated.push({
-                      role: 'assistant',
-                      content: '',
-                      approvalRequest: {
-                        type: 'tool_approval_request',
-                        taskId,
-                        queryName,
-                        queryNamespace: query.namespace || 'default',
-                        toolCalls,
-                        timeout,
-                        onTimeout,
-                        agentName,
-                        receivedAtMs,
-                      },
-                      metadata: {
-                        queryName,
-                      },
-                    } as ExtendedChatMessage);
-                    return updated;
-                  });
-
-                  // Update the pending approval ref with new message index
-                  pendingApprovalQueryRef.current = {
-                    queryName,
-                    messageIndex: -1, // Use -1 to indicate the last message
-                  };
-
-                  // Stop polling and wait for the next approval
-                  stopPollingRef.current = null;
-                  setIsProcessing(false);
-                  break;
-                }
-              } catch (err) {
-                console.error(
-                  '[HITL Debug] Error fetching cascading approval task:',
-                  err,
-                );
-              }
-            }
-          }
+        if (
+          result.status === 'input-required' &&
+          (await handleCascadingApproval(queryName))
+        ) {
+          break;
         }
 
         if (result.terminal) {
-          console.log(
-            '[HITL Debug] Query reached terminal state:',
-            result.status,
-          );
-          stopPollingRef.current = null;
-
-          if (result.status === 'done') {
-            console.log(
-              '[HITL Debug] Query completed successfully with messages:',
-              result.messages?.length,
-            );
-            if (result.messages && result.messages.length > 0) {
-              console.log('[HITL Debug] Updating chat messages with result');
-              updateChatMessages(prev => {
-                const beforeApproval = prev.slice(0, messageIndex);
-                const afterMessages = result.messages!.map(
-                  (msg): ExtendedChatMessage => {
-                    if (msg.role === 'tool') {
-                      return {
-                        role: 'tool',
-                        content: msg.content || '',
-                        tool_call_id: msg.tool_call_id || '',
-                      } as ExtendedChatMessage;
-                    } else if (msg.role === 'assistant') {
-                      const baseMsg: {
-                        role: 'assistant';
-                        content: string;
-                        name?: string;
-                        tool_calls?: Array<{
-                          id: string;
-                          type: 'function';
-                          function: { name: string; arguments: string };
-                        }>;
-                      } = {
-                        role: 'assistant' as const,
-                        content: msg.content || '',
-                      };
-                      if (msg.name) {
-                        baseMsg.name = msg.name;
-                      }
-                      if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        baseMsg.tool_calls = msg.tool_calls.map(tc => ({
-                          id: tc.id,
-                          type: 'function' as const,
-                          function: tc.function,
-                        }));
-                      }
-                      return baseMsg as ExtendedChatMessage;
-                    } else {
-                      return {
-                        role: msg.role as 'user' | 'system',
-                        content: msg.content || '',
-                      } as ExtendedChatMessage;
-                    }
-                  },
-                );
-                return [...beforeApproval, ...afterMessages];
-              });
-            }
-          } else if (result.status === 'error') {
-            console.log('[HITL Debug] Query failed with error');
-            updateChatMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: result.response || 'Query failed after approval',
-                metadata: {
-                  status: 'failed',
-                  queryName,
-                },
-              } as ExtendedChatMessage,
-            ]);
-          }
-          setIsProcessing(false);
+          applyTerminalResult(result, messageIndex, queryName);
           break;
         }
       } catch (err) {
         console.error('[HITL Debug] Error polling after approval:', err);
       }
     }
-    console.log('[HITL Debug] Polling loop ended');
+
     setIsWaitingForApprovalResponse(false);
-  }, [updateChatMessages, setIsProcessing]);
+  }, [
+    updateChatMessages,
+    setIsProcessing,
+    handleCascadingApproval,
+    applyTerminalResult,
+  ]);
 
   return {
     messages: chatMessages,

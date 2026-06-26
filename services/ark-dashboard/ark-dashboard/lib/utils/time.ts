@@ -20,19 +20,21 @@ export function parseDurationToMs(
   const trimmed = duration.trim();
   if (trimmed === '') return null;
 
-  const re = /(-?\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h|d)/g;
+  // Anchored, single-token regex consumed against a shrinking string. Matching
+  // only ever starts at position 0 of `rest`, so total work is linear in the
+  // input length (no global rescan that would make it super-linear).
+  const token = /^(-?\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h|d)/;
+  let rest = trimmed;
   let total = 0;
-  let consumed = 0;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(trimmed)) !== null) {
-    const value = parseFloat(match[1]);
-    const unit = match[2];
-    const factor = UNIT_TO_MS[unit];
+  while (rest.length > 0) {
+    const match = token.exec(rest);
+    if (!match) return null;
+    const value = Number.parseFloat(match[1]);
+    const factor = UNIT_TO_MS[match[2]];
     if (factor === undefined || Number.isNaN(value)) return null;
     total += value * factor;
-    consumed += match[0].length;
+    rest = rest.slice(match[0].length);
   }
-  if (consumed === 0 || consumed !== trimmed.length) return null;
   return total;
 }
 

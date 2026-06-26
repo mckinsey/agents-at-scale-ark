@@ -550,8 +550,6 @@ func (a *Agent) runAgenticLoopFromResumption(
 	eventStream EventStreamInterface,
 	tools []openai.ChatCompletionToolParam,
 ) (*ExecutionResult, error) {
-	log := logf.FromContext(ctx)
-
 	for {
 		if ctx.Err() != nil {
 			return &ExecutionResult{Messages: newMessages}, ctx.Err()
@@ -573,21 +571,24 @@ func (a *Agent) runAgenticLoopFromResumption(
 		}
 
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
-			logger := logf.FromContext(ctx)
-			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
-				logger.Error(err, "Tool execution failed during approval resumption", "agent", a.FullName())
-			}
-			// Check if this is a cascading approval error
-			var approvalErr *ApprovalRequiredError
-			if errors.As(err, &approvalErr) {
-				// Remove the last assistant message from newMessages since it contains
-				// tool_calls that haven't been executed yet
-				if len(newMessages) > 0 {
-					log.Info("Removing last assistant message with pending tool_calls from result", "messageCount", len(newMessages))
-					newMessages = newMessages[:len(newMessages)-1]
-				}
-			}
+			newMessages = a.handleResumptionToolError(ctx, err, newMessages)
 			return &ExecutionResult{Messages: newMessages}, err
 		}
 	}
+}
+
+// handleResumptionToolError logs a genuine tool failure and, for a cascading
+// approval, drops the trailing assistant message whose tool_calls were not run.
+func (a *Agent) handleResumptionToolError(ctx context.Context, err error, newMessages []Message) []Message {
+	logger := logf.FromContext(ctx)
+	if !IsTerminateTeam(err) && !IsSelectionMade(err) {
+		logger.Error(err, "Tool execution failed during approval resumption", "agent", a.FullName())
+	}
+
+	var approvalErr *ApprovalRequiredError
+	if errors.As(err, &approvalErr) && len(newMessages) > 0 {
+		logger.Info("Removing last assistant message with pending tool_calls from result", "messageCount", len(newMessages))
+		newMessages = newMessages[:len(newMessages)-1]
+	}
+	return newMessages
 }

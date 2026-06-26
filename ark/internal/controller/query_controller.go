@@ -235,55 +235,65 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 	// Check task phase
 	switch a2aTask.Status.Phase {
 	case arka2a.PhaseCompleted:
-		// Task completed with approval - resume query execution
-		log.Info("A2ATask completed, resuming query execution", "taskId", taskID)
-		// Note: Don't clear taskID here - executor needs it to detect resumption
-		// The executor will clear it after processing (handler.go line 165)
-
-		// Approval was granted: reset the cascade counter so legitimate
-		// multi-step flows aren't penalised by earlier denials in the chain.
-		if err := r.resetApprovalCascadeCount(ctx, obj); err != nil {
-			log.Error(err, "failed to reset approval cascade counter")
-		}
-
-		r.clearOperationCacheForResumption(ctx, obj, "task completed")
-
-		if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
-			return ctrl.Result{}, err
-		}
-		// Immediately requeue to trigger executor resumption
-		return ctrl.Result{Requeue: true}, nil
-
+		return r.handleApprovedTask(ctx, obj, taskID)
 	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
-		// A denial that the agent can react to (explicit reject or timeout-reject)
-		// resumes execution so the agent produces a final response. Only true
-		// failures (e.g. controller errors, cancellation for non-approval reasons)
-		// land the query in error.
-		if arka2a.IsResumableDenial(&a2aTask) {
-			return r.handleResumableDenial(ctx, obj, taskID, expiry)
-		}
-
-		log.Info("A2ATask failed or cancelled, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase, "error", a2aTask.Status.Error)
-		if a2aTask.Status.Error != "" {
-			var target arkv1alpha1.QueryTarget
-			if obj.Status.Response != nil {
-				target = obj.Status.Response.Target
-			}
-			obj.Status.Response = &arkv1alpha1.Response{
-				Target:  target,
-				Content: a2aTask.Status.Error,
-				Phase:   statusError,
-			}
-		}
-		if err := r.updateStatus(ctx, obj, statusError); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
-
+		return r.handleDeniedOrFailedTask(ctx, obj, &a2aTask, taskID, expiry)
 	default:
 		// Task still pending, keep waiting
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
+}
+
+// handleApprovedTask resumes query execution after an approval was granted.
+func (r *QueryReconciler) handleApprovedTask(ctx context.Context, obj *arkv1alpha1.Query, taskID string) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	log.Info("A2ATask completed, resuming query execution", "taskId", taskID)
+	// Note: Don't clear taskID here - executor needs it to detect resumption;
+	// the executor clears it after processing.
+
+	// Approval was granted: reset the cascade counter so legitimate multi-step
+	// flows aren't penalised by earlier denials in the chain.
+	if err := r.resetApprovalCascadeCount(ctx, obj); err != nil {
+		log.Error(err, "failed to reset approval cascade counter")
+	}
+
+	r.clearOperationCacheForResumption(ctx, obj, "task completed")
+
+	if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
+		return ctrl.Result{}, err
+	}
+	// Immediately requeue to trigger executor resumption
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// handleDeniedOrFailedTask resumes the agent on a resumable denial, otherwise
+// marks the query as errored.
+func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *arkv1alpha1.Query, a2aTask *arkv1alpha1.A2ATask, taskID string, expiry time.Time) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	// A denial the agent can react to (explicit reject or timeout-reject) resumes
+	// execution so the agent produces a final response. Only true failures land
+	// the query in error.
+	if arka2a.IsResumableDenial(a2aTask) {
+		return r.handleResumableDenial(ctx, obj, taskID, expiry)
+	}
+
+	log.Info("A2ATask failed or cancelled, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase, "error", a2aTask.Status.Error)
+	if a2aTask.Status.Error != "" {
+		var target arkv1alpha1.QueryTarget
+		if obj.Status.Response != nil {
+			target = obj.Status.Response.Target
+		}
+		obj.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: a2aTask.Status.Error,
+			Phase:   statusError,
+		}
+	}
+	if err := r.updateStatus(ctx, obj, statusError); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
 }
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
@@ -1057,30 +1067,30 @@ func (r *QueryReconciler) resetApprovalCascadeCount(ctx context.Context, query *
 		return nil
 	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := &arkv1alpha1.Query{}
-		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, latest); err != nil {
-			if errors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-		if latest.Annotations == nil {
-			return nil
-		}
-		if _, present := latest.Annotations[annotations.ApprovalCascadeCount]; !present {
-			return nil
-		}
-		delete(latest.Annotations, annotations.ApprovalCascadeCount)
-		if err := r.Update(ctx, latest); err != nil {
-			if errors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-		query.Annotations = latest.Annotations
-		query.ResourceVersion = latest.ResourceVersion
-		return nil
+		return r.removeApprovalCascadeAnnotation(ctx, query)
 	})
+}
+
+// removeApprovalCascadeAnnotation deletes the cascade annotation from the latest
+// version of the query. A deleted query is treated as success (nothing to reset).
+func (r *QueryReconciler) removeApprovalCascadeAnnotation(ctx context.Context, query *arkv1alpha1.Query) error {
+	latest := &arkv1alpha1.Query{}
+	if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, latest); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if latest.Annotations == nil {
+		return nil
+	}
+	if _, present := latest.Annotations[annotations.ApprovalCascadeCount]; !present {
+		return nil
+	}
+	delete(latest.Annotations, annotations.ApprovalCascadeCount)
+	if err := r.Update(ctx, latest); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	query.Annotations = latest.Annotations
+	query.ResourceVersion = latest.ResourceVersion
+	return nil
 }
 
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {
