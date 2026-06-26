@@ -1053,6 +1053,52 @@ func TestHandleApprovalRequiredEmitsStreamEvent(t *testing.T) {
 	require.NotEmpty(t, stream.chunks, "approval request event should be streamed")
 }
 
+func TestResolveResumptionAgent(t *testing.T) {
+	makeTask := func(ctx *ExecutionContext) *arkv1alpha1.A2ATask {
+		meta := map[string]string{}
+		if ctx != nil {
+			raw, _ := json.Marshal(ctx)
+			meta["context"] = string(raw)
+		}
+		return &arkv1alpha1.A2ATask{Status: arkv1alpha1.A2ATaskStatus{ProtocolMetadata: meta}}
+	}
+	state := func(targetName string) *executionState {
+		return &executionState{
+			target: &arkv1alpha1.QueryTarget{Type: "agent", Name: targetName},
+			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}},
+		}
+	}
+
+	t.Run("falls back to target when no context", func(t *testing.T) {
+		name, ns := resolveResumptionAgent(state("my-agent"), makeTask(nil))
+		assert.Equal(t, "my-agent", name)
+		assert.Equal(t, "default", ns)
+	})
+
+	t.Run("uses context agent for team target", func(t *testing.T) {
+		task := makeTask(&ExecutionContext{AgentName: "member-agent", AgentNamespace: "team-ns"})
+		name, ns := resolveResumptionAgent(state("test-team"), task)
+		assert.Equal(t, "member-agent", name, "team member from context, not the team name")
+		assert.Equal(t, "team-ns", ns)
+	})
+
+	t.Run("keeps query namespace when context omits namespace", func(t *testing.T) {
+		task := makeTask(&ExecutionContext{AgentName: "member-agent"})
+		name, ns := resolveResumptionAgent(state("test-team"), task)
+		assert.Equal(t, "member-agent", name)
+		assert.Equal(t, "default", ns)
+	})
+
+	t.Run("falls back to target on unparseable context", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{ProtocolMetadata: map[string]string{"context": "{not json"}},
+		}
+		name, ns := resolveResumptionAgent(state("my-agent"), task)
+		assert.Equal(t, "my-agent", name)
+		assert.Equal(t, "default", ns)
+	})
+}
+
 func TestBuildA2AResponse(t *testing.T) {
 	h := newTestHandler()
 	tracer := telemetrynoop.NewTracer()

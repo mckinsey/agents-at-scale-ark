@@ -790,17 +790,19 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 		log.Info("Handling rejected tool calls - will return error results", "count", len(toolCallsData), "reason", rejectionError)
 	}
 
-	// Fetch the agent CRD - needed for both approval and rejection to resume conversation
-	targetName := state.target.Name
+	// Resolve the agent that requested approval. For team targets the query
+	// target names the team, not the agent, so prefer the agent captured in the
+	// approval context; fall back to the target for direct agent queries.
+	agentName, agentNamespace := resolveResumptionAgent(state, a2aTask)
 	var agentCRD arkv1alpha1.Agent
-	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: state.query.Namespace}, &agentCRD); err != nil {
-		return nil, nil, fmt.Errorf("failed to get agent %s: %w", targetName, err)
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: agentName, Namespace: agentNamespace}, &agentCRD); err != nil {
+		return nil, nil, fmt.Errorf("failed to get agent %s: %w", agentName, err)
 	}
 
 	// Create agent instance - needed for resuming execution with results (approval or rejection)
 	agent, err := MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
+		return nil, nil, fmt.Errorf("failed to make agent %s: %w", agentName, err)
 	}
 
 	// Convert parsed tool calls to openai format
@@ -879,6 +881,29 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 	}
 
 	return result, result.Messages, nil
+}
+
+// resolveResumptionAgent determines which agent to resume after approval. The
+// approval context records the agent that actually requested approval (a team
+// member when the query targets a team); fall back to the query target for
+// direct agent queries or when no context was persisted.
+func resolveResumptionAgent(state *executionState, a2aTask *arkv1alpha1.A2ATask) (string, string) {
+	name := state.target.Name
+	namespace := state.query.Namespace
+
+	if ctxJSON, ok := a2aTask.Status.ProtocolMetadata["context"]; ok {
+		var execCtx ExecutionContext
+		if err := json.Unmarshal([]byte(ctxJSON), &execCtx); err == nil {
+			if execCtx.AgentName != "" {
+				name = execCtx.AgentName
+			}
+			if execCtx.AgentNamespace != "" {
+				namespace = execCtx.AgentNamespace
+			}
+		}
+	}
+
+	return name, namespace
 }
 
 // saveInputMessagesToMemory saves input messages to memory before first approval
