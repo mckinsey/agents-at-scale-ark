@@ -891,18 +891,22 @@ func resolveResumptionAgent(state *executionState, a2aTask *arkv1alpha1.A2ATask)
 	name := state.target.Name
 	namespace := state.query.Namespace
 
-	if ctxJSON, ok := a2aTask.Status.ProtocolMetadata["context"]; ok {
-		var execCtx ExecutionContext
-		if err := json.Unmarshal([]byte(ctxJSON), &execCtx); err == nil {
-			if execCtx.AgentName != "" {
-				name = execCtx.AgentName
-			}
-			if execCtx.AgentNamespace != "" {
-				namespace = execCtx.AgentNamespace
-			}
-		}
+	ctxJSON, ok := a2aTask.Status.ProtocolMetadata["context"]
+	if !ok {
+		return name, namespace
 	}
 
+	var execCtx ExecutionContext
+	if err := json.Unmarshal([]byte(ctxJSON), &execCtx); err != nil {
+		return name, namespace
+	}
+
+	if execCtx.AgentName != "" {
+		name = execCtx.AgentName
+	}
+	if execCtx.AgentNamespace != "" {
+		namespace = execCtx.AgentNamespace
+	}
 	return name, namespace
 }
 
