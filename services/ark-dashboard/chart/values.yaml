@@ -165,14 +165,33 @@ httpRoute:
   #         port: 3000
 
 # Seeded into the `marketplace-sources` ConfigMap. Set to [] to skip.
+# Optional `auth` block = authenticated fetch. The token is NEVER templated here:
+# it lives in a pre-existing Secret (External Secrets / sealed-secrets / SOPS / Vault);
+# only `scheme` + `secretRef` are seeded. Grant viewers `get` on that Secret to use it
+# (see samples/marketplace/authenticated-source-rbac.yaml).
 marketplaceSources:
   - name: agents-at-scale-marketplace
     url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
     displayName: "Ark Marketplace"
+  # - name: internal-mirror
+  #   url: https://internal.example.com/marketplace.json
+  #   displayName: "Internal Mirror"
+  #   namespace: team-a
+  #   auth:
+  #     scheme: bearer                                     # GitHub/GHES/artifact stores
+  #     secretRef: marketplace-source-internal-mirror-auth # pre-existing Secret, key `value`
+  # - name: azure-devops-mirror
+  #   url: https://dev.azure.com/org/_apis/git/repositories/repo/items?path=/marketplace.json
+  #   displayName: "Azure DevOps Mirror"
+  #   namespace: team-a
+  #   auth:
+  #     scheme: basic                                       # Azure DevOps PAT (empty user)
+  #     secretRef: marketplace-source-azure-devops-mirror-auth
 
 marketplaceSourcesSeed:
   image: alpine/k8s:1.35.5
 
-# Edit access to the marketplace-sources ConfigMap; bound per namespace.
+# Edit access to the marketplace-sources ConfigMap + per-source credential
+# Secrets; a namespace-scoped Role bound per namespace (never a ClusterRole).
 marketplaceSourceEditorRole:
   create: true
