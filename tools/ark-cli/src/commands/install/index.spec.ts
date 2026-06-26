@@ -794,9 +794,6 @@ describe('install command', () => {
         command.parseAsync(['node', 'test', 'ark-completions', 'ark-api', '--ark-version', '0.1.50'])
       ).rejects.toThrow('process.exit called');
 
-      // The other service still installs best-effort, but the overall command
-      // fails with a single error (non-zero exit) naming the skipped service —
-      // no separate "skipping" warning.
       expect(mockOutput.success).toHaveBeenCalledWith('ark-api installed successfully');
       expect(mockOutput.warning).not.toHaveBeenCalled();
       expect(mockOutput.error).toHaveBeenCalledWith(
@@ -854,6 +851,55 @@ describe('install command', () => {
       expect(mockOutput.success).toHaveBeenCalledWith('ark-api installed successfully');
       expect(mockOutput.warning).not.toHaveBeenCalled();
       expect(mockExit).not.toHaveBeenCalled();
+    });
+
+    it('in -y mode, installs the rest then exits non-zero for the skipped version', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller:0.0.0-bad',
+          namespace: 'ark-system',
+          category: 'core',
+        },
+        'ark-completions': {
+          name: 'ark-completions',
+          helmReleaseName: 'ark-completions',
+          chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions:0.0.0-bad',
+          namespace: 'ark-system',
+          category: 'core',
+        },
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockRejectedValueOnce({
+          stderr:
+            'Error: failed to perform "FetchReference" on source: ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions:0.0.0-bad: not found',
+          message: 'Command failed',
+        });
+
+      const command = createInstallCommand(mockConfig);
+      await expect(
+        command.parseAsync(['node', 'test', '-y', '--ark-version', '0.0.0-bad'])
+      ).rejects.toThrow('process.exit called');
+
+      const helmUpgradeCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      expect(
+        helmUpgradeCalls.some((call: any) =>
+          call[1].some((arg: any) => String(arg).includes('ark-controller'))
+        )
+      ).toBe(true);
+
+      expect(mockOutput.warning).not.toHaveBeenCalled();
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        'installation incomplete: 1 service(s) skipped because the requested version was not found: ark-completions@0.0.0-bad'
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
     });
 
     it('fails on other helm errors (not version-not-found)', async () => {

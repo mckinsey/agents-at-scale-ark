@@ -85,8 +85,6 @@ function isValidVersion(version: string): boolean {
   return /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(version);
 }
 
-// Returns the requested version that helm reported as not found, or null if the
-// error is something else. Lets callers report which service@version was missing.
 function notFoundVersion(
   error: unknown,
   options: {
@@ -115,10 +113,6 @@ function notFoundVersion(
   return null;
 }
 
-// On a version-not-found error, returns a "service@version" descriptor for the
-// caller to record (reported as a single aggregate error at the end). For any
-// other error it fails fast with a non-zero exit. Returns false when there is no
-// error to handle.
 function handleInstallError(
   error: unknown,
   service: ArkService,
@@ -129,7 +123,7 @@ function handleInstallError(
 ): string | false {
   const version = notFoundVersion(error, options);
   if (version !== null) {
-    return `${service.name}@${version}`; // should continue to next service
+    return version; // should continue to next service
   }
 
   // Other errors still fail
@@ -138,10 +132,11 @@ function handleInstallError(
   process.exit(1);
 }
 
-function exitIfServicesSkipped(skipped: string[]): void {
+function exitIfServicesSkipped(skipped: {name: string; version: string}[]): void {
   if (skipped.length === 0) return;
+  const detail = skipped.map((s) => `${s.name}@${s.version}`).join(', ');
   output.error(
-    `installation incomplete: ${skipped.length} service(s) skipped because the requested version was not found: ${skipped.join(', ')}`
+    `installation incomplete: ${skipped.length} service(s) skipped because the requested version was not found: ${detail}`
   );
   process.exit(1);
 }
@@ -310,8 +305,7 @@ export async function installArk(
   }
   const backend: Backend = requestedBackend;
 
-  // Track services skipped due to a not-found version so we can fail at the end
-  const skippedServices: string[] = [];
+  const skippedServices: {name: string; version: string}[] = [];
 
   let postgresValues: PostgresStorageConfig | undefined;
   if (backend === 'postgresql') {
@@ -370,9 +364,9 @@ export async function installArk(
           );
           output.success(`${service.name} installed successfully`);
         } catch (error) {
-          const skipped = handleInstallError(error, service, options);
-          if (skipped) {
-            skippedServices.push(skipped);
+          const skippedVersion = handleInstallError(error, service, options);
+          if (skippedVersion) {
+            skippedServices.push({name: service.name, version: skippedVersion});
             continue;
           }
         }
@@ -421,9 +415,9 @@ export async function installArk(
           }
         }
       } catch (error) {
-        const skipped = handleInstallError(error, service, options);
-        if (skipped) {
-          skippedServices.push(skipped);
+        const skippedVersion = handleInstallError(error, service, options);
+        if (skippedVersion) {
+          skippedServices.push({name: service.name, version: skippedVersion});
           continue;
         }
       }
@@ -629,9 +623,9 @@ export async function installArk(
 
         console.log(); // Add blank line after command output
       } catch (error) {
-        const skipped = handleInstallError(error, service, options);
-        if (skipped) {
-          skippedServices.push(skipped);
+        const skippedVersion = handleInstallError(error, service, options);
+        if (skippedVersion) {
+          skippedServices.push({name: service.name, version: skippedVersion});
           console.log(); // Add blank line after warning
           continue;
         }
@@ -682,9 +676,9 @@ export async function installArk(
         );
         console.log(); // Add blank line after command output
       } catch (error) {
-        const skipped = handleInstallError(error, service, options);
-        if (skipped) {
-          skippedServices.push(skipped);
+        const skippedVersion = handleInstallError(error, service, options);
+        if (skippedVersion) {
+          skippedServices.push({name: service.name, version: skippedVersion});
           console.log(); // Add blank line after warning
           continue;
         }
@@ -692,9 +686,6 @@ export async function installArk(
       }
     }
   }
-
-  // Fail if any requested service was skipped due to a not-found version
-  exitIfServicesSkipped(skippedServices);
 
   // Show next steps after successful installation
   if (serviceNames.length === 0) {
@@ -712,7 +703,8 @@ export async function installArk(
           s.category === 'core' &&
           s.k8sDeploymentName &&
           s.namespace &&
-          (!s.requiresBackend || s.requiresBackend === backend)
+          (!s.requiresBackend || s.requiresBackend === backend) &&
+          !skippedServices.some((sk) => sk.name === s.name)
       );
 
       const spinner = ora(
@@ -757,6 +749,8 @@ export async function installArk(
       process.exit(1);
     }
   }
+
+  exitIfServicesSkipped(skippedServices);
 }
 
 export function createInstallCommand(config: ArkConfig) {
