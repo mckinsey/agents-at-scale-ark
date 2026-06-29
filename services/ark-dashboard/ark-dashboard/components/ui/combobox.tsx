@@ -26,7 +26,9 @@ function useComboboxAnchorRef() {
   return React.useContext(ComboboxAnchorContext);
 }
 
-function Combobox(props: React.ComponentProps<typeof ComboboxPrimitive.Root>) {
+function Combobox<Value, Multiple extends boolean | undefined = false>(
+  props: ComboboxPrimitive.Root.Props<Value, Multiple>,
+) {
   const anchorRef = React.useRef<HTMLDivElement | null>(null);
   return (
     <ComboboxAnchorContext.Provider value={anchorRef}>
