@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -381,6 +382,26 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r := &QueryReconciler{MaxConcurrentReconciles: 7}
 			opts := r.buildControllerOptions()
 			Expect(opts.MaxConcurrentReconciles).To(Equal(7))
+		})
+	})
+
+	Context("SetupWithManager", func() {
+		It("registers the controller and sizes the semaphore from MaxConcurrentQueries", func() {
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+			Expect(err).NotTo(HaveOccurred())
+
+			r := &QueryReconciler{
+				Client:                  mgr.GetClient(),
+				Scheme:                  mgr.GetScheme(),
+				MaxConcurrentQueries:    2,
+				MaxConcurrentReconciles: 2,
+			}
+
+			Expect(r.SetupWithManager(mgr)).To(Succeed())
+
+			Expect(r.sem).NotTo(BeNil(), "initSemaphore should have run via SetupWithManager")
+			Expect(r.sem.TryAcquire(2)).To(BeTrue(), "semaphore should permit MaxConcurrentQueries acquisitions")
+			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "semaphore should refuse the next acquisition once the cap is reached")
 		})
 	})
 
