@@ -66,6 +66,10 @@ export default {
     title: 'End to end testing',
     href: '/developer-guide/testing'
   },
+  pipelines: {
+    title: 'Build pipelines',
+    href: '/operations-guide/build-pipelines'
+  },
 
   '---operate': { type: 'separator', title: 'Operate ARK (operators / SRE)' },
   provisioning: {
@@ -87,10 +91,6 @@ export default {
   'operate-marketplace': {
     title: 'Marketplace',
     href: '/operations-guide/marketplace'
-  },
-  pipelines: {
-    title: 'Build pipelines',
-    href: '/operations-guide/build-pipelines'
   },
   'pen-testing': {
     title: 'Penetration testing',
