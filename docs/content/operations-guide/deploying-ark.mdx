@@ -203,27 +203,8 @@ This creates:
 - A RoleBinding linking the service account to the role
 - Builtin tools (`terminate`, `noop`) for agent workflows
 
-Additional options include resource quotas and network policies, which are documented in the chart.
+Resource quotas and network policies are also available, documented in the chart. Queries then run under this service account via their `query.serviceAccount` field (subject to the impersonation setting above); omit it to use the controller's own identity.
 
-### Using the Tenant Service Account
-
-Configure queries to use the service account:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: my-query
-  namespace: tenant-1
-spec:
-  # Optional - omit to use controller identity.
-  serviceAccount: ark-tenant  
-  input: "Hello from tenant-1"
-  target:
-    type: agent
-    name: my-agent
-```
-
-When no service account is specified, the query runs with the controller's identity. This is suitable for development and single-tenant deployments.
+The [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) guide is the canonical reference for multi-tenancy — CLI-based setup (`ark install ark-tenant`), cross-tenant access via RBAC, broker storage isolation, and the development workflow.
 
 > Note: Future releases will move query execution to per-namespace executor pods, eliminating the need for service account impersonation.
