@@ -41,6 +41,7 @@ export { InsertDriveFile } from './insert-drive-file';
 export { KeyboardDoubleArrowLeft } from './keyboard-double-arrow-left';
 export { KeyboardDoubleArrowRight } from './keyboard-double-arrow-right';
 export { LightMode } from './light-mode';
+export { Lock } from './lock';
 export { Memory } from './memory';
 export { Meta } from './meta';
 export { OpenAI } from './openai';

@@ -372,7 +372,6 @@ export function CreateAgentForm({
           {/* Right column — Variables panel (figma 4257:26496, 464px fixed) */}
           <div className="bg-surface-primary flex max-h-full min-h-0 w-[464px] flex-none flex-col overflow-y-auto p-5">
             <ParameterEditor
-              variant="compact"
               parameters={parameters}
               onChange={setParameters}
               prompt={promptValue}

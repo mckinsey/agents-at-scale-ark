@@ -14,9 +14,13 @@ vi.mock('@/components/ui/sonner', () => ({
 }));
 
 const mockGetByName = vi.fn();
+const mockTeamGetByName = vi.fn();
 vi.mock('@/lib/services', () => ({
   agentsService: {
     getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+  teamsService: {
+    getByName: (...args: unknown[]) => mockTeamGetByName(...args),
   },
 }));
 
@@ -373,6 +377,25 @@ describe('ChatInput', () => {
     const findSendButton = () =>
       screen.getByRole('button', { name: 'Send message' });
 
+    // Selects a variable in a freshly added row and gives it a value. The new
+    // list UI starts empty, so the user adds a row (+), picks the variable from
+    // the dropdown, then types the value.
+    const addVariableValue = async (variableName: string, value: string) => {
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Add variable' }),
+      );
+      await userEvent.click(
+        screen.getByRole('combobox', { name: 'Choose variable' }),
+      );
+      await userEvent.click(
+        await screen.findByRole('option', { name: variableName }),
+      );
+      await userEvent.type(
+        screen.getByPlaceholderText('Enter value...'),
+        value,
+      );
+    };
+
     it('shows the parameter editor and keeps send disabled until required params are filled', async () => {
       mockGetByName.mockResolvedValue({
         parameters: [
@@ -397,10 +420,7 @@ describe('ChatInput', () => {
       expect(findSendButton()).toBeDisabled();
       expect(mockSendMessage).not.toHaveBeenCalled();
 
-      await userEvent.type(
-        await screen.findByPlaceholderText('Enter value...'),
-        'researcher',
-      );
+      await addVariableValue('agent_name', 'researcher');
 
       expect(findSendButton()).not.toBeDisabled();
     });
@@ -417,10 +437,7 @@ describe('ChatInput', () => {
 
       render(<ChatInput {...baseProps} conversation={agentConversation} />);
 
-      await userEvent.type(
-        await screen.findByPlaceholderText('Enter value...'),
-        'researcher',
-      );
+      await addVariableValue('agent_name', 'researcher');
       await userEvent.type(
         screen.getByPlaceholderText('Message param-agent'),
         'Hello',

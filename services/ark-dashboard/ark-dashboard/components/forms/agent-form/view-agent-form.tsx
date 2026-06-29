@@ -372,7 +372,6 @@ export function ViewAgentForm({
 
                       {!isA2A && (
                         <ParameterEditor
-                          variant="compact"
                           parameters={parameters}
                           onChange={setParameters}
                           prompt={promptValue}
