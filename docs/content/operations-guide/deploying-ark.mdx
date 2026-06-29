@@ -103,7 +103,7 @@ helm upgrade --install \
   --namespace ark-system \
   --create-namespace \
   --set controllerManager.container.image.repository=your-registry.com/ark-controller \
-  --set controllerManager.container.image.tag=0.1.21 \
+  --set controllerManager.container.image.tag=0.1.31 \
   --set containerRegistry.enabled=true \
   --set containerRegistry.server=your-registry.com \
   --set containerRegistry.username=your_username \
@@ -115,7 +115,7 @@ helm upgrade --install \
   --version 0.1.31 \
   --namespace ark-system \
   --set image.repository=your-registry.com/ark-completions \
-  --set image.tag=0.1.21
+  --set image.tag=0.1.31
 ```
 
 If you need to transfer containers between registries, use the transfer script:
@@ -126,7 +126,7 @@ export SOURCE_DOCKER_REGISTRY=source-registry.com
 export TARGET_DOCKER_REGISTRY=your-registry.com
 export TARGET_DOCKER_USERNAME=your_username
 export TARGET_DOCKER_TOKEN=your_token
-export VERSION=0.1.21
+export VERSION=0.1.31
 ./scripts/deploy/transfer-ark-containers.sh
 ```
 
