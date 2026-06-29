@@ -226,20 +226,9 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
-	cleanupCache := true
 	startTime := time.Now()
 
-	defer func() {
-		if rec := recover(); rec != nil {
-			log.Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
-		}
-		if cleanupCache {
-			r.operations.Delete(namespacedName)
-		}
-		if r.sem != nil {
-			r.sem.Release(1)
-		}
-	}()
+	defer r.finishExecuteQueryAsync(opCtx, namespacedName)
 
 	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
@@ -331,6 +320,16 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	operationData := buildOperationData(target, queryInput)
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
+	if rec := recover(); rec != nil {
+		logf.FromContext(ctx).Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
+	}
+	r.operations.Delete(namespacedName)
+	if r.sem != nil {
+		r.sem.Release(1)
+	}
 }
 
 func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
