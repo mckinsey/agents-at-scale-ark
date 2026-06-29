@@ -383,6 +383,61 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(opts.MaxConcurrentReconciles).To(Equal(7))
 		})
 	})
+
+	Context("finishExecuteQueryAsync", func() {
+		It("deletes the operation entry and releases the semaphore", func() {
+			r := &QueryReconciler{
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			// Saturate the semaphore to model "a query is already in flight"; the
+			// next TryAcquire fails until something releases the slot.
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "semaphore should now be full")
+
+			namespacedName := types.NamespacedName{Name: "finish-query", Namespace: "default"}
+			_, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			r.operations.Store(namespacedName, context.CancelFunc(cancel))
+
+			r.finishExecuteQueryAsync(context.Background(), namespacedName)
+
+			_, exists := r.operations.Load(namespacedName)
+			Expect(exists).To(BeFalse(), "operations entry should be cleared")
+			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "semaphore slot should have been released")
+		})
+
+		It("does not panic when the semaphore is nil", func() {
+			r := &QueryReconciler{}
+			namespacedName := types.NamespacedName{Name: "no-sem-query", Namespace: "default"}
+			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
+
+			Expect(func() { r.finishExecuteQueryAsync(context.Background(), namespacedName) }).NotTo(Panic())
+
+			_, exists := r.operations.Load(namespacedName)
+			Expect(exists).To(BeFalse())
+		})
+
+		It("recovers from a panic in the goroutine and still cleans up", func() {
+			r := &QueryReconciler{
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+
+			namespacedName := types.NamespacedName{Name: "panic-query", Namespace: "default"}
+			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
+
+			Expect(func() {
+				defer r.finishExecuteQueryAsync(context.Background(), namespacedName)
+				panic("simulated execution panic")
+			}).NotTo(Panic())
+
+			_, exists := r.operations.Load(namespacedName)
+			Expect(exists).To(BeFalse(), "cleanup must run even on panic")
+			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "semaphore must be released even on panic")
+		})
+	})
 })
 
 var _ = Describe("Query Controller Fallback Raw", func() {
