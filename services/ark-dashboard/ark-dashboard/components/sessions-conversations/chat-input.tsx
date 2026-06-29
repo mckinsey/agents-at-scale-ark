@@ -54,9 +54,17 @@ export function ChatInput({
   const toolCallCount = conversation?.toolCallCount || 0;
 
   const {
-    requiredParameters,
-    values: parameterValues,
-    setValue: setParameterValue,
+    variant: parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    rows: parameterRows,
+    addRow: addParameterRow,
+    setRowName: setParameterRowName,
+    setRowValue: setParameterRowValue,
+    setRowAgent: setParameterRowAgent,
+    removeRow: removeParameterRow,
+    canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(participantName, participantType);
@@ -125,14 +133,34 @@ export function ChatInput({
 
   return (
     <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden shrink-0">
-      {requiredParameters.length > 0 && (
+      {hasParameters && (
         <div className="px-8 pt-4">
-          <ChatParameterFields
-            requiredParameters={requiredParameters}
-            values={parameterValues}
-            onChange={setParameterValue}
-            disabled={isPending}
-          />
+          {parameterVariant === 'team' ? (
+            <ChatParameterFields
+              variant="team"
+              teamAgents={teamAgents}
+              rows={parameterRows}
+              onAddRow={addParameterRow}
+              onChangeAgent={setParameterRowAgent}
+              onChangeName={setParameterRowName}
+              onChangeValue={setParameterRowValue}
+              onRemoveRow={removeParameterRow}
+              canAddRow={canAddParameterRow}
+              disabled={isPending}
+            />
+          ) : (
+            <ChatParameterFields
+              variant="agent"
+              availableParameters={availableParameters}
+              rows={parameterRows}
+              onAddRow={addParameterRow}
+              onChangeName={setParameterRowName}
+              onChangeValue={setParameterRowValue}
+              onRemoveRow={removeParameterRow}
+              canAddRow={canAddParameterRow}
+              disabled={isPending}
+            />
+          )}
         </div>
       )}
       <div className="self-stretch px-4 pt-3 flex flex-col justify-start items-start gap-4">

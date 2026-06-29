@@ -51,9 +51,17 @@ export function ChatPanel({
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
-    requiredParameters,
-    parameterValues,
-    setParameterValue,
+    parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    parameterRows,
+    addParameterRow,
+    setParameterRowName,
+    setParameterRowValue,
+    setParameterRowAgent,
+    removeParameterRow,
+    canAddParameterRow,
     missingParameters,
   } = useChatSession({ name, type });
 
@@ -120,14 +128,34 @@ export function ChatPanel({
       </ScrollArea>
 
       <div className="border-stroke-divider flex-shrink-0 border-t">
-        {requiredParameters.length > 0 && (
+        {hasParameters && (
           <div className="px-4 pt-4">
-            <ChatParameterFields
-              requiredParameters={requiredParameters}
-              values={parameterValues}
-              onChange={setParameterValue}
-              disabled={isProcessing}
-            />
+            {parameterVariant === 'team' ? (
+              <ChatParameterFields
+                variant="team"
+                teamAgents={teamAgents}
+                rows={parameterRows}
+                onAddRow={addParameterRow}
+                onChangeAgent={setParameterRowAgent}
+                onChangeName={setParameterRowName}
+                onChangeValue={setParameterRowValue}
+                onRemoveRow={removeParameterRow}
+                canAddRow={canAddParameterRow}
+                disabled={isProcessing}
+              />
+            ) : (
+              <ChatParameterFields
+                variant="agent"
+                availableParameters={availableParameters}
+                rows={parameterRows}
+                onAddRow={addParameterRow}
+                onChangeName={setParameterRowName}
+                onChangeValue={setParameterRowValue}
+                onRemoveRow={removeParameterRow}
+                canAddRow={canAddParameterRow}
+                disabled={isProcessing}
+              />
+            )}
           </div>
         )}
         <div className="flex gap-2 p-4">

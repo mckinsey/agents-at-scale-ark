@@ -19,6 +19,8 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
 import {
   type ApiQueryParameter,
+  type ParameterRow,
+  type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
@@ -45,9 +47,17 @@ interface UseChatSessionReturn {
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
-  requiredParameters: string[];
-  parameterValues: Record<string, string>;
-  setParameterValue: (name: string, value: string) => void;
+  parameterVariant: 'agent' | 'team';
+  hasParameters: boolean;
+  availableParameters: string[];
+  teamAgents: TeamAgentParameters[];
+  parameterRows: ParameterRow[];
+  addParameterRow: () => void;
+  setParameterRowName: (id: string, name: string) => void;
+  setParameterRowValue: (id: string, value: string) => void;
+  setParameterRowAgent: (id: string, agent: string) => void;
+  removeParameterRow: (id: string) => void;
+  canAddParameterRow: boolean;
   missingParameters: string[];
 }
 
@@ -168,9 +178,17 @@ export function useChatSession({
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
-    requiredParameters,
-    values: parameterValues,
-    setValue: setParameterValue,
+    variant: parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    rows: parameterRows,
+    addRow: addParameterRow,
+    setRowName: setParameterRowName,
+    setRowValue: setParameterRowValue,
+    setRowAgent: setParameterRowAgent,
+    removeRow: removeParameterRow,
+    canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(name, type);
@@ -855,9 +873,17 @@ export function useChatSession({
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,
-    requiredParameters,
-    parameterValues,
-    setParameterValue,
+    parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    parameterRows,
+    addParameterRow,
+    setParameterRowName,
+    setParameterRowValue,
+    setParameterRowAgent,
+    removeParameterRow,
+    canAddParameterRow,
     missingParameters,
   };
 }
