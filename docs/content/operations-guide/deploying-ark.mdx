@@ -206,5 +206,3 @@ This creates:
 Resource quotas and network policies are also available, documented in the chart. Queries then run under this service account via their `query.serviceAccount` field (subject to the impersonation setting above); omit it to use the controller's own identity.
 
 The [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) guide is the canonical reference for multi-tenancy — CLI-based setup (`ark install ark-tenant`), cross-tenant access via RBAC, broker storage isolation, and the development workflow.
-
-> Note: Future releases will move query execution to per-namespace executor pods, eliminating the need for service account impersonation.
