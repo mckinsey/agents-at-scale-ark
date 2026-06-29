@@ -32,7 +32,7 @@ The OAuth callback is a plain browser GET initiated by the IdP redirect — it d
 
 ### ark-api extensions
 
-These extend the existing orchestration endpoints; the contract additions are captured as ADDED requirements under the new `mcp-auth-dashboard` capability (the orchestration capability is not yet in the baseline specs, so there is nothing to MODIFY).
+These extend the existing orchestration endpoints. The `mcp-auth-ark-api-orchestration` capability is now archived into the baseline specs, but the contract additions here are net-new behaviour the orchestration spec explicitly reserved for `mcp-auth-dashboard`, so they are captured as ADDED requirements under the new capability rather than as MODIFY deltas against the orchestration endpoints.
 
 - **`POST /api/v1/mcp-servers/{name}/auth/start`** — body gains optional `redirect_on_complete?: bool` (default `false`, preserving the CLI's HTML-completion behaviour). The existing `force?: bool` (already defined by the orchestration capability) is used by the dashboard's **Re-authenticate** action to start a flow against an `Authorized` server. When the request carries an authenticated identity (`request.state.user_identity` populated by the impersonation middleware), ark-api records that identity in the flow's cache entry; otherwise it falls back to `cli`. The flag and identity are stored on the cache entry alongside the existing PKCE/state material.
 
@@ -53,7 +53,7 @@ These extend the existing orchestration endpoints; the contract additions are ca
 
 ### Dashboard
 
-`services/ark-dashboard/` MCP servers page (`app/(dashboard)/mcp/`, `components/cards/mcp-server-card.tsx`):
+`services/ark-dashboard/ark-dashboard/` MCP servers page (`app/(dashboard)/mcp/`, `components/cards/mcp-server-card.tsx`):
 
 - **State badge** — rendered from `authorization.state`: `Required` (action needed), `Authorized` (with `authorizedBy` on hover/detail and an `expiresAt`-derived indication, flagged when near expiry), `DiscoveryFailed` (error styling, no action). Servers with no `authorization` block render no auth badge.
 - **Authenticate action** — shown when `state == Required`. Calls `POST /auth/start` with `redirect_on_complete: true` and the card's namespace, then full-page navigates to `authorization_url`. Error toast + no navigation on a non-2xx.
@@ -74,7 +74,7 @@ This change does not alter the auth endpoints' trust model from `mcp-auth-ark-ap
 
 ### Modified Capabilities
 
-None as a baseline delta. The `mcp-auth-ark-api-orchestration` capability is not yet archived into `openspec/specs/`, so its endpoints are extended in place; the additive behaviour is owned by the new `mcp-auth-dashboard` capability and was explicitly reserved for it by the orchestration spec. The orchestration contract is consumed unchanged otherwise (including the existing `force` flag and the `auth/status` terminal-state semantics).
+None as a baseline delta. The `mcp-auth-ark-api-orchestration` capability is now archived into `openspec/specs/`, but the additive behaviour was explicitly reserved for `mcp-auth-dashboard` by the orchestration spec, so it is owned by the new capability rather than extending the orchestration endpoints via MODIFY deltas. The orchestration contract is consumed unchanged otherwise (including the existing `force` flag and the `auth/status` terminal-state semantics).
 
 ## Impact
 
