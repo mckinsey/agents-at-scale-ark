@@ -359,6 +359,30 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(result).To(Equal(ctrl.Result{}))
 		})
 	})
+
+	Context("initSemaphore", func() {
+		It("creates a semaphore sized to MaxConcurrentQueries", func() {
+			r := &QueryReconciler{MaxConcurrentQueries: 3}
+			r.initSemaphore()
+			Expect(r.sem).NotTo(BeNil())
+			Expect(r.sem.TryAcquire(3)).To(BeTrue(), "should permit MaxConcurrentQueries acquisitions")
+			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "should deny the next acquisition once the cap is reached")
+		})
+
+		It("leaves the semaphore nil when MaxConcurrentQueries is 0", func() {
+			r := &QueryReconciler{MaxConcurrentQueries: 0}
+			r.initSemaphore()
+			Expect(r.sem).To(BeNil())
+		})
+	})
+
+	Context("buildControllerOptions", func() {
+		It("propagates MaxConcurrentReconciles when set", func() {
+			r := &QueryReconciler{MaxConcurrentReconciles: 7}
+			opts := r.buildControllerOptions()
+			Expect(opts.MaxConcurrentReconciles).To(Equal(7))
+		})
+	})
 })
 
 var _ = Describe("Query Controller Fallback Raw", func() {

@@ -213,7 +213,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	}
 
 	if r.sem != nil && !r.sem.TryAcquire(1) {
-		log.V(1).Info("query execution capacity reached, requeuing", "query", req.NamespacedName.String(), "cap", r.MaxConcurrentQueries)
+		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
 	}
 
@@ -920,16 +920,24 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.initSemaphore()
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&arkv1alpha1.Query{}).
+		Named("query").
+		WithOptions(r.buildControllerOptions()).
+		Complete(r)
+}
+
+func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
 		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
 	}
+}
+
+func (r *QueryReconciler) buildControllerOptions() controller.Options {
 	opts := controller.Options{}
 	if r.MaxConcurrentReconciles > 0 {
 		opts.MaxConcurrentReconciles = r.MaxConcurrentReconciles
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&arkv1alpha1.Query{}).
-		Named("query").
-		WithOptions(opts).
-		Complete(r)
+	return opts
 }
