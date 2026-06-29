@@ -6,16 +6,11 @@ Deploy Ark locally using the CLI, Helm, or to remote clusters with registry-base
 
 Running Ark requires at least 2 vCPU and 4 GiB of RAM. Further resource consumption depends on individual workflows and load.
 
-## CLI Deployment
+## Install with the CLI
 
-Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
+The `ark` CLI is the fastest way to install Ark on any cluster — `npm install -g @agents-at-scale/ark`, then `ark install` runs an interactive install of the core controller, its dependencies (cert-manager, Gateway API), and optional services.
 
-```
-npm install -g @agents-at-scale/ark
-ark install
-```
-
-This will run an interactive install of the core Ark controller, dependencies, and optional additional services.
+The [Quickstart](/quickstart) covers that flow end to end — prerequisites, install, and verifying with `ark status` — and is kept current and tested, so it isn't repeated here. This page focuses on what the quickstart doesn't: Helm and remote-cluster deployment, storage backends, private registries, CI/CD RBAC, and multi-tenant operation.
 
 ### Storage backend
 
@@ -90,7 +85,7 @@ The `fark` (Fast Agentic Runtime Kit) CLI can be built from source:
 
 ```bash
 cd tools/fark
-go build -o ark ./cmd/fark
+go build -o fark ./cmd/fark
 cp fark /usr/local/bin
 fark
 ```
@@ -179,7 +174,7 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 ## The Ark Controller
 
-By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field. Impersonation is nenabled by default and can be configured via the `ark-controller` chart values:
+By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field. Impersonation is enabled by default and can be configured via the `ark-controller` chart values:
 
 ```yaml
 # values.yaml for ark-controller
