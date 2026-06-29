@@ -38,7 +38,7 @@ These extend the existing orchestration endpoints. The `mcp-auth-ark-api-orchest
 
 - **`GET /api/v1/mcp/auth/callback`** — completion behaviour for dashboard-initiated flows (`redirect_on_complete: true`) when `ARK_API_DASHBOARD_URL` is configured:
   - **Success** → `302` to `<ARK_API_DASHBOARD_URL>/mcp?authorized=<name>&namespace=<ns>&auth_id=<auth_id>`.
-  - **IdP error or token-exchange failure** → `302` to the same path with `&auth_error=<code>&auth_error_desc=<text>` instead of `auth_id`. `auth_error` is the OAuth error code (or a stable `token_exchange_failed` token); `auth_error_desc` is the IdP-supplied description, **URL-encoded and length-capped**.
+  - **IdP error or token-exchange failure** → `302` to the same path with `&auth_error=<code>&auth_error_desc=<text>` instead of `auth_id`. `auth_error` is the OAuth error code (or a stable `token_exchange_failed` token); `auth_error_desc` is the IdP-supplied description, **truncated to 200 characters then URL-encoded**.
   - **Cache miss** (unknown/expired/replayed `state`, so ark-api cannot tell whether the flow was CLI or dashboard) → if `ARK_API_DASHBOARD_URL` is configured, `302` to `<ARK_API_DASHBOARD_URL>/mcp?auth_error=expired` (no server name or `auth_id` — neither is known on a miss); otherwise the existing HTML 400 page. A CLI-opened browser tab that ages out will also bounce to the dashboard in this case — harmless, and documented.
   - When `redirect_on_complete` is false/absent, or `ARK_API_DASHBOARD_URL` is unset, the existing HTML completion/error page is rendered unchanged (graceful fallback).
   - The redirect target's host and path are constructed entirely from `ARK_API_DASHBOARD_URL` plus the MCPServer name/namespace held in the trusted cache entry — **no** client-supplied URL is echoed, so the redirect is not an open-redirect vector. The name, namespace, `auth_id`, and `auth_error*` values are URL-encoded.
@@ -87,10 +87,10 @@ None as a baseline delta. The `mcp-auth-ark-api-orchestration` capability is now
 - **CRD:** none. Consumes `spec.authorization.tokenSecretRef`, `status.authorization.*`, and the `mcp-auth-authorized-*` annotations unchanged.
 - **RBAC:** none beyond `mcp-auth-ark-api-orchestration`.
 - **Security:**
-  - No token material reaches the browser; the redirect carries the MCPServer name, namespace, an opaque `auth_id`, and (on failure) an OAuth error code + capped description.
+  - No token material reaches the browser; the redirect carries the MCPServer name, namespace, an opaque `auth_id`, and (on failure) an OAuth error code + a 200-char-capped description.
   - `auth_id` rides in the redirect URL (browser history / referrer). It is opaque and grants no privileges by itself (per the orchestration capability); polling `auth/status` with it only reveals the flow's terminal state.
   - The post-callback redirect is built from server config + trusted cache values, never from a client-supplied return URL — not an open-redirect vector.
-  - `auth_error_desc` is IdP-supplied free text; it is URL-encoded and length-capped before being placed in the redirect, and treated as untrusted by the dashboard toast.
+  - `auth_error_desc` is IdP-supplied free text; it is truncated to 200 characters then URL-encoded before being placed in the redirect, and treated as untrusted by the dashboard toast.
   - The resolved identity written to `authorized-by` is the same identity ark-api already uses for impersonation; opaque to consumers and displayed verbatim.
 
 ## Non-Goals

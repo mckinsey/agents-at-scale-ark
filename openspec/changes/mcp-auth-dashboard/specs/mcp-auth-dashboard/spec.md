@@ -67,7 +67,7 @@ When `status.authorization` is absent, the `authorization` field SHALL be `null`
 On a flow whose cache entry has `redirect_on_complete == true`, and when `ARK_API_DASHBOARD_URL` is configured, `GET /api/v1/mcp/auth/callback` SHALL respond `302` rather than rendering the HTML completion page. The Secret write, annotation stamping, and cache-state transitions SHALL be identical to the HTML-completion path — only the response differs. The `Location` SHALL be:
 
 - **On a successful token exchange:** `<ARK_API_DASHBOARD_URL>/mcp?authorized=<name>&namespace=<ns>&auth_id=<auth_id>`, where `auth_id` is the flow's existing identifier so the dashboard can poll `auth/status`.
-- **On an IdP `error` redirect OR a failed token exchange:** `<ARK_API_DASHBOARD_URL>/mcp?authorized=<name>&namespace=<ns>&auth_error=<code>&auth_error_desc=<desc>`. `<code>` is the OAuth error code (or the stable token `token_exchange_failed` when the token endpoint itself failed). `<desc>` is the IdP-supplied human-readable description, URL-encoded and length-capped; it SHALL be omitted when absent. The cache entry's `failed` transition SHALL still occur.
+- **On an IdP `error` redirect OR a failed token exchange:** `<ARK_API_DASHBOARD_URL>/mcp?authorized=<name>&namespace=<ns>&auth_error=<code>&auth_error_desc=<desc>`. `<code>` is the OAuth error code (or the stable token `token_exchange_failed` when the token endpoint itself failed). `<desc>` is the IdP-supplied human-readable description, truncated to 200 characters then URL-encoded (truncation precedes encoding so an escape sequence is never split); it SHALL be omitted when absent. The cache entry's `failed` transition SHALL still occur.
 
 The MCPServer `name` and `namespace` SHALL be taken from the trusted cache entry (never from a request parameter) and URL-encoded. When `redirect_on_complete` is `false`/absent, or `ARK_API_DASHBOARD_URL` is not configured, the endpoint SHALL render the HTML completion/error page from `mcp-auth-ark-api-orchestration` unchanged (graceful fallback).
 
@@ -82,7 +82,7 @@ The MCPServer `name` and `namespace` SHALL be taken from the trusted cache entry
 - **GIVEN** a flow started with `redirect_on_complete: true` for MCPServer `notion` in namespace `team-a`
 - **WHEN** the IdP redirects to `auth/callback` with `error=access_denied&error_description=User+declined`
 - **THEN** ark-api SHALL respond `302` to `https://ark.example.com/mcp?authorized=notion&namespace=team-a&auth_error=access_denied&auth_error_desc=User%20declined`
-- **AND** the `auth_error_desc` value SHALL be URL-encoded and length-capped
+- **AND** the `auth_error_desc` value SHALL be truncated to 200 characters then URL-encoded
 
 #### Scenario: Token-exchange failure on a dashboard flow redirects with auth_error
 
@@ -209,7 +209,7 @@ The **Authenticate** action (state `Required`) SHALL call `POST /api/v1/mcp-serv
 On loading `/mcp` with auth query parameters set by the callback redirect, the dashboard SHALL determine the outcome as follows and, in all cases, strip the consumed auth parameters (`authorized`, `auth_id`, `auth_error`, `auth_error_desc`, and the redirect-added `namespace`) from the URL so a refresh does not re-trigger the handler:
 
 - When `auth_error` is present, it SHALL show an error toast. The `expired` value SHALL be special-cased to a "flow expired — try again" message; otherwise the toast SHALL use `auth_error_desc` when present, falling back to the `auth_error` code. It SHALL NOT poll.
-- Otherwise, with `authorized=<name>` and `auth_id` present, it SHALL poll `GET /api/v1/mcp-servers/{name}/auth/status?auth_id=<auth_id>&namespace=<ns>` until a terminal state: `authorized` → success toast; `failed` → error toast carrying the status message; `expired` → expired toast. While `pending`, it SHALL keep polling up to a bounded timeout, after which it SHALL show a "submitted — not yet confirmed; check the server status" toast. On `authorized` it SHALL invalidate the MCP servers query so the card reflects the new state.
+- Otherwise, with `authorized=<name>` and `auth_id` present, it SHALL poll `GET /api/v1/mcp-servers/{name}/auth/status?auth_id=<auth_id>&namespace=<ns>` — the same completion endpoint the orchestration CLI polls, reused here rather than introducing a streaming/push channel — until a terminal state: `authorized` → success toast; `failed` → error toast carrying the status message; `expired` → expired toast. The token exchange has already completed before the redirect, so only the controller's reconcile to `Authorized` remains: while `pending`, it SHALL poll at a ~2 s interval up to a bounded client-side budget of ~30 s (a dashboard constant, distinct from and much shorter than the server-side `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` since the flow's own cache entry need not be alive for this confirmation), after which it SHALL show a "submitted — not yet confirmed; check the server status" toast. On `authorized` it SHALL invalidate the MCP servers query so the card reflects the new state.
 
 #### Scenario: Successful return polls auth/status to authorized
 
