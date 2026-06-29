@@ -23,6 +23,14 @@ export default {
   'secure-software-architecture': 'Secure Software Architecture',
   scalability: 'Scalability',
   'vulnerability-management': 'Vulnerability Management',
+  'penetration-testing': {
+    title: 'Penetration testing',
+    href: '/operations-guide/penetration-testing-reports'
+  },
+  'data-flow': {
+    title: 'Data flow and encryption',
+    href: '/operations-guide/data-flow-and-encryption'
+  },
 
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors',
