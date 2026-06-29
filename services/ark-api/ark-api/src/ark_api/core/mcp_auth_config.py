@@ -29,6 +29,17 @@ class McpAuthConfigError(ValueError):
     """Raised when MCP-auth configuration is invalid."""
 
 
+def _has_embedded_loopback_ip(host: str) -> bool:
+    labels = host.replace("-", ".").split(".")
+    for i in range(len(labels) - 3):
+        try:
+            if ipaddress.ip_address(".".join(labels[i : i + 4])).is_loopback:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _is_loopback_host(host: str) -> bool:
     if host in _LOOPBACK_HOSTS:
         return True
@@ -44,7 +55,29 @@ def _is_loopback_host(host: str) -> bool:
             ipaddress.ip_address(addr[4][0]).is_loopback for addr in resolved
         )
     except (socket.gaierror, ValueError):
+        return _has_embedded_loopback_ip(host)
+
+
+def _is_loopback_literal(host: str) -> bool:
+    if host in _LOOPBACK_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
         return False
+
+
+def is_strict_idp_acceptable(url: str) -> bool:
+    """Whether RFC 8252-strict IdPs accept this redirect_uri.
+
+    Strict IdPs (Notion, Google) require https or an http loopback literal
+    (127.0.0.1, [::1], or localhost); a non-literal host that merely resolves
+    to loopback (e.g. nip.io) is rejected.
+    """
+    parts = urlsplit(url)
+    if parts.scheme == "https":
+        return True
+    return _is_loopback_literal(parts.hostname or "")
 
 
 def _validate_callback_url(raw: str) -> str:
@@ -94,6 +127,16 @@ def _validate_callback_url(raw: str) -> str:
             path = path.rstrip("/") + CALLBACK_PATH if not path.endswith(CALLBACK_PATH) else path
 
     normalised = urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+    if not is_strict_idp_acceptable(normalised):
+        logger.warning(
+            "ARK_API_PUBLIC_CALLBACK_URL host %r resolves to loopback but is not a "
+            "loopback literal; RFC 8252-strict IdPs (e.g. Notion, Google) will reject "
+            "this http redirect_uri at registration. Use a loopback literal "
+            "(127.0.0.1, [::1], or localhost) or a public https URL.",
+            host,
+        )
+
     return normalised
 
 

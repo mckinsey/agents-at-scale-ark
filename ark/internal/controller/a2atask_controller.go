@@ -5,6 +5,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -20,6 +22,16 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
+)
+
+const (
+	pollFailureCountAnnotation = "ark.mckinsey.com/poll-failure-count"
+	defaultPollInterval        = 5 * time.Second
+	defaultTaskTimeout         = 12 * time.Hour
+	defaultTaskTTL             = 720 * time.Hour
+	maxPollBackoff             = 5 * time.Minute
+	rateLimitBackoffFloor      = 30 * time.Second
+	maxBackoffExponent         = 16
 )
 
 type A2ATaskReconciler struct {
@@ -43,64 +55,122 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// TTL cleanup: delete task if it has exceeded its time-to-live since creation
-	if a2aTask.Spec.TTL != nil {
-		expiry := a2aTask.CreationTimestamp.Add(a2aTask.Spec.TTL.Duration)
-		if time.Now().After(expiry) {
-			if err := r.Delete(ctx, &a2aTask); err != nil {
-				log.Error(err, "unable to delete A2ATask after TTL expiry")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
+	if done, err := r.reconcileTTL(ctx, &a2aTask); done || err != nil {
+		return ctrl.Result{}, err
 	}
 
-	// Initialize phase if not set
 	if a2aTask.Status.Phase == "" {
 		a2aTask.Status.Phase = arka2a.PhasePending
 	}
 
-	// Initialize Completed condition if not set
 	if len(a2aTask.Status.Conditions) == 0 {
 		r.setConditionCompleted(&a2aTask, metav1.ConditionFalse, "TaskNotStarted", "Task has not been started yet")
 		return ctrl.Result{}, r.Status().Update(ctx, &a2aTask)
 	}
 
-	// Handle terminal states
 	if arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
 		return ctrl.Result{}, nil
 	}
 
-	// Fetch task status from A2A server for all non-terminal tasks
-	if err := r.fetchA2ATaskStatus(ctx, &a2aTask); err != nil {
-		log.Error(err, "failed to fetch A2A task status", "taskId", a2aTask.Spec.TaskID)
-		r.Eventing.A2aRecorder().TaskPollingFailed(ctx, &a2aTask, fmt.Sprintf("Failed to fetch task status: %v", err))
-
-		// Continue with requeue even on error to retry polling
-	}
-
-	// Update status
-	if err := r.Status().Update(ctx, &a2aTask); err != nil {
-		log.Error(err, "unable to update A2ATask status")
+	if done, err := r.reconcileTimeout(ctx, &a2aTask); done || err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Requeue for non-terminal tasks using the configured poll interval
-	if !arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
-		pollInterval := time.Second * 5 // default fallback
-		if a2aTask.Spec.PollInterval != nil {
-			pollInterval = a2aTask.Spec.PollInterval.Duration
-		}
-		return ctrl.Result{RequeueAfter: pollInterval}, nil
-	}
-
-	return ctrl.Result{}, nil
+	return r.pollTaskStatus(ctx, &a2aTask)
 }
 
 func (r *A2ATaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.A2ATask{}).
 		Complete(r)
+}
+
+// reconcileTTL deletes the task once it has outlived its TTL. Returns true when handled.
+func (r *A2ATaskReconciler) reconcileTTL(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	ttl := defaultTaskTTL
+	if a2aTask.Spec.TTL != nil {
+		ttl = a2aTask.Spec.TTL.Duration
+	}
+	if time.Now().Before(a2aTask.CreationTimestamp.Add(ttl)) {
+		return false, nil
+	}
+	logf.FromContext(ctx).Info("deleting A2ATask after TTL expiry", "ttl", ttl)
+	if err := r.Delete(ctx, a2aTask); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// reconcileTimeout marks the task failed once it has exceeded its timeout. Returns true when handled.
+func (r *A2ATaskReconciler) reconcileTimeout(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	timeout := defaultTaskTimeout
+	if a2aTask.Spec.Timeout != nil {
+		timeout = a2aTask.Spec.Timeout.Duration
+	}
+	if time.Now().Before(a2aTask.CreationTimestamp.Add(timeout)) {
+		return false, nil
+	}
+	logf.FromContext(ctx).Info("A2ATask exceeded timeout, marking as failed", "timeout", timeout)
+	a2aTask.Status.Phase = arka2a.PhaseFailed
+	a2aTask.Status.Error = fmt.Sprintf("Task polling timeout after %v", timeout)
+	r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskTimeout", fmt.Sprintf("Task did not reach terminal state within %v", timeout))
+	now := metav1.NewTime(time.Now())
+	a2aTask.Status.CompletionTime = &now
+	if err := r.Status().Update(ctx, a2aTask); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// pollTaskStatus fetches the task status from the A2A server, applying backoff on failure.
+func (r *A2ATaskReconciler) pollTaskStatus(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	failureCount := r.getFailureCount(ctx, a2aTask)
+	before := snapshotA2ATaskStatus(&a2aTask.Status)
+
+	if err := r.fetchA2ATaskStatus(ctx, a2aTask); err != nil {
+		return r.handlePollFailure(ctx, a2aTask, err, failureCount)
+	}
+
+	if failureCount > 0 {
+		log.Info("poll succeeded, resetting failure count", "previousFailures", failureCount)
+		r.recordFailure(a2aTask, 0)
+		if err := r.Update(ctx, a2aTask); err != nil {
+			log.Error(err, "unable to reset A2ATask failure count")
+		}
+	}
+
+	if snapshotA2ATaskStatus(&a2aTask.Status) != before {
+		if err := r.Status().Update(ctx, a2aTask); err != nil {
+			log.Error(err, "unable to update A2ATask status")
+			return ctrl.Result{}, err
+		}
+	}
+
+	if !arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
+		return ctrl.Result{RequeueAfter: pollIntervalOrDefault(a2aTask)}, nil
+	}
+	return ctrl.Result{}, nil
+}
+
+// handlePollFailure records the failure and requeues with backoff (longer for rate-limit responses).
+func (r *A2ATaskReconciler) handlePollFailure(ctx context.Context, a2aTask *arkv1alpha1.A2ATask, pollErr error, failureCount int) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	failureCount++
+	rateLimited := isRateLimited(pollErr)
+
+	log.Error(pollErr, "failed to fetch A2A task status", "taskId", a2aTask.Spec.TaskID, "failureCount", failureCount, "rateLimited", rateLimited)
+	r.Eventing.A2aRecorder().TaskPollingFailed(ctx, a2aTask, fmt.Sprintf("Failed to fetch task status: %v", pollErr))
+
+	r.recordFailure(a2aTask, failureCount)
+	if err := r.Update(ctx, a2aTask); err != nil {
+		log.Error(err, "unable to update A2ATask failure count")
+	}
+
+	backoff := computePollBackoff(failureCount, pollIntervalOrDefault(a2aTask), rateLimited)
+	log.Info("applying backoff after poll failure", "failureCount", failureCount, "requeueAfter", backoff, "rateLimited", rateLimited)
+	return ctrl.Result{RequeueAfter: backoff}, nil
 }
 
 // fetchA2ATaskStatus queries the A2A server for the current task status and updates the A2ATask
@@ -164,7 +234,6 @@ func (r *A2ATaskReconciler) updateConditionsAndEvents(a2aTask *arkv1alpha1.A2ATa
 		return
 	}
 
-	// Update Completed condition based on phase
 	switch newPhase {
 	case arka2a.PhasePending, arka2a.PhaseAssigned:
 		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "TaskPending", "Task is pending execution")
@@ -188,4 +257,98 @@ func (r *A2ATaskReconciler) setConditionCompleted(a2aTask *arkv1alpha1.A2ATask, 
 		Message:            message,
 		ObservedGeneration: a2aTask.Generation,
 	})
+}
+
+func (r *A2ATaskReconciler) getFailureCount(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) int {
+	count, err := parseFailureCount(a2aTask.Annotations)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "invalid poll-failure-count annotation, resetting to 0", "value", a2aTask.Annotations[pollFailureCountAnnotation])
+		return 0
+	}
+	return count
+}
+
+func (r *A2ATaskReconciler) recordFailure(a2aTask *arkv1alpha1.A2ATask, count int) {
+	if a2aTask.Annotations == nil {
+		a2aTask.Annotations = make(map[string]string)
+	}
+	a2aTask.Annotations[pollFailureCountAnnotation] = strconv.Itoa(count)
+}
+
+func pollIntervalOrDefault(a2aTask *arkv1alpha1.A2ATask) time.Duration {
+	if a2aTask.Spec.PollInterval != nil {
+		return a2aTask.Spec.PollInterval.Duration
+	}
+	return defaultPollInterval
+}
+
+// parseFailureCount reads the persisted failure count, surfacing a parse error rather than silently resetting.
+func parseFailureCount(annotations map[string]string) (int, error) {
+	if annotations == nil {
+		return 0, nil
+	}
+	value, ok := annotations[pollFailureCountAnnotation]
+	if !ok {
+		return 0, nil
+	}
+	return strconv.Atoi(value)
+}
+
+// isRateLimited reports whether the poll error is a backend throttle/quota response.
+// The trpc-a2a-go client surfaces only the status code as a string and discards the
+// Retry-After header, so detection is by status code and the backoff floor stands in
+// for a server-provided retry delay.
+func isRateLimited(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, code := range []string{"http status 429", "http status 402", "http status 503"} {
+		if strings.Contains(msg, code) {
+			return true
+		}
+	}
+	return false
+}
+
+// computePollBackoff returns the requeue delay for a given consecutive failure count.
+// It grows exponentially from base, is capped at maxPollBackoff, and uses a higher
+// floor for rate-limited responses. The exponent is bounded to avoid shift overflow.
+func computePollBackoff(failureCount int, base time.Duration, rateLimited bool) time.Duration {
+	if base <= 0 {
+		base = defaultPollInterval
+	}
+	exponent := failureCount
+	if exponent < 0 {
+		exponent = 0
+	}
+	if exponent > maxBackoffExponent {
+		exponent = maxBackoffExponent
+	}
+	backoff := base * time.Duration(int64(1)<<uint(exponent))
+	if backoff <= 0 || backoff > maxPollBackoff {
+		backoff = maxPollBackoff
+	}
+	if rateLimited && backoff < rateLimitBackoffFloor {
+		backoff = rateLimitBackoffFloor
+	}
+	return backoff
+}
+
+type a2aTaskStatusSnapshot struct {
+	phase         string
+	protocolState string
+	errMsg        string
+	artifactsLen  int
+	historyLen    int
+}
+
+func snapshotA2ATaskStatus(status *arkv1alpha1.A2ATaskStatus) a2aTaskStatusSnapshot {
+	return a2aTaskStatusSnapshot{
+		phase:         status.Phase,
+		protocolState: status.ProtocolState,
+		errMsg:        status.Error,
+		artifactsLen:  len(status.Artifacts),
+		historyLen:    len(status.History),
+	}
 }

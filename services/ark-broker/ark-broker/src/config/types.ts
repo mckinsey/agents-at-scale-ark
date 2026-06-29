@@ -30,10 +30,28 @@ export type PersistenceConfig = Readonly<{
   sessionsFilePath?: string;
 }>;
 
+export type MessageBackend = 'memory' | 'postgres';
+
+export type BackendsConfig = Readonly<{
+  message: MessageBackend;
+  messageVisibilityTtlSeconds: number;
+}>;
+
+export type DatabaseConfig = Readonly<{
+  url?: string;
+  poolMax: number;
+  connectTimeoutMs: number;
+  statementTimeoutMs: number;
+  debugQueries: boolean;
+  sslRootCertPath?: string;
+}>;
+
 export type AppConfig = Readonly<{
   nodeEnv: NodeEnv;
   logLevel: LogLevel;
   server: ServerConfig;
   limits: LimitsConfig;
   persistence: PersistenceConfig;
+  backends: BackendsConfig;
+  database: DatabaseConfig;
 }>;

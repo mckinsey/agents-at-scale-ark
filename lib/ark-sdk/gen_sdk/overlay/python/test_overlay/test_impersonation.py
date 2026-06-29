@@ -52,6 +52,7 @@ class TestGetClientImpersonation(unittest.TestCase):
         mock_client_class.assert_called_once_with(
             "default",
             default_headers={"Impersonate-User": "jane@acme.com", "Impersonate-Group": "team-a"},
+            user_agent=None,
         )
 
     @patch("ark_sdk.client.get_context", return_value={"namespace": "default"})
@@ -62,7 +63,7 @@ class TestGetClientImpersonation(unittest.TestCase):
 
         get_client(None, "v1alpha1")
 
-        mock_client_class.assert_called_once_with("default", default_headers=None)
+        mock_client_class.assert_called_once_with("default", default_headers=None, user_agent=None)
 
 
 if __name__ == "__main__":

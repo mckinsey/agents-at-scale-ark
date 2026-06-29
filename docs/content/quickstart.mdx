@@ -1,67 +1,141 @@
 ---
-title: Getting Started
+title: Quickstart
+description: Install Ark, verify it, and create your first model and agent from the dashboard
 ---
 
 # Quickstart
 
-Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
+Get Ark running on a local Kubernetes cluster, verify the install, then open the dashboard and create your first model and agent.
+
+## 1. Prerequisites
+
+Ark runs on a Kubernetes cluster and is managed with the `ark` CLI. You'll need:
+
+| Requirement | Notes |
+| --- | --- |
+| **A Kubernetes cluster** | [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), or [Docker Desktop](https://docs.docker.com/desktop/kubernetes/), with **≥ 2 CPU and 4 GiB RAM** free. |
+| **[Node.js](https://nodejs.org/en/download)** (18+) | Provides `npm`, used to install the `ark` CLI. |
+| **[Helm](https://helm.sh/docs/intro/install/)** | Ark installs its components as Helm releases. |
+| **[kubectl](https://kubernetes.io/docs/tasks/tools/)** | Configured to talk to your cluster (`kubectl get nodes` should work). |
+| **An LLM API key** | OpenAI, Azure OpenAI, or Anthropic — for the model you create in step 4. |
+
+Install the `ark` CLI:
 
 ```bash
-# Install the 'ark' CLI:
 npm install -g @agents-at-scale/ark
+```
 
-# Install Ark:
+`ark` bundles a status check (next section) that flags anything missing.
+
+## 2. Install Ark
+
+With your cluster running and `kubectl` pointed at it:
+
+```bash
 ark install
+```
 
-# Optionally configure a 'default' model to use for agents:
-ark models create default
+> **Pin a version** with `ark install --ark-version 0.1.50`. If the version doesn't exist, install continues with a warning. See [GitHub releases](https://github.com/mckinsey/agents-at-scale-ark/releases) for available versions. For per-component installs, RBAC, and remote clusters, see [Deploying Ark](/operations-guide/deploying-ark).
 
-# Run the dashboard:
+## 3. Verify the installation
+
+Run the built-in status check:
+
+```bash
+ark status
+```
+
+It reports system dependencies, cluster access, and the health of each Ark service:
+
+```text
+system dependencies:
+  ✓ installed node v22.0.0
+  ✓ installed kubectl v1.33
+  ✓ installed helm v3.18.4
+  ✓ installed minikube v1.36.0
+
+cluster access:
+  ✓ accessible minikube default minikube
+
+ark services:
+  ✓ healthy ark-api default 1/1 replicas ready
+  ✓ healthy ark-dashboard default 1/1 replicas ready
+  ✓ healthy ark-mcp default 1/1 replicas ready
+  ✓ healthy ark-broker default 1/1 replicas ready
+
+ark status:
+  ✓ ready ark-controller ark-system 1/1 replicas ready
+  ● default model not available
+```
+
+A `default model not available` line is expected at this stage — you'll add one next. You can also check with `kubectl`:
+
+```bash
+kubectl get pods -n ark-system
+kubectl get pods -n default
+```
+
+## 4. Open the dashboard, add a model, and add an agent
+
+### Open the dashboard
+
+```bash
 ark dashboard
 ```
 
-Ark needs a Kubernetes cluster — [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/), or similar — with at least 2 CPU and 4 GiB RAM available. `ark install` warns if any required dependency is missing.
+This opens the Ark dashboard in your browser.
 
-The default install brings up the Ark dependencies, the controller, the APIs, and the dashboard. The optional `default` model is used by agents that don't pin one.
+### Add a model
 
-# Version Pinning
+Agents need a model. The conventional first model is named `default` — agents that don't pin a model fall back to it.
 
-Pin specific Ark or marketplace versions using semantic versioning:
+1. Go to **Models** in the left nav and click **Add Model**.
+2. Fill the form:
+
+| Field | Value |
+| --- | --- |
+| **Name** | `default` |
+| **Provider** | e.g. `OpenAI` |
+| **Model** | e.g. `gpt-4o-mini` |
+| **API Key** | Hit **Add New** to create a secret with your API key |
+| **Base URL** | The provider's API URL |
+
+3. Hit **Create Model**.
+
+![Add Model form filled in for the default OpenAI model](/models/add-form.png)
+
+See [Models](/user-guide/models) for every provider and field.
+
+> Prefer the CLI? `ark models create default` walks you through the same setup interactively.
+
+### Add an agent
+
+1. Go to **Agent Builder → Agents** in the left nav and click **Create Agent**.
+2. Fill the form:
+
+| Field | Notes |
+| --- | --- |
+| **Name** | Required. Lowercase, k8s name rules. |
+| **Agent Prompt** | The system prompt, e.g. *"You are a helpful assistant. Answer concisely."* |
+| **Description** | Shown in the agent list and team picker. |
+| **Model** | Leave as `None (Unset)` to use the `default` model you just created. |
+| **Tools** | Optional — a checklist grouped by source. |
+
+3. Hit **Create Agent**.
+
+![Create Agent form filled in for a support agent](/agents/add-form.png)
+
+### Try it
+
+Open the agent and use the chat panel on the right, or run a query from the CLI:
 
 ```bash
-ark install --ark-version 0.1.50                          # Install specific Ark version
-ark install marketplace/services/phoenix --marketplace-version 0.1.7  # Pin marketplace item
+ark query agent/my-agent "What is the capital of France?"
 ```
 
-If a version doesn't exist, installation continues with a warning. Find available versions in [GitHub releases](https://github.com/mckinsey/agents-at-scale-ark/releases).
+## Next steps
 
-For local development mode — live-reload, DNS for every service, and the ability to install extras like Minio — use:
-
-```bash
-# Install devspace - live reload etc for services. Requires a k8s cluster, which
-# could be 'brew install minikube' or similar.
-brew install devspace
-
-# Run Ark in dev mode.
-devspace dev
-
-# Show available routes that can be accessed:
-devspace run routes
-
-# Output:
-# argo-workflows: http://argo.default.127.0.0.1.nip.io:8080/ (unavailable)
-# ark-api       : http://ark-api.default.127.0.0.1.nip.io:8080/ (unavailable)
-# ark-dashboard : http://127.0.0.1.nip.io:8080/ (unavailable)
-# ark-dashboard : http://dashboard.default.127.0.0.1.nip.io:8080/ (unavailable)
-# minio-console : http://minio.default.127.0.0.1.nip.io:8080/ (unavailable)
-```
-
-For per-component installs, RBAC, CI/CD, and remote clusters, see the [Deploying Ark](../operations-guide/deploying-ark) operations guide.
-
-## Installing Fark
-
-The [Fark](../developer-guide/cli-tools) (Fast Agentic Runtime Kit) CLI manages agents and runs queries.
-
-## Troubleshooting
-
-See the [Troubleshooting](../reference/troubleshooting) guide.
+- [Models](/user-guide/models) — every provider, auth method, and field.
+- [Agents](/user-guide/agents) — prompts, parameters, tools, and execution engines.
+- [Run queries / chat with agents and teams](/user-guide/queries) — multi-turn conversations, parameters, and the API.
+- [Troubleshooting](/reference/troubleshooting) — common install and runtime issues.

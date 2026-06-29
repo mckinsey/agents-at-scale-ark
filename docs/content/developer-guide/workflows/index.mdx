@@ -1,27 +1,388 @@
 ---
 title: Workflows
-description: Multi-step agent orchestration
+description: Orchestrate multi-step Ark pipelines with Argo Workflows — install, author, run, and view
 ---
+
+import { Callout } from 'nextra/components'
 
 # Workflows
 
-Workflow engines can be used to orchestrate complex operations in Ark and across diferent components of a system.
+> **Workflows in Ark are [Argo Workflows](https://argoproj.github.io/workflows/).** Ark does **not** ship its own workflow engine — there's no native "Ark workflow" CRD and no drag-and-drop workflow builder. You author Argo `WorkflowTemplate` / `Workflow` YAML, and each step calls Ark by creating a `Query` resource (or running the `fark` CLI) against an agent, team, model, or tool. Ark provides Helm charts and a pre-built `ark-tools` image to make those calls easy.
 
-## Argo Workflows
+## Why Argo?
 
-Ark has dedicated support for **[Argo Workflows](/developer-guide/workflows/argo-workflows)** - which offers Kubernetes-native workflow orchestration.
+Argo is a battle-tested workflow engine for running complex, distributed workflows on Kubernetes. It's a good fit for orchestrating agentic processes with Ark because:
 
-**Why Argo?**
+- **Enterprise-grade security** — standard Kubernetes patterns for services, RBAC, etc.
+- **Cloud-native / portable** — runs on any Kubernetes environment.
+- **Open source** — no vendor lock-in.
+- **Battle-tested** — many years of production use.
+- **Isolation** — containerised step execution is ideal for low-trust or isolated agentic operations.
 
-Argo is a battle tested workflow system that is typically used to run complex workflows across a distributed environment. Argo workflows are used in many scenarios with Ark as it has a number of features that make it a good choice for complex agentic process orchestration:
+> **Argo is a recommendation, not a requirement.** Ark agents and teams are API-callable (via the `Query` resource or the `ark` CLI), so any workflow engine that can run a container or make an HTTP/Kubernetes call can orchestrate them — for example [Temporal](https://temporal.io/). Argo is the engine Ark ships ready-made charts and the `ark-tools` image for; the patterns on this page apply to any engine.
 
-- **Enterprise grade security** - standard k8s patterns around services, RBAC, etc
-- **Cloud native / portable / distributed** - able to run on any Kubernetes environment
-- **Open source** - no vendor lock-in
-- **Battle tested** - many years of development
-- **Zero trust / isolation** - containerised execution is ideal for low trust workloads, and isolating agentic operations
-- And many more...
+## What the dashboard does (and doesn't) do
 
----
+The Ark dashboard's **Workflow Templates** page is **read-only** — it lists the Argo `WorkflowTemplate`s in your namespace and renders their DAGs so you can see the shape of a pipeline. It is a *viewer*, not an editor:
 
-**Next**: [Argo Workflows](/developer-guide/workflows/argo-workflows)
+- ✅ List templates, view details (entrypoint, steps), visualise the DAG (pan/zoom).
+- ❌ No creating, editing, or composing workflows in the UI.
+
+**All workflow authoring is YAML.** Write the `WorkflowTemplate`, `kubectl apply` it, and it appears in the dashboard for inspection and in Argo for execution.
+
+## Installing
+
+This installs Argo in single-namespace mode within the Ark tenant namespace (typically `default` in development).
+
+```bash
+helm upgrade --install argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows
+
+# Or, for local development:
+cd services/argo-workflows
+devspace dev
+
+# Check status
+kubectl get pods -l app.kubernetes.io/part-of=argo-workflows
+
+# Port-forward to the Argo dashboard (automatic when using devspace).
+kubectl port-forward svc/argo-workflows-server 2746:2746
+# Dashboard: http://localhost:2746
+```
+
+### Minio artifact storage
+
+Argo can use Minio to store workflow artifacts (intermediate outputs, logs, data files) for passing data between steps or preserving outputs. First install the Minio Operator:
+
+```bash
+helm upgrade minio-operator operator \
+  --install \
+  --repo https://operator.min.io \
+  --namespace minio-operator \
+  --create-namespace \
+  --version 7.1.1
+
+kubectl get pods -n minio-operator
+```
+
+Then enable Minio in the Argo Workflows chart:
+
+```bash
+helm upgrade --install argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows \
+  --set minio.enabled=true
+
+# Or for local development (select 'true' when prompted to enable Minio):
+cd services/argo-workflows
+devspace dev
+
+kubectl get tenant   # check Minio tenant status
+```
+
+## How a step calls Ark
+
+Every Ark interaction inside a workflow is one of two patterns:
+
+1. **A `Query` resource** — `kubectl apply` a `Query` CR, `kubectl wait --for=condition=Completed`, then read `.status.response.content`. This is what the bundled samples use; it works anywhere and gives you labels, TTL, timeout, parameters, and session/conversation IDs.
+2. **The `fark` CLI** — run the pre-built [`ark-tools`](/reference/utility-images#ark-tools) image and call `fark <agent|team|model|tool> <name> "<message>"`. Shorter for one-shot calls.
+
+<Callout type="warning">
+Use **`fark`**, not `ark`, inside a workflow pod. `fark` talks to the Kubernetes API directly (in-cluster config), so it works with the workflow's ServiceAccount. The `ark` CLI port-forwards to the `ark-api` service, which requires `pods/portforward` permission the `argo-workflow` ServiceAccount doesn't have — `ark query …` will fail in a workflow step with *"cannot create resource pods/portforward"*. Keep `ark query` for local/interactive use.
+</Callout>
+
+Both patterns need a ServiceAccount with RBAC to talk to the cluster — the samples set `serviceAccountName: argo-workflow`, which the chart provisions. The examples below are Argo `template` snippets — drop them into a `WorkflowTemplate`'s `templates:` list.
+
+### Invoke an agent
+
+```yaml
+- name: ask-agent
+  script:
+    image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+    command: [bash]
+    source: |
+      fark agent weather-agent "What's the forecast for London?" --quiet > /tmp/out.txt
+  outputs:
+    parameters:
+      - name: response
+        valueFrom:
+          path: /tmp/out.txt
+```
+
+### Invoke a team
+
+Same shape — use the `team` subcommand:
+
+```yaml
+- name: ask-team
+  script:
+    image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+    command: [bash]
+    source: |
+      fark team research-team "Summarise the latest on EV battery chemistries." --quiet > /tmp/out.txt
+  outputs:
+    parameters:
+      - name: response
+        valueFrom:
+          path: /tmp/out.txt
+```
+
+### Invoke a tool
+
+Tools take a JSON object matching their `inputSchema`:
+
+```yaml
+- name: call-tool
+  script:
+    image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+    command: [bash]
+    source: |
+      fark tool get-coordinates '{"city":"Paris"}' --quiet > /tmp/out.txt
+  outputs:
+    parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/out.txt
+```
+
+### Add session and conversation IDs
+
+To thread several steps into one conversation (shared memory) and group them under a session for telemetry, set `conversationId` and `sessionId`. With the `Query` CR pattern, set them in the spec — the workflow name makes a convenient stable ID across steps:
+
+```yaml
+- name: ask-with-context
+  script:
+    image: alpine/k8s:1.28.13
+    command: [sh]
+    source: |
+      QUERY_NAME="step-{{workflow.name}}-$(date +%s%N)"
+      cat <<EOF | kubectl apply -f -
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      metadata:
+        name: $QUERY_NAME
+        labels:
+          workflow: "{{workflow.name}}"
+      spec:
+        input: "What's my name?"
+        conversationId: "{{workflow.name}}"   # shared across steps → same memory thread
+        sessionId: "{{workflow.name}}"         # groups the steps for telemetry
+        target:
+          type: agent
+          name: assistant
+        serviceAccount: argo-workflow
+        timeout: 5m
+        ttl: 24h
+      EOF
+      kubectl wait --for=condition=Completed --timeout=5m query/$QUERY_NAME || true
+      kubectl get query $QUERY_NAME -o jsonpath='{.status.response.content}'
+```
+
+A later step that reuses the same `conversationId` sees the earlier exchange. See [Run queries → Multi-turn conversations](/user-guide/queries#multi-turn-conversations) for the underlying behaviour.
+
+## Example: agents, teams, and deterministic steps together
+
+Real Ark workflows mix LLM steps (agents/teams) with plain deterministic steps (containers that transform data, gate on conditions, or format output). The marketplace [KYC demo bundle](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/demos/kyc-demo-bundle) is a good reference: four sequential team steps feeding a final deterministic processing step.
+
+This condensed `WorkflowTemplate` shows the shape — a sequential pipeline where each step queries a different resource, and a final non-LLM step formats the result:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: research-pipeline
+  annotations:
+    workflows.argoproj.io/description: "Agent → team → deterministic pipeline"
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+  arguments:
+    parameters:
+      - name: topic
+        value: "electric vehicle adoption in Europe"
+  templates:
+    - name: main
+      steps:
+        # Step 1 — an AGENT gathers raw material.
+        - - name: research
+            template: query-ark
+            arguments:
+              parameters:
+                - name: kind
+                  value: "agent"
+                - name: name
+                  value: "research-agent"
+                - name: input
+                  value: "Research: {{workflow.parameters.topic}}"
+
+        # Step 2 — a TEAM reviews and refines, seeing step 1's output.
+        - - name: review
+            template: query-ark
+            arguments:
+              parameters:
+                - name: kind
+                  value: "team"
+                - name: name
+                  value: "review-team"
+                - name: input
+                  value: "Critique and tighten this research:\n{{steps.research.outputs.parameters.response}}"
+
+        # Step 3 — a DETERMINISTIC step (no LLM) formats the final report.
+        - - name: format
+            template: format-report
+            arguments:
+              parameters:
+                - name: body
+                  value: "{{steps.review.outputs.parameters.response}}"
+
+    # Reusable Ark query step — works for agent, team, model, or tool kinds.
+    - name: query-ark
+      inputs:
+        parameters:
+          - name: kind
+          - name: name
+          - name: input
+      script:
+        image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+        command: [bash]
+        source: |
+          fark {{inputs.parameters.kind}} {{inputs.parameters.name}} "{{inputs.parameters.input}}" --quiet > /tmp/response.txt
+      outputs:
+        parameters:
+          - name: response
+            valueFrom:
+              path: /tmp/response.txt
+
+    # A plain container step — pure data transformation, no Ark call.
+    - name: format-report
+      inputs:
+        parameters:
+          - name: body
+      script:
+        image: alpine:3.19
+        command: [sh]
+        source: |
+          echo "# Research Report"
+          echo "Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo
+          echo "{{inputs.parameters.body}}"
+```
+
+## Running workflows
+
+Apply a template, then run it from the Argo dashboard or the `argo` CLI:
+
+```bash
+kubectl apply -f research-pipeline.yaml
+
+# Run from the CLI.
+argo submit --from workflowtemplate/research-pipeline -p topic="EV adoption in Europe"
+
+# Watch progress and read results.
+argo watch @latest
+argo logs @latest
+argo list workflows
+```
+
+From the **Argo dashboard** (`http://localhost:2746`), choose **Workflows → New Workflow → From Template** and pick your template.
+
+```bash
+# List templates if needed.
+argo template list
+```
+
+## Bundled samples
+
+The Ark repo ships runnable templates under `services/argo-workflows/samples/`:
+
+| Sample | Shows |
+| --- | --- |
+| `query-fanout-template.yaml` | List models, fan out a parallel query per model, fan in and compare (quality, token count). |
+| `ark-tools-template.yaml` | Run a query via the `fark` CLI in a container and capture output. |
+| `weather-workflow-template.yaml` | Sequential agent queries passing results between steps. |
+| `a2a-arithmetic-workflow.yaml` | Combine A2A agents, Ark agents, and Python steps. |
+| `minio-artifact-template.yaml` | Pass artifacts between steps via Minio. |
+
+```bash
+kubectl apply -f services/argo-workflows/samples/query-fanout-template.yaml
+argo submit --from workflowtemplate/query-fanout-template \
+  -p question="Describe how to monitor argo workflows from the command-line"
+```
+
+![Screenshot of the fanout workflow](./images/query-fanout-screenshot.png)
+
+### A2A arithmetic workflow
+
+`a2a-arithmetic-workflow.yaml` combines A2A agents, Ark agents, and Python scripts. Install [mock-llm](https://github.com/dwmkerr/mock-llm) with A2A support — it creates a `countdown-agent` that returns an A2A task counting down from a given number of seconds:
+
+```bash
+helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+  --set ark.a2a.enabled=true
+
+kubectl get a2aserver mock-llm-countdown
+# NAME                   ADDRESS                                                 READY
+# mock-llm-countdown     http://mock-llm:6556/a2a/agents/countdown-agent         true
+
+kubectl apply -f services/argo-workflows/samples/a2a-arithmetic-workflow.yaml
+argo submit --from workflowtemplate/a2a-arithmetic-workflow -p a="2" -p b="3"
+```
+
+![Screenshot of the A2A agents workflow](./images/a2a-workflow.png)
+
+For larger end-to-end examples (multi-team DAGs writing reports via the file-gateway), see the marketplace demo bundles: [kyc-demo-bundle](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/demos/kyc-demo-bundle) and [cobol-modernization-bundle](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/demos/cobol-modernization-bundle).
+
+## Viewing templates in the Ark dashboard
+
+Once applied, open **Workflow Templates** in the dashboard sidebar to inspect a template:
+
+- **Template list** — name, description (from the `workflows.argoproj.io/description` annotation), creation time.
+- **DAG visualisation** — nodes (steps), edges (dependencies), hierarchical top-to-bottom layout, pan and zoom.
+- **Template info** — namespace, entrypoint, the available template definitions.
+
+To *run* a template, use the Argo dashboard or the `argo` CLI — the Ark dashboard only visualises.
+
+## Uninstalling
+
+```bash
+# Helm install
+helm uninstall argo-workflows
+
+# Or, if using devspace
+devspace purge
+```
+
+By default the Argo chart does **not** remove the Argo CRDs, to avoid accidental data loss. (Re-installing into a different namespace will clash unless you remove them.) To delete all Argo CRDs — and every workflow, template, and related object:
+
+```bash
+kubectl get crd -o name | grep argoproj.io | xargs kubectl delete
+```
+
+If you enabled Minio:
+
+```bash
+helm uninstall minio-operator --namespace minio-operator
+# Removing Minio CRDs deletes stored artifacts:
+kubectl get crd -o name | grep min.io | xargs kubectl delete
+```
+
+## Troubleshooting
+
+```bash
+# List workflows
+kubectl get workflows
+
+# Logs for the latest run
+argo logs @latest
+```
+
+If an Ark step fails, inspect the `Query` it created — workflows label them with the workflow name:
+
+```bash
+kubectl get queries -l workflow=<workflow-name>
+kubectl get query <name> -o jsonpath='{.status.response.content}'
+```
+
+## Related
+
+- [Run queries / chat with agents and teams](/user-guide/queries) — the `Query` resource these steps create.
+- [`ark-tools` image](/reference/utility-images#ark-tools) — the CLI image used in workflow steps.
+- [Resources API](/reference/resources-api) — access workflow templates via the API.

@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
+from ark_sdk.k8s import create_api_client
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ def _decode_b64_or_empty(value: Optional[str]) -> str:
 async def read_cached_client_creds(
     namespace: str, secret_name: str, keys: SecretKeys
 ) -> CachedClientCreds:
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         try:
             secret = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
@@ -203,7 +203,7 @@ async def write_flow_state(
         "stringData": string_data,
     }
 
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         try:
             await v1.create_namespaced_secret(
@@ -235,7 +235,7 @@ async def write_flow_state(
 async def read_flow_state_by_state_param(
     namespace: str, state_param: str
 ) -> Optional[FlowState]:
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         secrets = await v1.list_namespaced_secret(
             namespace=namespace,
@@ -253,7 +253,7 @@ async def read_flow_state_by_state_param(
 async def read_flow_state_by_auth_id(
     namespace: str, secret_name: str
 ) -> Optional[FlowState]:
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         try:
             secret = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
@@ -301,7 +301,7 @@ async def mark_flow_authorized(
             FLOW_TOKEN_EXPIRES_AT_KEY: token_expires_at or "",
         },
     }
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
 
@@ -315,7 +315,7 @@ async def mark_flow_failed(namespace: str, secret_name: str, message: str) -> No
             FLOW_MESSAGE_KEY: message,
         },
     }
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
 
@@ -367,7 +367,7 @@ async def write_token_secret(
         type="Opaque",
     )
 
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         try:
             await v1.create_namespaced_secret(namespace=namespace, body=secret)
@@ -404,7 +404,7 @@ async def clear_token_secret(
     for k in FLOW_KEYS:
         cleared[k] = ""
 
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         try:
             await v1.patch_namespaced_secret(
@@ -424,7 +424,7 @@ async def clear_token_secret(
 
 
 async def delete_token_secret(*, namespace: str, secret_name: str) -> bool:
-    async with ApiClient() as api:
+    async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         try:
             await v1.delete_namespaced_secret(name=secret_name, namespace=namespace)

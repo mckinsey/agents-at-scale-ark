@@ -25,6 +25,7 @@ type HTTPMemory struct {
 	name             string
 	namespace        string
 	headers          map[string]string
+	ttlSeconds       *int64
 	eventingRecorder eventing.MemoryRecorder
 }
 
@@ -45,7 +46,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 	}
 
 	// Create HTTP client with timeout for memory operations
-	httpClient := common.NewHTTPClientWithLogging(ctx)
+	httpClient := common.NewHTTPClientWithLogging()
 	if config.Timeout > 0 {
 		httpClient.Timeout = config.Timeout
 	}
@@ -72,6 +73,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		name:             memoryName,
 		namespace:        namespace,
 		headers:          headers,
+		ttlSeconds:       config.TtlSeconds,
 		eventingRecorder: memoryRecorder,
 	}, nil
 }
@@ -182,6 +184,7 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		ConversationID: m.conversationId,
 		QueryID:        queryID,
 		Messages:       openaiMessages,
+		TtlSeconds:     m.ttlSeconds,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
@@ -310,6 +313,36 @@ func (m *HTTPMemory) GetBaseURL() string {
 // GetName returns the memory resource name
 func (m *HTTPMemory) GetName() string {
 	return m.name
+}
+
+// DeleteQuery removes all messages for the given query from the memory backend.
+func (m *HTTPMemory) DeleteQuery(ctx context.Context, queryID string) error {
+	if err := m.resolveAndUpdateAddress(ctx); err != nil {
+		return fmt.Errorf("failed to resolve memory address: %w", err)
+	}
+
+	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, m.baseURL, url.PathEscape(queryID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", requestURL, resp.StatusCode, queryID)
+	}
+
+	return nil
 }
 
 // Close closes the HTTP client connections

@@ -1,4 +1,27 @@
-export const createTextChunk = (content: string, index: number = 0) => ({
+export interface ChatCompletionChunk {
+  id: string;
+  object: 'chat.completion.chunk';
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    delta: {
+      content?: string;
+      tool_calls?: Array<{
+        index: number;
+        id: string;
+        type: 'function';
+        function: {name: string; arguments: string};
+      }>;
+    };
+    finish_reason?: string;
+  }>;
+}
+
+export const createTextChunk = (
+  content: string,
+  index: number = 0
+): ChatCompletionChunk => ({
   id: `chatcmpl-${Date.now()}`,
   object: 'chat.completion.chunk',
   created: Date.now(),
@@ -10,7 +33,7 @@ export const createToolCallChunk = (
   toolName: string,
   args: string,
   index: number = 0
-) => ({
+): ChatCompletionChunk => ({
   id: `chatcmpl-${Date.now()}`,
   object: 'chat.completion.chunk',
   created: Date.now(),
@@ -35,7 +58,9 @@ export const createToolCallChunk = (
   ],
 });
 
-export const createFinishChunk = (reason: string = 'stop') => ({
+export const createFinishChunk = (
+  reason: string = 'stop'
+): ChatCompletionChunk => ({
   id: `chatcmpl-${Date.now()}`,
   object: 'chat.completion.chunk',
   created: Date.now(),

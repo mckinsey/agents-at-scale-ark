@@ -24,5 +24,17 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       eventFilePath: parsed.EVENT_FILE_PATH,
       sessionsFilePath: parsed.SESSIONS_FILE_PATH,
     }),
+    backends: Object.freeze({
+      message: parsed.MESSAGE_BACKEND,
+      messageVisibilityTtlSeconds: parsed.MESSAGE_VISIBILITY_TTL_SECONDS,
+    }),
+    database: Object.freeze({
+      url: parsed.DATABASE_URL,
+      poolMax: parsed.DATABASE_POOL_MAX,
+      connectTimeoutMs: parsed.DATABASE_CONNECT_TIMEOUT_MS,
+      statementTimeoutMs: parsed.DATABASE_STATEMENT_TIMEOUT_MS,
+      debugQueries: parsed.DATABASE_DEBUG_QUERIES,
+      sslRootCertPath: parsed.DATABASE_SSL_ROOT_CERT_PATH,
+    }),
   });
 }

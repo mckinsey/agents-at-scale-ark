@@ -90,6 +90,7 @@ Memory is implemented as a simple HTTP server:
 | DELETE | `/conversations/{id}` | Delete a specific conversation |
 | POST | `/messages` | Store messages (requires conversation_id) |
 | GET | `/messages` | Retrieve messages with optional filtering |
+| DELETE | `/queries/{queryId}/messages` | Delete all messages for a query across all conversations |
 | GET | `/health` | Health check |
 
 ### Create Conversation
@@ -115,6 +116,7 @@ Stores messages for an existing conversation. The `conversation_id` is required.
 {
   "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
   "query_id": "query-uuid",
+  "ttl_seconds": 2592000,
   "messages": [
     {
       "role": "user",
@@ -127,6 +129,8 @@ Stores messages for an existing conversation. The `conversation_id` is required.
   ]
 }
 ```
+
+`ttl_seconds` (optional) sets a per-message expiry: each stored message is stamped with an `expires_at` snapshot and filtered out on read once it elapses. This **expires** messages on a timer — it does not delete them; see [Delete Query Messages](#delete-query-messages) for explicit removal. When omitted, the backend applies its default visibility TTL.
 
 ### Get Conversation
 
@@ -189,3 +193,20 @@ Returns object with conversation IDs:
 ```json
 {"conversations": ["conv-1", "conv-2", "conv-3"]}
 ```
+
+### Delete Query Messages
+
+**DELETE** `/queries/{queryId}/messages`
+
+Hard-deletes all messages for a query across every conversation. The Ark controller calls this to clean up broker state when a `Query` is deleted — see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup). The operation is idempotent.
+
+Response:
+
+```json
+{
+  "status": "success",
+  "message": "Query <queryId> messages deleted"
+}
+```
+
+A backend that does not implement this endpoint should return `404` or `405`; the controller treats both as "not supported" and skips cleanup.

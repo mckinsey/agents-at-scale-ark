@@ -2,6 +2,9 @@ image:
   repository: postgres
   tag: 16-alpine
 
+ssl:
+  enabled: false
+
 database: ark
 user: postgres
 password: arkdev123

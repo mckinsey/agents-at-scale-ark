@@ -27,3 +27,17 @@ func TestMCPClientPool_Close_EmptyPool(t *testing.T) {
 	p := NewMCPClientPool()
 	assert.NoError(t, p.Close())
 }
+
+func TestMCPClientPool_GetOrCreateClient_WritePath_UnsupportedTransport(t *testing.T) {
+	p := NewMCPClientPool()
+
+	_, err := p.GetOrCreateClient(t.Context(), MCPClientConfig{
+		ServerNamespace: "default",
+		ServerName:      "my-server",
+		ServerURL:       "http://localhost:9999",
+		Transport:       "unsupported-xyz",
+	}, nil)
+
+	assert.ErrorContains(t, err, ErrUnsupportedTransport)
+	assert.Empty(t, p.clients)
+}

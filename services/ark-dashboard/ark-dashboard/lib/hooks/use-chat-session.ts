@@ -17,6 +17,10 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
+import {
+  type ApiQueryParameter,
+  useAgentQueryParameters,
+} from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
@@ -40,7 +44,11 @@ interface UseChatSessionReturn {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
-  cancelQuery: () => void
+  cancelQuery: () => void;
+  requiredParameters: string[];
+  parameterValues: Record<string, string>;
+  setParameterValue: (name: string, value: string) => void;
+  missingParameters: string[];
 }
 
 export function useChatSession({
@@ -68,11 +76,13 @@ export function useChatSession({
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
-  const conversationId = (chatSession as { conversationId?: string }).conversationId;
+  const conversationId = (chatSession as { conversationId?: string })
+    .conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      const sessionIdToUse =
+        pendingSessionIdRef.current ?? createNewSessionId(name);
       pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
@@ -155,7 +165,15 @@ export function useChatSession({
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatStreamAbortControllerRef = useRef(new AbortController())
+  const chatStreamAbortControllerRef = useRef(new AbortController());
+
+  const {
+    requiredParameters,
+    values: parameterValues,
+    setValue: setParameterValue,
+    missingParameters,
+    toApiParameters,
+  } = useAgentQueryParameters(name, type);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -186,11 +204,11 @@ export function useChatSession({
     [],
   );
 
-  const lastQueryName = useRef('')
+  const lastQueryName = useRef('');
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string) => {
-      chatStreamAbortControllerRef.current = new AbortController()
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+      chatStreamAbortControllerRef.current = new AbortController();
 
       const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
@@ -268,6 +286,7 @@ export function useChatSession({
           conversationId,
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
+          apiParameters,
         );
 
       queryName = streamQueryName;
@@ -275,7 +294,7 @@ export function useChatSession({
 
       const stopPhasePolling = await chatService.streamQueryStatus(
         streamQueryName,
-        (status) => {
+        status => {
           if (status && typeof status === 'object' && 'phase' in status) {
             const phase = (status as { phase?: string }).phase;
             setProcessingPhase(phase);
@@ -319,8 +338,7 @@ export function useChatSession({
             }
           }
 
-          const arkTokenUsage =
-            arkData.completedQuery?.status?.tokenUsage;
+          const arkTokenUsage = arkData.completedQuery?.status?.tokenUsage;
           const usage: TokenUsage | null = arkTokenUsage
             ? {
                 prompt_tokens: arkTokenUsage.promptTokens || 0,
@@ -553,7 +571,7 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -564,9 +582,10 @@ export function useChatSession({
         conversationId,
         undefined,
         queryTimeout,
+        apiParameters,
       );
 
-      lastQueryName.current = query.name
+      lastQueryName.current = query.name;
 
       let pollingStopped = false;
       stopPollingRef.current = () => {
@@ -718,6 +737,18 @@ export function useChatSession({
     async (userMessage: string) => {
       setError(null);
 
+      if (missingParameters.length > 0) {
+        const plural = missingParameters.length > 1;
+        setError(
+          `This agent needs the ${missingParameters.join(', ')} parameter${
+            plural ? 's' : ''
+          } — supply ${plural ? 'them' : 'it'} above, or use the Queries form to create the query.`,
+        );
+        return;
+      }
+
+      const apiParameters = toApiParameters();
+
       trackEvent({
         name: 'chat_message_sent',
         properties: {
@@ -737,9 +768,9 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage);
+          await handleStreamChatResponse(userMessage, apiParameters);
         } else {
-          await handlePollChatResponse(userMessage);
+          await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -747,7 +778,7 @@ export function useChatSession({
 
         if (err instanceof Error) {
           if (err.name === 'AbortError') {
-            return
+            return;
           }
           if (err.message.includes('Failed to fetch')) {
             errMsg =
@@ -777,7 +808,9 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
+      missingParameters,
       name,
+      toApiParameters,
       type,
       updateChatMessages,
     ],
@@ -800,21 +833,21 @@ export function useChatSession({
   }, [chatKey, name, setChatHistory, setLastConversationId]);
 
   const cancelQuery = useCallback(async () => {
-    chatStreamAbortControllerRef.current.abort()
-    stopPollingRef.current?.()
-    
-    setIsProcessing(false)
+    chatStreamAbortControllerRef.current.abort();
+    stopPollingRef.current?.();
 
-    updateChatMessages(prev => [...prev, {
-      role: 'system',
-      content: 'Conversation stopped by user',
-    }])
+    setIsProcessing(false);
 
-    await chatService.cancelQuery(lastQueryName.current).catch(() => {})
-  }, [
-    setIsProcessing,
-    updateChatMessages,
-  ])
+    updateChatMessages(prev => [
+      ...prev,
+      {
+        role: 'system',
+        content: 'Conversation stopped by user',
+      },
+    ]);
+
+    await chatService.cancelQuery(lastQueryName.current).catch(() => {});
+  }, [setIsProcessing, updateChatMessages]);
 
   return {
     messages: chatMessages,
@@ -828,5 +861,9 @@ export function useChatSession({
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,
+    requiredParameters,
+    parameterValues,
+    setParameterValue,
+    missingParameters,
   };
 }

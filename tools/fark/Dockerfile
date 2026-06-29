@@ -1,4 +1,4 @@
-FROM golang:1.26.3-alpine AS builder
+FROM golang:1.26.4-alpine AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY cmd/ ./cmd/
 # Build with vendored dependencies
 RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -o fark ./cmd/fark
 
-FROM alpine:latest
+FROM alpine:3.22
 
 RUN adduser --system --uid 1001 fark && \
     apk --no-cache add ca-certificates

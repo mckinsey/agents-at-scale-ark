@@ -59,14 +59,18 @@ export function createMemoryRouter(
    */
   router.post<Record<string, string>, unknown, PostMessagesBody>(
     '/messages',
-    (req, res) => {
+    async (req, res) => {
       const parse = postMessagesBodySchema.safeParse(req.body);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id);
         return;
       }
-      const {conversation_id, query_id, messages}: PostMessagesBody =
-        parse.data;
+      const {
+        conversation_id,
+        query_id,
+        messages,
+        ttl_seconds,
+      }: PostMessagesBody = parse.data;
 
       try {
         req.log.info(
@@ -78,8 +82,13 @@ export function createMemoryRouter(
           'received messages'
         );
 
-        memory.addMessages(conversation_id, query_id, messages);
-        memory.save();
+        await memory.addMessages(
+          conversation_id,
+          query_id,
+          messages,
+          ttl_seconds
+        );
+        await memory.save();
 
         if (sessions && conversation_id) {
           sessions.applyMessage(conversation_id, query_id);
@@ -95,7 +104,7 @@ export function createMemoryRouter(
 
   router.get<Record<string, string>, unknown, unknown, GetMessagesQueryRaw>(
     '/messages',
-    (req, res) => {
+    async (req, res) => {
       const parse = getMessagesQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id);
@@ -111,15 +120,21 @@ export function createMemoryRouter(
       if (watch) {
         handleStreamingMessages(req, res, memory, conversationId, cursor);
       } else {
-        handlePaginatedMessages(req, res, memory, conversationId, queryId);
+        await handlePaginatedMessages(
+          req,
+          res,
+          memory,
+          conversationId,
+          queryId
+        );
       }
     }
   );
 
-  router.get('/memory-status', (req, res) => {
+  router.get('/memory-status', async (req, res) => {
     try {
-      const conversationIds = memory.getConversationIds();
-      const allItems = memory.all();
+      const conversationIds = await memory.getConversationIds();
+      const allItems = await memory.all();
 
       const conversationStats: Record<
         string,
@@ -148,9 +163,9 @@ export function createMemoryRouter(
     }
   });
 
-  router.get('/conversations', (req, res) => {
+  router.get('/conversations', async (req, res) => {
     try {
-      const conversations = memory.getConversationIds();
+      const conversations = await memory.getConversationIds();
       res.json({conversations});
     } catch (error) {
       req.log.error({err: error}, 'failed to get conversations');
@@ -183,8 +198,8 @@ export function createMemoryRouter(
    *       500:
    *         description: Failed to purge memory
    */
-  router.delete('/messages', (_req, res) => {
-    memory.delete();
+  router.delete('/messages', async (_req, res) => {
+    await memory.delete();
     res.json({status: 'success', message: 'Memory purged'});
   });
 
@@ -224,7 +239,7 @@ export function createMemoryRouter(
    */
   router.delete<{conversationId: string}>(
     '/conversations/:conversationId',
-    (req, res) => {
+    async (req, res) => {
       const {conversationId} = req.params;
 
       if (!conversationId) {
@@ -238,7 +253,7 @@ export function createMemoryRouter(
         return;
       }
 
-      memory.deleteConversation(conversationId);
+      await memory.deleteConversation(conversationId);
       res.json({
         status: 'success',
         message: `Conversation ${conversationId} deleted`,
@@ -288,7 +303,7 @@ export function createMemoryRouter(
    */
   router.delete<{conversationId: string; queryId: string}>(
     '/conversations/:conversationId/queries/:queryId/messages',
-    (req, res) => {
+    async (req, res) => {
       const {conversationId, queryId} = req.params;
 
       if (!conversationId) {
@@ -313,11 +328,64 @@ export function createMemoryRouter(
         return;
       }
 
-      memory.deleteQuery(conversationId, queryId);
+      await memory.deleteQuery(conversationId, queryId);
       res.json({
         status: 'success',
         message: `Query ${queryId} messages deleted from conversation ${conversationId}`,
       });
+    }
+  );
+
+  /**
+   * @swagger
+   * /queries/{queryId}/messages:
+   *   delete:
+   *     summary: Delete all messages for a specific query
+   *     description: Removes all messages for a specific query across all conversations
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: queryId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Query ID to delete messages for
+   *     responses:
+   *       200:
+   *         description: Query messages deleted successfully
+   *       400:
+   *         description: Invalid query ID
+   *       500:
+   *         description: Failed to delete query messages
+   */
+  router.delete<{queryId: string}>(
+    '/queries/:queryId/messages',
+    async (req, res) => {
+      const {queryId} = req.params;
+
+      if (!queryId) {
+        res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Query ID is required',
+            requestId: req.id === undefined ? undefined : String(req.id),
+          },
+        });
+        return;
+      }
+
+      try {
+        req.log.info({queryId}, 'deleting messages for query');
+        await memory.deleteByQuery(queryId);
+        res.json({
+          status: 'success',
+          message: `Query ${queryId} messages deleted`,
+        });
+      } catch (error) {
+        req.log.error({err: error}, 'failed to delete query messages');
+        sendInternalError(res, req.id);
+      }
     }
   );
 
@@ -346,8 +414,8 @@ export function createMemoryRouter(
    *       500:
    *         description: Failed to delete conversations
    */
-  router.delete('/conversations', (_req, res) => {
-    memory.delete();
+  router.delete('/conversations', async (_req, res) => {
+    await memory.delete();
     res.json({status: 'success', message: 'All conversations deleted'});
   });
 
@@ -408,7 +476,7 @@ export function createMemoryRouter(
    */
   router.get<{conversationId: string}>(
     '/conversations/:conversationId',
-    (req, res) => {
+    async (req, res) => {
       const {conversationId} = req.params;
 
       if (!conversationId) {
@@ -422,7 +490,7 @@ export function createMemoryRouter(
         return;
       }
 
-      const items = memory.getByConversation(conversationId);
+      const items = await memory.getByConversation(conversationId);
 
       if (items.length === 0) {
         res.status(404).json({

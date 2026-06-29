@@ -55,7 +55,7 @@ describe('SessionsView', () => {
   it('opens EventSource with correct URL on mount', () => {
     render(<SessionsView memory="default" />);
     expect(esInstances).toHaveLength(1);
-    expect(latestES().url).toBe('/api/v1/broker/sessions?memory=default&watch=true');
+    expect(latestES().url).toBe('http://localhost:3000/api/v1/broker/sessions?memory=default&watch=true');
   });
 
   it('cleans up EventSource on unmount', () => {
@@ -151,7 +151,7 @@ describe('SessionsView', () => {
     await user.click(screen.getByRole('button', { name: /purge/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/broker/sessions?memory=default', {
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/broker/sessions?memory=default', {
         method: 'DELETE',
       });
     });

@@ -24,16 +24,20 @@ export function handleStreamingAllTraces(
 ): void {
   req.log.info({cursor, sessionId}, 'starting SSE stream for all spans');
 
-  let replayItems: OTELSpan[] | undefined;
-  if (cursor !== undefined) {
-    let items = traces.all().filter((item) => item.sequenceNumber > cursor);
-    if (sessionId) {
-      items = items.filter((item) =>
-        spanMatchesSessionId(item.data, sessionId)
-      );
-    }
-    replayItems = items.map((item) => item.data);
-  }
+  const getReplay =
+    cursor === undefined
+      ? undefined
+      : async (): Promise<OTELSpan[]> => {
+          let items = (await traces.all()).filter(
+            (item) => item.sequenceNumber > cursor
+          );
+          if (sessionId) {
+            items = items.filter((item) =>
+              spanMatchesSessionId(item.data, sessionId)
+            );
+          }
+          return items.map((item) => item.data);
+        };
 
   streamSSE({
     res,
@@ -47,19 +51,19 @@ export function handleStreamingAllTraces(
           callback(item.data);
         }
       }),
-    replayItems,
+    getReplay,
   });
 }
 
-export function handlePaginatedAllTraces(
+export async function handlePaginatedAllTraces(
   req: Request,
   res: Response,
   traces: TraceBroker,
   sessionId: string | undefined
-): void {
+): Promise<void> {
   try {
     const params = parsePaginationParams(req.query as Record<string, unknown>);
-    const result = traces.paginateTraces(params, sessionId);
+    const result = await traces.paginateTraces(params, sessionId);
 
     const response: PaginatedList<{traceId: string; spans: OTELSpan[]}> = {
       items: result.items,
@@ -89,15 +93,17 @@ export function handleStreamingTrace(
 ): void {
   req.log.info({traceId}, 'starting SSE stream for trace');
 
-  let replayItems: OTELSpan[] | undefined;
-  if (fromBeginning) {
-    replayItems = traces.getSpansByTraceId(traceId);
-  } else if (cursor !== undefined) {
-    replayItems = traces
-      .getByTraceId(traceId)
-      .filter((item) => item.sequenceNumber > cursor)
-      .map((item) => item.data);
-  }
+  const getReplay =
+    fromBeginning || cursor !== undefined
+      ? async (): Promise<OTELSpan[]> => {
+          if (fromBeginning) {
+            return traces.getSpansByTraceId(traceId);
+          }
+          return (await traces.getByTraceId(traceId))
+            .filter((item) => item.sequenceNumber > cursor!)
+            .map((item) => item.data);
+        }
+      : undefined;
 
   streamSSE({
     res,
@@ -107,20 +113,20 @@ export function handleStreamingTrace(
     itemName: 'spans',
     subscribe: (callback) =>
       traces.subscribeToTrace(traceId, (item) => callback(item.data)),
-    replayItems,
+    getReplay,
     identifier: `Trace ${traceId}`,
   });
 }
 
-export function handlePaginatedTrace(
+export async function handlePaginatedTrace(
   req: Request,
   res: Response,
   traces: TraceBroker,
   traceId: string
-): void {
+): Promise<void> {
   try {
-    const spans = traces.getSpansByTraceId(traceId);
-    if (spans.length === 0 && !traces.hasTrace(traceId)) {
+    const spans = await traces.getSpansByTraceId(traceId);
+    if (spans.length === 0 && !(await traces.hasTrace(traceId))) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
