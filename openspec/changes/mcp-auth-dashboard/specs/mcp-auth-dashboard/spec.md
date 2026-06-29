@@ -209,7 +209,7 @@ The **Authenticate** action (state `Required`) SHALL call `POST /api/v1/mcp-serv
 On loading `/mcp` with auth query parameters set by the callback redirect, the dashboard SHALL determine the outcome as follows and, in all cases, strip the consumed auth parameters (`authorized`, `auth_id`, `auth_error`, `auth_error_desc`, and the redirect-added `namespace`) from the URL so a refresh does not re-trigger the handler:
 
 - When `auth_error` is present, it SHALL show an error toast. The `expired` value SHALL be special-cased to a "flow expired — try again" message; otherwise the toast SHALL use `auth_error_desc` when present, falling back to the `auth_error` code. It SHALL NOT poll.
-- Otherwise, with `authorized=<name>` and `auth_id` present, it SHALL poll `GET /api/v1/mcp-servers/{name}/auth/status?auth_id=<auth_id>&namespace=<ns>` — the same completion endpoint the orchestration CLI polls, reused here rather than introducing a streaming/push channel — until a terminal state: `authorized` → success toast; `failed` → error toast carrying the status message; `expired` → expired toast. The token exchange has already completed before the redirect, so only the controller's reconcile to `Authorized` remains: while `pending`, it SHALL poll at a ~2 s interval up to a bounded client-side budget of ~30 s (a dashboard constant, distinct from and much shorter than the server-side `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` since the flow's own cache entry need not be alive for this confirmation), after which it SHALL show a "submitted — not yet confirmed; check the server status" toast. On `authorized` it SHALL invalidate the MCP servers query so the card reflects the new state.
+- Otherwise, with `authorized=<name>` and `auth_id` present, it SHALL poll `GET /api/v1/mcp-servers/{name}/auth/status?auth_id=<auth_id>&namespace=<ns>` — the same completion endpoint the orchestration CLI polls, reused here rather than introducing a streaming/push channel — until a terminal state: `authorized` → success toast; `failed` → error toast carrying the status message; `expired` → expired toast, **except** when the freshly-loaded MCP servers list shows that same server's current `authorization.state == Authorized` (the flow succeeded but its cache entry aged out before the stale params were stripped, so `auth/status` can only report `expired`) — in that case the dashboard SHALL suppress the "flow expired — try again" toast and instead silently strip the params or show an "already authorized — no action needed" message, since it holds strictly more state than `auth/status` does. The token exchange has already completed before the redirect, so only the controller's reconcile to `Authorized` remains: while `pending`, it SHALL poll at a ~2 s interval up to a bounded client-side budget of ~30 s (a dashboard constant, distinct from and much shorter than the server-side `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` since the flow's own cache entry need not be alive for this confirmation), after which it SHALL show a "submitted — not yet confirmed; check the server status" toast. On `authorized` it SHALL invalidate the MCP servers query so the card reflects the new state.
 
 #### Scenario: Successful return polls auth/status to authorized
 
@@ -234,6 +234,14 @@ On loading `/mcp` with auth query parameters set by the callback redirect, the d
 - **GIVEN** the browser returns to `/mcp?auth_error=expired`
 - **WHEN** the dashboard handles the return
 - **THEN** it SHALL show a "flow expired — try again" toast
+
+#### Scenario: Expired poll on a stale URL whose server is already Authorized
+
+- **GIVEN** the browser returns to a stale `/mcp?authorized=notion&namespace=team-a&auth_id=abc` after the flow's cache entry has aged out
+- **AND** the freshly-loaded MCP servers list shows `notion` with `authorization.state == "Authorized"`
+- **WHEN** the dashboard polls `auth/status` and it reports `expired`
+- **THEN** it SHALL NOT show the "flow expired — try again" toast
+- **AND** it SHALL strip the auth query parameters (optionally showing an "already authorized — no action needed" message)
 
 #### Scenario: Pending beyond the timeout
 
