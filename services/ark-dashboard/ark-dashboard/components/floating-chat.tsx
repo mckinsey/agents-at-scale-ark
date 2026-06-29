@@ -59,7 +59,7 @@ export default function FloatingChat({
         return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[548px] h-auto min-h-0 transition-all duration-300';
       case 'default':
       default:
-        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[548px] h-[500px] transition-all duration-300';
+        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[548px] h-[708px] max-h-[calc(100vh-2rem)] transition-all duration-300';
     }
   };
 

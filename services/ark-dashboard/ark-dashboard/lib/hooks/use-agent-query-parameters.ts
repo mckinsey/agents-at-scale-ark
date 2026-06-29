@@ -40,6 +40,18 @@ function stripPrefix(name: string): string {
   return name.includes('/') ? name.split('/').pop() || name : name;
 }
 
+async function resolveTeamMemberParameters(member: {
+  name: string;
+}): Promise<TeamAgentParameters> {
+  const agent = await agentsService
+    .getByName(stripPrefix(member.name))
+    .catch(() => null);
+  return {
+    name: member.name,
+    parameters: extractAgentRequiredParams(agent?.parameters),
+  };
+}
+
 /**
  * Resolves the query parameters an agent (or a team's member agents) declares
  * via valueFrom.queryParameterRef and holds the rows a user builds to supply
@@ -86,15 +98,7 @@ export function useAgentQueryParameters(
             member => member.type === 'agent',
           );
           const resolved = await Promise.all(
-            agentMembers.map(async member => {
-              const agent = await agentsService
-                .getByName(stripPrefix(member.name))
-                .catch(() => null);
-              return {
-                name: member.name,
-                parameters: extractAgentRequiredParams(agent?.parameters),
-              };
-            }),
+            agentMembers.map(resolveTeamMemberParameters),
           );
           if (cancelled) return;
           setTeamAgents(resolved.filter(entry => entry.parameters.length > 0));
@@ -161,15 +165,19 @@ export function useAgentQueryParameters(
 
   const setRowAgent = useCallback(
     (id: string, agent: string) => {
+      const agentParams =
+        teamAgents.find(entry => entry.name === agent)?.parameters || [];
       setRows(prev =>
-        prev.map(row => {
-          if (row.id !== id) return row;
-          const agentParams =
-            teamAgents.find(entry => entry.name === agent)?.parameters || [];
-          // Reset the variable if the new agent does not declare it.
-          const name = agentParams.includes(row.name) ? row.name : '';
-          return { ...row, agent, name };
-        }),
+        prev.map(row =>
+          row.id === id
+            ? {
+                ...row,
+                agent,
+                // Reset the variable if the new agent does not declare it.
+                name: agentParams.includes(row.name) ? row.name : '',
+              }
+            : row,
+        ),
       );
     },
     [teamAgents],

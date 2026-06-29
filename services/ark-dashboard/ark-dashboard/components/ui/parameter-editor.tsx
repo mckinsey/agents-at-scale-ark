@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 
 import { Add, Info, Lock, Trash, Warning } from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { generateUUID } from '@/lib/utils/uuid';
 
 import { Button } from './button';
 import { ScrollArea } from './scroll-area';
@@ -16,6 +17,7 @@ export type ParameterSource =
   | 'secretKeyRef';
 
 export interface Parameter {
+  id: string;
   name: string;
   source: ParameterSource;
   value?: string;
@@ -70,6 +72,7 @@ export function ParameterEditor({
     onChange([
       ...parameters,
       {
+        id: generateUUID(),
         name,
         source,
         value: '',
@@ -136,7 +139,7 @@ export function ParameterEditor({
           if (isQueryParameter) {
             return (
               <div
-                key={index}
+                key={param.id}
                 className="flex h-10 items-center gap-2 border-b border-white/[0.16]">
                 <span className="text-fg-primary min-w-0 flex-1 truncate text-sm leading-4 tracking-[-0.112px]">
                   {param.name || (
@@ -159,7 +162,7 @@ export function ParameterEditor({
           const isValueSource = param.source === 'value';
 
           return (
-            <div key={index} className="flex items-center gap-3">
+            <div key={param.id} className="flex items-center gap-3">
               <div className="focus-within:border-b-stroke-status-focus flex h-10 min-w-0 flex-1 items-center gap-2 border-b border-white/[0.16]">
                 <input
                   type="text"

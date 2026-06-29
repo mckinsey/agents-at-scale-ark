@@ -7,8 +7,12 @@ import {
   type Parameter,
 } from '@/components/ui/parameter-editor';
 
+let paramIdCounter = 0;
+
 function makeParam(overrides: Partial<Parameter> = {}): Parameter {
+  paramIdCounter += 1;
   return {
+    id: `test-param-${paramIdCounter}`,
     name: 'foo',
     source: 'value',
     value: '',
