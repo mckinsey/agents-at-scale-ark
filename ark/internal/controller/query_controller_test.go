@@ -419,7 +419,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			namespacedName := types.NamespacedName{Name: "finish-query", Namespace: "default"}
 			_, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			r.operations.Store(namespacedName, context.CancelFunc(cancel))
+			r.operations.Store(namespacedName, cancel)
 
 			r.finishExecuteQueryAsync(context.Background(), namespacedName)
 
