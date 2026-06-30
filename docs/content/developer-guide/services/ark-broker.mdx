@@ -51,7 +51,7 @@ The Helm chart can optionally configure a persistent volume for data storage by 
 
 ## Message backend (Postgres)
 
-By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. Only the messages store is affected — chunks, traces, events, and sessions remain in memory (or file-based, as above). The events store has its own Postgres backend (`EVENT_BACKEND=postgres`), described in the [Events backend](#events-backend-postgres) section below.
+By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. Only the messages store is affected — chunks, traces, events, and sessions remain in memory (or file-based, as above).
 
 This is separate from the controller's [PostgreSQL storage backend](/operations-guide/postgres-storage-backend), which stores Ark resources (CRDs) via the aggregated API server. The two use different databases and serve different purposes.
 
@@ -239,53 +239,6 @@ redis:
 ```
 
 The password can also be supplied separately from the URL via `redis.passwordSecretRef`, sourced into `REDIS_PASSWORD`.
-
-## Events backend (Postgres)
-
-Operation events (`QueryExecutionComplete`, `AgentExecutionStart`, and similar lifecycle events emitted by the controller) are stored in-memory by default. With `EVENT_BACKEND=postgres` they are persisted to Postgres, surviving pod restarts and enabling durable event history.
-
-The events store uses the same `DATABASE_URL` and connection pool as the messages backend. Both can be enabled independently or together — no separate database or credentials are needed.
-
-Enable it in the Helm chart:
-
-```yaml
-backends:
-  event: postgres
-
-database:
-  url: "postgres://user:password@host:5432/ark_broker"
-```
-
-Key environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EVENT_BACKEND` | `memory` | Event storage backend: `memory` or `postgres` |
-| `DATABASE_URL` | — | Postgres connection string. Required when `EVENT_BACKEND=postgres` (shared with `MESSAGE_BACKEND`). |
-| `EVENT_VISIBILITY_TTL_SECONDS` | `2592000` | Default event TTL (30 days) |
-
-Events are written with an `expires_at` snapshot at insert time and filtered out once it elapses. The per-event TTL can be overridden at write time by including `ttl_seconds` in the `POST /events` body:
-
-```json
-{
-  "eventType": "QueryExecutionComplete",
-  "reason": "Completed",
-  "timestamp": "...",
-  "message": "...",
-  "data": { "queryId": "my-query", ... },
-  "ttl_seconds": 3600
-}
-```
-
-When `ttl_seconds` is absent the global `EVENT_VISIBILITY_TTL_SECONDS` applies. Events are append-only and immutable; there is no per-query delete endpoint yet (follow-up).
-
-<Callout type="warning">
-  Apply the same database isolation rules as for messages: each broker release must use its own database. The `events` table has no tenant separation. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
-</Callout>
-
-The same TLS and `urlSecretRef` options from the messages backend apply here — see [Securing the Postgres connection](#securing-the-postgres-connection).
-
-See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace and integration tests.
 
 ## Sessions Endpoint
 
