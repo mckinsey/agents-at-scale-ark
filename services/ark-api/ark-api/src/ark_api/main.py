@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from kubernetes_asyncio import client
 from ark_sdk.k8s import create_api_client
 from ark_sdk.client import set_default_user_agent
 from dotenv import load_dotenv
@@ -28,6 +27,11 @@ from .middleware import ReadOnlyMiddleware
 from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
+from .impersonation_groups_patch import apply as _apply_group_impersonation_patch
+
+# Fix multi-group impersonation: ensure repeated Impersonate-Group headers so
+# group-based RBAC works for users in more than one group (see module docstring).
+_apply_group_impersonation_patch()
 
 # Load environment variables from .env file
 load_dotenv()
