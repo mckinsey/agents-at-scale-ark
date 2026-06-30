@@ -40,6 +40,16 @@ spec:
             value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"
+          {{- if .Values.namespaceScopedDiscovery }}
+          # Per-tenant pods are authorized by a namespaced Role, which cannot
+          # satisfy the cluster-wide List that broker/target discovery does by
+          # default. Scope discovery to this pod's own namespace, where its
+          # ark-broker/ark-config-broker live.
+          - name: ARK_DISCOVERY_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- end }}
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"

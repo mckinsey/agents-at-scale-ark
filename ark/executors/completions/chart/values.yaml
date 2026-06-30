@@ -49,6 +49,15 @@ serviceAccountName: ark-controller
 rbac:
   create: false
 
+# Scope broker/OTEL discovery to the pod's own namespace. Broker and target
+# discovery list ConfigMaps/Secrets cluster-wide by default, which a
+# namespaced Role (rbac.create=true) cannot authorize — the list is Forbidden
+# and the pod silently falls back to dropping events/traces. Enable this for
+# per-tenant installs (alongside rbac.create=true) so discovery lists only the
+# tenant's own namespace, where its ark-broker/ark-config-broker live. Off by
+# default so the shared ark-system install keeps its cluster-wide view.
+namespaceScopedDiscovery: false
+
 # Register this deployment as an ExecutionEngine named "ark-completions" in its
 # namespace. The controller's dispatch prefers a namespace-local ExecutionEngine
 # of this name over the central address, so enabling this is what makes a

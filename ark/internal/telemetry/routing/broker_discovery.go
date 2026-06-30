@@ -36,7 +36,7 @@ func DiscoverBrokerEndpoints(ctx context.Context, k8sClient client.Client) ([]Br
 	}
 
 	cmList := &corev1.ConfigMapList{}
-	if err := k8sClient.List(ctx, cmList); err != nil {
+	if err := k8sClient.List(ctx, cmList, scopedListOptions()...); err != nil {
 		return nil, fmt.Errorf("failed to list ConfigMaps: %w", err)
 	}
 
