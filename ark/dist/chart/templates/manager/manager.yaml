@@ -33,6 +33,8 @@ spec:
             - {{ . }}
             {{- end }}
             - "--completions-addr={{ .Values.completions.addr }}"
+            - "--max-concurrent-queries={{ .Values.controllerManager.maxConcurrentQueries }}"
+            - "--max-concurrent-reconciles={{ .Values.controllerManager.maxConcurrentReconciles }}"
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
