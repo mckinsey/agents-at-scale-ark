@@ -13,32 +13,22 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// kindBroadcaster is the in-process watch cache for a single resource kind. It is
-// the missing layer that the etcd-backed apiserver gets for free from its cacher:
-// instead of every watcher independently re-querying PostgreSQL on each write
-// (O(watchers) relists per write), one broadcaster per kind runs a SINGLE relist
-// and fans the resulting rows out to all subscribers over in-memory channels.
-//
-// A broadcaster is created lazily when the first watcher of a kind subscribes and
-// torn down when the last one leaves (see PostgreSQLBackend.getOrCreateBroadcaster
-// and kindBroadcaster.unsubscribe). It owns the per-kind relist cursor; each
-// subscriber still applies its own (uid, rv) dedup and namespace/label filtering,
-// so a row fanned out to a non-matching or already-seen watcher is simply ignored.
+// kindBroadcaster is the in-process watch cache for a single resource kind: one
+// relist per write fanned out to all subscribers in memory, instead of O(watchers)
+// relists. Created lazily on the first watcher of a kind, torn down with the last.
+// It owns the per-kind relist cursor; subscribers still apply their own (uid, rv)
+// dedup and namespace/label filtering.
 type kindBroadcaster struct {
 	backend *PostgreSQLBackend
 	kind    string
 
-	// nudgeCh coalesces relist requests: WAL signals and retries collapse into at
-	// most one pending relist (buffer 1 + non-blocking send), exactly like the old
-	// per-watcher nudgeCh did, but now once per kind instead of once per watcher.
+	// nudgeCh coalesces relist requests (buffer 1 + non-blocking send).
 	nudgeCh chan struct{}
 	done    chan struct{}
 	closed  sync.Once
 
-	// lastSeenRV / seenRVs are the per-kind relist cursor and dedup set. They serve
-	// the same BIGSERIAL commit-order-race mitigation documented on relist(): the
-	// lookback window re-reads recently-committed rows and seenRVs suppresses
-	// re-fanning rows already dispatched.
+	// per-kind relist cursor + dedup set (the lookback/seenRVs commit-order-race
+	// mitigation documented on relist()).
 	lastSeenRV atomic.Int64
 	seenMu     sync.Mutex
 	seenRVs    map[string]int64
@@ -60,9 +50,8 @@ func newKindBroadcaster(backend *PostgreSQLBackend, kind string) *kindBroadcaste
 	}
 }
 
-// changeRow is one relisted row, reconstructed once by the broadcaster and shared
-// (read-only) across subscribers. Each subscriber DeepCopyObject()s obj before
-// emitting, so the shared pointer is never mutated.
+// changeRow is one relisted row, reconstructed once and shared read-only across
+// subscribers (each deep-copies obj before emitting).
 type changeRow struct {
 	rv      int64
 	uid     string
@@ -116,9 +105,8 @@ func (b *kindBroadcaster) run() {
 	defer relistTicker.Stop()
 
 	// Prime the cursor at the current max rv so the first relist fans out only
-	// subsequent changes, not the whole table — each watcher gets current state
-	// from its own initial relist. Done here (not under backend.mu in
-	// getOrCreateBroadcaster) to keep the DB query off the lock's critical path.
+	// subsequent changes (watchers get current state from their own initial relist).
+	// Done here, off backend.mu's critical path.
 	b.lastSeenRV.Store(b.backend.currentMaxRV())
 	b.relist()
 
@@ -197,10 +185,8 @@ func (b *kindBroadcaster) relist() {
 	b.consecutiveFailures = 0
 }
 
-// onRelistFailure records the failure and schedules a short-backoff retry instead
-// of waiting for the 120s safety tick. The cursor is deliberately not advanced, so
-// the retry re-reads the same window. Subscribers are never closed — a transient DB
-// blip must not tear down every informer for the kind.
+// onRelistFailure schedules a short-backoff retry (not the 120s tick). The cursor is
+// not advanced, so the retry re-reads the same window; subscribers are never closed.
 func (b *kindBroadcaster) onRelistFailure(err error) {
 	b.consecutiveFailures++
 	broadcasterRelistFailures.WithLabelValues(b.kind).Inc()
@@ -214,9 +200,9 @@ func (b *kindBroadcaster) onRelistFailure(err error) {
 	time.AfterFunc(delay, b.nudge)
 }
 
-// fanout routes one row to every matching subscriber via a non-blocking send. A
-// slow consumer (full inputCh) is marked "behind" and recovers via its own relist;
-// it never blocks dispatch to the other subscribers (no head-of-line blocking).
+// fanout routes one row to each matching subscriber via a non-blocking send. A slow
+// consumer (full inputCh) is marked "behind" (recovers via its own relist) rather
+// than blocking dispatch to the others.
 func (b *kindBroadcaster) fanout(row *changeRow) {
 	b.subMu.RLock()
 	defer b.subMu.RUnlock()
