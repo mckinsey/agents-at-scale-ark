@@ -2,9 +2,7 @@
 #
 # validate-chart-values.sh
 # Validates that key values in dist/chart/values.yaml render into the
-# manager Deployment as expected. Regression guard for cases like
-# https://github.com/mckinsey/agents-at-scale-ark/pull/2717 where
-# `| default 32` silently swallowed `--set ...=0`.
+# manager Deployment as expected. 
 #
 
 set -euo pipefail
@@ -26,6 +24,7 @@ render() {
     helm template test-release "$CHART_DIR" \
         --show-only "$MANAGER_TEMPLATE" \
         "$@"
+    return $?
 }
 
 # expect_arg <name> <expected-arg> <set-args...>
@@ -39,7 +38,7 @@ expect_arg() {
         echo -e "${YELLOW}  helm template failed:${NC}"
         echo "$output" | sed 's/^/    /'
         FAILED=$((FAILED + 1))
-        return
+        return 0
     fi
     if echo "$output" | grep -qF -- "$expected"; then
         echo -e "${GREEN}OK${NC}   $name (found: $expected)"
@@ -50,6 +49,7 @@ expect_arg() {
         echo "$output" | grep -E -- '--max-concurrent-(queries|reconciles)=' | sed 's/^/    /' || true
         FAILED=$((FAILED + 1))
     fi
+    return 0
 }
 
 echo "Validating chart value rendering for $MANAGER_TEMPLATE..."
@@ -75,7 +75,7 @@ expect_arg "override maxConcurrentReconciles=0" \
     --set controllerManager.maxConcurrentReconciles=0
 
 echo ""
-if [ "$FAILED" -eq 0 ]; then
+if [[ "$FAILED" -eq 0 ]]; then
     echo -e "${GREEN}All chart value checks passed${NC}"
     exit 0
 fi
