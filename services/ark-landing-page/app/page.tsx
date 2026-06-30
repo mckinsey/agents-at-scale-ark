@@ -11,12 +11,19 @@ import {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Strip trailing slashes without a regex (avoids Sonar S5852 ReDoS heuristics).
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === '/') end -= 1;
+  return value.slice(0, end);
+}
+
 function getNamespaceUrl(namespace: string): string {
   // Tenant dashboards are served per-namespace under a path prefix on the
   // shared dashboard origin (e.g. http://localhost:3000/tenant-a).
-  const base = (
-    process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL || 'http://localhost:3000'
-  ).replace(/\/+$/, '');
+  const base = stripTrailingSlashes(
+    process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL || 'http://localhost:3000',
+  );
   return `${base}/${namespace}`;
 }
 
