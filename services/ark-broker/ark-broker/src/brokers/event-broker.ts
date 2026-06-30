@@ -30,8 +30,11 @@ export class EventBroker {
     this.stream = stream;
   }
 
-  async addEvent(event: EventData): Promise<BrokerItem<EventData>> {
-    return this.stream.append(event);
+  async addEvent(
+    event: EventData,
+    ttlSeconds?: number
+  ): Promise<BrokerItem<EventData>> {
+    return this.stream.append(event, ttlSeconds);
   }
 
   async getByQuery(queryId: string): Promise<BrokerItem<EventData>[]> {

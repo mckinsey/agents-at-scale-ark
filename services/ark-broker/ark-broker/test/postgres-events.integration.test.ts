@@ -94,40 +94,21 @@ describeIntegration('postgres event backend — HTTP integration', () => {
     expect(res.body.items.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('expired events are not returned (short-ttl config)', async () => {
-    const config = loadConfig({
-      EVENT_BACKEND: 'postgres',
-      DATABASE_URL: connectionUrl(),
-      EVENT_VISIBILITY_TTL_SECONDS: '1',
-    });
-    const shortTtlDb = db();
-    const {app: shortTtlApp} = buildApp({
-      config,
-      logger,
-      version: 'test',
-      messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger),
-      eventStream: createEventStream(config, logger, shortTtlDb),
-      db: shortTtlDb,
-    });
-
+  it('expired events are not returned (body ttl_seconds override)', async () => {
     const ttlEvent = {
       ...baseEvent,
       data: {...baseEvent.data, queryId: 'q-ttl-test'},
+      ttl_seconds: 1,
     };
 
-    await request(shortTtlApp).post('/events').send(ttlEvent).expect(201);
+    await request(app).post('/events').send(ttlEvent).expect(201);
 
-    const before = await request(shortTtlApp)
-      .get('/events/q-ttl-test')
-      .expect(200);
+    const before = await request(app).get('/events/q-ttl-test').expect(200);
     expect(before.body.items).toHaveLength(1);
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    const after = await request(shortTtlApp)
-      .get('/events/q-ttl-test')
-      .expect(200);
+    const after = await request(app).get('/events/q-ttl-test').expect(200);
     expect(after.body.items).toHaveLength(0);
   });
 });
