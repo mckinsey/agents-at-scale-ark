@@ -88,6 +88,9 @@ deployments:
               - CHOWN
               - FOWNER
               - DAC_OVERRIDE
+        backends:
+          message: memory
+          chunk: memory
         memory:
           setAsDefault: true
         persistence:
@@ -142,10 +145,9 @@ profiles:
             chart:
               path: ../../charts/ark-storage-dev
             releaseName: ark-storage-dev
-      - op: add
-        path: deployments.ark-broker.helm.values.backends
-        value:
-          message: postgres
+      - op: replace
+        path: deployments.ark-broker.helm.values.backends.message
+        value: postgres
       - op: add
         path: deployments.ark-broker.helm.values.database
         value:
@@ -171,11 +173,9 @@ profiles:
             releaseName: ark-redis-dev
             values:
               password: ${BROKER_REDIS_PASSWORD}
-      - op: add
-        path: deployments.ark-broker.helm.values.backends
-        value:
-          message: memory
-          chunk: redis
+      - op: replace
+        path: deployments.ark-broker.helm.values.backends.chunk
+        value: redis
       - op: add
         path: deployments.ark-broker.helm.values.redis
         value:
