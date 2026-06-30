@@ -4,6 +4,8 @@ export default {
   'deploying-ark': 'Deploying Ark',
   'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
+  'multi-tenant-dashboard-hosting': 'Multi-Tenant Dashboard Hosting',
+  marketplace: 'Marketplace',
   monitoring: 'Monitoring',
   'disaster-recovery': 'Disaster Recovery',
 
@@ -17,8 +19,6 @@ export default {
   'data-flow-and-encryption': 'Data Flow and Encryption',
   'model-url-security': 'Model URL Security',
   'penetration-testing-reports': 'Penetration Testing Reports',
-  'code-analysis-reports': 'Code Analysis Reports',
-  'artifact-analysis-reports': 'Artifact Analysis Reports',
 
   '---roadmap': { type: 'separator', title: 'Roadmap and refactoring' },
   'technical-debt-and-upcoming-refactoring': 'Technical Debt and Upcoming Refactoring'

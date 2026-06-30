@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore, Provider as JotaiProvider, useAtomValue } from 'jotai';
+import { Provider as JotaiProvider, createStore, useAtomValue } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -35,6 +35,9 @@ vi.mock('@/lib/services', () => ({
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
+  },
+  agentsService: {
+    getByName: vi.fn().mockResolvedValue({ parameters: [] }),
   },
 }));
 
@@ -92,7 +95,11 @@ describe('FloatingChat', () => {
     vi.mocked(chatService.startStreamChatResponse).mockImplementation(
       async (...args: unknown[]) => ({
         queryName: 'test-query',
-        chunks: (chatService.streamChatResponse as (...a: unknown[]) => AsyncGenerator<Record<string, unknown>>)(...args),
+        chunks: (
+          chatService.streamChatResponse as (
+            ...a: unknown[]
+          ) => AsyncGenerator<Record<string, unknown>>
+        )(...args),
       }),
     );
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});
@@ -795,6 +802,7 @@ describe('FloatingChat', () => {
           undefined, // conversationId
           undefined, // enableStreaming
           '5m', // timeout
+          undefined, // parameters
         );
       });
 
@@ -923,6 +931,7 @@ describe('FloatingChat', () => {
           undefined,
           undefined,
           '5m',
+          undefined, // parameters
         );
       });
 

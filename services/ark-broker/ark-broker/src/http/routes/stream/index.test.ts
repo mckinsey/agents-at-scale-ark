@@ -1,6 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker';
+import {InMemoryChunkStream} from '@ark-broker/brokers/stream/in-memory-chunk-stream';
 import {createLogger} from '@ark-broker/logging/logger';
 import {createHttpLogger} from '@ark-broker/http/middleware/http-logger';
 import {requestId} from '@ark-broker/http/middleware/request-id';
@@ -17,7 +18,7 @@ describe('Streaming API', () => {
 
   beforeEach(() => {
     const logger = createLogger({level: 'silent', pretty: false});
-    chunks = new CompletionChunkBroker(logger);
+    chunks = new CompletionChunkBroker(new InMemoryChunkStream(logger));
     app = express();
     app.use(express.json() as express.RequestHandler);
     app.use(requestId);

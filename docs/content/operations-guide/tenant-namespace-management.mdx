@@ -20,7 +20,7 @@ This installs the tenant chart (service account, roles, builtin tools), the API 
 ark dashboard
 ```
 
-> The Ark CLI uses your current kubectl context namespace. You can also install the charts directly with Helm — see the [Deploying Ark](./deploying-ark) guide.
+> The Ark CLI uses your current kubectl context namespace. You can also install the charts directly with Helm — see the [Deploying Ark](/operations-guide/deploying-ark) guide.
 
 ## Cross-Tenant Access
 
@@ -73,6 +73,16 @@ graph LR
 ```
 
 Without the RoleBinding, the API returns a 403 error when attempting to access another tenant's resources.
+
+## Broker storage isolation
+
+The cross-tenant isolation above applies to Kubernetes resources and is enforced by RBAC. The broker's message storage is a separate concern. The broker is a per-tenant component — each tenant namespace runs its own broker — while only the controller is a cluster-wide singleton.
+
+When the broker uses the default in-memory message store, each broker pod holds its own messages, so isolation follows the deployment. With the Postgres message backend (`backends.message: postgres`) the `messages` table has no `tenant_id` column and no row-level security — its columns are `sequence_number`, `conversation_id`, `query_id`, `message`, `created_at`, and `expires_at`. Data isolation between tenants therefore depends entirely on the deployment, not on the data.
+
+Each per-tenant broker must point at its own database (or at least its own schema) with its own credentials. Do not share one `DATABASE_URL` across brokers of different tenants — their messages would be commingled in the same `messages` table with no way to separate them after the fact. Only the messages store is affected; chunks, traces, events, and sessions remain in memory.
+
+See [Message backend (Postgres)](/developer-guide/services/ark-broker#message-backend-postgres) for backend configuration.
 
 ## Developing with Tenants
 

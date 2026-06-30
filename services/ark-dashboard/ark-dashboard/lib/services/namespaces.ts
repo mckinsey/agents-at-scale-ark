@@ -10,6 +10,8 @@ export type NamespaceListResponse =
   components['schemas']['NamespaceListResponse'];
 export type NamespaceCreateRequest =
   components['schemas']['NamespaceCreateRequest'];
+export type ContextResponse = components['schemas']['ContextResponse'];
+export type Permissions = components['schemas']['PermissionsResponse'];
 
 // Service with list and create operations
 export const namespacesService = {
@@ -24,16 +26,8 @@ export const namespacesService = {
   },
 
   // Get current Kubernetes context
-  async getContext(namespace?: string): Promise<{
-    namespace: string;
-    cluster: string | null;
-    read_only_mode: boolean;
-  }> {
-    const response = await apiClient.get<{
-      namespace: string;
-      cluster: string | null;
-      read_only_mode: boolean;
-    }>('/api/v1/context', {
+  async getContext(namespace?: string): Promise<ContextResponse> {
+    const response = await apiClient.get<ContextResponse>('/api/v1/context', {
       params: namespace ? { namespace } : undefined,
     });
     return response;

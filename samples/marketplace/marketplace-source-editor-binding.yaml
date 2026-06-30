@@ -1,0 +1,34 @@
+# Lets users EDIT a namespace's marketplace catalogue (add/edit/delete sources).
+# Covers the marketplace-sources ConfigMap and the per-source credential Secrets.
+# Namespaced Role (never a ClusterRole): replicate into each tenant namespace.
+# Edit `namespace` and subjects.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-source-editor
+  namespace: team-a
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["marketplace-sources"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: marketplace-source-editor
+  namespace: team-a
+subjects:
+  - kind: User
+    name: alice@example.com
+    apiGroup: rbac.authorization.k8s.io
+  # - kind: Group
+  #   name: platform-admins
+  #   apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: marketplace-source-editor
+  apiGroup: rbac.authorization.k8s.io

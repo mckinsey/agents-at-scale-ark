@@ -77,6 +77,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Export uv lockfiles to requirements.txt for Xray
         shell: bash
@@ -244,6 +246,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -294,9 +298,11 @@ jobs:
             dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
+            install-uv: true
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
+            install-uv: true
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
@@ -305,6 +311,7 @@ jobs:
             dockerfile: Dockerfile.migrate
           - path: services/ark-mcp
             image: ark-mcp
+            install-uv: true
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: tools/ark-cli
             image: ark-cli
@@ -323,7 +330,12 @@ jobs:
           path: out/
 
       - name: Install uv
+        if: matrix.install-uv
         uses: astral-sh/setup-uv@v7
+        with:
+          # Pinned to match the Dockerfile uv version and to skip setup-uv's
+          # "find latest" GitHub API lookup, which has stalled CI for minutes.
+          version: "0.11.21"
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -386,6 +398,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Build libraries
         run: make libs-build-all
@@ -597,6 +611,8 @@ jobs:
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
           ARK_MCP_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
           ARK_MCP_IMAGE_TAG: ${{ github.sha }}
+          ARK_DASHBOARD_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard
+          ARK_DASHBOARD_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -894,6 +910,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
+          install-broker: "true"
 
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
@@ -1420,7 +1437,6 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -1519,6 +1535,16 @@ jobs:
             mv tmp.json .github/release-please-config-rc.json
           fi
 
+          # Clean up last-release-sha (added during promotion to anchor stable notes - issue #2655)
+          if jq -e 'has("last-release-sha")' .github/release-please-config.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config.json > tmp.json
+            mv tmp.json .github/release-please-config.json
+          fi
+          if jq -e 'has("last-release-sha")' .github/release-please-config-rc.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config-rc.json > tmp.json
+            mv tmp.json .github/release-please-config-rc.json
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
@@ -1534,7 +1560,7 @@ jobs:
           Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
 
           ### What this PR does
-          - Cleans up \`release-as\` from config files
+          - Cleans up \`release-as\` and \`last-release-sha\` from config files
 
           ### What happens when merged
           - Release-please will create v${NEXT}-rc from conventional commits

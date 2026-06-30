@@ -58,6 +58,28 @@ def _is_loopback_host(host: str) -> bool:
         return _has_embedded_loopback_ip(host)
 
 
+def _is_loopback_literal(host: str) -> bool:
+    if host in _LOOPBACK_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def is_strict_idp_acceptable(url: str) -> bool:
+    """Whether RFC 8252-strict IdPs accept this redirect_uri.
+
+    Strict IdPs (Notion, Google) require https or an http loopback literal
+    (127.0.0.1, [::1], or localhost); a non-literal host that merely resolves
+    to loopback (e.g. nip.io) is rejected.
+    """
+    parts = urlsplit(url)
+    if parts.scheme == "https":
+        return True
+    return _is_loopback_literal(parts.hostname or "")
+
+
 def _validate_callback_url(raw: str) -> str:
     """Validate and normalise ARK_API_PUBLIC_CALLBACK_URL.
 
@@ -105,6 +127,16 @@ def _validate_callback_url(raw: str) -> str:
             path = path.rstrip("/") + CALLBACK_PATH if not path.endswith(CALLBACK_PATH) else path
 
     normalised = urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+    if not is_strict_idp_acceptable(normalised):
+        logger.warning(
+            "ARK_API_PUBLIC_CALLBACK_URL host %r resolves to loopback but is not a "
+            "loopback literal; RFC 8252-strict IdPs (e.g. Notion, Google) will reject "
+            "this http redirect_uri at registration. Use a loopback literal "
+            "(127.0.0.1, [::1], or localhost) or a public https URL.",
+            host,
+        )
+
     return normalised
 
 

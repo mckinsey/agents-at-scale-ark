@@ -13,12 +13,12 @@ The redirect target is a single externally reachable URL that ark-api must own. 
 
 | Env var | Default | Description |
 |---|---|---|
-| `ARK_API_PUBLIC_CALLBACK_URL` | _unset_ | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/v1/mcp/auth/callback` is appended automatically if the URL has no path. When unset, the four `auth/*` endpoints return `503`. |
+| `ARK_API_PUBLIC_CALLBACK_URL` | `http://127.0.0.1:34780/v1/mcp/auth/callback` | Externally reachable URL the IdP redirects back to. MUST be HTTPS unless the host is a loopback literal (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, or `localhost`). The path `/v1/mcp/auth/callback` is appended automatically if the URL has no path. The chart default is a loopback literal that `ark mcp auth login` makes reachable through its automatic ark-api port-forward (port `34780`). Set to empty to disable the four `auth/*` endpoints (they return `503`). |
 | `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries stored in the Secret. After this window a late callback returns "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
 
-ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected.
+ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected. It also logs a warning when the host is a non-literal that merely resolves to loopback (e.g. a `nip.io` name): such a value is accepted by ark-api but rejected by RFC 8252-strict IdPs (Notion, Google) as a redirect URI — prefer a loopback literal or a public HTTPS URL.
 
 ## Public ingress
 
@@ -34,20 +34,24 @@ The same URL MUST be one of the redirect URIs registered with the IdP (ark-api e
 
 ## Air-gapped port-forward
 
-Clusters without public ingress can run the flow through `kubectl port-forward`. The IdP redirects to a loopback URL on the operator's workstation, where `kubectl` forwards the connection into the cluster:
+Clusters without public ingress run the flow through `kubectl port-forward`. The IdP redirects to a loopback URL on the operator's workstation, where `kubectl` forwards the connection into the cluster.
+
+**CLI flow.** `ark mcp auth login` does this automatically: it already port-forwards ark-api to `127.0.0.1:34780`, which is exactly the host and port of the chart default callback URL. No manual port-forward is needed for the CLI flow.
+
+**Dashboard flow.** The dashboard does not port-forward. On a local install, either run a manual port-forward matching the callback URL, or override `ARK_API_PUBLIC_CALLBACK_URL` with a public HTTPS ingress.
 
 ```bash
-kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 8080:80
+kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 34780:80
 ```
 
 The `--address 127.0.0.1,::1` flag binds the listener to both IPv4 and IPv6 loopback. This avoids a class of bugs where the OS resolves `localhost` to `::1` but kubectl only listens on `127.0.0.1` (or vice versa) and the IdP redirect times out.
 
-Configure ark-api to advertise the same loopback URL:
+Configure ark-api to advertise the same loopback URL (matching the forwarded port):
 
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: http://127.0.0.1:8080/v1/mcp/auth/callback
+    value: http://127.0.0.1:34780/v1/mcp/auth/callback
 ```
 
 Use bracketed IPv6 if the cluster prefers v6:
@@ -55,7 +59,7 @@ Use bracketed IPv6 if the cluster prefers v6:
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: http://[::1]:8080/v1/mcp/auth/callback
+    value: http://[::1]:34780/v1/mcp/auth/callback
 ```
 
 The loopback carve-out also accepts the literal `localhost`:
@@ -63,7 +67,7 @@ The loopback carve-out also accepts the literal `localhost`:
 ```yaml
 env:
   - name: ARK_API_PUBLIC_CALLBACK_URL
-    value: http://localhost:8080/v1/mcp/auth/callback
+    value: http://localhost:34780/v1/mcp/auth/callback
 ```
 
 Register the chosen URL with the IdP as a redirect URI before running the flow.
