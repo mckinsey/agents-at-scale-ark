@@ -5,7 +5,7 @@ description: Current and future architecture of the Ark core component
 
 # Core Architecture
 
-This page describes the current architecture of Ark and the planned aggregated architecture that addresses scalability concerns.
+This page describes the current architecture of Ark and the planned aggregated architecture that addresses scalability concerns. It focuses on the **platform and storage layer** — how Ark is deployed and where resources are persisted. For the resources themselves and how a request runs, see [Core concepts](/core-concepts) and [Query Execution Flow](/reference/query-execution).
 
 ## Current Architecture
 
@@ -19,6 +19,8 @@ The current Ark deployment consists of:
 All Ark resources are stored in etcd alongside standard Kubernetes resources. The controller delegates query execution to the completions engine via A2A protocol over a K8s service. The engine handles agent execution, tool calls, team orchestration, memory, and streaming to ark-broker.
 
 ### Current Query Execution Flow
+
+[Query Execution Flow](/reference/query-execution) covers the execution detail — dispatch, the turn loop, tools, and teams. The diagram below adds the **storage dimension**: how the `Query` and its status move through **etcd** in the standard deployment.
 
 ```mermaid
 sequenceDiagram
@@ -74,6 +76,8 @@ When a user creates an Ark resource (Query, Agent, Model, etc.), the Kubernetes 
   - Manages query queue with SKIP LOCKED support
 
 ### Aggregated Query Execution Flow
+
+The execution is identical to the standard deployment — only the storage path changes: the embedded Ark API server persists resources to PostgreSQL instead of etcd, and `pg_notify` drives cross-replica watch delivery. See [Query Execution Flow](/reference/query-execution) for the dispatch and engine detail.
 
 ```mermaid
 sequenceDiagram
