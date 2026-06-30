@@ -7,12 +7,20 @@ pipelines:
       create_deployments ark-storage-dev
       kubectl rollout status deployment/ark-storage-dev -n default --timeout=120s
     fi
+    if [ "${BROKER_CHUNK_BACKEND}" == "redis" ]; then
+      create_deployments ark-redis-dev
+      kubectl rollout status deployment/ark-redis-dev -n default --timeout=120s
+    fi
     build_images --all
     create_deployments --all
   dev: |-
     if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ]; then
       create_deployments ark-storage-dev
       kubectl rollout status deployment/ark-storage-dev -n default --timeout=120s
+    fi
+    if [ "${BROKER_CHUNK_BACKEND}" == "redis" ]; then
+      create_deployments ark-redis-dev
+      kubectl rollout status deployment/ark-redis-dev -n default --timeout=120s
     fi
     build_images --all
     create_deployments --all
@@ -34,6 +42,9 @@ vars:
   BROKER_POSTGRES_PASSWORD:
     source: env
     default: arkdev123
+  BROKER_REDIS_PASSWORD:
+    source: env
+    default: arkredisdev123
 
 images:
   ark-broker:
@@ -77,6 +88,9 @@ deployments:
               - CHOWN
               - FOWNER
               - DAC_OVERRIDE
+        backends:
+          message: memory
+          chunk: memory
         memory:
           setAsDefault: true
         persistence:
@@ -131,10 +145,9 @@ profiles:
             chart:
               path: ../../charts/ark-storage-dev
             releaseName: ark-storage-dev
-      - op: add
-        path: deployments.ark-broker.helm.values.backends
-        value:
-          message: postgres
+      - op: replace
+        path: deployments.ark-broker.helm.values.backends.message
+        value: postgres
       - op: add
         path: deployments.ark-broker.helm.values.database
         value:
@@ -145,3 +158,28 @@ profiles:
           image:
             repository: ${runtime.images.ark-broker-migrate.image}
             tag: ${runtime.images.ark-broker-migrate.tag}
+  - name: broker-redis
+    activation:
+      - vars:
+          BROKER_CHUNK_BACKEND: redis
+    patches:
+      - op: add
+        path: deployments.ark-redis-dev
+        value:
+          namespace: default
+          helm:
+            chart:
+              path: ../../charts/ark-redis-dev
+            releaseName: ark-redis-dev
+            values:
+              password: ${BROKER_REDIS_PASSWORD}
+      - op: replace
+        path: deployments.ark-broker.helm.values.backends.chunk
+        value: redis
+      - op: add
+        path: deployments.ark-broker.helm.values.redis
+        value:
+          url: "redis://:${BROKER_REDIS_PASSWORD}@ark-redis-dev:6379"
+          keyPrefix: "ark-broker"
+          streamTtlSeconds: 3600
+          connectTimeoutMs: 10000
