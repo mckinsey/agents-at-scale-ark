@@ -40,7 +40,7 @@ interface ToolsMultiSelectProps {
 // Ghost underline field to match the agent form's other inputs (overrides the
 // Combobox chips' default bordered/rounded surface).
 const CHIPS_TRIGGER_CLASS =
-  'min-h-9 rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 transition-colors focus-within:border-b-stroke-status-focus focus-within:ring-0 focus-within:shadow-none hover:border-b-white/40';
+  'min-h-9 rounded-none border-0 border-b border-stroke-tertiary bg-transparent px-0 transition-colors focus-within:border-b-stroke-status-focus focus-within:ring-0 focus-within:shadow-none hover:border-b-stroke-secondary';
 
 function toolMatchesQuery(tool: Tool, query: string): boolean {
   const q = query.toLowerCase();
