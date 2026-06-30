@@ -32,11 +32,15 @@ export type PersistenceConfig = Readonly<{
 
 export type MessageBackend = 'memory' | 'postgres';
 
+export type EventBackend = 'memory' | 'postgres';
+
 export type ChunkBackend = 'memory' | 'redis';
 
 export type BackendsConfig = Readonly<{
   message: MessageBackend;
   messageVisibilityTtlSeconds: number;
+  event: EventBackend;
+  eventVisibilityTtlSeconds: number;
   chunk: ChunkBackend;
 }>;
 
