@@ -44,7 +44,7 @@ sequenceDiagram
     KubeAPI->>etcd: Store Query status
 ```
 
-In the current architecture, queries are processed sequentially by controller reconciliation loops. This limits horizontal scalability for query workloads.
+In the current architecture, the controller processes queries through its reconciliation loop. The Query reconciler runs up to `maxConcurrentReconciles` worker goroutines in parallel (default 4) and caps concurrent in-flight executions at `maxConcurrentQueries` (default 32). Because reconciliation runs only on the leader, query throughput does not scale horizontally with replica count — production tuning is done by adjusting these limits and the controller's resource allocation. See [Scalability](/reference/scalability) for details.
 
 ## Aggregated Architecture
 
