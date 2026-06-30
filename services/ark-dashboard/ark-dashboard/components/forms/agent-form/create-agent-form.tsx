@@ -1,12 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-
-import { ChevronDown, ChevronLeft } from '@/components/icons';
+import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { NumericBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   FieldDescription,
   FieldError,
@@ -16,13 +12,7 @@ import {
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { PromptEditor } from '@/components/ui/prompt-editor';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -32,15 +22,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { Tag } from '@/components/ui/tag';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
 
@@ -76,15 +61,6 @@ export function CreateAgentForm({
   const isDisabled = form.formState.isSubmitting;
   const hasUnavailableTools = unavailableTools.length > 0;
   const cancelHref = onCancel ? undefined : '/agents';
-
-  const [toolsPopoverOpen, setToolsPopoverOpen] = useState(false);
-  const selectedTools = availableTools.filter(t => isToolSelected(t.name));
-  const selectedToolCount = selectedTools.length;
-  const MAX_VISIBLE_TAGS = 4;
-  const visibleSelectedTools = selectedTools.slice(0, MAX_VISIBLE_TAGS);
-  const overflowSelectedCount = selectedToolCount - visibleSelectedTools.length;
-  const placeholderLabel = toolsLoading ? 'Loading tools...' : 'Select tools';
-  const toolsTriggerDisabled = isDisabled || toolsLoading;
 
   return (
     <div className="absolute inset-0 flex flex-col gap-5 overflow-hidden px-12 pt-10">
@@ -212,133 +188,13 @@ export function CreateAgentForm({
 
             <FieldSet className="gap-2">
               <FieldTitle>Tools</FieldTitle>
-              <Popover
-                open={toolsPopoverOpen}
-                onOpenChange={setToolsPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <div
-                    id="tools-trigger"
-                    role="combobox"
-                    aria-controls="tools-listbox"
-                    aria-expanded={toolsPopoverOpen}
-                    aria-haspopup="listbox"
-                    aria-disabled={toolsTriggerDisabled || undefined}
-                    tabIndex={toolsTriggerDisabled ? -1 : 0}
-                    onKeyDown={e => {
-                      if (
-                        (e.key === 'Enter' || e.key === ' ') &&
-                        !toolsTriggerDisabled
-                      ) {
-                        e.preventDefault();
-                        setToolsPopoverOpen(o => !o);
-                      }
-                    }}
-                    className={cn(
-                      'flex min-h-9 w-full cursor-pointer items-center justify-between gap-2 border-0 border-b border-white/[0.24] bg-transparent px-0 py-1 text-left transition-colors',
-                      'focus-visible:border-b-stroke-status-focus data-[state=open]:border-b-stroke-status-focus hover:border-b-white/40 focus-visible:outline-none',
-                      'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
-                    )}>
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                      {selectedToolCount === 0 ? (
-                        <span className="text-fg-tertiary text-sm leading-5 tracking-[-0.028px]">
-                          {placeholderLabel}
-                        </span>
-                      ) : (
-                        <>
-                          {visibleSelectedTools.map(tool => (
-                            <Tag
-                              key={tool.name}
-                              size="xs"
-                              variant="primary"
-                              onPointerDown={e => e.stopPropagation()}
-                              onRemove={e => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleToolToggle(tool, false);
-                              }}>
-                              {tool.name}
-                            </Tag>
-                          ))}
-                          {overflowSelectedCount > 0 && (
-                            <NumericBadge size="sm" variant="primary">
-                              {overflowSelectedCount}
-                            </NumericBadge>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'text-fg-secondary size-4 shrink-0 transition-transform',
-                        toolsPopoverOpen && 'rotate-180',
-                      )}
-                    />
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent
-                  side="bottom"
-                  align="start"
-                  sideOffset={4}
-                  collisionPadding={8}
-                  role="listbox"
-                  aria-multiselectable="true"
-                  className="bg-fill-onsurface-ui-2 shadow-elevation-2 w-[var(--radix-popover-trigger-width)] rounded-none border-0 p-1">
-                  {availableTools.length === 0 ? (
-                    <p className="text-fg-secondary px-3 py-2 text-sm">
-                      No tools available in this namespace.
-                    </p>
-                  ) : (
-                    <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-[min(320px,var(--radix-popover-content-available-height))]">
-                      <ul id="tools-listbox" className="flex flex-col">
-                        {availableTools.map(tool => {
-                          const checked = isToolSelected(tool.name);
-                          const description = tool.description?.trim();
-                          const labelNode = (
-                            <span className="text-fg-primary text-sm leading-5 tracking-[-0.028px]">
-                              {tool.name}
-                            </span>
-                          );
-                          return (
-                            <li
-                              key={tool.name}
-                              role="option"
-                              aria-selected={checked}>
-                              <label
-                                className={cn(
-                                  'flex h-9 cursor-pointer items-center gap-2 px-1',
-                                  'hover:bg-stateslayer-overlay-hover',
-                                )}>
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={value =>
-                                    handleToolToggle(tool, value === true)
-                                  }
-                                  disabled={isDisabled}
-                                  aria-label={tool.name}
-                                />
-                                {description ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="text-fg-primary cursor-pointer text-sm leading-5 tracking-[-0.028px]">
-                                        {tool.name}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom" align="start">
-                                      {description}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ) : (
-                                  labelNode
-                                )}
-                              </label>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </ScrollArea>
-                  )}
-                </PopoverContent>
-              </Popover>
+              <ToolsMultiSelect
+                availableTools={availableTools}
+                isToolSelected={isToolSelected}
+                onToggle={handleToolToggle}
+                toolsLoading={toolsLoading}
+                disabled={isDisabled}
+              />
             </FieldSet>
 
             <FormField

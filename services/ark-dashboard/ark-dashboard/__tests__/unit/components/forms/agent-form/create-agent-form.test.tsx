@@ -125,20 +125,20 @@ describe('CreateAgentForm', () => {
       }),
     );
     render(<CreateAgentForm mode="create" />);
-    expect(screen.getByText('Select tools')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Select tools')).toBeInTheDocument();
   });
 
-  it('shows selected tools as tags in the trigger', () => {
+  it('shows selected tools as chips in the trigger', () => {
     const hook = buildHook({
       availableTools: [{ name: 't1' } as Tool, { name: 't2' } as Tool],
     });
     hook.actions.isToolSelected = vi.fn((n: string): boolean => n === 't1');
     useAgentFormMock.mockReturnValue(hook);
     render(<CreateAgentForm mode="create" />);
-    const trigger = document.getElementById('tools-trigger');
-    expect(trigger).not.toBeNull();
-    expect(trigger?.textContent).toContain('t1');
-    expect(screen.queryByText('Select tools')).not.toBeInTheDocument();
+    expect(screen.getByText('t1')).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText('Select tools'),
+    ).not.toBeInTheDocument();
   });
 
   it('disables Create button when readOnlyMode is true', () => {

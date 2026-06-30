@@ -50,7 +50,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { getModelTypeDisplayName } from '@/lib/constants/model-types';
+import {
+  AZURE_AUTH_METHOD_DISPLAY_NAMES,
+  getModelTypeDisplayName,
+  MODEL_PROVIDER_DISPLAY_NAMES,
+  SUPPORTED_MODEL_PROVIDERS,
+} from '@/lib/constants/model-types';
 import type { Secret } from '@/lib/services';
 import type { SecretDetailResponse } from '@/lib/services/secrets';
 import {
@@ -127,6 +132,7 @@ export function ModelConfiguratorForm() {
               <FieldSet className="gap-2">
                 <FieldTitle>Provider</FieldTitle>
                 <Select
+                  items={MODEL_PROVIDER_DISPLAY_NAMES}
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={disabledFields?.provider}>
@@ -134,18 +140,13 @@ export function ModelConfiguratorForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-fill-onsurface-ui-2">
-                    <SelectItem value="openai">
-                      <SelectItemText>OpenAI</SelectItemText>
-                    </SelectItem>
-                    <SelectItem value="azure">
-                      <SelectItemText>Azure OpenAI</SelectItemText>
-                    </SelectItem>
-                    <SelectItem value="bedrock">
-                      <SelectItemText>AWS Bedrock</SelectItemText>
-                    </SelectItem>
-                    <SelectItem value="anthropic">
-                      <SelectItemText>Anthropic</SelectItemText>
-                    </SelectItem>
+                    {SUPPORTED_MODEL_PROVIDERS.map(value => (
+                      <SelectItem key={value} value={value}>
+                        <SelectItemText>
+                          {MODEL_PROVIDER_DISPLAY_NAMES[value]}
+                        </SelectItemText>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </FieldSet>
@@ -238,7 +239,9 @@ function SecretSelectorField({
       render={({ field, fieldState }) => (
         <FieldSet className="gap-2">
           <FieldTitle>{label}</FieldTitle>
-          <Select onValueChange={field.onChange} value={field.value as string}>
+          <Select
+            onValueChange={value => field.onChange(value ?? '')}
+            value={field.value as string}>
             <div className="flex items-center gap-3">
               <SelectTrigger className={cn(GHOST_TRIGGER, 'flex-1')}>
                 <SelectValue placeholder={placeholder} />
@@ -337,21 +340,20 @@ function AzureSpecificFields({
           <FieldSet className="gap-2">
             <FieldTitle>Authentication</FieldTitle>
             <Select
+              items={AZURE_AUTH_METHOD_DISPLAY_NAMES}
               onValueChange={field.onChange}
               value={field.value ?? 'apiKey'}>
               <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
                 <SelectValue placeholder="Select auth method" />
               </SelectTrigger>
               <SelectContent className="bg-fill-onsurface-ui-2">
-                <SelectItem value="apiKey">
-                  <SelectItemText>API Key</SelectItemText>
-                </SelectItem>
-                <SelectItem value="managedIdentity">
-                  <SelectItemText>Managed Identity</SelectItemText>
-                </SelectItem>
-                <SelectItem value="workloadIdentity">
-                  <SelectItemText>Workload Identity</SelectItemText>
-                </SelectItem>
+                {Object.entries(AZURE_AUTH_METHOD_DISPLAY_NAMES).map(
+                  ([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      <SelectItemText>{label}</SelectItemText>
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
             <FieldDescription>
@@ -596,7 +598,10 @@ function SecretDialogProvider({
   const handleSuccess = useCallback(
     (data: SecretDetailResponse) => {
       if (fieldToSet) {
-        formValueSetter(fieldToSet, data.name);
+        formValueSetter(fieldToSet, data.name, {
+          shouldValidate: true,
+          shouldDirty: true,
+        });
         setFieldToSet(undefined);
       }
       toggleDialog();

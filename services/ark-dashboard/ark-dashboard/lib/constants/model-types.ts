@@ -24,3 +24,16 @@ export function getModelProviderDisplayName(
   if (!provider) return 'Unknown';
   return MODEL_PROVIDER_DISPLAY_NAMES[provider] ?? provider;
 }
+
+export const SUPPORTED_MODEL_PROVIDERS = [
+  'openai',
+  'azure',
+  'bedrock',
+  'anthropic',
+] as const;
+
+export const AZURE_AUTH_METHOD_DISPLAY_NAMES: Record<string, string> = {
+  apiKey: 'API Key',
+  managedIdentity: 'Managed Identity',
+  workloadIdentity: 'Workload Identity',
+};
