@@ -376,7 +376,11 @@ func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target ark
 func (r *QueryReconciler) resolveDefaultEngineAddress(ctx context.Context, namespace string) string {
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	key := types.NamespacedName{Name: defaultCompletionsEngineName, Namespace: namespace}
-	if r.Get(ctx, key, &engineCRD) != nil {
+	if err := r.Get(ctx, key, &engineCRD); err != nil {
+		if !errors.IsNotFound(err) {
+			logf.FromContext(ctx).Error(err, "failed to get default completions ExecutionEngine, falling back to central completions address",
+				"engine", defaultCompletionsEngineName, "namespace", namespace)
+		}
 		return r.CompletionsAddr
 	}
 
