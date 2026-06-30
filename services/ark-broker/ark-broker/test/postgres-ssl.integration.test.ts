@@ -4,6 +4,7 @@ import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
+import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {usePgContainerSsl} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
 
 jest.setTimeout(120_000);
@@ -28,6 +29,7 @@ describeIntegration('postgres backend — SSL connection', () => {
       logger,
       version: 'test',
       messageStream: stream,
+      chunkStream: createChunkStream(config, logger),
       db: db(),
     }));
   });
