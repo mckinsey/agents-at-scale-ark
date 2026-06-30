@@ -11,7 +11,7 @@ This page explains how a Query is executed in the ARK platform, from creation to
 
 When you create a Query resource, it triggers a hierarchical execution flow:
 
-1. **Query** - Created by user with input and targets
+1. **Query** - Created by user with input and a target (or selector)
 2. **Query Controller** - Orchestrates the execution
 3. **Agents or Teams** - Process the query
    - Teams use strategies to coordinate multiple agents
@@ -29,7 +29,7 @@ When you create a Query resource, it triggers a hierarchical execution flow:
 
 A user creates a Query resource specifying:
 - **input**: The user's question or request
-- **targets**: One or more Agents or Teams
+- **target**: The agent, team, model, or tool to run — or a **selector** to match one by labels
 - **parameters** (optional): Values to use in the query or pass to agent parameters via queryParameterRef
 - **memory** (optional): Reference to a Memory resource
 - **sessionId** (optional): Conversation session identifier
@@ -56,9 +56,11 @@ spec:
 
 The Query controller detects the new Query and:
 1. Resolves the target (agent, team, model, or tool) from the spec or label selector
-2. If the target agent has an `executionEngine` (A2A or named engine), the controller executes it directly since these agents proxy to external services
-3. Otherwise, sends an A2A `SendMessage` to the completions engine with the target and query reference
+2. Resolves the dispatch address — the built-in **completions engine** for teams, models, tools, and agents that use the default or `a2a` execution engine; or a **named execution engine** when the target agent specifies one
+3. Sends an A2A `SendMessage` to that address with the target and a reference to the query
 4. Waits for the response and writes the result to the Query status
+
+The controller always dispatches over A2A — it never executes a target in-process. For `a2a` agents the completions engine is the dispatch target and proxies the call to the agent's external A2A server.
 
 ### 3. Completions Engine Execution
 
@@ -77,7 +79,7 @@ The completions engine receives the A2A message and:
 6. **Streaming**: Chunks stream directly from the engine to ark-broker
 
 #### Team Execution
-1. **Strategy Application**: Uses the team's strategy (sequential, round-robin, selector, graph)
+1. **Strategy Application**: Uses the team's strategy — `sequential` or `selector` (optionally constrained by a `graph`). The deprecated `round-robin` and standalone `graph` strategies are migrated by the admission webhook (`round-robin` → `sequential` with loops; `graph` → `selector`)
 2. **Member Coordination**: Orchestrates execution across team members
 3. **Recursive Routing**: Members with explicit execution engines route via A2A; others execute locally
 
@@ -87,14 +89,14 @@ After execution:
 1. The engine saves new messages to memory, sends a final stream chunk, and closes the stream
 2. The engine returns the A2A response with the assistant message, token usage, and conversation ID
 3. The controller writes the response, token usage, and conversation ID to the Query CR status
-4. The controller marks the Query as completed
+4. The controller marks the Query as done (`phase: done`)
 
 ## Execution Engines
 
 Custom execution engines override default agent execution using the A2A protocol:
 
 - **Agent Engines**: Custom agent execution via A2A (e.g., LangChain, CrewAI)
-- Agents referencing an ExecutionEngine send requests via A2A with agent config, tools, and history in message metadata
+- When an agent references an ExecutionEngine, the controller dispatches the query to that engine via A2A. The message carries a reference to the Query (name and namespace) plus the input; the engine reads the agent config, tools, and conversation history from Kubernetes
 - The engine processes the request and returns results through the A2A protocol
 
 ## Error Handling
