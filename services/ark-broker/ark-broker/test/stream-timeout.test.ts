@@ -3,6 +3,7 @@ import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
+import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 
 const config = loadConfig({});
 const logger = createLogger({level: 'silent', pretty: false});
@@ -11,6 +12,7 @@ const {app} = buildApp({
   logger,
   version: 'test',
   messageStream: createMessageStream(config, logger),
+  chunkStream: createChunkStream(config, logger),
 });
 
 describe('Stream Timeout', () => {
