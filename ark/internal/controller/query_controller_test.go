@@ -346,7 +346,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "capacity-disabled-query",
 					Namespace:         "default",
-					CreationTimestamp: metav1.Time{Time: time.Now().Add(-2 * time.Hour)},
+					CreationTimestamp: metav1.Time{Time: time.Now()},
 				},
 				Spec: arkv1alpha1.QuerySpec{
 					TTL: &metav1.Duration{Duration: time.Hour},
@@ -357,7 +357,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			result, err := r.handleRunningPhase(context.Background(), req, query)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result.RequeueAfter).To(BeZero(), "must not requeue with capacity delay when enforcement is disabled")
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "should register the operation, proving execution branch was taken despite no semaphore")
 		})
 	})
 
