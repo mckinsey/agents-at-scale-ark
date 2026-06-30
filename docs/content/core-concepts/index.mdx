@@ -1,33 +1,50 @@
+---
+title: Core concepts
+description: The mental model behind Ark — models, agents, teams, queries, and how they run on Kubernetes
+---
+
 # Core concepts
 
-This section explains **what ARK is**, how it is designed, and why key decisions were made. 
+This page explains the ideas behind Ark: the resources you work with, how they fit together, and how a request becomes an answer. For step-by-step instructions see the [how-to guides](/how-to-guides); for field-level detail see the [resource reference](/reference/resources/agent).
 
-## What is ARK?
+## What is Ark?
 
-Ark is a set of open-source tools that allow teams to leverage their existing Kubernetes infrastructure to run AI agents and multi-agent systems. Key features include:
+Ark runs AI agents and multi-agent systems on Kubernetes. Every part of an agentic system — the model connection, the agent, the team, the request — is a **Kubernetes custom resource** that you declare in YAML (or through the CLI, API, or dashboard). An Ark **controller** watches those resources and drives execution, so you operate agents with the same tools you already use for Kubernetes: `kubectl`, GitOps, RBAC, and namespaces for multi-tenancy.
 
-- [Platform-agnostic agent operations](../reference/query-execution).
-- [Standardized deployment patterns](../operations-guide/deploying-ark).
-- [Transparent orchestration](../developer-guide/observability).
-- [Extensible tool integration](../reference/resources/tools).
-- [Multi-agent coordination](../user-guide/teams).
-- [Custom headers support](../user-guide/overrides) (e.g., request tracing, custom metadata).
+If you've used Kubernetes the model is familiar — you describe the desired state, and a controller reconciles it.
 
-## ARK architecture
+## The core resources
 
-The reason ARK uses Kubernetes as its foundation is to build upon battle-tested orchestration patterns for distributed systems. Review the following guides to learn more:
+Ark's resources are small, composable building blocks. Most agentic systems use only a handful:
 
-- [How ARK resources relate to and interact with each other](/reference/relationships).
-- [How query execution flows through the system](/reference/query-execution).
-- [How the ARK gateway enables external access](/developer-guide/ark-gateway).
-- [How services work together](/developer-guide/services).
-- [How workflows coordinate agent interactions](/developer-guide/workflows).
-- [How observability provides system transparency](/developer-guide/observability).
+| Resource | What it is |
+| --- | --- |
+| [**Model**](/reference/resources/models) | A connection to an LLM provider (OpenAI, Azure, Anthropic, Bedrock) — the reasoning engine an agent uses. |
+| [**Agent**](/reference/resources/agent) | A model plus a system prompt and an optional set of tools — the basic unit that answers a request. |
+| [**Tool**](/reference/resources/tools) | A capability an agent can call: an HTTP endpoint, an MCP tool, a built-in (`terminate`, `noop`), or another agent or team. |
+| [**MCPServer**](/reference/resources/mcpserver) | A connection to an external [MCP](https://modelcontextprotocol.io) server. Ark discovers its tools and creates `Tool` resources automatically. |
+| [**Team**](/reference/resources/team) | A group of agents (and/or sub-teams) with a **strategy** — sequential, selector, or graph — that decides who runs and when. |
+| [**Query**](/reference/resources/query) | A request. It points at a target (an agent, team, model, or tool) with some input; Ark runs it and writes the answer to the query's status. |
+| [**Memory**](/reference/resources/memory) | Conversation persistence, so a sequence of queries forms one continuous session. |
+| [**ExecutionEngine**](/developer-guide/building-execution-engines) | A pluggable runtime. The built-in completions engine runs agents by default; register one to run a different framework (e.g. LangChain). |
+| [**A2AServer**](/reference/resources/a2aserver) | A connection to an external agent that speaks the [A2A protocol](https://a2a-protocol.org). Ark discovers it and creates an `Agent` from its agent card. |
 
+These compose: a **Model** powers an **Agent**; **Tools** and **MCPServers** give that agent capabilities; **Agents** group into a **Team**; a **Query** runs an agent, team, model, or tool; and **Memory** threads queries into a conversation. See [Resource Relationships](/reference/relationships) for the full map.
 
-## Architecture concepts
+## How a query runs
 
-Ark runs in two parts. The **`ark-system` namespace** holds the platform: the controller that reconciles ARK resources and the default execution engine it dispatches queries to. A **tenant namespace** (e.g. `default`) holds the API and UI services you and your agents talk to, along with the ARK resources you create.
+Ark is declarative end to end. A request moves through four stages:
+
+1. **Declare** — you create a `Query` (and the agent or team it targets) with `kubectl`, the `ark` CLI, the API, or the dashboard.
+2. **Reconcile** — the Ark controller notices the new `Query` and resolves its target and dependencies (model, tools, memory).
+3. **Execute** — the controller dispatches execution over the A2A protocol to an execution engine. The default **completions engine** runs the LLM turn loop, calls tools, coordinates team members, and streams partial output to the broker.
+4. **Respond** — the result is written back to `query.status.response`, and the exchange is saved to memory.
+
+For the detailed walkthrough, see [Query Execution Flow](/reference/query-execution).
+
+## Architecture
+
+Ark runs in two parts. The **`ark-system` namespace** holds the platform — the controller that reconciles resources and the default execution engine it dispatches queries to. A **tenant namespace** (e.g. `default`) holds the services you and your agents interact with — the REST/A2A API, the dashboard, the MCP interface, and the broker — alongside the resources you create.
 
 ```mermaid
 %%{init: {'themeVariables': {'fontSize': '18px'}, 'flowchart': {'rankSpacing': 80, 'nodeSpacing': 50}}}%%
@@ -59,58 +76,21 @@ flowchart LR
     class postgres optional;
 ```
 
-### Core resources
+Because every resource is namespaced, a namespace acts as a tenant: teams share one cluster while staying isolated by Kubernetes RBAC. See [Tenant and Namespace Management](/operations-guide/tenant-namespace-management).
 
-ARK's core resources represent the fundamental abstractions for building agentic systems. These resources follow Kubernetes patterns, making them familiar to platform engineers while providing specialized capabilities for AI workloads:
+## Why Kubernetes?
 
-- [**Models**](../user-guide/models/): Configure and connect to AI models.
-- [**Agents**](../user-guide/agents/): Create autonomous AI agents with specific capabilities and tools.
-- [**Teams**](../user-guide/teams/): Orchestrate multiple agents working together with coordination strategies.
-- [**Queries**](../user-guide/queries/): Execute prompts and manage conversations with agents or teams.
-- [**Tools**](../user-guide/tools/): Define custom tools and MCP tool references for agents.
-- [**MCPServers**](../user-guide/tools/): Configure Model Context Protocol servers for external integrations.
-- **Memory**: Persistent storage for agent conversations and state.
-- **ExecutionEngine**: Register a custom runtime (e.g. a framework executor) that the controller dispatches to instead of the built-in completions engine.
-- **A2AServer**: Register an external A2A agent; the controller discovers it and creates an Agent from its agent card.
-- **A2ATask**: Tracks the execution of an A2A task.
-- **ArkConfig**: Cluster-scoped configuration for ARK defaults.
+Building on Kubernetes means Ark inherits proven infrastructure instead of reinventing it:
 
+- **Declarative and version-controlled** — resources are YAML you can manage with GitOps.
+- **Secure by default** — RBAC, service accounts, and namespaces scope access and isolate tenants.
+- **Composable** — models, agents, tools, and teams are independent resources you mix and match.
+- **Observable** — every step emits Kubernetes events and OpenTelemetry traces.
 
-### Services
+## Learn more
 
-Alongside the controller, Ark runs a default execution engine and a set of supporting services:
-
-- **completions engine**: The default executor — a standalone A2A service the controller calls to run the LLM turn loop, tool calls, team orchestration, and streaming. Agents with no `executionEngine` set use it.
-- **ark-api**: REST API for managing ARK resources (includes the A2A gateway for agent-to-agent communication).
-- **ark-dashboard**: Web-based management interface.
-- **ark-mcp**: Exposes ARK resources over the Model Context Protocol so MCP clients can list and query ARK agents.
-- **localhost-gateway**: Local development gateway (only on local).
-- **ark-broker**: Memory storage with streaming support; messages can optionally be persisted to Postgres.
-
-### Marketplace services
-
-Optional services are available from the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace):
-
-- **langfuse**: Observability and tracing service.
-- **executor-langchain**: LangChain agent execution engine.
-
-
-### Design effective agentic systems
-
-The design of effective agentic systems requires understanding both technical patterns and practical constraints:
-
-- [Tips for building agentic use cases](/user-guide/tips-on-building-agentic-use-cases).
-- [Design principles](/developer-guide/design-principles).
-
-### Extensibility concepts
-
-Ark's extensibility model allows customization while maintaining system stability. Extension points include:
-
-- [CRD design guidelines](/developer-guide/crd-design-guide).
-- [LangChain execution engine](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/services/executor-langchain).
-
-### Security and identity concepts
-
-Security in ARK is built on Kubernetes RBAC and service account patterns, providing isolation and access control:
-
-- [Authentication](/developer-guide/authentication).
+- **Build something** — the [how-to guides](/how-to-guides) cover models, agents, teams, queries, and tools.
+- **Resource reference** — field-level detail for every resource under [Reference → Resources](/reference/resources/agent).
+- **Architecture deep-dives** — [Core Architecture](/reference/core-architecture), [Query Execution Flow](/reference/query-execution), and [Resource Relationships](/reference/relationships).
+- **Extend Ark** — [execution engines](/developer-guide/building-execution-engines), [A2A servers](/developer-guide/building-a2a-servers), and the [Marketplace](https://mckinsey.github.io/agents-at-scale-marketplace) (Langfuse, Phoenix, the LangChain executor, and more).
+- **Design guidance** — [Tips for building agentic use cases](/user-guide/tips-on-building-agentic-use-cases) and [Design principles](/developer-guide/design-principles).

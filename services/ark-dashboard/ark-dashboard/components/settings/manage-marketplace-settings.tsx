@@ -1,11 +1,12 @@
 'use client';
 
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Lock, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { MarketplaceAuthScheme } from '@/lib/services/marketplace';
 import {
   useCreateMarketplaceSource,
   useDeleteMarketplaceSource,
@@ -16,10 +17,27 @@ import {
 const PUBLIC_MARKETPLACE_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
+type SchemeChoice = 'none' | MarketplaceAuthScheme;
+
 type NewSourceForm = {
   url: string;
   displayName: string;
+  scheme: SchemeChoice;
+  credential: string;
 };
+
+const EMPTY_FORM: NewSourceForm = {
+  url: '',
+  displayName: '',
+  scheme: 'none',
+  credential: '',
+};
+
+const SCHEME_OPTIONS: { value: SchemeChoice; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'bearer', label: 'Bearer / token' },
+  { value: 'basic', label: 'HTTP Basic (Azure DevOps)' },
+];
 
 function validateMarketplaceUrl(url: string): string | null {
   if (!url) return 'Marketplace URL is required';
@@ -60,8 +78,9 @@ export function ManageMarketplaceSettings() {
   const canEdit = permissions?.canEdit ?? false;
 
   const [isAdding, setIsAdding] = useState(false);
-  const [newSource, setNewSource] = useState<NewSourceForm>({ url: '', displayName: '' });
+  const [newSource, setNewSource] = useState<NewSourceForm>(EMPTY_FORM);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [credentialError, setCredentialError] = useState<string | null>(null);
 
   const handleAddSource = () => {
     const staticError = validateMarketplaceUrl(newSource.url);
@@ -70,15 +89,27 @@ export function ManageMarketplaceSettings() {
       return;
     }
     setUrlError(null);
+
+    const scheme = newSource.scheme;
+    if (scheme !== 'none' && !newSource.credential) {
+      setCredentialError('A credential is required for authenticated sources');
+      return;
+    }
+    setCredentialError(null);
+
     createSource.mutate(
       {
         name: deriveSourceName(newSource.displayName, newSource.url),
         url: newSource.url,
         displayName: newSource.displayName || undefined,
+        auth:
+          scheme === 'none'
+            ? undefined
+            : { scheme, credential: newSource.credential },
       },
       {
         onSuccess: () => {
-          setNewSource({ url: '', displayName: '' });
+          setNewSource(EMPTY_FORM);
           setIsAdding(false);
         },
       },
@@ -87,8 +118,9 @@ export function ManageMarketplaceSettings() {
 
   const handleCancelAdd = () => {
     setIsAdding(false);
-    setNewSource({ url: '', displayName: '' });
+    setNewSource(EMPTY_FORM);
     setUrlError(null);
+    setCredentialError(null);
   };
 
   if (isPending) {
@@ -110,9 +142,17 @@ export function ManageMarketplaceSettings() {
               <div key={source.name} className="rounded-lg border p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-4">
-                    <Label className="text-sm font-medium">
-                      {source.displayName || source.name}
-                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-medium">
+                        {source.displayName || source.name}
+                      </Label>
+                      {source.hasCredential && (
+                        <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                          <Lock className="h-3 w-3" />
+                          {source.auth?.scheme === 'basic' ? 'Basic' : 'Bearer'}
+                        </span>
+                      )}
+                    </div>
                     <div>
                       <div className="mb-1 text-sm text-muted-foreground">
                         Marketplace JSON URL
@@ -188,6 +228,47 @@ export function ManageMarketplaceSettings() {
                 className="mt-1.5 text-sm"
               />
             </div>
+            <div>
+              <Label className="text-sm">Authentication</Label>
+              <div className="mt-1.5 flex gap-2">
+                {SCHEME_OPTIONS.map(option => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={newSource.scheme === option.value ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={() =>
+                      setNewSource({ ...newSource, scheme: option.value, credential: '' })
+                    }>
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {newSource.scheme !== 'none' && (
+              <div>
+                <Label htmlFor="new-credential" className="text-sm">
+                  {newSource.scheme === 'basic' ? 'Personal access token' : 'Token'}
+                </Label>
+                <Input
+                  id="new-credential"
+                  type="password"
+                  autoComplete="off"
+                  value={newSource.credential}
+                  onChange={e => {
+                    setNewSource({ ...newSource, credential: e.target.value });
+                    setCredentialError(null);
+                  }}
+                  placeholder="Sent once on save; never displayed again"
+                  className={`mt-1.5 font-mono text-sm${
+                    credentialError ? ' border-destructive' : ''
+                  }`}
+                />
+                {credentialError && (
+                  <p className="mt-1 text-xs text-destructive">{credentialError}</p>
+                )}
+              </div>
+            )}
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button
