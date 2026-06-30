@@ -190,8 +190,13 @@ function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
 function ComboboxItem({
   className,
   children,
+  optionalCheckbox,
+  showCheckmark = true,
   ...props
-}: ComboboxPrimitive.Item.Props) {
+}: ComboboxPrimitive.Item.Props & {
+  optionalCheckbox?: React.ReactNode;
+  showCheckmark?: boolean;
+}) {
   return (
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
@@ -211,14 +216,17 @@ function ComboboxItem({
         className,
       )}
       {...props}>
+      {optionalCheckbox}
       <span className="flex-1 overflow-hidden overflow-ellipsis whitespace-nowrap">
         {children}
       </span>
-      <ComboboxPrimitive.ItemIndicator
-        data-slot="combobox-item-indicator"
-        render={<span className="flex size-4 items-center justify-center" />}>
-        <Check className="size-4" />
-      </ComboboxPrimitive.ItemIndicator>
+      {showCheckmark && (
+        <ComboboxPrimitive.ItemIndicator
+          data-slot="combobox-item-indicator"
+          render={<span className="flex size-4 items-center justify-center" />}>
+          <Check className="size-4" />
+        </ComboboxPrimitive.ItemIndicator>
+      )}
     </ComboboxPrimitive.Item>
   );
 }

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 
 import { NumericBadge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Combobox,
   ComboboxAnchor,
@@ -123,7 +124,18 @@ export function ToolsMultiSelect({
             {(tool: Tool) => {
               const description = tool.description?.trim();
               return (
-                <ComboboxItem key={tool.name} value={tool}>
+                <ComboboxItem
+                  key={tool.name}
+                  value={tool}
+                  showCheckmark={false}
+                  optionalCheckbox={
+                    <Checkbox
+                      checked={isToolSelected(tool.name)}
+                      tabIndex={-1}
+                      aria-hidden
+                      className="pointer-events-none"
+                    />
+                  }>
                   {description ? (
                     <Tooltip>
                       <TooltipTrigger asChild>

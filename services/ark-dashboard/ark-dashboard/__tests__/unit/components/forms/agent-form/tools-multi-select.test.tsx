@@ -69,6 +69,27 @@ describe('ToolsMultiSelect', () => {
     );
   });
 
+  it('renders a checkbox per option that reflects the selected state', async () => {
+    render(
+      <ToolsMultiSelect
+        availableTools={tools}
+        isToolSelected={name => name === 'search'}
+        onToggle={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText('Select tools');
+    await userEvent.click(input);
+    await screen.findByText('calculator');
+
+    // Combobox content renders in a portal, so query the whole document.
+    const checkboxes = document.querySelectorAll('[data-slot="checkbox"]');
+    expect(checkboxes).toHaveLength(tools.length);
+    expect(
+      document.querySelectorAll('[data-slot="checkbox"][data-state="checked"]'),
+    ).toHaveLength(1);
+  });
+
   it('caps visible chips at 4 and shows an overflow count', () => {
     const many: Tool[] = Array.from({ length: 6 }, (_, i) => ({
       id: String(i),
