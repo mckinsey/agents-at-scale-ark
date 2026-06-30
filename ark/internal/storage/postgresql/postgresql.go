@@ -65,11 +65,14 @@ type PostgreSQLBackend struct {
 	db        *sql.DB
 	connStr   string
 	converter storage.TypeConverter
-	watchers  map[string][]*postgresWatcher
-	mu        sync.RWMutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	cachedRV  atomic.Int64
+	// broadcasters holds one in-process watch cache per kind (see broadcaster.go).
+	// mu guards the map; a broadcaster is created lazily on first Watch of a kind
+	// and removed when its last watcher unsubscribes.
+	broadcasters map[string]*kindBroadcaster
+	mu           sync.RWMutex
+	ctx          context.Context
+	cancel       context.CancelFunc
+	cachedRV     atomic.Int64
 }
 
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
@@ -108,12 +111,12 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 
 	ctx, cancel := context.WithCancel(context.Background())
 	backend := &PostgreSQLBackend{
-		db:        db,
-		connStr:   connStr,
-		converter: converter,
-		watchers:  make(map[string][]*postgresWatcher),
-		ctx:       ctx,
-		cancel:    cancel,
+		db:           db,
+		connStr:      connStr,
+		converter:    converter,
+		broadcasters: make(map[string]*kindBroadcaster),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 
 	if err := backend.initSchema(); err != nil {
@@ -586,8 +589,6 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 }
 
 func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
-	key := fmt.Sprintf("%s/%s", kind, namespace)
-
 	labelFilter, err := parseLabelSelector(opts.LabelSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse label selector: %w", err)
@@ -595,25 +596,43 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 
 	w := &postgresWatcher{
 		outCh:       make(chan watch.Event, 100),
-		nudgeCh:     make(chan struct{}, 1),
+		inputCh:     make(chan *changeRow, 256),
 		backend:     p,
-		key:         key,
 		kind:        kind,
 		ns:          namespace,
 		labelFilter: labelFilter,
 		ctx:         ctx,
 		done:        make(chan struct{}),
-		initialList: true,
 		seenRVs:     make(map[string]int64),
 	}
 
-	p.mu.Lock()
-	p.watchers[key] = append(p.watchers[key], w)
-	p.mu.Unlock()
+	b := p.getOrCreateBroadcasterAndSubscribe(kind, w)
+	w.bc = b
 
 	go w.run()
 
 	return w, nil
+}
+
+func (p *PostgreSQLBackend) getOrCreateBroadcasterAndSubscribe(kind string, w *postgresWatcher) *kindBroadcaster {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	b := p.broadcasters[kind]
+	if b == nil || b.isDone() {
+		b = newKindBroadcaster(p, kind)
+		p.broadcasters[kind] = b
+		go b.run()
+	}
+	b.subscribe(w)
+	return b
+}
+
+func (p *PostgreSQLBackend) currentMaxRV() int64 {
+	rv, err := p.getMaxResourceVersion()
+	if err != nil {
+		return 0
+	}
+	return rv
 }
 
 func (p *PostgreSQLBackend) GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error) {
@@ -687,49 +706,32 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	return p.converter.Decode(kind, data)
 }
 
-func (p *PostgreSQLBackend) nudgeWatchersByKindNamespace(kind, namespace string) {
-	key := fmt.Sprintf("%s/%s", kind, namespace)
-	allKey := fmt.Sprintf("%s/", kind)
-
+// nudgeKind wakes the broadcaster for a single kind (one relist), if one exists.
+// Namespace is irrelevant for selecting the broadcaster — broadcasters are keyed by
+// kind and route to the right watchers by namespace at fan-out.
+func (p *PostgreSQLBackend) nudgeKind(kind string) {
 	p.mu.RLock()
-	watchers := make([]*postgresWatcher, 0, len(p.watchers[key])+len(p.watchers[allKey]))
-	watchers = append(watchers, p.watchers[key]...)
-	if namespace != "" {
-		watchers = append(watchers, p.watchers[allKey]...)
-	}
+	b := p.broadcasters[kind]
 	p.mu.RUnlock()
-
-	for _, w := range watchers {
-		select {
-		case w.nudgeCh <- struct{}{}:
-		default:
-		}
+	if b != nil {
+		b.nudge()
 	}
 }
 
+// nudgeWatchersByKindNamespace is kept as the WAL consumer's entry point; the
+// namespace argument is now only informational since the broadcaster is per-kind.
+func (p *PostgreSQLBackend) nudgeWatchersByKindNamespace(kind, namespace string) {
+	_ = namespace
+	p.nudgeKind(kind)
+}
+
+// nudgeAllWatchers relists every kind's broadcaster — called once on WAL reconnect
+// so no committed change is missed across the gap.
 func (p *PostgreSQLBackend) nudgeAllWatchers() {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	for _, watchers := range p.watchers {
-		for _, w := range watchers {
-			select {
-			case w.nudgeCh <- struct{}{}:
-			default:
-			}
-		}
-	}
-}
-
-func (p *PostgreSQLBackend) removeWatcher(key string, w *postgresWatcher) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	watchers := p.watchers[key]
-	for i, existing := range watchers {
-		if existing == w {
-			p.watchers[key] = append(watchers[:i], watchers[i+1:]...)
-			break
-		}
+	for _, b := range p.broadcasters {
+		b.nudge()
 	}
 }
 
@@ -746,10 +748,14 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 }
 
 type postgresWatcher struct {
-	outCh           chan watch.Event
-	nudgeCh         chan struct{}
+	// outCh is the public watch stream. Its SOLE writer is run(); the broadcaster
+	// never touches it, which keeps close() race-free.
+	outCh chan watch.Event
+	// inputCh carries fan-out rows from the kind's broadcaster. Written by the
+	// broadcaster (non-blocking) and never closed; drained by run().
+	inputCh         chan *changeRow
 	backend         *PostgreSQLBackend
-	key             string
+	bc              *kindBroadcaster
 	kind            string
 	ns              string
 	labelFilter     map[string]string
@@ -758,12 +764,15 @@ type postgresWatcher struct {
 	stopped         atomic.Bool
 	closed          sync.Once
 	lastSeenRV      atomic.Int64
-	initialList     bool
 	initialListDone bool
+	// behind is set by the broadcaster when this watcher's inputCh is full and a row
+	// was dropped; run() then does a private catch-up relist to recover it.
+	behind atomic.Bool
 	// seenRVs maps a resource UID to the highest rv we've already emitted for it.
 	// Combined with the lookback window in relist(), this lets us re-fetch rows that
 	// might have been invisible during a prior relist (because their txn was still
-	// in flight) without re-emitting events the consumer already saw.
+	// in flight) without re-emitting events the consumer already saw. It also dedups
+	// the initial relist against broadcaster fan-out.
 	seenMu  sync.Mutex
 	seenRVs map[string]int64
 }
@@ -772,7 +781,9 @@ func (w *postgresWatcher) Stop() {
 	if w.stopped.Swap(true) {
 		return
 	}
-	w.backend.removeWatcher(w.key, w)
+	if w.bc != nil {
+		w.bc.unsubscribe(w)
+	}
 	w.closed.Do(func() {
 		close(w.done)
 	})
@@ -783,16 +794,17 @@ func (w *postgresWatcher) ResultChan() <-chan watch.Event {
 }
 
 func (w *postgresWatcher) run() {
+	// Stop() (deferred first, runs first) unsubscribes from the broadcaster so no
+	// further fan-out targets this watcher, THEN close(outCh) (runs last) is safe
+	// because run() is the only writer to outCh.
 	defer close(w.outCh)
+	defer w.Stop()
 
-	w.relist()
+	w.relist() // initial population: full current state via this watcher's filters
 	w.sendBookmark()
 
 	bookmarkTicker := time.NewTicker(30 * time.Second)
 	defer bookmarkTicker.Stop()
-
-	relistTicker := time.NewTicker(120 * time.Second)
-	defer relistTicker.Stop()
 
 	for {
 		select {
@@ -802,11 +814,45 @@ func (w *postgresWatcher) run() {
 			return
 		case <-bookmarkTicker.C:
 			w.sendBookmark()
-		case <-relistTicker.C:
-			w.relist()
-		case <-w.nudgeCh:
-			w.relist()
+		case row := <-w.inputCh:
+			if !w.forwardRow(row) {
+				return
+			}
+			// If the broadcaster dropped rows into a full inputCh, recover them
+			// with a private filtered relist (runs in this goroutine, so it
+			// respects outCh backpressure and never blocks other watchers).
+			if w.behind.Swap(false) {
+				w.relist()
+			}
 		}
+	}
+}
+
+// forwardRow emits one broadcaster fan-out row, deduped against this watcher's
+// seenRVs and deep-copied so the broadcaster's shared object is never mutated.
+// Returns false if the watcher is shutting down.
+func (w *postgresWatcher) forwardRow(row *changeRow) bool {
+	uidNew := !w.hasSeenUID(row.uid)
+	if w.markSeen(row.uid, row.rv) {
+		return true
+	}
+	var eventType watch.EventType
+	switch {
+	case row.deleted:
+		eventType = watch.Deleted
+	case uidNew:
+		eventType = watch.Added
+	default:
+		eventType = watch.Modified
+	}
+	w.advanceRV(row.rv)
+	select {
+	case w.outCh <- watch.Event{Type: eventType, Object: row.obj.DeepCopyObject()}:
+		return true
+	case <-w.done:
+		return false
+	case <-w.ctx.Done():
+		return false
 	}
 }
 
@@ -969,8 +1015,4 @@ func (w *postgresWatcher) relist() {
 		}
 	}
 	w.pruneSeen()
-
-	if w.initialList {
-		w.initialList = false
-	}
 }
