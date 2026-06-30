@@ -43,6 +43,18 @@ export const envSchema = z
       .default('false')
       .transform((v) => v === 'true'),
     DATABASE_SSL_ROOT_CERT_PATH: z.string().min(1).optional(),
+    CHUNK_BACKEND: z.enum(['memory', 'redis']).default('memory'),
+    REDIS_URL: z.string().min(1).optional(),
+    REDIS_USERNAME: z.string().min(1).optional(),
+    REDIS_PASSWORD: z.string().min(1).optional(),
+    REDIS_TLS_CA_CERT_PATH: z.string().min(1).optional(),
+    REDIS_KEY_PREFIX: z.string().min(1).default('ark-broker'),
+    REDIS_STREAM_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+    REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+    REDIS_DEBUG_COMMANDS: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
   })
   .superRefine((data, ctx) => {
     if (data.MESSAGE_BACKEND === 'postgres' && !data.DATABASE_URL) {
@@ -50,6 +62,13 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         message: 'DATABASE_URL is required when MESSAGE_BACKEND=postgres',
         path: ['DATABASE_URL'],
+      });
+    }
+    if (data.CHUNK_BACKEND === 'redis' && !data.REDIS_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'REDIS_URL is required when CHUNK_BACKEND=redis',
+        path: ['REDIS_URL'],
       });
     }
   });
