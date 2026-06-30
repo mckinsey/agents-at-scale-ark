@@ -10,11 +10,12 @@ Set your kubectl context to the target namespace and use the Ark CLI to install:
 kubectl create namespace tenant-a
 kubectl config set-context --current --namespace=tenant-a
 ark install ark-tenant
+ark install ark-broker
 ark install ark-api
 ark install ark-dashboard
 ```
 
-This installs the tenant chart (service account, roles, builtin tools), the API layer, and the dashboard. You can then open the dashboard with:
+This installs the tenant chart (service account, roles, builtin tools), the broker (per-tenant message and session storage), the API layer, and the dashboard. You can then open the dashboard with:
 
 ```bash
 ark dashboard
@@ -34,12 +35,14 @@ Install two full tenants:
 kubectl create namespace tenant-a
 kubectl config set-context --current --namespace=tenant-a
 ark install ark-tenant
+ark install ark-broker
 ark install ark-api
 ark install ark-dashboard
 
 kubectl create namespace tenant-b
 kubectl config set-context --current --namespace=tenant-b
 ark install ark-tenant
+ark install ark-broker
 ark install ark-api
 ark install ark-dashboard
 ```
