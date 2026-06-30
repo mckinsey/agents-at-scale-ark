@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple
 
-from helpers.k8s import apply_yaml
+from helpers.k8s import apply_yaml, delete_resource as k8s_delete_resource
 
 _FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "rbac-test-bindings.yaml"
 _SAMPLES = Path(__file__).resolve().parents[4] / "samples" / "rbac-test-bindings.yaml"
@@ -93,6 +93,11 @@ class RBACHelper:
             ["kubectl", "delete", "-f", str(GRANT), "--ignore-not-found=true"]
         )
         return ok, stderr
+
+    def delete_resource(
+        self, kind: str, name: str, namespace: str = NAMESPACE
+    ) -> Tuple[bool, str]:
+        return k8s_delete_resource(kind, name, namespace)
 
     def _create_as(
         self, manifest: str, user: str, group: str, namespace: str = NAMESPACE

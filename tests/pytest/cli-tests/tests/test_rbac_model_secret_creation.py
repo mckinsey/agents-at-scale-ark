@@ -1,4 +1,3 @@
-import json
 import pytest
 
 from helpers.rbac_helper import (
@@ -46,19 +45,19 @@ def clean_state(rbac):
     _reset()
 
 
+# One class so pytest-xdist `--dist loadscope` keeps the whole file on a single
+# worker. The forbidden and allowed cases share the demo grant and resource
+# names in one namespace; splitting them across workers would let the allowed
+# case's grant race the forbidden case's teardown.
 @pytest.mark.cli
 @pytest.mark.rbac
-class TestCreationWithoutRBAC:
+class TestResourceCreationRBAC:
     @pytest.mark.parametrize("kind, name, method", CASES, ids=IDS)
     def test_creation_forbidden(self, rbac, kind, name, method):
         ok, out = getattr(rbac, method)(name, DEMO_USER, DEMO_GROUP)
         assert not ok, f"{kind} creation should be denied without RBAC, got: {out}"
-        assert "forbidden" in out.lower(), f"expected a forbidden error for {kind}, got: {out}"
+        assert "cannot create resource" in out, f"expected an RBAC authorization denial for {kind}, got: {out}"
 
-
-@pytest.mark.cli
-@pytest.mark.rbac
-class TestCreationWithRBAC:
     @pytest.mark.parametrize("kind, name, method", CASES, ids=IDS)
     def test_creation_allowed(self, rbac, kind, name, method):
         applied, err = rbac.apply_grant()
