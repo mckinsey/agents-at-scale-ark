@@ -8,7 +8,7 @@ Running Ark requires at least 2 vCPU and 4 GiB of RAM. Further resource consumpt
 
 ## Install with the CLI
 
-For the standard install — `npm install -g @agents-at-scale/ark`, then `ark install` — follow the [Quickstart](/quickstart), which is kept current and tested. This page covers: Helm and remote-cluster deployment, storage backends, private registries, CI/CD RBAC, and multi-tenant operation.
+For the standard CLI install, follow the [Quickstart](/quickstart), which is kept current and tested. This page covers: Helm and remote-cluster deployment, storage backends, private registries, CI/CD RBAC, and multi-tenant operation.
 
 ### Storage backend
 
@@ -205,4 +205,4 @@ This creates:
 
 Resource quotas and network policies are also available, documented in the chart. Queries then run under this service account via their `query.serviceAccount` field (subject to the impersonation setting above); omit it to use the controller's own identity.
 
-The [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) guide is the canonical reference for multi-tenancy — CLI-based setup (`ark install ark-tenant`), cross-tenant access via RBAC, broker storage isolation, and the development workflow.
+The [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) guide is the canonical reference for multi-tenancy — CLI-based setup, cross-tenant access via RBAC, broker storage isolation, and the development workflow.
