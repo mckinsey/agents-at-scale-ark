@@ -5,16 +5,10 @@ import { useAtom } from 'jotai';
 import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
 import type {
   BooleanSetting,
-  SelectSetting,
+  NumberSetting,
 } from '@/components/experimental-features-dialog/types';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 
 function BooleanFeatureRow({ feature }: { feature: BooleanSetting }) {
@@ -34,8 +28,15 @@ function BooleanFeatureRow({ feature }: { feature: BooleanSetting }) {
   );
 }
 
-function SelectFeatureRow({ feature }: { feature: SelectSetting }) {
+function NumberFeatureRow({ feature }: { feature: NumberSetting }) {
   const [value, setValue] = useAtom(feature.atom);
+
+  const handleChange = (raw: string) => {
+    if (/^\d+$/.test(raw) && Number(raw) > 0) {
+      setValue(`${raw}m`);
+    }
+  };
+
   return (
     <div className="flex flex-row items-center justify-between rounded-lg border p-4">
       <div className="flex-1 space-y-0.5">
@@ -46,18 +47,15 @@ function SelectFeatureRow({ feature }: { feature: SelectSetting }) {
           </div>
         )}
       </div>
-      <Select value={value} onValueChange={(v) => setValue(v as string)}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {feature.options.map(option => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={parseInt(value, 10) || ''}
+          onChange={e => handleChange(e.target.value)}
+          className="w-[120px]"
+        />
+        <span className="text-muted-foreground text-sm">minutes</span>
+      </div>
     </div>
   );
 }
@@ -74,7 +72,7 @@ export function ExperimentalFeaturesSettings() {
             feature.type === 'boolean' ? (
               <BooleanFeatureRow key={feature.feature} feature={feature} />
             ) : (
-              <SelectFeatureRow key={feature.feature} feature={feature} />
+              <NumberFeatureRow key={feature.feature} feature={feature} />
             ),
           )}
         </div>

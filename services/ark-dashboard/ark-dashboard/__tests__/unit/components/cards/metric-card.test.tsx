@@ -23,4 +23,21 @@ describe('MetricCard', () => {
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', '/models?namespace=test-ns');
   });
+
+  it('makes the whole card clickable (title and value inside the link)', () => {
+    render(
+      <MetricCard
+        title="Models"
+        value={5}
+        href="/models"
+        isLoading={false}
+        hasError={false}
+      />,
+    );
+
+    const link = screen.getByRole('link');
+    expect(link).toContainElement(screen.getByText('Models'));
+    expect(link).toContainElement(screen.getByText('5'));
+    expect(link).toContainElement(screen.getByText('See all'));
+  });
 });

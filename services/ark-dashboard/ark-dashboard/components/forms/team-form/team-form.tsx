@@ -215,7 +215,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const displayName = team?.name || '';
 
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden px-20 pb-10">
+    <div className="absolute inset-0 flex flex-col overflow-hidden px-12 pb-10">
       <header className="flex flex-none flex-col gap-4 pt-10 pb-5">
         <div className="flex items-center justify-between">
           <nav
