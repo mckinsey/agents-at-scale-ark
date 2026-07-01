@@ -74,13 +74,25 @@ When a Bedrock Model does not configure an `apiKey` (no key block), the executor
 - **WHEN** a Bedrock Model configures an `apiKey` whose ValueSource resolves to an error, a missing Secret, or an empty string
 - **THEN** the executor SHALL return an error and SHALL NOT fall back to IAM or the default credential chain
 
-### Requirement: Model-creation surfaces expose the Bedrock API key option
-The ark-cli Bedrock model creation flow and the dashboard Bedrock model form SHALL allow specifying an API key as an alternative to IAM credentials, and SHALL NOT require IAM credentials when an API key is provided.
+### Requirement: Model-creation surfaces let the user choose the Bedrock auth method
+When creating a Bedrock Model, the ark-cli flow and the dashboard form SHALL let the user choose the authentication method — API key or IAM credentials — and SHALL collect only the fields for the chosen method. The dashboard SHALL present this as a selector (shown once the Bedrock provider is chosen) that conditionally reveals either the API-key field or the IAM-credential fields. A single creation flow SHALL NOT require the user to supply both methods.
 
-#### Scenario: ark-cli accepts an API key for Bedrock
-- **WHEN** a user creates a Bedrock model via ark-cli and provides an API key
+#### Scenario: Dashboard offers an auth-method selector for Bedrock
+- **WHEN** a user selects the Bedrock provider in the dashboard model form
+- **THEN** the form SHALL present an auth-method selector offering "API key" and "IAM credentials"
+
+#### Scenario: Dashboard shows only the chosen method's fields
+- **WHEN** the user selects "API key" as the Bedrock auth method
+- **THEN** the form SHALL reveal the API-key field and SHALL NOT require the IAM-credential fields; and selecting "IAM credentials" SHALL reveal the IAM fields and SHALL NOT require the API-key field
+
+#### Scenario: Dashboard submits only the chosen method
+- **WHEN** the user completes the Bedrock form with a chosen auth method
+- **THEN** the dashboard SHALL submit a Model containing only that method's config (`spec.config.bedrock.apiKey` for API key, or the IAM credential fields otherwise)
+
+#### Scenario: ark-cli lets the user choose the auth method
+- **WHEN** a user creates a Bedrock model via ark-cli
+- **THEN** the CLI SHALL let the user choose between API key and IAM credentials and SHALL collect only the chosen method's inputs
+
+#### Scenario: ark-cli produces a manifest for the chosen method
+- **WHEN** a user creates a Bedrock model via ark-cli choosing the API key method
 - **THEN** the CLI SHALL produce a Model manifest with `spec.config.bedrock.apiKey` and SHALL NOT require `accessKeyId`/`secretAccessKey`
-
-#### Scenario: Dashboard accepts an API key for Bedrock
-- **WHEN** a user creates a Bedrock model in the dashboard and provides an API key
-- **THEN** the dashboard SHALL submit a Model with `spec.config.bedrock.apiKey` and SHALL NOT require IAM credential fields to be filled

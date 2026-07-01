@@ -56,6 +56,9 @@ Branch order handles IAM configured on the Model; `AuthSchemePreference` handles
 ### Decision: Treat apiKey as a secret end-to-end
 `apiKey` is an optional `*ValueSource` resolvable from a Secret, excluded from `BedrockModel.BuildConfig()` and never written to status or logs. "Unset" means `config.APIKey == nil` (no key block) — that path falls back to IAM/default chain. A *configured* key that resolves empty is a misconfiguration, not "unset" — handled by the fail-loud decision below. Region and `baseUrl` still apply on the bearer path (Bedrock is regional).
 
+### Decision: Auth method is a UI/CLI choice; precedence is the backend safety net
+The ark-cli and dashboard surfaces let the user pick one auth method (API key or IAM) and collect only that method's fields, so a UI-created Model never carries both. This is an ergonomics layer, not an enforcement one: the CRD still accepts both fields, and Models applied directly (raw YAML, GitOps) can carry both — which is exactly why the backend precedence rule and the webhook warning remain necessary. The two layers are complementary, not redundant.
+
 ### Decision: Non-blocking webhook warning when both apiKey and IAM are set
 `DefaultModel` (`ark/internal/validation/defaults.go`) adds a warning annotation via the existing `annotations.MigrationWarningPrefix` channel noting the API key takes precedence. Advisory only — the resource is still accepted. Reuses the established Model warning pattern (same as `spec.type → spec.provider`); chosen over silent behavior (confusing) and hard rejection (breaks the additive guarantee).
 
@@ -74,6 +77,8 @@ The spec scenarios are the acceptance contract; each maps to at least one test:
 - **Unit — auth selection** (`provider_bedrock.go`): `apiKey` set → bearer path with both provider and `AuthSchemePreference`; IAM only → static credentials; neither → default chain; both → bearer (precedence).
 - **Unit — webhook** (`defaults.go` / `model_webhook_test.go`): warning annotation present when both auth methods set, absent otherwise; each config shape (apiKey only / from Secret / IAM only / neither) is accepted.
 - **e2e (chainsaw, mock Bedrock)**: an `apiKey` Model completes a query; the outgoing request carries `Authorization: Bearer …` and is not SigV4-signed, including when ambient AWS credentials exist in the executor environment; an IAM-configured Model path is unchanged.
+- **ark-cli**: choosing the API-key method emits `spec.config.bedrock.apiKey` and does not require IAM inputs; choosing IAM emits the credential fields; only the chosen method's inputs are collected.
+- **Dashboard (form/unit)**: the auth-method selector appears once Bedrock is chosen; selecting a method reveals only that method's fields and submits only that method's config.
 
 ## Migration Plan
 

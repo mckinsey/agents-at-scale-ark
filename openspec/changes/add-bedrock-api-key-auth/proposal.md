@@ -7,7 +7,7 @@ Ark's Bedrock provider only authenticates with IAM-style credentials (access key
 - Add an optional `apiKey` (ValueSource) field to `BedrockModelConfig`, consistent with how other providers model `apiKey` as a secret.
 - The completions executor authenticates Bedrock requests with the API key as a bearer token when one is configured, by setting `BearerAuthTokenProvider` and `AuthSchemePreference` on the `bedrockruntime` client so bearer auth is selected even when IAM credentials are present in the environment. Existing IAM-credential and default-credential-chain behavior is preserved when no API key is set.
 - **Precedence:** when both `apiKey` and IAM credentials are configured, the API key wins (bearer auth is used, IAM credentials are ignored). This is the documented contract, surfaced in docs and via a non-blocking webhook warning when both are set.
-- Extend the model-creation surfaces — ark-cli (`bedrock.ts`, `manifest-builder.ts`) and the dashboard model forms — to offer the API-key option, making IAM credentials no longer unconditionally required.
+- Extend the model-creation surfaces — ark-cli (`bedrock.ts`, `manifest-builder.ts`) and the dashboard model forms — with an auth-method selector for Bedrock (API key vs IAM credentials) that collects only the chosen method's fields. This is a UI/CLI convenience; the backend precedence rule remains the safety net for Models applied directly (e.g. raw YAML/GitOps) that carry both.
 - Update docs and samples (`docs/content/user-guide/models.mdx`, `docs/content/reference/resources/models.mdx`) to cover API-key auth and the precedence rule.
 
 This is additive and backward compatible: no existing Bedrock configuration changes behavior.
