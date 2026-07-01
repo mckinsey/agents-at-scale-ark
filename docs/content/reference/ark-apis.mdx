@@ -1,13 +1,13 @@
 ---
-title: Ark APIs
-description: REST APIs for managing Ark resources and querying targets
+title: Ark API
+description: The ark-api REST interface — query targets, manage resources, and read any Kubernetes resource
 ---
 
 import { Tabs } from 'nextra/components'
 
-# Ark APIs
+# Ark API
 
-Ark provides REST APIs for managing resources and executing queries.
+The `ark-api` service exposes a REST interface for executing queries and managing resources. This page covers the query and resource endpoints, plus a generic endpoint for reading any Kubernetes resource. (Trace ingestion and retrieval are served separately by the broker — see [Traces](/reference/traces).)
 
 ## Interactive API Explorer
 
@@ -335,3 +335,64 @@ The same query API works for agents, teams, models, and tools:
     ```
   </Tabs.Tab>
 </Tabs>
+
+## Generic Resources API
+
+Beyond the typed endpoints above, the Ark API exposes a generic endpoint for reading **any** Kubernetes resource — core resources (Pods, Services, ConfigMaps) and grouped resources (Deployments, WorkflowTemplates, custom resources) — without a resource-specific endpoint.
+
+### Endpoints
+
+Core resources (API version `v1`):
+
+```
+GET /v1/resources/api/{version}/{kind}
+GET /v1/resources/api/{version}/{kind}/{resource_name}
+```
+
+Grouped resources (resources in API groups — `apps`, `batch`, custom groups):
+
+```
+GET /v1/resources/apis/{group}/{version}/{kind}
+GET /v1/resources/apis/{group}/{version}/{kind}/{resource_name}
+```
+
+Examples:
+
+```bash
+# Core: a Pod, and all Services
+curl http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+curl http://ark-api:8000/v1/resources/api/v1/Service
+
+# Grouped: a Deployment, an Argo WorkflowTemplate, all Jobs
+curl http://ark-api:8000/v1/resources/apis/apps/v1/Deployment/my-deployment
+curl http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-workflow
+curl http://ark-api:8000/v1/resources/apis/batch/v1/Job
+```
+
+### Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `namespace` | Kubernetes namespace | Current context namespace |
+
+```bash
+curl "http://ark-api:8000/v1/resources/api/v1/Pod?namespace=production"
+```
+
+### Response format
+
+Responses return the raw Kubernetes resource. Content negotiation via the `Accept` header returns JSON (default) or YAML:
+
+```bash
+# YAML
+curl -H "Accept: application/yaml" \
+  http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+```
+
+### Scope handling
+
+The endpoint handles namespaced and cluster-scoped resources automatically: it tries namespaced access first, falls back to cluster-scoped, and errors only if both fail. This works transparently for resources like Nodes (cluster-scoped) and Pods (namespaced).
+
+### RBAC
+
+The endpoint uses the service account configured for the Ark API pod. Ensure that service account has RBAC permissions for the resources you want to access.
