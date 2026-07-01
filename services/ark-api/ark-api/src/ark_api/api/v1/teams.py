@@ -1,11 +1,14 @@
 """Kubernetes teams API endpoints."""
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.team_v1alpha1 import TeamV1alpha1
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.teams import (
     TeamResponse,
@@ -79,7 +82,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
 
 @router.get("", response_model=TeamListResponse)
 @handle_k8s_errors(operation="list", resource_type="team")
-async def list_teams(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamListResponse:
+async def list_teams(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
     """
     List all Team CRs in a namespace.
     
@@ -89,7 +92,7 @@ async def list_teams(namespace: Optional[str] = Query(None, description="Namespa
     Returns:
         TeamListResponse: List of all teams in the namespace
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         teams = await ark_client.teams.a_list()
         
         team_list = []
@@ -104,7 +107,7 @@ async def list_teams(namespace: Optional[str] = Query(None, description="Namespa
 
 @router.post("", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="team")
-async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamDetailResponse:
+async def create_team(request: Request, body: TeamCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
     """
     Create a new Team CR.
     
@@ -120,7 +123,7 @@ async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(
     Returns:
         TeamDetailResponse: The created team details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Build the team spec
         team_spec = {
             "members": [member.model_dump(exclude_none=True) for member in body.members],
@@ -157,7 +160,7 @@ async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(
 
 @router.get("/{team_name}", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="team")
-async def get_team(team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamDetailResponse:
+async def get_team(request: Request, team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
     """
     Get a specific Team CR by name.
     
@@ -168,7 +171,7 @@ async def get_team(team_name: str, namespace: Optional[str] = Query(None, descri
     Returns:
         TeamDetailResponse: The team details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         team = await ark_client.teams.a_get(team_name)
         
         return team_to_detail_response(team.to_dict())
@@ -176,7 +179,7 @@ async def get_team(team_name: str, namespace: Optional[str] = Query(None, descri
 
 @router.put("/{team_name}", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="team")
-async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamDetailResponse:
+async def update_team(request: Request, team_name: str, body: TeamUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
     """
     Update a Team CR by name.
     
@@ -188,7 +191,7 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
     Returns:
         TeamDetailResponse: The updated team details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing team first
         existing_team = await ark_client.teams.a_get(team_name)
         existing_spec = existing_team.to_dict()["spec"]
@@ -240,7 +243,7 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
 
 @router.delete("/{team_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="team")
-async def delete_team(team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_team(request: Request, team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Team CR by name.
     
@@ -248,5 +251,5 @@ async def delete_team(team_name: str, namespace: Optional[str] = Query(None, des
         namespace: The namespace containing the team
         team_name: The name of the team
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.teams.a_delete(team_name)

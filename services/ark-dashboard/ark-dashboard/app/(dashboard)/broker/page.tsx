@@ -17,6 +17,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
+import { apiUrl } from '@/lib/api/config';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 
@@ -82,7 +83,7 @@ export function useSSEStream(endpoint: string | null, memory: string) {
       }
 
       setError(null);
-      let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
+      let url = apiUrl(`/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`);
       if (cursor !== undefined && cursor !== null) {
         url += `&cursor=${cursor}`;
       }
@@ -418,7 +419,7 @@ export function SessionsView({ memory }: { memory: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const es = new EventSource(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}&watch=true`);
+    const es = new EventSource(apiUrl(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}&watch=true`));
     const sessions: Record<string, unknown> = {};
 
     es.onopen = () => setIsConnected(true);
@@ -461,7 +462,7 @@ export function SessionsView({ memory }: { memory: string }) {
 
   const handlePurge = async () => {
     try {
-      await fetch(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`, { method: 'DELETE' });
+      await fetch(apiUrl(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`), { method: 'DELETE' });
       setStore({ sessions: {} });
     } catch {
     }

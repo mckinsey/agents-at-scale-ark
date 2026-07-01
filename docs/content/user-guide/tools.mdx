@@ -1,77 +1,294 @@
-# Tools and MCP Servers
+---
+title: Tools and MCP servers
+description: Give agents tools — HTTP APIs, MCP servers, other agents and teams, and built-ins — via the dashboard or kubectl
+---
 
-## Building Robust MCP Servers
+# Tools and MCP servers
 
-It is essential to consider using Kubernetes Probes for MCP server deployments. This allows the cluster to monitor status, restart if needed, explain health and readiness. This is hugely helpful for troubleshooting. A brief summary of probes:
+A `Tool` is something an agent can call: an HTTP API, a function on an MCP server, another agent or team, or a built-in like `terminate`. You create `Tool` resources (or let an MCP server create them for you), then reference them from an agent's `spec.tools`. The full schema reference lives at [Reference → Tools](/reference/resources/tools). This page walks you through the tool types, creating them from the dashboard or `kubectl`, and attaching them to agents.
 
-- Liveness probes determine when to restart a container. For example, liveness probes could catch a deadlock when an application is running but unable to make progress. If a container fails its liveness probe repeatedly, the kubelet restarts the container. Liveness probes do not wait for readiness probes to succeed. If you want to wait before executing a liveness probe, you can either define initialDelaySeconds or use a startup probe.
+## Tool types
 
-- Readiness probes determine when a container is ready to accept traffic. This is useful when waiting for an application to perform time-consuming initial tasks that depend on its backing services; for example: establishing network connections, loading files, and warming caches. Readiness probes can also be useful later in the container’s lifecycle, for example, when recovering from temporary faults or overloads. If the readiness probe returns a failed state, Kubernetes removes the pod from all matching service endpoints. Readiness probes run on the container during its whole lifecycle.
+| Type | What it calls | How it's created |
+| --- | --- | --- |
+| **`http`** | An HTTP/REST endpoint, with the LLM filling URL/body parameters | You author it. |
+| **`mcp`** | A function exposed by an MCP server | **Auto-created** by the MCP server controller — you don't hand-write these. |
+| **`agent`** | Another agent, called as a tool | You author it (wraps an existing Agent). |
+| **`team`** | A team, called as a tool | You author it (wraps an existing Team). |
+| **`builtin`** | A system function (`terminate`, `noop`) | **Auto-seeded** by the install; you reference it by name. |
 
-- A startup probe verifies whether the application within a container is started. This can be used to adopt liveness checks on slow starting containers, avoiding them getting killed by the kubelet before they are up and running. If such a probe is configured, it disables liveness and readiness checks until it succeeds. This type of probe is only executed at startup, unlike liveness and readiness probes, which are run periodically.
+## Create a tool
 
-[Read more about the Configure Liveness, Readiness and Startup Probes.] (https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/)
+### Via Dashboard
 
-## Robust Example
+1. Launch the dashboard: `ark dashboard`.
+2. Go to **Tools** in the left nav and click **Add Tool**.
+3. Fill the form:
 
-This is example is based on our Helm Chart for the [Playwright MCP Server](https://github.com/microsoft/playwright-mcp).
+| Field | Notes |
+| --- | --- |
+| **Name** | Required. Lowercase, k8s name rules. |
+| **Type** | `HTTP`, `MCP`, `Agent`, or `Team`. (Built-in tools aren't created here — they ship with the install.) |
+| **Description** | What the tool does. The LLM reads this to decide when to call it — keep it task-oriented. |
+| **Input Schema (JSON)** | A JSON Schema describing the arguments the LLM must supply. |
+| **Annotations (JSON)** | Optional MCP-style hints (`readOnlyHint`, `destructiveHint`, `title`, …). |
+| **URL** (HTTP) / **Agent** (Agent) / **Team** (Team) | Type-specific target. |
+
+4. Hit save.
+
+![Tools list with Add Tool](/tools/list.png)
+
+![Add Tool form for an HTTP tool](/tools/add-form.png)
+
+### Via kubectl
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: get-coordinates
+spec:
+  type: http
+  description: "Returns coordinates for the given city name"
+  inputSchema:
+    type: object
+    properties:
+      city:
+        type: string
+        description: City name to look up
+    required: ["city"]
+  http:
+    url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
+    method: GET
+    timeout: 30s
+EOF
+
+kubectl get tool get-coordinates -o jsonpath='{.status.state}'   # Ready
+```
+
+A valid tool reports `status.state: Ready` with message `Tool configuration is valid`. The admission webhook checks the `inputSchema` is valid JSON Schema and that the type-specific block is present.
+
+## HTTP tools
+
+HTTP tools are the workhorse — they turn any REST endpoint into something an agent can call. Two kinds of templating are involved, and they use **different syntax**:
+
+- **URL parameters** use single braces `{name}` and are substituted from the tool-call arguments (URL-encoded).
+- **Body templates** use Go template syntax `{{.input.name}}` for arguments and `{{.name}}` for `bodyParameters`.
 
 ```yaml
-# Kubernetes Health Probes - Essential for proper pod lifecycle management
-#
-# STARTUP PROBE: Protects slow-starting containers during initialization
-# - Purpose: Delays liveness/readiness checks until container fully starts
-# - Behavior: If fails, other probes don't start; prevents premature kills
-# - Use case: Applications with long startup times (like Playwright browser installation)
-# - Test: MCP handshake - if initialize succeeds, server is ready to accept MCP requests
-startupProbe:
-  exec:
-    command:
-    - /bin/sh
-    - -c
-    - |
-      curl -s -f -X POST http://localhost:8080/mcp \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json, text/event-stream" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
-        | grep -q '"result"'
-  initialDelaySeconds: 30    # Wait 30s before first check (allow server startup)
-  periodSeconds: 15          # Check every 15s
-  timeoutSeconds: 10         # Timeout each check after 10s
-  failureThreshold: 12       # Allow 12 failures = 3 minutes total startup time
-
-# READINESS PROBE: Controls traffic routing to pod
-# - Purpose: Determines if pod should receive traffic from Services/load balancers
-# - Behavior: If fails, pod removed from endpoints (no traffic) but NOT restarted
-# - Use case: Pod running but not ready to serve requests (e.g., loading data, warming up)
-# - Test: MCP handshake - if initialize succeeds, server is ready to handle client traffic
-readinessProbe:
-  exec:
-    command:
-    - /bin/sh
-    - -c
-    - |
-      curl -s -f -X POST http://localhost:8080/mcp \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json, text/event-stream" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
-        | grep -q '"result"'
-  initialDelaySeconds: 30    # Wait 30s after startup probe succeeds
-  periodSeconds: 15          # Check every 15s
-  timeoutSeconds: 10         # Timeout each check after 10s  
-  failureThreshold: 3        # Mark not-ready after 3 consecutive failures
-
-# LIVENESS PROBE: Detects and recovers from deadlocked containers
-# - Purpose: Determines if container is still running properly (restart if not)
-# - Behavior: If fails, kubelet kills and restarts the container
-# - Use case: Detect deadlocks, infinite loops, or hung processes
-# - Test: HTTP GET / returns 400 "Invalid request" - proves server is alive and processing HTTP
-# - Note: Microsoft Playwright MCP server only has /mcp and /sse endpoints, no /health endpoint
-livenessProbe:
-  httpGet:
-    path: /
-    port: 8080
-  periodSeconds: 30          # Check every 30s (less frequent than readiness)
-  timeoutSeconds: 10         # Timeout each check after 10s
-  failureThreshold: 6        # HIGHER than readiness - pod marked not-ready before restart
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: create-user
+spec:
+  type: http
+  description: "Creates a new user"
+  inputSchema:
+    type: object
+    properties:
+      name: { type: string }
+      email: { type: string }
+    required: ["name", "email"]
+  http:
+    url: https://api.example.com/users
+    method: POST
+    headers:
+      - name: Content-Type
+        value:
+          value: application/json
+      - name: Authorization
+        value:
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: auth-token
+    body: |
+      {
+        "name": "{{.input.name}}",
+        "email": "{{.input.email}}",
+        "org": "{{.default_org}}"
+      }
+    bodyParameters:
+      - name: default_org
+        valueFrom:
+          configMapKeyRef:
+            name: user-config
+            key: default-organization
+    timeout: 30s
 ```
+
+`bodyParameters` resolve from inline `value`, a `configMapKeyRef`, or a `secretKeyRef`. Header values use the same `value` / `valueFrom` shape.
+
+## MCP tools (auto-created)
+
+You don't write `mcp` Tool resources by hand. Register an MCP server with an `MCPServer` resource and the controller connects to it, discovers the tools it advertises, and **creates one `Tool` per function** — named `<mcp-server>-<tool>` and labelled `mcp/server: <server>`.
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: calculator
+spec:
+  address:
+    value: "http://calculator.default.svc.cluster.local:8000/mcp"
+  transport: http          # http (streamable) or sse
+  timeout: "60s"
+  description: "Arithmetic functions"
+EOF
+
+# Wait for the server, then list the tools it produced.
+kubectl wait --for=condition=Available mcpserver/calculator --timeout=60s
+kubectl get tools -l "mcp/server=calculator"
+```
+
+Deleting the `MCPServer` deletes the tools it created. The dashboard groups tools by MCP server, and `ark tools` shows that grouped view.
+
+> **MCP server authentication.** Static credentials go in `spec.headers` (e.g. a GitHub PAT from a Secret) — see [Reference → MCPServer](/reference/resources/mcpserver). For per-query or per-user credentials, use [overrides](/user-guide/overrides) to inject headers at query time, targeting specific MCP servers via label selectors.
+
+## Agents and teams as tools
+
+Wrap an existing Agent or Team as a `Tool` so another agent can delegate to it. The wrapped resource is invoked with a single `input` argument.
+
+```yaml
+# Agent as a tool
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: research-agent-tool
+spec:
+  type: agent
+  description: "Delegate a research question to the research agent"
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+        description: the research question
+    required: ["input"]
+  agent:
+    name: research-agent
+---
+# Team as a tool
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: review-team-tool
+spec:
+  type: team
+  description: "Hand a document to the review team"
+  inputSchema:
+    type: object
+    properties:
+      input: { type: string }
+    required: ["input"]
+  team:
+    name: review-team
+```
+
+The agent that wants to delegate then references the Tool by name (`type: agent` / `type: team`).
+
+## Built-in tools
+
+Built-in tools map to functions implemented inside Ark. There are two: `terminate` (ends a conversation / team turn with a final response) and `noop` (does nothing — useful for testing). The `ark-tenant` chart seeds them as `Tool` resources in each tenant namespace (gated on `builtinTools.create`), so on a standard install they already exist and you just reference them:
+
+```bash
+kubectl get tools terminate noop
+```
+
+```yaml
+spec:
+  tools:
+    - type: builtin
+      name: terminate
+```
+
+The set of built-in implementations is fixed in Ark's code — `terminate` and `noop` are the only ones, and you reference them rather than defining new ones.
+
+## Attach a tool to an agent
+
+Tools do nothing until an agent references them. Add entries to the agent's `spec.tools`, each with a `type` matching the Tool's type and the Tool's `name`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: geo-agent
+spec:
+  prompt: "Look up city coordinates with the get-coordinates tool, then report lat/long."
+  tools:
+    - type: http
+      name: get-coordinates
+    - type: builtin
+      name: terminate
+```
+
+In the dashboard, the **Create/Edit Agent** form has a tool checklist grouped by source (Built-in, HTTP, MCP servers, …) — see [Agents → Create an agent](/user-guide/agents#via-dashboard).
+
+### Partial tools (pre-fill parameters)
+
+Use `partial` to pin some of a tool's parameters at the agent level and hide them from the LLM, exposing only the rest. The `partial.name` points at the real Tool CRD; the outer `name`/`description` are what the agent sees.
+
+```yaml
+spec:
+  tools:
+    - type: http
+      name: weather-forecast            # name the agent sees
+      description: "Get the latest weather forecast"
+      partial:
+        name: weather-api               # the real Tool CRD
+        parameters:
+          - name: units
+            value: "metric"             # pinned, hidden from the agent
+          - name: city
+            value: "{{ .Query.city }}"  # sourced from a query parameter
+```
+
+## Query a tool directly
+
+You can invoke a tool on its own (handy for testing) by passing a JSON object matching its `inputSchema`:
+
+```bash
+ark query tool/get-coordinates '{"city":"Paris"}'
+```
+
+Or via a `Query` resource with `target.type: tool`.
+
+## Inspect, list, delete
+
+```bash
+ark tools                                   # CLI list (grouped by MCP server)
+kubectl get tools                           # all Tool resources
+kubectl get tools -l "mcp/server=calculator"   # tools from one MCP server
+kubectl describe tool get-coordinates
+kubectl get tool get-coordinates -o yaml
+
+kubectl delete tool get-coordinates
+```
+
+## Features only available in YAML
+
+The dashboard's **Add Tool** form covers name, type (`HTTP` / `MCP` / `Agent` / `Team`), description, input schema, and annotations — plus the type-specific target (HTTP URL, or the agent/team picker). These tool features are only configurable via the `Tool` YAML for now:
+
+- **HTTP method, headers, body, `bodyParameters`, and `timeout`.** The form only takes the URL (so it produces a `GET` with no auth headers or body). Any POST/PUT tool, any tool that needs an `Authorization` header or a templated body, must be authored in YAML.
+- **`builtin` tools.** The form's type dropdown is `HTTP` / `MCP` / `Agent` / `Team` only. Built-in tools (`terminate`, `noop`) aren't created from the UI — they're seeded by the install and referenced by name.
+- **Partial tools (`agent.spec.tools[].partial`).** Pre-filling/hiding tool parameters is configured on the agent in YAML, not in the tool form.
+
+For any of these, write the `Tool` (or `Agent`) YAML directly. You can still inspect and delete the resource from the dashboard afterwards.
+
+## Troubleshooting
+
+**Tool stuck — not `Ready`.** `kubectl get tool <name> -o jsonpath='{.status.message}'` shows why. Common causes: invalid `inputSchema` JSON, a missing type block (`http`/`agent`/`team`), or an agent/team reference to a resource that doesn't exist.
+
+**`Tool 'X' not found in namespace 'Y'` on an agent.** The agent references a tool that hasn't been created. Apply the Tool first; for MCP tools, confirm the `MCPServer` is `Available` and produced the tool (`kubectl get tools -l "mcp/server=<server>"`).
+
+**Agent ignores the tool.** The LLM decides whether to call a tool from its **description** — vague descriptions get skipped. Make the `description` specific about when to use it.
+
+**MCP tools disappeared.** They're owned by the `MCPServer` — if the server goes un-`Available` (bad address, failed auth, network) its tools are removed. Check `kubectl describe mcpserver <server>`.
+
+## Next steps
+
+- [Reference → Tools](/reference/resources/tools) — full schema for every tool type.
+- [Reference → MCPServer](/reference/resources/mcpserver) — transports, timeouts, and OAuth.
+- [Agents](/user-guide/agents) — attach tools and use partial-tool parameter injection.

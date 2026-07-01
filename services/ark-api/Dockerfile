@@ -1,4 +1,4 @@
-FROM python:3.14.4-slim AS builder
+FROM python:3.14.5-slim AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
   && chown -R ark:nogroup /home/ark
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
 
 # Copy dependency files and install dependencies (cached unless deps change)
 COPY ark-api/pyproject.toml ark-api/uv.lock ./

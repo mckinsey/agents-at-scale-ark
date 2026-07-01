@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/apiserver/pkg/storage/names"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
@@ -26,8 +27,9 @@ import (
 )
 
 const (
-	columnTypeDate   = "date"
-	defaultNamespace = "default"
+	columnTypeDate          = "date"
+	defaultNamespace        = "default"
+	maxGenerateNameAttempts = 100
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -166,6 +168,36 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		accessor.SetCreationTimestamp(metav1.Now())
 	}
 
+	// Handle generateName: if name is empty but generateName is set, generate a unique name
+	// Retry on name collisions up to maxGenerateNameAttempts
+	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
+			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
+			accessor.SetName(generatedName)
+
+			sctx, cancel := storageContext(ctx)
+			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
+			cancel()
+
+			if err == nil {
+				metrics.RecordStorageOperation("create", s.config.Kind, "success")
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+			}
+
+			if !errors.Is(err, storage.ErrAlreadyExists) {
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				metrics.RecordStorageOperation("create", s.config.Kind, "error")
+				return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
+			}
+		}
+
+		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
+		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		return nil, apierrors.NewServerTimeout(gr, "create", 1)
+	}
+
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	if err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
@@ -210,6 +242,15 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		return nil, false, fmt.Errorf("failed to get updated object: %w", err)
 	}
 
+	// Preserve resourceVersion from existing object if patch didn't include it.
+	// kubectl strategic merge patches may send resourceVersion: null, but PostgreSQL
+	// backend requires a non-zero resourceVersion for optimistic concurrency control.
+	existingAccessor, _ := meta.Accessor(existing)
+	updatedAccessor, _ := meta.Accessor(updated)
+	if updatedAccessor.GetResourceVersion() == "" && existingAccessor.GetResourceVersion() != "" {
+		updatedAccessor.SetResourceVersion(existingAccessor.GetResourceVersion())
+	}
+
 	if updateValidation != nil {
 		if err := updateValidation(ctx, updated, existing); err != nil {
 			metrics.RecordStorageOperation("update", s.config.Kind, "validation_error")
@@ -219,6 +260,17 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 
 	if err := s.backend.Update(sctx, s.config.Kind, namespace, name, updated); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "update", name, start)
+	}
+
+	// Finish a graceful deletion: once a terminating object (deletionTimestamp set)
+	// has no finalizers left, perform the actual removal now.
+	if updatedAccessor.GetDeletionTimestamp() != nil && len(updatedAccessor.GetFinalizers()) == 0 {
+		if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
+			return nil, false, handleUpdateError(err, s.config, "delete", name, start)
+		}
+		metrics.RecordStorageOperation("update", s.config.Kind, "finalized_delete")
+		metrics.RecordStorageLatency("update", s.config.Kind, start)
+		return updated, false, nil
 	}
 
 	metrics.RecordStorageOperation("update", s.config.Kind, "success")
@@ -244,6 +296,28 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 			metrics.RecordStorageOperation("delete", s.config.Kind, "validation_error")
 			return nil, false, err
 		}
+	}
+
+	accessor, err := meta.Accessor(existing)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
+	}
+
+	// Graceful deletion: an object with finalizers is not removed yet. Mark it by
+	// setting deletionTimestamp so controllers can run their finalizers; the actual
+	// removal happens in Update once the last finalizer is gone. This mirrors the
+	// behavior of the upstream Kubernetes API server.
+	if len(accessor.GetFinalizers()) > 0 {
+		if accessor.GetDeletionTimestamp() == nil {
+			now := metav1.NewTime(time.Now())
+			accessor.SetDeletionTimestamp(&now)
+			if err := s.backend.Update(sctx, s.config.Kind, namespace, name, existing); err != nil {
+				return nil, false, handleUpdateError(err, s.config, "delete", name, start)
+			}
+		}
+		metrics.RecordStorageOperation("delete", s.config.Kind, "pending_finalizers")
+		metrics.RecordStorageLatency("delete", s.config.Kind, start)
+		return existing, false, nil
 	}
 
 	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {

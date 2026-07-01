@@ -13,7 +13,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Values.serviceAccount.name }}-ark-mcp
+  name: {{ .Values.serviceAccount.name }}-ark-mcp-{{ .Release.Namespace }}
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -36,7 +36,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.serviceAccount.name }}-ark-mcp
+  name: {{ .Values.serviceAccount.name }}-ark-mcp-{{ .Release.Namespace }}
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -47,6 +47,6 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Values.serviceAccount.name }}-ark-mcp
+  name: {{ .Values.serviceAccount.name }}-ark-mcp-{{ .Release.Namespace }}
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

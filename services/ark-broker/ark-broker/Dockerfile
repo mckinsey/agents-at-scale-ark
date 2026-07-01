@@ -32,4 +32,4 @@ USER nodejs
 
 EXPOSE 8080
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/index.js"]

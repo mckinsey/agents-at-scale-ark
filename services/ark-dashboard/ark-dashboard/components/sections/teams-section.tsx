@@ -192,7 +192,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
 
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between gap-2 px-6 py-3">
+        <div className="mt-3 flex items-center justify-between gap-2">
           {!showCompactView ? (
             <Button
               variant="outline"
@@ -210,7 +210,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
           />
         </div>
 
-        <main className="flex-1 overflow-auto px-6 py-0">
+        <main className="mt-4 flex-1 overflow-auto">
           {showCompactView && (
             <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
               {teams.map(team => (

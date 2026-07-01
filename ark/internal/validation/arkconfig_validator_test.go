@@ -48,4 +48,3 @@ func TestValidateArkConfig_RejectsNegativeQueryTTL(t *testing.T) {
 		t.Fatalf("expected error for negative QueryTTL")
 	}
 }
-

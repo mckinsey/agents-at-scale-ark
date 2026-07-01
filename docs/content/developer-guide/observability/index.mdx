@@ -5,7 +5,37 @@ description: Monitor and trace your agentic workloads with integrated observabil
 
 # Observability
 
-Comprehensive observability is crucial for production agentic workloads. ARK provides integrated monitoring, tracing, and logging capabilities to help you understand and optimize your AI agent performance.
+Comprehensive observability is crucial for production agentic workloads. ARK gives you observability at two levels:
+
+- **Built in to the dashboard** — sessions, workflow runs, Kubernetes events, and a live broker stream, with no extra setup.
+- **OpenTelemetry export** — ship traces to any OTLP backend (Langfuse, Phoenix, Opik, Jaeger, Honeycomb, …) for deeper analysis, cost/token tracking, and evaluation.
+
+## Monitoring in the dashboard
+
+The dashboard's **Monitoring** section gives you a view of what your agents are doing without installing anything. It has four views:
+
+| View | What it shows |
+| --- | --- |
+| **Sessions** | Every session across agents, teams, and tools, with active/error counts. Drill into a session to replay its conversations message by message. |
+| **Workflow Runs** | Argo workflow executions with status and a per-step timing breakdown. |
+| **Events** | Kubernetes events for ARK resources, filterable by type, kind, and name. |
+| **Broker** | A live stream of what `ark-broker` captures — OTEL traces, messages, LLM chunks, events, and sessions. |
+
+The **Sessions** view lists every session and its participants:
+
+![Dashboard Sessions view listing sessions with participants and error counts](./images/dashboard-sessions.png)
+
+Open a session to replay the conversation:
+
+![Dashboard session conversation replay](./images/dashboard-session-conversation.png)
+
+**Workflow Runs** shows each Argo run and its steps:
+
+![Dashboard Workflow Runs view with per-step status and timing](./images/dashboard-workflow-runs.png)
+
+The **Broker** view streams traces, messages, and LLM chunks live — useful for debugging without any external backend:
+
+![Dashboard Broker view streaming OTEL traces](./images/dashboard-broker.png)
 
 ## OpenTelemetry Integration
 
@@ -22,12 +52,12 @@ Telemetry is enabled by setting the OpenTelemetry environment variables:
 
 ## Architecture
 
-The controller creates a root trace span (`query.dispatch`) for every query execution. Trace context propagates via W3C `traceparent` headers across A2A boundaries to the completions engine and execution engines, producing a connected trace tree.
+The controller creates a root trace span (`query.<name>.dispatch`) for every query execution. Trace context propagates via W3C `traceparent` headers across A2A boundaries to the completions engine and execution engines, producing a connected trace tree.
 
 ```
 ┌─────────────────────┐
 │   ARK Controller    │
-│  query.dispatch     │──── traceparent ────► Completions Engine
+│ query.<name>.dispatch│──── traceparent ────► Completions Engine
 │  (root span)        │                       query.<name>
 └─────────┬───────────┘                         └─ agent/team/model
           │                                        └─ LLM calls, tools

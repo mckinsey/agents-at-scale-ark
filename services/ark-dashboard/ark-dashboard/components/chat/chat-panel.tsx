@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { Button } from '@/components/ui/button';
+import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
@@ -48,6 +49,10 @@ export function ChatPanel({
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
+    requiredParameters,
+    parameterValues,
+    setParameterValue,
+    missingParameters,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -93,7 +98,6 @@ export function ChatPanel({
             debugMode={debugMode}
             isProcessing={isProcessing}
             processingPhase={processingPhase}
-
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
@@ -103,6 +107,16 @@ export function ChatPanel({
       </div>
 
       <div className="flex-shrink-0 border-t">
+        {requiredParameters.length > 0 && (
+          <div className="px-4 pt-4">
+            <ChatParameterFields
+              requiredParameters={requiredParameters}
+              values={parameterValues}
+              onChange={setParameterValue}
+              disabled={isProcessing}
+            />
+          </div>
+        )}
         <div className="flex gap-2 p-4">
           <div className="relative flex-1">
             <Input
@@ -116,24 +130,24 @@ export function ChatPanel({
               disabled={isProcessing}
             />
           </div>
-          {isProcessing ?
+          {isProcessing ? (
             <Button
               onClick={cancelQuery}
               size="sm"
               variant="destructive"
-              aria-label="Stop conversation"
-            >
+              aria-label="Stop conversation">
               <Square className="h-4 w-4" />
             </Button>
-            : <Button
+          ) : (
+            <Button
               onClick={handleSendMessage}
-              disabled={!currentMessage.trim()}
+              disabled={!currentMessage.trim() || missingParameters.length > 0}
               size="sm"
               variant="default"
               aria-label="Send message">
               <Send className="h-4 w-4" />
             </Button>
-          }
+          )}
         </div>
 
         <Separator />
@@ -173,16 +187,14 @@ export function ChatPanel({
                   <TooltipContent>
                     <div className="space-y-1 text-xs">
                       <div>
-                        Prompt:{' '}
-                        {tokenUsage.prompt_tokens.toLocaleString()}
+                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
                       </div>
                       <div>
                         Completion:{' '}
                         {tokenUsage.completion_tokens.toLocaleString()}
                       </div>
                       <div className="border-t pt-1 font-medium">
-                        Total:{' '}
-                        {tokenUsage.total_tokens.toLocaleString()}
+                        Total: {tokenUsage.total_tokens.toLocaleString()}
                       </div>
                     </div>
                   </TooltipContent>

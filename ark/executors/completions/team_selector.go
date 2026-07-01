@@ -157,7 +157,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		userPrompt = "Select the next speaker to respond using the select-next-speaker tool, or use the terminate tool if you think the user's original question has been answered."
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
+	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil, ExecuteOptions{ToolChoice: ToolChoiceRequired})
 	if err != nil {
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
 	}

@@ -3,6 +3,7 @@
 import logging
 import os
 import json
+import time
 from typing import Optional, Dict, Any
 import jwt
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError, InvalidAudienceError, InvalidIssuerError
@@ -15,6 +16,11 @@ from .exceptions import TokenValidationError, InvalidTokenError as AuthInvalidTo
 from .config import AuthConfig
 
 logger = logging.getLogger(__name__)
+
+# OIDC providers rotate signing keys (Dex rotates ~every 6h), so a JWKS set
+# cached for the process lifetime goes stale and rejects tokens signed by a
+# newly-rotated key. Bound the cache and refetch on an unknown kid.
+JWKS_CACHE_TTL_SECONDS = int(os.getenv("OIDC_JWKS_CACHE_TTL_SECONDS", "300"))
 
 
 class TokenValidator:
@@ -30,22 +36,63 @@ class TokenValidator:
 
     
     def _create_config_from_env(self) -> AuthConfig:
-        """Create AuthConfig from environment variables."""
-        # Read environment variables directly
+        """Create AuthConfig from environment variables.
+
+        JWKS URL resolution order:
+          1. ``OIDC_JWKS_URL`` explicit override (escape hatch for air-gapped
+             IdPs or unconventional well-known layouts).
+          2. ``<issuer>/.well-known/openid-configuration`` discovery per
+             RFC 8414 / OIDC Core §4 — works for Dex (``/keys``), Auth0
+             (``/.well-known/jwks.json``), Okta (``/v1/keys``), Keycloak
+             (``/protocol/openid-connect/certs``), Google, et al.
+
+        The previous implementation hardcoded the Keycloak path, which
+        404'd against every other IdP. Discovery is the OIDC-standard
+        way to learn ``jwks_uri`` and removes the per-IdP assumption.
+        """
         issuer = os.getenv("OIDC_ISSUER_URL")
         audience = os.getenv("OIDC_APPLICATION_ID")
-        jwks_url = None
-        if issuer:
-            # Use the correct JWKS endpoint for Keycloak/Okta
-            jwks_url = f"{issuer}/protocol/openid-connect/certs"
-        
-        logger.info(f"Creating AuthConfig from environment - issuer: {issuer}, audience: {audience}")
-        
+        jwks_url = os.getenv("OIDC_JWKS_URL") or None
+        if not jwks_url and issuer:
+            jwks_url = self._discover_jwks_url(issuer)
+
+        logger.info(
+            "Creating AuthConfig from environment - issuer: %s, audience: %s, jwks_url: %s",
+            issuer, audience, jwks_url,
+        )
+
         return AuthConfig(
             issuer=issuer,
             audience=audience,
-            jwks_url=jwks_url
+            jwks_url=jwks_url,
         )
+
+    @staticmethod
+    def _discover_jwks_url(issuer: str) -> str:
+        """Resolve ``jwks_uri`` from the issuer's OIDC discovery document.
+
+        Raises ``TokenValidationError`` when discovery is unreachable or
+        the document does not contain ``jwks_uri``. Use ``OIDC_JWKS_URL``
+        to bypass discovery for air-gapped IdPs.
+        """
+        discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+        try:
+            response = requests.get(discovery_url, timeout=10)
+            response.raise_for_status()
+            jwks_uri = response.json().get("jwks_uri")
+            if not jwks_uri:
+                raise TokenValidationError(
+                    f"OIDC discovery document at {discovery_url} did not include jwks_uri. "
+                    f"Set OIDC_JWKS_URL to override."
+                )
+            return jwks_uri
+        except TokenValidationError:
+            raise
+        except (requests.RequestException, ValueError) as exc:
+            raise TokenValidationError(
+                f"OIDC discovery failed for {discovery_url}: {exc}. "
+                f"Set OIDC_JWKS_URL to override."
+            ) from exc
     
     def _fetch_jwks(self) -> Dict[str, Any]:
         """Fetch JWKS from the configured URL."""
@@ -60,10 +107,13 @@ class TokenValidator:
             logger.error(f"Failed to fetch JWKS: {e}")
             raise TokenValidationError(f"Failed to fetch JWKS: {e}")
     
-    def _get_jwks(self) -> Dict[str, Any]:
-        """Get JWKS with caching."""
-        if self._jwks_cache is None:
+    def _get_jwks(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """Get JWKS, cached with a TTL. ``force_refresh`` bypasses the cache."""
+        now = time.monotonic()
+        expired = self._cache_expiry is not None and now >= self._cache_expiry
+        if force_refresh or self._jwks_cache is None or expired:
             self._jwks_cache = self._fetch_jwks()
+            self._cache_expiry = now + JWKS_CACHE_TTL_SECONDS
         return self._jwks_cache
     
     def _jwk_to_pem(self, jwk_dict: Dict[str, Any]) -> str:
@@ -101,14 +151,13 @@ class TokenValidator:
             if not kid:
                 raise TokenValidationError("Token header does not contain 'kid'")
 
-            # Get JWKS
-            jwks = self._get_jwks()
-
-            # Find the key with matching kid
-            for key in jwks.get('keys', []):
-                if key.get('kid') == kid:
-                    # Convert JWK to PEM
-                    return self._jwk_to_pem(key)
+            # Try the cached JWKS first; on an unknown kid, refetch once in case
+            # the IdP rotated its signing keys since the cache was populated.
+            for force_refresh in (False, True):
+                jwks = self._get_jwks(force_refresh=force_refresh)
+                for key in jwks.get('keys', []):
+                    if key.get('kid') == kid:
+                        return self._jwk_to_pem(key)
 
             raise TokenValidationError(f"Unable to find key with kid: {kid}")
 

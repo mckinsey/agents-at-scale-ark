@@ -5,11 +5,12 @@ Extension spec: ark/api/extensions/query/v1/
 
 import base64
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
+from ark_sdk.k8s import create_api_client
 
 from ..executor import (
     AgentConfig,
@@ -33,6 +34,16 @@ QUERY_EXTENSION_METADATA_KEY = f"{QUERY_EXTENSION_URI}/ref"
 class QueryRef:
     name: str
     namespace: str
+
+
+def _parse_go_duration_to_seconds(duration: str) -> Optional[int]:
+    if not duration:
+        return None
+    total = sum(
+        int(v) * {"h": 3600, "m": 60, "s": 1}[u]
+        for v, u in re.findall(r"(\d+)([hms])", duration)
+    )
+    return total or None
 
 
 def extract_query_ref(message: Any) -> QueryRef:
@@ -97,6 +108,9 @@ async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: 
     query_annotations = query.metadata.get("annotations", {}) if query.metadata else {}
     execution_engine_annotations = await _resolve_execution_engine_annotations(agent, namespace)
 
+    raw_ttl = getattr(query.spec, "ttl", None)
+    message_ttl_seconds = _parse_go_duration_to_seconds(raw_ttl) if isinstance(raw_ttl, str) else None
+
     return ExecutionEngineRequest(
         agent=agent_config,
         userInput=Message(role="user", content=user_input),
@@ -104,6 +118,7 @@ async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: 
         conversationId=conversation_id,
         query_annotations=query_annotations,
         execution_engine_annotations=execution_engine_annotations,
+        message_ttl_seconds=message_ttl_seconds,
     )
 
 
@@ -193,7 +208,7 @@ async def _resolve_configmap_ref(cm_ref: Any, namespace: str) -> str:
     if not (ref_name and ref_key):
         return ""
     try:
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
             return (cm.data or {}).get(ref_key, "")

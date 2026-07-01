@@ -1,45 +1,11 @@
-XRAY-962117 - CVE-2026-32280
-- Go crypto/x509 Certificate.Verify slow chain building causing potential DoS in mTLS scenarios.
-- Patched by upgrading Go to 1.26.3 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile. Whitelist retained in case scanner caches previous scan images before rebuild.
-XRAY-979047 - CVE-2026-39820
-- Go net/mail ParseAddress/ParseAddressList/ParseDate functions have quadratic complexity in comment parsing, allowing crafted email addresses to cause excessive CPU and memory usage.
-- Patched by upgrading Go to 1.26.3 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile. Whitelist retained in case scanner caches previous scan images before rebuild.
-XRAY-979069 - CVE-2026-33811
-- Go net package has double-free vulnerability in cgo DNS resolver when processing very long CNAME responses with LookupCNAME, potentially causing crashes.
-- Patched by upgrading Go to 1.26.3 in ark/Dockerfile, ark/Dockerfile.completions, images/ark-tools/Dockerfile and tools/fark/Dockerfile. Whitelist retained in case scanner caches previous scan images before rebuild.
-XRAY-962422 - CVE-2026-39883
-- OpenTelemetry-Go PATH hijacking via bare `kenv` command on BSD and Solaris platforms (fix in 1.43.0).
-- Not exploitable in Ark: all Ark Go components run in Linux containers (alpine/bookworm). The `kenv` code path is only invoked on BSD/Solaris hosts. No BSD/Solaris runtime targets exist in Ark deployment.
+XRAY-1002760 - GHSA-gv7w-rqvm-qjhr (esbuild < 0.28.1)
+- Missing binary integrity verification in esbuild's Deno module enables RCE via NPM_CONFIG_REGISTRY manipulation.
+- NOT introduced by this PR: affects esbuild@0.27.x pulled transitively via tsx@4.21.0 (ark-broker, ark-cli) and vite@7.3.2 (ark-dashboard). No package-lock.json was modified in this PR.
+- Exploitation requires the attacker to control NPM_CONFIG_REGISTRY during a Deno binary download at build time. Does not affect production runtime — esbuild is a dev-only toolchain dep, not deployed in any container.
+- Fix requires tsx upgrade (4.x→5.x or newer minor that allows esbuild@~0.28.0) and vite upgrade (7.x→8.x) across three packages; tracked separately.
+
 XRAY-97724 - CVE-2018-20225
 - An issue was discovered in pip (all versions) because it installs the version with the highest version number, even if the user had intended to obtain a private package from a private index. This only affects use of the --extra-index-url option, and exploitation requires that the package does not already exist in the public index (and thus the attacker can put the package there with an arbitrary version number). NOTE: it has been reported that this is intended functionality and the user is responsible for using --extra-index-url securely.
-- NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, langchain-weather-agent, simple-agent, retrieval-service, tool templates).
+- NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, simple-agent, retrieval-service, tool templates).
 - Evidence: All Python Dockerfiles use "uv sync --frozen" for dependency installation. pip is only present in base images and used to bootstrap uv itself ("pip install uv"), never for --extra-index-url operations.
 - No fix available: This is considered intended pip functionality per official response. Using uv eliminates the attack vector entirely.
-XRAY-913110 - CVE-2026-0621
-- The npm package modelcontextprotocol/sdk has a vulnerability in versions 0 >= 1.25.1, however, 1.25.1 is the most up-to-date version. We will have to ignore this violation until a newer version is released.
-- Used in ark-cli and filesystem-mcp
-XRAY-934751 - CVE-2024-58340
-- LangChain versions up to and including 0.3.1 contain a regular expression denial-of-service (ReDoS) vulnerability in the MRKLOutputParser.parse() method (libs/langchain/langchain/agents/mrkl/output_parser.py). The parser applies a backtracking-prone regular expression when extracting tool actions from model output. An attacker who can supply or influence the parsed text (for example via prompt injection in downstream applications that pass LLM output directly into MRKLOutputParser.parse()) can trigger excessive CPU consumption by providing a crafted payload, causing significant parsing delays and a denial-of-service condition.
-- We appear to be using newer LangChain versions than the vulnerable oens and we aren't using the vulnerable method.
-XRAY-935637 - CVE-2026-0994
-- A denial-of-service vulnerability exists in google.protobuf (Python) versions up to 6.33.4 where json_format.ParseDict() allows max_recursion_depth bypass via nested google.protobuf.Any messages, causing Python recursion stack exhaustion. Severity: High (CVSS 8.2).
-- No patched version is available yet. The fix is merged to protobuf master (PR #25239) but not released to PyPI. Latest available version is 6.33.4 (still vulnerable).
-- Mitigations applied: (1) Pinned protobuf>=6.33.4 in ark-api and langchain-weather-agent, (2) Updated langchain-weather-agent from 6.33.0 to 6.33.4, (3) Documented vulnerability and upgrade path in CVE-2026-0994.md.
-- Used in services/ark-api/ark-api and samples/a2a/langchain-weather-agent via a2a-sdk dependency.
-- Will upgrade immediately when patched version is released to PyPI.
-XRAY-937734 - CVE-2026-23864
-- Resource exhaustion in React allows attackers to perform denial of service by sending crafted HTTP requests.
-- Next.js is on the last version (16.1.6) and the fix is not yet available
-- Used in docs only.
-XRAY-589047 - CVE-2024-23342
-- RESOLVED: This vulnerability has been addressed by migrating from python-jose to PyJWT and bumping ark-sdk to 0.1.57+.
-- Historical context: JFrog Xray previously matched ark-sdk:0.1.55 against PyPI registry and reported python-jose dependency from the published PyPI version. Our actual containers used a locally-built wheel with PyJWT instead of python-jose.
-- The CVE affects python-ecdsa <= 0.18.0 via python-jose dependency. We migrated ark-sdk from python-jose to PyJWT (PR #1417) to fix this vulnerability.
-- Current status: ark-sdk version bumped from 0.1.55 to 0.1.57. All containers now use PyJWT[crypto]>=2.10.0 with no dependency on python-jose or python-ecdsa.
-- This entry can be removed if Xray no longer reports this violation after the version bump.
-XRAY-944492 - CVE-2026-26996
-- minimatch < 10.2.1 has ReDoS (Regular Expression Denial of Service) via glob patterns with many consecutive `*` wildcards followed by a non-matching literal, causing O(4^N) exponential backtracking. Severity: High (CVSS 8.7).
-- Appears in ark-broker via swagger-jsdoc@6.2.8 -> glob@7.1.6 -> minimatch@3.1.3. The override in package.json pins minimatch to ^3.1.2 (latest 3.x), but 3.x is still in the affected range (< 10.2.1).
-- Not exploitable in our context: swagger-jsdoc only uses glob at startup to scan for JSDoc annotations using hardcoded patterns (`./dist/**/*.js`, `./src/**/*.ts`). No user-controlled input reaches the minimatch pattern argument. The CVE requires attacker-controlled patterns with many consecutive `*` wildcards.
-- Cannot upgrade: swagger-jsdoc@6.x depends on glob@7.x which requires minimatch@3.x API. minimatch@10.x is a complete rewrite with breaking API changes and cannot be used as a drop-in replacement. swagger-jsdoc has not released a version compatible with minimatch@10.x.
-- Used in services/ark-broker/ark-broker only.

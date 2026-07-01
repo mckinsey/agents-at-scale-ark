@@ -9,6 +9,7 @@ from .teams import router as teams_router
 from .queries import router as queries_router
 from .tools import router as tools_router
 from .mcp_servers import router as mcp_servers_router
+from .mcp_auth import router as mcp_auth_router
 from .a2a_servers import router as a2a_servers_router
 from .proxy import proxy_router
 from .memories import router as memories_router, memory_messages_router
@@ -20,10 +21,11 @@ from .api_keys import router as api_keys_router
 from .a2a_tasks import router as a2a_tasks_router
 from .resources import router as resources_router
 from .broker import router as broker_router
-from .proxy import proxy_router
 from .export import router as export_router
 from .file_preview import router as file_preview_router
 from .arkconfig import router as arkconfig_router
+from .marketplace_sources import router as marketplace_sources_router
+from .marketplace_items import router as marketplace_items_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -36,6 +38,7 @@ router.include_router(teams_router)
 router.include_router(queries_router)
 router.include_router(tools_router)
 router.include_router(mcp_servers_router)
+router.include_router(mcp_auth_router)
 router.include_router(a2a_servers_router)
 router.include_router(proxy_router)
 router.include_router(a2a_tasks_router)
@@ -52,3 +55,5 @@ router.include_router(proxy_router)
 router.include_router(export_router)
 router.include_router(file_preview_router)
 router.include_router(arkconfig_router)
+router.include_router(marketplace_sources_router)
+router.include_router(marketplace_items_router)

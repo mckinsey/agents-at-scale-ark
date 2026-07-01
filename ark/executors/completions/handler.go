@@ -194,7 +194,7 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	if conversationId == "" {
 		conversationId = query.Spec.ConversationId
 	}
-	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, h.eventing.MemoryRecorder())
+	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, ttlSecondsFromQuery(query), h.eventing.MemoryRecorder())
 	if err != nil {
 		querySpan.End()
 		return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
@@ -317,6 +317,7 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
 		}
+		defer agent.Close()
 		member = agent
 	case ToolTypeTeam:
 		var teamCRD arkv1alpha1.Team
@@ -327,13 +328,14 @@ func (h *Handler) executeMember(ctx context.Context, state *executionState) (*Ex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to make team %s: %w", targetName, err)
 		}
+		defer team.Close()
 		member = team
 	default:
 		return nil, nil, fmt.Errorf("unsupported member type: %s", targetType)
 	}
 
 	currentMessage, contextMessages := PrepareExecutionMessages(state.inputMessages, state.memoryMessages)
-	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream)
+	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream, ExecuteOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -356,7 +358,7 @@ func (h *Handler) executeModel(
 		return nil, fmt.Errorf("failed to load model %s: %w", modelName, err)
 	}
 
-	completion, err := model.ChatCompletion(ctx, allMessages, eventStream, 1)
+	completion, err := model.ChatCompletion(ctx, allMessages, eventStream, 1, nil, ToolChoiceUnset)
 	if err != nil {
 		return nil, err
 	}

@@ -12,8 +12,8 @@ import (
 )
 
 type ChatCompletionProvider interface {
-	ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
-	ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
+	ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error)
+	ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error)
 	SetOutputSchema(schema *runtime.RawExtension, schemaName string)
 }
 
@@ -32,7 +32,7 @@ type Model struct {
 	eventingRecorder  eventing.ModelRecorder
 }
 
-func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	if m.Provider == nil {
 		return nil, nil
 	}
@@ -65,9 +65,9 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
 			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model, nil)
 			return eventStream.StreamChunk(ctx, chunkWithMeta)
-		}, tools...)
+		}, tools, toolChoice)
 	} else {
-		response, err = m.Provider.ChatCompletion(ctx, messages, n, tools...)
+		response, err = m.Provider.ChatCompletion(ctx, messages, n, tools, toolChoice)
 	}
 
 	if err != nil {
@@ -115,7 +115,7 @@ func (m *Model) HealthCheck(ctx context.Context) error {
 		return provider.HealthCheck(ctx)
 	default:
 		testMessages := []Message{NewUserMessage("Hello")}
-		_, err := m.ChatCompletion(ctx, testMessages, nil, 1)
+		_, err := m.ChatCompletion(ctx, testMessages, nil, 1, nil, ToolChoiceUnset)
 		return err
 	}
 }

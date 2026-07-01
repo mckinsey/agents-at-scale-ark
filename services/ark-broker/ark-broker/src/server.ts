@@ -1,59 +1,113 @@
 import express from 'express';
 import cors from 'cors';
-import { MemoryBroker } from './memory-broker.js';
-import { CompletionChunkBroker } from './completion-chunk-broker.js';
-import { TraceBroker } from './trace-broker.js';
-import { EventBroker } from './event-broker.js';
-import { SessionsBroker } from './sessions-broker.js';
-import { createMemoryRouter } from './routes/memory.js';
-import { createStreamRouter } from './routes/stream.js';
-import { createTracesRouter } from './routes/traces.js';
-import { createEventsRouter } from './routes/events.js';
-import { createSessionsRouter } from './routes/sessions.js';
-import { createOTLPRouter } from './routes/otlp.js';
+import type {AppConfig} from './config/index.js';
+import type {Logger} from './logging/logger.js';
+import {
+  createErrorHandler,
+  notFoundHandler,
+} from './http/middleware/error-handler.js';
+import {createHttpLogger} from './http/middleware/http-logger.js';
+import {requestId} from './http/middleware/request-id.js';
+import {MemoryBroker} from './brokers/memory-broker.js';
+import type {MessageStream} from './brokers/stream/message-stream.js';
+import {type Db, pingDb} from './db/db.js';
+import type {RedisClient} from './redis/redis.js';
+import {pingRedis} from './redis/redis.js';
+import {CompletionChunkBroker} from './brokers/chunks-broker.js';
+import type {ChunkStream} from './brokers/stream/chunk-stream.js';
+import {TraceBroker} from './brokers/trace-broker.js';
+import {EventBroker} from './brokers/event-broker.js';
+import {SessionsBroker} from './brokers/sessions-broker.js';
+import {createMemoryRouter} from './http/routes/memory/index.js';
+import {createStreamRouter} from './http/routes/stream/index.js';
+import {createTracesRouter} from './http/routes/traces/index.js';
+import {createEventsRouter} from './http/routes/events/index.js';
+import {createSessionsRouter} from './http/routes/sessions/index.js';
+import {createOTLPRouter} from './http/routes/otlp.js';
+import {setupSwagger} from './http/swagger.js';
 
-const app = express();
+export type Brokers = {
+  memory: MemoryBroker;
+  chunks: CompletionChunkBroker;
+  traces: TraceBroker;
+  events: EventBroker;
+  sessions: SessionsBroker;
+};
 
-const maxMessages = process.env.MAX_MESSAGES ? parseInt(process.env.MAX_MESSAGES, 10) : 0;
-const maxChunks = process.env.MAX_CHUNKS ? parseInt(process.env.MAX_CHUNKS, 10) : 0;
-const maxSpans = process.env.MAX_SPANS ? parseInt(process.env.MAX_SPANS, 10) : 0;
-const maxEvents = process.env.MAX_EVENTS ? parseInt(process.env.MAX_EVENTS, 10) : 0;
+export type AppBundle = {
+  app: express.Express;
+  brokers: Brokers;
+};
 
-const memory = new MemoryBroker(process.env.MEMORY_FILE_PATH, maxMessages);
-const chunks = new CompletionChunkBroker(process.env.STREAM_FILE_PATH, maxChunks);
-const traces = new TraceBroker(process.env.TRACE_FILE_PATH, maxSpans);
-const events = new EventBroker(process.env.EVENT_FILE_PATH, maxEvents);
-const sessions = new SessionsBroker(process.env.SESSIONS_FILE_PATH);
+export function buildApp(deps: {
+  config: AppConfig;
+  logger: Logger;
+  version: string;
+  messageStream: MessageStream;
+  chunkStream: ChunkStream;
+  db?: Db;
+  redis?: RedisClient;
+}): AppBundle {
+  const {config, logger, version, messageStream, chunkStream, db, redis} = deps;
+  const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+  const memory = new MemoryBroker(messageStream);
+  const chunks = new CompletionChunkBroker(chunkStream);
+  const traces = new TraceBroker(
+    logger.child({broker: 'traces'}),
+    config.persistence.traceFilePath,
+    config.limits.maxSpans
+  );
+  const events = new EventBroker(
+    logger.child({broker: 'events'}),
+    config.persistence.eventFilePath,
+    config.limits.maxEvents
+  );
+  const sessions = new SessionsBroker(
+    logger.child({broker: 'sessions'}),
+    config.persistence.sessionsFilePath
+  );
 
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-  next();
-});
+  logger.info('brokers initialized');
 
-app.get('/health', (_req, res) => {
-  res.status(200).send('OK');
-});
+  app.use(cors());
+  app.use(express.json({limit: '10mb'}) as express.RequestHandler);
+  app.use(requestId);
+  app.use(createHttpLogger(logger));
 
-// Sessions broker is passed to events and memory routes so they can enrich
-// the sessions view with incoming event and message data
-app.use('/', createMemoryRouter(memory, sessions));
-app.use('/stream', createStreamRouter(chunks));
-app.use('/traces', createTracesRouter(traces));
-app.use('/events', createEventsRouter(events, sessions));
-app.use('/sessions', createSessionsRouter(sessions));
-app.use('/v1', createOTLPRouter(traces));
+  app.get('/health', (_req, res) => {
+    res.status(200).send('OK');
+  });
 
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+  app.get('/readyz', async (_req, res) => {
+    try {
+      await Promise.all([
+        db ? pingDb(db) : Promise.resolve(),
+        redis ? pingRedis(redis) : Promise.resolve(),
+      ]);
+      res.status(200).send('OK');
+    } catch (err) {
+      logger.warn({err}, 'readyz ping failed');
+      res.status(503).send('Service Unavailable');
+    }
+  });
 
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
+  app.use('/', createMemoryRouter(memory, sessions));
+  app.use('/stream', createStreamRouter(chunks));
+  app.use('/traces', createTracesRouter(traces));
+  app.use('/events', createEventsRouter(events, sessions));
+  app.use('/sessions', createSessionsRouter(sessions));
+  app.use('/v1', createOTLPRouter(traces, logger.child({route: 'otlp'})));
 
-export default app;
-export { memory, chunks, traces, events, sessions };
+  setupSwagger(app, {
+    logger,
+    version,
+    host: config.server.host,
+    port: config.server.port,
+  });
+
+  app.use(createErrorHandler({includeStack: config.nodeEnv === 'development'}));
+  app.use(notFoundHandler);
+
+  return {app, brokers: {memory, chunks, traces, events, sessions}};
+}

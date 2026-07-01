@@ -53,10 +53,10 @@ spec:
     - type: http
       name: web-search
     - type: mcp
-      name: mcp-filesystem-write-file
+      name: file-gateway-write-file
     - type: mcp
-      name: mcp-filesystem-create-directory
+      name: file-gateway-create-directory
     - type: mcp
-      name: mcp-filesystem-list-directory
+      name: file-gateway-list-directory
     - type: mcp
-      name: mcp-filesystem-get-file-info
+      name: file-gateway-get-file-info

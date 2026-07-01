@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
+import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -71,6 +72,8 @@ export const MarketplaceSection = forwardRef<
           </AlertDescription>
         </Alert>
       )}
+
+      {!isPending && <MarketplaceSourceErrors errors={data?.sourceErrors} />}
 
       {isPending && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">

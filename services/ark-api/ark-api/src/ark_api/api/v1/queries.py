@@ -1,12 +1,15 @@
 """API routes for Query resources."""
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.queries import (
     QueryResponse,
@@ -140,13 +143,15 @@ def _creation_timestamp_key(item_dict: dict):
 @router.get("", response_model=QueryListResponse)
 @handle_k8s_errors(operation="list", resource_type="query")
 async def list_queries(
+    request: Request,
     namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(25, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match over query input text"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> QueryListResponse:
     """List queries in a namespace with pagination and text search."""
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         result = await ark_client.queries.a_list()
         raw_items = [item.to_dict() for item in result]
 
@@ -176,11 +181,13 @@ async def list_queries(
 @router.post("", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="query")
 async def create_query(
+    request: Request,
     query: QueryCreateRequest,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> QueryDetailResponse:
     """Create a new query."""
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Determine input type and build spec accordingly
         spec = {
             "type": getattr(query, 'type', 'user')
@@ -238,9 +245,9 @@ async def create_query(
 
 @router.get("/{query_name}", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="query")
-async def get_query(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> QueryDetailResponse:
+async def get_query(request: Request, query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> QueryDetailResponse:
     """Get a specific query."""
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         result = await ark_client.queries.a_get(query_name)
         
         return query_to_detail_response(result.to_dict())
@@ -249,12 +256,14 @@ async def get_query(query_name: str, namespace: Optional[str] = Query(None, desc
 @router.put("/{query_name}", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="query")
 async def update_query(
+    request: Request,
     query_name: str,
     query: QueryUpdateRequest,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> QueryDetailResponse:
     """Update a specific query."""
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get current query
         current = await ark_client.queries.a_get(query_name)
         spec = current.to_dict()["spec"]
@@ -299,16 +308,16 @@ async def update_query(
 
 @router.patch("/{query_name}/cancel", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="query")
-async def cancel_query(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> QueryDetailResponse:
+async def cancel_query(request: Request, query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> QueryDetailResponse:
     """Cancel a specific query by setting spec.cancel to true."""
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         patch = {"spec": {"cancel": True}}
         updated = await ark_client.queries.a_patch(query_name, patch)
         return query_to_detail_response(updated.to_dict())
 
 @router.delete("/{query_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="query")
-async def delete_query(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> None:
+async def delete_query(request: Request, query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """Delete a specific query."""
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.queries.a_delete(query_name)
