@@ -76,11 +76,15 @@ spec:
     try:
     - script:
         timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
         content: |
+          QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
           COUNT=0
           for i in $(seq 1 10); do
             COUNT=$(bash ../shared/psql-query.sh \
-              "SELECT count(*) FROM events WHERE query_id='events-broker-query' AND expires_at IS NOT NULL;" \
+              "SELECT count(*) FROM events WHERE query_id='${QUERY_UID}' AND expires_at IS NOT NULL;" \
               | tr -d ' \n')
             [ "${COUNT}" -ge 1 ] && break
             sleep 1
@@ -94,12 +98,16 @@ spec:
     try:
     - script:
         timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
         content: |
+          QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
           BROKER_NS=$(kubectl get deployment --all-namespaces \
             -o jsonpath='{range .items[?(@.metadata.name=="ark-broker")]}{.metadata.namespace}{end}' 2>/dev/null)
           BROKER_NS=${BROKER_NS:-default}
           COUNT=$(kubectl exec -n "$BROKER_NS" deployment/ark-broker -- \
-            node -e 'const h=require("http");h.get("http://localhost:8080/events/events-broker-query",r=>{let d="";r.on("data",c=>{d+=c});r.on("end",()=>{const b=JSON.parse(d);process.stdout.write(String(b.items?b.items.length:0));process.exit(b.items&&b.items.length>=1?0:1)})}).on("error",e=>{process.stderr.write(e.message);process.exit(1)})')
+            node -e "const h=require('http');h.get('http://localhost:8080/events/${QUERY_UID}',r=>{let d='';r.on('data',c=>{d+=c});r.on('end',()=>{const b=JSON.parse(d);process.stdout.write(String(b.items?b.items.length:0));process.exit(b.items&&b.items.length>=1?0:1)})}).on('error',e=>{process.stderr.write(e.message);process.exit(1)})")
           echo "HTTP events count: ${COUNT}"
           [ "${COUNT}" -ge 1 ] || { echo "expected at least 1 event via HTTP, got ${COUNT}"; exit 1; }
     catch:
