@@ -36,7 +36,7 @@ func TestOperationTracker_InitializeQueryContext(t *testing.T) {
 	assert.NotNil(t, qd)
 	assert.Equal(t, "test-query", qd.QueryName)
 	assert.Equal(t, "test-ns", qd.Namespace)
-	assert.Equal(t, "test-uid", qd.QueryID)
+	assert.Equal(t, "test-query", qd.QueryID)
 	assert.Equal(t, "session-123", qd.SessionID)
 	assert.Equal(t, query, qd.Query)
 }
@@ -112,7 +112,7 @@ func TestOperationTracker_Start(t *testing.T) {
 	assert.NotNil(t, event.Data)
 	data, ok := (*event.Data).(map[string]string)
 	assert.True(t, ok)
-	assert.Equal(t, "test-uid", data["queryId"])
+	assert.Equal(t, "test-query", data["queryId"])
 	assert.Equal(t, "test-query", data["queryName"])
 	assert.Equal(t, "test-ns", data["queryNamespace"])
 	assert.Equal(t, "session-123", data["sessionId"])

@@ -52,7 +52,7 @@ func (ot *OperationTracker) InitializeQueryContext(ctx context.Context, query *a
 
 	qd := &QueryDetails{
 		Query:          query,
-		QueryID:        string(query.UID),
+		QueryID:        query.Name,
 		QueryName:      query.Name,
 		Namespace:      query.Namespace,
 		SessionID:      sessionID,
