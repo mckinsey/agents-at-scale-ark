@@ -4,6 +4,7 @@ import subprocess
 from typing import List, Optional, Tuple
 
 import pexpect
+import yaml
 
 # Generated model manifests carry ${VAR} placeholders meant to be substituted
 # before apply; the model webhook validates baseUrl is a valid HTTPS URL.
@@ -100,20 +101,24 @@ class GenerateHelper:
             cwd=project_dir,
         )
 
-    def dry_run_apply(self, manifest_path: str) -> Tuple[bool, str]:
+    def dry_run_apply(self, manifest_path: str) -> Tuple[bool, object]:
+        """Server-side dry-run apply; on success returns the post-mutation
+        object, on failure returns the error string."""
         with open(manifest_path) as f:
             rendered = string.Template(f.read()).safe_substitute(RENDER_ENV)
         try:
             result = subprocess.run(
                 [
                     "kubectl", "apply", "--dry-run=server",
-                    "-n", self.namespace, "-f", "-",
+                    "-n", self.namespace, "-f", "-", "-o", "yaml",
                 ],
                 input=rendered, capture_output=True, text=True, timeout=60,
             )
         except subprocess.TimeoutExpired:
             return False, "kubectl apply timed out"
-        return result.returncode == 0, (result.stderr or result.stdout)
+        if result.returncode != 0:
+            return False, (result.stderr or result.stdout)
+        return True, yaml.safe_load(result.stdout)
 
     def apply(self, manifest_path: str) -> Tuple[bool, str]:
         ok, out, err = self._run(

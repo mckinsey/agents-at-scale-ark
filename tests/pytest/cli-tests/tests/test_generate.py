@@ -17,6 +17,15 @@ PREREQ_SECRETS = [
 ]
 PREREQ_AGENT = "sample-agent"
 
+# The mutating webhook tags any deprecated field it migrates with an
+# annotation under this prefix; see ark/internal/annotations/annotations.go.
+MIGRATION_WARNING_PREFIX = "ark.mckinsey.com/migration-warning-"
+
+
+def _migration_warnings(obj: dict) -> dict:
+    anns = obj.get("metadata", {}).get("annotations") or {}
+    return {k: v for k, v in anns.items() if k.startswith(MIGRATION_WARNING_PREFIX)}
+
 
 def _load_docs(path: Path):
     with open(path) as f:
@@ -86,21 +95,21 @@ class TestArkGenerate:
     def test_generated_model_uses_provider_field(self, provider):
         proj = self._project(f"model-{provider}", provider)
         spec = _model_spec(proj / "models" / "default.yaml")
-        assert "type" not in spec, "model still uses deprecated spec.type"
         assert spec.get("provider"), "model is missing spec.provider"
 
     def test_generated_azure_model_nests_apikey_under_auth(self):
         proj = self._project("model-azure", "azure")
         spec = _model_spec(proj / "models" / "default.yaml")
         azure = spec["config"]["azure"]
-        assert "apiKey" not in azure, "azure apiKey should not sit directly under config.azure"
         assert azure["auth"]["apiKey"], "azure apiKey should be nested under config.azure.auth"
 
     @pytest.mark.parametrize("provider", MODEL_PROVIDERS)
-    def test_generated_model_applies_to_cluster(self, provider):
+    def test_generated_model_applies_without_deprecation(self, provider):
         proj = self._project(f"model-{provider}", provider)
-        ok, msg = self.helper.dry_run_apply(str(proj / "models" / "default.yaml"))
-        assert ok, f"server-side apply of generated {provider} model failed: {msg}"
+        ok, applied = self.helper.dry_run_apply(str(proj / "models" / "default.yaml"))
+        assert ok, f"server-side apply of generated {provider} model failed: {applied}"
+        warnings = _migration_warnings(applied)
+        assert not warnings, f"generator emitted deprecated fields: {warnings}"
 
     # -- ark generate query ----------------------------------------------------
 
@@ -111,12 +120,13 @@ class TestArkGenerate:
 
         path = proj / "queries" / "genq-query.yaml"
         spec = _query_spec(path)
-        assert "targets" not in spec, "query still uses deprecated spec.targets"
         assert spec["target"]["type"] == "agent"
         assert spec["target"]["name"]
 
-        ok, msg = self.helper.dry_run_apply(str(path))
-        assert ok, f"server-side apply of generated query failed: {msg}"
+        ok, applied = self.helper.dry_run_apply(str(path))
+        assert ok, f"server-side apply of generated query failed: {applied}"
+        warnings = _migration_warnings(applied)
+        assert not warnings, f"generator emitted deprecated fields: {warnings}"
 
     # -- ark generate agent ----------------------------------------------------
 
@@ -131,11 +141,12 @@ class TestArkGenerate:
         assert query_path.exists()
 
         spec = _query_spec(query_path)
-        assert "targets" not in spec
         assert spec["target"]["type"] == "agent"
 
-        ok, msg = self.helper.dry_run_apply(str(agent_path))
-        assert ok, f"server-side apply of generated agent failed: {msg}"
+        ok, applied = self.helper.dry_run_apply(str(agent_path))
+        assert ok, f"server-side apply of generated agent failed: {applied}"
+        warnings = _migration_warnings(applied)
+        assert not warnings, f"generator emitted deprecated fields: {warnings}"
 
     # -- ark generate team -----------------------------------------------------
 
@@ -155,8 +166,9 @@ class TestArkGenerate:
         assert team_spec["members"], "team should have at least one member"
 
         spec = _query_spec(query_path)
-        assert "targets" not in spec
         assert spec["target"]["type"] == "team"
 
-        ok, msg = self.helper.dry_run_apply(str(team_path))
-        assert ok, f"server-side apply of generated team failed: {msg}"
+        ok, applied = self.helper.dry_run_apply(str(team_path))
+        assert ok, f"server-side apply of generated team failed: {applied}"
+        warnings = _migration_warnings(applied)
+        assert not warnings, f"generator emitted deprecated fields: {warnings}"
