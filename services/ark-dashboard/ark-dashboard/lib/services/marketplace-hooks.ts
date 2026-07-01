@@ -112,14 +112,11 @@ export function useUninstallMarketplaceItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => marketplaceService.uninstallMarketplaceItem(id, namespace),
-    onSuccess: (_, id) => {
-      toast.success('Uninstallation started', {
-        description: `Uninstalling marketplace item ${id}`,
-      });
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['marketplace'] });
     },
     onError: error => {
-      toast.error('Uninstallation failed', {
+      toast.error('Failed to load uninstall command', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     },
