@@ -63,9 +63,16 @@ The Bedrock API key SHALL be handled as a secret consistent with other providers
 - **WHEN** the executor builds the runtime config representation of a Bedrock Model that has an `apiKey`
 - **THEN** the API key value SHALL NOT appear in that config representation
 
-#### Scenario: Empty apiKey value treated as unset
-- **WHEN** a Bedrock Model resolves `apiKey` to an empty string
-- **THEN** the executor SHALL treat it as if no API key were configured and fall back to IAM or the default credential chain
+### Requirement: Unresolvable configured apiKey fails loud
+When a Bedrock Model does not configure an `apiKey` (no key block), the executor SHALL fall back to IAM or the default credential chain. When a Model *does* configure an `apiKey` but it cannot be resolved — a resolution error, a missing Secret, or an empty value — the executor SHALL return an error rather than silently fall back, so the misconfiguration is not masked.
+
+#### Scenario: No apiKey configured falls back
+- **WHEN** a Bedrock Model has no `apiKey` block configured
+- **THEN** the executor SHALL fall back to IAM or the default credential chain without error
+
+#### Scenario: Configured apiKey that resolves empty errors
+- **WHEN** a Bedrock Model configures an `apiKey` whose ValueSource resolves to an error, a missing Secret, or an empty string
+- **THEN** the executor SHALL return an error and SHALL NOT fall back to IAM or the default credential chain
 
 ### Requirement: Model-creation surfaces expose the Bedrock API key option
 The ark-cli Bedrock model creation flow and the dashboard Bedrock model form SHALL allow specifying an API key as an alternative to IAM credentials, and SHALL NOT require IAM credentials when an API key is provided.

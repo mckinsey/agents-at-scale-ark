@@ -6,7 +6,7 @@ Bedrock authentication in Ark flows through three layers in the completions exec
 2. **Config resolution** — `loadBedrockConfig` (`ark/executors/completions/model_bedrock.go`): resolves each `ValueSource` (including Secret refs) to a string and calls `NewBedrockModel(...)`.
 3. **Client construction** — `BedrockModel.initClient` (`ark/executors/completions/provider_bedrock.go:44-69`): if access key + secret are present → `credentials.NewStaticCredentialsProvider(...)`; otherwise `config.LoadDefaultConfig(...)`. Then `bedrockruntime.NewFromConfig(cfg)`.
 
-AWS Bedrock API keys are bearer tokens that authenticate via `Authorization: Bearer <key>`, overriding SigV4 signing. The vendored `aws-sdk-go-v2 v1.42.0` already supports this: `bedrockruntime.Options.BearerAuthTokenProvider bearer.TokenProvider` (`options.go:42`) and `github.com/aws/smithy-go/auth/bearer` (in `go.mod` at v1.27.1). No new dependency.
+AWS Bedrock API keys are bearer tokens that authenticate via `Authorization: Bearer <key>`, overriding SigV4 signing. The vendored `aws-sdk-go-v2 v1.42.0` already supports this — no new dependency. Verified in the module cache: `bedrockruntime.Options.BearerAuthTokenProvider bearer.TokenProvider` (`options.go:42`) and `bearer.StaticTokenProvider` from `github.com/aws/smithy-go/auth/bearer` (present at `smithy-go@v1.27.1`, matching `go.mod`). The implementation PR should confirm the same via a compiling import.
 
 **Auth scheme selection (verified against SDK source `auth.go`/`options.go`):** every Bedrock operation advertises two auth schemes in a fixed order — `[SigV4, HTTPBearer]` — and the resolver picks the *first* scheme whose identity resolver is non-nil (`selectScheme`). SigV4's identity resolver is non-nil whenever `Options.Credentials != nil` (`getSigV4IdentityResolver`). Because `config.LoadDefaultConfig` populates `Credentials` from the ambient AWS chain (env vars, `~/.aws`, or an attached IAM role) even when no credentials are set on the Model, SigV4 wins by default and a bearer token is silently ignored. Setting `BearerAuthTokenProvider` alone does **not** suppress SigV4. AWS's own env-var path confirms this: `resolveEnvBearerToken` sets both the token provider *and* `AuthSchemePreference = ["httpBearerAuth"]`.
 
@@ -54,10 +54,26 @@ Branch order handles IAM configured on the Model; `AuthSchemePreference` handles
 **Rationale:** setting `apiKey` is deliberate; silently preferring IAM would surprise. Chosen over "mutually exclusive / reject both" (breaks the additive guarantee) and "IAM wins" (counterintuitive).
 
 ### Decision: Treat apiKey as a secret end-to-end
-`apiKey` is an optional `*ValueSource` resolvable from a Secret, excluded from `BedrockModel.BuildConfig()` and never written to status or logs. Empty-string resolution is treated as unset. Region and `baseUrl` still apply on the bearer path (Bedrock is regional).
+`apiKey` is an optional `*ValueSource` resolvable from a Secret, excluded from `BedrockModel.BuildConfig()` and never written to status or logs. "Unset" means `config.APIKey == nil` (no key block) — that path falls back to IAM/default chain. A *configured* key that resolves empty is a misconfiguration, not "unset" — handled by the fail-loud decision below. Region and `baseUrl` still apply on the bearer path (Bedrock is regional).
 
 ### Decision: Non-blocking webhook warning when both apiKey and IAM are set
 `DefaultModel` (`ark/internal/validation/defaults.go`) adds a warning annotation via the existing `annotations.MigrationWarningPrefix` channel noting the API key takes precedence. Advisory only — the resource is still accepted. Reuses the established Model warning pattern (same as `spec.type → spec.provider`); chosen over silent behavior (confusing) and hard rejection (breaks the additive guarantee).
+
+Concretely:
+- Annotation key: `annotations.MigrationWarningPrefix + "bedrock-auth"`
+- Message: `"both apiKey and IAM credentials are set for the bedrock provider - apiKey takes precedence and the IAM credentials are ignored"`
+
+### Decision: Fail loud when a configured apiKey cannot be resolved
+The existing `resolveOptionalValue` helper swallows resolution errors and returns `""`, which for optional fields like `region` is harmless. For `apiKey` this is unsafe: a configured-but-unresolvable key (e.g. a missing Secret) would silently become empty and fall back to IAM or the default chain, masking a misconfiguration behind a confusing downstream auth failure. When `config.APIKey != nil` (the user configured a key) but it resolves to an error or empty value, `loadBedrockConfig` SHALL return an error rather than fall back. When `config.APIKey == nil` (not configured), behavior is unchanged. This diverges deliberately from the swallow-errors pattern used by the other optional Bedrock fields.
+
+## Testing
+
+The spec scenarios are the acceptance contract; each maps to at least one test:
+
+- **Unit — config resolution** (`model_bedrock.go`): `apiKey` populates `BedrockModel.APIKey`, including from a Secret ValueSource; no `apiKey` block falls back without error; a configured `apiKey` that resolves to an error/missing-Secret/empty returns an error (fail-loud); `BuildConfig()` omits the key.
+- **Unit — auth selection** (`provider_bedrock.go`): `apiKey` set → bearer path with both provider and `AuthSchemePreference`; IAM only → static credentials; neither → default chain; both → bearer (precedence).
+- **Unit — webhook** (`defaults.go` / `model_webhook_test.go`): warning annotation present when both auth methods set, absent otherwise; each config shape (apiKey only / from Secret / IAM only / neither) is accepted.
+- **e2e (chainsaw, mock Bedrock)**: an `apiKey` Model completes a query; the outgoing request carries `Authorization: Bearer …` and is not SigV4-signed, including when ambient AWS credentials exist in the executor environment; an IAM-configured Model path is unchanged.
 
 ## Migration Plan
 
