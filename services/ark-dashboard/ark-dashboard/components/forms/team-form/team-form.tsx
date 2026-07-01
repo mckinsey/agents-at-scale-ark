@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
-import { PanelToggleButton } from '@/components/common/panel-toggle-button';
-import { ResourceSwitcherBar } from '@/components/common/resource-switcher-bar';
+import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import { ChevronLeft, Warning } from '@/components/icons';
+import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
@@ -32,7 +31,6 @@ import { useTeamForm } from './use-team-form';
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
@@ -215,106 +213,38 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const displayName = team?.name || '';
 
   return (
-    <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col overflow-hidden">
-      <header className="flex flex-none flex-col gap-4 pb-5">
-        <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href="/teams"
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              Teams
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              {displayName}
-            </span>
-          </nav>
-          <div className="flex items-center gap-3">
-            <NamespacedLink href="/teams">
-              <Button variant="outline">Back</Button>
-            </NamespacedLink>
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={saving || !hasChanges || readOnlyMode}>
-              {saving && <Spinner className="mr-2 h-4 w-4" />}
-              Save changes
-            </Button>
-          </div>
+    <ResourceStudioLayout
+      listHref="/teams"
+      listLabel="Teams"
+      displayName={displayName}
+      saving={saving}
+      hasChanges={hasChanges}
+      readOnlyMode={readOnlyMode}
+      onSave={form.handleSubmit(onSubmit)}
+      switcherValue={teamName}
+      switcherPlaceholder="Select team"
+      switcherItems={allTeams}
+      switcherLoading={teamsLoading}
+      onSwitcherSelect={value => push(`/teams/${encodeURIComponent(value)}`)}
+      showYaml={showYaml}
+      onToggleYaml={() => setShowYaml(!showYaml)}
+      yamlContent={
+        <YamlViewer yaml={teamYaml} fileName={team?.name || 'team'} />
+      }
+      formContent={
+        <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+          <Form {...form}>{formSections}</Form>
         </div>
-        <div className="flex items-end justify-between">
-          <h1 className="text-fg-primary text-xl leading-7">{displayName}</h1>
-          {hasChanges && (
-            <div className="flex items-center gap-1">
-              <IconShell size="sm" className="text-status-warning opacity-100">
-                <Warning />
-              </IconShell>
-              <span className="text-fg-primary text-sm leading-5 tracking-[-0.112px]">
-                You have unsaved changes
-              </span>
-            </div>
-          )}
-        </div>
-      </header>
-
-      <div
-        className={`relative flex min-h-0 flex-1 overflow-hidden ${
-          isLeftPanelCollapsed ? '' : 'gap-6'
-        }`}>
-        <div
-          className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
-            isLeftPanelCollapsed ? 'w-0' : 'flex-1'
-          }`}>
-          {!isLeftPanelCollapsed && (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <ResourceSwitcherBar
-                value={teamName}
-                placeholder="Select team"
-                items={allTeams}
-                loading={teamsLoading}
-                onSelect={value =>
-                  push(`/teams/${encodeURIComponent(value)}`)
-                }
-                showYaml={showYaml}
-                onToggleYaml={() => setShowYaml(!showYaml)}
-              />
-              <ScrollArea className="h-0 min-h-0 flex-1">
-                {showYaml ? (
-                  <YamlViewer yaml={teamYaml} fileName={team?.name || 'team'} />
-                ) : (
-                  <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
-                    <Form {...form}>{formSections}</Form>
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          )}
-        </div>
-
-        <PanelToggleButton
-          isCollapsed={isLeftPanelCollapsed}
-          onToggle={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+      }
+      chatPanel={
+        <EmbeddedChatPanel
+          name={teamName || ''}
+          type="team"
+          strategy={team?.strategy}
+          selectorAgentName={team?.selector?.agent ?? undefined}
+          graphEdges={team?.graph?.edges}
         />
-
-        <div
-          className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
-            isLeftPanelCollapsed ? 'w-full' : 'flex-1'
-          }`}>
-          <EmbeddedChatPanel
-            name={teamName || ''}
-            type="team"
-            strategy={team?.strategy}
-            selectorAgentName={team?.selector?.agent ?? undefined}
-            graphEdges={team?.graph?.edges}
-          />
-        </div>
-      </div>
-    </div>
+      }
+    />
   );
 }

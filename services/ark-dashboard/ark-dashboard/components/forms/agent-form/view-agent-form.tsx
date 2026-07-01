@@ -3,12 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
-import { PanelToggleButton } from '@/components/common/panel-toggle-button';
-import { ResourceSwitcherBar } from '@/components/common/resource-switcher-bar';
+import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import { ChevronLeft, Warning } from '@/components/icons';
-import { NamespacedLink } from '@/components/namespaced-link';
-import { Button } from '@/components/ui/button';
 import {
   FieldDescription,
   FieldError,
@@ -16,11 +12,9 @@ import {
   FieldTitle,
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
-import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import { PromptEditor } from '@/components/ui/prompt-editor';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -50,7 +44,6 @@ export function ViewAgentForm({
 }: Readonly<AgentFormProps>) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
@@ -139,81 +132,26 @@ export function ViewAgentForm({
   const displayName = agent?.name || '';
 
   return (
-    <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col overflow-hidden">
-      <header className="flex flex-none flex-col gap-4 pb-5">
-        <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href="/agents"
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              Agents
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              {displayName}
-            </span>
-          </nav>
-          <div className="flex items-center gap-3">
-            <NamespacedLink href="/agents">
-              <Button variant="outline">Back</Button>
-            </NamespacedLink>
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={saving || !hasChanges || readOnlyMode}>
-              {saving && <Spinner className="mr-2 h-4 w-4" />}
-              Save changes
-            </Button>
-          </div>
-        </div>
-        <div className="flex items-end justify-between">
-          <h1 className="text-fg-primary text-xl leading-7">{displayName}</h1>
-          {hasChanges && (
-            <div className="flex items-center gap-1">
-              <IconShell size="sm" className="text-status-warning opacity-100">
-                <Warning />
-              </IconShell>
-              <span className="text-fg-primary text-sm leading-5 tracking-[-0.112px]">
-                You have unsaved changes
-              </span>
-            </div>
-          )}
-        </div>
-      </header>
-
-      <div
-        className={`relative flex min-h-0 flex-1 overflow-hidden ${
-          isLeftPanelCollapsed ? '' : 'gap-6'
-        }`}>
-        <div
-          className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
-            isLeftPanelCollapsed ? 'w-0' : 'flex-1'
-          }`}>
-          {!isLeftPanelCollapsed && (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <ResourceSwitcherBar
-                value={agentName}
-                placeholder="Select agent"
-                items={allAgents}
-                loading={agentsLoading}
-                onSelect={value => push(`/agents/${value}`)}
-                showYaml={showYaml}
-                onToggleYaml={() => setShowYaml(!showYaml)}
-              />
-              <ScrollArea className="h-0 min-h-0 flex-1">
-                {showYaml ? (
-                  <YamlViewer
-                    yaml={agentYaml}
-                    fileName={agent?.name || 'agent'}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+    <ResourceStudioLayout
+      listHref="/agents"
+      listLabel="Agents"
+      displayName={displayName}
+      saving={saving}
+      hasChanges={hasChanges}
+      readOnlyMode={readOnlyMode}
+      onSave={form.handleSubmit(onSubmit)}
+      switcherValue={agentName}
+      switcherPlaceholder="Select agent"
+      switcherItems={allAgents}
+      switcherLoading={agentsLoading}
+      onSwitcherSelect={value => push(`/agents/${value}`)}
+      showYaml={showYaml}
+      onToggleYaml={() => setShowYaml(!showYaml)}
+      yamlContent={
+        <YamlViewer yaml={agentYaml} fileName={agent?.name || 'agent'} />
+      }
+      formContent={
+        <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
                     <Form {...form}>
                       <FormField
                         control={form.control}
@@ -387,25 +325,9 @@ export function ViewAgentForm({
                         <SkillsDisplaySection skills={agent?.skills || []} />
                       )}
                     </Form>
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          )}
         </div>
-
-        <PanelToggleButton
-          isCollapsed={isLeftPanelCollapsed}
-          onToggle={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
-        />
-
-        <div
-          className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
-            isLeftPanelCollapsed ? 'w-full' : 'flex-1'
-          }`}>
-          <EmbeddedChatPanel name={agentName || ''} type="agent" />
-        </div>
-      </div>
-    </div>
+      }
+      chatPanel={<EmbeddedChatPanel name={agentName || ''} type="agent" />}
+    />
   );
 }
