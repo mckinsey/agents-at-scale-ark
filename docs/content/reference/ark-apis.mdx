@@ -16,7 +16,7 @@ The **authoritative, always-current reference is the built-in OpenAPI spec** (`/
 The API is served by the `ark-api` service. To reach it:
 
 - **In-cluster**: `http://ark-api.<namespace>.svc.cluster.local` (default port 80).
-- **Local dev**: `kubectl port-forward svc/ark-api 8000:80`, then use `http://localhost:8000`. Or run `ark routes` / `make routes` to get a gateway URL such as `ark-api.default.127.0.0.1.nip.io:8000`.
+- **Local dev**: `kubectl port-forward svc/ark-api 8000:80`, then use `http://localhost:8000`. Or run `ark routes` / `devspace run routes` to get a gateway URL such as `ark-api.default.127.0.0.1.nip.io:8000`.
 
 Open the Swagger UI at `/docs` to browse and try every endpoint:
 
