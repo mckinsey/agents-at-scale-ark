@@ -13,9 +13,18 @@ Ark's control plane runs on Kubernetes and inherits its scaling primitives. The 
 
 ### Controller
 
-The controller reconciles all Ark custom resources across the cluster. It runs with leader election enabled by default, so multiple replicas can be deployed for availability — only the leader actively reconciles. Reconciler concurrency uses controller-runtime defaults and is not currently configurable via Helm values.
+The controller reconciles all Ark custom resources across the cluster. It runs with leader election enabled by default, so multiple replicas can be deployed for availability — only the leader actively reconciles.
 
 The controller's default resource allocation is intentionally conservative. Production deployments with a high volume of concurrent queries or large numbers of resources should increase CPU and memory limits based on observed usage.
+
+#### Query concurrency tuning
+
+The Query controller exposes two knobs via Helm values under `controllerManager`:
+
+- **`maxConcurrentQueries`** (default `32`) — caps the number of Query executions running concurrently as in-process goroutines. When the cap is reached, the reconciler requeues so the backlog stays in the workqueue instead of the controller heap. This bounds memory under burst load. Set to `0` to disable the cap (not recommended — susceptible to OOM under burst load).
+- **`maxConcurrentReconciles`** (default `4`) — caps the number of Query reconciles running in parallel. The workqueue dedupes per-key, so this only enables concurrency *across different* Query objects, not faster repeats of the same one. Set to `0` to use the controller-runtime default (1).
+
+The two knobs are independent and both effective at the defaults. `maxConcurrentReconciles` controls how fast queued queries are picked up; `maxConcurrentQueries` bounds how many of them can be in-flight at once. Raise both together if the controller has spare CPU/memory headroom and queue depth is growing. Lower `maxConcurrentQueries` if the controller pod is near its memory limit during bursts.
 
 ### API and dashboard
 
