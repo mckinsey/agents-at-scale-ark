@@ -1,39 +1,35 @@
 ---
 title: Query Execution Flow
-description: How queries are processed through the ARK system
+description: How Ark turns a Query into an answer, from creation to a written response
 ---
 
 # Query Execution Flow
 
-This page explains how a Query is executed in the ARK platform, from creation to completion.
+A `Query` is how you ask an agent, team, model, or tool to do something. This page traces what happens after you create one — from the controller picking it up, through execution on an engine, to the response written back to the resource.
 
-## Overview
+## At a glance
 
-When you create a Query resource, it triggers a hierarchical execution flow:
+Every query moves through four stages:
 
-1. **Query** - Created by user with input and targets
-2. **Query Controller** - Orchestrates the execution
-3. **Agents or Teams** - Process the query
-   - Teams use strategies to coordinate multiple agents
-   - Agents execute prompts against models
-4. **Models** - Generate responses and can invoke:
-   - Tools - Custom functions
-   - MCP Servers - External service integrations
-5. **Optional Components**:
-   - Memory - Provides conversation context
-   - Execution Engines - Custom implementations for queries, agents, or teams
+1. **Declare** — you create a `Query` with an input and a target.
+2. **Dispatch** — the controller resolves the target and sends it to an execution engine over A2A.
+3. **Execute** — the engine runs the agent or team: model calls, tools, memory, and streaming.
+4. **Respond** — the result is written to the query's status and saved to memory.
 
-## Execution Steps
+The rest of this page covers each stage in detail. For how this maps onto Ark's deployment and storage backends (etcd or PostgreSQL), see [Core Architecture](/reference/core-architecture).
 
-### 1. Query Creation
+## 1. Declare the query
 
-A user creates a Query resource specifying:
-- **input**: The user's question or request
-- **targets**: One or more Agents or Teams
-- **parameters** (optional): Values to use in the query or pass to agent parameters via queryParameterRef
-- **memory** (optional): Reference to a Memory resource
-- **sessionId** (optional): Conversation session identifier
-- **serviceAccount** (optional): For RBAC isolation
+A `Query` specifies what to run and how:
+
+| Field | Purpose |
+| --- | --- |
+| `input` | The user's question or request. |
+| `target` | The agent, team, model, or tool to run — or a `selector` to match one by labels. |
+| `parameters` *(optional)* | Values used in the input or passed to agent parameters via `queryParameterRef`. |
+| `memory` *(optional)* | A `Memory` resource for conversation context. |
+| `sessionId` *(optional)* | Conversation session identifier. |
+| `serviceAccount` *(optional)* | Service account to run under, for RBAC isolation. |
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -52,80 +48,76 @@ spec:
     name: conversation-memory
 ```
 
-### 2. Controller Processing
+## 2. The controller dispatches it
 
-The Query controller detects the new Query and:
-1. Resolves the target (agent, team, model, or tool) from the spec or label selector
-2. If the target agent has an `executionEngine` (A2A or named engine), the controller executes it directly since these agents proxy to external services
-3. Otherwise, sends an A2A `SendMessage` to the completions engine with the target and query reference
-4. Waits for the response and writes the result to the Query status
+The Query controller picks up the new resource and:
 
-### 3. Completions Engine Execution
+1. **Resolves the target** — the agent, team, model, or tool named in the spec, or the first match of the label selector.
+2. **Resolves the dispatch address** — the built-in **completions engine** for teams, models, tools, and agents on the default or `a2a` engine; or a **named execution engine** when the target agent specifies one.
+3. **Sends an A2A `SendMessage`** to that address with the target and a reference to the query.
+4. **Waits for the response** and writes the result to the query's status.
 
-The completions engine receives the A2A message and:
-1. Reads the Query CR and target CRD from Kubernetes
-2. Creates a memory client and loads conversation history
-3. Creates an EventStream for streaming chunks to ark-broker
-4. Executes the target
+The controller always dispatches over A2A — it never executes a target in-process. For `a2a` agents the completions engine is the dispatch target and proxies the call to the agent's external A2A server.
 
-#### Agent Execution
-1. **Model Resolution**: Resolves the agent's model reference
-2. **Parameter Resolution**: Resolves agent parameters from static values, ConfigMaps, Secrets, and query parameters
-3. **Prompt Construction**: Builds the prompt from agent system prompt, memory context, and user input
-4. **Tool Preparation**: Prepares available tools and MCP servers
-5. **Turn Loop**: Calls the model, executes tool calls, repeats until no more tool calls
-6. **Streaming**: Chunks stream directly from the engine to ark-broker
+## 3. The engine executes the target
 
-#### Team Execution
-1. **Strategy Application**: Uses the team's strategy (sequential, round-robin, selector, graph)
-2. **Member Coordination**: Orchestrates execution across team members
-3. **Recursive Routing**: Members with explicit execution engines route via A2A; others execute locally
+The completions engine receives the message and sets up the run: it reads the `Query` and the target resource from Kubernetes, creates a memory client and loads conversation history, opens an event stream for chunks to `ark-broker`, then executes the target.
 
-### 4. Response Handling
+**For an agent**, it:
 
-After execution:
-1. The engine saves new messages to memory, sends a final stream chunk, and closes the stream
-2. The engine returns the A2A response with the assistant message, token usage, and conversation ID
-3. The controller writes the response, token usage, and conversation ID to the Query CR status
-4. The controller marks the Query as completed
+1. Resolves the agent's model.
+2. Resolves parameters from static values, ConfigMaps, Secrets, and query parameters.
+3. Builds the prompt from the system prompt, memory context, and user input.
+4. Prepares the available tools and MCP servers.
+5. Runs the turn loop — call the model, execute any tool calls, repeat until none remain.
+6. Streams chunks to `ark-broker` as they arrive.
 
-## Execution Engines
+**For a team**, it:
 
-Custom execution engines override default agent execution using the A2A protocol:
+1. Applies the team's strategy — `sequential` or `selector` (optionally constrained by a `graph`). The deprecated `round-robin` and standalone `graph` strategies are migrated by the admission webhook (`round-robin` → `sequential` with loops; `graph` → `selector`).
+2. Coordinates execution across the members.
+3. Routes recursively — members with their own execution engine go back through A2A; the rest run locally.
 
-- **Agent Engines**: Custom agent execution via A2A (e.g., LangChain, CrewAI)
-- Agents referencing an ExecutionEngine send requests via A2A with agent config, tools, and history in message metadata
-- The engine processes the request and returns results through the A2A protocol
+## 4. The response is written back
 
-## Error Handling
+When execution finishes:
 
-The system handles errors gracefully:
-- **Model Errors**: API failures, rate limits, invalid responses
-- **Tool Errors**: Tool execution failures, timeouts
-- **Resource Errors**: Missing agents, models, or tools
-- **Permission Errors**: RBAC violations, service account issues
+1. The engine saves the new messages to memory, sends a final stream chunk, and closes the stream.
+2. It returns the A2A response with the assistant message, token usage, and conversation ID.
+3. The controller writes the response, token usage, and conversation ID to the query's status.
+4. The controller marks the query done (`phase: done`).
 
-Failed queries are marked with error status and detailed error messages.
+## Custom execution engines
+
+A named `ExecutionEngine` runs an agent on a different runtime (e.g. LangChain or CrewAI) instead of the built-in completions engine. When an agent references one, the controller dispatches the query to that engine over A2A. The message carries a reference to the `Query` (name and namespace) plus the input; the engine reads the agent config, tools, and conversation history from Kubernetes, processes the request, and returns the result over A2A.
+
+## Error handling
+
+Failed queries are marked with an error status and a detailed message. Common failures:
+
+- **Model errors** — API failures, rate limits, invalid responses.
+- **Tool errors** — tool execution failures or timeouts.
+- **Resource errors** — missing agents, models, or tools.
+- **Permission errors** — RBAC violations or service-account issues.
 
 ## Observability
 
-Query execution is fully observable through:
-- **Kubernetes Events**: Resource creation and status changes
-- **OpenTelemetry Traces**: Detailed execution spans
-- **Logs**: Structured logging throughout the pipeline
-- **Metrics**: Performance and error metrics
+Every step of execution is observable:
 
-## Example Flow
+- **Kubernetes events** — resource creation and status changes.
+- **OpenTelemetry traces** — detailed execution spans across the controller and engines.
+- **Logs** — structured logging throughout the pipeline.
+- **Metrics** — performance and error metrics.
 
-Here's a complete example of a weather query execution:
+See [Observability](/developer-guide/observability) for setup.
 
-1. User creates Query targeting `weather-agent`
-2. Controller resolves `weather-agent` and its `gpt-4` model
-3. Agent constructs prompt with weather tools available
-4. Model calls `get-weather` tool with location parameter
-5. Tool executes and returns weather data
-6. Model generates natural language response
-7. Controller updates Query with final response
-8. Memory stores conversation for future context
+## Example: a weather query
 
-This flow demonstrates ARK's orchestration of multiple components to deliver intelligent, tool-enabled responses.
+1. You create a `Query` targeting `weather-agent`.
+2. The controller resolves `weather-agent` and dispatches to the completions engine.
+3. The engine builds the prompt with the agent's weather tools available.
+4. The model calls the `get-weather` tool with a location.
+5. The tool returns weather data.
+6. The model produces a natural-language answer.
+7. The controller writes the answer to the query's status.
+8. The conversation is saved to memory for the next turn.
