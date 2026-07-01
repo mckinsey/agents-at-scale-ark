@@ -75,7 +75,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         onSubmit,
         isSubmitPending: isPending,
       }}>
-      <div className="absolute inset-0 flex flex-col gap-5 overflow-hidden px-12 pt-10">
+      <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
           <div className="flex items-center justify-between">
             <nav
