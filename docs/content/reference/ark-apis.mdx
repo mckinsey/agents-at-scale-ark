@@ -1,337 +1,333 @@
 ---
-title: Ark APIs
-description: REST APIs for managing Ark resources and querying targets
+title: Ark API
+description: The ark-api REST interface — query targets, manage resources, and read any Kubernetes resource
 ---
 
 import { Tabs } from 'nextra/components'
 
-# Ark APIs
+# Ark API
 
-Ark provides REST APIs for managing resources and executing queries.
+The `ark-api` service exposes a REST interface for executing queries and managing resources. This page covers the base URL, authentication, conventions, the query workflow, and a reference of every endpoint group. Trace ingestion and retrieval are served separately by the broker — see [Traces](/reference/traces).
 
-## Interactive API Explorer
+The **authoritative, always-current reference is the built-in OpenAPI spec** (`/openapi.json`) and its Swagger UI (`/docs`). Use this page for orientation and the endpoint index; use Swagger for full request/response schemas.
 
-The easiest way to explore and test the APIs is through the built-in OpenAPI interface:
+## Base URL and interactive explorer
 
-Start the [dashboard](/user-guide/dashboard) with `make dashboard` or `ark dashboard`.
+The API is served by the `ark-api` service. To reach it:
 
-You can access the APIs using the 'APIs' link at bottom left of the dashboard screen:
+- **In-cluster**: `http://ark-api.<namespace>.svc.cluster.local` (default port 80).
+- **Local dev**: `kubectl port-forward svc/ark-api 8000:80`, then use `http://localhost:8000`. Or run `ark routes` / `devspace run routes` to get a gateway URL such as `ark-api.default.127.0.0.1.nip.io:8000`.
 
-![Ark Dashboard Screenshot](/ark-dashboard-screenshot.png)
+Open the Swagger UI at `/docs` to browse and try every endpoint:
 
-You can also check the routes that have been setup with `make routes` - you will see the API routes such as `ark-api.default.127.0.0.1.nip.io:8000`.
-
-You can open the API docs directly and interact with them through the path: http://ark-api.default.127.0.0.1.nip.io:8080/docs
-
-![Ark APIs](/ark-apis.png)
+![Ark API Swagger UI](/ark-apis.png)
 
 ## Authentication
 
 Ark APIs support multiple authentication methods depending on the `AUTH_MODE` configuration:
 
-- **OIDC/JWT**: For dashboard users (when `AUTH_MODE=sso` or `AUTH_MODE=hybrid`)
-- **API Keys**: For service-to-service communication (when `AUTH_MODE=basic` or `AUTH_MODE=hybrid`)
-- **No Authentication**: For development environments (when `AUTH_MODE=open`)
+- **OIDC/JWT** — for dashboard users (`AUTH_MODE=sso` or `hybrid`).
+- **API keys** — for service-to-service communication (`AUTH_MODE=basic` or `hybrid`).
+- **No authentication** — for development (`AUTH_MODE=open`).
 
-### Using API Keys
-
-For programmatic access, create API keys and use HTTP Basic Authentication:
+For programmatic access, create an API key and use HTTP Basic auth:
 
 ```bash
+# Create a key
 curl -X POST http://localhost:8000/v1/api-keys \
   -H "Content-Type: application/json" \
   -d '{"name": "My Service Key"}'
 
-curl -u "pk-ark-xxxxx:sk-ark-xxxxx" \
-  http://localhost:8000/v1/namespaces/default/agents
+# Use it
+curl -u "pk-ark-xxxxx:sk-ark-xxxxx" http://localhost:8000/v1/agents
 ```
 
-See the [Authentication Guide](/developer-guide/authentication) for complete configuration details.
+JWT bearer tokens are also accepted: `-H "Authorization: Bearer <token>"`. See the [Authentication Guide](/developer-guide/authentication) for full configuration.
 
-## Starting the APIs
+## Conventions
+
+A few conventions apply across the API:
+
+- **Namespace is a query parameter, not a path segment.** Pass `?namespace=<name>` to scope a request; it defaults to the API's current context namespace. For example `GET /v1/agents?namespace=team-a` — there is no `/v1/namespaces/{namespace}/agents` path.
+- **Two response shapes.** The typed resource endpoints (`/v1/agents`, `/v1/queries`, …) return **simplified JSON objects** (flat fields like `name`, `namespace`, `status`), not raw Kubernetes manifests. The [generic Resources API](#generic-resources-api) returns **raw Kubernetes objects** (`apiVersion`, `kind`, `metadata`, `spec`, `status`).
+- **List responses** wrap results in `{ "items": [ ... ] }`.
+- **Content negotiation** — the generic Resources API returns JSON by default or YAML with `Accept: application/yaml`.
+
+## Queries
+
+Queries are the primary way to interact with Ark: `POST /v1/queries` sends input to any agent, team, model, or tool.
+
+### List available targets
 
 ```bash
-make ark-api-dev
-
-docker run -p 8000:8000 ark-api:latest
+curl http://localhost:8000/v1/agents
+curl http://localhost:8000/v1/models
+curl http://localhost:8000/v1/teams
+curl http://localhost:8000/v1/tools
 ```
 
-The APIs will be available at `http://localhost:8000`.
+### Run a query
 
-Browse the complete API documentation at `http://localhost:8000/docs` when the service is running.
-
-## Resource APIs
-
-Standard REST APIs for managing Ark resources:
-
-- **Agents**: `/v1/namespaces/{namespace}/agents`
-- **Teams**: `/v1/namespaces/{namespace}/teams`
-- **Queries**: `/v1/namespaces/{namespace}/queries`
-- **Models**: `/v1/namespaces/{namespace}/models`
-- **Secrets**: `/v1/namespaces/{namespace}/secrets`
-- **API Keys**: `/v1/api-keys` (for service authentication)
-- **Namespaces**: `/v1/namespaces`
-
-Standard Kubernetes REST patterns are followed, such as `POST` to create, `DELETE` to delete.
-
-## Query API
-
-Queries are the primary way to interact with Ark. Use `POST /v1/queries/` to send input to any agent, team, model, or tool.
-
-### List Available Targets
-
-See all available agents, teams, models, and tools:
-
-<Tabs items={['Bash', 'Python']}>
-  <Tabs.Tab>
-    ```bash
-    curl http://localhost:8000/v1/agents/
-    curl http://localhost:8000/v1/models/
-    curl http://localhost:8000/v1/teams/
-    curl http://localhost:8000/v1/tools/
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    import requests
-
-    base = "http://localhost:8000"
-    agents = requests.get(f"{base}/v1/agents/").json()
-    models = requests.get(f"{base}/v1/models/").json()
-    teams = requests.get(f"{base}/v1/teams/").json()
-    tools = requests.get(f"{base}/v1/tools/").json()
-
-    for agent in agents.get("items", []):
-        print(f"agent/{agent['metadata']['name']}")
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-### Creating a Query
-
-Send a query to any target:
-
-<Tabs items={['Bash', 'Python']}>
-  <Tabs.Tab>
-    ```bash
-    curl -X POST http://localhost:8000/v1/queries/ \
-      -H "Content-Type: application/json" \
-      -d '{
-        "name": "my-query",
-        "type": "user",
-        "input": "Hello, how can you help me?",
-        "target": {"type": "agent", "name": "my-agent"}
-      }'
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    import requests
-
-    response = requests.post(
-        "http://localhost:8000/v1/queries/",
-        json={
-            "name": "my-query",
-            "type": "user",
-            "input": "Hello, how can you help me?",
-            "target": {"type": "agent", "name": "my-agent"},
-        }
-    )
-
-    query = response.json()
-    print(query["status"]["response"]["content"])
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-Response:
-
-```json
-{
-  "metadata": {
-    "name": "my-query",
-    "namespace": "default"
-  },
-  "spec": {
-    "type": "user",
-    "input": "Hello, how can you help me?",
-    "target": {"type": "agent", "name": "my-agent"}
-  },
-  "status": {
-    "phase": "done",
-    "response": {
-      "content": "Hello! How can I help you today?"
-    },
-    "conversationId": "conv-abc123"
-  }
-}
-```
-
-#### Query Fields
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Unique query name |
-| `type` | No | Input type, defaults to `"user"` |
-| `input` | Yes | The user message text |
-| `target` | Yes | Target with `type` (agent/model/team/tool) and `name` |
-| `conversationId` | No | Continue a previous conversation |
-| `sessionId` | No | Group queries for telemetry tracking |
-| `timeout` | No | Query timeout, e.g. `"5m"` |
-| `metadata.annotations` | No | Custom Kubernetes annotations |
-
-### Conversations
-
-Use `conversationId` to maintain context across queries. The memory service manages conversation history automatically.
+`POST /v1/queries` is **asynchronous** — it creates the query and returns immediately, before execution finishes. Poll `GET /v1/queries/{name}` until `status.phase` is `done` (or `error`/`canceled`), then read `status.response.content`. (For token-by-token output, stream instead — see [Streaming Responses](/developer-guide/queries/streaming).)
 
 <Tabs items={['Python', 'Bash']}>
   <Tabs.Tab>
     ```python
-    import requests
+    import requests, time
 
-    url = "http://localhost:8000/v1/queries/"
+    base = "http://localhost:8000"
 
-    first = requests.post(url, json={
-        "name": "conv-q1",
-        "input": "What is the capital of France?",
+    # 1. Create the query (returns immediately)
+    requests.post(f"{base}/v1/queries", json={
+        "name": "my-query",
+        "input": "Hello, how can you help me?",
         "target": {"type": "agent", "name": "my-agent"},
-    }).json()
+    }).raise_for_status()
 
-    conversation_id = first["status"]["conversationId"]
+    # 2. Poll until it finishes
+    while True:
+        q = requests.get(f"{base}/v1/queries/my-query").json()
+        phase = q["status"].get("phase")
+        if phase in ("done", "error", "canceled"):
+            break
+        time.sleep(1)
 
-    followup = requests.post(url, json={
-        "name": "conv-q2",
-        "input": "What is its population?",
-        "target": {"type": "agent", "name": "my-agent"},
-        "conversationId": conversation_id,
-    }).json()
-
-    print(followup["status"]["response"]["content"])
+    print(q["status"]["response"]["content"])
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    RESPONSE=$(curl -s -X POST http://localhost:8000/v1/queries/ \
+    curl -X POST http://localhost:8000/v1/queries \
       -H "Content-Type: application/json" \
       -d '{
-        "name": "conv-q1",
-        "input": "What is the capital of France?",
+        "name": "my-query",
+        "input": "Hello, how can you help me?",
         "target": {"type": "agent", "name": "my-agent"}
-      }')
+      }'
 
-    CONV_ID=$(echo $RESPONSE | jq -r '.status.conversationId')
+    # Poll until status.phase is "done"
+    until [ "$(curl -s http://localhost:8000/v1/queries/my-query | jq -r .status.phase)" = "done" ]; do
+      sleep 1
+    done
 
-    curl -X POST http://localhost:8000/v1/queries/ \
-      -H "Content-Type: application/json" \
-      -d "{
-        \"name\": \"conv-q2\",
-        \"input\": \"What is its population?\",
-        \"target\": {\"type\": \"agent\", \"name\": \"my-agent\"},
-        \"conversationId\": \"$CONV_ID\"
-      }"
+    curl -s http://localhost:8000/v1/queries/my-query | jq -r .status.response.content
     ```
   </Tabs.Tab>
 </Tabs>
 
-The `conversationId` is returned in `status.conversationId` after the first query completes. Pass it to subsequent queries to continue the conversation. See [Streaming Responses](/developer-guide/queries/streaming#the-ark-metadata-field) for how metadata is returned in streaming responses.
+The completed query looks like this (fields are flat, not nested under `spec`/`metadata`):
 
-### Custom Annotations
+```json
+{
+  "name": "my-query",
+  "namespace": "default",
+  "input": "Hello, how can you help me?",
+  "target": {"type": "agent", "name": "my-agent"},
+  "conversationId": "conv-abc123",
+  "status": {
+    "phase": "done",
+    "response": {"content": "Hello! How can I help you today?"},
+    "conversationId": "conv-abc123",
+    "tokenUsage": {"promptTokens": 1317, "completionTokens": 43, "totalTokens": 1360}
+  }
+}
+```
 
-Pass custom Kubernetes annotations to the query resource via `metadata.annotations`:
+#### Query fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Unique query name |
+| `input` | Yes | The user message text |
+| `target` | Yes* | Target with `type` (agent/team/model/tool) and `name`. Omit to use `selector` |
+| `selector` | No | Label selector to match a target instead of naming one |
+| `type` | No | Input type, defaults to `"user"` |
+| `conversationId` | No | Continue a previous conversation |
+| `sessionId` | No | Group queries for telemetry tracking |
+| `parameters` | No | Values used in the input or passed to agent parameters via `queryParameterRef` |
+| `memory` | No | A `Memory` resource for conversation context |
+| `timeout` | No | Query timeout, e.g. `"5m"` |
+| `metadata.annotations` | No | Custom Kubernetes annotations on the query |
+
+### Conversations
+
+Pass the `conversationId` returned in `status.conversationId` to a later query to continue the thread — the memory service manages history automatically.
 
 ```bash
-curl -X POST http://localhost:8000/v1/queries/ \
+CONV=$(curl -s http://localhost:8000/v1/queries/my-query | jq -r .status.conversationId)
+
+curl -X POST http://localhost:8000/v1/queries \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "annotated-query",
-    "input": "Hello",
-    "target": {"type": "agent", "name": "my-agent"},
-    "metadata": {
-      "annotations": {
-        "ark.mckinsey.com/a2a-context-id": "ctx-abc123",
-        "ark.mckinsey.com/streaming-enabled": "true"
-      }
-    }
-  }'
+  -d "{
+    \"name\": \"followup\",
+    \"input\": \"And its population?\",
+    \"target\": {\"type\": \"agent\", \"name\": \"my-agent\"},
+    \"conversationId\": \"$CONV\"
+  }"
 ```
 
-### Querying with Python
+### Query different targets
 
-A complete example showing query creation, polling, authentication, and error handling:
-
-```python
-import requests
-from requests.auth import HTTPBasicAuth
-
-base_url = "http://localhost:8000"
-
-response = requests.post(
-    f"{base_url}/v1/queries/",
-    # Uncomment to use auth with key pair
-    # auth=HTTPBasicAuth("pk-ark-xxxxx", "sk-ark-xxxxx"),
-    headers={
-        "Content-Type": "application/json",
-        # Uncomment to use auth with bearer token
-        # "Authorization": "Bearer YOUR_TOKEN_HERE",
-    },
-    json={
-        "name": "python-query",
-        "type": "user",
-        "input": "Summarize the latest updates",
-        "target": {"type": "agent", "name": "my-agent"},
-        # Optional: continue a conversation
-        # "conversationId": "previous-conversation-id",
-        # Optional: session tracking
-        # "sessionId": "my-session-id",
-        # Optional: query timeout
-        # "timeout": "5m",
-    }
-)
-
-response.raise_for_status()
-query = response.json()
-print(query["status"]["response"]["content"])
-```
-
-### Querying Different Targets
-
-The same query API works for agents, teams, models, and tools:
+The same request works for agents, teams, models, and tools — only `target.type` changes:
 
 <Tabs items={['Agent', 'Team', 'Model', 'Tool']}>
   <Tabs.Tab>
-    ```python
-    requests.post(url, json={
-        "name": "agent-query",
-        "input": "What's the weather like in New York?",
-        "target": {"type": "agent", "name": "weather-agent"},
-    })
+    ```json
+    {"name": "q", "input": "Weather in NYC?", "target": {"type": "agent", "name": "weather-agent"}}
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```python
-    requests.post(url, json={
-        "name": "team-query",
-        "input": "Analyze customer feedback and suggest improvements",
-        "target": {"type": "team", "name": "research-team"},
-    })
+    ```json
+    {"name": "q", "input": "Analyze this feedback", "target": {"type": "team", "name": "research-team"}}
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```python
-    requests.post(url, json={
-        "name": "model-query",
-        "input": "What is 2+2?",
-        "target": {"type": "model", "name": "gpt-4"},
-    })
+    ```json
+    {"name": "q", "input": "What is 2+2?", "target": {"type": "model", "name": "default"}}
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```python
-    requests.post(url, json={
-        "name": "tool-query",
-        "input": "{\"location\": \"New York\"}",
-        "target": {"type": "tool", "name": "get_weather"},
-    })
+    ```json
+    {"name": "q", "input": "{\"location\": \"NYC\"}", "target": {"type": "tool", "name": "get_weather"}}
     ```
   </Tabs.Tab>
 </Tabs>
+
+### Cancel a query
+
+```bash
+curl -X PATCH http://localhost:8000/v1/queries/my-query/cancel
+```
+
+## Endpoint reference
+
+All endpoints are under `/v1` and accept `?namespace=`. This is a map of the surface — see `/docs` for full schemas.
+
+### Resources
+
+Standard CRUD (`GET`/`POST` on the collection, `GET`/`PUT`/`DELETE` on the item):
+
+| Resource | Endpoints |
+|----------|-----------|
+| Agents | `/v1/agents`, `/v1/agents/{name}` |
+| Teams | `/v1/teams`, `/v1/teams/{name}` |
+| Models | `/v1/models`, `/v1/models/{name}` |
+| Memories | `/v1/memories`, `/v1/memories/{name}` |
+| Secrets | `/v1/secrets`, `/v1/secrets/{name}` |
+| MCP servers | `/v1/mcp-servers`, `/v1/mcp-servers/{name}` (no `PUT`) |
+| Tools | `/v1/tools`, `/v1/tools/{name}` (read/delete only — tools are created from MCP servers) |
+| A2A servers | `/v1/a2a-servers`, `/v1/a2a-servers/{name}` (read/delete only) |
+| A2A tasks | `/v1/a2a-tasks`, `/v1/a2a-tasks/{name}` (read/delete only) |
+| Events | `/v1/events`, `/v1/events/{name}` (read only — Kubernetes events) |
+| ArkConfig | `/v1/arkconfig` (`GET`/`PUT`/`DELETE`) |
+| Namespaces | `/v1/namespaces` (`GET`/`POST`) |
+
+### Queries and conversations
+
+| Purpose | Endpoints |
+|---------|-----------|
+| Queries | `GET`/`POST` `/v1/queries`, `GET`/`PUT`/`DELETE` `/v1/queries/{name}`, `PATCH /v1/queries/{name}/cancel` |
+| Conversations | `GET`/`DELETE` `/v1/conversations`, `DELETE /v1/conversations/{id}`, `DELETE /v1/conversations/{id}/queries/{query_id}/messages` |
+| Memory messages | `GET /v1/memory-messages`, `GET /v1/memories/{name}/conversations/{id}/messages` |
+
+### Broker data
+
+Telemetry the broker captures for a namespace. (Trace ingestion and the OTLP endpoint are documented under [Traces](/reference/traces).)
+
+| Data | Endpoints |
+|------|-----------|
+| Chunks | `GET`/`DELETE` `/v1/broker/chunks` |
+| Events | `GET`/`DELETE` `/v1/broker/events`, `GET /v1/broker/events/{query_id}` |
+| Messages | `GET`/`DELETE` `/v1/broker/messages` |
+| Sessions | `GET`/`DELETE` `/v1/broker/sessions`, `GET /v1/broker/sessions/{id}` |
+| Traces | `GET`/`DELETE` `/v1/broker/traces`, `GET /v1/broker/traces/{id}` |
+
+### MCP authorization
+
+| Purpose | Endpoints |
+|---------|-----------|
+| OAuth flow | `POST /v1/mcp-servers/{name}/auth/start`, `GET /v1/mcp-servers/{name}/auth/status`, `POST /v1/mcp-servers/{name}/auth/logout` |
+| Callback | `GET /v1/mcp/auth/callback` |
+
+### Marketplace and services
+
+| Purpose | Endpoints |
+|---------|-----------|
+| Ark services | `GET /v1/ark-services`, `GET /v1/ark-services/{name}`, `GET /v1/ark-services/marketplace-items` |
+| Marketplace sources | `GET`/`POST` `/v1/namespaces/{ns}/marketplace-sources`, `GET`/`PATCH`/`DELETE` `/v1/namespaces/{ns}/marketplace-sources/{name}`, `GET /v1/namespaces/{ns}/marketplace-sources/permissions` |
+| Marketplace items | `GET /v1/namespaces/{ns}/marketplace-items` |
+| Service proxy | `GET`/`POST` `/v1/proxy/{resource}/{server_name}` (and `/{path}`), `GET /v1/proxy/services`, `PATCH`/`DELETE` `/v1/proxy/services/{service_name}/{api_path}` |
+
+### System and utilities
+
+| Purpose | Endpoints |
+|---------|-----------|
+| Context | `GET /v1/context` — current namespace and permissions |
+| System info | `GET /v1/system-info` |
+| Export | `POST /v1/export/resources`, `GET /v1/export/last-export-time` |
+| File preview | `POST /v1/file-preview/spreadsheet` |
+| A2A gateway | `GET /a2a/agents` — discover agents over A2A |
+| Health | `GET /health`, `GET /ready` |
+| API keys | `GET`/`POST` `/v1/api-keys`, `DELETE /v1/api-keys/{public_key}` |
+
+## Generic Resources API
+
+Beyond the typed endpoints, the Ark API exposes a generic endpoint for reading **any** Kubernetes resource — core resources (Pods, Services, ConfigMaps) and grouped resources (Deployments, WorkflowTemplates, custom resources) — without a resource-specific endpoint. Unlike the typed endpoints, these return the **raw Kubernetes object**.
+
+### Endpoints
+
+Core resources (API version `v1`):
+
+```
+GET|POST   /v1/resources/api/{version}/{kind}
+GET|DELETE /v1/resources/api/{version}/{kind}/{resource_name}
+```
+
+Grouped resources (resources in API groups — `apps`, `batch`, custom groups):
+
+```
+GET|POST   /v1/resources/apis/{group}/{version}/{kind}
+GET|DELETE /v1/resources/apis/{group}/{version}/{kind}/{resource_name}
+```
+
+Examples:
+
+```bash
+# Core: a Pod, and all Services
+curl http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+curl http://ark-api:8000/v1/resources/api/v1/Service
+
+# Grouped: a Deployment, an Argo WorkflowTemplate, all Jobs
+curl http://ark-api:8000/v1/resources/apis/apps/v1/Deployment/my-deployment
+curl http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-workflow
+curl http://ark-api:8000/v1/resources/apis/batch/v1/Job
+```
+
+There are also convenience log endpoints: `GET /v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log` and the Argo workflow node log endpoint.
+
+### Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `namespace` | Kubernetes namespace | Current context namespace |
+
+```bash
+curl "http://ark-api:8000/v1/resources/api/v1/Pod?namespace=production"
+```
+
+### Response format
+
+Responses return the raw Kubernetes resource. Content negotiation via the `Accept` header returns JSON (default) or YAML:
+
+```bash
+curl -H "Accept: application/yaml" \
+  http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+```
+
+### Scope handling
+
+The endpoint handles namespaced and cluster-scoped resources automatically: it tries namespaced access first, falls back to cluster-scoped, and errors only if both fail. This works transparently for resources like Nodes (cluster-scoped) and Pods (namespaced).
+
+### RBAC
+
+The endpoint uses the service account configured for the Ark API pod. Ensure that service account has RBAC permissions for the resources you want to access.
