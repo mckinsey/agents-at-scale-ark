@@ -605,7 +605,7 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		// instead of spawning an executor goroutine we'd have to drain.
 		_, cancel := context.WithCancel(ctx)
 		defer cancel()
-		r.operations.Store(key, context.CancelFunc(cancel))
+		r.operations.Store(key, cancel)
 
 		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
 		Expect(err).NotTo(HaveOccurred())
