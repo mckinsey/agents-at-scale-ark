@@ -159,7 +159,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
   if (isCreating) {
     return (
-      <div className="absolute inset-0 flex flex-col gap-5 overflow-hidden px-12 pt-10">
+      <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
           <div className="flex items-center justify-between">
             <nav
@@ -215,8 +215,8 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const displayName = team?.name || '';
 
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden px-12 pb-10">
-      <header className="flex flex-none flex-col gap-4 pt-10 pb-5">
+    <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col overflow-hidden">
+      <header className="flex flex-none flex-col gap-4 pb-5">
         <div className="flex items-center justify-between">
           <nav
             aria-label="Breadcrumb"
@@ -263,10 +263,13 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div
+        className={`relative flex min-h-0 flex-1 overflow-hidden ${
+          isLeftPanelCollapsed ? '' : 'gap-6'
+        }`}>
         <div
-          className={`border-stroke-divider flex h-full min-h-0 flex-col overflow-hidden border-r transition-all duration-300 ${
-            isLeftPanelCollapsed ? 'w-0 border-r-0' : 'w-1/2'
+          className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
+            isLeftPanelCollapsed ? 'w-0' : 'flex-1'
           }`}>
           {!isLeftPanelCollapsed && (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -301,7 +304,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
         <div
           className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
-            isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
+            isLeftPanelCollapsed ? 'w-full' : 'flex-1'
           }`}>
           <EmbeddedChatPanel
             name={teamName || ''}
