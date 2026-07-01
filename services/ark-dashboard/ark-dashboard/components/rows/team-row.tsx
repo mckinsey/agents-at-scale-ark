@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertTriangle, MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
@@ -30,6 +30,7 @@ interface TeamRowProps {
     team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },
   ) => void;
   readonly onDelete?: (id: string) => void;
+  readonly leading?: ReactNode;
 }
 
 export function TeamRow({
@@ -37,6 +38,7 @@ export function TeamRow({
   agents: _agents,
   onUpdate: _onUpdate,
   onDelete,
+  leading,
 }: TeamRowProps) {
   const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
@@ -72,6 +74,8 @@ export function TeamRow({
             push(`/teams/${encodeURIComponent(team.name)}`);
           }
         }}>
+        {leading}
+
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <Users className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 

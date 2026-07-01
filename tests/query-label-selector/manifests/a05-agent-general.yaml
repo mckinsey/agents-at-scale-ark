@@ -8,7 +8,7 @@ metadata:
     type: generalist
 spec:
   modelRef:
-    name: test-model
+    name: test-model-mock
   prompt: |
     You are a general purpose agent.
     Provide helpful responses on a wide range of topics.

@@ -5,27 +5,32 @@ metadata:
 spec:
   description: Test query execution with model as direct target
   steps:
-  - name: step-1
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/*.yaml
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
-        name: test-model
-        timeout: 3m
+        name: test-model-mock
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a03-query-model-target.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -43,9 +48,9 @@ spec:
             name: model-target-query
           status:
             (response != null): true
-            (response.target.name): 'test-model'
+            (response.target.name): 'test-model-mock'
             (response.target.type): 'model'
-            (length(response.content) > `3`): true
+            (response.content): 'Paris'
     catch:
     - events: {}
     - describe:
@@ -53,3 +58,10 @@ spec:
         kind: Query
         name: model-target-query
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

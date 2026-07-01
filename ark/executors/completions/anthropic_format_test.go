@@ -1,6 +1,7 @@
 package completions
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -136,19 +137,46 @@ func TestBuildAnthropicRequest(t *testing.T) {
 	tools := []anthropicTool{{Name: "test", Description: "test tool"}}
 
 	t.Run("uses defaults", func(t *testing.T) {
-		req := buildAnthropicRequest(messages, "system", tools, nil)
+		req := buildAnthropicRequest(messages, "system", tools, ToolChoiceUnset, nil)
 		assert.Equal(t, 4096, req.MaxTokens)
 		assert.Equal(t, 1.0, req.Temperature)
 		assert.Equal(t, "system", req.SystemPrompt)
 		assert.Len(t, req.Messages, 1)
 		assert.Len(t, req.Tools, 1)
+		assert.Nil(t, req.ToolChoice)
 	})
 
 	t.Run("uses properties", func(t *testing.T) {
 		props := map[string]string{"temperature": "0.5", "max_tokens": "1024"}
-		req := buildAnthropicRequest(messages, "", tools, props)
+		req := buildAnthropicRequest(messages, "", tools, ToolChoiceUnset, props)
 		assert.Equal(t, 1024, req.MaxTokens)
 		assert.Equal(t, 0.5, req.Temperature)
+	})
+
+	t.Run("required tool choice maps to type=any", func(t *testing.T) {
+		req := buildAnthropicRequest(messages, "", tools, ToolChoiceRequired, nil)
+		assert.Equal(t, map[string]interface{}{"type": "any"}, req.ToolChoice)
+	})
+
+	t.Run("auto and none tool choice map through", func(t *testing.T) {
+		auto := buildAnthropicRequest(messages, "", tools, ToolChoiceAuto, nil)
+		assert.Equal(t, map[string]interface{}{"type": "auto"}, auto.ToolChoice)
+		none := buildAnthropicRequest(messages, "", tools, ToolChoiceNone, nil)
+		assert.Equal(t, map[string]interface{}{"type": "none"}, none.ToolChoice)
+	})
+
+	t.Run("tool_choice is omitted from JSON when unset", func(t *testing.T) {
+		req := buildAnthropicRequest(messages, "", tools, ToolChoiceUnset, nil)
+		body, err := json.Marshal(req)
+		require.NoError(t, err)
+		assert.NotContains(t, string(body), "tool_choice")
+	})
+
+	t.Run("tool_choice is serialized when set", func(t *testing.T) {
+		req := buildAnthropicRequest(messages, "", tools, ToolChoiceRequired, nil)
+		body, err := json.Marshal(req)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), `"tool_choice":{"type":"any"}`)
 	})
 }
 

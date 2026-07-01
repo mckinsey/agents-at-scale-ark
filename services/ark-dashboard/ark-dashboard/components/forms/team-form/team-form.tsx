@@ -38,7 +38,7 @@ import { TeamFormMode, type TeamFormProps } from './types';
 import { useTeamForm } from './use-team-form';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
+  { href: '/', label: 'Ark Dashboard' },
   { href: '/teams', label: 'Teams' },
 ];
 

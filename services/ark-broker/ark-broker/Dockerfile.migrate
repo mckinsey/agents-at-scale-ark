@@ -1,0 +1,11 @@
+FROM migrate/migrate:v4.19.1
+
+LABEL org.opencontainers.image.title="ark-broker-migrate" \
+      org.opencontainers.image.description="Applies database schema migrations for ark-broker using golang-migrate" \
+      org.opencontainers.image.source="https://github.com/mckinsey/agents-at-scale-ark" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.vendor="McKinsey & Company"
+
+COPY --chown=root:root --chmod=555 src/db/migrations /migrations
+
+USER 65534:65534

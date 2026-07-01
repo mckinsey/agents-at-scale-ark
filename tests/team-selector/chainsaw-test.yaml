@@ -2,41 +2,35 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: team-selector
-  labels:
-    # LLM tests call real language model APIs
-    llm: "true"
 spec:
   description: Test selector team strategy with AI-driven participant selection
-  # Selector strategy requires multiple AI model calls for participant selection
-  # and can take longer than default timeouts, especially with maxTurns: 6
   steps:
-  - name: step-1
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - apply:
-        file: manifests/*.yaml
+
+  - name: wait-for-model-ready
+    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
-        name: test-model
-        timeout: 3m
+        name: test-model-mock
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -75,6 +69,15 @@ spec:
           condition:
             name: Completed
             value: 'True'
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: selector-team-query
+
+  - name: validate-selector-execution
+    try:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -84,43 +87,21 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'selector-team'
-            (length(response.content) > `200`): true
+            (contains(response.raw, 'RESEARCH:')): true
+            (contains(response.raw, 'ANALYSIS:')): true
+            (contains(response.raw, 'COORDINATION:')): true
+            (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: selector-team-query
-    - script:
-        content: |
-          echo "Validating participant selection events..."
-          events=$(kubectl get events -n $NAMESPACE --field-selector involvedObject.name=selector-team-query,involvedObject.kind=Query -o json)
-          participant_selections=$(echo "$events" | jq '[.items[] | select(.reason == "ParticipantSelected" or .reason == "TeamParticipantSelected" or (.message // "" | contains("selected participant")) or (.message // "" | contains("Selected participant")))] | length')
-          
-          if [ "$participant_selections" -gt 0 ]; then
-              echo "Found $participant_selections participant selection events"
-              echo "$events" | jq -r '.items[] | select(.reason == "ParticipantSelected" or .reason == "TeamParticipantSelected" or (.message // "" | contains("selected participant")) or (.message // "" | contains("Selected participant"))) | "Event: \(.reason) - \(.message)"'
-          else
-              echo "No explicit participant selection events found, checking for team execution events..."
-              team_events=$(echo "$events" | jq '[.items[] | select((.reason // "") | contains("Team") or contains("Agent"))] | length')
-              echo "Found $team_events team/agent execution events"
-              if [ "$team_events" -gt 0 ]; then
-                  echo "Team execution events indicate selector strategy is working"
-                  echo "Sample events:"
-                  echo "$events" | jq -r '.items[0:3][] | "  \(.reason): \(.message // "No message")"'
-              fi
-          fi
-
-          if [ ${#response} -gt 200 ]; then
-              echo "Selector team AI-driven participant selection produced comprehensive response"
-          else
-              echo "WARNING: Response might be shorter than expected for selector team execution"
-          fi
 
     cleanup:
     - script:
         content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

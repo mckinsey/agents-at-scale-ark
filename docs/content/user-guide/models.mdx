@@ -5,32 +5,55 @@ description: Create, modify, and manage models
 
 # Models
 
-Models represent the configuration for a large-language model, such as OpenAI GPT and Claude Opus.
+A `Model` represents the configuration for a large-language model — OpenAI GPT, Azure OpenAI, AWS Bedrock, Anthropic Claude, or any OpenAI-compatible endpoint.
 
-Ark agents can be configured to use any model and will use the model named `default` if a specific model is not specified.
+Every agent picks a model with `spec.modelRef.name`. If an agent doesn't pin one, it falls back to the model named **`default`** in the same namespace. Keeping at least one model called `default` is the conventional starting point.
 
-You can quickly configure a model by running `ark dashboard` and going to the 'Models' page.
+The full schema reference — every field, every provider, every auth method, custom headers, properties, and health-check status — lives at [Reference → Models](/reference/resources/models). This page walks you through the canonical setup and the two ways to do it.
 
-## Creating Models
+## Create the `default` model
 
-Create a [Model Resource](../../reference/resources/models.mdx). As an example. this is how you would configure the an OpenAI gpt-4o-mini model:
+The example below creates an OpenAI `gpt-4o-mini` model called `default`. You can do it from the Dashboard or with `kubectl`; pick whichever you prefer.
+
+### Via Dashboard
+
+1. Launch the dashboard: `ark dashboard`.
+2. Go to **Models** in the left nav and click **Add Model**.
+3. Fill the form:
+
+| Field | Value |
+| --- | --- |
+| **Name** | `default` |
+| **Provider** | `OpenAI` |
+| **Model** | `gpt-4o-mini` |
+| **API Key** | Pick an existing secret from the dropdown, or hit **Add New** to create one inline |
+| **Base URL** | Add the model URL |
+
+4. Hit **Create Model**.
+
+![Add Model form filled in for the default OpenAI model](/models/add-form.png)
+
+The form changes per provider:
+
+- **Azure OpenAI** adds an **Authentication** dropdown (API Key / Managed Identity / Workload Identity) and an **API Version** field.
+- **AWS Bedrock** replaces the API Key with separate **Access Key ID Secret** and **Secret Access Key Secret** pickers, plus optional **Region** and **Model ARN**.
+- **Anthropic** has the same shape as OpenAI plus an optional **Anthropic Version** field.
+
+### Via kubectl
 
 ```bash
-# First, create a secret with your OpenAI API key.
-# Secrets are the recommended way to store sensitive data.
-kubectl create secret generic default-model-secret \
-  --from-literal=api-key='YOUR_OPENAI_API_KEY'
+# Store the API key in a Secret first.
+kubectl create secret generic default-model-token \
+  --from-literal=token='YOUR_OPENAI_API_KEY'
 
-# Create the model resource, which uses the configured secret for its API
-# key.
-cat <<EOF | kubectl apply -f -
+# Create the Model resource.
+cat <<'EOF' | kubectl apply -f -
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
   name: default
 spec:
   provider: openai
-  type: completion
   model:
     value: gpt-4o-mini
   config:
@@ -40,25 +63,91 @@ spec:
       apiKey:
         valueFrom:
           secretKeyRef:
-            name: default-model-secret
-            key: api-key
+            name: default-model-token
+            key: token
 EOF
 ```
 
-You can then query the model directly:
+The `type` field defaults to `completions` (chat completions) and is the only value the API server currently accepts, so it's safe to omit.
 
-```bash
-ark query model/default "Explain how AI large language models work"
-```
+### Via the CLI generator
 
-You can also create a model with the command `ark models create`. For example, to create the `default` model use:
+`ark models create` is an interactive shortcut that produces the same `Model` resource plus the backing Secret:
 
 ```bash
 ark models create default
 ```
 
-You will then be asked to provide the model configuration, API key, etc.
+It prompts for provider, model name, base URL, API key, and (for Azure) API version. Flags let you skip prompts:
 
----
+```bash
+ark models create default \
+  --type openai \
+  --model gpt-4o-mini \
+  --api-key sk-... \
+  --yes
+```
 
-**Ready to create agents?** Move to the [Agents](/user-guide/agents) guide.
+## Verify the model is working
+
+```bash
+# List all models with their availability status
+kubectl get models
+
+# NAME      TYPE          PROVIDER   MODEL          AVAILABLE   AGE
+# default   completions   openai     gpt-4o-mini    True        20s
+```
+
+Send a one-off query against the model to make sure credentials are correct:
+
+```bash
+ark query model/default "Explain how AI large language models work"
+```
+
+Ark probes each model periodically (default every 1 minute, configurable via `spec.pollInterval`). When a probe fails, the `ModelAvailable` condition on the Model resource flips to `False`. See [Model status and health checking](/reference/resources/models#status-and-health-checking) for details.
+
+## Pick a provider
+
+| Provider | When to use | Reference |
+| --- | --- | --- |
+| **OpenAI** | OpenAI hosted models, or any OpenAI-compatible endpoint (Google Gemini in compatibility mode, vLLM, Ollama, custom gateways) | [OpenAI](/reference/resources/models#openai) |
+| **Azure OpenAI** | Azure-hosted OpenAI deployments. Supports API Key, AKS Managed Identity, and Workload Identity authentication | [Azure OpenAI](/reference/resources/models#azure-openai) |
+| **AWS Bedrock** | Bedrock-hosted models (Anthropic Claude, Mistral, Cohere, etc.). Uses IAM by default; explicit credentials supported | [AWS Bedrock](/reference/resources/models#aws-bedrock) |
+| **Anthropic** | Native Anthropic API for Claude models | [Anthropic](/reference/resources/models#google-gemini-and-anthropic-models) |
+
+The legacy form `spec.type: openai|azure|bedrock|anthropic` (using `type` as the provider) is **deprecated**. The mutating webhook migrates it to `spec.provider` automatically and stamps a `ark.mckinsey.com/migration-warning/...` annotation on the Model. New configs should use `spec.provider`.
+
+## Features only available in YAML
+
+The Dashboard's **Add Model** form covers the common case for each provider. These features are only configurable via the `Model` YAML for now:
+
+- **Per-request properties** — `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`, `stop`, `seed`, and any other OpenAI Chat Completion parameter, supplied under `spec.config.<provider>.properties`. See [Model Properties](/reference/resources/models#model-properties).
+- **Custom HTTP headers** — `spec.config.openai.headers` and `spec.config.azure.headers`, supporting direct values and values loaded from Secrets / ConfigMaps. Useful for API gateways and custom auth. See [Custom HTTP Headers](/reference/resources/models#custom-http-headers).
+- **`spec.pollInterval`** — health-check cadence (default `1m`). Only editable via YAML.
+- **Bedrock session token** — `spec.config.bedrock.sessionToken` for temporary AWS credentials.
+- **Bedrock IAM-role default** — omitting `accessKeyId` / `secretAccessKey` entirely makes the controller use the pod's IAM role. The Dashboard form requires explicit secrets.
+- **Azure Workload Identity `clientId` / `tenantId`** — selectable in the form's Authentication dropdown but the values themselves still come from YAML.
+
+If you need any of the above, write the Model YAML directly and apply with `kubectl`. You can still inspect and delete it from the Dashboard afterwards.
+
+## Troubleshooting
+
+**Probes fail with `invalid header field value for "Authorization"`.** The API key in your Secret almost certainly ends with a newline. Go's HTTP client rejects newlines in header values, so the controller can't probe the model and `ModelAvailable` flips to `False`. Re-create the Secret with `--from-literal` (no newline) or strip whitespace before writing:
+
+```bash
+# Safer than --from-file when copy-pasting a key
+kubectl create secret generic my-model-token \
+  --from-literal=token='YOUR_API_KEY'
+
+# Or strip any trailing whitespace from a file
+tr -d '\n\r' < key.txt | kubectl create secret generic my-model-token \
+  --from-file=token=/dev/stdin
+```
+
+`kubectl describe model <name>` shows the underlying probe error in the `ModelAvailable` condition.
+
+## Next steps
+
+- [Reference → Models](/reference/resources/models) — full schema, every provider, every field
+- [Agents](/user-guide/agents) — how `modelRef` wires an agent to a model
+- [Quickstart](/quickstart) — get Ark and the `default` model installed

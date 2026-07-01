@@ -1,28 +1,35 @@
 export default {
-  preset: 'ts-jest/presets/default-esm',
+  extensionsToTreatAsEsm: ['.ts'],
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/test'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
+  testPathIgnorePatterns: ['/node_modules/', '/__tests__/testHelpers/'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
-      useESM: true,
-      isolatedModules: true
-    }]
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
+        useESM: true,
+        isolatedModules: true,
+        tsconfig: {
+          ignoreDeprecations: '6.0',
+        },
+      },
+    ],
+    '^.+\\.js$': ['ts-jest', {useESM: true}],
   },
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/types/**/*'
-  ],
+  transformIgnorePatterns: ['node_modules/(?!@faker-js/faker)'],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/types/**/*'],
   coverageThreshold: {
     global: {
       branches: 80,
       functions: 80,
       lines: 80,
-      statements: 80
-    }
+      statements: 80,
+    },
   },
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
-  }
+    '^@ark-broker/(.*)\\.js$': '<rootDir>/src/$1',
+    '^@ark-broker/(.*)$': '<rootDir>/src/$1',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
 };

@@ -34,6 +34,7 @@ from .extensions.query import (
     extract_query_ref,
     resolve_query,
 )
+from .query_status_updater import QueryStatusUpdater
 
 logger = logging.getLogger(__name__)
 
@@ -215,9 +216,11 @@ class A2AExecutorAdapter(AgentExecutor):
             query_name=query_ref.name,
             session_id=conversation_id,
             agent_name=request.agent.name,
+            message_ttl_seconds=request.message_ttl_seconds,
         ) if broker_url else None
 
         self.executor._broker_client = broker
+        self.executor._query_status_updater = QueryStatusUpdater(query_ref)
         self.executor._streamed = False
 
         try:
@@ -227,9 +230,23 @@ class A2AExecutorAdapter(AgentExecutor):
                 if msg.role == "assistant" and msg.content:
                     response_text += msg.content
 
+            response_dicts = [
+                m.model_dump(exclude_defaults=True) for m in response_messages
+            ]
+
+            if broker and conversation_id:
+                all_messages = [
+                    request.userInput.model_dump(exclude_defaults=True)
+                ] + response_dicts
+                await broker.send_messages(conversation_id, all_messages)
+
             if broker:
                 if not self.executor._streamed:
                     await broker.send_chunk(response_text, finish_reason="stop")
+                await broker.send_final_chunk(
+                    response_text=response_text,
+                    response_messages=response_dicts,
+                )
                 await broker.complete()
 
             response_msg = A2AMessage(
@@ -251,6 +268,7 @@ class A2AExecutorAdapter(AgentExecutor):
             )
         finally:
             self.executor._broker_client = None
+            self.executor._query_status_updater = None
             self.executor._streamed = False
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:

@@ -5,51 +5,32 @@ metadata:
 spec:
   description: Test hierarchical team structure with teams containing other teams as members
   steps:
-  - name: step-1
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/*.yaml
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
-        name: test-model
-        timeout: 3m
+        name: test-model-mock
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: researcher
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: analyst
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: synthesizer
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: coordinator
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -104,7 +85,7 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'parent-team'
-            (length(response.content) > `100`): true
+            (response.content): 'coordinator-output'
     catch:
     - events: {}
     - describe:
@@ -112,3 +93,10 @@ spec:
         kind: Query
         name: team-of-teams-query
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

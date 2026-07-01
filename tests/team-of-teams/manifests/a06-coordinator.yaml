@@ -7,4 +7,4 @@ spec:
     You are a coordination specialist who organizes team outputs.
     Provide final summary and coordination insights. Keep responses brief.
   modelRef:
-    name: test-model
+    name: test-model-mock

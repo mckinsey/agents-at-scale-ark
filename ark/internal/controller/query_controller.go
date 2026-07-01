@@ -5,10 +5,15 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +22,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -26,6 +32,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/common"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
@@ -38,6 +45,14 @@ const (
 	targetTypeTeam  = "team"
 	targetTypeModel = "model"
 	targetTypeTool  = "tool"
+
+	messageCleanupGracePeriod   = 5 * time.Minute
+	messageCleanupRetryInterval = 15 * time.Second
+
+	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
+	// when MaxConcurrentQueries is reached. Short enough to be responsive,
+	// long enough to avoid a busy-loop while in-flight queries drain.
+	queryCapacityRequeueDelay = 250 * time.Millisecond
 )
 
 type QueryReconciler struct {
@@ -46,7 +61,22 @@ type QueryReconciler struct {
 	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
 	CompletionsAddr string
-	operations      sync.Map
+
+	// MaxConcurrentQueries caps the number of Query executions running in
+	// goroutines at once. When the cap is reached, Reconcile() requeues so
+	// the workqueue (cheap, object keys only) holds the backlog instead of
+	// the controller heap. Set to 0 to disable enforcement.
+	MaxConcurrentQueries int
+
+	// MaxConcurrentReconciles sets how many Query keys can be reconciled in
+	// parallel. The controller-runtime workqueue dedupes per-key, so concurrent
+	// reconciles only run for different Query objects — Reconcile() for the
+	// same key is still serialized. Set to 0 to use the controller-runtime
+	// default (1).
+	MaxConcurrentReconciles int
+
+	sem        *semaphore.Weighted
+	operations sync.Map
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -55,6 +85,8 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=memories,verbs=get
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 
@@ -110,7 +142,16 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 	}
 
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
-		r.finalize(ctx, obj)
+		if err := r.finalize(ctx, obj); err != nil {
+			log := logf.FromContext(ctx)
+			if time.Since(obj.DeletionTimestamp.Time) > messageCleanupGracePeriod {
+				log.Error(err, "giving up on broker message cleanup after grace period", "query", obj.Name)
+				controllerutil.RemoveFinalizer(obj, finalizer)
+				return &ctrl.Result{}, r.Update(ctx, obj)
+			}
+			log.Error(err, "broker message cleanup failed, will retry", "query", obj.Name)
+			return &ctrl.Result{RequeueAfter: messageCleanupRetryInterval}, nil
+		}
 		controllerutil.RemoveFinalizer(obj, finalizer)
 		return &ctrl.Result{}, r.Update(ctx, obj)
 	}
@@ -142,7 +183,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
-	case statusRunning:
+	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
@@ -162,7 +203,21 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	opCtx, cancel := context.WithCancel(ctx)
+	queryTimeout := time.Hour
+	if obj.Spec.TTL != nil {
+		queryTimeout = obj.Spec.TTL.Duration
+	}
+	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
+	if remaining <= 0 {
+		return ctrl.Result{}, nil
+	}
+
+	if r.sem != nil && !r.sem.TryAcquire(1) {
+		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
+		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
+	}
+
+	opCtx, cancel := context.WithTimeout(ctx, remaining)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
@@ -171,17 +226,9 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
-	cleanupCache := true
 	startTime := time.Now()
 
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error(fmt.Errorf("query execution goroutine panic: %v", r), "Query execution goroutine panicked")
-		}
-		if cleanupCache {
-			r.operations.Delete(namespacedName)
-		}
-	}()
+	defer r.finishExecuteQueryAsync(opCtx, namespacedName)
 
 	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
@@ -200,7 +247,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	queryInput := extractUserInput(opCtx, obj, r.Client)
 
-	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
+	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(
+		opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, obj.Name),
@@ -239,6 +287,11 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	response, engineMeta, err := r.sendQueryA2A(opCtx, address, obj, *target)
 	if err != nil {
+		if stderrors.Is(err, context.Canceled) {
+			dispatchSpan.SetStatus(telemetry.StatusOk, "canceled")
+			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
+			return
+		}
 		dispatchSpan.RecordError(err)
 		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
@@ -265,16 +318,43 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
 
-	var operationData map[string]string
+	operationData := buildOperationData(target, queryInput)
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
+	if rec := recover(); rec != nil {
+		logf.FromContext(ctx).Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
+	}
+	r.operations.Delete(namespacedName)
+	if r.sem != nil {
+		r.sem.Release(1)
+	}
+}
+
+func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
+	operationData := make(map[string]string)
+	operationData["targetType"] = target.Type
+
+	switch target.Type {
+	case targetTypeTeam:
+		operationData["team"] = target.Name
+	case targetTypeAgent:
+		operationData["agent"] = target.Name
+	case targetTypeTool:
+		operationData["tool"] = target.Name
+	}
+
 	if queryInput != "" {
 		const maxDisplayInputLength = 48
 		displayInput := queryInput
 		if len(displayInput) > maxDisplayInputLength {
 			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
 		}
-		operationData = map[string]string{"input": displayInput}
+		operationData["input"] = displayInput
 	}
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+
+	return operationData
 }
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {
@@ -630,11 +710,7 @@ func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Q
 	return r.updateStatusWithDuration(ctx, query, status, nil)
 }
 
-func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-	query.Status.Phase = status
+func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status string) {
 	switch status {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
@@ -649,6 +725,45 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	case statusCanceled:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
+}
+
+type savedQueryStatus struct {
+	response       *arkv1alpha1.Response
+	tokenUsage     arkv1alpha1.TokenUsage
+	conversationId string
+}
+
+func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
+	if s.response != nil {
+		query.Status.Response = s.response
+	}
+	query.Status.TokenUsage = s.tokenUsage
+	if s.conversationId != "" {
+		query.Status.ConversationId = s.conversationId
+	}
+}
+
+func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	saved := savedQueryStatus{
+		response:       query.Status.Response,
+		tokenUsage:     query.Status.TokenUsage,
+		conversationId: query.Status.ConversationId,
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	query.Status.Phase = status
+	saved.restoreOnto(query)
+	r.setConditionForPhase(query, status)
 	if duration != nil {
 		query.Status.Duration = duration
 	}
@@ -657,7 +772,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+		if !errors.IsConflict(err) {
+			logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+		}
 	}
 	return err
 }
@@ -684,7 +801,7 @@ func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) s
 	return statusDone
 }
 
-func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
+func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) error {
 	log := logf.FromContext(ctx)
 	log.Info("finalizing query", "name", query.Name, "namespace", query.Namespace)
 
@@ -696,6 +813,71 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		r.operations.Delete(nsName)
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
 	}
+
+	return r.deleteBrokerMessages(ctx, query)
+}
+
+func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1alpha1.Query) error {
+	log := logf.FromContext(ctx)
+
+	var memoryName, memoryNamespace string
+	if query.Spec.Memory != nil {
+		memoryName = query.Spec.Memory.Name
+		memoryNamespace = query.Spec.Memory.Namespace
+		if memoryNamespace == "" {
+			memoryNamespace = query.Namespace
+		}
+	} else {
+		memoryName = "default" //nolint:goconst
+		memoryNamespace = query.Namespace
+	}
+
+	var memory arkv1alpha1.Memory
+	if err := r.Get(ctx, client.ObjectKey{Name: memoryName, Namespace: memoryNamespace}, &memory); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			log.Info("memory not found, skipping broker message cleanup", "memory", memoryName, "query", query.Name)
+			return nil
+		}
+		return fmt.Errorf("failed to get memory %s/%s: %w", memoryNamespace, memoryName, err)
+	}
+
+	var baseURL string
+	if memory.Status.LastResolvedAddress != nil && *memory.Status.LastResolvedAddress != "" {
+		baseURL = strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
+	} else {
+		resolver := common.NewValueSourceResolver(r.Client)
+		resolved, err := resolver.ResolveValueSource(ctx, memory.Spec.Address, memoryNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to resolve memory address: %w", err)
+		}
+		baseURL = strings.TrimSuffix(resolved, "/")
+	}
+
+	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, baseURL, url.PathEscape(query.Name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+	req.Header.Set("User-Agent", "ark-controller/1.0")
+
+	httpClient := common.NewHTTPClientWithLogging()
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		log.Info("broker does not support delete query messages, skipping", "query", query.Name, "status", resp.StatusCode)
+		return nil
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", baseURL, resp.StatusCode, query.Name)
+	}
+
+	log.Info("deleted broker messages for query", "query", query.Name)
+	return nil
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
@@ -737,8 +919,24 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.initSemaphore()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Query{}).
 		Named("query").
+		WithOptions(r.buildControllerOptions()).
 		Complete(r)
+}
+
+func (r *QueryReconciler) initSemaphore() {
+	if r.MaxConcurrentQueries > 0 {
+		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
+	}
+}
+
+func (r *QueryReconciler) buildControllerOptions() controller.Options {
+	opts := controller.Options{}
+	if r.MaxConcurrentReconciles > 0 {
+		opts.MaxConcurrentReconciles = r.MaxConcurrentReconciles
+	}
+	return opts
 }

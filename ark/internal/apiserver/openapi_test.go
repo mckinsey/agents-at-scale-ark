@@ -74,9 +74,12 @@ func TestModelSchemaHasProperStructure(t *testing.T) {
 func TestObjectMetaAnnotationsSchema(t *testing.T) {
 	defs := GetOpenAPIDefinitions(nil)
 
-	objectMeta, ok := defs["k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"]
+	// SSA fieldmanager looks up types by their canonical (reverse-domain) form,
+	// e.g. io.k8s.apimachinery..., not the Go-style import path. The map keys
+	// must match what the $ref strings use.
+	objectMeta, ok := defs["io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta"]
 	if !ok {
-		t.Fatal("ObjectMeta definition not found")
+		t.Fatal("ObjectMeta definition not found under canonical name")
 	}
 
 	annotations, ok := objectMeta.Schema.Properties["annotations"]

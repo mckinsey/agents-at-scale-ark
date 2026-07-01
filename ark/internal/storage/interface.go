@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("not found")
-	ErrConflict = errors.New("conflict: resource version mismatch")
+	ErrNotFound      = errors.New("not found")
+	ErrConflict      = errors.New("conflict: resource version mismatch")
+	ErrAlreadyExists = errors.New("already exists")
 )
 
 type ListOptions struct {

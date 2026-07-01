@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
 interface ChatMessageProps {
@@ -35,7 +35,7 @@ export function ChatMessage({
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
-  const markdownContent = useMarkdownProcessor(content);
+  const markdownContent = renderMarkdown(content);
   const { push } = useNamespacedNavigation();
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);

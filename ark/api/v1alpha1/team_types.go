@@ -32,7 +32,7 @@ type TeamSpec struct {
 	Strategy    string       `json:"strategy"`
 	Description string       `json:"description,omitempty"`
 	// +kubebuilder:default=false
-	Loops    bool              `json:"loops"`
+	Loops    *bool             `json:"loops,omitempty"`
 	MaxTurns *int              `json:"maxTurns,omitempty"`
 	Selector *TeamSelectorSpec `json:"selector,omitempty"`
 	Graph    *TeamGraphSpec    `json:"graph,omitempty"`

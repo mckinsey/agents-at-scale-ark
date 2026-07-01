@@ -12,7 +12,7 @@ spec:
   templates:
     - name: main
       script:
-        image: python:3.11-bookworm
+        image: python:3.12-bookworm
         command: [bash]
         source: |
           set -e

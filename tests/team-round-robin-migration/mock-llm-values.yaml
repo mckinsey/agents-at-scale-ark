@@ -1,12 +1,7 @@
 terminationGracePeriodSeconds: 3
 ark:
   model:
-    enabled: true
     name: test-model
-    type: completions
-    provider: openai
-    model: gpt-4
-    apiKey: mock-api-key
 
 config:
   rules:
@@ -19,9 +14,8 @@ config:
           "object": "list",
           "data": [
             {
-              "id": "gpt-4",
+              "id": "gpt-4.1-mini",
               "object": "model",
-              "created": 1687882411,
               "owned_by": "openai"
             }
           ]

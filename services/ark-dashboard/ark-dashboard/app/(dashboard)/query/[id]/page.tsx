@@ -30,7 +30,7 @@ import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import {
   agentsService,
   memoriesService,
@@ -39,6 +39,7 @@ import {
   toolsService,
 } from '@/lib/services';
 import type { Agent } from '@/lib/services/agents';
+import { useArkConfig } from '@/lib/services/arkconfig-hooks';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
@@ -61,7 +62,7 @@ function ResponseContent({
   viewMode: 'content' | 'text' | 'markdown' | 'raw';
   rawJson?: unknown;
 }) {
-  const markdownContent = useMarkdownProcessor(content);
+  const markdownContent = renderMarkdown(content);
 
   if (viewMode === 'raw') {
     const getJsonDisplay = () => {
@@ -348,6 +349,9 @@ function QueryDetailContent() {
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
   const mode = isNew ? 'new' : 'view';
+
+  const { data: arkConfig } = useArkConfig();
+  const ttlPlaceholder = `Default: ${arkConfig?.queryTTL || '720h'}`;
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -827,7 +831,7 @@ function QueryDetailContent() {
                       setQuery(prev => (prev ? { ...prev, ttl } : null))
                     }
                     label="TTL"
-                    placeholder="Default: 720h"
+                    placeholder={ttlPlaceholder}
                     tooltip="How long the query will remain in the system before it is deleted"
                   />
                   <QueryMemoryField

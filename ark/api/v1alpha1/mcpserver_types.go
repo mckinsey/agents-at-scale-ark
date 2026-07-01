@@ -26,14 +26,62 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="1m"
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
+
+	// Authorization configures how the controller obtains and injects
+	// credentials for OAuth-protected MCP servers. When unset, the
+	// controller does not attempt to inject Authorization headers.
+	// +kubebuilder:validation:Optional
+	Authorization *MCPServerAuthorizationSpec `json:"authorization,omitempty"`
+}
+
+// MCPServerAuthorizationSpec configures how the controller sources
+// OAuth credentials for an MCPServer. Fork 1A scope is a single shared
+// token per server, stored in a Kubernetes Secret in the same namespace.
+type MCPServerAuthorizationSpec struct {
+	// TokenSecretRef references the Kubernetes Secret holding OAuth
+	// tokens and client credentials. The Secret MUST exist in the same
+	// namespace as the MCPServer.
+	// +kubebuilder:validation:Required
+	TokenSecretRef TokenSecretReference `json:"tokenSecretRef"`
+}
+
+// TokenSecretReference points at a Secret and names the keys inside it
+// that carry OAuth state. Keys default to the values defined in the
+// mcp-auth-cli-authorize spec.
+type TokenSecretReference struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="access_token"
+	AccessTokenKey string `json:"accessTokenKey,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="refresh_token"
+	RefreshTokenKey string `json:"refreshTokenKey,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="expires_at"
+	ExpiresAtKey string `json:"expiresAtKey,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="client_id"
+	ClientIDKey string `json:"clientIDKey,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="client_secret"
+	ClientSecretKey string `json:"clientSecretKey,omitempty"`
 }
 
 // MCPServerAuthorizationState enumerates the observable authorization
 // states of an MCP server. An empty value (the absence of the
 // `authorization` sub-resource) means authorization is not required.
-// Future changes will extend this enum with `Authorized`, `Expired`,
-// and `RefreshFailed` once token exchange lands.
-// +kubebuilder:validation:Enum=Required;DiscoveryFailed
+// `Authorized` indicates the controller successfully listed tools using
+// a Bearer token from `spec.authorization.tokenSecretRef`. A 401 from the
+// upstream — expiry, revocation, refresh failure — collapses back to
+// `Required` and emits a `TokenRejected` event so the transition is
+// observable without a dedicated state.
+// +kubebuilder:validation:Enum=Required;DiscoveryFailed;Authorized
 type MCPServerAuthorizationState string
 
 const (
@@ -45,6 +93,11 @@ const (
 	// responded with HTTP 401 but no usable RFC 9728 metadata could be
 	// obtained.
 	MCPServerAuthorizationStateDiscoveryFailed MCPServerAuthorizationState = "DiscoveryFailed"
+
+	// MCPServerAuthorizationStateAuthorized indicates the controller
+	// connected to the MCP server using a Bearer token resolved from
+	// `spec.authorization.tokenSecretRef`.
+	MCPServerAuthorizationStateAuthorized MCPServerAuthorizationState = "Authorized"
 )
 
 // MCPServerAuthorizationStatus surfaces OAuth 2.1 / RFC 9728 Protected
@@ -112,6 +165,12 @@ type MCPServerAuthorizationStatus struct {
 	// discovery probe against the server.
 	// +kubebuilder:validation:Optional
 	LastDiscovered *metav1.Time `json:"lastDiscovered,omitempty"`
+
+	// ExpiresAt is the absolute time at which the current access_token
+	// expires, published for dashboard / observability consumers that
+	// may have `get` on mcpservers but not on secrets.
+	// +kubebuilder:validation:Optional
+	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
 }
 
 // MCPServerStatus defines the observed state of MCPServer

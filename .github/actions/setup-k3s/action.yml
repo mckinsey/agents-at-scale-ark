@@ -25,7 +25,9 @@ inputs:
   k3s-version:
     description: K3S version (https://github.com/rancher/k3s/releases)
     required: false
-    default: ""
+    # Pinned to avoid intermittent failures resolving the "stable" channel via
+    # update.k3s.io, which the upstream install script does not handle gracefully.
+    default: "v1.35.5+k3s1"
   k3s-channel:
     description: K3S channel (https://update.k3s.io/v1-release/channels)
     required: false
@@ -149,6 +151,38 @@ runs:
         echo "::endgroup::"
       shell: bash
 
+    # Wait for k3s to finish creating the bootstrap RBAC the cloud-controller
+    # manager needs before we apply anything on top of it. If we don't, the
+    # cloud-controller can race against its own rolebinding, hit a 403 reading
+    # kube-system/extension-apiserver-authentication, treat that as fatal, and
+    # take the rest of k3s down with it mid-calico-rollout. Symptom: calico-node
+    # never goes ready and every follow-up kubectl call returns "connection to
+    # 127.0.0.1:6443 was refused".
+    - name: Wait for k3s bootstrap RBAC
+      run: |
+        echo "::group::Wait for k3s bootstrap RBAC"
+        # Probe the actual auth chain (rolebinding + configmap + apiserver
+        # cache) instead of pattern-matching resource names; the rolebinding
+        # the cloud-controller uses has been renamed across k3s versions.
+        for attempt in $(seq 1 24); do
+          if kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+               --as=k3s-cloud-controller-manager >/dev/null 2>&1; then
+            echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
+            break
+          fi
+          echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          sleep 2
+          if [ "$attempt" -eq 24 ]; then
+            echo "Timed out waiting for k3s bootstrap RBAC"
+            kubectl -n kube-system get rolebinding,configmap || true
+            kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+              --as=k3s-cloud-controller-manager -v=6 || true
+            exit 1
+          fi
+        done
+        echo "::endgroup::"
+      shell: bash
+
     # Install calico as a CNI to enforce our NetworkPolicies. Note that canal
     # could do this job as well.
     #
@@ -213,17 +247,38 @@ runs:
 
     - name: Wait for calico, coredns, metrics server, traefik
       run: |
-        echo "::group::Wait for daemonset/calico-node"
-        kubectl rollout status --watch --timeout=5m daemonset/calico-node -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout() {
+          local kind="$1" name="$2"
+          echo "::group::Wait for $kind/$name"
+          for attempt in $(seq 1 36); do
+            if kubectl rollout status --timeout=30s "$kind/$name" -n kube-system 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for $name (attempt $attempt/36)..."
+            sleep 5
+            if [ "$attempt" -eq 36 ]; then
+              echo "Timed out waiting for $name"
+              echo "--- pod status ---"
+              kubectl get pods -n kube-system -o wide || true
+              echo "--- $name describe ---"
+              kubectl describe "$kind/$name" -n kube-system || true
+              echo "--- $name pod describe ---"
+              kubectl describe pods -l k8s-app="$name" -n kube-system || true
+              echo "--- $name pod logs (all containers) ---"
+              kubectl logs -l k8s-app="$name" -n kube-system --all-containers=true --tail=50 || true
+              echo "--- node memory ---"
+              free -h || true
+              echo "--- k3s service logs ---"
+              sudo journalctl -u k3s --no-pager --since "10 minutes ago" --lines=50 || true
+              kubectl rollout status --timeout=30s "$kind/$name" -n kube-system
+            fi
+          done
+          echo "::endgroup::"
+        }
 
-        echo "::group::Wait for deployment/calico-kube-controllers"
-        kubectl rollout status --watch --timeout=5m deployment/calico-kube-controllers -n kube-system
-        echo "::endgroup::"
-
-        echo "::group::Wait for deployment/coredns"
-        kubectl rollout status --watch --timeout=5m deployment/coredns -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout daemonset calico-node
+        wait_for_rollout deployment calico-kube-controllers
+        wait_for_rollout deployment coredns
 
         echo "::group::Wait for deployment/metrics-server"
         if [[ "${{ inputs.metrics-enabled }}" == true ]]; then

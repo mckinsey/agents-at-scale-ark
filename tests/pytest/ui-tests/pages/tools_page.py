@@ -68,6 +68,8 @@ class ToolsPage(BasePage):
         add_button.click()
         self.wait_for_navigation_complete()
         self.wait_for_form_ready()
+        dialog = self.page.locator("[role='dialog']").first
+        self.wait_for_animations_complete(dialog)
         
         name_input = self.page.locator(self.TOOL_NAME_INPUT).first
 
@@ -81,18 +83,36 @@ class ToolsPage(BasePage):
 
         logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
+        name_input.blur()
         logger.info(f"Name in name input is {name_input.input_value()}")
 
-        type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
+        type_trigger = self.page.locator("[role='dialog'] [role='combobox']").first
+        type_trigger.scroll_into_view_if_needed()
         type_trigger.wait_for(state="visible", timeout=15000)
-        type_trigger.click()
 
-        listbox = self.page.locator("[role='listbox'][data-side][data-state='open']")
-        listbox.wait_for(state="visible", timeout=15000)
+        listbox = self.page.locator("[role='listbox'][data-state='open']")
+        for attempt in range(3):
+            logger.info(f"Clicking type trigger to open dropdown (attempt {attempt + 1})")
+            type_trigger.click()
+            try:
+                listbox.wait_for(state="visible", timeout=5000)
+                logger.info("Listbox visible")
+                break
+            except Exception:
+                logger.info(f"Listbox not visible on attempt {attempt + 1}, retrying")
+        else:
+            listbox.wait_for(state="visible", timeout=1)
+
         self.wait_for_animations_complete(listbox)
-        logger.info("Listbox animations complete, clicking HTTP option")
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+        http_option.wait_for(state="visible", timeout=10000)
+        logger.info("HTTP option visible, clicking")
         http_option.click()
+        name_value_after_type = name_input.input_value()
+        logger.info(f"Name input value after type selection: '{name_value_after_type}'")
+        if not name_value_after_type:
+            logger.info("Name was cleared by type selection re-render, re-filling")
+            name_input.fill(tool_name)
 
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=15000)

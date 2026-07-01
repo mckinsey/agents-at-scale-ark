@@ -419,6 +419,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/arkconfig": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Arkconfig
+         * @description Return the singleton ArkConfig. If it does not exist, return defaults with exists=false.
+         */
+        get: operations["get_arkconfig_v1_arkconfig_get"];
+        /**
+         * Upsert Arkconfig
+         * @description Create or update the singleton ArkConfig with the supplied defaults.
+         */
+        put: operations["upsert_arkconfig_v1_arkconfig_put"];
+        post?: never;
+        /**
+         * Delete Arkconfig
+         * @description Delete the singleton ArkConfig, restoring hardcoded defaults.
+         */
+        delete: operations["delete_arkconfig_v1_arkconfig_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/broker/chunks": {
         parameters: {
             query?: never;
@@ -530,6 +558,26 @@ export interface paths {
          * @description Purge all sessions from the broker.
          */
         delete: operations["purge_sessions_v1_broker_sessions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/broker/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session
+         * @description Get a single session by ID from the broker.
+         */
+        get: operations["get_session_v1_broker_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -890,6 +938,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mcp-servers/{mcp_server_name}/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout Mcp Auth */
+        post: operations["logout_mcp_auth_v1_mcp_servers__mcp_server_name__auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp-servers/{mcp_server_name}/auth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Mcp Auth */
+        post: operations["start_mcp_auth_v1_mcp_servers__mcp_server_name__auth_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp-servers/{mcp_server_name}/auth/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Mcp Auth Status */
+        get: operations["get_mcp_auth_status_v1_mcp_servers__mcp_server_name__auth_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mcp Auth Callback */
+        get: operations["mcp_auth_callback_v1_mcp_auth_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/memories": {
         parameters: {
             query?: never;
@@ -1100,6 +1216,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/namespaces/{namespace}/marketplace-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Items
+         * @description Aggregate marketplace items across the namespace's sources. Always HTTP 200.
+         */
+        get: operations["list_marketplace_items_v1_namespaces__namespace__marketplace_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Sources
+         * @description List marketplace sources for a namespace. Missing ConfigMap returns [].
+         */
+        get: operations["list_marketplace_sources_v1_namespaces__namespace__marketplace_sources_get"];
+        put?: never;
+        /**
+         * Create Marketplace Source
+         * @description Create a source via server-side apply. With a credential: validate it, store it
+         *     in a per-source Secret, and write only ``{scheme, secretRef}`` to the ConfigMap.
+         */
+        post: operations["create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketplace Source Permissions
+         * @description Probe edit permission via SSAR. Fail-closed: canEdit=False on any error.
+         */
+        get: operations["get_marketplace_source_permissions_v1_namespaces__namespace__marketplace_sources_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketplace Source
+         * @description Get a single marketplace source by name.
+         */
+        get: operations["get_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Marketplace Source
+         * @description Delete a source: remove its ConfigMap key and its credential Secret.
+         */
+        delete: operations["delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Marketplace Source
+         * @description Update a source via server-side apply. Omitting ``auth`` makes it anonymous and
+         *     deletes the credential Secret; changing the URL or scheme requires re-supplying the
+         *     credential (the existing Secret is never carried to a new URL).
+         */
+        patch: operations["update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch"];
+        trace?: never;
+    };
     "/v1/proxy/services": {
         parameters: {
             query?: never;
@@ -1237,7 +1448,7 @@ export interface paths {
         };
         /**
          * List Queries
-         * @description List all queries in a namespace.
+         * @description List queries in a namespace with pagination and text search.
          */
         get: operations["list_queries_v1_queries_get"];
         put?: never;
@@ -2419,6 +2630,34 @@ export interface components {
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
+         * ArkConfigResponse
+         * @description Cluster-wide Ark defaults. Singleton resource named 'default'.
+         */
+        ArkConfigResponse: {
+            /**
+             * Exists
+             * @description Whether the ArkConfig singleton exists in the cluster.
+             * @default false
+             */
+            exists: boolean;
+            /**
+             * Queryttl
+             * @description Default TTL injected into Query resources that do not specify spec.ttl (e.g. '720h').
+             */
+            queryTTL?: string | null;
+        };
+        /**
+         * ArkConfigUpdateRequest
+         * @description Update payload for the ArkConfig singleton.
+         */
+        ArkConfigUpdateRequest: {
+            /**
+             * Queryttl
+             * @description Default TTL for queries (e.g. '720h'). Pass null to clear.
+             */
+            queryTTL?: string | null;
+        };
+        /**
          * ArkService
          * @description Response model for a single ARK service.
          *
@@ -2475,6 +2714,78 @@ export interface components {
         Audio: {
             /** Id */
             id: string;
+        };
+        /** AuthLogoutRequest */
+        AuthLogoutRequest: {
+            /** Delete Secret */
+            delete_secret?: boolean | null;
+            /** Keep Client */
+            keep_client?: boolean | null;
+        };
+        /** AuthLogoutResponse */
+        AuthLogoutResponse: {
+            /** Cleared Keys */
+            cleared_keys?: string[];
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /**
+             * Noop
+             * @default false
+             */
+            noop: boolean;
+        };
+        /** AuthStartRequest */
+        AuthStartRequest: {
+            /**
+             * Force
+             * @description Bypass the Authorized preflight and force fresh DCR even when the Secret carries cached client credentials
+             */
+            force?: boolean | null;
+            /**
+             * Scopes
+             * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
+             */
+            scopes?: string[] | null;
+        };
+        /** AuthStartResponse */
+        AuthStartResponse: {
+            /** Auth Id */
+            auth_id: string;
+            /** Authorization Url */
+            authorization_url: string;
+            /**
+             * Flow Expires At
+             * @description RFC 3339 UTC cache-entry deadline; distinct from the token expiry returned by auth/status
+             */
+            flow_expires_at: string;
+        };
+        /** AuthStatusResponse */
+        AuthStatusResponse: {
+            /**
+             * Controller Message
+             * @description Latest Available condition message from the controller
+             */
+            controller_message?: string | null;
+            /**
+             * Controller State
+             * @description Current MCPServer status.authorization.state from the controller
+             */
+            controller_state?: string | null;
+            /**
+             * Expires At
+             * @description RFC 3339 UTC token expiry (only present once state == authorized)
+             */
+            expires_at?: string | null;
+            /** Message */
+            message?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "authorized" | "failed" | "expired";
         };
         /**
          * AvailabilityStatus
@@ -2733,6 +3044,7 @@ export interface components {
             cluster: string | null;
             /** Namespace */
             namespace: string;
+            permissions?: components["schemas"]["PermissionsResponse"] | null;
             /** Read Only Mode */
             read_only_mode: boolean;
         };
@@ -3192,6 +3504,109 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * MarketplaceItemError
+         * @description Per-source failure detail returned by the aggregator.
+         */
+        MarketplaceItemError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * MarketplaceItemsSourceResult
+         * @description Aggregator result for one source: items on success, error on failure.
+         */
+        MarketplaceItemsSourceResult: {
+            /** Displayname */
+            displayName: string;
+            error?: components["schemas"]["MarketplaceItemError"] | null;
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Source */
+            source: string;
+        };
+        /**
+         * MarketplacePermissionsResponse
+         * @description Response of the permission probe endpoint.
+         */
+        MarketplacePermissionsResponse: {
+            /** Canedit */
+            canEdit: boolean;
+        };
+        /**
+         * MarketplaceSourceAuthInfo
+         * @description Non-secret auth metadata returned to clients (never the credential).
+         */
+        MarketplaceSourceAuthInfo: {
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
+         * MarketplaceSourceAuthInput
+         * @description Auth config supplied on create/update.
+         *
+         *     ``credential`` is write-only (stored in a Secret, never returned). It has no
+         *     length constraint on purpose: a failed constraint would echo the token into the
+         *     422 body. Emptiness is checked in the endpoint, returning a clean 400.
+         */
+        MarketplaceSourceAuthInput: {
+            /** Credential */
+            credential?: string | null;
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
+         * MarketplaceSourceCreate
+         * @description Request body for creating a marketplace source.
+         */
+        MarketplaceSourceCreate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
+            /** Displayname */
+            displayName?: string | null;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MarketplaceSourceResponse
+         * @description A single marketplace source entry. Never carries the credential value.
+         */
+        MarketplaceSourceResponse: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInfo"] | null;
+            /** Displayname */
+            displayName?: string | null;
+            /**
+             * Hascredential
+             * @default false
+             */
+            hasCredential: boolean;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MarketplaceSourceUpdate
+         * @description Request body for updating a marketplace source.
+         */
+        MarketplaceSourceUpdate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
+            /** Displayname */
+            displayName?: string | null;
+            /** Url */
+            url: string;
+        };
+        /**
          * Memory
          * @description Memory reference for a query.
          */
@@ -3472,6 +3887,23 @@ export interface components {
             /** Headers */
             headers?: components["schemas"]["AgentHeader"][] | null;
         };
+        /** PermissionsResponse */
+        PermissionsResponse: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Rules
+             * @default {}
+             */
+            rules: {
+                [key: string]: string[];
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /**
          * QueryConfigMapKeyRef
          * @description Reference to a key in a ConfigMap.
@@ -3596,6 +4028,21 @@ export interface components {
             count: number;
             /** Items */
             items: components["schemas"]["QueryResponse"][];
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /**
          * QueryParameter
@@ -4654,6 +5101,77 @@ export interface operations {
             };
         };
     };
+    get_arkconfig_v1_arkconfig_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArkConfigResponse"];
+                };
+            };
+        };
+    };
+    upsert_arkconfig_v1_arkconfig_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArkConfigUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArkConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_arkconfig_v1_arkconfig_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_chunks_v1_broker_chunks_get: {
         parameters: {
             query?: {
@@ -4921,6 +5439,22 @@ export interface operations {
                 watch?: boolean;
                 /** @description Memory resource name */
                 memory?: string;
+                /** @description Max sessions to return */
+                limit?: number | null;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
+                /** @description Filter by status (active/idle/error) */
+                status?: string | null;
+                /** @description Filter sessions from this date */
+                date_from?: string | null;
+                /** @description Filter sessions to this date */
+                date_to?: string | null;
+                /** @description Search by session ID or participant */
+                search?: string | null;
+                /** @description Sort field (date, name, conversations) */
+                sort?: string | null;
+                /** @description Sort order (asc/desc) */
+                order?: string | null;
             };
             header?: never;
             path?: never;
@@ -4956,6 +5490,40 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_v1_broker_sessions__session_id__get: {
+        parameters: {
+            query?: {
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5581,6 +6149,152 @@ export interface operations {
             };
         };
     };
+    logout_mcp_auth_v1_mcp_servers__mcp_server_name__auth_logout_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                mcp_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthLogoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthLogoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_mcp_auth_v1_mcp_servers__mcp_server_name__auth_start_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                mcp_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mcp_auth_status_v1_mcp_servers__mcp_server_name__auth_status_get: {
+        parameters: {
+            query: {
+                /** @description auth_id returned by auth/start */
+                auth_id: string;
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                mcp_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mcp_auth_callback_v1_mcp_auth_callback_get: {
+        parameters: {
+            query?: {
+                state?: string | null;
+                code?: string | null;
+                error?: string | null;
+                error_description?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_memories_v1_memories_get: {
         parameters: {
             query?: {
@@ -6057,6 +6771,232 @@ export interface operations {
             };
         };
     };
+    list_marketplace_items_v1_namespaces__namespace__marketplace_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceItemsSourceResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_sources_v1_namespaces__namespace__marketplace_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceSourceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_source_permissions_v1_namespaces__namespace__marketplace_sources_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplacePermissionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_services_v1_proxy_services_get: {
         parameters: {
             query?: {
@@ -6403,6 +7343,12 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Page number (1-indexed) */
+                page?: number;
+                /** @description Items per page */
+                page_size?: number;
+                /** @description Case-insensitive substring match over query input text */
+                search?: string | null;
             };
             header?: never;
             path?: never;

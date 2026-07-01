@@ -1,6 +1,5 @@
 import unittest
 import base64
-import io
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from src.ark_api.api.v1.file_preview import router

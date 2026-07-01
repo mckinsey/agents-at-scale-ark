@@ -9,6 +9,7 @@ import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServerCreateRequest } from '@/lib/services/mcp-servers';
 import { type MCPServer } from '@/lib/services/mcp-servers';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 import { McpEditor } from '../editors/mcp-editor';
 import { BaseCard, type BaseCardAction } from './base-card';
@@ -65,6 +66,10 @@ export function McpServerCard({
     });
   }
 
+  const originIcon = getOriginIcon(
+    mcpServer.annotations?.[ARK_ANNOTATIONS.ORIGIN],
+  );
+
   // Get the address from either status.lastResolvedAddress or spec.address.value
   const address = mcpServer.address || 'Address not available';
   const transport = mcpServer.transport || 'unknown';
@@ -78,11 +83,12 @@ export function McpServerCard({
         actions={actions}
         footer={
           <div className="text-muted-foreground flex flex-col gap-1 text-sm">
-            <div className="w-fit">
+            <div className="flex w-fit items-center gap-x-1.5">
               <AvailabilityStatusBadge
                 status={mcpServer.available}
                 eventsLink={`/events?kind=MCPServer&name=${mcpServer.name}&page=1`}
               />
+              {originIcon}
             </div>
             <div>
               <span className="font-medium">Address:</span> {address}

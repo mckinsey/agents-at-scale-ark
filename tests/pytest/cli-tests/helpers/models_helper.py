@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-DEFAULT_AZURE_API_VERSION = "2024-04-01-preview"
+from helpers import k8s
 
 
 class ModelsHelper:
@@ -32,18 +32,8 @@ class ModelsHelper:
             return False, "", str(e)
 
     def _apply_yaml(self, resource: Dict[str, Any]) -> Tuple[bool, str]:
-        try:
-            yaml_str = yaml.safe_dump(resource, default_flow_style=False)
-            result = subprocess.run(
-                ["kubectl", "apply", "-f", "-"],
-                input=yaml_str,
-                capture_output=True,
-                text=True,
-                timeout=self.TIMEOUT_CREATE,
-            )
-            return result.returncode == 0, result.stderr if result.returncode != 0 else result.stdout
-        except Exception as e:
-            return False, str(e)
+        yaml_str = yaml.safe_dump(resource, default_flow_style=False)
+        return k8s.apply_yaml(yaml_str, timeout=self.TIMEOUT_CREATE)
 
     def create_secret(self, name: str, token: str) -> Tuple[bool, str]:
         encoded = base64.b64encode(token.encode()).decode()
@@ -75,40 +65,20 @@ class ModelsHelper:
         }
         return self._apply_yaml(resource)
 
-    def create_anthropic_model(self, name: str, secret_name: str, model: str = "claude-3-haiku-20240307", base_url: str = "") -> Tuple[bool, str]:
+    def create_mock_model(self, name: str, model: str = "gpt-4.1-mini") -> Tuple[bool, str]:
         resource: Dict[str, Any] = {
             "apiVersion": "ark.mckinsey.com/v1alpha1",
             "kind": "Model",
             "metadata": {"name": name, "namespace": self.NAMESPACE},
             "spec": {
                 "config": {
-                    "anthropic": {
-                        "apiKey": {"valueFrom": {"secretKeyRef": {"key": "token", "name": secret_name}}},
-                        "baseUrl": {"value": base_url},
+                    "openai": {
+                        "apiKey": {"value": "mock-api-key"},
+                        "baseUrl": {"value": "http://mock-llm.default.svc.cluster.local:6556/v1"},
                     }
                 },
                 "model": {"value": model},
-                "provider": "anthropic",
-                "type": "completions",
-            },
-        }
-        return self._apply_yaml(resource)
-
-    def create_azure_model(self, name: str, secret_name: str, model: str = "gpt-35-turbo", base_url: str = "", api_version: str = DEFAULT_AZURE_API_VERSION) -> Tuple[bool, str]:
-        resource: Dict[str, Any] = {
-            "apiVersion": "ark.mckinsey.com/v1alpha1",
-            "kind": "Model",
-            "metadata": {"name": name, "namespace": self.NAMESPACE},
-            "spec": {
-                "config": {
-                    "azure": {
-                        "auth": {"apiKey": {"valueFrom": {"secretKeyRef": {"key": "token", "name": secret_name}}}},
-                        "baseUrl": {"value": base_url},
-                        "apiVersion": {"value": api_version},
-                    }
-                },
-                "model": {"value": model},
-                "provider": "azure",
+                "provider": "openai",
                 "type": "completions",
             },
         }
@@ -173,7 +143,3 @@ class ModelsHelper:
             ["kubectl", "delete", "secret", name, "-n", self.NAMESPACE, "--ignore-not-found=true"],
         )
         return success, stderr
-
-    def cleanup(self, model_name: str, secret_name: str) -> None:
-        self.delete_model(model_name)
-        self.delete_secret(secret_name)

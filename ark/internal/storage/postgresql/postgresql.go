@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -168,6 +168,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 	);
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS owner_references JSONB DEFAULT '[]';
+	ALTER TABLE resources ADD COLUMN IF NOT EXISTS deletion_timestamp TIMESTAMPTZ;
 
 	ALTER TABLE resources DROP CONSTRAINT IF EXISTS resources_kind_namespace_name_key;
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_unique_active ON resources(kind, namespace, name) WHERE deleted_at IS NULL;
@@ -286,6 +287,9 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 		RETURNING resource_version, generation, created_at
 	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON).Scan(&rv, &generation, &createdAt)
 	if err != nil {
+		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "23505" {
+			return storage.ErrAlreadyExists
+		}
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
 
@@ -294,7 +298,7 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at
+		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name)
 
@@ -302,20 +306,21 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 	var uid string
 	var spec, status, labels, annotations, finalizers, ownerRefs []byte
 	var createdAt, updatedAt time.Time
+	var deletionTimestamp sql.NullTime
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 }
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND deleted_at IS NULL`
 	args := []interface{}{kind}
@@ -343,6 +348,12 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	if opts.Continue != "" {
 		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
 		if err == nil && cursor > 0 {
+			// NOTE: paginated LIST has a known weak-consistency edge case across pages
+			// due to the BIGSERIAL commit-order race documented in postgresWatcher.relist.
+			// A row whose creating transaction was in-flight during page N's snapshot
+			// can commit before page N+1 and not be returned by either page. The proper
+			// fix is snapshot-based pagination (pg_export_snapshot + REPEATABLE READ).
+			// Bites only when total result > opts.Limit (typically 500). Tracked separately.
 			query += fmt.Sprintf(" AND resource_version < $%d", argIndex)
 			args = append(args, cursor)
 			argIndex++
@@ -370,12 +381,13 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
+		var deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -403,11 +415,12 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 
 	var resource struct {
 		Metadata struct {
-			ResourceVersion string            `json:"resourceVersion"`
-			Labels          map[string]string `json:"labels"`
-			Annotations     map[string]string `json:"annotations"`
-			Finalizers      []string          `json:"finalizers"`
-			OwnerReferences json.RawMessage   `json:"ownerReferences"`
+			ResourceVersion   string            `json:"resourceVersion"`
+			Labels            map[string]string `json:"labels"`
+			Annotations       map[string]string `json:"annotations"`
+			Finalizers        []string          `json:"finalizers"`
+			OwnerReferences   json.RawMessage   `json:"ownerReferences"`
+			DeletionTimestamp *string           `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -432,6 +445,14 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	ownerRefsJSON := string(resource.Metadata.OwnerReferences)
 	if ownerRefsJSON == "" || ownerRefsJSON == jsonNull {
 		ownerRefsJSON = "[]"
+	}
+
+	// deletionTimestamp is set-once: once a graceful delete records it, normal
+	// updates that omit it (most reconciles) must not clear it. COALESCE in the
+	// UPDATE keeps the stored value whenever the incoming object has none.
+	var deletionTS interface{}
+	if resource.Metadata.DeletionTimestamp != nil && *resource.Metadata.DeletionTimestamp != "" {
+		deletionTS = *resource.Metadata.DeletionTimestamp
 	}
 
 	specJSON := string(resource.Spec)
@@ -461,14 +482,15 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
+			    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
 			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10 AND deleted_at IS NULL
+			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
 		SELECT resource_version, generation, uid, created_at, true FROM upd
 		UNION ALL
 		SELECT 0, 0, '', NOW(), false WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -582,6 +604,7 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		ctx:         ctx,
 		done:        make(chan struct{}),
 		initialList: true,
+		seenRVs:     make(map[string]int64),
 	}
 
 	p.mu.Lock()
@@ -606,7 +629,14 @@ func (p *PostgreSQLBackend) Close() error {
 	return p.db.Close()
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time) (runtime.Object, error) {
+func nullTimePtr(t sql.NullTime) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Time
+}
+
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
 	var finalizersList []string
@@ -631,6 +661,9 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	}
 	if len(ownerRefsList) > 0 {
 		metadata["ownerReferences"] = ownerRefsList
+	}
+	if deletionTimestamp != nil {
+		metadata["deletionTimestamp"] = deletionTimestamp.UTC().Format(time.RFC3339)
 	}
 
 	obj := map[string]interface{}{
@@ -727,6 +760,12 @@ type postgresWatcher struct {
 	lastSeenRV      atomic.Int64
 	initialList     bool
 	initialListDone bool
+	// seenRVs maps a resource UID to the highest rv we've already emitted for it.
+	// Combined with the lookback window in relist(), this lets us re-fetch rows that
+	// might have been invisible during a prior relist (because their txn was still
+	// in flight) without re-emitting events the consumer already saw.
+	seenMu  sync.Mutex
+	seenRVs map[string]int64
 }
 
 func (w *postgresWatcher) Stop() {
@@ -808,14 +847,52 @@ func (w *postgresWatcher) advanceRV(rv int64) {
 	}
 }
 
-func (w *postgresWatcher) relist() {
-	lastRV := w.lastSeenRV.Load()
+// markSeen returns true if rv should be skipped because we've already emitted
+// this uid at the same or higher rv. Otherwise records rv as the latest.
+func (w *postgresWatcher) markSeen(uid string, rv int64) bool {
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	if seen, ok := w.seenRVs[uid]; ok && seen >= rv {
+		return true
+	}
+	w.seenRVs[uid] = rv
+	return false
+}
+
+func (w *postgresWatcher) hasSeenUID(uid string) bool {
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	_, ok := w.seenRVs[uid]
+	return ok
+}
+
+// pruneSeen drops seenRVs entries far below the current cursor, bounding memory.
+func (w *postgresWatcher) pruneSeen() {
+	pruneFloor := w.lastSeenRV.Load() - 5000
+	if pruneFloor <= 0 {
+		return
+	}
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	for uid, rv := range w.seenRVs {
+		if rv < pruneFloor {
+			delete(w.seenRVs, uid)
+		}
+	}
+}
+
+func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
+	const lookback int64 = 500
+	queryFromRV := w.lastSeenRV.Load() - lookback
+	if queryFromRV < 0 {
+		queryFromRV = 0
+	}
 
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND resource_version > $2`
-	args := []interface{}{w.kind, lastRV}
+	args := []interface{}{w.kind, queryFromRV}
 	argIndex := 3
 
 	if w.ns != "" {
@@ -823,16 +900,54 @@ func (w *postgresWatcher) relist() {
 		args = append(args, w.ns)
 		argIndex++
 	}
-
 	if w.labelFilter != nil {
 		labelJSON, _ := json.Marshal(w.labelFilter)
 		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
 		args = append(args, string(labelJSON))
 		_ = argIndex
 	}
-
 	query += ` ORDER BY resource_version ASC`
+	return query, args
+}
 
+// emitRow sends a single relist row downstream. Returns false if the watcher
+// should stop iterating (done/cancelled).
+func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
+	uidNew := !w.hasSeenUID(uid)
+	if w.markSeen(uid, rv) {
+		return true
+	}
+	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+	if err != nil {
+		return true
+	}
+	var eventType watch.EventType
+	switch {
+	case deletedAt.Valid:
+		eventType = watch.Deleted
+	case uidNew:
+		eventType = watch.Added
+	default:
+		eventType = watch.Modified
+	}
+	w.advanceRV(rv)
+	select {
+	case w.outCh <- watch.Event{Type: eventType, Object: obj}:
+		return true
+	case <-w.done:
+		return false
+	case <-w.ctx.Done():
+		return false
+	}
+}
+
+func (w *postgresWatcher) relist() {
+	// FIX: BIGSERIAL resource_versions are assigned at INSERT statement time, but row
+	// visibility depends on COMMIT time. Two concurrent INSERTs can commit in the
+	// opposite order from rv assignment, so a strict `rv > lastSeenRV` cursor can skip
+	// past an in-flight rv permanently. Mitigation: re-query with a lookback window,
+	// then dedup by (uid, rv) using w.seenRVs to avoid double-emitting.
+	query, args := w.buildRelistQuery()
 	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
 	if err != nil {
 		return
@@ -844,36 +959,16 @@ func (w *postgresWatcher) relist() {
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
-		var deletedAt sql.NullTime
+		var deletedAt, deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
 			return
 		}
-
-		obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
-		if err != nil {
-			continue
-		}
-
-		var eventType watch.EventType
-		switch {
-		case deletedAt.Valid:
-			eventType = watch.Deleted
-		case w.initialList:
-			eventType = watch.Added
-		default:
-			eventType = watch.Modified
-		}
-
-		w.advanceRV(rv)
-		select {
-		case w.outCh <- watch.Event{Type: eventType, Object: obj}:
-		case <-w.done:
-			return
-		case <-w.ctx.Done():
+		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
 			return
 		}
 	}
+	w.pruneSeen()
 
 	if w.initialList {
 		w.initialList = false

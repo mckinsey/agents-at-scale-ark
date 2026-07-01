@@ -17,6 +17,10 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
+import {
+  type ApiQueryParameter,
+  useAgentQueryParameters,
+} from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
@@ -32,12 +36,19 @@ interface UseChatSessionReturn {
   messages: ExtendedChatMessage[];
   sessionId: string;
   isProcessing: boolean;
+  processingPhase?: string;
+
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
+  cancelQuery: () => void;
+  requiredParameters: string[];
+  parameterValues: Record<string, string>;
+  setParameterValue: (name: string, value: string) => void;
+  missingParameters: string[];
 }
 
 export function useChatSession({
@@ -65,11 +76,13 @@ export function useChatSession({
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
-  const conversationId = (chatSession as { conversationId?: string }).conversationId;
+  const conversationId = (chatSession as { conversationId?: string })
+    .conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      const sessionIdToUse =
+        pendingSessionIdRef.current ?? createNewSessionId(name);
       pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
@@ -145,11 +158,22 @@ export function useChatSession({
   );
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatStreamAbortControllerRef = useRef(new AbortController());
+
+  const {
+    requiredParameters,
+    values: parameterValues,
+    setValue: setParameterValue,
+    missingParameters,
+    toApiParameters,
+  } = useAgentQueryParameters(name, type);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -180,8 +204,12 @@ export function useChatSession({
     [],
   );
 
+  const lastQueryName = useRef('');
+
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+      chatStreamAbortControllerRef.current = new AbortController();
+
       const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
       let currentMessageIndex = turnStartIndex;
@@ -249,20 +277,39 @@ export function useChatSession({
         currentMessageIndex += systemMsgCount + 1;
       };
 
-      for await (const chunk of chatService.streamChatResponse(
-        userMessage,
-        type,
-        name,
-        sessionId,
-        conversationId,
-        queryTimeout,
-      )) {
+      const { queryName: streamQueryName, chunks } =
+        await chatService.startStreamChatResponse(
+          userMessage,
+          type,
+          name,
+          sessionId,
+          conversationId,
+          queryTimeout,
+          chatStreamAbortControllerRef.current.signal,
+          apiParameters,
+        );
+
+      queryName = streamQueryName;
+      lastQueryName.current = queryName;
+
+      const stopPhasePolling = await chatService.streamQueryStatus(
+        streamQueryName,
+        status => {
+          if (status && typeof status === 'object' && 'phase' in status) {
+            const phase = (status as { phase?: string }).phase;
+            setProcessingPhase(phase);
+          }
+        },
+      );
+
+      for await (const chunk of chunks) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
         if (typedChunk.error) {
           hasError = true;
           errorMessage = typedChunk.error.message || 'An error occurred';
           queryName = typedChunk.ark?.query || '';
+          lastQueryName.current = queryName;
           break;
         }
 
@@ -291,8 +338,7 @@ export function useChatSession({
             }
           }
 
-          const arkTokenUsage =
-            arkData.completedQuery?.status?.tokenUsage;
+          const arkTokenUsage = arkData.completedQuery?.status?.tokenUsage;
           const usage: TokenUsage | null = arkTokenUsage
             ? {
                 prompt_tokens: arkTokenUsage.promptTokens || 0,
@@ -404,6 +450,7 @@ export function useChatSession({
         }
       }
 
+      stopPhasePolling();
       finalizeCurrentMessage();
 
       if (messageTokenUsage) {
@@ -524,7 +571,7 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -535,7 +582,10 @@ export function useChatSession({
         conversationId,
         undefined,
         queryTimeout,
+        apiParameters,
       );
+
+      lastQueryName.current = query.name;
 
       let pollingStopped = false;
       stopPollingRef.current = () => {
@@ -545,6 +595,8 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(query.name);
+
+          setProcessingPhase(result.status);
 
           if (result.terminal) {
             const fullQuery = await chatService.getQuery(query.name);
@@ -685,6 +737,18 @@ export function useChatSession({
     async (userMessage: string) => {
       setError(null);
 
+      if (missingParameters.length > 0) {
+        const plural = missingParameters.length > 1;
+        setError(
+          `This agent needs the ${missingParameters.join(', ')} parameter${
+            plural ? 's' : ''
+          } — supply ${plural ? 'them' : 'it'} above, or use the Queries form to create the query.`,
+        );
+        return;
+      }
+
+      const apiParameters = toApiParameters();
+
       trackEvent({
         name: 'chat_message_sent',
         properties: {
@@ -704,15 +768,18 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage);
+          await handleStreamChatResponse(userMessage, apiParameters);
         } else {
-          await handlePollChatResponse(userMessage);
+          await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
         console.error('Error sending message:', err);
         let errMsg = 'Failed to send message';
 
         if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            return;
+          }
           if (err.message.includes('Failed to fetch')) {
             errMsg =
               'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
@@ -734,13 +801,16 @@ export function useChatSession({
         setError(errMsg);
       } finally {
         setIsProcessing(false);
+        setProcessingPhase(undefined);
       }
     },
     [
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
+      missingParameters,
       name,
+      toApiParameters,
       type,
       updateChatMessages,
     ],
@@ -762,15 +832,38 @@ export function useChatSession({
     setError(null);
   }, [chatKey, name, setChatHistory, setLastConversationId]);
 
+  const cancelQuery = useCallback(async () => {
+    chatStreamAbortControllerRef.current.abort();
+    stopPollingRef.current?.();
+
+    setIsProcessing(false);
+
+    updateChatMessages(prev => [
+      ...prev,
+      {
+        role: 'system',
+        content: 'Conversation stopped by user',
+      },
+    ]);
+
+    await chatService.cancelQuery(lastQueryName.current).catch(() => {});
+  }, [setIsProcessing, updateChatMessages]);
+
   return {
     messages: chatMessages,
     sessionId,
     isProcessing,
+    processingPhase,
     error,
     sendMessage,
     clearChat,
     messagesEndRef,
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
+    cancelQuery,
+    requiredParameters,
+    parameterValues,
+    setParameterValue,
+    missingParameters,
   };
 }

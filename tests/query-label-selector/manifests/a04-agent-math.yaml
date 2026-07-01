@@ -8,7 +8,7 @@ metadata:
     type: specialist
 spec:
   modelRef:
-    name: test-model
+    name: test-model-mock
   prompt: |
     You are a mathematics specialist agent.
     Solve mathematical problems and provide detailed explanations.

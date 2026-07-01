@@ -2,41 +2,35 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: team-graph-selector
-  labels:
-    # LLM tests call real language model APIs
-    llm: "true"
 spec:
   description: Test selector team strategy with graph constraints
-  # Graph-constrained selector combines AI-driven selection with workflow constraints
-  # Coordinator can choose between researcher/analyzer, then graph enforces flow
   steps:
-  - name: setup-test-environment
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - apply:
-        file: manifests/*.yaml
+
+  - name: wait-for-model-ready
+    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
-        name: test-model
-        timeout: 3m
+        name: test-model-mock
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -83,8 +77,6 @@ spec:
                 to: writer
               - from: writer
                 to: coordinator
-  - name: wait-for-query-completion
-    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -94,7 +86,14 @@ spec:
           condition:
             name: Completed
             value: 'True'
-  - name: validate-graph-selector-execution
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-graph-selector-team
+
+  - name: validate-graph-execution
     try:
     - assert:
         resource:
@@ -104,39 +103,23 @@ spec:
             name: test-graph-selector-team
           status:
             (response != null): true
-            (response.target.type): team
-            (response.target.name): graph-selector-team
-            (length(response.content) > `500`): true
+            (response.target.name): 'graph-selector-team'
+            (contains(response.raw, 'RESEARCH:')): true
+            (contains(response.raw, 'ANALYSIS:')): true
+            (contains(response.raw, 'REPORT:')): true
+            (contains(response.raw, 'COORDINATION COMPLETE:')): true
+            (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-graph-selector-team
-    - script:
-        content: |
-          echo "Validating graph-constrained selector execution..."
-          events=$(kubectl get events -n $NAMESPACE --field-selector involvedObject.name=test-graph-selector-team,involvedObject.kind=Query -o json)
-          
-          # Check for participant selection events
-          participant_selections=$(echo "$events" | jq '[.items[] | select(.reason == "ParticipantSelected" or .reason == "SelectorAgentResponse")] | length')
-          echo "Found $participant_selections participant selection events"
-          
-          if [ "$participant_selections" -gt 0 ]; then
-              echo "Participant selection events:"
-              echo "$events" | jq -r '.items[] | select(.reason == "ParticipantSelected" or .reason == "SelectorAgentResponse") | "  \(.reason): \(.message // "No message")"'
-          fi
-          
-          # Check for graph-constrained selection events
-          graph_constrained=$(echo "$events" | jq '[.items[] | select(.message // "" | contains("graph_constrained"))] | length')
-          if [ "$graph_constrained" -gt 0 ]; then
-              echo "Found $graph_constrained graph-constrained selection events"
-          fi
 
     cleanup:
     - script:
         content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

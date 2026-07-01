@@ -1,0 +1,105 @@
+name: openspec-flow-run-agent
+description: |
+  Thin wrapper around `anthropics/claude-code-action`'s entrypoint,
+  factored out of the plan/implement/respond jobs to stop triplicating
+  the ALL_INPUTS jq construction and env wiring.
+
+  The caller is responsible for:
+    - `actions/checkout` of the target repo
+    - cloning claude-code-action to `claude_code_action_path`
+    - installing bun on PATH
+
+inputs:
+  prompt:
+    description: Full agent prompt text.
+    required: true
+  anthropic_api_key:
+    description: >
+      Anthropic API key (from secrets.ANTHROPIC_API_KEY). Optional if
+      `claude_code_oauth_token` is set.
+    required: false
+    default: ""
+  claude_code_oauth_token:
+    description: >
+      Claude Code OAuth token (`claude setup-token` output). Alternative to
+      `anthropic_api_key` — when set, the agent runs against the user's
+      Claude subscription instead of API billing. At least one of the two
+      must be provided.
+    required: false
+    default: ""
+  github_token:
+    description: >
+      GitHub token the agent uses for API calls and git push. Typically
+      secrets.AGENT_GITHUB_TOKEN with a fallback to github.token — see
+      caller workflow.
+    required: true
+  override_github_token:
+    description: >
+      Optional PAT that overrides the OIDC-derived app token. Passed
+      through as OVERRIDE_GITHUB_TOKEN env var.
+    required: false
+    default: ""
+  additional_permissions:
+    description: >
+      Extra scopes to request on the OIDC-exchanged installation token.
+      Must match the env var name the action reads
+      (process.env.ADDITIONAL_PERMISSIONS in src/github/token.ts).
+      Example: `workflows: write` to let the agent push
+      .github/workflows/*.yaml edits.
+    required: false
+    default: ""
+  show_full_output:
+    description: >
+      If "true", agent tool-call output is visible in the run log.
+      Useful for debugging silent no-ops. Leak risk on public repos —
+      leave off unless investigating.
+    required: false
+    default: "false"
+  claude_code_action_path:
+    description: >
+      Filesystem path where the caller has cloned claude-code-action.
+    required: false
+    default: "/tmp/claude-code-action"
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PROMPT: ${{ inputs.prompt }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_code_oauth_token }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        OVERRIDE_GITHUB_TOKEN: ${{ inputs.override_github_token }}
+        ADDITIONAL_PERMISSIONS: ${{ inputs.additional_permissions }}
+        INPUT_SHOW_FULL_OUTPUT: ${{ inputs.show_full_output }}
+        ACTION_PATH: ${{ inputs.claude_code_action_path }}
+      run: |
+        # Override GITHUB_ACTION_PATH — GH sets it to *this* composite
+        # action's dir by default; claude-code-action's entrypoint needs
+        # its own source tree instead.
+        export GITHUB_ACTION_PATH="$ACTION_PATH"
+        export CLAUDE_ARGS="--permission-mode bypassPermissions"
+        # Require at least one of api_key / oauth_token. Fail fast with a
+        # clear message rather than letting the action silently degrade.
+        if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+          echo "::error::Neither anthropic_api_key nor claude_code_oauth_token was provided. Set one in the caller workflow."
+          exit 1
+        fi
+        # Both set: warn, do not intervene. Claude Agent SDK precedence is
+        # API-key-wins (matches the local `claude` CLI). Operator must
+        # pick: delete the ANTHROPIC_API_KEY secret on the repo if they
+        # want OAuth/subscription auth to route.
+        if [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+          echo "::warning::Both ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN are set. The Claude Agent SDK uses the API key; OAuth is ignored. Delete the API key secret to route subscription auth."
+        fi
+        ALL_INPUTS="$(jq -nc \
+          --arg prompt "$PROMPT" \
+          --arg api_key "$ANTHROPIC_API_KEY" \
+          --arg oauth_token "$CLAUDE_CODE_OAUTH_TOKEN" \
+          --arg gh_token "$GITHUB_TOKEN" \
+          --arg claude_args "$CLAUDE_ARGS" \
+          --arg extra_perms "$ADDITIONAL_PERMISSIONS" \
+          '{prompt: $prompt, anthropic_api_key: $api_key, claude_code_oauth_token: $oauth_token, github_token: $gh_token, claude_args: $claude_args, additional_permissions: $extra_perms}')"
+        export ALL_INPUTS
+        bun run "$GITHUB_ACTION_PATH/src/entrypoints/run.ts"

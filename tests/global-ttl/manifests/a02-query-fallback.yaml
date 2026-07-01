@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-fallback-ttl
+spec:
+  input: "test fallback ttl when no arkconfig"
+  target:
+    type: agent
+    name: placeholder-agent

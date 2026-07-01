@@ -11,27 +11,22 @@ spec:
     try:
     # Install mock-llm with custom rules
     - script:
-        timeout: 90s
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
     # Wait for Model to be available
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
     # Apply all manifests
     - apply:
         file: manifests/*.yaml

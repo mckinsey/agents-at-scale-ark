@@ -3,7 +3,8 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
-import { FILES_API_BASE_URL } from '@/lib/api/files-client';
+import { apiUrl } from '@/lib/api/config';
+import { filesApiClient } from '@/lib/api/files-client';
 import {
   getLanguageFromExtension,
   isImageFile,
@@ -11,6 +12,7 @@ import {
   isJsonFile,
   isZipFile,
   isSpreadsheetFile,
+  isMarkdownFile,
 } from '@/lib/utils/file-preview';
 import type { ZipEntry } from '@/components/file-preview/zip-tree';
 import type { SpreadsheetData } from '@/components/file-preview/spreadsheet-viewer';
@@ -28,6 +30,7 @@ export interface PreviewTab {
   isZip: boolean;
   spreadsheetData: SpreadsheetData | null;
   isSpreadsheet: boolean;
+  isMarkdown: boolean;
   loading: boolean;
 }
 
@@ -62,6 +65,7 @@ export function useMultiFilePreview() {
       isZip: false,
       spreadsheetData: null,
       isSpreadsheet: false,
+      isMarkdown: false,
       loading: true,
     };
 
@@ -70,7 +74,7 @@ export function useMultiFilePreview() {
     setPreviewOpen(true);
 
     try {
-      const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
+      const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -104,7 +108,7 @@ export function useMultiFilePreview() {
           const base64Content = await base64Promise;
 
           // Call the API endpoint
-          const apiResponse = await fetch('/api/v1/file-preview/spreadsheet', {
+          const apiResponse = await fetch(apiUrl('/api/v1/file-preview/spreadsheet'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -185,6 +189,7 @@ export function useMultiFilePreview() {
         updatedTab.content = text;
         updatedTab.isImage = false;
         updatedTab.language = language;
+        updatedTab.isMarkdown = isMarkdownFile(fileExtension);
 
         if (isJson) {
           try {

@@ -17,7 +17,7 @@ export default function HomePage() {
       <main className="container space-y-8 p-6 py-8">
         <section>
           <h2 className="mb-2 text-3xl font-bold text-balance">
-            Welcome to the ARK Dashboard
+            Welcome to the Ark Dashboard
           </h2>
           <p className="text-muted-foreground text-pretty">
             Monitor and manage your AI infrastructure from one central location.

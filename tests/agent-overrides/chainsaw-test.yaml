@@ -10,12 +10,9 @@ spec:
   - name: deploy-mock-llm-and-setup
     try:
     - script:
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml \
-            --wait --timeout=120s
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -75,9 +72,8 @@ spec:
         name: overrides-test-query
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     catch:
     - events: {}
     - describe:
@@ -94,7 +90,6 @@ spec:
           metadata:
             name: overrides-test-query
           status:
-            (response != null): true
             (response.target.name): 'overrides-test-agent'
     - script:
         env:
@@ -141,9 +136,8 @@ spec:
         name: overrides-test-query-tool
         timeout: 60s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     - script:
         env:
         - name: NAMESPACE

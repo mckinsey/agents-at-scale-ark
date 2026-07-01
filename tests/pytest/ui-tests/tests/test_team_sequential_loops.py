@@ -1,16 +1,13 @@
 import pytest
 from playwright.sync_api import Page
-from pages.secrets_page import SecretsPage
-from pages.models_page import ModelsPage
 from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
+from conftest import MOCK_LLM_MODEL_NAME
 
 
 @pytest.fixture(scope="class")
 def team_loop_resources():
     return {
-        "secret_name": None,
-        "model_name": None,
         "agent_name": None,
         "created_teams": [],
         "setup_failed": False,
@@ -27,24 +24,8 @@ class TestTeamSequentialLoops:
         if resources["agent_name"]:
             return
 
-        secrets = SecretsPage(page)
-        models = ModelsPage(page)
         agents = AgentsPage(page)
-        model_data = models.TEST_DATA["openai"]
-
-        secret = secrets.create_secret_for_test("loops-secret", model_data["env_key"])
-        if not secret["in_table"]:
-            resources["setup_failed"] = True
-            pytest.skip("Secret creation failed")
-        resources["secret_name"] = secret["name"]
-
-        model = models.create_model_for_test("loops-model", secret["name"], secrets)
-        if not model["in_table"]:
-            resources["setup_failed"] = True
-            pytest.skip("Model creation failed")
-        resources["model_name"] = model["name"]
-
-        agent = agents.create_agent_for_test("loops-agent", model["name"])
+        agent = agents.create_agent_for_test("loops-agent", MOCK_LLM_MODEL_NAME)
         if not agent["in_table"]:
             resources["setup_failed"] = True
             pytest.skip("Agent creation failed")
@@ -53,8 +34,6 @@ class TestTeamSequentialLoops:
     def _teardown(self, page: Page, resources: dict) -> None:
         teams = TeamsPage(page)
         agents = AgentsPage(page)
-        models = ModelsPage(page)
-        secrets = SecretsPage(page)
 
         teams.navigate_to_teams_tab()
         for name in list(resources["created_teams"]):
@@ -64,14 +43,6 @@ class TestTeamSequentialLoops:
         if resources["agent_name"]:
             agents.navigate_to_agents_tab()
             agents.delete_agent_with_verification(resources["agent_name"])
-
-        if resources["model_name"]:
-            models.navigate_to_models_tab()
-            models.delete_model_with_verification(resources["model_name"])
-
-        if resources["secret_name"]:
-            secrets.navigate_to_secrets_tab()
-            secrets.delete_secret_with_verification(resources["secret_name"])
 
     def _open_dialog(self, teams: TeamsPage) -> None:
         teams.navigate_to_teams_tab()

@@ -1,9 +1,11 @@
 import functools
 import logging
 import os
+from typing import Optional
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from ark_sdk.client import V1_ALPHA1, with_ark_client
+from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.k8s import get_namespace
 
 logger = logging.getLogger(__name__)
@@ -69,16 +71,17 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
 
 
 class AgentRegistry:
-    def __init__(self, namespace: str):
+    def __init__(self, namespace: str, impersonation: Optional[ImpersonationConfig] = None):
         self._namespace = namespace
+        self._impersonation = impersonation
 
     async def get_agent(self, name: str) -> AgentCard | None:
-        async with with_ark_client(self._namespace, V1_ALPHA1) as ark_client:
+        async with with_ark_client(self._namespace, V1_ALPHA1, impersonation=self._impersonation) as ark_client:
             agent = await ark_client.agents.a_get(name)
             return ark_to_agent_card(agent)
 
     async def list_agents(self) -> list[AgentCard]:
-        async with with_ark_client(self._namespace, V1_ALPHA1) as ark_client:
+        async with with_ark_client(self._namespace, V1_ALPHA1, impersonation=self._impersonation) as ark_client:
             agents = await ark_client.agents.a_list()
             return [ark_to_agent_card(a) for a in agents]
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
@@ -15,18 +15,20 @@ import {
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type { Agent } from '@/lib/services';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface AgentRowProps {
   readonly agent: Agent;
   readonly onDelete?: (id: string) => void;
+  readonly leading?: ReactNode;
 }
 
-export function AgentRow({ agent, onDelete }: AgentRowProps) {
+export function AgentRow({ agent, onDelete, leading }: AgentRowProps) {
   const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -41,6 +43,8 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
     Bot,
   );
 
+  const originIcon = getOriginIcon(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]);
+
   return (
     <>
       <div
@@ -54,13 +58,19 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
             push(`/agents/${encodeURIComponent(agent.name)}`);
           }
         }}>
+        {leading}
+
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={agent.name}>
-              {agent.name}
-            </p>
+            <div className="flex items-center gap-x-1.5">
+              {originIcon}
+              <p className="truncate text-sm font-medium" title={agent.name}>
+                {agent.name}
+              </p>
+            </div>
+
             <p
               className="text-muted-foreground truncate text-xs"
               title={agent.description || ''}>

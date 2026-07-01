@@ -4,8 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: ["main"]
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'examples/**'
+      - 'samples/**'
+      - 'openspec/**'
+      - '**.md'
   workflow_dispatch:
 
 # Release please will create pull requests, update the changelog, and cicd will
@@ -30,6 +35,9 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  CHAINSAW_VERSION: v0.2.15
 
 jobs:
   # Setup job to determine container cache registry
@@ -60,7 +68,45 @@ jobs:
       SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
       - uses: actions/checkout@v6
-      
+
+      - name: Materialize embedded CRDs for Go scan
+        shell: bash
+        run: |
+          mkdir -p ark/internal/apiserver/crds
+          cp ark/config/crd/bases/*.yaml ark/internal/apiserver/crds/
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
+
+      - name: Export uv lockfiles to requirements.txt for Xray
+        shell: bash
+        run: |
+          # jf audit only reads requirements.txt for Python; without this it
+          # resolves uv projects fresh from PyPI and misses the locked versions.
+          # --no-sources skips [tool.uv.sources] overrides (e.g. local ark-sdk
+          # wheels built later in the pipeline) so the export works at checkout.
+          # Failures fall back to jf audit's pre-existing pyproject.toml mode
+          # for that one project — no worse than today — so don't fail the job.
+          set +e
+          for dir in services/ark-api/ark-api \
+                     services/ark-mcp/ark-mcp \
+                     lib/ark-sdk \
+                     lib/ark-sdk/gen_sdk/overlay/python \
+                     templates/tool; do
+            if [ ! -f "$dir/uv.lock" ]; then
+              echo "Skipping $dir (no uv.lock)"
+              continue
+            fi
+            echo "Exporting $dir"
+            err=$( (cd "$dir" && uv export --format requirements-txt --no-hashes --no-dev --no-sources > requirements.txt) 2>&1 )
+            if [ $? -ne 0 ]; then
+              echo "::warning::uv export failed for $dir, jf audit will fall back to scanning pyproject.toml as pip: ${err//$'\n'/ | }"
+            fi
+          done
+          exit 0
+
       - name: Run JFrog Xray scan
         id: xray-scan
         uses: ./.github/actions/jfrog-xray-scan
@@ -157,7 +203,7 @@ jobs:
             tools/fark/go.sum
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: "3.18.6"
 
@@ -199,7 +245,9 @@ jobs:
             tools/fark/go.sum
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -210,7 +258,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - run: make -j24 services-build-all
 
@@ -250,16 +298,20 @@ jobs:
             dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
+            install-uv: true
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
+            install-uv: true
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
-          - path: samples/a2a/langchain-weather-agent
-            image: langchain-weather-agent
+          - path: services/ark-broker/ark-broker
+            image: ark-broker-migrate
+            dockerfile: Dockerfile.migrate
           - path: services/ark-mcp
             image: ark-mcp
+            install-uv: true
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: tools/ark-cli
             image: ark-cli
@@ -272,13 +324,18 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download library artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: out-libs-${{ github.sha }}
           path: out/
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        if: matrix.install-uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # Pinned to match the Dockerfile uv version and to skip setup-uv's
+          # "find latest" GitHub API lookup, which has stalled CI for minutes.
+          version: "0.11.21"
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -312,7 +369,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-broker
-          - langchain-weather-agent
+          - ark-broker-migrate
           - ark-mcp
           - ark-cli
           - ark-tools
@@ -340,7 +397,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Build libraries
         run: make libs-build-all
@@ -517,7 +576,6 @@ jobs:
   e2e-tests-standard:
     name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
     continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
@@ -531,14 +589,16 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
+          install-broker: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
       - name: Install chainsaw
         run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
@@ -547,17 +607,19 @@ jobs:
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
-          LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
-          LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
-          ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
+          ARK_BROKER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
+          ARK_MCP_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
+          ARK_MCP_IMAGE_TAG: ${{ github.sha }}
+          ARK_DASHBOARD_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard
+          ARK_DASHBOARD_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
           if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
             chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
           else
-            chainsaw test --config .chainsaw.yaml --selector '!llm'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only'
           fi
 
       - name: Collect cluster logs
@@ -594,27 +656,50 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
       - name: Install chainsaw and jq
         run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Warm up network connectivity
+        env:
+          AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
-          echo "Warming up egress network paths..."
+          echo "Warming up egress network paths to LLM providers..."
           for i in {1..5}; do
-            echo "Attempt $i: Testing connectivity to external APIs"
-            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            echo "Attempt $i:"
+            azure_ok=1
+            if [ -n "$AZURE_BASE_URL" ]; then
+              azure_ok=0
+              if curl -s -m 10 -o /dev/null "$AZURE_BASE_URL"; then
+                echo "✓ Azure OpenAI reachable"
+                azure_ok=1
+              else
+                echo "✗ Azure OpenAI unreachable (will retry)"
+              fi
+            fi
+            openai_ok=0
+            if curl -s -m 10 -o /dev/null "$OPENAI_BASE_URL"; then
+              echo "✓ OpenAI reachable"
+              openai_ok=1
+            else
+              echo "✗ OpenAI unreachable (will retry)"
+            fi
+            if [ "$azure_ok" = 1 ] && [ "$openai_ok" = 1 ]; then
+              echo "Network warm-up complete - LLM providers reachable"
+              break
+            fi
             sleep 3
           done
-          echo "Network warm-up complete - egress connectivity established"
 
       - name: Run multi-provider LLM tests
         env:
@@ -623,9 +708,7 @@ jobs:
           E2E_TEST_AZURE_OPENAI_API_VERSION: ${{ secrets.CICD_AZURE_OPENAI_API_VERSION || '2024-12-01-preview' }}
           E2E_TEST_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           E2E_TEST_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
-          LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
-          LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
-          ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
+          ARK_CLUSTER_MEMORY_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
           ARK_CLUSTER_MEMORY_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
@@ -651,7 +734,6 @@ jobs:
   e2e-ui-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -659,7 +741,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
-
+          install-broker: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -670,17 +752,6 @@ jobs:
             --namespace default \
             --create-namespace \
             --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-api" \
-            --set app.image.tag="${{ github.sha }}" \
-            --set app.image.pullPolicy="Always" \
-            --wait \
-            --timeout=5m
-
-      - name: Deploy ark-broker
-        run: |
-          helm upgrade --install ark-broker services/ark-broker/chart \
-            --namespace default \
-            --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-broker" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -700,8 +771,8 @@ jobs:
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
         run: |
@@ -764,7 +835,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14'
           cache: 'pip'
           cache-dependency-path: tests/pytest/ui-tests/requirements.txt
 
@@ -782,24 +853,19 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Create test environment
-        env:
-          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
-          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
-          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
-          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+      - name: Install mock-llm
         run: |
-          cd tests/pytest/ui-tests
-          cat > .env << EOF
-          CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
-          CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
-          CICD_ANTHROPIC_API_KEY=${CICD_ANTHROPIC_API_KEY}
-          CICD_ANTHROPIC_BASE_URL=${CICD_ANTHROPIC_BASE_URL}
-          CICD_AZURE_API_KEY=${CICD_AZURE_API_KEY}
-          CICD_AZURE_BASE_URL=${CICD_AZURE_BASE_URL}
-          EOF
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/ui-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
 
       - name: Start port-forwarding
         run: |
@@ -837,7 +903,6 @@ jobs:
   e2e-cli-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -845,6 +910,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
+          install-broker: "true"
 
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
@@ -853,7 +919,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build and install ark-cli
         run: |
@@ -890,6 +956,31 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Deploy localhost-gateway
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
+          helm upgrade --install localhost-gateway services/localhost-gateway/chart \
+            --namespace ark-system \
+            --create-namespace \
+            --wait \
+            --timeout=10m
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ark-system --timeout=120s
+          kubectl wait --for=condition=Programmed gateway/localhost-gateway -n ark-system --timeout=120s
+
+      - name: Install mock-llm
+        run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/cli-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -902,12 +993,6 @@ jobs:
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
-          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
-          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
-          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
-          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/cli-tests/tests
           pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
@@ -939,6 +1024,7 @@ jobs:
         chart:
           # Package only the essential charts.
           - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-apiserver, path: ark/dist/chart-apiserver }
           - { name: ark-completions, path: ark/executors/completions/chart }
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
@@ -951,7 +1037,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: "3.14.0"
 
@@ -969,39 +1055,6 @@ jobs:
           path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
           retention-days: 30
 
-  build-docs:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22.x"
-
-      - name: Build Docs
-        run: |
-          cd docs
-          npm ci
-          npm i pagefind @pagefind/linux-x64 && npm run build
-        env:
-          # Set basePath for GitHub Pages deployment using configurable variable
-          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
-
-      - name: Validate Internal Documentation Links
-        run: |
-          # Rebuild docs without base path for link checking
-          echo "Rebuilding docs without base path for link validation..."
-          npm run build
-          echo "Checking for broken links..."
-          npm run check-links
-        working-directory: docs
-
-      - name: Upload Site Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/out
-
   build-ark-cli:
     runs-on: ubuntu-24.04
     steps:
@@ -1010,7 +1063,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Build ARK CLI
         run: |
@@ -1062,7 +1115,6 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1074,6 +1126,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.2"
+          # Coverage tooling only; no project build, so module caching has no value here.
+          cache: false
 
       - name: Install Python coverage tools
         run: |
@@ -1081,7 +1135,7 @@ jobs:
           pip install coverage
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: coverage-*
           path: coverage-artifacts
@@ -1115,7 +1169,7 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./coverage-artifacts
@@ -1138,7 +1192,6 @@ jobs:
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1201,22 +1254,6 @@ jobs:
           target-branch: main
           release-as: ${{ steps.release-type.outputs.release_as || '' }}
 
-  release-docs:
-    needs: [check-release]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
-    concurrency:
-      group: "pages"
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ !env.ACT }}
-        id: deployment
-        uses: actions/deploy-pages@v5
-
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
@@ -1225,7 +1262,7 @@ jobs:
       - uses: actions/checkout@v6
       
       - name: Download library artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: out-libs-${{ github.sha }}
           path: ./
@@ -1259,6 +1296,7 @@ jobs:
       matrix:
         chart:
           - ark-controller
+          - ark-apiserver
           - ark-completions
           - ark-api
           - ark-dashboard
@@ -1271,7 +1309,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download ${{ matrix.chart }} artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.chart }}-${{ github.sha }}
           path: ./
@@ -1291,7 +1329,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download ark-cli artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ark-cli-${{ github.sha }}
           path: ./
@@ -1330,9 +1368,11 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.2'
+          # goreleaser builds tools/fark; cache against its go.sum.
+          cache-dependency-path: tools/fark/go.sum
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: latest
@@ -1397,12 +1437,11 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install published ark-cli from npm
         run: |
@@ -1496,6 +1535,16 @@ jobs:
             mv tmp.json .github/release-please-config-rc.json
           fi
 
+          # Clean up last-release-sha (added during promotion to anchor stable notes - issue #2655)
+          if jq -e 'has("last-release-sha")' .github/release-please-config.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config.json > tmp.json
+            mv tmp.json .github/release-please-config.json
+          fi
+          if jq -e 'has("last-release-sha")' .github/release-please-config-rc.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config-rc.json > tmp.json
+            mv tmp.json .github/release-please-config-rc.json
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
@@ -1511,7 +1560,7 @@ jobs:
           Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
 
           ### What this PR does
-          - Cleans up \`release-as\` from config files
+          - Cleans up \`release-as\` and \`last-release-sha\` from config files
 
           ### What happens when merged
           - Release-please will create v${NEXT}-rc from conventional commits

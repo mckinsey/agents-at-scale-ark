@@ -1,0 +1,50 @@
+# Example values for hosting one tenant of a multi-tenant Ark dashboard under
+# a path prefix on a shared domain (e.g. mydomain.com/namespace1/).
+#
+# Apply this file per tenant:
+#   helm install ark-dashboard-ns1 ./chart \
+#     -f values-multi-tenant.example.yaml \
+#     --set app.config.basePath=/namespace1 \
+#     --set app.config.arkApiService.host=ark-api.namespace1.svc.cluster.local \
+#     --namespace namespace1
+#
+# Repeat per tenant namespace, with each tenant's prefix and ark-api host.
+
+app:
+  config:
+    basePath: /namespace1
+    arkApiService:
+      host: ark-api.namespace1.svc.cluster.local
+      port: "80"
+      protocol: http
+  env:
+    # Auth callback URLs must include the tenant prefix or OIDC callbacks
+    # redirect to the wrong tenant.
+    - name: BASE_URL
+      value: https://mydomain.com/namespace1
+    - name: AUTH_URL
+      value: https://mydomain.com/namespace1/api/auth
+    - name: AUTH_MODE
+      value: open
+
+# The dashboard chart installs a per-tenant Ingress that captures only this
+# tenant's prefix. The cluster operator is responsible for installing the
+# matching ark-api Ingress (or using a single shared Ingress) that routes
+# /namespace1/api/v1/* to the namespace1 ark-api with prefix-strip:
+#
+#   nginx.ingress.kubernetes.io/rewrite-target: /v1/$1
+#   path: /namespace1/api/v1/(.*)
+#   pathType: ImplementationSpecific
+#
+# See the multi-tenant hosting guide in docs/ for the full Ingress example.
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: mydomain.com
+      paths:
+        - path: /namespace1
+          pathType: Prefix
+
+httpRoute:
+  enabled: false

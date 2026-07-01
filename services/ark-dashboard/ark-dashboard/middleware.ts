@@ -1,102 +1,45 @@
-import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
-import type { NextRequestWithAuth } from './auth';
-import { auth } from './auth';
-import { COOKIE_SESSION_TOKEN, SIGNIN_PATH } from './lib/constants/auth';
+import { auth, type NextRequestWithAuth } from './auth';
+import { SIGNIN_PATH } from './lib/constants/auth';
 
-async function middleware(request: NextRequest) {
-  // Get the base path from environment (no default)
-  const basePath = process.env.ARK_DASHBOARD_BASE_PATH || '';
-
-  // Proxy anything starting with /api/ to the backend, stripping the /api prefix
-  // This includes: /api/v1/*, /api/docs, /api/openapi.json
-  // BUT exclude Next.js API routes like /api/marketplace
-  const apiPath = `${basePath}/api/`;
-
-  // Check if this is a marketplace route (handled by Next.js, not proxied)
-  if (request.nextUrl.pathname.startsWith(`${basePath}/api/marketplace`)) {
-    return NextResponse.next();
-  }
-
-  if (request.nextUrl.pathname.startsWith(apiPath)) {
-    const token = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET,
-      cookieName: COOKIE_SESSION_TOKEN,
-    });
-    // Read environment variables at runtime
-    const host = process.env.ARK_API_SERVICE_HOST || 'localhost';
-    const port = process.env.ARK_API_SERVICE_PORT || '8000';
-    const protocol = process.env.ARK_API_SERVICE_PROTOCOL || 'http';
-
-    // Remove the base path and /api prefix to get the backend path
-    let backendPath = request.nextUrl.pathname.replace(basePath, '');
-    backendPath = backendPath.replace('/api', '');
-
-    // Construct the target URL
-    const targetUrl = `${protocol}://${host}:${port}${backendPath}${request.nextUrl.search}`;
-
-    // Rewrite the request to the backend with standard HTTP forwarding headers
-    // These X-Forwarded-* headers help the backend understand the external request context:
-    // - X-Forwarded-Prefix: tells backend it's being served from /api path externally
-    // - X-Forwarded-Host: original host header from the client request
-    // - X-Forwarded-Proto: original protocol (http/https) from the client request
-    // The backend uses these to generate correct URLs for OpenAPI specs and CORS handling
-    // Create new headers for the backend request (NOT the frontend response)
-    const backendHeaders = new Headers(request.headers);
-    backendHeaders.set('X-Forwarded-Prefix', '/api');
-    backendHeaders.set('X-Forwarded-Host', request.headers.get('host') || '');
-    backendHeaders.set(
-      'X-Forwarded-Proto',
-      request.nextUrl.protocol.slice(0, -1),
-    ); // Remove trailing ':'
-    if (token?.access_token) {
-      backendHeaders.set('Authorization', `Bearer ${token.access_token}`);
-    }
-
-    const fetchOptions: RequestInit = {
-      method: request.method,
-      headers: backendHeaders,
-    };
-
-    if (request.body) {
-      fetchOptions.body = request.body;
-    }
-    const backendResponse = await fetch(targetUrl, fetchOptions);
-
-    return new Response(backendResponse.body, {
-      status: backendResponse.status,
-      statusText: backendResponse.statusText,
-      headers: backendResponse.headers,
-    });
-  }
-
-  // For all other requests, continue normally
-  return NextResponse.next();
-}
+// Auth-only edge gate. The proxy logic that used to live here now lives in
+// app/api/v1/[...proxy]/route.ts; this file restores the authentication gate
+// that was lost when the original middleware.ts was renamed (commit 001616dd9).
+//
+// In open mode, auth.ts's openauth wrapper injects a dummy session, so req.auth
+// is always truthy and nothing is redirected. In sso mode NextAuth populates
+// req.auth from the session; an unauthenticated request is redirected to the
+// sign-in page.
+//
+// NB: we deliberately do NOT use `export const config = { matcher }`. The
+// negative-lookahead matcher string that worked on the pre-16 build compiles to
+// an invalid RegExp under Next.js 16 ("Unmatched ')'"), crashing the server on
+// every request. Filtering excluded paths in-code is version-robust and matches
+// the same exclusions the old matcher expressed.
+const PUBLIC_PREFIXES = [
+  '/api/auth',
+  '/signout',
+  '/_next/static',
+  '/_next/image',
+];
 
 export default auth(async (req: NextRequestWithAuth) => {
-  //If no user session redirect to signin page
-  if (!req.auth) {
-    //If the user is trying to access a page other than the signin page, set it as the callback url.
-    if (req.nextUrl.pathname !== SIGNIN_PATH) {
-      const baseURL = process.env.BASE_URL;
+  const { pathname } = req.nextUrl;
 
-      const newUrl = new URL(
-        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(baseURL!)}`,
-        baseURL,
-      );
-
-      return NextResponse.redirect(newUrl);
-    }
+  if (
+    pathname === '/favicon.ico' ||
+    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
+  ) {
     return NextResponse.next();
   }
 
-  return middleware(req);
+  if (!req.auth && pathname !== SIGNIN_PATH) {
+    const signInUrl = new URL(
+      `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(req.nextUrl.href)}`,
+      process.env.BASE_URL,
+    );
+    return NextResponse.redirect(signInUrl);
+  }
+  return NextResponse.next();
 });
-
-export const config = {
-  matcher: '/((?!api/auth|signout|_next/static|_next/image|favicon.ico).*)',
-};

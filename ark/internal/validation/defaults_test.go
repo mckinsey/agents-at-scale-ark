@@ -2,6 +2,7 @@
 package validation
 
 import (
+	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,7 +88,7 @@ func TestDefaultTeam(t *testing.T) {
 		if team.Spec.Strategy != "sequential" {
 			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
 		}
-		if !team.Spec.Loops {
+		if team.Spec.Loops == nil || !*team.Spec.Loops {
 			t.Fatal("expected loops to be true")
 		}
 		if team.Spec.MaxTurns == nil || *team.Spec.MaxTurns != 5 {
@@ -110,7 +111,7 @@ func TestDefaultTeam(t *testing.T) {
 		if team.Spec.Strategy != "sequential" {
 			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
 		}
-		if team.Spec.Loops {
+		if team.Spec.Loops == nil || *team.Spec.Loops {
 			t.Fatal("expected loops to be false")
 		}
 		if team.Spec.MaxTurns != nil {
@@ -138,6 +139,23 @@ func TestDefaultTeam(t *testing.T) {
 		}
 	})
 
+	t.Run("adds migration warning for selector with custom prompt missing select-next-speaker", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: StrategySelector,
+				Selector: &arkv1alpha1.TeamSelectorSpec{
+					SelectorPrompt: "Pick the best agent for the task.",
+				},
+			},
+		}
+		DefaultTeam(team)
+		key := annotations.MigrationWarningPrefix + "selector-prompt"
+		if team.Annotations[key] == "" {
+			t.Fatal("expected migration warning for selector prompt without select-next-speaker")
+		}
+	})
+
 	t.Run("migrates graph to sequential with loops disabled", func(t *testing.T) {
 		maxTurns := 10
 		team := &arkv1alpha1.Team{
@@ -156,7 +174,7 @@ func TestDefaultTeam(t *testing.T) {
 		if team.Spec.Strategy != "sequential" {
 			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
 		}
-		if team.Spec.Loops {
+		if team.Spec.Loops == nil || *team.Spec.Loops {
 			t.Fatal("expected loops to be false")
 		}
 		if team.Spec.Graph != nil {
@@ -181,7 +199,7 @@ func TestDefaultQuery(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`[{"role":"user","content":"hello world"}]`))
-		DefaultQuery(query)
+		DefaultQuery(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "hello world" {
 			t.Fatalf("expected 'hello world', got '%s'", text)
@@ -200,7 +218,7 @@ func TestDefaultQuery(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`"not-an-array"`))
-		DefaultQuery(query)
+		DefaultQuery(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "" {
 			t.Fatalf("expected empty string, got '%s'", text)
@@ -215,13 +233,16 @@ func TestDefaultQuery(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`"original"`))
-		DefaultQuery(query)
+		DefaultQuery(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "original" {
 			t.Fatalf("expected 'original', got '%s'", text)
 		}
-		if query.Annotations != nil {
-			t.Fatal("expected no annotations for non-messages type")
+		if _, ok := query.Annotations[annotations.MigrationWarningPrefix+"input-type"]; ok {
+			t.Fatal("expected no migration warning annotation for non-messages type")
+		}
+		if query.Spec.TTL == nil {
+			t.Fatal("expected TTL to be populated from fallback")
 		}
 	})
 }

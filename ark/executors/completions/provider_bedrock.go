@@ -73,19 +73,15 @@ func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName
 	bm.schemaName = schemaName
 }
 
-func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	var toolsParam []openai.ChatCompletionToolParam
-	if len(tools) > 0 {
-		toolsParam = tools[0]
-	}
+func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	if err := bm.initClient(ctx); err != nil {
 		return nil, err
 	}
 
 	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
-	anthropicTools := convertToolsToAnthropic(toolsParam)
+	anthropicTools := convertToolsToAnthropic(tools)
 
-	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, bm.Properties)
+	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, bm.Properties)
 
 	if strings.Contains(strings.ToLower(bm.Model), "claude") {
 		request.AnthropicVersion = "bedrock-2023-05-31"
@@ -122,11 +118,11 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 }
 
 func (bm *BedrockModel) ChatCompletionWithSchema(ctx context.Context, messages []Message, outputSchema *runtime.RawExtension, schemaName string, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	return bm.ChatCompletion(ctx, messages, 1, tools)
+	return bm.ChatCompletion(ctx, messages, 1, tools, ToolChoiceUnset)
 }
 
-func (bm *BedrockModel) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	completion, err := bm.ChatCompletion(ctx, messages, n, tools...)
+func (bm *BedrockModel) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+	completion, err := bm.ChatCompletion(ctx, messages, n, tools, toolChoice)
 	if err != nil {
 		return nil, err
 	}

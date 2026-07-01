@@ -1,0 +1,23 @@
+{{- if .Values.rbac.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: a2aserver-viewer-role
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - a2aservers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - a2aservers/status
+  verbs:
+  - get
+{{- end -}}

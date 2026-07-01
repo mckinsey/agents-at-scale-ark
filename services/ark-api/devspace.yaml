@@ -6,6 +6,11 @@ images:
     image: ark-api
     dockerfile: Dockerfile
     context: .
+  ark-api-dev:
+    image: ark-api-dev
+    dockerfile: Dockerfile.dev
+    context: .
+    buildKit: {}
 
 dependencies:
   ark-sdk:
@@ -20,6 +25,7 @@ pipelines:
   dev: |-
     run_dependency_pipelines --all --pipeline=dev
     ./sync-ark-sdk.sh
+    build_images ark-api-dev
     create_deployments --all
     start_dev --all
 
@@ -64,13 +70,12 @@ deployments:
 dev:
   ark-api:
     imageSelector: ark-api
-    devImage: python:3.12-slim
-    # Install dependencies and start API server with hot reload
+    devImage: ${runtime.images.ark-api-dev.image}:${runtime.images.ark-api-dev.tag}
     command:
       [
         "sh",
         "-c",
-        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv sync --frozen && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
+        "cd /app/ark-api && uv sync --frozen && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
       ]
     namespace: default
     # Stream logs instead of terminal

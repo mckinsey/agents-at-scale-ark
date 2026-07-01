@@ -3,8 +3,6 @@
 package postgresql
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -15,7 +13,7 @@ import (
 )
 
 const (
-	walSlotPrefix        = "ark_cdc_"
+	walSlotName          = "ark_cdc"
 	walPublicationName   = "ark_cdc"
 	walStandbyTimeout    = 10 * time.Second
 	walKeepaliveInterval = 5 * time.Second
@@ -25,12 +23,6 @@ type walStreamState struct {
 	relations        map[uint32]*pglogrepl.RelationMessage
 	lastWriteLSN     pglogrepl.LSN
 	lastStatusUpdate time.Time
-}
-
-func generateSlotName() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return walSlotPrefix + hex.EncodeToString(b)
 }
 
 func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto3.BackendMessage, state *walStreamState) error {

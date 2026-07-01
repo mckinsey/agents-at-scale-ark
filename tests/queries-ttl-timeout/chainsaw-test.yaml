@@ -4,44 +4,63 @@ metadata:
   name: test-query-ttl-timeout
 spec:
   steps:
-    - try:
-      - script:
-          skipLogOutput: true
-          content: |
-            set -u
-            echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-          outputs:
-          - name: azure
-            value: (json_parse($stdout))
-      - apply:
-          file: "manifests/*.yaml"
-      - wait:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          name: test-model-openai
-          timeout: 3m
-          for:
-            condition:
-              name: ModelAvailable
-              value: 'True' 
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Agent
-            metadata:
-              name: test-math
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query-math-timeout
-            status:
-              (phase == 'done' || phase == 'error'): true
-      catch:
-      - events: {}
-      - describe:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/a04-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-math-timeout
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
-          name: test-query-math-ttl
+          metadata:
+            name: test-query-math-timeout
+          status:
+            phase: error
+            (contains(response.content, 'Client.Timeout exceeded') || contains(response.content, 'context deadline exceeded')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-math-timeout
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

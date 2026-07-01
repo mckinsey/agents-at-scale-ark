@@ -12,12 +12,9 @@ spec:
   - name: step-1
     try:
     - script:
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml \
-            --wait --timeout=120s
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)

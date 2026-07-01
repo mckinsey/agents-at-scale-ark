@@ -53,8 +53,11 @@ function sessionCallback({
   session,
   token,
 }: Parameters<SessionCallback>['0']): ReturnType<SessionCallback> {
-  if (session?.user && token?.id) {
-    session.user.id = String(token.id);
+  // NextAuth stores the subject on token.sub, not token.id
+  // Fall back to token.id for compatibility if it exists
+  const userId = token?.id ?? token?.sub;
+  if (session?.user && userId) {
+    session.user.id = String(userId);
   }
   return session;
 }
@@ -92,11 +95,19 @@ const debug = process.env.AUTH_DEBUG === 'true';
 
 // Since we are using custom cookie names we have to manage these settings ourselfs.
 // https://authjs.dev/reference/nextjs#cookies
-const useSecureCookies = process.env.AUTH_URL?.startsWith('https://') || false;
+export const useSecureCookies =
+  process.env.AUTH_URL?.startsWith('https://') || false;
 const cookiePrefix = useSecureCookies ? '__Secure-' : '';
+
+// Resolved session cookie name. getToken() in middleware and federated
+// signout MUST read by this exact name — Auth.js derives its decryption
+// salt from cookieName, so a bare-name read against a __Secure- cookie
+// returns null and every proxied call 401s. See issue #2318.
+export const SESSION_COOKIE_NAME = `${cookiePrefix}${COOKIE_SESSION_TOKEN}`;
+
 const cookies: NextAuthConfig['cookies'] = {
   sessionToken: {
-    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`,
+    name: SESSION_COOKIE_NAME,
   },
   callbackUrl: {
     name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`,
@@ -116,6 +127,19 @@ const cookies: NextAuthConfig['cookies'] = {
     name: `${cookiePrefix}${COOKIE_NONCE}`,
   },
 };
+
+// Transient OIDC-flow cookies (state, PKCE verifier, nonce, callback-url, CSRF
+// token). Sign-out must clear these alongside the session: Auth.js writes a
+// fresh `state`/PKCE cookie at sign-in and reads it back at the callback, but a
+// stale value left over from a prior flow fails state validation
+// (CallbackRouteError -> error=Configuration), breaking the next sign-in.
+export const OIDC_FLOW_COOKIE_NAMES = [
+  `${cookiePrefix}${COOKIE_CALLBACK_URL}`,
+  `${useSecureCookies ? '__Host-' : ''}${COOKIE_CSRF_TOKEN}`,
+  `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`,
+  `${cookiePrefix}${COOKIE_STATE}`,
+  `${cookiePrefix}${COOKIE_NONCE}`,
+];
 
 const callbacks: NextAuthConfig['callbacks'] = {
   jwt: jwtCallback,

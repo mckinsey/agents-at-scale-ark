@@ -37,6 +37,11 @@ func TestIsTerminateTeam(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "SelectionMade is NOT TerminateTeam",
+			err:      &SelectionMade{SelectedName: "researcher"},
+			expected: false,
+		},
+		{
 			name:     "other error",
 			err:      errors.New("some other error"),
 			expected: false,
@@ -111,6 +116,88 @@ func TestTerminateTeamWithResponse(t *testing.T) {
 
 		if terminateErr.Response != response {
 			t.Errorf("Response = %q, expected %q", terminateErr.Response, response)
+		}
+	})
+}
+
+func TestToolNotCalledError(t *testing.T) {
+	t.Run("error message", func(t *testing.T) {
+		err := &ToolNotCalledError{}
+		expected := "selector agent did not use the select-next-speaker tool"
+		if err.Error() != expected {
+			t.Errorf("Error() = %q, expected %q", err.Error(), expected)
+		}
+	})
+
+	t.Run("is not TerminateTeam", func(t *testing.T) {
+		err := &ToolNotCalledError{}
+		if IsTerminateTeam(err) {
+			t.Error("IsTerminateTeam() should return false for ToolNotCalledError")
+		}
+	})
+
+	t.Run("is not SelectionMade", func(t *testing.T) {
+		err := &ToolNotCalledError{}
+		if IsSelectionMade(err) {
+			t.Error("IsSelectionMade() should return false for ToolNotCalledError")
+		}
+	})
+
+	t.Run("errors.As matches", func(t *testing.T) {
+		var target *ToolNotCalledError
+		err := &ToolNotCalledError{}
+		if !errors.As(err, &target) {
+			t.Error("errors.As should match ToolNotCalledError")
+		}
+	})
+}
+
+func TestSelectionMade(t *testing.T) {
+	t.Run("error message includes selected name", func(t *testing.T) {
+		err := &SelectionMade{SelectedName: "analyst"}
+		expected := "selection made: analyst"
+		if err.Error() != expected {
+			t.Errorf("Error() = %q, expected %q", err.Error(), expected)
+		}
+	})
+
+	t.Run("IsSelectionMade returns true", func(t *testing.T) {
+		err := &SelectionMade{SelectedName: "analyst"}
+		if !IsSelectionMade(err) {
+			t.Error("IsSelectionMade() should return true for SelectionMade")
+		}
+	})
+
+	t.Run("IsSelectionMade returns false for nil", func(t *testing.T) {
+		if IsSelectionMade(nil) {
+			t.Error("IsSelectionMade() should return false for nil")
+		}
+	})
+
+	t.Run("IsSelectionMade returns false for other errors", func(t *testing.T) {
+		if IsSelectionMade(errors.New("some error")) {
+			t.Error("IsSelectionMade() should return false for non-SelectionMade errors")
+		}
+	})
+
+	t.Run("IsTerminateTeam returns false for SelectionMade", func(t *testing.T) {
+		err := &SelectionMade{SelectedName: "analyst"}
+		if IsTerminateTeam(err) {
+			t.Error("IsTerminateTeam() should return false for SelectionMade after decoupling")
+		}
+	})
+
+	t.Run("preserves selected name field", func(t *testing.T) {
+		name := "researcher"
+		err := &SelectionMade{SelectedName: name}
+
+		var selectionErr *SelectionMade
+		if !errors.As(err, &selectionErr) {
+			t.Fatal("Expected error to be SelectionMade")
+		}
+
+		if selectionErr.SelectedName != name {
+			t.Errorf("SelectedName = %q, expected %q", selectionErr.SelectedName, name)
 		}
 	})
 }

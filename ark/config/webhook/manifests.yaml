@@ -131,6 +131,29 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-ark-mckinsey-com-v1alpha1-arkconfig
+  failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
+  name: varkconfig-v1.kb.io
+  rules:
+  - apiGroups:
+    - ark.mckinsey.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - arkconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-mcpserver
   failurePolicy: Fail
   matchConditions:
