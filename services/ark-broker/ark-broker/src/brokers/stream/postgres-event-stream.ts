@@ -1,15 +1,10 @@
-import {EventEmitter} from 'events';
 import type postgres from 'postgres';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
 import type {EventData} from '../event-broker.js';
 import {BrokerItem} from './broker-item.js';
-import {
-  DEFAULT_LIMIT,
-  type PaginatedList,
-  type PaginationParams,
-} from '../pagination.js';
-import type {Predicate, Stream} from './stream.js';
+import type {Predicate} from './stream.js';
+import {PostgresStreamBase} from './postgres-stream-base.js';
 
 type EventRow = {
   sequence_number: string;
@@ -28,14 +23,14 @@ function rowToBrokerItem(row: EventRow): BrokerItem<EventData> {
   };
 }
 
-export class PostgresEventStream implements Stream<EventData> {
-  private readonly emitter = new EventEmitter();
-
+export class PostgresEventStream extends PostgresStreamBase<EventData> {
   constructor(
     private readonly logger: Logger,
     private readonly db: Db,
     private readonly ttlSeconds: number
-  ) {}
+  ) {
+    super();
+  }
 
   async append(
     data: EventData,
@@ -68,38 +63,6 @@ export class PostgresEventStream implements Stream<EventData> {
     return rows.map(rowToBrokerItem);
   }
 
-  async filter(
-    predicate: Predicate<EventData>
-  ): Promise<BrokerItem<EventData>[]> {
-    return (await this.all()).filter(predicate);
-  }
-
-  async paginate(
-    params: PaginationParams,
-    predicate?: Predicate<EventData>
-  ): Promise<PaginatedList<BrokerItem<EventData>>> {
-    const limit = params.limit ?? DEFAULT_LIMIT;
-    const cursor = params.cursor;
-
-    const all = await this.all();
-    let filtered = predicate ? all.filter(predicate) : all;
-    const total = filtered.length;
-
-    if (cursor !== undefined) {
-      filtered = filtered.filter((item) => item.sequenceNumber > cursor);
-    }
-
-    const items = filtered.slice(0, limit);
-    const hasMore = filtered.length > limit;
-
-    return {
-      items,
-      total,
-      hasMore,
-      nextCursor: hasMore ? items.at(-1)!.sequenceNumber : undefined,
-    };
-  }
-
   async delete(predicate?: Predicate<EventData>): Promise<void> {
     if (!predicate) {
       this.logger.info('deleting all events');
@@ -112,19 +75,10 @@ export class PostgresEventStream implements Stream<EventData> {
     await this.db`DELETE FROM events WHERE sequence_number = ANY(${toDelete})`;
   }
 
-  async save(): Promise<void> {}
-
   async getCurrentSequence(): Promise<number> {
     const [{seq}] = await this.db<[{seq: string | null}]>`
       SELECT MAX(sequence_number) as seq FROM events WHERE expires_at > now()
     `;
     return seq === null ? 0 : Number(seq);
-  }
-
-  subscribe(callback: (item: BrokerItem<EventData>) => void): () => void {
-    this.emitter.on('item', callback);
-    return (): void => {
-      this.emitter.off('item', callback);
-    };
   }
 }
