@@ -28,7 +28,7 @@ function BooleanFeatureRow({ feature }: { feature: BooleanSetting }) {
   );
 }
 
-function NumberFeatureRow({ feature }: { feature: NumberSetting }) {
+function NumberFeatureRow({ feature }: Readonly<{ feature: NumberSetting }>) {
   const [value, setValue] = useAtom(feature.atom);
 
   const handleChange = (raw: string) => {
@@ -50,7 +50,7 @@ function NumberFeatureRow({ feature }: { feature: NumberSetting }) {
       <div className="flex items-center gap-2">
         <Input
           type="number"
-          value={parseInt(value, 10) || ''}
+          value={Number.parseInt(value, 10) || ''}
           onChange={e => handleChange(e.target.value)}
           className="w-[120px]"
         />

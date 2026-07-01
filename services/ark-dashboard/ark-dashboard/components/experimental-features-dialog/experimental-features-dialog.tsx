@@ -57,7 +57,7 @@ type NumberFeatureProps = {
   feature: NumberSetting;
 };
 
-function NumberFeature({ feature }: NumberFeatureProps) {
+function NumberFeature({ feature }: Readonly<NumberFeatureProps>) {
   const [atomValue, setAtom] = useAtom(feature.atom);
 
   const handleChange = (raw: string) => {
@@ -79,7 +79,7 @@ function NumberFeature({ feature }: NumberFeatureProps) {
       <div className="flex items-center gap-2">
         <Input
           type="number"
-          value={parseInt(atomValue, 10) || ''}
+          value={Number.parseInt(atomValue, 10) || ''}
           onChange={e => handleChange(e.target.value)}
           className="w-[120px]"
         />
