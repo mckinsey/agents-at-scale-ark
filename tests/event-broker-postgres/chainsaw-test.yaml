@@ -77,9 +77,14 @@ spec:
     - script:
         timeout: 30s
         content: |
-          COUNT=$(bash ../shared/psql-query.sh \
-            "SELECT count(*) FROM events WHERE query_id='events-broker-query' AND expires_at IS NOT NULL;" \
-            | tr -d ' \n')
+          COUNT=0
+          for i in $(seq 1 10); do
+            COUNT=$(bash ../shared/psql-query.sh \
+              "SELECT count(*) FROM events WHERE query_id='events-broker-query' AND expires_at IS NOT NULL;" \
+              | tr -d ' \n')
+            [ "${COUNT}" -ge 1 ] && break
+            sleep 1
+          done
           echo "events in Postgres: ${COUNT}"
           [ "${COUNT}" -ge 1 ] || { echo "expected at least 1 event, got ${COUNT}"; exit 1; }
     catch:
