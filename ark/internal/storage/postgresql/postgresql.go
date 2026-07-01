@@ -16,6 +16,7 @@ import (
 	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/watch"
@@ -82,30 +83,88 @@ func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	return preds, nil
 }
 
-func parseLabelSelector(selector string) (map[string]string, error) {
+// parseLabelSelector parses a Kubernetes label selector expression. The full
+// selector language is supported: equality (=, ==), inequality (!=), set-based
+// (in, notin), and existence (key, !key). Invalid expressions produce a
+// storage.ErrInvalidRequest so the registry surfaces them as 400 Bad Request.
+func parseLabelSelector(selector string) (labels.Selector, error) {
 	if selector == "" {
 		return nil, nil
 	}
-	result := map[string]string{}
-	for _, part := range strings.Split(selector, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if strings.Contains(part, "!=") || strings.Contains(part, " in ") || strings.Contains(part, " notin ") || strings.HasPrefix(part, "!") {
-			return nil, fmt.Errorf("unsupported label selector operator in %q, only equality (=, ==) is supported", part)
-		}
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid label selector %q", part)
-		}
-		key := strings.TrimSuffix(strings.TrimSpace(kv[0]), "=")
-		result[strings.TrimSpace(key)] = strings.TrimSpace(kv[1])
+	sel, err := labels.Parse(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid label selector %q: %v", storage.ErrInvalidRequest, selector, err)
 	}
-	if len(result) == 0 {
+	if sel.Empty() {
 		return nil, nil
 	}
-	return result, nil
+	return sel, nil
+}
+
+// buildLabelSelectorSQL translates a parsed label selector into a SQL fragment
+// (a series of " AND ..." clauses) and the arguments to bind. startArgIndex is
+// the $N placeholder to use for the first bound arg; callers should advance
+// their own arg index by len(args) after appending.
+//
+// The labels column is jsonb; we read individual values via labels->>$N and use
+// NULL-safe operators so k8s semantics are preserved:
+//   - Equals/DoubleEquals match when the key exists AND the value matches.
+//   - NotEquals matches when the key is absent OR the value differs.
+//   - In matches when the key exists AND the value is in the set.
+//   - NotIn matches when the key is absent OR the value is not in the set.
+//   - Exists/DoesNotExist require only the key's presence/absence.
+//
+// Operator SQL is fixed text (no client-controlled strings), and every value
+// crosses the boundary as a bound parameter, so no injection surface.
+//
+// The selector must have come from parseLabelSelector (i.e. labels.Parse) — an
+// unsupported operator or malformed requirement is treated as an unreachable
+// invariant violation and panics rather than silently returning over-broad SQL.
+func buildLabelSelectorSQL(sel labels.Selector, startArgIndex int) (string, []interface{}) {
+	if sel == nil || sel.Empty() {
+		return "", nil
+	}
+	reqs, _ := sel.Requirements()
+	var sb strings.Builder
+	var args []interface{}
+	argIndex := startArgIndex
+	for _, req := range reqs {
+		key := req.Key()
+		op := req.Operator()
+		// .List() (not UnsortedList) so the emitted SQL is deterministic —
+		// labels.Parse already sorts requirements by key, and this sorts values
+		// within each requirement, so equivalent selectors produce identical SQL.
+		vals := req.Values().List()
+		switch op {
+		case selection.Equals, selection.DoubleEquals:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = $%d`, argIndex, argIndex+1)
+			args = append(args, key, vals[0])
+			argIndex += 2
+		case selection.NotEquals:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> $%d)`, argIndex, argIndex, argIndex+1)
+			args = append(args, key, vals[0])
+			argIndex += 2
+		case selection.In:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = ANY($%d::text[])`, argIndex, argIndex+1)
+			args = append(args, key, pq.Array(vals))
+			argIndex += 2
+		case selection.NotIn:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> ALL($%d::text[]))`, argIndex, argIndex, argIndex+1)
+			args = append(args, key, pq.Array(vals))
+			argIndex += 2
+		case selection.Exists:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NOT NULL`, argIndex)
+			args = append(args, key)
+			argIndex++
+		case selection.DoesNotExist:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, argIndex)
+			args = append(args, key)
+			argIndex++
+		default:
+			panic(fmt.Sprintf("buildLabelSelectorSQL: unhandled operator %q from labels.Parse output", op))
+		}
+	}
+	return sb.String(), args
 }
 
 type Config struct {
@@ -390,17 +449,15 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		argIndex++
 	}
 
-	if opts.LabelSelector != "" {
-		labelMap, err := parseLabelSelector(opts.LabelSelector)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to parse label selector: %w", err)
-		}
-		if labelMap != nil {
-			labelJSON, _ := json.Marshal(labelMap)
-			query += fmt.Sprintf(" AND labels @> $%d::jsonb", argIndex)
-			args = append(args, string(labelJSON))
-			argIndex++
-		}
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
+	if err != nil {
+		return nil, "", err
+	}
+	if labelSel != nil {
+		clause, labelArgs := buildLabelSelectorSQL(labelSel, argIndex)
+		query += clause
+		args = append(args, labelArgs...)
+		argIndex += len(labelArgs)
 	}
 
 	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
@@ -656,9 +713,9 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 
-	labelFilter, err := parseLabelSelector(opts.LabelSelector)
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+		return nil, err
 	}
 
 	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
@@ -673,7 +730,7 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		key:         key,
 		kind:        kind,
 		ns:          namespace,
-		labelFilter: labelFilter,
+		labelSel:    labelSel,
 		fieldPreds:  fieldPreds,
 		ctx:         ctx,
 		done:        make(chan struct{}),
@@ -826,7 +883,7 @@ type postgresWatcher struct {
 	key             string
 	kind            string
 	ns              string
-	labelFilter     map[string]string
+	labelSel        labels.Selector
 	fieldPreds      []fieldPredicate
 	ctx             context.Context
 	done            chan struct{}
@@ -975,11 +1032,11 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 		args = append(args, w.ns)
 		argIndex++
 	}
-	if w.labelFilter != nil {
-		labelJSON, _ := json.Marshal(w.labelFilter)
-		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
-		args = append(args, string(labelJSON))
-		argIndex++
+	if w.labelSel != nil {
+		clause, labelArgs := buildLabelSelectorSQL(w.labelSel, argIndex)
+		query += clause
+		args = append(args, labelArgs...)
+		argIndex += len(labelArgs)
 	}
 	for _, p := range w.fieldPreds {
 		query += fmt.Sprintf(` AND %s %s $%d`, p.column, p.op, argIndex)

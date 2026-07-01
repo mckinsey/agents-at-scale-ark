@@ -3,9 +3,12 @@
 package postgresql
 
 import (
+	"database/sql/driver"
 	"errors"
+	"reflect"
 	"testing"
 
+	"github.com/lib/pq"
 	"mckinsey.com/ark/internal/storage"
 )
 
@@ -104,5 +107,189 @@ func TestParseFieldSelector(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseLabelSelector_AcceptsSetBased(t *testing.T) {
+	t.Parallel()
+	// These selectors were rejected by the old equality-only parser. Confirm
+	// each parses cleanly now, exposing the shape client-go and kubectl use.
+	inputs := []string{
+		"app=web",
+		"app==web",
+		"app!=web",
+		"tier in (frontend, backend)",
+		"tier notin (frontend, backend)",
+		"tier",
+		"!tier",
+		"app=web,tier in (frontend, backend),!temporary",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			sel, err := parseLabelSelector(in)
+			if err != nil {
+				t.Fatalf("parseLabelSelector(%q) error = %v", in, err)
+			}
+			if sel == nil {
+				t.Fatalf("parseLabelSelector(%q) returned nil", in)
+			}
+		})
+	}
+}
+
+func TestParseLabelSelector_InvalidReturnsInvalidRequest(t *testing.T) {
+	t.Parallel()
+	_, err := parseLabelSelector("this is not a selector")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, storage.ErrInvalidRequest) {
+		t.Errorf("expected ErrInvalidRequest, got %v", err)
+	}
+}
+
+// normalizedArg collapses pq.Array (which wraps a slice into a driver.Valuer)
+// into the equivalent []string, so tests can compare arg slices directly.
+func normalizedArg(a interface{}) interface{} {
+	if v, ok := a.(driver.Valuer); ok {
+		// pq.Array over []string is comparable by falling back to the underlying
+		// value; use reflection to unwrap without invoking Value() (which
+		// produces a Postgres array literal string, not the input slice).
+		rv := reflect.ValueOf(v)
+		if rv.Kind() == reflect.Ptr {
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Struct && rv.NumField() > 0 {
+			inner := rv.Field(0)
+			if inner.CanInterface() {
+				return inner.Interface()
+			}
+		}
+	}
+	return a
+}
+
+func TestBuildLabelSelectorSQL(t *testing.T) {
+	t.Parallel()
+
+	// Every case starts the arg index at 5 to exercise the offset logic that
+	// callers rely on (labels are added after kind/namespace/etc.).
+	const start = 5
+
+	tests := []struct {
+		name       string
+		selector   string
+		wantClause string
+		wantArgs   []interface{}
+	}{
+		{
+			name:       "equals",
+			selector:   "app=web",
+			wantClause: " AND labels->>$5 = $6",
+			wantArgs:   []interface{}{"app", "web"},
+		},
+		{
+			name:       "double equals",
+			selector:   "app==web",
+			wantClause: " AND labels->>$5 = $6",
+			wantArgs:   []interface{}{"app", "web"},
+		},
+		{
+			name:       "not equals — must match when label absent",
+			selector:   "app!=web",
+			wantClause: " AND (labels->>$5 IS NULL OR labels->>$5 <> $6)",
+			wantArgs:   []interface{}{"app", "web"},
+		},
+		{
+			name:       "in",
+			selector:   "tier in (frontend, backend)",
+			wantClause: " AND labels->>$5 = ANY($6::text[])",
+			wantArgs:   []interface{}{"tier", pq.Array([]string{"backend", "frontend"})},
+		},
+		{
+			name:       "notin — must match when label absent",
+			selector:   "tier notin (frontend, backend)",
+			wantClause: " AND (labels->>$5 IS NULL OR labels->>$5 <> ALL($6::text[]))",
+			wantArgs:   []interface{}{"tier", pq.Array([]string{"backend", "frontend"})},
+		},
+		{
+			name:       "exists",
+			selector:   "app",
+			wantClause: " AND labels->>$5 IS NOT NULL",
+			wantArgs:   []interface{}{"app"},
+		},
+		{
+			name:       "does not exist",
+			selector:   "!temporary",
+			wantClause: " AND labels->>$5 IS NULL",
+			wantArgs:   []interface{}{"temporary"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sel, err := parseLabelSelector(tt.selector)
+			if err != nil {
+				t.Fatalf("parseLabelSelector(%q) error = %v", tt.selector, err)
+			}
+			clause, args := buildLabelSelectorSQL(sel, start)
+			if clause != tt.wantClause {
+				t.Errorf("clause = %q, want %q", clause, tt.wantClause)
+			}
+			if len(args) != len(tt.wantArgs) {
+				t.Fatalf("got %d args, want %d: %+v", len(args), len(tt.wantArgs), args)
+			}
+			for i := range args {
+				got := normalizedArg(args[i])
+				want := normalizedArg(tt.wantArgs[i])
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("arg[%d] = %#v, want %#v", i, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildLabelSelectorSQL_NilAndEmpty(t *testing.T) {
+	t.Parallel()
+	clause, args := buildLabelSelectorSQL(nil, 1)
+	if clause != "" || args != nil {
+		t.Errorf("nil selector: clause=%q args=%v; want empty", clause, args)
+	}
+}
+
+func TestBuildLabelSelectorSQL_IsDeterministic(t *testing.T) {
+	t.Parallel()
+	// Equivalent selectors written in a different order (both requirement order
+	// and value order within a set) must produce identical SQL and args.
+	pairs := []struct {
+		a, b string
+	}{
+		{"app=web,tier=frontend", "tier=frontend,app=web"},
+		{"tier in (b, a)", "tier in (a, b)"},
+		{"a=1,b in (y, x),!c", "!c,b in (x, y),a=1"},
+	}
+	for _, p := range pairs {
+		a, err := parseLabelSelector(p.a)
+		if err != nil {
+			t.Fatalf("parse(%q) err=%v", p.a, err)
+		}
+		b, err := parseLabelSelector(p.b)
+		if err != nil {
+			t.Fatalf("parse(%q) err=%v", p.b, err)
+		}
+		clauseA, argsA := buildLabelSelectorSQL(a, 1)
+		clauseB, argsB := buildLabelSelectorSQL(b, 1)
+		if clauseA != clauseB {
+			t.Errorf("%q vs %q: clause differs\n  a=%q\n  b=%q", p.a, p.b, clauseA, clauseB)
+		}
+		if len(argsA) != len(argsB) {
+			t.Fatalf("%q vs %q: arg count differs %d vs %d", p.a, p.b, len(argsA), len(argsB))
+		}
+		for i := range argsA {
+			if !reflect.DeepEqual(normalizedArg(argsA[i]), normalizedArg(argsB[i])) {
+				t.Errorf("%q vs %q: arg[%d] differs: %#v vs %#v", p.a, p.b, i, argsA[i], argsB[i])
+			}
+		}
 	}
 }
