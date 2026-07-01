@@ -15,7 +15,9 @@ import (
 
 	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog/v2"
 
@@ -23,6 +25,62 @@ import (
 )
 
 const jsonNull = "null"
+
+// fieldPredicate is a validated (column, op, value) triple derived from a client-
+// supplied field selector. columns come from supportedFieldColumns (never client
+// input), so composing SQL by concatenating column and op is safe from injection.
+type fieldPredicate struct {
+	column string
+	op     string
+	value  string
+}
+
+// supportedFieldColumns maps the well-known Kubernetes field selectors this
+// backend understands to the resources table column they filter on. Only the
+// two universally-defined metadata fields are wired up so far; resource-specific
+// fields (e.g. status.phase) are rejected pending typed field indexers — the
+// intent is to add them, not to forbid them.
+var supportedFieldColumns = map[string]string{
+	"metadata.name":      "name",
+	"metadata.namespace": "namespace",
+}
+
+// parseFieldSelector validates opts.FieldSelector and returns SQL predicates for
+// the currently supported metadata fields. Fields that aren't wired up yet, and
+// operators other than =/==/!=, produce storage.ErrInvalidRequest so the registry
+// surfaces them as 400 Bad Request rather than returning an unfiltered result set.
+// Additional fields can be added by extending supportedFieldColumns.
+func parseFieldSelector(selector string) ([]fieldPredicate, error) {
+	if selector == "" {
+		return nil, nil
+	}
+	sel, err := fields.ParseSelector(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid field selector %q: %v", storage.ErrInvalidRequest, selector, err)
+	}
+	if sel.Empty() {
+		return nil, nil
+	}
+	reqs := sel.Requirements()
+	preds := make([]fieldPredicate, 0, len(reqs))
+	for _, req := range reqs {
+		col, ok := supportedFieldColumns[req.Field]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: metadata.name, metadata.namespace)", storage.ErrInvalidRequest, req.Field)
+		}
+		var op string
+		switch req.Operator {
+		case selection.Equals, selection.DoubleEquals:
+			op = "="
+		case selection.NotEquals:
+			op = "<>"
+		default:
+			return nil, fmt.Errorf("%w: field selector operator %q is not yet implemented (currently supported: =, ==, !=)", storage.ErrInvalidRequest, req.Operator)
+		}
+		preds = append(preds, fieldPredicate{column: col, op: op, value: req.Value})
+	}
+	return preds, nil
+}
 
 func parseLabelSelector(selector string) (map[string]string, error) {
 	if selector == "" {
@@ -345,6 +403,16 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		}
 	}
 
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, p := range fieldPreds {
+		query += fmt.Sprintf(" AND %s %s $%d", p.column, p.op, argIndex)
+		args = append(args, p.value)
+		argIndex++
+	}
+
 	if opts.Continue != "" {
 		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
 		if err == nil && cursor > 0 {
@@ -593,6 +661,11 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		return nil, fmt.Errorf("failed to parse label selector: %w", err)
 	}
 
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return nil, err
+	}
+
 	w := &postgresWatcher{
 		outCh:       make(chan watch.Event, 100),
 		nudgeCh:     make(chan struct{}, 1),
@@ -601,6 +674,7 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		kind:        kind,
 		ns:          namespace,
 		labelFilter: labelFilter,
+		fieldPreds:  fieldPreds,
 		ctx:         ctx,
 		done:        make(chan struct{}),
 		initialList: true,
@@ -753,6 +827,7 @@ type postgresWatcher struct {
 	kind            string
 	ns              string
 	labelFilter     map[string]string
+	fieldPreds      []fieldPredicate
 	ctx             context.Context
 	done            chan struct{}
 	stopped         atomic.Bool
@@ -904,7 +979,12 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 		labelJSON, _ := json.Marshal(w.labelFilter)
 		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
 		args = append(args, string(labelJSON))
-		_ = argIndex
+		argIndex++
+	}
+	for _, p := range w.fieldPreds {
+		query += fmt.Sprintf(` AND %s %s $%d`, p.column, p.op, argIndex)
+		args = append(args, p.value)
+		argIndex++
 	}
 	query += ` ORDER BY resource_version ASC`
 	return query, args
