@@ -218,7 +218,7 @@ wheels = [
 
 [[package]]
 name = "ark-api"
-version = "0.1.64"
+version = "0.1.65"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
@@ -304,7 +304,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.64-py3-none-any.whl", hash = "sha256:8dfbe032aacc2924b78388ab272a4eabc4ced24bf9afc6e2d5bac78e012f7983" },
+    { filename = "ark_sdk-0.1.64-py3-none-any.whl", hash = "sha256:38afe41bdb541537226cc70fcddba945e25bd7cbe52b56613de9d0e71e4b7799" },
 ]
 
 [package.metadata]
