@@ -554,3 +554,129 @@ func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T)
 
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
 }
+
+func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testKind := "TestResource"
+	testNS := "integration-test-generation"
+	testName := "generation-test-resource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+	}()
+
+	generation := func() int64 {
+		var g int64
+		if err := backend.db.QueryRowContext(ctx,
+			"SELECT generation FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+			testKind, testNS, testName).Scan(&g); err != nil {
+			t.Fatalf("read generation: %v", err)
+		}
+		return g
+	}
+	currentObj := func() *integrationTestObject {
+		got, gerr := backend.Get(ctx, testKind, testNS, testName)
+		if gerr != nil {
+			t.Fatalf("Get failed: %v", gerr)
+		}
+		return got.(*integrationTestObject)
+	}
+
+	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	obj.Metadata.Name = testName
+	obj.Metadata.Namespace = testNS
+	obj.Metadata.UID = "gen-test-uid"
+	obj.Metadata.Labels = map[string]string{"tier": "a"}
+	obj.Spec = map[string]interface{}{"model": "gpt-4"}
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Fatalf("after Create: generation = %d, want 1", g)
+	}
+
+	// Metadata-only update (label change, same spec). Kubernetes says this
+	// must NOT bump generation.
+	step := currentObj()
+	step.Metadata.Labels = map[string]string{"tier": "b"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("label-only Update failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Errorf("after label-only update: generation = %d, want 1 (metadata-only must not bump)", g)
+	}
+
+	// Spec change: generation must bump.
+	step = currentObj()
+	step.Spec["model"] = "gpt-4-turbo"
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("spec Update failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after spec change: generation = %d, want 2", g)
+	}
+
+	// Status-only update via UpdateStatus: must not bump.
+	step = currentObj()
+	step.Status = map[string]interface{}{"phase": "Ready"}
+	if err := backend.UpdateStatus(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("UpdateStatus failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after status update: generation = %d, want 2 (status must not bump)", g)
+	}
+
+	// Status-and-metadata via Update() (some clients round-trip the whole
+	// object without touching spec). Same result: no bump.
+	step = currentObj()
+	step.Metadata.Labels["extra"] = "value"
+	step.Status["phase"] = "Running"
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("status+label Update failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after status+label update: generation = %d, want 2", g)
+	}
+
+	// Spec change with reordered keys (jsonb structural equality means an
+	// object with the same content but different key order must still be
+	// treated as equal — no bump). Reset spec first to a two-key form.
+	step = currentObj()
+	step.Spec = map[string]interface{}{"a": "1", "b": "2"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("two-key spec Update failed: %v", err)
+	}
+	genAfterTwoKey := generation()
+	if genAfterTwoKey != 3 {
+		t.Fatalf("after two-key spec change: generation = %d, want 3", genAfterTwoKey)
+	}
+	step = currentObj()
+	step.Spec = map[string]interface{}{"b": "2", "a": "1"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("reordered-key Update failed: %v", err)
+	}
+	if g := generation(); g != genAfterTwoKey {
+		t.Errorf("after reordered-key update: generation = %d, want %d (jsonb equality is order-independent)", g, genAfterTwoKey)
+	}
+}

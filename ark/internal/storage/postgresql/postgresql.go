@@ -477,13 +477,21 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	var uid string
 	var createdAt time.Time
 	var updated bool
+	// generation bumps only when .spec differs. Kubernetes controllers use the
+	// generation/observedGeneration pair to detect "have I reconciled the current
+	// spec"; bumping on metadata- or status-only updates makes that check useless
+	// and triggers spurious reconciles. The CASE compares the OLD spec (row
+	// values before SET is applied, per PostgreSQL semantics) to the incoming
+	// $1 — jsonb equality is structural, so key-order differences from JSON
+	// re-marshalling don't cause a false bump.
 	err = p.db.QueryRowContext(ctx, `
 		WITH upd AS (
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
 			    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
-			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+			    generation = CASE WHEN spec = $1::jsonb THEN generation ELSE generation + 1 END,
+			    resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
 			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
