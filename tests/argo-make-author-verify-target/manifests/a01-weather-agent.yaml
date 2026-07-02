@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather
+spec:
+  prompt: |
+    You are a weather assistant.
+  modelRef:
+    name: default

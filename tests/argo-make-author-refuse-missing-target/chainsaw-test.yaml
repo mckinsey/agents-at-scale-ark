@@ -1,0 +1,138 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: argo-make-author-refuse-missing-target
+spec:
+  description: >-
+    The argo-make-author agent refuses to reference a query target absent from
+    the live cluster: it writes no WorkflowTemplate YAML for it and instead
+    offers the available alternatives.
+  timeouts:
+    apply: 30s
+    assert: 180s
+  steps:
+  - name: setup-rbac
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+
+  - name: setup-kubernetes-mcp-server
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          bash ../shared/install-kubernetes-mcp-server.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: kubernetes-mcp-server
+        timeout: 3m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: resources_list
+          status:
+            state: Ready
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get mcpserver,tool -n $NAMESPACE -o wide 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  - name: wait-for-model
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: default
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    catch:
+    - script:
+        content: |
+          kubectl get model -n $NAMESPACE -o yaml 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: deploy-agent
+    try:
+    - apply:
+        file: ../../services/ark-dashboard/ark-dashboard/lib/bundled-manifests/argo-make-author.agent.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: argo-make-author
+    catch:
+    - events: {}
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a01-author-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: author-query
+        timeout: 3m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: author-query
+          status:
+            (contains(response.content, 'WorkflowTemplate')): false
+            (contains(response.content, 'templateRef')): false
+            (contains(response.content, 'available')): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get model,agent,tool,query -n $NAMESPACE 2>/dev/null || true
+          kubectl describe query author-query -n $NAMESPACE 2>/dev/null || true
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=80 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall kubernetes-mcp-server --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
