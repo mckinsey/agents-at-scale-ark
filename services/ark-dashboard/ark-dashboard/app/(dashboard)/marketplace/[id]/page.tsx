@@ -11,9 +11,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import { PageHeader } from '@/components/common/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,11 @@ export default function MarketplaceDetailPage() {
   const { data: item, isPending, error } = useGetMarketplaceItemById(id);
   const installMutation = useInstallMarketplaceItem();
   const uninstallMutation = useUninstallMarketplaceItem();
+  const [uninstallCommand, setUninstallCommand] = useState<{
+    open: boolean;
+    helmCommand?: string;
+    name?: string;
+  }>({ open: false });
 
   useEffect(() => {
     if (error) {
@@ -53,7 +59,21 @@ export default function MarketplaceDetailPage() {
   };
 
   const handleUninstall = () => {
-    uninstallMutation.mutate(id);
+    uninstallMutation.mutateAsync(id).then(
+      result => {
+        if (result && typeof result === 'object' && 'status' in result) {
+          const data = result as Record<string, unknown>;
+          if (data.status === 'command') {
+            setUninstallCommand({
+              open: true,
+              helmCommand: data.helmCommand as string | undefined,
+              name: (data.name as string | undefined) || item?.name,
+            });
+          }
+        }
+      },
+      () => undefined,
+    );
   };
 
   const getCategoryColor = (category: string) => {
@@ -394,6 +414,17 @@ export default function MarketplaceDetailPage() {
             </Card>
           </div>
         </div>
+
+        <MarketplaceCommandDialog
+          open={uninstallCommand.open}
+          onOpenChange={open => setUninstallCommand(s => ({ ...s, open }))}
+          command={{
+            helmCommand: uninstallCommand.helmCommand,
+            name: uninstallCommand.name,
+          }}
+          itemName={item.name}
+          action="uninstall"
+        />
       </main>
     </div>
   );

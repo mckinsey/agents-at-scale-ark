@@ -8,9 +8,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -252,22 +255,24 @@ var _ = Describe("Query Controller", func() {
 })
 
 var _ = Describe("Query Controller handleRunningPhase", func() {
-	Context("TTL handling", func() {
-		It("returns immediately when the query TTL has already expired", func() {
+	Context("MaxConcurrentQueries enforcement", func() {
+		It("requeues without spawning execution when the semaphore is full", func() {
 			r := &QueryReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
 			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "pre-condition: semaphore should start drainable")
+
 			query := arkv1alpha1.Query{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "expired-ttl-query",
-					Namespace: "default",
-					CreationTimestamp: metav1.Time{
-						Time: time.Now().Add(-2 * time.Hour),
-					},
+					Name:              "capacity-requeue-query",
+					Namespace:         "default",
+					CreationTimestamp: metav1.Time{Time: time.Now()},
 				},
 				Spec: arkv1alpha1.QuerySpec{
-					TTL: &metav1.Duration{Duration: 1 * time.Hour},
+					TTL: &metav1.Duration{Duration: time.Hour},
 				},
 			}
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
@@ -275,21 +280,28 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			result, err := r.handleRunningPhase(context.Background(), req, query)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result.RequeueAfter).To(Equal(queryCapacityRequeueDelay))
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeFalse(), "should not register an operation when capacity is exhausted")
 		})
 
-		It("returns immediately when the query has no TTL and uses default 1h but is already 2h old", func() {
+		It("does not enforce a cap when MaxConcurrentQueries is 0", func() {
 			r := &QueryReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				MaxConcurrentQueries: 0,
 			}
+			Expect(r.sem).To(BeNil(), "nil semaphore means enforcement is disabled")
+
 			query := arkv1alpha1.Query{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "no-ttl-old-query",
-					Namespace: "default",
-					CreationTimestamp: metav1.Time{
-						Time: time.Now().Add(-2 * time.Hour),
-					},
+					Name:              "capacity-disabled-query",
+					Namespace:         "default",
+					CreationTimestamp: metav1.Time{Time: time.Now()},
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					TTL: &metav1.Duration{Duration: time.Hour},
 				},
 			}
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
@@ -297,8 +309,364 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			result, err := r.handleRunningPhase(context.Background(), req, query)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result.RequeueAfter).To(BeZero(), "must not requeue with capacity delay when enforcement is disabled")
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "should register the operation, proving execution branch was taken despite no semaphore")
 		})
+	})
+
+	Context("initSemaphore", func() {
+		It("creates a semaphore sized to MaxConcurrentQueries", func() {
+			r := &QueryReconciler{MaxConcurrentQueries: 3}
+			r.initSemaphore()
+			Expect(r.sem).NotTo(BeNil())
+			Expect(r.sem.TryAcquire(3)).To(BeTrue(), "should permit MaxConcurrentQueries acquisitions")
+			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "should deny the next acquisition once the cap is reached")
+		})
+
+		It("leaves the semaphore nil when MaxConcurrentQueries is 0", func() {
+			r := &QueryReconciler{MaxConcurrentQueries: 0}
+			r.initSemaphore()
+			Expect(r.sem).To(BeNil())
+		})
+	})
+
+	Context("buildControllerOptions", func() {
+		It("propagates MaxConcurrentReconciles when set", func() {
+			r := &QueryReconciler{MaxConcurrentReconciles: 7}
+			opts := r.buildControllerOptions()
+			Expect(opts.MaxConcurrentReconciles).To(Equal(7))
+		})
+	})
+
+	Context("SetupWithManager", func() {
+		It("registers the controller and sizes the semaphore from MaxConcurrentQueries", func() {
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+			Expect(err).NotTo(HaveOccurred())
+
+			r := &QueryReconciler{
+				Client:                  mgr.GetClient(),
+				Scheme:                  mgr.GetScheme(),
+				MaxConcurrentQueries:    2,
+				MaxConcurrentReconciles: 2,
+			}
+
+			Expect(r.SetupWithManager(mgr)).To(Succeed())
+
+			Expect(r.sem).NotTo(BeNil(), "initSemaphore should have run via SetupWithManager")
+			Expect(r.sem.TryAcquire(2)).To(BeTrue(), "semaphore should permit MaxConcurrentQueries acquisitions")
+			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "semaphore should refuse the next acquisition once the cap is reached")
+		})
+	})
+
+	Context("finishExecuteQueryAsync", func() {
+		It("deletes the operation entry and releases the semaphore", func() {
+			r := &QueryReconciler{
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			// Saturate the semaphore to model "a query is already in flight"; the
+			// next TryAcquire fails until something releases the slot.
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "semaphore should now be full")
+
+			namespacedName := types.NamespacedName{Name: "finish-query", Namespace: "default"}
+			_, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			r.operations.Store(namespacedName, cancel)
+
+			r.finishExecuteQueryAsync(context.Background(), namespacedName)
+
+			_, exists := r.operations.Load(namespacedName)
+			Expect(exists).To(BeFalse(), "operations entry should be cleared")
+			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "semaphore slot should have been released")
+		})
+
+		It("does not panic when the semaphore is nil", func() {
+			r := &QueryReconciler{}
+			namespacedName := types.NamespacedName{Name: "no-sem-query", Namespace: "default"}
+			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
+
+			Expect(func() { r.finishExecuteQueryAsync(context.Background(), namespacedName) }).NotTo(Panic())
+
+			_, exists := r.operations.Load(namespacedName)
+			Expect(exists).To(BeFalse())
+		})
+
+		It("recovers from a panic in the goroutine and still cleans up", func() {
+			r := &QueryReconciler{
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+
+			namespacedName := types.NamespacedName{Name: "panic-query", Namespace: "default"}
+			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
+
+			Expect(func() {
+				defer r.finishExecuteQueryAsync(context.Background(), namespacedName)
+				panic("simulated execution panic")
+			}).NotTo(Panic())
+
+			_, exists := r.operations.Load(namespacedName)
+			Expect(exists).To(BeFalse(), "cleanup must run even on panic")
+			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "semaphore must be released even on panic")
+		})
+	})
+})
+
+var _ = Describe("Query TTL helpers", func() {
+	Describe("ttlRemaining", func() {
+		It("returns 0 when TTL is not configured", func() {
+			q := &arkv1alpha1.Query{}
+			Expect(ttlRemaining(q)).To(BeZero())
+		})
+
+		It("returns a positive duration when terminal and completion is recent", func() {
+			q := &arkv1alpha1.Query{
+				Spec: arkv1alpha1.QuerySpec{TTL: &metav1.Duration{Duration: time.Hour}},
+				Status: arkv1alpha1.QueryStatus{
+					Phase: statusDone,
+					Conditions: []metav1.Condition{{
+						Type:               string(arkv1alpha1.QueryCompleted),
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: metav1.NewTime(time.Now().Add(-10 * time.Minute)),
+					}},
+				},
+			}
+			Expect(ttlRemaining(q)).To(BeNumerically("~", 50*time.Minute, time.Minute))
+		})
+
+		It("returns a negative duration when TTL has elapsed since completion", func() {
+			q := &arkv1alpha1.Query{
+				Spec: arkv1alpha1.QuerySpec{TTL: &metav1.Duration{Duration: time.Hour}},
+				Status: arkv1alpha1.QueryStatus{
+					Phase: statusDone,
+					Conditions: []metav1.Condition{{
+						Type:               string(arkv1alpha1.QueryCompleted),
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Hour)),
+					}},
+				},
+			}
+			Expect(ttlRemaining(q)).To(BeNumerically("<", 0))
+		})
+
+		It("falls back to CreationTimestamp when no QueryCompleted condition is set", func() {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Hour))},
+				Spec:       arkv1alpha1.QuerySpec{TTL: &metav1.Duration{Duration: time.Hour}},
+			}
+			Expect(ttlRemaining(q)).To(BeNumerically("<", 0))
+		})
+
+		It("falls back to CreationTimestamp when QueryCompleted has Status=False (in-flight)", func() {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Hour))},
+				Spec:       arkv1alpha1.QuerySpec{TTL: &metav1.Duration{Duration: time.Hour}},
+				Status: arkv1alpha1.QueryStatus{
+					Phase: statusRunning,
+					Conditions: []metav1.Condition{{
+						Type:               string(arkv1alpha1.QueryCompleted),
+						Status:             metav1.ConditionFalse,
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					}},
+				},
+			}
+			Expect(ttlRemaining(q)).To(BeNumerically("<", 0))
+		})
+	})
+
+	Describe("queryCompletedAt", func() {
+		It("returns nil when no QueryCompleted condition is set", func() {
+			Expect(queryCompletedAt(&arkv1alpha1.Query{})).To(BeNil())
+		})
+
+		It("returns nil when QueryCompleted is Status=False", func() {
+			q := &arkv1alpha1.Query{
+				Status: arkv1alpha1.QueryStatus{
+					Conditions: []metav1.Condition{{
+						Type:   string(arkv1alpha1.QueryCompleted),
+						Status: metav1.ConditionFalse,
+					}},
+				},
+			}
+			Expect(queryCompletedAt(q)).To(BeNil())
+		})
+
+		It("returns LastTransitionTime when QueryCompleted is Status=True", func() {
+			at := time.Now().Add(-time.Hour).Truncate(time.Second)
+			q := &arkv1alpha1.Query{
+				Status: arkv1alpha1.QueryStatus{
+					Conditions: []metav1.Condition{{
+						Type:               string(arkv1alpha1.QueryCompleted),
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: metav1.NewTime(at),
+					}},
+				},
+			}
+			got := queryCompletedAt(q)
+			Expect(got).NotTo(BeNil())
+			Expect(*got).To(Equal(at))
+		})
+	})
+
+	Describe("isTerminalPhase", func() {
+		It("returns true for done/error/canceled", func() {
+			Expect(isTerminalPhase(statusDone)).To(BeTrue())
+			Expect(isTerminalPhase(statusError)).To(BeTrue())
+			Expect(isTerminalPhase(statusCanceled)).To(BeTrue())
+		})
+		It("returns false for in-flight or unknown phases", func() {
+			Expect(isTerminalPhase(statusRunning)).To(BeFalse())
+			Expect(isTerminalPhase(statusProvisioning)).To(BeFalse())
+			Expect(isTerminalPhase(statusPending)).To(BeFalse())
+			Expect(isTerminalPhase("")).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
+	ctx := context.Background()
+
+	It("deletes a terminal-phase Query whose TTL has elapsed since completion", func() {
+		name := "ttl-elapsed-terminal-query"
+		key := types.NamespacedName{Name: name, Namespace: "default"}
+
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				TTL:    &metav1.Duration{Duration: time.Nanosecond},
+			},
+		}
+		Expect(query.Spec.SetInputString("hello")).To(Succeed())
+		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		query.Status.Phase = statusDone
+		query.Status.Conditions = []metav1.Condition{{
+			Type:               string(arkv1alpha1.QueryCompleted),
+			Status:             metav1.ConditionTrue,
+			Reason:             "QuerySucceeded",
+			Message:            "Query completed successfully",
+			LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Hour)),
+		}}
+		Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = k8sClient.Get(ctx, key, &arkv1alpha1.Query{})
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be deleted when terminal phase + TTL elapsed since completion")
+	})
+
+	It("does NOT delete a non-terminal Query even when its TTL has elapsed since creation", func() {
+		// Regression test for #2693: the old controller measured TTL from
+		// CreationTimestamp regardless of phase, which would reap a long-
+		// running or queue-backlogged Query mid-flight.
+		name := "ttl-elapsed-running-query"
+		key := types.NamespacedName{Name: name, Namespace: "default"}
+
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				TTL:    &metav1.Duration{Duration: time.Nanosecond},
+			},
+		}
+		Expect(query.Spec.SetInputString("hello")).To(Succeed())
+		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		// Sleep so time.Since(CreationTimestamp) > TTL (1ns). Without the
+		// fix, ttlRemaining would be negative and the guard would delete.
+		time.Sleep(10 * time.Millisecond)
+
+		// Pre-add the finalizer so Reconcile reaches handleQueryExecution
+		// in a single pass instead of returning early to write it first.
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		controllerutil.AddFinalizer(query, finalizer)
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		query.Status.Phase = statusRunning
+		query.Status.Conditions = []metav1.Condition{{
+			Type:               string(arkv1alpha1.QueryCompleted),
+			Status:             metav1.ConditionFalse,
+			Reason:             "QueryRunning",
+			Message:            "Query is running",
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		}}
+		Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		// Pre-register an operation so handleRunningPhase short-circuits
+		// instead of spawning an executor goroutine we'd have to drain.
+		_, cancel := context.WithCancel(ctx)
+		defer cancel()
+		r.operations.Store(key, cancel)
+
+		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+		Expect(err).NotTo(HaveOccurred())
+
+		var refetched arkv1alpha1.Query
+		Expect(k8sClient.Get(ctx, key, &refetched)).To(Succeed())
+		Expect(refetched.DeletionTimestamp.IsZero()).To(BeTrue(), "in-flight Query must not be GC'd even when TTL has elapsed since creation")
+
+		// Cleanup: remove finalizer so Delete actually removes the object.
+		r.operations.Delete(key)
+		controllerutil.RemoveFinalizer(&refetched, finalizer)
+		Expect(k8sClient.Update(ctx, &refetched)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, &refetched)).To(Succeed())
+	})
+
+	It("requeues a terminal Query for GC at completedAt + TTL when TTL has not yet elapsed", func() {
+		name := "ttl-pending-terminal-query"
+		key := types.NamespacedName{Name: name, Namespace: "default"}
+
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				TTL:    &metav1.Duration{Duration: time.Hour},
+			},
+		}
+		Expect(query.Spec.SetInputString("hello")).To(Succeed())
+		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		// Pre-add the finalizer so Reconcile reaches handleQueryExecution
+		// in a single pass instead of returning early to write it first.
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		controllerutil.AddFinalizer(query, finalizer)
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
+
+		completedAt := time.Now().Add(-10 * time.Minute)
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		query.Status.Phase = statusDone
+		query.Status.Conditions = []metav1.Condition{{
+			Type:               string(arkv1alpha1.QueryCompleted),
+			Status:             metav1.ConditionTrue,
+			Reason:             "QuerySucceeded",
+			Message:            "Query completed successfully",
+			LastTransitionTime: metav1.NewTime(completedAt),
+		}}
+		Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		result, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+		Expect(err).NotTo(HaveOccurred())
+
+		var refetched arkv1alpha1.Query
+		Expect(k8sClient.Get(ctx, key, &refetched)).To(Succeed())
+		Expect(refetched.DeletionTimestamp.IsZero()).To(BeTrue(), "terminal Query with TTL still remaining must not be GC'd yet")
+		Expect(result.RequeueAfter).To(BeNumerically("~", 50*time.Minute, time.Minute), "RequeueAfter should target completedAt + TTL")
+
+		// Cleanup: remove finalizer so Delete actually removes the object.
+		Expect(k8sClient.Get(ctx, key, &refetched)).To(Succeed())
+		controllerutil.RemoveFinalizer(&refetched, finalizer)
+		Expect(k8sClient.Update(ctx, &refetched)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, &refetched)).To(Succeed())
 	})
 })
 

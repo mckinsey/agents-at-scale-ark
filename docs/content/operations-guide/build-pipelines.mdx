@@ -62,12 +62,13 @@ For the complete release process including RC and stable release cycles, artifac
 3. **Release Activation** (When Release PR is merged)
    - The CI/CD pipeline re-runs fully and creates a GitHub release with the new version tag
    - Changelog is automatically attached to the GitHub release
-   - Sets `release_created` output to trigger downstream jobs:
-      - **release-docs**: Deploys documentation to GitHub Pages
-      - **release-libs**: Attaches Python wheel files to GitHub release
-      - **release-chart**: Attaches Helm chart package to GitHub release
-      - **release-ark-cli**: Attaches ARK CLI npm package to GitHub release
-      - **run-deploy-workflow**: Triggers the Deploy workflow for distribution channels
+   - Sets `release_created` output to trigger downstream jobs (in `.github/workflows/cicd.yaml`):
+      - **release-libs**: Attaches the Python wheel files to the GitHub release
+      - **release-charts**: Attaches the Helm chart packages to the GitHub release
+      - **release-ark-cli**: Attaches the ARK CLI npm package to the GitHub release
+      - **release-fark**: Builds the `fark` CLI with GoReleaser and attaches its binaries to the GitHub release
+      - **run-deploy-workflow**: Triggers the Deploy workflow (`deploy.yml`), which publishes the distribution channels — documentation to GitHub Pages, multi-arch containers, the Helm chart, the npm CLI, and the PyPI SDK
+   - On stable releases only, **verify-ark-installation** smoke-tests the published install and **bootstrap-next-rc-cycle** opens the next release-candidate cycle
 
 ### Version Synchronization
 
