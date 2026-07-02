@@ -66,12 +66,12 @@ export default {
     title: 'End to end testing',
     href: '/developer-guide/testing'
   },
+  pipelines: {
+    title: 'Build pipelines',
+    href: '/operations-guide/build-pipelines'
+  },
 
   '---operate': { type: 'separator', title: 'Operate ARK (operators / SRE)' },
-  provisioning: {
-    title: 'Cloud infrastructure',
-    href: '/operations-guide/provisioning'
-  },
   deploying: {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
@@ -88,25 +88,9 @@ export default {
     title: 'Marketplace',
     href: '/operations-guide/marketplace'
   },
-  pipelines: {
-    title: 'Build pipelines',
-    href: '/operations-guide/build-pipelines'
-  },
-  'pen-testing': {
-    title: 'Penetration testing',
-    href: '/operations-guide/penetration-testing-reports'
-  },
-  'code-analysis': {
-    title: 'Code analysis',
-    href: '/operations-guide/code-analysis-reports'
-  },
-  'artifact-analysis': {
-    title: 'Artifact analysis',
-    href: '/operations-guide/artifact-analysis-reports'
-  },
-  'data-flow': {
-    title: 'Data flow and encryption',
-    href: '/operations-guide/data-flow-and-encryption'
+  provisioning: {
+    title: 'Cloud deployments',
+    href: '/operations-guide/provisioning'
   }
 }
 
