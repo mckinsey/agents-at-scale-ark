@@ -40,6 +40,18 @@ The **messages** store can opt in to a Postgres backend (`backends.message: post
 
 When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
 
+The PostgreSQL backend's advantage grows with resource count — it is most pronounced on `LIST` operations. Benchmarks at 10,000 Ark resources:
+
+| Operation | etcd | PostgreSQL |
+|-----------|------|------------|
+| LIST latency (P50) | 2,980ms | 1,504ms (~2x faster) |
+| LIST throughput | 6.1 ops/sec | 12.5 ops/sec (~2x higher) |
+| Create latency (P50) | 107ms | 106ms (comparable) |
+| Get latency (P50) | 103ms | 106ms (comparable) |
+| Watch latency (P50) | — | 73ms |
+
+On PostgreSQL, production capacity is roughly ~230 ops/sec burst / ~180 ops/sec sustained, 200+ concurrent watchers at ~80ms P50, with optimal concurrency around 50–100 workers. See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
+
 ### Executors
 
 All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The default completions executor uses an in-memory A2A task manager that holds conversation history, active tasks, and streaming subscribers, so it runs as a single replica by default. Scaling it to multiple replicas would require sticky sessions or a shared task store. Marketplace and custom executors can define their own HPA, resource limits, and replica strategy depending on their state management approach.
