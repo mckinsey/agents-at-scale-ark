@@ -155,12 +155,11 @@ func normalizedArg(a interface{}) interface{} {
 	return a
 }
 
-func TestBuildLabelSelectorSQL(t *testing.T) {
+func TestLabelSelectorSQL(t *testing.T) {
 	t.Parallel()
 
-	// Every case starts the arg index at 5 to exercise the offset logic that
-	// callers rely on (labels are added after kind/namespace/etc.).
-	const start = 5
+	// Pre-seed args with 4 pads so the first emitted placeholder is $5.
+	const preExistingArgs = 4
 
 	tests := []struct {
 		name       string
@@ -218,15 +217,18 @@ func TestBuildLabelSelectorSQL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseLabelSelector(%q) error = %v", tt.selector, err)
 			}
-			clause, args := buildLabelSelectorSQL(sel, start)
+			args := make([]interface{}, preExistingArgs)
+			clause := labelSelectorSQL(sel, &args)
+			gotArgs := args[preExistingArgs:]
+
 			if clause != tt.wantClause {
 				t.Errorf("clause = %q, want %q", clause, tt.wantClause)
 			}
-			if len(args) != len(tt.wantArgs) {
-				t.Fatalf("got %d args, want %d: %+v", len(args), len(tt.wantArgs), args)
+			if len(gotArgs) != len(tt.wantArgs) {
+				t.Fatalf("got %d args, want %d: %+v", len(gotArgs), len(tt.wantArgs), gotArgs)
 			}
-			for i := range args {
-				got := normalizedArg(args[i])
+			for i := range gotArgs {
+				got := normalizedArg(gotArgs[i])
 				want := normalizedArg(tt.wantArgs[i])
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("arg[%d] = %#v, want %#v", i, got, want)
@@ -236,15 +238,16 @@ func TestBuildLabelSelectorSQL(t *testing.T) {
 	}
 }
 
-func TestBuildLabelSelectorSQL_NilAndEmpty(t *testing.T) {
+func TestLabelSelectorSQL_NilAndEmpty(t *testing.T) {
 	t.Parallel()
-	clause, args := buildLabelSelectorSQL(nil, 1)
-	if clause != "" || args != nil {
+	args := make([]interface{}, 0)
+	clause := labelSelectorSQL(nil, &args)
+	if clause != "" || len(args) != 0 {
 		t.Errorf("nil selector: clause=%q args=%v; want empty", clause, args)
 	}
 }
 
-func TestBuildLabelSelectorSQL_IsDeterministic(t *testing.T) {
+func TestLabelSelectorSQL_IsDeterministic(t *testing.T) {
 	t.Parallel()
 	// Equivalent selectors written in a different order (both requirement order
 	// and value order within a set) must produce identical SQL and args.
@@ -264,8 +267,10 @@ func TestBuildLabelSelectorSQL_IsDeterministic(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse(%q) err=%v", p.b, err)
 		}
-		clauseA, argsA := buildLabelSelectorSQL(a, 1)
-		clauseB, argsB := buildLabelSelectorSQL(b, 1)
+		argsA := make([]interface{}, 0)
+		argsB := make([]interface{}, 0)
+		clauseA := labelSelectorSQL(a, &argsA)
+		clauseB := labelSelectorSQL(b, &argsB)
 		if clauseA != clauseB {
 			t.Errorf("%q vs %q: clause differs\n  a=%q\n  b=%q", p.a, p.b, clauseA, clauseB)
 		}

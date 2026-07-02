@@ -37,28 +37,20 @@ type fieldPredicate struct {
 	value  string
 }
 
-// supportedFieldColumns maps the well-known Kubernetes field selectors this
-// backend understands to the resources table column they filter on. Only the
-// two universally-defined metadata fields are wired up so far; resource-specific
-// fields (e.g. status.phase) are rejected pending typed field indexers — the
-// intent is to add them, not to forbid them.
+// supportedFieldColumns maps k8s field selectors to the resources table
+// column they filter on. Resource-specific fields (e.g. status.phase) are
+// rejected pending typed field indexers — not permanently forbidden.
 var supportedFieldColumns = map[string]string{
 	"metadata.name":      "name",
 	"metadata.namespace": "namespace",
 }
 
-// supportedFieldOps maps a Kubernetes field-selector operator to the SQL
-// operator it translates to. Adding a new operator here also updates the
-// error message via supportedFieldOpsList.
 var supportedFieldOps = map[selection.Operator]string{
 	selection.Equals:       "=",
 	selection.DoubleEquals: "=",
 	selection.NotEquals:    "<>",
 }
 
-// supportedFieldsList returns the currently-supported field selector fields,
-// sorted alphabetically, for inclusion in error messages. Derived from
-// supportedFieldColumns so the two stay in lockstep as fields are added.
 func supportedFieldsList() string {
 	keys := make([]string, 0, len(supportedFieldColumns))
 	for k := range supportedFieldColumns {
@@ -68,9 +60,6 @@ func supportedFieldsList() string {
 	return strings.Join(keys, ", ")
 }
 
-// supportedFieldOpsList returns the currently-supported field selector
-// operators (in their k8s user-visible form), sorted for determinism.
-// Derived from supportedFieldOps so the two stay in lockstep.
 func supportedFieldOpsList() string {
 	keys := make([]string, 0, len(supportedFieldOps))
 	for k := range supportedFieldOps {
@@ -81,9 +70,7 @@ func supportedFieldOpsList() string {
 }
 
 // parseFieldSelector validates opts.FieldSelector and returns SQL predicates for
-// the currently supported metadata fields. Fields that aren't wired up yet, and
-// operators other than =/==/!=, produce storage.ErrInvalidRequest so the registry
-// surfaces them as 400 Bad Request rather than returning an unfiltered result set.
+// supported metadata fields. Unsupported fields or operators produce storage.ErrInvalidRequest.
 // Additional fields can be added by extending supportedFieldColumns.
 func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	if selector == "" {
@@ -112,10 +99,6 @@ func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	return preds, nil
 }
 
-// parseLabelSelector parses a Kubernetes label selector expression. The full
-// selector language is supported: equality (=, ==), inequality (!=), set-based
-// (in, notin), and existence (key, !key). Invalid expressions produce a
-// storage.ErrInvalidRequest so the registry surfaces them as 400 Bad Request.
 func parseLabelSelector(selector string) (labels.Selector, error) {
 	if selector == "" {
 		return nil, nil
@@ -130,70 +113,44 @@ func parseLabelSelector(selector string) (labels.Selector, error) {
 	return sel, nil
 }
 
-// buildLabelSelectorSQL translates a parsed label selector into a SQL fragment
-// (a series of " AND ..." clauses) and the arguments to bind. startArgIndex is
-// the $N placeholder to use for the first bound arg; callers should advance
-// their own arg index by len(args) after appending.
-//
-// The labels column is jsonb; we read individual values via labels->>$N and use
-// NULL-safe operators so k8s semantics are preserved:
-//   - Equals/DoubleEquals match when the key exists AND the value matches.
-//   - NotEquals matches when the key is absent OR the value differs.
-//   - In matches when the key exists AND the value is in the set.
-//   - NotIn matches when the key is absent OR the value is not in the set.
-//   - Exists/DoesNotExist require only the key's presence/absence.
-//
-// Operator SQL is fixed text (no client-controlled strings), and every value
-// crosses the boundary as a bound parameter, so no injection surface.
-//
-// The selector must have come from parseLabelSelector (i.e. labels.Parse) — an
-// unsupported operator or malformed requirement is treated as an unreachable
-// invariant violation and panics rather than silently returning over-broad SQL.
-func buildLabelSelectorSQL(sel labels.Selector, startArgIndex int) (string, []interface{}) {
+// labelSelectorSQL emits " AND ..." clauses and appends bind values to *args.
+// Placeholders are len(*args)+1 at each use, so the caller passes the same
+// slice and doesn't track an index. Values are bound; operators are fixed.
+func labelSelectorSQL(sel labels.Selector, args *[]interface{}) string {
 	if sel == nil || sel.Empty() {
-		return "", nil
+		return ""
 	}
 	reqs, _ := sel.Requirements()
 	var sb strings.Builder
-	var args []interface{}
-	argIndex := startArgIndex
 	for _, req := range reqs {
 		key := req.Key()
 		op := req.Operator()
-		// .List() (not UnsortedList) so the emitted SQL is deterministic —
-		// labels.Parse already sorts requirements by key, and this sorts values
-		// within each requirement, so equivalent selectors produce identical SQL.
 		vals := req.Values().List()
+		p := len(*args) + 1
 		switch op {
 		case selection.Equals, selection.DoubleEquals:
-			fmt.Fprintf(&sb, ` AND labels->>$%d = $%d`, argIndex, argIndex+1)
-			args = append(args, key, vals[0])
-			argIndex += 2
+			fmt.Fprintf(&sb, ` AND labels->>$%d = $%d`, p, p+1)
+			*args = append(*args, key, vals[0])
 		case selection.NotEquals:
-			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> $%d)`, argIndex, argIndex, argIndex+1)
-			args = append(args, key, vals[0])
-			argIndex += 2
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> $%d)`, p, p, p+1)
+			*args = append(*args, key, vals[0])
 		case selection.In:
-			fmt.Fprintf(&sb, ` AND labels->>$%d = ANY($%d::text[])`, argIndex, argIndex+1)
-			args = append(args, key, pq.Array(vals))
-			argIndex += 2
+			fmt.Fprintf(&sb, ` AND labels->>$%d = ANY($%d::text[])`, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
 		case selection.NotIn:
-			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> ALL($%d::text[]))`, argIndex, argIndex, argIndex+1)
-			args = append(args, key, pq.Array(vals))
-			argIndex += 2
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> ALL($%d::text[]))`, p, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
 		case selection.Exists:
-			fmt.Fprintf(&sb, ` AND labels->>$%d IS NOT NULL`, argIndex)
-			args = append(args, key)
-			argIndex++
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NOT NULL`, p)
+			*args = append(*args, key)
 		case selection.DoesNotExist:
-			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, argIndex)
-			args = append(args, key)
-			argIndex++
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, p)
+			*args = append(*args, key)
 		default:
-			panic(fmt.Sprintf("buildLabelSelectorSQL: unhandled operator %q from labels.Parse output", op))
+			panic(fmt.Sprintf("labelSelectorSQL: unhandled operator %q from labels.Parse output", op))
 		}
 	}
-	return sb.String(), args
+	return sb.String()
 }
 
 type Config struct {
@@ -483,10 +440,8 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		return nil, "", err
 	}
 	if labelSel != nil {
-		clause, labelArgs := buildLabelSelectorSQL(labelSel, argIndex)
-		query += clause
-		args = append(args, labelArgs...)
-		argIndex += len(labelArgs)
+		query += labelSelectorSQL(labelSel, &args)
+		argIndex = len(args) + 1
 	}
 
 	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
@@ -1062,10 +1017,8 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 		argIndex++
 	}
 	if w.labelSel != nil {
-		clause, labelArgs := buildLabelSelectorSQL(w.labelSel, argIndex)
-		query += clause
-		args = append(args, labelArgs...)
-		argIndex += len(labelArgs)
+		query += labelSelectorSQL(w.labelSel, &args)
+		argIndex = len(args) + 1
 	}
 	for _, p := range w.fieldPreds {
 		query += fmt.Sprintf(` AND %s %s $%d`, p.column, p.op, argIndex)
