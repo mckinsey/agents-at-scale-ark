@@ -63,8 +63,11 @@ def ark_api_url(request):
         if _health_ok(url):
             break
     else:
-        proc.terminate()
-        pytest.exit(f"ark-api port-forward on :{port} did not become healthy in 20s", returncode=1)
+        logger.warning(
+            "ark-api port-forward on :%d did not become healthy in 20s (worker=%s); "
+            "tests requiring ark-api will fail against %s",
+            port, worker_id, url,
+        )
 
     os.environ["ARK_API_URL"] = url
     yield url
