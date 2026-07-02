@@ -1,6 +1,7 @@
 'use client';
 
 import { useAtom } from 'jotai';
+import { useState } from 'react';
 
 import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
 import type {
@@ -31,7 +32,12 @@ function BooleanFeatureRow({ feature }: { feature: BooleanSetting }) {
 function NumberFeatureRow({ feature }: Readonly<{ feature: NumberSetting }>) {
   const [value, setValue] = useAtom(feature.atom);
 
+  const [draft, setDraft] = useState(
+    () => `${Number.parseInt(value, 10) || ''}`,
+  );
+
   const handleChange = (raw: string) => {
+    setDraft(raw);
     if (/^\d+$/.test(raw) && Number(raw) > 0) {
       setValue(`${raw}m`);
     }
@@ -50,7 +56,7 @@ function NumberFeatureRow({ feature }: Readonly<{ feature: NumberSetting }>) {
       <div className="flex items-center gap-2">
         <Input
           type="number"
-          value={Number.parseInt(value, 10) || ''}
+          value={draft}
           onChange={e => handleChange(e.target.value)}
           className="w-[120px]"
         />
