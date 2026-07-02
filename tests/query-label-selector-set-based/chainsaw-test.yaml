@@ -1,0 +1,84 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-label-selector-set-based
+  labels:
+    postgresql: "true"
+spec:
+  description: |
+    Query dispatch using a set-based LabelSelector (matchExpressions).
+    The old PostgreSQL storage backend rejected anything but equality, so a
+    Query with matchExpressions never resolved a target. This exercises the
+    fix end-to-end: Query.spec.selector -> controller LabelSelectorAsSelector
+    -> client-go List against the aggregated apiserver -> storage-layer SQL
+    filter.
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/*.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-set-based-selector
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-set-based-selector
+          status:
+            # Under the pre-fix backend, the impersonated List with a
+            # set-based selector errors at the storage layer and the Query
+            # ends up in phase=error. Assert on phase=done explicitly so a
+            # regression there fails loudly rather than passing through the
+            # weaker Completed=True condition.
+            phase: done
+            (response != null): true
+            # `type in (specialist)` matches weather + math; `environment
+            # notin (development)` excludes general. Whichever specialist the
+            # controller lists first wins — assert we picked a specialist and
+            # not the generalist.
+            (response.target.name == 'test-agent-math' || response.target.name == 'test-agent-weather'): true
+            (response.target.name != 'test-agent-general'): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-set-based-selector
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

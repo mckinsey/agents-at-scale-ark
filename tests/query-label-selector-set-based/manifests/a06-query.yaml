@@ -1,0 +1,26 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-set-based-selector
+spec:
+  input: What is the weather like today and what mathematical concepts should I know?
+  # serviceAccount forces the Query controller to build an uncached impersonated
+  # client (see getClientForQuery in query_controller.go). Without this the
+  # controller uses its default cached client, which applies label selectors
+  # against the local informer cache and never sends them to the API server —
+  # so the aggregated apiserver storage-layer selector translation this test
+  # is trying to exercise would be bypassed.
+  serviceAccount: query-selector-sa
+  selector:
+    # matchExpressions is the set-based form of a LabelSelector. Under the
+    # pre-fix PostgreSQL storage backend, `parseLabelSelector` rejected the
+    # `In` operator ("only equality is supported"), so the Query controller's
+    # List call failed and the Query never dispatched. The fix routes label
+    # selectors through k8s labels.Parse so all operators are honoured.
+    matchExpressions:
+    - key: type
+      operator: In
+      values: [specialist]
+    - key: environment
+      operator: NotIn
+      values: [development]
