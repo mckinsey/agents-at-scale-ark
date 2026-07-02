@@ -1,0 +1,269 @@
+---
+title: Broker Service
+description: The ark-broker HTTP API for messages, chunks, traces, events, and sessions
+---
+
+# Broker Service
+
+The `ark-broker` service is an event bus that captures the runtime data a query produces: chat **messages**, streaming **chunks**, OTEL **traces**, controller **events**, and materialized **sessions**. The Ark controller and executors write to it during a query; the dashboard and `ark-api` read from it to render live output, conversation history, and telemetry.
+
+Storage defaults to in-memory, with pluggable persistent backends selected via environment variables: messages can be backed by PostgreSQL (`MESSAGE_BACKEND=postgres`, `DATABASE_URL`) and chunks by Redis (`CHUNK_BACKEND=redis`, `REDIS_URL`). With a persistent backend configured, that data survives pod restarts.
+
+This page documents the broker's HTTP API directly. `ark-api` also re-exposes read access to the same data under `/v1/broker/*` — see the [Ark API](/reference/ark-apis#broker-data) reference.
+
+## Base URL and access
+
+The API is served by the `ark-broker` service:
+
+- **In-cluster**: `http://ark-broker.<namespace>.svc.cluster.local` (default port 80).
+- **Local dev**: `kubectl port-forward svc/ark-broker 8080:80`, then use `http://localhost:8080`.
+
+A Swagger UI covering the documented subset of endpoints is available at `/api-docs`, and the OpenAPI spec at `/openapi.json`. This page is the complete reference for all data domains.
+
+## Conventions
+
+A few conventions apply across the broker's read endpoints:
+
+- **Pagination.** List endpoints return `{ "items": [...], "total": N, "hasMore": bool, "nextCursor": M }`. Pass `?limit=<n>` to size the page and `?cursor=<nextCursor>` to fetch the next one.
+- **SSE streaming.** Any list endpoint accepts `?watch=true` to switch from a JSON page to a Server-Sent Events stream. New items arrive as `data:` lines. Add `?from-beginning=true` to replay existing items before streaming new ones, or `?cursor=<n>` to resume after a known sequence number.
+- **Write vs read.** The controller and executors POST data in (chunks, traces, events, messages); the dashboard and `ark-api` GET it out. Each domain also exposes a `DELETE` to purge it.
+
+## Messages
+
+Chat messages exchanged during queries, grouped by conversation and query ID. This is the memory store that gives multi-turn conversations their history.
+
+```
+GET    /messages
+POST   /messages
+DELETE /messages
+GET    /memory-status
+GET    /conversations
+POST   /conversations
+GET    /conversations/{conversationId}
+DELETE /conversations/{conversationId}
+DELETE /conversations
+DELETE /queries/{queryId}/messages
+DELETE /conversations/{conversationId}/queries/{queryId}/messages
+```
+
+List messages:
+
+```bash
+curl "http://localhost:8080/messages?limit=1"
+```
+
+```json
+{
+  "items": [
+    {
+      "timestamp": "2026-06-30T16:00:25.869Z",
+      "conversation_id": "ctx-4f7c7c64-6b95-497b-b7fb-5503ac0eb3e1",
+      "query_id": "chat-query-f0291940-0002-415e-8ffe-4304336f4aa8",
+      "message": { "role": "user", "content": "Hi there - what is 0+0?" },
+      "sequence": 1
+    }
+  ],
+  "total": 20,
+  "hasMore": true,
+  "nextCursor": 1
+}
+```
+
+`GET /memory-status` returns a summary of stored conversations without the message bodies:
+
+```json
+{
+  "total_conversations": 2,
+  "total_messages": 20,
+  "conversations": {
+    "ctx-4f7c7c64-...": { "message_count": 18, "query_count": 9 }
+  }
+}
+```
+
+## Chunks
+
+Streaming completion chunks (OpenAI `chat.completion.chunk` format) produced by the executor as a query runs. This is what powers token-by-token output in the dashboard. Chunks are served under `/stream`.
+
+```
+GET    /stream                      # paginated chunks, or SSE with ?watch=true
+GET    /stream/{query_name}         # SSE stream for one query
+POST   /stream/{query_id}           # controller/executor pushes a chunk
+POST   /stream/{query_id}/complete  # mark the query stream complete
+DELETE /stream
+```
+
+| Parameter | Applies to | Description |
+|-----------|------------|-------------|
+| `limit` | `GET /stream` | Maximum chunks to return |
+| `cursor` | `GET /stream` | Sequence number to paginate from |
+| `watch` | `GET /stream` | Set `true` for SSE streaming |
+| `from-beginning` | `GET /stream/{query_name}` | Replay existing chunks before streaming |
+| `wait-for-query` | `GET /stream/{query_name}` | Wait for the query to appear before streaming |
+| `max-chunk-size` | `GET /stream/{query_name}` | Split large chunks to this byte size |
+
+Stream one query's output as it is generated:
+
+```bash
+curl "http://localhost:8080/stream/my-query?from-beginning=true"
+```
+
+## Traces
+
+OTEL traces capture the execution flow of a query. A trace contains multiple spans — each span is an operation such as an LLM call or tool execution. When a query runs in a namespace with a configured broker, the Ark controller sends trace data to the broker's OTLP endpoint.
+
+### Ingesting traces (OTLP)
+
+```
+POST /v1/traces
+```
+
+The [standard OTLP/HTTP endpoint](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/). Accepts OpenTelemetry span data (JSON and protobuf over HTTP). This is the write path — how spans get into the broker.
+
+```bash
+curl -X POST http://localhost:8080/v1/traces \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resourceSpans": [{
+      "resource": {
+        "attributes": [{"key": "service.name", "value": {"stringValue": "my-service"}}]
+      },
+      "scopeSpans": [{
+        "spans": [
+          {"traceId": "abc123", "spanId": "span-1", "name": "query.execute"},
+          {"traceId": "abc123", "spanId": "span-2", "parentSpanId": "span-1", "name": "llm.chat"}
+        ]
+      }]
+    }]
+  }'
+```
+
+Returns `{}` on success.
+
+### Retrieving traces
+
+```
+GET    /traces
+GET    /traces/{traceId}
+DELETE /traces
+```
+
+Returns traces grouped by trace ID.
+
+| Parameter | Description |
+|-----------|-------------|
+| `cursor` | Sequence number to paginate from |
+| `session_id` | Filter to spans with a matching `ark.session.id` attribute |
+| `watch` | Set `true` for SSE streaming |
+| `from-beginning` | Replay all existing spans before streaming (single trace only) |
+
+List traces:
+
+```bash
+curl "http://localhost:8080/traces?limit=10"
+```
+
+```json
+{
+  "items": [
+    { "traceId": "abc123", "spans": [] }
+  ],
+  "total": 150,
+  "hasMore": true,
+  "nextCursor": 42
+}
+```
+
+Get a single trace:
+
+```bash
+curl http://localhost:8080/traces/abc123
+```
+
+Stream spans in real time via SSE:
+
+```bash
+curl "http://localhost:8080/traces?watch=true"
+```
+
+```
+data: {"traceId":"abc123","spanId":"span1","name":"llm.chat",...}
+data: {"traceId":"abc123","spanId":"span2","name":"tool.execute",...}
+```
+
+Replay all existing spans for one trace, then stream new ones:
+
+```bash
+curl "http://localhost:8080/traces/abc123?watch=true&from-beginning=true"
+```
+
+## Events
+
+Controller operation events emitted as a query executes — `QueryExecutionStart`, `LLMCallComplete`, and similar. Useful for building a timeline of what the controller did.
+
+```
+GET    /events
+GET    /events/{queryId}
+POST   /events
+DELETE /events
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `cursor` | Sequence number to paginate from |
+| `session_id` | Filter events by Ark session ID |
+| `watch` | Set `true` for SSE streaming |
+| `from-beginning` | Replay existing events before streaming |
+
+```bash
+curl "http://localhost:8080/events?limit=10"
+curl "http://localhost:8080/events/my-query"
+```
+
+## Sessions
+
+An event-sourced, materialized view over the other brokers — a session is enriched by events and messages to give a single rollup per conversation, with status and counts.
+
+```
+GET    /sessions
+GET    /sessions/{sessionId}
+POST   /sessions
+DELETE /sessions
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `status` | Filter by `active`, `idle`, or `error` |
+| `search` | Filter sessions by text |
+| `sort` | Sort by `date`, `name`, or `conversations` |
+| `order` | `asc` or `desc` |
+| `dateFrom` / `dateTo` | Filter by date range |
+| `session_id` | Filter to one session |
+| `watch` | Set `true` for SSE streaming |
+
+List responses include a `statusCounts` rollup:
+
+```bash
+curl "http://localhost:8080/sessions?limit=10&status=active"
+```
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "hasMore": false,
+  "statusCounts": { "active": 0, "idle": 0, "error": 0 }
+}
+```
+
+## Endpoint reference
+
+| Domain | Endpoints |
+|--------|-----------|
+| Messages | `GET`/`POST`/`DELETE` `/messages`, `GET /memory-status` |
+| Conversations | `GET`/`POST`/`DELETE` `/conversations`, `GET`/`DELETE` `/conversations/{id}`, `DELETE /queries/{queryId}/messages`, `DELETE /conversations/{id}/queries/{queryId}/messages` |
+| Chunks | `GET`/`DELETE` `/stream`, `GET /stream/{query_name}`, `POST /stream/{query_id}`, `POST /stream/{query_id}/complete` |
+| Traces | `POST /v1/traces` (OTLP), `GET`/`DELETE` `/traces`, `GET /traces/{traceId}` |
+| Events | `GET`/`POST`/`DELETE` `/events`, `GET /events/{queryId}` |
+| Sessions | `GET`/`POST`/`DELETE` `/sessions`, `GET /sessions/{sessionId}` |
+| Health | `GET /health` (liveness), `GET /readyz` (readiness) |
