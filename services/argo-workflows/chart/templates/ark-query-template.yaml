@@ -1,0 +1,154 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ark-query
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    workflows.argoproj.io/title: "Ark Query"
+    workflows.argoproj.io/description: |
+      Reusable building block that submits an Ark Query and returns its
+      structured outputs. Reference from a workflow step or task with
+      templateRef: {name: ark-query, template: query}.
+spec:
+  templates:
+    - name: query
+      inputs:
+        parameters:
+          - name: target
+          - name: input
+          - name: timeout
+            value: "5m"
+          - name: ttl
+            value: ""
+          - name: parameters
+            value: "[]"
+          - name: session-id
+            value: ""
+          - name: memory
+            value: ""
+          - name: query-name
+            value: ""
+          - name: service-account
+            value: ""
+      outputs:
+        parameters:
+          - name: response
+            valueFrom:
+              path: /tmp/response.txt
+          - name: query-json
+            valueFrom:
+              path: /tmp/query.json
+          - name: phase
+            valueFrom:
+              path: /tmp/phase.txt
+          - name: conversation-id
+            valueFrom:
+              path: /tmp/conversation-id.txt
+      script:
+        image: alpine/k8s:1.28.13
+        command: [sh]
+        env:
+          - name: ARK_TARGET
+            value: {{ "{{inputs.parameters.target}}" | quote }}
+          - name: ARK_INPUT
+            value: {{ "{{inputs.parameters.input}}" | quote }}
+          - name: ARK_TIMEOUT
+            value: {{ "{{inputs.parameters.timeout}}" | quote }}
+          - name: ARK_TTL
+            value: {{ "{{inputs.parameters.ttl}}" | quote }}
+          - name: ARK_PARAMETERS
+            value: {{ "{{inputs.parameters.parameters}}" | quote }}
+          - name: ARK_SESSION_ID
+            value: {{ "{{inputs.parameters.session-id}}" | quote }}
+          - name: ARK_MEMORY
+            value: {{ "{{inputs.parameters.memory}}" | quote }}
+          - name: ARK_QUERY_NAME
+            value: {{ "{{inputs.parameters.query-name}}" | quote }}
+          - name: ARK_SERVICE_ACCOUNT
+            value: {{ "{{inputs.parameters.service-account}}" | quote }}
+          - name: ARK_WORKFLOW_NAME
+            value: {{ "{{workflow.name}}" | quote }}
+          - name: ARK_POD_NAME
+            value: {{ "{{pod.name}}" | quote }}
+        source: |
+          set -u
+
+          echo "{}" > /tmp/query.json
+          : > /tmp/response.txt
+          : > /tmp/phase.txt
+          : > /tmp/conversation-id.txt
+
+          fail() {
+            printf '%s' "$1" > /tmp/response.txt
+            echo "ark-query: $1" >&2
+            exit 1
+          }
+
+          case "$ARK_TARGET" in
+            */*) ;;
+            *) fail "invalid target '$ARK_TARGET': expected type/name (e.g. agent/weather)" ;;
+          esac
+          TARGET_TYPE="${ARK_TARGET%%/*}"
+          TARGET_NAME="${ARK_TARGET#*/}"
+          case "$TARGET_TYPE" in
+            agent|team|model|tool) ;;
+            *) fail "invalid target type '$TARGET_TYPE': expected one of agent|team|model|tool" ;;
+          esac
+          [ -n "$TARGET_NAME" ] || fail "invalid target '$ARK_TARGET': name is empty"
+
+          echo "$ARK_PARAMETERS" | jq -e 'type == "array"' >/dev/null 2>&1 \
+            || fail "invalid parameters: expected a JSON array of {name,value} objects"
+
+          QUERY_NAME="$ARK_QUERY_NAME"
+          [ -n "$QUERY_NAME" ] || QUERY_NAME="q-${ARK_WORKFLOW_NAME}-${ARK_POD_NAME}"
+
+          QUERY_JSON=$(jq -n \
+            --arg name "$QUERY_NAME" \
+            --arg workflow "$ARK_WORKFLOW_NAME" \
+            --arg input "$ARK_INPUT" \
+            --arg ttype "$TARGET_TYPE" \
+            --arg tname "$TARGET_NAME" \
+            --arg timeout "$ARK_TIMEOUT" \
+            --argjson parameters "$ARK_PARAMETERS" \
+            --arg ttl "$ARK_TTL" \
+            --arg sessionId "$ARK_SESSION_ID" \
+            --arg memory "$ARK_MEMORY" \
+            --arg serviceAccount "$ARK_SERVICE_ACCOUNT" \
+            '{
+              apiVersion: "ark.mckinsey.com/v1alpha1",
+              kind: "Query",
+              metadata: { name: $name, labels: { workflow: $workflow } },
+              spec: ({
+                input: $input,
+                target: { type: $ttype, name: $tname },
+                timeout: $timeout,
+                parameters: $parameters
+              }
+              + (if $ttl != "" then { ttl: $ttl } else {} end)
+              + (if $sessionId != "" then { sessionId: $sessionId } else {} end)
+              + (if $memory != "" then { memory: { name: $memory } } else {} end)
+              + (if $serviceAccount != "" then { serviceAccount: $serviceAccount } else {} end))
+            }') || fail "failed to build Query manifest"
+
+          echo "$QUERY_JSON" | kubectl apply -f - || fail "failed to create Query $QUERY_NAME"
+
+          kubectl wait --for=condition=Completed --timeout="$ARK_TIMEOUT" query/"$QUERY_NAME" || true
+
+          kubectl get query "$QUERY_NAME" -o json > /tmp/query.json 2>/dev/null \
+            || { echo "{}" > /tmp/query.json; fail "failed to read Query $QUERY_NAME after wait"; }
+
+          PHASE=$(jq -r '.status.phase // ""' /tmp/query.json)
+          CONTENT=$(jq -r '.status.response.content // ""' /tmp/query.json)
+          CONVERSATION_ID=$(jq -r '.status.conversationId // ""' /tmp/query.json)
+
+          printf '%s' "$PHASE" > /tmp/phase.txt
+          printf '%s' "$CONTENT" > /tmp/response.txt
+          printf '%s' "$CONVERSATION_ID" > /tmp/conversation-id.txt
+
+          if [ "$PHASE" = "done" ]; then
+            echo "Query $QUERY_NAME completed: done"
+            exit 0
+          fi
+
+          echo "Query $QUERY_NAME did not complete successfully (phase: ${PHASE:-<none>})" >&2
+          exit 1
