@@ -5,13 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: |
-    Query dispatch using a set-based LabelSelector (matchExpressions).
-    The old PostgreSQL storage backend rejected anything but equality, so a
-    Query with matchExpressions never resolved a target. This exercises the
-    fix end-to-end: Query.spec.selector -> controller LabelSelectorAsSelector
-    -> client-go List against the aggregated apiserver -> storage-layer SQL
-    filter.
+  description: Query dispatch with a set-based LabelSelector (matchExpressions).
   steps:
   - name: setup-mock-llm
     try:
@@ -55,17 +49,9 @@ spec:
           metadata:
             name: test-query-set-based-selector
           status:
-            # Under the pre-fix backend, the impersonated List with a
-            # set-based selector errors at the storage layer and the Query
-            # ends up in phase=error. Assert on phase=done explicitly so a
-            # regression there fails loudly rather than passing through the
-            # weaker Completed=True condition.
+            # phase=done (not just Completed=True): pre-fix code errored the query.
             phase: done
             (response != null): true
-            # `type in (specialist)` matches weather + math; `environment
-            # notin (development)` excludes general. Whichever specialist the
-            # controller lists first wins — assert we picked a specialist and
-            # not the generalist.
             (response.target.name == 'test-agent-math' || response.target.name == 'test-agent-weather'): true
             (response.target.name != 'test-agent-general'): true
     catch:
