@@ -145,8 +145,6 @@ Risk is assessed continuously through CI-side scanning, periodic external assess
 **Periodic external assessment** is published in the dated security-assurance report pages:
 
 - [Penetration Testing Reports](/operations-guide/penetration-testing-reports) — third-party assessment findings, risk levels, remediation status, and dates.
-- [Code Analysis Reports](/operations-guide/code-analysis-reports) — per-stack SonarQube issue counts.
-- [Artifact Analysis Reports](/operations-guide/artifact-analysis-reports) — per-image vulnerability counts.
 
 **CVE and vulnerability handling.** Routine dependency CVEs flow through Dependabot. New unwhitelisted Xray violations auto-create GitHub issues. Manual CVE work and pentest findings follow the [`ark-security-patcher`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.claude/agents/ark-security-patcher.md) agent workflow, supported by the `vulnerability-fixer` and `pentest-issue-resolver` skills. Compensating controls and accepted residual risk are recorded inline in `tolerated_violations.txt`, which doubles as the citable record. Full process in [Vulnerability Management → Action plan and patch management](/reference/vulnerability-management#action-plan-and-patch-management).
 
@@ -155,6 +153,6 @@ Risk is assessed continuously through CI-side scanning, periodic external assess
 - [Design Principles](/developer-guide/design-principles) — the principles that drive secure-by-default and observable design decisions.
 - [End-to-End Testing](/developer-guide/testing) and [UI Testing](/developer-guide/testing/ui-testing) — test authoring guides.
 - [Build Pipelines](/operations-guide/build-pipelines) — full CI/CD and release-management flow.
-- [Penetration Testing Reports](/operations-guide/penetration-testing-reports), [Code Analysis Reports](/operations-guide/code-analysis-reports), [Artifact Analysis Reports](/operations-guide/artifact-analysis-reports) — security assurance evidence.
+- [Penetration Testing Reports](/operations-guide/penetration-testing-reports) — security assurance evidence.
 - [Model URL Security](/operations-guide/model-url-security) — operator-side threat surface for model endpoints.
 - [Upgrading](/reference/upgrading) — semantic-versioning policy and version-specific migration steps.
