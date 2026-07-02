@@ -1,0 +1,61 @@
+# Upstream kubernetes-mcp-server chart configuration. This is layered on top of
+# the upstream chart from ghcr.io/containers/charts, which is a dependency of
+# our own chart. It mirrors the Ark configuration the devspace deployment uses.
+kubernetes-mcp-server:
+  # Read-only mode. The server only exposes resources_list / resources_get.
+  config:
+    read_only: true
+
+  # Expose the server through the localhost-gateway Gateway API, not Ingress.
+  ingress:
+    enabled: false
+
+  httpRoute:
+    enabled: true
+    parentRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: localhost-gateway
+        namespace: ark-system
+        sectionName: http-wildcard
+    hostnames:
+      - kubernetes-mcp-server.127.0.0.1.nip.io
+
+  # Namespace-scoped read-only access to the Ark resources the server grounds
+  # agents on.
+  rbac:
+    create: true
+    extraRoles:
+      - name: ark-reader
+        rules:
+          - apiGroups: ["ark.mckinsey.com"]
+            resources:
+              - agents
+              - teams
+              - queries
+              - models
+              - mcpservers
+              - a2aservers
+              - a2atasks
+              - tools
+              - memories
+              - executionengines
+              - arkconfigs
+            verbs: ["get", "list", "watch"]
+    extraRoleBindings:
+      - name: ark-reader
+        roleRef:
+          name: ark-reader
+
+# Ark MCPServer registration. Registers the in-cluster kubernetes-mcp-server
+# with Ark so its resources_list / resources_get Tool CRDs are discovered.
+mcpServer:
+  create: true
+  name: kubernetes-mcp-server
+  description: k8s mcp server
+  transport: http
+  # Defaults to the in-cluster service the subchart deploys. Override to point
+  # at a different address.
+  address: ""
+  pollInterval: 1m
+  timeout: 30s
