@@ -112,7 +112,7 @@
     "uuid": "^14.0.0",
     "postcss": "^8.5.10",
     "ws": "^8.21.0",
-    "brace-expansion": ">=5.0.6",
+    "brace-expansion": ">=5.0.7",
     "esbuild": "^0.28.1",
     "form-data": "^4.0.6",
     "vite": "^8.0.16"
