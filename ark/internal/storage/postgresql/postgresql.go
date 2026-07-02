@@ -47,6 +47,15 @@ var supportedFieldColumns = map[string]string{
 	"metadata.namespace": "namespace",
 }
 
+// supportedFieldOps maps a Kubernetes field-selector operator to the SQL
+// operator it translates to. Adding a new operator here also updates the
+// error message via supportedFieldOpsList.
+var supportedFieldOps = map[selection.Operator]string{
+	selection.Equals:       "=",
+	selection.DoubleEquals: "=",
+	selection.NotEquals:    "<>",
+}
+
 // supportedFieldsList returns the currently-supported field selector fields,
 // sorted alphabetically, for inclusion in error messages. Derived from
 // supportedFieldColumns so the two stay in lockstep as fields are added.
@@ -54,6 +63,18 @@ func supportedFieldsList() string {
 	keys := make([]string, 0, len(supportedFieldColumns))
 	for k := range supportedFieldColumns {
 		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+// supportedFieldOpsList returns the currently-supported field selector
+// operators (in their k8s user-visible form), sorted for determinism.
+// Derived from supportedFieldOps so the two stay in lockstep.
+func supportedFieldOpsList() string {
+	keys := make([]string, 0, len(supportedFieldOps))
+	for k := range supportedFieldOps {
+		keys = append(keys, string(k))
 	}
 	sort.Strings(keys)
 	return strings.Join(keys, ", ")
@@ -82,14 +103,9 @@ func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: %s)", storage.ErrInvalidRequest, req.Field, supportedFieldsList())
 		}
-		var op string
-		switch req.Operator {
-		case selection.Equals, selection.DoubleEquals:
-			op = "="
-		case selection.NotEquals:
-			op = "<>"
-		default:
-			return nil, fmt.Errorf("%w: field selector operator %q is not yet implemented (currently supported: =, ==, !=)", storage.ErrInvalidRequest, req.Operator)
+		op, ok := supportedFieldOps[req.Operator]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector operator %q is not yet implemented (currently supported: %s)", storage.ErrInvalidRequest, req.Operator, supportedFieldOpsList())
 		}
 		preds = append(preds, fieldPredicate{column: col, op: op, value: req.Value})
 	}
