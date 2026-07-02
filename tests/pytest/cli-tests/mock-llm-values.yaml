@@ -19,8 +19,47 @@ config:
       status: 200
       content: '{"id":"mock-response","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Hello! I received your message."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'
 
+  # Rules are evaluated in order and the LAST match wins, so the generic
+  # /v1/responses rule comes first and the field-specific rules follow. Each
+  # specific rule matches an executor-forwarded request field and returns a
+  # distinctive marker, so the test fails if the executor stops forwarding it.
   - path: "/v1/responses"
     method: "POST"
     response:
       status: 200
       content: '{"id":"resp_mock","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello! I received your message.","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":0}}}'
+
+  - path: "/v1/responses"
+    method: "POST"
+    match: "body.reasoning.effort"
+    response:
+      status: 200
+      content: '{"id":"resp_mock","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock","status":"completed","role":"assistant","content":[{"type":"output_text","text":"REASONING_APPLIED","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":8}}}'
+
+  - path: "/v1/responses"
+    method: "POST"
+    match: "body.tools[?type=='web_search_preview']"
+    response:
+      status: 200
+      content: '{"id":"resp_mock","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock","status":"completed","role":"assistant","content":[{"type":"output_text","text":"WEB_SEARCH_RESULT https://adamgrooming.example.com","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":0}}}'
+
+  - path: "/v1/responses"
+    method: "POST"
+    match: "body.tools[?name=='generate_sql']"
+    response:
+      status: 200
+      content: '{"id":"resp_mock","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock","status":"completed","role":"assistant","content":[{"type":"output_text","text":"SELECT id, value FROM contracts WHERE value > 50000 ORDER BY value DESC LIMIT 10;","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":0}}}'
+
+  - path: "/v1/responses"
+    method: "POST"
+    match: "body.text.format"
+    response:
+      status: 200
+      content: '{"id":"resp_mock","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock","status":"completed","role":"assistant","content":[{"type":"output_text","text":"STRUCTURED_OUTPUT company_name website_url companies_house_number registered_address company_status","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":0}}}'
+
+  - path: "/v1/responses"
+    method: "POST"
+    match: "body.previous_response_id"
+    response:
+      status: 200
+      content: '{"id":"resp_mock2","object":"response","created_at":1700000000,"status":"completed","model":"gpt-4.1-mini","output":[{"type":"message","id":"msg_mock2","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Your name is Alex and you work in financial risk management.","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20,"output_tokens_details":{"reasoning_tokens":0}}}'

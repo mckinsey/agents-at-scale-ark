@@ -29,9 +29,7 @@ SCHEMA_KEY    = "executor-openai-responses.ark.mckinsey.com/output-schema"
 # Model names
 # ---------------------------------------------------------------------------
 
-MODEL_NON_GPT5 = "gpt-4o"
-MODEL_GPT5     = "gpt-5.2-2025-12-11"
-MODEL_O3       = "o3"
+MODEL_GPT5 = "gpt-5.2-2025-12-11"
 
 MOCK_LLM_MODEL_NAME = "test-model-mock"
 MOCK_LLM_BASE_URL   = "http://mock-llm.default.svc.cluster.local:6556/v1"

@@ -17,6 +17,13 @@ _NIP_URL = "http://ark-api.default.127.0.0.1.nip.io:8080"
 _PORT_BASE = 18080
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "executor: end-to-end tests for the executor-openai-responses service",
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def ark_api_url(request):
     """Resolve a reachable ark-api base URL and expose it via ARK_API_URL.

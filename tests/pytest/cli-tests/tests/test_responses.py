@@ -4,7 +4,6 @@ import subprocess
 import time
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
 
 import pytest
 import requests
@@ -13,9 +12,7 @@ from helpers.responses_helper import (
     REASONING_KEY,
     TOOLS_KEY,
     SCHEMA_KEY,
-    MODEL_NON_GPT5,
     MODEL_GPT5,
-    MODEL_O3,
     MOCK_LLM_MODEL_NAME,
     WEB_SEARCH_TOOL,
     COMPANY_LOOKUP_SCHEMA,
@@ -29,7 +26,6 @@ from helpers.responses_helper import (
     wait_for_webhook_ready,
     kubectl_apply,
     build_agent_manifest,
-    build_query_manifest,
     submit_query,
     poll_query,
     run_query,
@@ -40,23 +36,21 @@ from helpers.responses_helper import (
 # ---------------------------------------------------------------------------
 # Direct executor tests — hit /execute endpoint without Ark control plane
 #
-# Tests T01–T10 cover executor behavior by posting JSON payloads to /execute
-# (not open-ended “does the LLM know X” checks):
+# Tests T01–T10 cover executor behavior by posting JSON payloads to /execute.
+# Each test runs against in-cluster mock-llm, whose rules (mock-llm-values.yaml)
+# return a distinctive marker when the executor forwards the relevant request
+# field, so a test fails if the executor stops forwarding it:
 #
 #   T01        Basic happy path / sdk fix
-#   T02        Multi-level annotations accepted without error
-#   T03        Web search only
-#   T04        Web search + structured output
-#   T05        SQL grammar (CFG custom tool)
-#   T06        Query-level reasoning annotation
+#   T02        Multi-level reasoning annotations forwarded (REASONING_APPLIED)
+#   T03        Web search tool forwarded (WEB_SEARCH_RESULT)
+#   T04        Web search + structured output (STRUCTURED_OUTPUT)
+#   T05        SQL grammar (CFG custom tool) forwarded (SELECT ...)
+#   T06        Query-level reasoning annotation forwarded
 #   T07        Tools annotation forwarded to model
-#   T08        Reasoning + numeric check (parametrized: gpt-5.2, o3)
+#   T08        Agent-level reasoning annotation forwarded (gpt-5)
 #   T09        Tool cascade: query annotation overrides agent annotation
 #   T10        Multi-turn memory via previous_response_id
-#
-# Required env vars:
-#   CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
-#   CICD_OPENAI_BASE_URL   Base URL (defaults to https://api.openai.com/v1)
 #
 # Optional env vars:
 #   EXECUTOR_URL           Full URL of the /execute endpoint.
@@ -71,12 +65,11 @@ class TestOpenAIResponsesExecutor:
     Live E2E tests for executor-openai-responses (T01–T10).
 
     Covers: SDK fix (T01), multi-level annotations (T02), web search (T03–T04),
-    SQL CFG tools (T05), annotation overrides (T06–T07), reasoning across
-    models (T08), tool cascade (T09), multi-turn memory (T10).
+    SQL CFG tools (T05), annotation overrides (T06–T07), reasoning (T08),
+    tool cascade (T09), multi-turn memory (T10).
 
-    Required env vars:
-      CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
-      CICD_OPENAI_BASE_URL   Base URL (defaults to https://api.openai.com/v1)
+    Requests hit /execute with an inline mock model config; the executor talks
+    to in-cluster mock-llm. No OpenAI credentials are needed.
 
     Optional env vars:
       EXECUTOR_URL           Full URL of the /execute endpoint.
@@ -115,7 +108,7 @@ class TestOpenAIResponsesExecutor:
     def _make_request(
         self,
         user_input: str,
-        model: str = MODEL_NON_GPT5,
+        model: str = MODEL_GPT5,
         prompt: str = "You are a helpful assistant.",
         agent_annotations: dict = None,
         ee_annotations: dict = None,
@@ -189,16 +182,17 @@ class TestOpenAIResponsesExecutor:
         assert content, f"Empty response from executor: {data}"
 
     # ------------------------------------------------------------------
-    # T02 — Annotations at agent/EE/query levels are accepted without error.
-    # Priority ordering cannot be verified externally; this confirms the
-    # executor processes layered annotations without crashing.
+    # T02 — Reasoning annotations set at agent/EE/query levels are resolved and
+    # forwarded to the model. mock-llm returns REASONING_APPLIED only when the
+    # request carries a reasoning field, so this fails if the executor drops it.
+    # Uses a gpt-5 model because the executor only forwards reasoning for gpt-5.
     # ------------------------------------------------------------------
 
-    def test_t02_multi_level_annotations_accepted(self):
+    def test_t02_multi_level_reasoning_forwarded(self):
         status, content, data = self._post(
             self._make_request(
                 "How many permanent members does the UN Security Council have?",
-                model=MODEL_NON_GPT5,
+                model=MODEL_GPT5,
                 agent_annotations={REASONING_KEY: '{"effort": "medium"}'},
                 ee_annotations={REASONING_KEY: '{"effort": "high"}'},
                 query_annotations={REASONING_KEY: '{"effort": "low"}'},
@@ -206,7 +200,7 @@ class TestOpenAIResponsesExecutor:
             )
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
+        assert "REASONING_APPLIED" in content, f"reasoning not forwarded: {content!r}"
 
     def test_t03_web_search_only(self):
         status, content, data = self._post(
@@ -228,7 +222,7 @@ class TestOpenAIResponsesExecutor:
             timeout=60,
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
+        assert "WEB_SEARCH_RESULT" in content, f"web search tool not forwarded: {content!r}"
 
 
     def test_t04_web_search_structured_output(self):
@@ -253,7 +247,8 @@ class TestOpenAIResponsesExecutor:
             timeout=90,
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
+        for field in COMPANY_LOOKUP_SCHEMA["required"]:
+            assert field in content, f"structured-output schema not forwarded ({field} missing): {content!r}"
 
 
     def test_t05_sql_cfg_custom_tool(self):
@@ -273,7 +268,7 @@ class TestOpenAIResponsesExecutor:
             )
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
+        assert "SELECT" in content.upper(), f"CFG custom tool not forwarded: {content!r}"
 
 
     def test_t06_query_level_reasoning_only(self):
@@ -286,53 +281,37 @@ class TestOpenAIResponsesExecutor:
             )
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, f"Empty response: {data}"
+        assert "REASONING_APPLIED" in content, f"query-level reasoning not forwarded: {content!r}"
 
 
     def test_t07_tools_annotation_forwarded_to_model(self):
         status, content, data = self._post(
             self._make_request(
                 "What is the current base interest rate set by the Bank of England?",
-                model=MODEL_NON_GPT5,
                 agent_annotations={TOOLS_KEY: json.dumps([{"type": "web_search_preview"}])},
                 conversation_id="t07-tools-forwarded-test",
             ),
             timeout=60,
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, f"Empty response: {data}"
+        assert "WEB_SEARCH_RESULT" in content, f"tools annotation not forwarded: {content!r}"
 
 
-    @pytest.mark.parametrize("model,user_input,expected", [
-        (
-            MODEL_GPT5,
-            (
-                "A portfolio of 5 UK commercial properties generates monthly rents of "
-                "£2,200, £1,750, £3,100, £1,900, and £2,650. "
-                "What is the total annual rental income?"
-            ),
-            ["139,200", "139200"],
-        ),
-        (
-            MODEL_O3,
-            (
-                "A fund of £50,000 is invested at a compound annual growth rate of 7% "
-                "for 3 years. What is the final value to the nearest pound?"
-            ),
-            ["61,252", "61252"],
-        ),
-    ])
-    def test_t08_reasoning_effort_by_model(self, model, user_input, expected):
+    def test_t08_agent_level_reasoning_forwarded(self):
         status, content, data = self._post(
             self._make_request(
-                user_input,
-                model=model,
+                (
+                    "A portfolio of 5 UK commercial properties generates monthly rents of "
+                    "£2,200, £1,750, £3,100, £1,900, and £2,650. "
+                    "What is the total annual rental income?"
+                ),
+                model=MODEL_GPT5,
                 agent_annotations={REASONING_KEY: '{"effort": "low"}'},
-                conversation_id=f"t08-reasoning-{model}-test",
+                conversation_id="t08-reasoning-test",
             )
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
+        assert "REASONING_APPLIED" in content, f"agent-level reasoning not forwarded: {content!r}"
 
 
     def test_t09_tool_cascade_query_overrides_agent(self):
@@ -368,7 +347,7 @@ class TestOpenAIResponsesExecutor:
             timeout=60,
         )
         assert status == 200, f"HTTP {status}: {data}"
-        assert content, f"Empty response: {data}"
+        assert "WEB_SEARCH_RESULT" in content, f"cascaded tools not forwarded: {content!r}"
 
     def test_t10_multi_turn_memory(self):
         conv_id = "t10-multi-turn-memory"
@@ -397,7 +376,10 @@ class TestOpenAIResponsesExecutor:
                 "Gateway enforces Zero Data Retention — previous_response_id not supported"
             )
         assert status2 == 200, f"Turn 2 failed with HTTP {status2}: {data2}"
-        assert content2, "Turn 2: empty response"
+        # mock-llm returns the Alex recall only when turn 2 carries the
+        # previous_response_id chained from turn 1, so an empty/plain response
+        # here means multi-turn memory was not wired through.
+        assert "Alex" in content2, f"multi-turn memory not chained: {content2!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -413,9 +395,9 @@ class TestOpenAIResponsesExecutor:
 # Concurrency is handled with ThreadPoolExecutor: all queries are submitted
 # simultaneously and polled independently until done or timeout.
 #
-# Required env vars:
-#   CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
-#   CICD_OPENAI_BASE_URL   Base URL (e.g. https://api.openai.com/v1)
+# The Agent routes through executor-openai-responses (the default execution
+# engine) and references the mock-backed test-model-mock Model, so queries
+# exercise the executor end-to-end against in-cluster mock-llm.
 #
 # Optional env vars:
 #   ARK_CONCURRENT_QUERIES   Number of simultaneous queries (default: 3)
@@ -429,9 +411,9 @@ class TestARKQueriesWithOpenAIResponses:
     """
     Full Ark control-plane tests for the OpenAI Responses executor (T13–T16).
 
-    Creates real Ark CRDs (Model, Agent, Query) via kubectl, polls
-    Query.status.phase until done, and asserts on response content.
-    Queries are submitted concurrently using ThreadPoolExecutor.
+    Creates an Agent (bound to the mock-backed test-model-mock Model) and Query
+    CRDs via kubectl, polls Query.status.phase until done, and asserts on
+    response content. Queries are submitted concurrently using ThreadPoolExecutor.
     """
 
     namespace:       str  = "default"
@@ -446,7 +428,7 @@ class TestARKQueriesWithOpenAIResponses:
 
         wait_for_webhook_ready()
         kubectl_apply(build_agent_manifest(
-            cls.agent_name, cls.namespace, MOCK_LLM_MODEL_NAME, execution_engine=None,
+            cls.agent_name, cls.namespace, MOCK_LLM_MODEL_NAME,
         ))
         time.sleep(3)
 

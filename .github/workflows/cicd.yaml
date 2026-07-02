@@ -1045,9 +1045,6 @@ jobs:
             --namespace default \
             --values tests/pytest/cli-tests/mock-llm-values.yaml \
             --wait --timeout=120s
-          kubectl apply -f tests/pytest/cli-tests/mock-llm-model.yaml
-          kubectl wait --for=condition=ModelAvailable model/test-model-mock \
-            -n default --timeout=120s
 
       - name: Setup Python
         uses: actions/setup-python@v5
