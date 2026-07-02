@@ -26,6 +26,7 @@ from ...services.mcp_auth_persistence import (
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
+    ensure_mcpserver_token_secret_ref,
     flow_deadline_rfc3339,
     mark_flow_authorized,
     mark_flow_failed,
@@ -194,11 +195,15 @@ async def start_mcp_auth(
 
         token_ref = _read_token_secret_ref(mcp_server)
         if not token_ref or not token_ref.name:
+            await ensure_mcpserver_token_secret_ref(ark_client, mcp_server_name)
+            mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
+            token_ref = _read_token_secret_ref(mcp_server)
+        if not token_ref or not token_ref.name:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"set spec.authorization.tokenSecretRef.name on the MCPServer "
-                    f"(e.g. {mcp_server_name}-oauth) and re-run auth login"
+                    f"could not provision spec.authorization.tokenSecretRef.name "
+                    f"on MCPServer {mcp_server_name!r}"
                 ),
             )
         secret_name = token_ref.name

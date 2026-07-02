@@ -62,3 +62,15 @@
 - [x] 10.1 Add a dashboard "Authenticate an MCP server" section covering Authenticate, Re-authenticate, Sign out, the IdP redirect, and completion confirmation.
 - [x] 10.2 Document `ARK_API_DASHBOARD_URL` (purpose, path-prefix requirement, validation, fallback when unset) alongside the orchestration env vars.
 - [x] 10.3 Restate the external-executor `spec.headers[]` workaround (owned by `mcp-auth-sdk-header-resolution`) in the dashboard flow docs so dashboard users hit the same caveat as CLI users.
+
+## 11. ark-api auth/start — auto-provision tokenSecretRef
+
+- [ ] 11.1 Add `ensure_mcpserver_token_secret_ref(ark_client, name)` to `services/ark-api/ark-api/src/ark_api/services/mcp_auth_persistence.py` (modelled on `annotate_mcpserver_authorized`): return the existing `spec.authorization.tokenSecretRef.name` when set; else set it to `<name>-oauth`, `a_update`, and return it. Idempotent.
+- [ ] 11.2 In `auth/start` (`api/v1/mcp_auth.py`), when `tokenSecretRef.name` is absent, call the helper, re-`a_get`, and re-read the ref before continuing; keep an error only if the ref is still missing after the patch.
+- [ ] 11.3 Tests: `auth/start` on a server with no `authorization` block provisions `<name>-oauth` and proceeds to DCR/authorize; an operator-set name is preserved (helper unit test).
+
+## 12. Out-of-the-box local reachability
+
+- [ ] 12.1 Add a `ports: [34780:8000]` forward to the `dev.ark-api` block in `services/ark-api/devspace.yaml` so `devspace dev` exposes the loopback callback port.
+- [ ] 12.2 Default `ARK_API_DASHBOARD_URL` to the local dashboard host in `services/ark-api/chart/values.yaml`; keep the `ARK_API_PUBLIC_CALLBACK_URL` loopback-literal default.
+- [ ] 12.3 Document the local no-manual-step flow and the production https-ingress path in `docs/content/operations-guide/mcp-oauth-callback.mdx`.

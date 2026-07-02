@@ -270,16 +270,33 @@ class TestAuthStart(_AuthBase):
             )
         self.assertEqual(response.status_code, 502, response.text)
 
-    def test_missing_token_secret_ref_returns_422(self):
-        patcher, _ = _patch_ark_client(_build_typed_mcp(token_secret_ref_name=None))
+    @patch("ark_api.api.v1.mcp_auth.write_flow_state", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.ensure_mcpserver_token_secret_ref", new_callable=AsyncMock)
+    def test_missing_token_secret_ref_auto_provisions(
+        self, mock_ensure, mock_register, mock_read_creds, mock_write_flow
+    ):
+        from ark_api.services.mcp_auth_persistence import CachedClientCreds
+        from ark_api.services.oauth_dcr import DcrResult
+
+        mock_read_creds.return_value = CachedClientCreds(client_id=None, client_secret=None)
+        mock_register.return_value = DcrResult(client_id="cid", client_secret="csec", raw_response={})
+        mock_ensure.return_value = "notion-mcp-oauth"
+
+        no_ref = _build_typed_mcp(token_secret_ref_name=None)
+        provisioned = _build_typed_mcp(token_secret_ref_name="notion-mcp-oauth")
+        patcher, client = _patch_ark_client(no_ref)
+        client.mcpservers.a_get = AsyncMock(side_effect=[no_ref, provisioned])
         with patcher:
             response = self.client.post(
                 "/v1/mcp-servers/notion-mcp/auth/start",
                 json={},
                 params={"namespace": "default"},
             )
-        self.assertEqual(response.status_code, 422, response.text)
-        self.assertIn("tokenSecretRef", response.json()["detail"])
+        self.assertEqual(response.status_code, 200, response.text)
+        mock_ensure.assert_awaited_once()
+        self.assertEqual(mock_write_flow.call_args.kwargs["secret_name"], "notion-mcp-oauth")
 
 
 class TestAuthStartRedirectAndIdentity(_AuthBase):
@@ -957,6 +974,40 @@ class TestAuthIdEntropy(unittest.TestCase):
 
         self.assertGreaterEqual(len(_decode(a)), 16)
         self.assertGreaterEqual(len(_decode(b)), 16)
+
+
+class TestEnsureTokenSecretRef(unittest.IsolatedAsyncioTestCase):
+    async def test_preset_name_is_preserved(self):
+        from ark_api.services.mcp_auth_persistence import ensure_mcpserver_token_secret_ref
+
+        mcp = MagicMock()
+        mcp.to_dict.return_value = {
+            "metadata": {"name": "svc"},
+            "spec": {"authorization": {"tokenSecretRef": {"name": "custom"}}},
+        }
+        client = AsyncMock()
+        client.mcpservers.a_get = AsyncMock(return_value=mcp)
+
+        result = await ensure_mcpserver_token_secret_ref(client, "svc")
+
+        self.assertEqual(result, "custom")
+        client.mcpservers.a_update.assert_not_awaited()
+
+    @patch("ark_sdk.models.mcp_server_v1alpha1.MCPServerV1alpha1")
+    async def test_absent_ref_defaults_to_name_oauth(self, mock_model):
+        from ark_api.services.mcp_auth_persistence import ensure_mcpserver_token_secret_ref
+
+        mcp = MagicMock()
+        mcp.to_dict.return_value = {"metadata": {"name": "svc"}, "spec": {"authorization": {}}}
+        client = AsyncMock()
+        client.mcpservers.a_get = AsyncMock(return_value=mcp)
+
+        result = await ensure_mcpserver_token_secret_ref(client, "svc")
+
+        self.assertEqual(result, "svc-oauth")
+        client.mcpservers.a_update.assert_awaited_once()
+        sent = mock_model.call_args.kwargs
+        self.assertEqual(sent["spec"]["authorization"]["tokenSecretRef"]["name"], "svc-oauth")
 
 
 if __name__ == "__main__":

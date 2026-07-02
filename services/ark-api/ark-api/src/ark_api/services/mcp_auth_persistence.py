@@ -468,6 +468,29 @@ async def annotate_mcpserver_authorized(
     await ark_client.mcpservers.a_update(updated)
 
 
+async def ensure_mcpserver_token_secret_ref(ark_client, name: str) -> str:
+    mcp = await ark_client.mcpservers.a_get(name)
+    obj = mcp.to_dict()
+    spec = obj.setdefault("spec", {})
+    authorization = dict(spec.get("authorization") or {})
+    token_ref = dict(authorization.get("tokenSecretRef") or {})
+    existing = token_ref.get("name")
+    if existing:
+        return existing
+
+    secret_name = f"{name}-oauth"
+    token_ref["name"] = secret_name
+    authorization["tokenSecretRef"] = token_ref
+    spec["authorization"] = authorization
+    obj["spec"] = spec
+
+    from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
+
+    updated = MCPServerV1alpha1(**obj)
+    await ark_client.mcpservers.a_update(updated)
+    return secret_name
+
+
 async def strip_mcpserver_auth_annotations(ark_client, name: str) -> None:
     mcp = await ark_client.mcpservers.a_get(name)
     obj = mcp.to_dict()

@@ -39,7 +39,7 @@ Clusters without public ingress run the flow through `kubectl port-forward`. The
 
 **CLI flow.** `ark mcp auth login` does this automatically: it already port-forwards ark-api to `127.0.0.1:34780`, which is exactly the host and port of the chart default callback URL. No manual port-forward is needed for the CLI flow.
 
-**Dashboard flow.** The dashboard does not port-forward. On a local install, either run a manual port-forward matching the callback URL, or override `ARK_API_PUBLIC_CALLBACK_URL` with a public HTTPS ingress.
+**Dashboard flow.** Under `devspace dev` the callback port is forwarded automatically (`services/ark-api/devspace.yaml` forwards `34780:8000`), so the dashboard flow completes with no manual step on a local install. For any other deployment the dashboard does not port-forward: run a manual port-forward matching the callback URL, or override `ARK_API_PUBLIC_CALLBACK_URL` with a public HTTPS ingress.
 
 ```bash
 kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 34780:80
@@ -77,13 +77,13 @@ Register the chosen URL with the IdP as a redirect URI before running the flow.
 
 The dashboard MCP servers page (`/mcp`) drives the same ark-api OAuth flow as the CLI, so a user who sees a server in the `Required` state can authorize it without dropping to a terminal. Each card surfaces the server's authorization state as a badge (`Auth required`, `Authorized`, `Discovery failed`) and exposes the relevant actions.
 
-- **Authenticate** (state `Required`) — starts the flow and full-page-navigates the browser to the IdP. After login/consent the IdP redirects to ark-api's callback, which redirects the browser back to the dashboard.
+- **Authenticate** (state `Required`) — starts the flow and full-page-navigates the browser to the IdP. After login/consent the IdP redirects to ark-api's callback, which redirects the browser back to the dashboard. If the server has no `spec.authorization.tokenSecretRef.name`, ark-api provisions it as `<name>-oauth` automatically — no manual `kubectl` edit is needed.
 - **Re-authenticate** (state `Authorized`) — same as Authenticate but forces a fresh flow against an already-authorized server (last login wins). The action is emphasised when the authorization is near expiry; the card shows an expiry indication derived from `status.authorization.expiresAt`.
 - **Sign out** (state `Authorized`) — opens a confirmation dialog and, on confirm, revokes the authorization (clears the tokens, keeps the Secret) so the card returns to `Required`.
 
 **Completion confirmation.** On return from the IdP, ark-api redirects to `<ARK_API_DASHBOARD_URL>/mcp` with the flow's `auth_id` (success) or an `auth_error` (failure / expired flow). The dashboard then polls the same `auth/status` endpoint the CLI uses until the controller reconciles the MCPServer to `Authorized`, showing a success, failure, or expired toast. No token material reaches the browser — the redirect carries only the server name, namespace, an opaque `auth_id`, and (on failure) an error code and a length-capped description.
 
-**Configuration.** The dashboard flow requires `ARK_API_DASHBOARD_URL` (see [Env vars](#env-vars)) so ark-api knows where to redirect the browser. The value MUST include any path prefix under which the dashboard is served. When it is unset, dashboard-initiated flows fall back to ark-api's HTML completion page (the CLI flow is unaffected either way). As with the CLI, the IdP redirect still lands on `ARK_API_PUBLIC_CALLBACK_URL`, which must be reachable from the browser — on a local install, use a public HTTPS ingress or a manual loopback port-forward (the dashboard does not port-forward).
+**Configuration.** The dashboard flow requires `ARK_API_DASHBOARD_URL` (see [Env vars](#env-vars)) so ark-api knows where to redirect the browser. The value MUST include any path prefix under which the dashboard is served. When it is unset, dashboard-initiated flows fall back to ark-api's HTML completion page (the CLI flow is unaffected either way). As with the CLI, the IdP redirect still lands on `ARK_API_PUBLIC_CALLBACK_URL`, which must be reachable from the browser. Under `devspace dev` this is handled automatically by the ark-api callback port-forward; other deployments use a public HTTPS ingress or a manual loopback port-forward.
 
 ## RBAC
 
