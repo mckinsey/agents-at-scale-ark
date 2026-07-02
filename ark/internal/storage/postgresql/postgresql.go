@@ -17,7 +17,7 @@ import (
 	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/watch"
@@ -99,11 +99,11 @@ func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	return preds, nil
 }
 
-func parseLabelSelector(selector string) (labels.Selector, error) {
+func parseLabelSelector(selector string) (k8slabels.Selector, error) {
 	if selector == "" {
 		return nil, nil
 	}
-	sel, err := labels.Parse(selector)
+	sel, err := k8slabels.Parse(selector)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid label selector %q: %v", storage.ErrInvalidRequest, selector, err)
 	}
@@ -116,7 +116,7 @@ func parseLabelSelector(selector string) (labels.Selector, error) {
 // labelSelectorSQL emits " AND ..." clauses and appends bind values to *args.
 // Placeholders are len(*args)+1 at each use, so the caller passes the same
 // slice and doesn't track an index. Values are bound; operators are fixed.
-func labelSelectorSQL(sel labels.Selector, args *[]interface{}) string {
+func labelSelectorSQL(sel k8slabels.Selector, args *[]interface{}) string {
 	if sel == nil || sel.Empty() {
 		return ""
 	}
@@ -147,7 +147,7 @@ func labelSelectorSQL(sel labels.Selector, args *[]interface{}) string {
 			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, p)
 			*args = append(*args, key)
 		default:
-			panic(fmt.Sprintf("labelSelectorSQL: unhandled operator %q from labels.Parse output", op))
+			panic(fmt.Sprintf("labelSelectorSQL: unhandled operator %q from k8slabels.Parse output", op))
 		}
 	}
 	return sb.String()
@@ -407,18 +407,18 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 
 	var rv, generation int64
 	var uid string
-	var spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte
+	var spec, status, labels, annotations, finalizers, ownerRefs []byte
 	var createdAt, updatedAt time.Time
 	var deletionTimestamp sql.NullTime
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labelsJSON, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labelsJSON), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 }
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
@@ -488,15 +488,15 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
-		var spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte
+		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
 		var deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labelsJSON, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labelsJSON), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -751,12 +751,12 @@ func nullTimePtr(t sql.NullTime) *time.Time {
 	return &t.Time
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labelsJSON, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
 	var finalizersList []string
 	var ownerRefsList []interface{}
-	_ = json.Unmarshal([]byte(labelsJSON), &labelsMap)
+	_ = json.Unmarshal([]byte(labels), &labelsMap)
 	_ = json.Unmarshal([]byte(annotations), &annotationsMap)
 	_ = json.Unmarshal([]byte(finalizers), &finalizersList)
 	_ = json.Unmarshal([]byte(ownerRefs), &ownerRefsList)
@@ -867,7 +867,7 @@ type postgresWatcher struct {
 	key             string
 	kind            string
 	ns              string
-	labelSel        labels.Selector
+	labelSel        k8slabels.Selector
 	fieldPreds      []fieldPredicate
 	ctx             context.Context
 	done            chan struct{}
@@ -1031,12 +1031,12 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 
 // emitRow sends a single relist row downstream. Returns false if the watcher
 // should stop iterating (done/cancelled).
-func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
+func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
 	uidNew := !w.hasSeenUID(uid)
 	if w.markSeen(uid, rv) {
 		return true
 	}
-	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labelsJSON), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 	if err != nil {
 		return true
 	}
@@ -1076,14 +1076,14 @@ func (w *postgresWatcher) relist() {
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
-		var spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte
+		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
 		var deletedAt, deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labelsJSON, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
 			return
 		}
-		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labelsJSON, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
+		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
 			return
 		}
 	}
