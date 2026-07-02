@@ -603,12 +603,14 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 		return got.(*integrationTestObject)
 	}
 
+	// Start with a two-key spec so we can test reordered-keys without needing
+	// an intermediate spec change first.
 	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
 	obj.Metadata.Name = testName
 	obj.Metadata.Namespace = testNS
 	obj.Metadata.UID = "gen-test-uid"
 	obj.Metadata.Labels = map[string]string{"tier": "a"}
-	obj.Spec = map[string]interface{}{"model": "gpt-4"}
+	obj.Spec = map[string]interface{}{"a": "1", "b": "2"}
 	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -616,20 +618,29 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 		t.Fatalf("after Create: generation = %d, want 1", g)
 	}
 
-	// Metadata-only update (label change, same spec). Kubernetes says this
-	// must NOT bump generation.
+	// Metadata-only (label change): no bump.
 	step := currentObj()
 	step.Metadata.Labels = map[string]string{"tier": "b"}
 	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
 		t.Fatalf("label-only Update failed: %v", err)
 	}
 	if g := generation(); g != 1 {
-		t.Errorf("after label-only update: generation = %d, want 1 (metadata-only must not bump)", g)
+		t.Errorf("after label-only update: generation = %d, want 1", g)
 	}
 
-	// Spec change: generation must bump.
+	// Reordered spec keys: same content, no bump (jsonb structural equality).
 	step = currentObj()
-	step.Spec["model"] = "gpt-4-turbo"
+	step.Spec = map[string]interface{}{"b": "2", "a": "1"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("reordered-key Update failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Errorf("after reordered-key update: generation = %d, want 1 (jsonb equality is order-independent)", g)
+	}
+
+	// Actual spec change: bump.
+	step = currentObj()
+	step.Spec["a"] = "changed"
 	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
 		t.Fatalf("spec Update failed: %v", err)
 	}
@@ -637,18 +648,17 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 		t.Errorf("after spec change: generation = %d, want 2", g)
 	}
 
-	// Status-only update via UpdateStatus: must not bump.
+	// UpdateStatus: no bump.
 	step = currentObj()
 	step.Status = map[string]interface{}{"phase": "Ready"}
 	if err := backend.UpdateStatus(ctx, testKind, testNS, testName, step); err != nil {
 		t.Fatalf("UpdateStatus failed: %v", err)
 	}
 	if g := generation(); g != 2 {
-		t.Errorf("after status update: generation = %d, want 2 (status must not bump)", g)
+		t.Errorf("after status update: generation = %d, want 2", g)
 	}
 
-	// Status-and-metadata via Update() (some clients round-trip the whole
-	// object without touching spec). Same result: no bump.
+	// Status + label via Update (whole-object round-trip, no spec change): no bump.
 	step = currentObj()
 	step.Metadata.Labels["extra"] = "value"
 	step.Status["phase"] = "Running"
@@ -657,26 +667,5 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 	}
 	if g := generation(); g != 2 {
 		t.Errorf("after status+label update: generation = %d, want 2", g)
-	}
-
-	// Spec change with reordered keys (jsonb structural equality means an
-	// object with the same content but different key order must still be
-	// treated as equal — no bump). Reset spec first to a two-key form.
-	step = currentObj()
-	step.Spec = map[string]interface{}{"a": "1", "b": "2"}
-	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
-		t.Fatalf("two-key spec Update failed: %v", err)
-	}
-	genAfterTwoKey := generation()
-	if genAfterTwoKey != 3 {
-		t.Fatalf("after two-key spec change: generation = %d, want 3", genAfterTwoKey)
-	}
-	step = currentObj()
-	step.Spec = map[string]interface{}{"b": "2", "a": "1"}
-	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
-		t.Fatalf("reordered-key Update failed: %v", err)
-	}
-	if g := generation(); g != genAfterTwoKey {
-		t.Errorf("after reordered-key update: generation = %d, want %d (jsonb equality is order-independent)", g, genAfterTwoKey)
 	}
 }
