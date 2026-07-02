@@ -421,18 +421,18 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 
 	var rv, generation int64
 	var uid string
-	var spec, status, labels, annotations, finalizers, ownerRefs []byte
+	var spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte
 	var createdAt, updatedAt time.Time
 	var deletionTimestamp sql.NullTime
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labelsJSON, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labelsJSON), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 }
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
@@ -504,15 +504,15 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers, ownerRefs []byte
+		var spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
 		var deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labelsJSON, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labelsJSON), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -767,12 +767,12 @@ func nullTimePtr(t sql.NullTime) *time.Time {
 	return &t.Time
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labelsJSON, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
 	var finalizersList []string
 	var ownerRefsList []interface{}
-	_ = json.Unmarshal([]byte(labels), &labelsMap)
+	_ = json.Unmarshal([]byte(labelsJSON), &labelsMap)
 	_ = json.Unmarshal([]byte(annotations), &annotationsMap)
 	_ = json.Unmarshal([]byte(finalizers), &finalizersList)
 	_ = json.Unmarshal([]byte(ownerRefs), &ownerRefsList)
@@ -1049,12 +1049,12 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 
 // emitRow sends a single relist row downstream. Returns false if the watcher
 // should stop iterating (done/cancelled).
-func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
+func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
 	uidNew := !w.hasSeenUID(uid)
 	if w.markSeen(uid, rv) {
 		return true
 	}
-	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labelsJSON), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 	if err != nil {
 		return true
 	}
@@ -1094,14 +1094,14 @@ func (w *postgresWatcher) relist() {
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers, ownerRefs []byte
+		var spec, status, labelsJSON, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
 		var deletedAt, deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labelsJSON, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
 			return
 		}
-		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
+		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labelsJSON, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
 			return
 		}
 	}
