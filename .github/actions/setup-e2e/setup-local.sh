@@ -249,6 +249,7 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
     BROKER_HELM_ARGS+=(
       --set memory.createMemoryCRD=false
       --set backends.message=postgres
+      --set backends.event=postgres
       --set "database.url=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=verify-full"
       --set "database.migrateUrl=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt"
       --set database.tls.enabled=true

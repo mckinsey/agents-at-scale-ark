@@ -4,6 +4,7 @@ import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
+import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
 import {OTELSpan} from '../src/brokers/trace-broker.js';
 import {EventData} from '../src/brokers/event-broker.js';
 
@@ -18,6 +19,7 @@ const {
   version: 'test',
   messageStream: createMessageStream(config, logger),
   chunkStream: createChunkStream(config, logger),
+  eventStream: createEventStream(config, logger),
 });
 
 describe('Session ID Filtering', () => {
