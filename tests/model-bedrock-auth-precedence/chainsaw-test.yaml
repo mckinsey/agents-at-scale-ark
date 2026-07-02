@@ -1,0 +1,97 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-bedrock-auth-precedence
+  labels:
+    standard: "true"
+spec:
+  description: Verify the CRD accepts the Bedrock apiKey field and the mutating webhook stamps a precedence warning only when both apiKey and IAM credentials are set
+  steps:
+    - name: both-auth-methods-warn
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: bedrock-both-auth
+              spec:
+                provider: bedrock
+                model:
+                  value: us.anthropic.claude-haiku-4-5-20251001-v1:0
+                config:
+                  bedrock:
+                    region:
+                      value: us-east-1
+                    apiKey:
+                      value: dummy-bearer-token
+                    accessKeyId:
+                      value: AKIAIOSFODNN7EXAMPLE
+                    secretAccessKey:
+                      value: dummy-secret-access-key
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: bedrock-both-auth
+                (annotations."ark.mckinsey.com/migration-warning-bedrock-auth" != null): true
+      catch:
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            name: bedrock-both-auth
+
+    - name: api-key-only-no-warning
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: bedrock-apikey-only
+              spec:
+                provider: bedrock
+                model:
+                  value: us.anthropic.claude-haiku-4-5-20251001-v1:0
+                config:
+                  bedrock:
+                    region:
+                      value: us-east-1
+                    apiKey:
+                      value: dummy-bearer-token
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: bedrock-apikey-only
+                (annotations."ark.mckinsey.com/migration-warning-bedrock-auth" == null): true
+
+    - name: iam-only-no-warning
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: bedrock-iam-only
+              spec:
+                provider: bedrock
+                model:
+                  value: us.anthropic.claude-haiku-4-5-20251001-v1:0
+                config:
+                  bedrock:
+                    region:
+                      value: us-east-1
+                    accessKeyId:
+                      value: AKIAIOSFODNN7EXAMPLE
+                    secretAccessKey:
+                      value: dummy-secret-access-key
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: bedrock-iam-only
+                (annotations."ark.mckinsey.com/migration-warning-bedrock-auth" == null): true
