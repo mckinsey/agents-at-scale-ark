@@ -18,7 +18,7 @@ spec:
     - script:
         timeout: 300s
         content: |
-          helm dependency build ../../services/argo-workflows/chart >/dev/null
+          helm dependency update ../../services/argo-workflows/chart >/dev/null
           helm install argo ../../services/argo-workflows/chart \
             --namespace "$NAMESPACE" \
             --set argo-workflows.singleNamespace=true \
