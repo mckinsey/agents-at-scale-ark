@@ -1,6 +1,6 @@
-# ARK Broker
+# Ark Broker
 
-Event bus for ARK cluster communication. Stores messages, chunks, traces, events, and sessions. Default backend is in-memory; messages can be persisted to Postgres.
+Event bus for Ark cluster communication. Stores messages, chunks, traces, events, and sessions. Default backend is in-memory; messages can be persisted to Postgres and completion chunks to Redis Streams.
 
 ## Quickstart
 
@@ -14,8 +14,14 @@ devspace deploy
 # Run in-cluster dev mode.
 devspace dev
 
-# Run with Postgres message backend (deploys ark-storage-dev automatically).
+# Run with Postgres message backend.
 BROKER_MESSAGE_BACKEND=postgres devspace dev
+
+# Run with Redis chunks backend.
+BROKER_CHUNK_BACKEND=redis devspace dev
+
+# Run with both backends active.
+BROKER_MESSAGE_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
 ```
 
 ## Configuration
@@ -37,6 +43,15 @@ BROKER_MESSAGE_BACKEND=postgres devspace dev
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL queries at debug level (SQL text + param count, never values) |
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate file. When set, the broker passes it to the Postgres driver for server certificate verification. Set automatically by the Helm chart when `database.tls.enabled=true`. |
+| `CHUNK_BACKEND` | `memory` | Completion chunk storage backend: `memory` or `redis` |
+| `REDIS_URL` | — | Redis connection string. Required when `CHUNK_BACKEND=redis`. Use `redis://` for plain or `rediss://` for TLS. |
+| `REDIS_USERNAME` | — | Redis ACL username (optional) |
+| `REDIS_PASSWORD` | — | Redis password (optional) |
+| `REDIS_TLS_CA_CERT_PATH` | — | Path to CA certificate for TLS connections with self-signed certs. Set automatically by the Helm chart when `redis.tls.enabled=true`. |
+| `REDIS_KEY_PREFIX` | `ark-broker` | Prefix for all Redis keys |
+| `REDIS_STREAM_TTL_SECONDS` | `3600` | TTL applied to per-query chunk streams |
+| `REDIS_CONNECT_TIMEOUT_MS` | `10000` | Redis connection timeout |
+| `REDIS_DEBUG_COMMANDS` | `false` | Log Redis connection lifecycle events at debug level (never logs payloads) |
 
 ## Database backend
 
@@ -88,6 +103,61 @@ make db-migrate-create NAME=add_index
 The Postgres integration tests use Testcontainers and run automatically with `make test`. No local Postgres required.
 
 To skip them (e.g. in environments without Docker):
+
+```bash
+SKIP_INTEGRATION=true make test
+```
+
+## Redis chunks backend
+
+Completion chunks are held in-memory by default. With `CHUNK_BACKEND=redis` they are stored in Redis Streams, enabling live chunk streaming across multiple broker replicas.
+
+### Local development with devspace
+
+```bash
+BROKER_CHUNK_BACKEND=redis devspace dev
+```
+
+This activates the `broker-redis` profile, which:
+- Deploys `ark-redis-dev` (Redis 7-alpine, service `ark-redis-dev`, port 6379) in the `default` namespace and waits for it to be ready.
+- Sets `REDIS_URL=redis://:arkredisdev123@ark-redis-dev:6379` on the broker deployment.
+
+Both backends can be activated together:
+
+```bash
+BROKER_MESSAGE_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
+```
+
+### Enabling in Helm
+
+```yaml
+backends:
+  chunk: redis
+
+redis:
+  url: "redis://:password@redis-host:6379"
+  keyPrefix: "ark-broker"
+  streamTtlSeconds: 3600
+  connectTimeoutMs: 10000
+```
+
+For TLS connections with a self-signed CA:
+
+```yaml
+redis:
+  url: "rediss://:password@redis-host:6380"
+  tls:
+    enabled: true
+    secretName: my-redis-tls-secret
+```
+
+The secret must contain `ca.crt`. The chart mounts it and sets `REDIS_TLS_CA_CERT_PATH` automatically.
+
+### Integration tests
+
+The Redis integration tests use Testcontainers (plain, auth, and TLS variants) and run automatically with `make test`. No local Redis required.
+
+To skip them:
 
 ```bash
 SKIP_INTEGRATION=true make test

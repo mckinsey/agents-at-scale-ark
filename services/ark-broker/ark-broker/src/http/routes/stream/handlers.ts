@@ -1,8 +1,6 @@
 import type {Request, Response} from 'express';
-import {
-  CompletionChunkBroker,
-  CompletionChunkData,
-} from '@ark-broker/brokers/chunks-broker.js';
+import type {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker.js';
+import type {CompletionChunkData} from '@ark-broker/brokers/stream/chunk-stream.js';
 import {BrokerItem} from '@ark-broker/brokers/stream/broker-item.js';
 import {writeSSEEvent} from '@ark-broker/http/sse.js';
 import {sendInternalError} from '@ark-broker/http/routes/errors.js';
@@ -130,10 +128,15 @@ function flushBuffer(
   buffer: BrokerItem<CompletionChunkData>[],
   maxReplayedSeq: number,
   counters: StreamCounters,
-  cleanup: () => void
+  cleanup: () => void,
+  onComplete: () => void
 ): boolean {
   for (const bufferedItem of buffer) {
     if (bufferedItem.sequenceNumber <= maxReplayedSeq) continue;
+    if (bufferedItem.data.complete) {
+      onComplete();
+      return false;
+    }
     const chunk = bufferedItem.data.chunk as ChunkPayload | string;
     if (typeof chunk === 'string') continue;
 
@@ -173,7 +176,8 @@ async function replayChunks(
   chunks: CompletionChunkBroker,
   queryName: string,
   state: QueryStreamState,
-  cleanup: () => void
+  cleanup: () => void,
+  onComplete: () => void
 ): Promise<boolean> {
   const existingItems = await chunks.getByQuery(queryName);
   req.log.info(
@@ -183,14 +187,15 @@ async function replayChunks(
 
   let maxReplayedSeq = -1;
   for (const item of existingItems) {
-    const chunk = item.data.chunk as ChunkPayload | string;
-    if (chunk === '[DONE]') {
-      req.log.info({queryName}, 'found [DONE] during replay, closing stream');
+    if (item.data.complete) {
+      req.log.info({queryName}, 'found complete during replay, closing stream');
       res.write('data: [DONE]\n\n');
       res.end();
       cleanup();
       return false;
     }
+    const chunk = item.data.chunk as ChunkPayload | string;
+    if (typeof chunk === 'string') continue;
     if (!writeSSEEvent(res, chunk, req.log)) {
       req.log.warn({queryName}, 'error writing existing chunk');
       cleanup();
@@ -208,7 +213,8 @@ async function replayChunks(
     state.buffer,
     maxReplayedSeq,
     state.counters,
-    cleanup
+    cleanup,
+    onComplete
   );
 }
 
@@ -300,15 +306,10 @@ export async function handleQueryStream(
     },
   };
 
-  const unsubHandles = {chunks: (): void => {}, complete: (): void => {}};
+  const unsubHandles = {chunks: (): void => {}};
   const cleanup = (): void => {
     unsubHandles.chunks();
-    unsubHandles.complete();
   };
-
-  unsubHandles.chunks = chunks.subscribeToQuery(queryName, (item) =>
-    handleIncomingItem(item, state, res, req, queryName, cleanup)
-  );
 
   const completeHandler = (): void => {
     req.log.info(
@@ -323,10 +324,14 @@ export async function handleQueryStream(
     res.end();
     cleanup();
   };
-  unsubHandles.complete = (): void => {
-    chunks.eventEmitter.off(`complete:${queryName}`, completeHandler);
-  };
-  chunks.eventEmitter.on(`complete:${queryName}`, completeHandler);
+
+  unsubHandles.chunks = chunks.subscribeToQuery(queryName, (item) => {
+    if (item.data.complete) {
+      completeHandler();
+      return;
+    }
+    handleIncomingItem(item, state, res, req, queryName, cleanup);
+  });
 
   if (waitForQuery) {
     state.timeoutHandle = setTimeout(
@@ -336,7 +341,15 @@ export async function handleQueryStream(
   }
 
   if (fromBeginning) {
-    const ok = await replayChunks(res, req, chunks, queryName, state, cleanup);
+    const ok = await replayChunks(
+      res,
+      req,
+      chunks,
+      queryName,
+      state,
+      cleanup,
+      completeHandler
+    );
     if (!ok) return;
   }
   state.caughtUp = true;

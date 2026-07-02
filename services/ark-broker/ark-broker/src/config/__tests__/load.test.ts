@@ -20,11 +20,20 @@ describe('loadConfig', () => {
     expect(cfg.persistence.sessionsFilePath).toBeUndefined();
     expect(cfg.backends.message).toBe('memory');
     expect(cfg.backends.messageVisibilityTtlSeconds).toBe(2592000);
+    expect(cfg.backends.chunk).toBe('memory');
     expect(cfg.database.url).toBeUndefined();
     expect(cfg.database.poolMax).toBe(10);
     expect(cfg.database.connectTimeoutMs).toBe(10000);
     expect(cfg.database.statementTimeoutMs).toBe(30000);
     expect(cfg.database.debugQueries).toBe(false);
+    expect(cfg.redis.url).toBeUndefined();
+    expect(cfg.redis.username).toBeUndefined();
+    expect(cfg.redis.password).toBeUndefined();
+    expect(cfg.redis.tlsCaCertPath).toBeUndefined();
+    expect(cfg.redis.keyPrefix).toBe('ark-broker');
+    expect(cfg.redis.streamTtlSeconds).toBe(3600);
+    expect(cfg.redis.connectTimeoutMs).toBe(10000);
+    expect(cfg.redis.debugCommands).toBe(false);
   });
 
   it('honors provided values', () => {
@@ -86,6 +95,7 @@ describe('loadConfig', () => {
     expect(Object.isFrozen(cfg.persistence)).toBe(true);
     expect(Object.isFrozen(cfg.backends)).toBe(true);
     expect(Object.isFrozen(cfg.database)).toBe(true);
+    expect(Object.isFrozen(cfg.redis)).toBe(true);
   });
 
   it('throws when attempting to mutate the frozen object', () => {
@@ -96,6 +106,9 @@ describe('loadConfig', () => {
     ).toThrow();
     expect(() =>
       Object.defineProperty(cfg.server, 'port', {value: 1234})
+    ).toThrow();
+    expect(() =>
+      Object.defineProperty(cfg.redis, 'keyPrefix', {value: 'x'})
     ).toThrow();
   });
 
@@ -136,6 +149,60 @@ describe('loadConfig', () => {
       });
 
       expect(cfg.backends.messageVisibilityTtlSeconds).toBe(3600);
+    });
+  });
+
+  describe('CHUNK_BACKEND=redis', () => {
+    it('accepts redis backend with REDIS_URL', () => {
+      const cfg = loadConfig({
+        CHUNK_BACKEND: 'redis',
+        REDIS_URL: 'redis://localhost:6379',
+      });
+
+      expect(cfg.backends.chunk).toBe('redis');
+      expect(cfg.redis.url).toBe('redis://localhost:6379');
+    });
+
+    it('rejects redis backend without REDIS_URL', () => {
+      expect(() => loadConfig({CHUNK_BACKEND: 'redis'})).toThrow();
+    });
+
+    it('honors all redis connection options', () => {
+      const cfg = loadConfig({
+        CHUNK_BACKEND: 'redis',
+        REDIS_URL: 'rediss://redis.example.com:6380',
+        REDIS_USERNAME: 'alice',
+        REDIS_PASSWORD: 'test-redis-password',
+        REDIS_TLS_CA_CERT_PATH: '/certs/ca.crt',
+        REDIS_KEY_PREFIX: 'my-prefix',
+        REDIS_STREAM_TTL_SECONDS: '7200',
+        REDIS_CONNECT_TIMEOUT_MS: '5000',
+      });
+
+      expect(cfg.redis.username).toBe('alice');
+      expect(cfg.redis.password).toBe('test-redis-password');
+      expect(cfg.redis.tlsCaCertPath).toBe('/certs/ca.crt');
+      expect(cfg.redis.keyPrefix).toBe('my-prefix');
+      expect(cfg.redis.streamTtlSeconds).toBe(7200);
+      expect(cfg.redis.connectTimeoutMs).toBe(5000);
+    });
+  });
+
+  describe('REDIS_DEBUG_COMMANDS', () => {
+    it('defaults to false', () => {
+      expect(loadConfig({}).redis.debugCommands).toBe(false);
+    });
+
+    it('parses true', () => {
+      expect(
+        loadConfig({REDIS_DEBUG_COMMANDS: 'true'}).redis.debugCommands
+      ).toBe(true);
+    });
+
+    it('treats any non-"true" value as false', () => {
+      expect(loadConfig({REDIS_DEBUG_COMMANDS: '1'}).redis.debugCommands).toBe(
+        false
+      );
     });
   });
 
