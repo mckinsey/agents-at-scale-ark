@@ -10,6 +10,35 @@ serviceAccountName: ark-controller
 
 namespace: ark-system
 
+# Static replica count. Ignored when autoscaling.enabled is true (the HPA owns the count).
+replicaCount: 1
+
+# HorizontalPodAutoscaler. When enabled, the Deployment omits its replicas field so the
+# HPA manages scaling. Safe for the controller's blocking dispatch path: each Query is a
+# single request-response handled start-to-finish by one pod, and conversation history is
+# stored externally (Memory service), so requests may land on any replica.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80   # optional, off by default
+
+# PodDisruptionBudget. Keeps at least minAvailable replicas Ready during voluntary
+# disruptions (e.g. node drains). Only meaningful with more than one replica.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Bounded drain window on shutdown. Queries can run up to ~5m, but scale-downs/drains are
+# not blocked that long: in-flight queries exceeding the window are cut and retried by the
+# controller's reconcile. Raise for longer drains.
+terminationGracePeriodSeconds: 60
+gracefulShutdown:
+  # preStop sleep so kube-proxy removes the pod from Service endpoints before the server
+  # starts refusing — stops new requests landing on a terminating pod.
+  preStopSleepSeconds: 5
+
 resources:
   limits:
     cpu: 500m

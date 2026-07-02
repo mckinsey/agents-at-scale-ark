@@ -29,6 +29,24 @@ go test ./executors/completions/...  # Run tests
 - Team execution supports sequential, round-robin, selector, and graph strategies
 - Streaming chunks and events are emitted to the Ark Broker
 
+## Scaling
+
+The chart supports multiple replicas (`replicaCount`, or an HPA via `autoscaling.enabled`)
+plus a `PodDisruptionBudget` and a bounded graceful-shutdown drain (`terminationGracePeriodSeconds`,
+`gracefulShutdown.preStopSleepSeconds`, and the binary's `--shutdown-timeout` flag).
+
+Running N replicas is **safe for the controller's dispatch path**: each Query is sent as a
+single blocking A2A request-response (`Blocking: true`) handled start-to-finish by one pod,
+`executionState` is request-scoped, and conversation history is stored externally
+(`HTTPMemory` → Memory service). Any replica can serve any request; follow-up turns are
+matched by `ConversationId` from the external store.
+
+**Known limitation:** the in-process `MemoryTaskManager` is per-pod, so external A2A clients
+that use non-blocking `tasks/get` / `tasks/resubscribe` or reattach to a `message/stream`
+across replicas are not supported — a re-attach may hit a pod that never saw the task. This
+needs a shared (e.g. Redis-backed) `TaskManager` and is deferred; `trpc-a2a-go` exposes a
+pluggable `TaskManager` interface but ships only the in-memory implementation.
+
 ## Dependencies
 
 Imports from shared packages:

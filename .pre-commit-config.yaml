@@ -7,6 +7,9 @@ repos:
       - id: check-yaml
         args:
           - "--allow-multiple-documents"
+        # Helm chart templates and ark-cli generator templates contain Go templating
+        # ({{- ... }}) that is not valid YAML; helm lint validates these instead.
+        exclude: '(^|/)templates/.*\.ya?ml$'
       - id: check-case-conflict
       - id: check-symlinks
       - id: check-json

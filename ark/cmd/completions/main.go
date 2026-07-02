@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Required for cloud provider auth plugins
 
@@ -40,8 +41,11 @@ func init() {
 func main() {
 	var addr string
 	var showVersion bool
+	var shutdownTimeout time.Duration
 	flag.StringVar(&addr, "addr", ":9090", "Address to listen on")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 55*time.Second,
+		"Max time to drain in-flight requests on shutdown; keep below the pod's terminationGracePeriodSeconds")
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -97,8 +101,10 @@ func main() {
 			cancel()
 		}
 	case <-ctx.Done():
-		log.Info("shutting down")
-		if err := srv.Stop(context.Background()); err != nil {
+		log.Info("shutting down", "timeout", shutdownTimeout)
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancelShutdown()
+		if err := srv.Stop(shutdownCtx); err != nil {
 			log.Error(err, "shutdown error")
 		}
 	}
