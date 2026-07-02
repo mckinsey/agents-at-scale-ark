@@ -100,4 +100,15 @@ describe('GET /api/auth/federated-signout', () => {
     expect(loc.searchParams.get('client_id')).toBe('client-123');
     expect(res.cookies.get(SESSION)?.value).toBe('');
   });
+
+  it('preserves the basePath prefix in the /signout redirect (tenant deployment)', async () => {
+    process.env.BASE_URL = 'https://dashboard.example.com/tenant-a';
+    vi.mocked(getToken).mockResolvedValue(null as never);
+
+    const res = await GET(request());
+
+    expect(res.headers.get('location')).toBe(
+      'https://dashboard.example.com/tenant-a/signout',
+    );
+  });
 });

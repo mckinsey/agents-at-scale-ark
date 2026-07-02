@@ -46,9 +46,7 @@ export async function GET(request: NextRequest) {
   const redirectURL = `${baseURL}/signout`;
   if (!token?.id_token) {
     // no session, just go home
-    return clearSessionCookies(
-      NextResponse.redirect(new URL('/signout', baseURL)),
-    );
+    return clearSessionCookies(NextResponse.redirect(redirectURL));
   }
 
   // Get or fetch the openid config from the OIDC provider's well-known configuration
@@ -59,9 +57,7 @@ export async function GET(request: NextRequest) {
     console.warn('Provider does not support RP-initiated logout (e.g., Dex)');
     console.warn('Performing local sign-out only');
     // Perform local sign-out only when provider doesn't support federated logout
-    return clearSessionCookies(
-      NextResponse.redirect(new URL('/signout', baseURL)),
-    );
+    return clearSessionCookies(NextResponse.redirect(redirectURL));
   }
 
   const url = new URL(openidConfig.end_session_endpoint);
