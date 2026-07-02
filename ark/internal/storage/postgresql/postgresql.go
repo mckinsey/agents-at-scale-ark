@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +47,18 @@ var supportedFieldColumns = map[string]string{
 	"metadata.namespace": "namespace",
 }
 
+// supportedFieldsList returns the currently-supported field selector fields,
+// sorted alphabetically, for inclusion in error messages. Derived from
+// supportedFieldColumns so the two stay in lockstep as fields are added.
+func supportedFieldsList() string {
+	keys := make([]string, 0, len(supportedFieldColumns))
+	for k := range supportedFieldColumns {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
 // parseFieldSelector validates opts.FieldSelector and returns SQL predicates for
 // the currently supported metadata fields. Fields that aren't wired up yet, and
 // operators other than =/==/!=, produce storage.ErrInvalidRequest so the registry
@@ -67,7 +80,7 @@ func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	for _, req := range reqs {
 		col, ok := supportedFieldColumns[req.Field]
 		if !ok {
-			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: metadata.name, metadata.namespace)", storage.ErrInvalidRequest, req.Field)
+			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: %s)", storage.ErrInvalidRequest, req.Field, supportedFieldsList())
 		}
 		var op string
 		switch req.Operator {
