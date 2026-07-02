@@ -64,6 +64,7 @@ flowchart LR
     end
 
     postgres[("PostgreSQL<br/>persist messages")]
+    redis[("Redis<br/>stream chunks")]
 
     controller -->|"A2A · runs queries"| completions
     controller -.->|"reconciles resources"| tenant
@@ -71,9 +72,10 @@ flowchart LR
     api -->|"stream"| broker
     completions -->|"stream"| broker
     broker -.->|"optional · recommended"| postgres
+    broker -.->|"optional · recommended"| redis
 
     classDef optional stroke-dasharray:5 5,stroke:#888,color:#555;
-    class postgres optional;
+    class postgres,redis optional;
 ```
 
 Because every resource is namespaced, a namespace acts as a tenant: teams share one cluster while staying isolated by Kubernetes RBAC. See [Tenant and Namespace Management](/operations-guide/tenant-namespace-management).
