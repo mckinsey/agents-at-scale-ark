@@ -101,17 +101,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Check TTL expiry if TTL is set.
-	// TTL may be nil when using aggregated API server (non-CRD storage)
-	// because the field is omitempty and may not be initialized.
-	if obj.Spec.TTL != nil {
-		expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
-		if time.Now().After(expiry) {
-			if err := r.Delete(ctx, &obj); err != nil {
-				log.Error(err, "unable to delete object")
-				return ctrl.Result{}, err
-			}
+	// Garbage-collect the Query once it has been in a terminal phase for
+	// longer than its TTL. TTL is measured from completion, not creation,
+	// so long-running or queued queries are never reaped mid-flight.
+	// TTL may be nil when using aggregated API server (non-CRD storage).
+	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) {
+		if err := r.Delete(ctx, &obj); err != nil {
+			log.Error(err, "unable to delete object")
+			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, nil
 	}
 
 	if result, err := r.handleFinalizer(ctx, &obj); result != nil {
@@ -160,39 +159,52 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	// Calculate expiry time for requeue. Use 1 hour default if TTL is not set.
-	// TTL may be nil when using aggregated API server (non-CRD storage).
-	ttl := time.Hour
-	if obj.Spec.TTL != nil {
-		ttl = obj.Spec.TTL.Duration
-	}
-	expiry := obj.CreationTimestamp.Add(ttl)
-
 	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
-			return ctrl.Result{
-				RequeueAfter: time.Until(expiry),
-			}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
-		return ctrl.Result{
-			RequeueAfter: time.Until(expiry),
-		}, nil
+		remaining := ttlRemaining(&obj)
+		if remaining == 0 {
+			return ctrl.Result{}, nil
+		}
+		if remaining < 0 {
+			// RequeueAfter requires a positive time: 1ns means it will be
+			// requeued for GC almost immediately
+			remaining = time.Nanosecond
+		}
+		return ctrl.Result{RequeueAfter: remaining}, nil
 	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			return ctrl.Result{
-				RequeueAfter: time.Until(expiry),
-			}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
+}
+
+// ttlRemaining returns the time left until the Query's post-completion TTL
+// elapses: zero means TTL is not configured, negative means TTL has already
+// elapsed, positive means time left until expiry. The anchor is the
+// QueryCompleted condition's LastTransitionTime; if that condition is
+// missing on a terminal-phase Query (a corrupt state our updater should
+// not produce), the anchor falls back to CreationTimestamp so GC still
+// fires eventually instead of stranding the object.
+func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
+	if obj.Spec.TTL == nil {
+		return 0
+	}
+	anchor := obj.CreationTimestamp.Time
+	if completedAt := queryCompletedAt(obj); completedAt != nil {
+		anchor = *completedAt
+	}
+	return time.Until(anchor.Add(obj.Spec.TTL.Duration))
 }
 
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
@@ -203,21 +215,15 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	queryTimeout := time.Hour
-	if obj.Spec.TTL != nil {
-		queryTimeout = obj.Spec.TTL.Duration
-	}
-	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
-	if remaining <= 0 {
-		return ctrl.Result{}, nil
-	}
-
 	if r.sem != nil && !r.sem.TryAcquire(1) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
 	}
 
-	opCtx, cancel := context.WithTimeout(ctx, remaining)
+	// Execution deadline is governed by Spec.Timeout, applied per-A2A-call in
+	// sendQueryA2A. The cancel handle is stored so Spec.Cancel can interrupt
+	// the goroutine via cleanupExistingOperation.
+	opCtx, cancel := context.WithCancel(ctx)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
@@ -693,6 +699,28 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 	}
 
 	return nil, fmt.Errorf("no matching resources found for selector")
+}
+
+func isTerminalPhase(phase string) bool {
+	switch phase {
+	case statusDone, statusError, statusCanceled:
+		return true
+	}
+	return false
+}
+
+// queryCompletedAt returns the timestamp when the Query reached a terminal
+// phase, or nil if it has not. The QueryCompleted condition flips to
+// Status=True only on terminal phases (Done/Error/Canceled), and
+// setConditionCompleted writes LastTransitionTime explicitly each time, so
+// the field is a reliable post-terminal anchor for TTL retention.
+func queryCompletedAt(obj *arkv1alpha1.Query) *time.Time {
+	cond := meta.FindStatusCondition(obj.Status.Conditions, string(arkv1alpha1.QueryCompleted))
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		return nil
+	}
+	t := cond.LastTransitionTime.Time
+	return &t
 }
 
 func (r *QueryReconciler) setConditionCompleted(query *arkv1alpha1.Query, status metav1.ConditionStatus, reason, message string) {

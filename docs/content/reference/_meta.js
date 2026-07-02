@@ -1,7 +1,7 @@
 export default {
   '---interfaces': { type: 'separator', title: 'Interfaces' },
   'ark-apis': 'Ark API',
-  'traces': 'Traces',
+  'broker': 'Broker Service',
 
   crds: 'Custom Resource Definitions',
   resources: 'Resources',
