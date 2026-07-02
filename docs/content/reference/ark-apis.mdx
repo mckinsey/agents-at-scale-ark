@@ -7,7 +7,7 @@ import { Tabs } from 'nextra/components'
 
 # Ark API
 
-The `ark-api` service exposes a REST interface for executing queries and managing resources. This page covers the base URL, authentication, conventions, the query workflow, and a reference of every endpoint group. Trace ingestion and retrieval are served separately by the broker — see [Traces](/reference/traces).
+The `ark-api` service exposes a REST interface for executing queries and managing resources. This page covers the base URL, authentication, conventions, the query workflow, and a reference of every endpoint group. Messages, chunks, traces, events, and sessions are served separately by the broker — see the [Broker Service](/reference/broker).
 
 The **authoritative, always-current reference is the built-in OpenAPI spec** (`/openapi.json`) and its Swagger UI (`/docs`). Use this page for orientation and the endpoint index; use Swagger for full request/response schemas.
 
@@ -232,7 +232,7 @@ Standard CRUD (`GET`/`POST` on the collection, `GET`/`PUT`/`DELETE` on the item)
 
 ### Broker data
 
-Telemetry the broker captures for a namespace. (Trace ingestion and the OTLP endpoint are documented under [Traces](/reference/traces).)
+Telemetry the broker captures for a namespace. (The broker's own HTTP API, including OTLP trace ingestion, is documented under the [Broker Service](/reference/broker).)
 
 | Data | Endpoints |
 |------|-----------|
