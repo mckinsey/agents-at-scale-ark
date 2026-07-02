@@ -56,7 +56,7 @@ function getInputDisplayText(
   if (!input) return '—';
   if (typeof input === 'string') return input;
   if (Array.isArray(input)) {
-    const lastMsg = input[input.length - 1];
+    const lastMsg = input.at(-1);
     if (!lastMsg?.content) return '—';
     return typeof lastMsg.content === 'string'
       ? lastMsg.content

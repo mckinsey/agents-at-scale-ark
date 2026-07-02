@@ -237,6 +237,215 @@ function QueryViewSegmentedToggle<T extends string>({
   );
 }
 
+function getStringInput(input: unknown): string {
+  return typeof input === 'string' ? input : '';
+}
+
+function formatQueryInput(input: unknown): string {
+  if (typeof input === 'string') return input;
+  if (Array.isArray(input)) return JSON.stringify(input, null, 2);
+  return '';
+}
+
+interface QueryViewModeProps {
+  query: TypedQueryDetailResponse;
+  responseViewMode: 'content' | 'raw';
+  setResponseViewMode: (mode: 'content' | 'raw') => void;
+  errorViewMode: 'events' | 'details';
+  setErrorViewMode: (mode: 'events' | 'details') => void;
+  queryParameters: QueryParameter[];
+  streaming: boolean;
+}
+
+function QueryViewMode({
+  query,
+  responseViewMode,
+  setResponseViewMode,
+  errorViewMode,
+  setErrorViewMode,
+  queryParameters,
+  streaming,
+}: Readonly<QueryViewModeProps>) {
+  const phase = query.status?.phase;
+  const hasResponse = !!query.status?.response;
+  const isFailed = phase === 'failed' || phase === 'error';
+  const targetDisplay = query.target
+    ? `${query.target.type}:${query.target.name}`
+    : '—';
+  const tokenUsage = query.status?.tokenUsage
+    ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
+    : '—';
+  const inputText = formatQueryInput(query.input);
+  const eventsHref = `/events?kind=Query&name=${query.name}`;
+
+  return (
+    <div className="flex w-full max-w-[1344px] flex-col gap-5">
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+            <NamespacedLink
+              href="/queries"
+              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+              <IconShell size="sm" className="opacity-100">
+                <ChevronLeft />
+              </IconShell>
+              Queries
+            </NamespacedLink>
+            <span aria-hidden="true" className="text-fg-secondary">
+              /
+            </span>
+            <span aria-current="page" className="text-fg-secondary">
+              {query.name}
+            </span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <a href={eventsHref} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">View events</Button>
+            </a>
+            <NamespacedLink href="/query/new">
+              <Button>New Query</Button>
+            </NamespacedLink>
+          </div>
+        </div>
+        <h1 className="text-fg-primary text-xl leading-7">{query.name}</h1>
+      </header>
+
+      <div className="flex items-stretch gap-3">
+        <QueryDetailCard title="Query details">
+          <QueryDetailRow
+            label="Svc account"
+            value={query.serviceAccount || '—'}
+          />
+          <QueryDetailRow label="Target" value={targetDisplay} />
+          <QueryDetailRow label="Session ID" value={query.sessionId || '—'} />
+          <QueryDetailRow
+            label="Conversation ID"
+            value={query.conversationId || '—'}
+            last
+          />
+        </QueryDetailCard>
+
+        <QueryDetailCard title="Configuration">
+          <QueryDetailRow
+            label="Timeout"
+            value={simplifyDuration(query.timeout) || '—'}
+          />
+          <QueryDetailRow
+            label="TTL"
+            value={simplifyDuration(query.ttl) || '—'}
+          />
+          <QueryDetailRow label="Memory" value={query.memory?.name || '—'} />
+          <QueryDetailRow label="Streaming" value={streaming ? 'Yes' : 'No'} />
+          <QueryDetailRow
+            label="Parameters"
+            value={
+              query.parameters?.length
+                ? `${query.parameters.length} param(s)`
+                : '—'
+            }
+            last
+          />
+        </QueryDetailCard>
+
+        <QueryDetailCard title="Advanced Settings">
+          <QueryDetailRow
+            label="Selector"
+            value={query.selector ? 'Configured' : '—'}
+            last
+          />
+        </QueryDetailCard>
+
+        <QueryDetailCard title="Status & Results">
+          <QueryDetailRow label="Phase" value={phase || '—'} />
+          <QueryDetailRow
+            label="Cancel"
+            value={query.cancel ? 'Requested' : 'No'}
+          />
+          <QueryDetailRow
+            label="Output"
+            value={hasResponse ? 'Available' : 'None'}
+          />
+          <QueryDetailRow label="Token usage" value={tokenUsage} last />
+        </QueryDetailCard>
+      </div>
+
+      <QuerySectionCard title="Input">
+        <div className="text-fg-primary py-2 text-base leading-6 tracking-[-0.032px] whitespace-pre-wrap">
+          {inputText || '—'}
+        </div>
+      </QuerySectionCard>
+
+      {hasResponse && (
+        <QuerySectionCard
+          title="Output"
+          headerRight={
+            <QueryViewSegmentedToggle
+              options={[
+                { value: 'content', label: 'Content' },
+                { value: 'raw', label: 'Raw' },
+              ]}
+              value={responseViewMode}
+              onChange={setResponseViewMode}
+            />
+          }>
+          <div className="py-2">
+            <ResponseContent
+              content={query.status?.response?.content || 'No content'}
+              viewMode={responseViewMode}
+              rawJson={query.status?.response}
+            />
+          </div>
+        </QuerySectionCard>
+      )}
+
+      {!hasResponse && isFailed && (
+        <QuerySectionCard
+          title="Error"
+          headerRight={
+            <QueryViewSegmentedToggle
+              options={[
+                { value: 'events', label: 'Events' },
+                { value: 'details', label: 'Details' },
+              ]}
+              value={errorViewMode}
+              onChange={setErrorViewMode}
+            />
+          }>
+          <div className="py-2">
+            <ErrorResponseContent query={query} viewMode={errorViewMode} />
+          </div>
+        </QuerySectionCard>
+      )}
+
+      {queryParameters.length > 0 && (
+        <QuerySectionCard title="Parameters">
+          <div className="flex flex-col gap-2 py-2">
+            {queryParameters.map(param => (
+              <div key={param.id} className="flex items-center gap-4">
+                <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
+                  {param.name}
+                </span>
+                <span className="text-fg-primary text-sm">
+                  {param.value || (
+                    <span className="text-fg-tertiary italic">empty</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </QuerySectionCard>
+      )}
+
+      <p className="text-fg-tertiary text-center text-xs">
+        Note: Events expire after a certain amount of time and may no longer be
+        available for viewing.
+      </p>
+    </div>
+  );
+}
+
 function QueryDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -568,191 +777,16 @@ function QueryDetailContent() {
   }
 
   if (mode === 'view') {
-    const phase = query.status?.phase;
-    const hasResponse = !!query.status?.response;
-    const isFailed = phase === 'failed' || phase === 'error';
-    const targetDisplay = query.target
-      ? `${query.target.type}:${query.target.name}`
-      : '—';
-    const tokenUsage = query.status?.tokenUsage
-      ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
-      : '—';
-    const inputText =
-      typeof query.input === 'string'
-        ? query.input
-        : Array.isArray(query.input)
-          ? JSON.stringify(query.input, null, 2)
-          : '';
-    const eventsHref = `/events?kind=Query&name=${query.name}`;
-
     return (
-      <div className="flex w-full max-w-[1344px] flex-col gap-5">
-        <header className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <nav
-              aria-label="Breadcrumb"
-              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-              <NamespacedLink
-                href="/queries"
-                className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-                <IconShell size="sm" className="opacity-100">
-                  <ChevronLeft />
-                </IconShell>
-                Queries
-              </NamespacedLink>
-              <span aria-hidden="true" className="text-fg-secondary">
-                /
-              </span>
-              <span aria-current="page" className="text-fg-secondary">
-                {query.name}
-              </span>
-            </nav>
-            <div className="flex items-center gap-3">
-              <a href={eventsHref} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline">View events</Button>
-              </a>
-              <NamespacedLink href="/query/new">
-                <Button>New Query</Button>
-              </NamespacedLink>
-            </div>
-          </div>
-          <h1 className="text-fg-primary text-xl leading-7">{query.name}</h1>
-        </header>
-
-        <div className="flex items-stretch gap-3">
-          <QueryDetailCard title="Query details">
-            <QueryDetailRow
-              label="Svc account"
-              value={query.serviceAccount || '—'}
-            />
-            <QueryDetailRow label="Target" value={targetDisplay} />
-            <QueryDetailRow label="Session ID" value={query.sessionId || '—'} />
-            <QueryDetailRow
-              label="Conversation ID"
-              value={query.conversationId || '—'}
-              last
-            />
-          </QueryDetailCard>
-
-          <QueryDetailCard title="Configuration">
-            <QueryDetailRow
-              label="Timeout"
-              value={simplifyDuration(query.timeout) || '—'}
-            />
-            <QueryDetailRow
-              label="TTL"
-              value={simplifyDuration(query.ttl) || '—'}
-            />
-            <QueryDetailRow label="Memory" value={query.memory?.name || '—'} />
-            <QueryDetailRow
-              label="Streaming"
-              value={streaming ? 'Yes' : 'No'}
-            />
-            <QueryDetailRow
-              label="Parameters"
-              value={
-                query.parameters?.length
-                  ? `${query.parameters.length} param(s)`
-                  : '—'
-              }
-              last
-            />
-          </QueryDetailCard>
-
-          <QueryDetailCard title="Advanced Settings">
-            <QueryDetailRow
-              label="Selector"
-              value={query.selector ? 'Configured' : '—'}
-              last
-            />
-          </QueryDetailCard>
-
-          <QueryDetailCard title="Status & Results">
-            <QueryDetailRow label="Phase" value={phase || '—'} />
-            <QueryDetailRow
-              label="Cancel"
-              value={query.cancel ? 'Requested' : 'No'}
-            />
-            <QueryDetailRow
-              label="Output"
-              value={hasResponse ? 'Available' : 'None'}
-            />
-            <QueryDetailRow label="Token usage" value={tokenUsage} last />
-          </QueryDetailCard>
-        </div>
-
-        <QuerySectionCard title="Input">
-          <div className="text-fg-primary py-2 text-base leading-6 tracking-[-0.032px] whitespace-pre-wrap">
-            {inputText || '—'}
-          </div>
-        </QuerySectionCard>
-
-        {hasResponse && (
-          <QuerySectionCard
-            title="Output"
-            headerRight={
-              <QueryViewSegmentedToggle
-                options={[
-                  { value: 'content', label: 'Content' },
-                  { value: 'raw', label: 'Raw' },
-                ]}
-                value={responseViewMode}
-                onChange={setResponseViewMode}
-              />
-            }>
-            <div className="py-2">
-              <ResponseContent
-                content={query.status?.response?.content || 'No content'}
-                viewMode={responseViewMode}
-                rawJson={query.status?.response}
-              />
-            </div>
-          </QuerySectionCard>
-        )}
-
-        {!hasResponse && isFailed && (
-          <QuerySectionCard
-            title="Error"
-            headerRight={
-              <QueryViewSegmentedToggle
-                options={[
-                  { value: 'events', label: 'Events' },
-                  { value: 'details', label: 'Details' },
-                ]}
-                value={errorViewMode}
-                onChange={setErrorViewMode}
-              />
-            }>
-            <div className="py-2">
-              <ErrorResponseContent query={query} viewMode={errorViewMode} />
-            </div>
-          </QuerySectionCard>
-        )}
-
-        {queryParameters.length > 0 && (
-          <QuerySectionCard title="Parameters">
-            <div className="flex flex-col gap-2 py-2">
-              {queryParameters.map((param, index) => (
-                <div key={index} className="flex items-center gap-4">
-                  <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
-                    {param.name}
-                  </span>
-                  <span className="text-fg-primary text-sm">
-                    {param.value || (
-                      <span className="text-fg-tertiary italic">empty</span>
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </QuerySectionCard>
-        )}
-
-        <p className="text-fg-tertiary text-center text-xs">
-          Note: Events expire after a certain amount of time and may no longer
-          be available for viewing.
-        </p>
-      </div>
+      <QueryViewMode
+        query={query}
+        responseViewMode={responseViewMode}
+        setResponseViewMode={setResponseViewMode}
+        errorViewMode={errorViewMode}
+        setErrorViewMode={setErrorViewMode}
+        queryParameters={queryParameters}
+        streaming={streaming}
+      />
     );
   }
 
@@ -975,7 +1009,7 @@ function QueryDetailContent() {
           <div className="grid grid-cols-2 gap-0 py-2">
             <div className="border-stroke-divider min-h-[260px] border-r pr-2">
               <PromptEditor
-                value={typeof query.input === 'string' ? query.input || '' : ''}
+                value={getStringInput(query.input)}
                 onChange={value =>
                   setQuery(prev => (prev ? { ...prev, input: value } : null))
                 }
@@ -1018,7 +1052,7 @@ function QueryDetailContent() {
       <QueryParameterEditor
         parameters={queryParameters}
         onChange={setQueryParameters}
-        inputText={typeof query.input === 'string' ? query.input : ''}
+        inputText={getStringInput(query.input)}
         agentRequiredParams={agentRequiredParams}
       />
     </div>

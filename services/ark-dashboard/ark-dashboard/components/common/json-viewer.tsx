@@ -43,23 +43,10 @@ export function JsonViewer({
       : `${pretty.slice(0, maxPreviewBytes)}\n… (truncated)`;
 
   const handleCopy = () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(pretty).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    } else {
-      const textArea = document.createElement('textarea');
-      textArea.value = pretty;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-9999px';
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
+    navigator.clipboard?.writeText(pretty).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }
+    });
   };
 
   const handleDownload = () => {
@@ -70,7 +57,7 @@ export function JsonViewer({
     a.download = `${fileName}.json`;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
     URL.revokeObjectURL(url);
   };
 

@@ -8,6 +8,7 @@ import {
   type QueryParameter,
   extractTemplateParameters,
 } from '@/lib/utils/query-parameters';
+import { generateUUID } from '@/lib/utils/uuid';
 
 import { Button } from './button';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
@@ -49,7 +50,7 @@ export function QueryParameterEditor({
   );
 
   const addParameter = (name = '') => {
-    onChange([...parameters, { name, value: '' }]);
+    onChange([...parameters, { id: generateUUID(), name, value: '' }]);
   };
 
   const removeParameter = (index: number) => {
@@ -72,12 +73,12 @@ export function QueryParameterEditor({
             </h3>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
-                  tabIndex={0}
+                <button
+                  type="button"
                   aria-label="How to use variables"
                   className="text-fg-secondary inline-flex cursor-help">
                   <Info className="size-4" />
-                </span>
+                </button>
               </TooltipTrigger>
               <TooltipContent>{VARIABLES_TOOLTIP_TEXT}</TooltipContent>
             </Tooltip>
@@ -163,7 +164,7 @@ export function QueryParameterEditor({
               parameters.filter(p => p.name === param.name).length > 1;
 
             return (
-              <div key={index} className="flex items-center gap-3">
+              <div key={param.id} className="flex items-center gap-3">
                 <div className="focus-within:border-b-stroke-status-focus flex h-10 min-w-0 flex-1 items-center gap-2 border-b border-white/[0.16]">
                   <input
                     type="text"
