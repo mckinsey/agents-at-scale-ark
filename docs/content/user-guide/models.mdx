@@ -112,7 +112,7 @@ Ark probes each model periodically (default every 1 minute, configurable via `sp
 | --- | --- | --- |
 | **OpenAI** | OpenAI hosted models, or any OpenAI-compatible endpoint (Google Gemini in compatibility mode, vLLM, Ollama, custom gateways) | [OpenAI](/reference/resources/models#openai) |
 | **Azure OpenAI** | Azure-hosted OpenAI deployments. Supports API Key, AKS Managed Identity, and Workload Identity authentication | [Azure OpenAI](/reference/resources/models#azure-openai) |
-| **AWS Bedrock** | Bedrock-hosted models (Anthropic Claude, Mistral, Cohere, etc.). Uses IAM by default; explicit credentials supported | [AWS Bedrock](/reference/resources/models#aws-bedrock) |
+| **AWS Bedrock** | Bedrock-hosted models (Anthropic Claude, Mistral, Cohere, etc.). Supports API-key (bearer token) or IAM credentials; uses the pod IAM role by default | [AWS Bedrock](/reference/resources/models#aws-bedrock) |
 | **Anthropic** | Native Anthropic API for Claude models | [Anthropic](/reference/resources/models#google-gemini-and-anthropic-models) |
 
 The legacy form `spec.type: openai|azure|bedrock|anthropic` (using `type` as the provider) is **deprecated**. The mutating webhook migrates it to `spec.provider` automatically and stamps a `ark.mckinsey.com/migration-warning/...` annotation on the Model. New configs should use `spec.provider`.
@@ -126,6 +126,7 @@ The Dashboard's **Add Model** form covers the common case for each provider. The
 - **`spec.pollInterval`** — health-check cadence (default `1m`). Only editable via YAML.
 - **Bedrock session token** — `spec.config.bedrock.sessionToken` for temporary AWS credentials.
 - **Bedrock IAM-role default** — omitting `accessKeyId` / `secretAccessKey` entirely makes the controller use the pod's IAM role. The Dashboard form requires explicit secrets.
+- **Bedrock API key** — `spec.config.bedrock.apiKey` authenticates with a Bedrock bearer token instead of IAM. When both are set the API key wins; see [AWS Bedrock](/reference/resources/models#aws-bedrock). Also selectable in the `ark models create` CLI flow.
 - **Azure Workload Identity `clientId` / `tenantId`** — selectable in the form's Authentication dropdown but the values themselves still come from YAML.
 
 If you need any of the above, write the Model YAML directly and apply with `kubectl`. You can still inspect and delete it from the Dashboard afterwards.

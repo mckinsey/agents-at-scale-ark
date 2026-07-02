@@ -286,4 +286,59 @@ func TestDefaultModel(t *testing.T) {
 			t.Fatal("should not set provider for non-provider type")
 		}
 	})
+
+	bedrockAuthWarning := annotations.MigrationWarningPrefix + "bedrock-auth"
+
+	newBedrockModel := func(bedrock *arkv1alpha1.BedrockModelConfig) *arkv1alpha1.Model {
+		return &arkv1alpha1.Model{
+			Spec: arkv1alpha1.ModelSpec{
+				Provider: ProviderBedrock,
+				Type:     ModelTypeCompletions,
+				Config:   arkv1alpha1.ModelConfig{Bedrock: bedrock},
+			},
+		}
+	}
+
+	t.Run("warns when both apiKey and IAM credentials are set", func(t *testing.T) {
+		model := newBedrockModel(&arkv1alpha1.BedrockModelConfig{
+			APIKey:          &arkv1alpha1.ValueSource{Value: "key"},
+			AccessKeyID:     &arkv1alpha1.ValueSource{Value: "id"},
+			SecretAccessKey: &arkv1alpha1.ValueSource{Value: "secret"},
+		})
+		DefaultModel(model)
+		if model.Annotations[bedrockAuthWarning] == "" {
+			t.Fatal("expected bedrock-auth warning annotation")
+		}
+	})
+
+	t.Run("no warning when only apiKey is set", func(t *testing.T) {
+		model := newBedrockModel(&arkv1alpha1.BedrockModelConfig{
+			APIKey: &arkv1alpha1.ValueSource{Value: "key"},
+		})
+		DefaultModel(model)
+		if _, ok := model.Annotations[bedrockAuthWarning]; ok {
+			t.Fatal("did not expect bedrock-auth warning when only apiKey is set")
+		}
+	})
+
+	t.Run("no warning when only IAM credentials are set", func(t *testing.T) {
+		model := newBedrockModel(&arkv1alpha1.BedrockModelConfig{
+			AccessKeyID:     &arkv1alpha1.ValueSource{Value: "id"},
+			SecretAccessKey: &arkv1alpha1.ValueSource{Value: "secret"},
+		})
+		DefaultModel(model)
+		if _, ok := model.Annotations[bedrockAuthWarning]; ok {
+			t.Fatal("did not expect bedrock-auth warning when only IAM credentials are set")
+		}
+	})
+
+	t.Run("no warning when neither auth method is set", func(t *testing.T) {
+		model := newBedrockModel(&arkv1alpha1.BedrockModelConfig{
+			Region: &arkv1alpha1.ValueSource{Value: "us-east-1"},
+		})
+		DefaultModel(model)
+		if _, ok := model.Annotations[bedrockAuthWarning]; ok {
+			t.Fatal("did not expect bedrock-auth warning when neither auth method is set")
+		}
+	})
 }
