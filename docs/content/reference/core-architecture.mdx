@@ -11,40 +11,36 @@ For how an individual request runs and is persisted, see [Query Execution Flow](
 
 ## Services and components
 
-A running Ark install is made up of a control plane (the controller and its webhooks) plus a handful of supporting services. Clients — `kubectl`, the dashboard, or the REST API — create resources through the Kubernetes API; the controller reconciles them and dispatches queries to an execution engine over the A2A protocol.
+Ark runs in two parts. The **`ark-system` namespace** holds the control plane — the controller that reconciles resources plus the execution engines it dispatches to. A **tenant namespace** holds the services you and your agents interact with — the REST/A2A API, the dashboard, and the broker — alongside the resources you create. Execution engines call out to model providers and any external MCP servers or A2A agents, and stream partial output to the broker.
 
 ```mermaid
-flowchart TB
-    subgraph clients["Clients"]
-        kubectl["kubectl / GitOps"]
-        dashboard["ark-dashboard"]
-        api["ark-api<br/>(REST + A2A gateway)"]
+%%{init: {'themeVariables': {'fontSize': '18px'}, 'flowchart': {'rankSpacing': 80, 'nodeSpacing': 50}}}%%
+flowchart LR
+    subgraph arksystem["ark-system namespace"]
+        direction TB
+        controller["ark-controller<br/>reconcile + webhooks"]
+        completions["ark-completions<br/>default execution engine"]
+        engines["named execution engines<br/>LangChain, Claude SDK, …"]
     end
 
-    subgraph plane["Ark control plane"]
-        kubeapi["Kubernetes API"]
-        controller["Ark controller<br/>(reconcile + webhooks)"]
+    subgraph tenant["tenant namespace (e.g. default)"]
+        direction TB
+        api["ark-api<br/>REST + A2A gateway"]
+        dashboard["ark-dashboard<br/>web UI"]
+        broker["ark-broker<br/>streaming + memory"]
     end
 
-    subgraph exec["Execution"]
-        completions["Completions engine<br/>(default executor)"]
-        engines["Named execution engines<br/>(LangChain, Claude SDK, …)"]
-    end
-
-    broker["ark-broker<br/>(streaming + memory)"]
-    model["Model provider / AI gateway"]
+    model["Model provider<br/>/ AI gateway"]
     external["External MCP servers<br/>& A2A agents"]
 
     dashboard --> api
-    kubectl --> kubeapi
-    api --> kubeapi
-    kubeapi <--> controller
-    controller -- "A2A" --> completions
-    controller -- "A2A" --> engines
+    controller -.->|"reconciles resources"| tenant
+    controller -->|"A2A · runs queries"| completions
+    controller -->|"A2A"| engines
+    api -->|"stream"| broker
+    completions -->|"stream"| broker
     completions --> model
     completions --> external
-    completions --> broker
-    dashboard -. "live output" .-> broker
 ```
 
 | Component | Role | Reference |
@@ -62,7 +58,7 @@ Named execution engines (LangChain, Claude Agent SDK, and others) plug in alongs
 
 Ark extends an agent's reach through two external integration points, both modelled as resources the controller watches:
 
-- **MCP servers** — an [`MCPServer`](/reference/resources/mcpserver) registers a Model Context Protocol endpoint. Ark discovers its tools and surfaces them as `Tool` resources that agents can call. Per-user credentials are handled with query-level header overrides (see [User-authorised MCP servers](/tutorials/user-authorised-mcp-servers)); for building your own, see [MCP server samples](/user-guide/samples/mcp-servers). Ark also ships `ark-mcp`, which exposes Ark's *own* resources over MCP.
+- **MCP servers** — an [`MCPServer`](/reference/resources/mcpserver) registers a Model Context Protocol endpoint. Ark discovers its tools and surfaces them as `Tool` resources that agents can call. Per-user credentials are handled with query-level header overrides (see [User-authorised MCP servers](/tutorials/user-authorised-mcp-servers)); for building your own, see [MCP server samples](/user-guide/samples/mcp-servers).
 - **A2A agents** — an [`A2AServer`](/reference/resources/a2aserver) points at a remote Agent-to-Agent server. Ark discovers the agents it advertises and creates local `Agent` resources backed by the `a2a` execution engine, so a remote agent is queried exactly like a native one. To build a compatible server, see [Building A2A servers](/developer-guide/building-a2a-servers).
 
 ## Storage backends
