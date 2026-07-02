@@ -41,11 +41,27 @@ single blocking A2A request-response (`Blocking: true`) handled start-to-finish 
 (`HTTPMemory` → Memory service). Any replica can serve any request; follow-up turns are
 matched by `ConversationId` from the external store.
 
-**Known limitation:** the in-process `MemoryTaskManager` is per-pod, so external A2A clients
-that use non-blocking `tasks/get` / `tasks/resubscribe` or reattach to a `message/stream`
-across replicas are not supported — a re-attach may hit a pod that never saw the task. This
-needs a shared (e.g. Redis-backed) `TaskManager` and is deferred; `trpc-a2a-go` exposes a
-pluggable `TaskManager` interface but ships only the in-memory implementation.
+### Shared task state (Redis)
+
+Set `taskManager.backend: redis` (and a `redis.url` or `redis.urlSecretRef`) to use the
+`trpc-a2a-go/taskmanager/redis` `TaskManager` instead of the per-process in-memory one. This
+makes A2A task state (status/history/artifacts) visible across replicas, so external A2A
+clients doing non-blocking `tasks/get` / `tasks/resubscribe` or `message/stream` re-attach
+work regardless of which pod serves the follow-up. The backend is chosen in
+[`server.go`](server.go) `buildTaskManager` from the `REDIS_URL`/`REDIS_PASSWORD`/
+`REDIS_TASK_EXPIRY_SECONDS` env; empty `REDIS_URL` keeps the in-memory manager (correct for
+single-pod installs). Use a dedicated Redis logical DB to isolate keys from other Ark
+services. `Service.sessionAffinity: ClientIP` (chart `service.sessionAffinity`) is available
+as a best-effort routing optimization but is not required for correctness once Redis is on.
+
+### Graceful shutdown
+
+On SIGTERM the server flips its readiness probe (`/ready`) to failing so the pod leaves
+Service endpoints before draining, then `http.Server.Shutdown` waits for in-flight requests
+bounded by `--shutdown-timeout`. Each request's context is merged with the server lifetime
+(`Handler.baseCtx`), so a long-lived stream still running when the drain deadline passes is
+cancelled and runs its `finalizeStream` path — closing the stream cleanly — instead of being
+severed on process exit. Liveness stays on `/health`; readiness is a separate `/ready`.
 
 ## Dependencies
 

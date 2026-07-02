@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -71,7 +72,18 @@ func main() {
 	telemetryProvider := telemetryconfig.NewProvider(ctx, k8sClient)
 	eventingProvider := eventingconfig.NewProviderWithClient(ctx, k8sClient)
 
-	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, addr)
+	var taskExpiry time.Duration
+	if raw := os.Getenv("REDIS_TASK_EXPIRY_SECONDS"); raw != "" {
+		if secs, parseErr := strconv.Atoi(raw); parseErr == nil && secs > 0 {
+			taskExpiry = time.Duration(secs) * time.Second
+		}
+	}
+	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, completions.ServerConfig{
+		Addr:          addr,
+		RedisURL:      os.Getenv("REDIS_URL"),
+		RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		TaskExpiry:    taskExpiry,
+	})
 	if err != nil {
 		log.Error(err, "failed to create completions engine server")
 		if shutdownErr := telemetryProvider.Shutdown(); shutdownErr != nil {

@@ -24,6 +24,23 @@ type Handler struct {
 	k8sClient client.Client
 	telemetry telemetry.Provider
 	eventing  eventing.Provider
+
+	// baseCtx is the server lifetime context, cancelled when the server is finalizing
+	// shutdown. Merged into each request's context so long-running executions (streams)
+	// stop and run their finalize path instead of being severed on process exit.
+	baseCtx context.Context
+}
+
+// mergeShutdown returns a child of reqCtx that is also cancelled when serverCtx is done,
+// so an in-flight execution reacts to server shutdown as well as client disconnect. The
+// returned cancel must be called to release resources.
+func mergeShutdown(reqCtx, serverCtx context.Context) (context.Context, context.CancelFunc) {
+	if serverCtx == nil {
+		return context.WithCancel(reqCtx)
+	}
+	ctx, cancel := context.WithCancel(reqCtx)
+	stop := context.AfterFunc(serverCtx, cancel)
+	return ctx, func() { stop(); cancel() }
 }
 
 type arkMetadata struct {
@@ -93,6 +110,10 @@ func (h *Handler) ProcessMessage(
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
+	// Link the request to the server lifetime so a shutdown finalizes in-flight work.
+	ctx, cancel := mergeShutdown(ctx, h.baseCtx)
+	defer cancel()
+
 	query, target, err := h.resolveQueryAndTarget(ctx, message)
 	if err != nil {
 		return nil, err

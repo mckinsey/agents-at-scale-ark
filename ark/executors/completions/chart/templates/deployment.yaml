@@ -40,6 +40,28 @@ spec:
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
           {{- end }}
+          {{- if eq .Values.taskManager.backend "redis" }}
+          - name: REDIS_URL
+            {{- if .Values.redis.urlSecretRef.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.redis.urlSecretRef.name }}
+                key: {{ .Values.redis.urlSecretRef.key | default "redis-url" }}
+            {{- else }}
+            value: {{ .Values.redis.url | quote }}
+            {{- end }}
+          {{- if .Values.redis.passwordSecretRef.name }}
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.redis.passwordSecretRef.name }}
+                key: {{ .Values.redis.passwordSecretRef.key | default "redis-password" }}
+          {{- end }}
+          {{- if gt (int .Values.redis.taskExpirySeconds) 0 }}
+          - name: REDIS_TASK_EXPIRY_SECONDS
+            value: {{ .Values.redis.taskExpirySeconds | quote }}
+          {{- end }}
+          {{- end }}
           envFrom:
           - configMapRef:
               name: otel-environment-variables
@@ -56,7 +78,7 @@ spec:
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: {{ .Values.targetPort }}
             initialDelaySeconds: 5
             periodSeconds: 10

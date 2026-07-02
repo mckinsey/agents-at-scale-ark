@@ -8,6 +8,12 @@ metadata:
 spec:
   selector:
     app: ark-completions
+  {{- if eq .Values.service.sessionAffinity "ClientIP" }}
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ .Values.service.sessionAffinityTimeoutSeconds }}
+  {{- end }}
   ports:
     - port: {{ .Values.port }}
       targetPort: {{ .Values.targetPort }}

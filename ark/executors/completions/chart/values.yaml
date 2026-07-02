@@ -6,6 +6,15 @@ image:
 port: 80
 targetPort: 9090
 
+# Service routing. sessionAffinity: ClientIP makes an external A2A client's follow-up
+# requests (tasks/get, tasks/resubscribe) stick to the same replica. Best-effort only —
+# it breaks under shared egress IPs (NAT) and pod restarts. With taskManager.backend=redis
+# task state is shared across pods, so affinity becomes a latency optimization, not a
+# correctness requirement.
+service:
+  sessionAffinity: None            # or ClientIP
+  sessionAffinityTimeoutSeconds: 10800
+
 serviceAccountName: ark-controller
 
 namespace: ark-system
@@ -38,6 +47,28 @@ gracefulShutdown:
   # preStop sleep so kube-proxy removes the pod from Service endpoints before the server
   # starts refusing — stops new requests landing on a terminating pod.
   preStopSleepSeconds: 5
+
+# A2A task-state store. "memory" keeps task state per-pod (correct for single-pod installs
+# and the controller's blocking dispatch path). "redis" uses a shared Redis-backed task
+# manager so task state (status/history/artifacts) is visible across replicas — required
+# when external A2A clients use tasks/get, tasks/resubscribe, or stream re-attach under
+# multi-pod/HPA scaling.
+taskManager:
+  backend: memory                  # memory | redis
+
+# Redis connection, used only when taskManager.backend is "redis". Mirrors ark-broker:
+# provide a plain url for dev, or a Secret reference for production. Use a dedicated Redis
+# logical DB (e.g. redis://host:6379/2) to isolate keys from other Ark services.
+redis:
+  url: ""                          # e.g. redis://:pass@ark-redis-dev:6379/0
+  urlSecretRef:
+    name: ""
+    key: "redis-url"
+  passwordSecretRef:
+    name: ""
+    key: "redis-password"
+  # Task/conversation key TTL in seconds (0 = library default).
+  taskExpirySeconds: 0
 
 resources:
   limits:
