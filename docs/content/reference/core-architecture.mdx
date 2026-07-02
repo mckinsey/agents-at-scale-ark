@@ -1,362 +1,115 @@
 ---
 title: Core Architecture
-description: Current and future architecture of the Ark core component
+description: Ark's platform services, how they connect, storage backends, and cloud deployment
 ---
 
 # Core Architecture
 
-This page describes the current architecture of Ark and the planned aggregated architecture that addresses scalability concerns. It focuses on the **platform and storage layer** — how Ark is deployed and where resources are persisted. For the resources themselves and how a request runs, see [Core concepts](/core-concepts) and [Query Execution Flow](/reference/query-execution).
+Ark is a set of Kubernetes services built around a controller that reconciles custom resources. This page covers those components, how they connect to each other and to external tools and agents, the storage backends Ark supports, and how it fits into a cloud deployment.
 
-## Current Architecture
+For how an individual request runs and is persisted, see [Query Execution Flow](/reference/query-execution). For the resources themselves, see [Resources](/reference/resources) and [Resource Relationships](/reference/relationships).
 
-The current Ark deployment consists of:
+## Services and components
 
-- **Ark Core (Controller)**: Go-based component with metrics, webhook, and controller modules
-- **Completions Engine**: Standalone A2A service that runs the LLM turn loop, tool execution, team orchestration, and streaming
-- **Kubernetes API Server**: Handles standard Kubernetes and Ark custom resources
-- **etcd**: Stores all Kubernetes resources including Ark custom resources (Agents, Models, Queries, etc.)
-
-All Ark resources are stored in etcd alongside standard Kubernetes resources. The controller delegates query execution to the completions engine via A2A protocol over a K8s service. The engine handles agent execution, tool calls, team orchestration, memory, and streaming to ark-broker.
-
-### Current Query Execution Flow
-
-[Query Execution Flow](/reference/query-execution) covers the execution detail — dispatch, the turn loop, tools, and teams. The diagram below adds the **storage dimension**: how the `Query` and its status move through **etcd** in the standard deployment.
+Ark runs in two parts. The **`ark-system` namespace** holds the control plane — the controller that reconciles resources plus the execution engines it dispatches to. A **tenant namespace** holds the services you and your agents interact with — the REST/A2A API, the dashboard, and the broker — alongside the resources you create. Execution engines call out to model providers and any external MCP servers or A2A agents, and stream partial output to the broker.
 
 ```mermaid
-sequenceDiagram
-    participant User
-    participant KubeAPI as Kubernetes API
-    participant etcd as etcd
-    participant Controller as Ark Controller
-    participant Engine as Completions Engine
-    participant Model as Model Provider
+%%{init: {'themeVariables': {'fontSize': '18px'}, 'flowchart': {'rankSpacing': 80, 'nodeSpacing': 50}}}%%
+flowchart LR
+    subgraph arksystem["ark-system namespace"]
+        direction TB
+        controller["ark-controller<br/>reconcile + webhooks"]
+        completions["ark-completions<br/>default execution engine"]
+        engines["named execution engines<br/>LangChain, Claude SDK, …"]
+    end
 
-    User->>KubeAPI: Create Query
-    KubeAPI->>etcd: Store Query resource
-    etcd-->>Controller: Watch notification
-    Controller->>KubeAPI: Get Query details
-    KubeAPI->>etcd: Retrieve Query
-    etcd-->>KubeAPI: Query data
-    KubeAPI-->>Controller: Query data
-    Controller->>Engine: A2A SendMessage
-    Engine->>Model: LLM API call
-    Model-->>Engine: Response
-    Engine-->>Controller: A2A Response
-    Controller->>KubeAPI: Update Query status
-    KubeAPI->>etcd: Store Query status
+    subgraph tenant["tenant namespace (e.g. default)"]
+        direction TB
+        api["ark-api<br/>REST + A2A gateway"]
+        dashboard["ark-dashboard<br/>web UI"]
+        broker["ark-broker<br/>streaming + memory"]
+    end
+
+    model["Model provider<br/>/ AI gateway"]
+    external["External MCP servers<br/>& A2A agents"]
+
+    dashboard --> api
+    controller -.->|"reconciles resources"| tenant
+    controller -->|"A2A · runs queries"| completions
+    controller -->|"A2A"| engines
+    api -->|"stream"| broker
+    completions -->|"stream"| broker
+    completions --> model
+    completions --> external
 ```
 
-In the current architecture, the controller processes queries through its reconciliation loop. The Query reconciler runs up to `maxConcurrentReconciles` worker goroutines in parallel (default 4) and caps concurrent in-flight executions at `maxConcurrentQueries` (default 32). Because reconciliation runs only on the leader, query throughput does not scale horizontally with replica count — production tuning is done by adjusting these limits and the controller's resource allocation. See [Scalability](/reference/scalability) for details.
+| Component | Role | Reference |
+| --- | --- | --- |
+| **Ark controller** | Reconciles Ark resources; runs validating/mutating webhooks; dispatches queries. Leader-elected. | — |
+| **Completions engine** | Default executor — runs the LLM turn loop, tool calls, team orchestration, memory, and streaming. A standalone A2A service. | [ark-completions](/developer-guide/services/ark-completions) |
+| **ark-api** | REST gateway for Ark resources and queries; also hosts the A2A gateway that exposes agents. | [ark-api](/developer-guide/services/ark-api) |
+| **ark-broker** | Event bus for streaming chunks and conversation memory (in-memory by default; PostgreSQL/Redis backends optional). | [ark-broker](/developer-guide/services/ark-broker) |
+| **ark-dashboard** | Web UI for managing resources and chatting with agents and teams. | [Dashboard](/developer-guide/ark-dashboard) |
+| **Gateway** | Kubernetes Gateway API (NGINX Gateway Fabric) that exposes services and routes outside the cluster. | [Gateway](/developer-guide/ark-gateway) |
 
-## Aggregated Architecture
+Named execution engines (LangChain, Claude Agent SDK, and others) plug in alongside the completions engine — an agent opts into one via `spec.executionEngine`, and the controller dispatches to it over A2A. See the [services overview](/developer-guide/services) for the full list.
 
-The aggregated architecture uses **Kubernetes aggregation layer** to introduce a dedicated data layer for Ark resources with horizontal query processing.
+## Connecting MCP servers and A2A agents
 
-### Kubernetes Aggregation Layer
+Ark extends an agent's reach through two external integration points, both modelled as resources the controller watches:
 
-The [Kubernetes aggregation layer](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/) allows extending the Kubernetes API with additional API servers. The Ark apiserver registers itself as an aggregated API server, handling all `ark.mckinsey.com` API group requests while the main Kubernetes API server handles standard resources.
+- **MCP servers** — an [`MCPServer`](/reference/resources/mcpserver) registers a Model Context Protocol endpoint. Ark discovers its tools and surfaces them as `Tool` resources that agents can call. Per-user credentials are handled with query-level header overrides (see [User-authorised MCP servers](/tutorials/user-authorised-mcp-servers)); for building your own, see [MCP server samples](/user-guide/samples/mcp-servers).
+- **A2A agents** — an [`A2AServer`](/reference/resources/a2aserver) points at a remote Agent-to-Agent server. Ark discovers the agents it advertises and creates local `Agent` resources backed by the `a2a` execution engine, so a remote agent is queried exactly like a native one. To build a compatible server, see [Building A2A servers](/developer-guide/building-a2a-servers).
 
-When a user creates an Ark resource (Query, Agent, Model, etc.), the Kubernetes API server proxies the request to the Ark apiserver, which stores data in Postgres instead of etcd.
-<br/>
+## Storage backends
+
+Ark supports two storage backends for its resources; the choice is a deployment decision and is transparent to clients using `kubectl` or the Ark API.
+
+- **etcd (default)** — Ark resources are installed as CRDs and stored in etcd alongside standard Kubernetes objects. Simplest to run; best for small-to-medium installs.
+- **PostgreSQL (aggregated)** — a [Kubernetes aggregated API server](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/) serves the `ark.mckinsey.com` group from a PostgreSQL database instead of etcd. Better for large resource counts, heavy `LIST` operations, and multi-replica deployments, with `pg_notify`-driven cross-replica watch delivery.
+
 <img src="/ark-core-aggregated.jpg" alt="Aggregated Core Architecture" style={{maxWidth: '800px', width: '100%'}} />
 
-### Components
+See [Query Execution Flow → How the query is stored](/reference/query-execution#how-the-query-is-stored) for how a query moves through each backend, [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup and operation, and [Scalability](/reference/scalability) for capacity and performance.
 
-- **Ark Core**: Enhanced with ark-apiserver and query-workers modules
-  - **metrics module**: Exposes metrics
-  - **webhook module**: Validates Ark resources
-  - **controller module**: Reconciles Ark resources (leader-elected)
-  - **ark-apiserver module**: Registered as Kubernetes aggregated API server, handles all Ark custom resources
-  - **query-workers module**: Processes query queue items (horizontally scalable)
-- **Kubernetes API Server**: Handles standard Kubernetes resources, proxies `ark.mckinsey.com` API requests to ark-apiserver
-- **etcd**: Stores standard Kubernetes resources only (Ark resources no longer stored here)
-- **Ark Database (Postgres)**:
-  - Sits behind ark-apiserver
-  - Stores all Ark custom resources (Agents, Models, Queries, etc.)
-  - Manages query queue with SKIP LOCKED support
+## Deploying on AWS and Azure
 
-### Aggregated Query Execution Flow
+Ark runs on any conformant Kubernetes cluster — EKS, GKE, or AKS. Two deployment concerns are cloud-specific:
 
-The execution is identical to the standard deployment — only the storage path changes: the embedded Ark API server persists resources to PostgreSQL instead of etcd, and `pg_notify` drives cross-replica watch delivery. See [Query Execution Flow](/reference/query-execution) for the dispatch and engine detail.
+- **Managed PostgreSQL** — the aggregated backend works with any Postgres that allows logical replication: Amazon RDS, Azure Database for PostgreSQL, or Google Cloud SQL. Setup for each is covered in [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend).
+- **Cloud identity for models** — models authenticate with cloud credentials rather than static keys: Azure Managed Identity or Workload Identity for Azure OpenAI, and IAM roles for AWS Bedrock. See [Models](/reference/resources/models) for the auth options per provider.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant KubeAPI as Kubernetes API
-    participant ArkAPI as Embedded Ark API Server
-    participant ArkDB as PostgreSQL
-    participant Controller as Ark Controller
-    participant Engine as Completions Engine
-    participant Model as Model Provider
+For provisioning clusters with Terraform, [Cloud Infrastructure Provisioning](/operations-guide/provisioning) covers EKS and GKE; there is no dedicated AKS walkthrough yet, but Ark installs on AKS the same way via [Deploying Ark](/operations-guide/deploying-ark).
 
-    Note over KubeAPI,ArkAPI: Kubernetes Aggregation Layer<br/>proxies ark.mckinsey.com requests
+## Connecting an AI gateway
 
-    User->>KubeAPI: Create Query
-    KubeAPI->>ArkAPI: Forward to aggregated API
-    ArkAPI->>ArkDB: Store Query
-    ArkDB-->>ArkAPI: Stored
-    ArkAPI-->>KubeAPI: Success
-    KubeAPI-->>User: Query created
-
-    Note over ArkAPI,Controller: Direct in-process notification
-
-    ArkAPI-->>Controller: Watch event (from write path)
-    Controller->>ArkAPI: Get Query details
-    ArkAPI->>ArkDB: Retrieve Query
-    ArkDB-->>ArkAPI: Query data
-    ArkAPI-->>Controller: Query data
-    Controller->>Engine: A2A SendMessage
-    Engine->>Model: LLM API call
-    Model-->>Engine: Response
-    Engine-->>Controller: A2A Response
-    Controller->>ArkAPI: Update Query status
-    ArkAPI->>ArkDB: Store result
-
-    Note over ArkDB: pg_notify signals other replicas<br/>for cross-replica event delivery
-```
-
-### Watch Event Delivery
-
-The PostgreSQL backend uses a three-layer event delivery pipeline:
-
-1. **Same-replica (instant)**: Write operations (`Create`, `Update`, `Delete`) notify watchers directly via goroutine after the DB operation succeeds. The object is reconstructed from `INSERT/UPDATE ... RETURNING` data — no separate query needed.
-
-2. **Cross-replica (~1-5ms)**: A PostgreSQL trigger fires `pg_notify` on every write. Other replicas' listeners receive the signal and trigger an immediate high-water-mark catch-up query (`WHERE resource_version > lastSeen`). For `DELETE` operations, the notification payload is used to build a stub and deliver the event directly (deleted rows can't be queried).
-
-3. **Safety net (≤30s)**: Each watcher runs a periodic catch-up sweep using the same high-water-mark query. Catches any events missed for any reason.
-
-The watcher uses a dual-channel design for panic safety: an internal `ch` (writers send here, never closed) and a consumer-facing `outCh` (only the `run()` goroutine writes and closes). `resource_version` uses PostgreSQL's global sequence (`nextval`) for globally unique values across all rows.
-
-### Scalability
-
-The aggregated architecture enables:
-
-- **Ark Core replicas**: One leader (reconciliation), multiple non-leaders (webhooks, metrics, embedded apiserver). Cross-replica watch events delivered via pg_notify signaling.
-- **Efficient storage**: PostgreSQL handles Ark resource storage more efficiently than etcd for large datasets
-- **Database replicas**: PostgreSQL replication for read scalability
-- **Connection pool**: Configurable per replica (default 40), sized for multi-replica deployments against typical `max_connections=100`
-
-### Benefits
-
-- **Kubernetes-native extension**: Uses standard Kubernetes aggregation layer pattern for seamless API integration
-- **Better scalability**: PostgreSQL handles Ark resource storage more efficiently than etcd for large datasets
-- **Efficient LIST operations**: Keyset pagination and indexes for fast queries
-- **Reliable watches**: Direct notification from write path + high-water-mark catch-up for self-healing event delivery
-- **Multi-replica ready**: pg_notify signaling for cross-replica event delivery without polling
-- **Enhanced observability**: Database schema supports advanced observability views
-- **etcd relief**: Reduces load on etcd by storing only core Kubernetes resources
-
----
-
-## Deployment Configurations
-
-Ark supports two storage backend configurations. Choose based on your scale and operational requirements.
-
-### Configuration 1: Standard (etcd)
-
-The default Kubernetes-native deployment where Ark resources are stored in etcd alongside standard Kubernetes resources.
-
-```mermaid
-flowchart TB
-    subgraph cluster["Kubernetes Cluster"]
-        kubectl["kubectl"]
-
-        subgraph apiserver["kube-apiserver"]
-            api_desc["All resources handled<br/>by single API server"]
-        end
-
-        subgraph controller["Ark Controller"]
-            ctrl_reconcile["Reconciliation"]
-            ctrl_webhook["Webhooks"]
-        end
-
-        completions["Completions Engine"]
-
-        subgraph etcd_box["etcd"]
-            etcd_k8s["pods, services, deployments"]
-            etcd_ark["queries, agents, models, teams"]
-        end
-
-        kubectl --> apiserver
-        apiserver <--> controller
-        controller -- "A2A" --> completions
-        apiserver --> etcd_box
-    end
-```
-
-**Characteristics:**
-- Single storage backend for all resources
-- Controller delegates query execution to completions engine via A2A
-- Simple deployment, no additional infrastructure
-- Standard Kubernetes CRD pattern
-
-**When to use:**
-- Small to medium deployments (< 1,000 Ark resources)
-- Low query concurrency requirements
-- Minimal infrastructure preference
-- Standard Kubernetes operational model
-
-### Configuration 2: Aggregated (PostgreSQL)
-
-Uses the Kubernetes aggregation layer to route Ark API requests to a dedicated API server backed by PostgreSQL.
-
-```mermaid
-flowchart TB
-    subgraph cluster["Kubernetes Cluster"]
-        kubectl["kubectl"]
-
-        subgraph apiserver["kube-apiserver"]
-            api_desc["Routes ark.mckinsey.com<br/>to embedded API server"]
-        end
-
-        subgraph controller["Ark Controller Pod"]
-            ctrl_reconcile["Reconciliation"]
-            ctrl_webhook["Webhooks"]
-            embedded_api["Embedded ark-apiserver<br/>(port 6443)"]
-        end
-
-        completions["Completions Engine"]
-
-        subgraph etcd_box["etcd"]
-            etcd_k8s["pods, services,<br/>deployments, configmaps"]
-        end
-
-        subgraph postgres["PostgreSQL"]
-            pg_features["Keyset pagination<br/>pg_notify signaling<br/>Global resource versioning"]
-        end
-
-        kubectl --> apiserver
-        apiserver --> etcd_box
-        apiserver --> embedded_api
-        embedded_api --> postgres
-        ctrl_reconcile <--> embedded_api
-        ctrl_reconcile -- "A2A" --> completions
-    end
-```
-
-**Characteristics:**
-- Dedicated storage for Ark resources in PostgreSQL
-- Embedded API server within controller pod
-- Controller delegates query execution to completions engine via A2A
-- Direct in-process watch events + pg_notify for cross-replica delivery
-- High-water-mark catch-up sweep as self-healing safety net
-- Keyset pagination for efficient LIST operations
-
-**When to use:**
-- Large deployments (> 1,000 Ark resources)
-- High query concurrency requirements
-- Heavy LIST operations at scale
-- Need for advanced querying capabilities
-
-### Performance Comparison
-
-Benchmarks at 10,000 Ark resources:
-
-| Operation | etcd | PostgreSQL | Winner |
-|-----------|------|------------|--------|
-| **LIST latency (P50)** | 2,980ms | 1,504ms | PostgreSQL (2x faster) |
-| **LIST throughput** | 6.1 ops/sec | 12.5 ops/sec | PostgreSQL (2x higher) |
-| **Create latency (P50)** | 107ms | 106ms | Comparable |
-| **Get latency (P50)** | 103ms | 106ms | Comparable |
-| **Watch latency (P50)** | - | 73ms | PostgreSQL (excellent) |
-
-**Production capacity (PostgreSQL):**
-- Burst throughput: ~230 ops/sec
-- Sustained throughput: ~180 ops/sec
-- Watch capacity: 200+ concurrent watchers at 80ms P50 latency
-- Optimal concurrency: 50-100 workers
-
-### Migration Path
-
-Migrating from etcd to PostgreSQL configuration:
-
-1. Deploy PostgreSQL database
-2. Deploy ark-apiserver with aggregated API configuration
-3. Register APIService for `ark.mckinsey.com` group
-4. Migrate existing resources using `kubectl get -o yaml | kubectl apply -f -`
-5. Verify watch events and controller reconciliation
-
-Resources are fully compatible between configurations - the storage backend is transparent to clients using `kubectl` or the Kubernetes API.
-
----
-
-## Implementation Status
-
-The aggregated architecture is fully implemented and ready for use:
-
-| Component | Status | Location |
-|-----------|--------|----------|
-| **Embedded API Server** | Complete | `ark/internal/apiserver/` |
-| **PostgreSQL Storage** | Complete | `ark/internal/storage/postgresql/` |
-| **OpenAPI Schema Generation** | Complete | From embedded CRDs |
-| **Controller Integration** | Complete | `ark/cmd/main.go` |
-| **Helm Chart Configuration** | Complete | `ark/dist/chart/` |
-
-### Enabling PostgreSQL Backend
-
-To deploy Ark with the PostgreSQL storage backend, configure the Helm values:
+Ark reaches models over HTTP, so it works with any OpenAI-compatible or Azure AI gateway. Point a `Model` at the gateway with `spec.config.<provider>.baseUrl` and supply credentials from a Secret (or a cloud managed identity):
 
 ```yaml
-storage:
-  backend: "postgresql"  # Options: "etcd" (default), "postgresql"
-  apiserver:
-    port: 6443
-  postgresql:
-    host: "postgresql.ark-system.svc.cluster.local"
-    port: 5432
-    database: "ark"
-    user: "ark"
-    passwordSecretName: "postgresql-credentials"
-    passwordSecretKey: "password"
-    sslMode: "disable"  # Options: disable, require, verify-ca, verify-full
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gateway-model
+spec:
+  provider: openai
+  model:
+    value: gpt-4o
+  config:
+    openai:
+      baseUrl:
+        value: https://my-ai-gateway.example.com/v1
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: gateway-credentials
+            key: token
 ```
 
-Install with PostgreSQL backend:
+See [Models](/reference/resources/models) for the full provider configuration and [Model URL Security](/operations-guide/model-url-security) for hardening gateway connections.
 
-```bash
-helm install ark ./ark/dist/chart -n ark-system \
-  --set storage.backend=postgresql \
-  --set storage.postgresql.host=postgresql \
-  --set storage.postgresql.user=postgres \
-  --set storage.postgresql.passwordSecretName=postgresql-credentials
-```
+## Related
 
-When using PostgreSQL backend, Ark CRDs are not installed (resources are stored in PostgreSQL instead of etcd). The embedded API server registers as a Kubernetes aggregated API server.
-
-### Multi-Replica Deployment
-
-To run multiple Ark controller replicas with the PostgreSQL backend:
-
-```yaml
-storage:
-  backend: "postgresql"
-  postgresql:
-    host: "postgresql.ark-system.svc.cluster.local"
-    port: 5432
-    database: "ark"
-    user: "ark"
-    passwordSecretName: "postgresql-credentials"
-
-controllerManager:
-  replicas: 2
-
-queryEngine:
-  enabled: true
-  container:
-    port: 9090
-```
-
-Each replica connects to the same PostgreSQL database. Event delivery across replicas uses pg_notify signaling — when replica A writes a resource, replica B receives the notification within ~1-5ms and runs a catch-up query to fetch the new data. Only one replica runs as leader (controller reconciliation), but all replicas serve API requests, webhooks, and watch streams.
-
-**Connection pool sizing**: Each replica uses up to `MaxOpenConns` database connections (default 40). With `max_connections=100` on PostgreSQL, 2 replicas use 80 connections, leaving 20 for admin and monitoring. Adjust `MaxOpenConns` based on your replica count and PostgreSQL `max_connections`.
-
-### Available Storage Backends
-
-The PostgreSQL storage backend implements the storage interface (`ark/internal/storage/interface.go`) with:
-- Direct notification from write path for instant same-replica event delivery
-- pg_notify signaling for cross-replica event delivery
-- High-water-mark catch-up sweep as safety net (every 30s, O(changed) not O(total))
-- Globally unique resource versions via PostgreSQL sequence (`nextval`)
-- Keyset pagination for efficient LIST operations
-- Composite indexes for fast queries
-- Configurable connection pooling (default 40 open / 20 idle per replica)
+- [Query Execution Flow](/reference/query-execution) — how a query runs and is stored.
+- [Resources](/reference/resources) — the Ark CRDs.
+- [Services](/developer-guide/services) — the runtime services in detail.
+- [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) and [Scalability](/reference/scalability) — running Ark at scale.
