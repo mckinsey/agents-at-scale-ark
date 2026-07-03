@@ -21,11 +21,12 @@ import (
 var log = logf.Log.WithName("eventing.broker")
 
 type Event struct {
-	Timestamp string                 `json:"timestamp"`
-	EventType string                 `json:"eventType"`
-	Reason    string                 `json:"reason"`
-	Message   string                 `json:"message"`
-	Data      map[string]interface{} `json:"data"`
+	Timestamp  string                 `json:"timestamp"`
+	EventType  string                 `json:"eventType"`
+	Reason     string                 `json:"reason"`
+	Message    string                 `json:"message"`
+	Data       map[string]interface{} `json:"data"`
+	TtlSeconds *int64                 `json:"ttl_seconds,omitempty"`
 }
 
 type BrokerEventEmitter struct {
@@ -47,6 +48,14 @@ func NewBrokerEventEmitter(endpoints []routing.BrokerEndpoint) eventing.EventEmi
 		endpoints: endpointMap,
 		sem:       semaphore.NewWeighted(64),
 	}
+}
+
+func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
+	if query.Spec.TTL == nil {
+		return nil
+	}
+	secs := int64(query.Spec.TTL.Seconds())
+	return &secs
 }
 
 func (e *BrokerEventEmitter) getEndpointForNamespace(namespace string) string {
@@ -90,11 +99,12 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 	}
 
 	event := Event{
-		Timestamp: time.Now().Format(time.RFC3339Nano),
-		EventType: eventType,
-		Reason:    reason,
-		Message:   message,
-		Data:      eventData,
+		Timestamp:  time.Now().Format(time.RFC3339Nano),
+		EventType:  eventType,
+		Reason:     reason,
+		Message:    message,
+		Data:       eventData,
+		TtlSeconds: ttlSecondsFromQuery(query),
 	}
 
 	if e.sem.TryAcquire(1) {
