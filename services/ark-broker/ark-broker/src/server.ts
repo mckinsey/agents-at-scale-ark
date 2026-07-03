@@ -10,6 +10,7 @@ import {createHttpLogger} from './http/middleware/http-logger.js';
 import {requestId} from './http/middleware/request-id.js';
 import {MemoryBroker} from './brokers/memory-broker.js';
 import type {MessageStream} from './brokers/stream/message-stream.js';
+import type {EventStream} from './brokers/event-broker.js';
 import {type Db, pingDb} from './db/db.js';
 import type {RedisClient} from './redis/redis.js';
 import {pingRedis} from './redis/redis.js';
@@ -45,10 +46,20 @@ export function buildApp(deps: {
   version: string;
   messageStream: MessageStream;
   chunkStream: ChunkStream;
+  eventStream: EventStream;
   db?: Db;
   redis?: RedisClient;
 }): AppBundle {
-  const {config, logger, version, messageStream, chunkStream, db, redis} = deps;
+  const {
+    config,
+    logger,
+    version,
+    messageStream,
+    chunkStream,
+    eventStream,
+    db,
+    redis,
+  } = deps;
   const app = express();
 
   const memory = new MemoryBroker(messageStream);
@@ -58,11 +69,7 @@ export function buildApp(deps: {
     config.persistence.traceFilePath,
     config.limits.maxSpans
   );
-  const events = new EventBroker(
-    logger.child({broker: 'events'}),
-    config.persistence.eventFilePath,
-    config.limits.maxEvents
-  );
+  const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(
     logger.child({broker: 'sessions'}),
     config.persistence.sessionsFilePath
