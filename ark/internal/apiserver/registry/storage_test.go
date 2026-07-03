@@ -5,6 +5,7 @@ package registry
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -697,5 +698,65 @@ func TestSetListItems(t *testing.T) {
 	}
 	if list.Continue != "next-token" {
 		t.Errorf("expected continue 'next-token', got '%s'", list.Continue)
+	}
+}
+
+func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		rvs      []string
+		expected string
+	}{
+		{
+			name:     "digit-count boundary 9 vs 10",
+			rvs:      []string{"9", "10"},
+			expected: "10",
+		},
+		{
+			name:     "digit-count boundary 9 vs 100",
+			rvs:      []string{"9", "100"},
+			expected: "100",
+		},
+		{
+			name:     "mixed order",
+			rvs:      []string{"3", "20", "100", "5"},
+			expected: "100",
+		},
+		{
+			name:     "empty and invalid rvs are skipped",
+			rvs:      []string{"", "not-a-number", "42"},
+			expected: "42",
+		},
+		{
+			name:     "no valid rvs leaves list rv unset",
+			rvs:      []string{"", "abc"},
+			expected: "",
+		},
+		{
+			name:     "empty list leaves rv unset",
+			rvs:      nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			list := &arkv1alpha1.AgentList{}
+			objects := make([]runtime.Object, 0, len(tt.rvs))
+			for i, rv := range tt.rvs {
+				objects = append(objects, &arkv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{Name: "a" + strconv.Itoa(i), ResourceVersion: rv},
+				})
+			}
+
+			if err := setListItems(list, objects, ""); err != nil {
+				t.Fatalf("setListItems() error = %v", err)
+			}
+
+			if got := list.ResourceVersion; got != tt.expected {
+				t.Errorf("list resourceVersion = %q, want %q", got, tt.expected)
+			}
+		})
 	}
 }
