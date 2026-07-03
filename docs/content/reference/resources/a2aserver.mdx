@@ -1,29 +1,32 @@
 ---
 title: A2AServer
-description: Agent-to-Agent protocol servers for hosting external agent frameworks
+description: A2AServer CRD reference — fields, agent discovery, status, and the v1prealpha1 API version
 ---
 
 # A2AServer
 
-A2AServer enables hosting external agent frameworks within ARK using the Agent-to-Agent (A2A) protocol.
+An `A2AServer` connects Ark to a remote [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org) server. Ark connects to the server, discovers the agents it hosts, and creates an [Agent](/reference/resources/agent) resource for each one — wired to the `a2a` execution engine so ordinary [queries](/reference/resources/query) can target them. Each dispatched query then produces an [A2ATask](/reference/resources/a2atask) that Ark polls until the remote agent finishes.
 
-## Specification
+> **API version:** `A2AServer` is served under **`ark.mckinsey.com/v1prealpha1`** — not the `v1alpha1` group used by most Ark resources (Agent, Query, Model, …). Set `apiVersion: ark.mckinsey.com/v1prealpha1` on every A2AServer manifest.
+
+## Spec
 
 ```yaml
-apiVersion: ark.mckinsey.com/v1prealpha1
+apiVersion: ark.mckinsey.com/v1prealpha1     # note: v1prealpha1, not v1alpha1
 kind: A2AServer
 metadata:
   name: aws-operator-agent
 spec:
-  # Required. Service address for the A2A server. Supports an inline `value`,
-  # or `valueFrom` with serviceRef, configMapKeyRef, or secretKeyRef.
+  # --- Required ----------------------------------------------------------
+  # Endpoint of the A2A server. Inline 'value', or 'valueFrom' with
+  # serviceRef / configMapKeyRef / secretKeyRef.
   address:
-    value: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
-  # Optional. Human-readable description of the A2A server.
+    value: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
+
+  # --- Optional ----------------------------------------------------------
   description: AWS operations agent with read-only access to AWS services
-  # Optional. HTTP headers sent on every request to the server, e.g. for
-  # authentication. Each value may be inline or sourced from a Secret or
-  # ConfigMap via valueFrom.
+  # HTTP headers sent on every request, e.g. for authentication. Each value
+  # is inline or sourced from a Secret/ConfigMap via valueFrom.
   headers:
     - name: Authorization
       value:
@@ -31,31 +34,29 @@ spec:
           secretKeyRef:
             name: a2a-credentials
             key: token
-  # Optional. How often to poll the server for updates (default: 1m).
-  pollInterval: 1m
-  # Optional. Timeout for A2A agent execution (default: 5m).
-  timeout: 5m
-status:
-  conditions:
-    # Ready: A2AServer is reachable and operational
-    - type: Ready
-      status: "True"
-      reason: AgentDiscovered
-      message: Successfully discovered agent
-    # Discovering: Agent discovery is in progress
-    - type: Discovering
-      status: "False"
-      reason: DiscoveryComplete
-      message: Agent discovery completed
-  # Last successfully resolved server address
-  lastResolvedAddress: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
+  pollInterval: 1m                            # how often to poll the server; default '1m'
+  timeout: 5m                                 # A2A agent execution timeout; default '5m'
 ```
 
-## Examples
+## Fields
 
-### Created Agent Example
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.address` | `ValueSource` | yes | Endpoint of the A2A server. Supports an inline `value`, or `valueFrom` with `serviceRef` (`name`, plus optional `namespace`, `port`, `path`), `configMapKeyRef`, or `secretKeyRef`. |
+| `spec.headers[]` | list of `Header` | no | HTTP headers sent on every request to the server, typically for authentication. Each entry has a `name` and a `value` that is inline or sourced via `valueFrom` (`secretKeyRef`, `configMapKeyRef`, or `queryParameterRef`). |
+| `spec.description` | string | no | Human-readable description of the server. Propagated onto the Agent resources Ark creates. |
+| `spec.pollInterval` | duration | no | How often the controller polls the server for updates. Default `1m`. |
+| `spec.timeout` | duration | no | Timeout for A2A agent execution (`30s`, `5m`, `1h`). Default `5m`. |
 
-When the A2AServer above is created, the controller automatically creates an Agent:
+## Discovery and created agents
+
+When an A2AServer is created, the controller:
+
+1. **Discovers agents.** It connects to `spec.address` and fetches the server's agent card, trying `/.well-known/agent-card.json` (A2A v0.3+) first, then falling back to `/.well-known/agent.json` (A2A v0.2.x).
+2. **Creates an Agent per discovered agent.** Each generated [Agent](/reference/resources/agent) has an owner reference to the A2AServer, `executionEngine.name: a2a`, and annotations recording the source server, resolved address, and discovered skills. A2A agents carry no `modelRef` — the remote server owns the model.
+3. **Monitors health.** The controller re-polls on `spec.pollInterval` and keeps the `Ready` and `Discovering` conditions current.
+
+Example Agent generated from the A2AServer above:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -63,27 +64,58 @@ kind: Agent
 metadata:
   name: aws-operator-agent
   annotations:
-    # A2A server that created this agent
     ark.mckinsey.com/a2a-server-name: aws-operator-agent
-    # Resolved address of the A2A server
-    ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
-    # Skills discovered from the A2A server
+    ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
     ark.mckinsey.com/a2a-server-skills: '[{"name":"describe_ec2_instances","description":"List and describe EC2 instances in the account"}]'
 spec:
   description: AWS operations agent with read-only access to AWS services
   prompt: You are aws_operator_agent. AWS operations agent with read-only access to AWS services
   executionEngine:
-    name: a2a
-  # No modelRef - A2A agents don't require models
+    name: a2a                                 # no modelRef — the remote A2A server owns the model
 ```
 
-## Behavior
+## Status
 
-When an A2AServer is created:
+```yaml
+status:
+  conditions:
+    - type: Ready                             # server reachable and operational
+      status: "True"
+      reason: AgentDiscovered
+      message: Successfully discovered agent
+    - type: Discovering                       # agent discovery in progress
+      status: "False"
+      reason: DiscoveryComplete
+      message: Agent discovery completed
+  lastResolvedAddress: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
+```
 
-1. **Discovery**: Controller connects to the server and discovers available agents. Tries `/.well-known/agent-card.json` (A2A v0.3+), then `/.well-known/agent.json` (A2A v0.2.x).
-2. **Agent Creation**: For each discovered agent, an Agent resource is created with:
-   - Owner reference to the A2AServer
-   - `executionEngine.name: a2a`
-   - Annotations identifying the A2AServer
-3. **Status Updates**: Controller continuously monitors server health
+### Status fields
+
+| Field | Description |
+| --- | --- |
+| `status.lastResolvedAddress` | The most recently resolved server address (after `spec.address` `valueFrom` resolution). |
+| `status.conditions[]` | Standard Kubernetes conditions. `Ready` indicates the server is reachable and operational; `Discovering` indicates agent discovery is in progress. |
+
+### Print columns
+
+`kubectl get a2aservers` prints:
+
+| Column | Source |
+| --- | --- |
+| `NAME` | `.metadata.name` |
+| `READY` | `Ready` condition status |
+| `DISCOVERING` | `Discovering` condition status |
+| `ADDRESS` | `.status.lastResolvedAddress` |
+| `AGE` | `.metadata.creationTimestamp` |
+
+```bash
+kubectl get a2aservers
+kubectl describe a2aserver aws-operator-agent
+```
+
+## Related
+
+- [Agent](/reference/resources/agent) — Ark creates one per discovered agent, wired to the `a2a` execution engine.
+- [A2ATask](/reference/resources/a2atask) — created per query and polled against this server via `spec.a2aServerRef`.
+- [Query](/reference/resources/query) — targets a discovered agent to run remote work.
