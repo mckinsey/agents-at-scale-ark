@@ -82,16 +82,15 @@ spec:
         timeout: 30s
         content: |
           set -e
-          PHASE=$(kubectl -n "$NAMESPACE" get workflow ark-query-agent -o jsonpath='{.status.phase}')
+          WF=$(kubectl -n "$NAMESPACE" get workflow ark-query-agent -o json)
+
+          PHASE=$(echo "$WF" | jq -r '.status.phase')
           echo "workflow phase: $PHASE"
           [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
 
-          RESPONSE=$(kubectl -n "$NAMESPACE" get workflow ark-query-agent \
-            -o jsonpath='{.status.outputs.parameters[?(@.name=="response")].value}')
-          QUERY_PHASE=$(kubectl -n "$NAMESPACE" get workflow ark-query-agent \
-            -o jsonpath='{.status.outputs.parameters[?(@.name=="phase")].value}')
-          CONVERSATION_ID=$(kubectl -n "$NAMESPACE" get workflow ark-query-agent \
-            -o jsonpath='{.status.outputs.parameters[?(@.name=="conversation-id")].value}')
+          RESPONSE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' | head -1)
+          QUERY_PHASE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' | head -1)
+          CONVERSATION_ID=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="conversation-id") | .value' | head -1)
 
           echo "response: $RESPONSE"
           echo "query phase: $QUERY_PHASE"
@@ -126,14 +125,14 @@ spec:
         timeout: 30s
         content: |
           set -e
-          PHASE=$(kubectl -n "$NAMESPACE" get workflow ark-query-team -o jsonpath='{.status.phase}')
+          WF=$(kubectl -n "$NAMESPACE" get workflow ark-query-team -o json)
+
+          PHASE=$(echo "$WF" | jq -r '.status.phase')
           echo "workflow phase: $PHASE"
           [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
 
-          RESPONSE=$(kubectl -n "$NAMESPACE" get workflow ark-query-team \
-            -o jsonpath='{.status.outputs.parameters[?(@.name=="response")].value}')
-          QUERY_PHASE=$(kubectl -n "$NAMESPACE" get workflow ark-query-team \
-            -o jsonpath='{.status.outputs.parameters[?(@.name=="phase")].value}')
+          RESPONSE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' | head -1)
+          QUERY_PHASE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' | head -1)
 
           echo "response: $RESPONSE"
           echo "query phase: $QUERY_PHASE"
