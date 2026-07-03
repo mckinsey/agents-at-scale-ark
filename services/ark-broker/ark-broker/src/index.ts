@@ -4,6 +4,7 @@ import {createLogger} from './logging/logger.js';
 import {buildApp} from './server.js';
 import {createMessageStream} from './brokers/stream/message-stream-factory.js';
 import {createChunkStream} from './brokers/stream/chunk-stream-factory.js';
+import {createEventStream} from './brokers/stream/event-stream-factory.js';
 import {createDb} from './db/db.js';
 import {createRedis} from './redis/redis.js';
 
@@ -28,23 +29,26 @@ const main = async (): Promise<void> => {
 
   logger.info({backend: config.backends.message}, 'message backend');
   logger.info({backend: config.backends.chunk}, 'chunk backend');
+  logger.info({backend: config.backends.event}, 'event backend');
 
-  const db =
-    config.backends.message === 'postgres'
-      ? createDb(config, logger)
-      : undefined;
+  const needsDb =
+    config.backends.message === 'postgres' ||
+    config.backends.event === 'postgres';
+  const db = needsDb ? createDb(config, logger) : undefined;
 
   const redis =
     config.backends.chunk === 'redis' ? createRedis(config, logger) : undefined;
 
   const messageStream = createMessageStream(config, logger, db);
   const chunkStream = createChunkStream(config, logger, redis);
+  const eventStream = createEventStream(config, logger, db);
   const {app, brokers} = buildApp({
     config,
     logger,
     version,
     messageStream,
     chunkStream,
+    eventStream,
     db,
     redis,
   });

@@ -6,6 +6,7 @@ import {buildApp} from '../src/server.js';
 import {createDb} from '../src/db/db.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
+import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
 import {usePgContainer} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
 
 jest.setTimeout(120_000);
@@ -31,6 +32,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
       version: 'test',
       messageStream: stream,
       chunkStream: createChunkStream(config, logger),
+      eventStream: createEventStream(config, logger),
       db: db(),
     }));
   });
@@ -73,6 +75,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
       version: 'test',
       messageStream: freshStream,
       chunkStream: createChunkStream(config, logger),
+      eventStream: createEventStream(config, logger),
       db: freshDb,
     });
 
