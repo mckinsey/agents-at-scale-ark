@@ -59,28 +59,41 @@ export function createConfig(
       (config as Record<string, unknown>).azure = azureConfig;
       return config;
     }
-    case 'bedrock':
-      config.bedrock = {
-        accessKeyId: {
+    case 'bedrock': {
+      const bedrockConfig: Record<string, unknown> = {
+        ...(formValues.region && { region: formValues.region }),
+        ...(formValues.modelARN && { modelArn: formValues.modelARN }),
+      };
+      if (formValues.bedrockAuthMethod === 'apiKey') {
+        bedrockConfig.apiKey = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockApiKeySecretName,
+              key: formValues.bedrockApiKeySecretKey,
+            },
+          },
+        };
+      } else {
+        bedrockConfig.accessKeyId = {
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockAccessKeyIdSecretName,
               key: formValues.bedrockAccessKeyIdSecretKey,
             },
           },
-        },
-        secretAccessKey: {
+        };
+        bedrockConfig.secretAccessKey = {
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockSecretAccessKeySecretName,
               key: formValues.bedrockSecretAccessKeySecretKey,
             },
           },
-        },
-        ...(formValues.region && { region: formValues.region }),
-        ...(formValues.modelARN && { modelArn: formValues.modelARN }),
-      };
+        };
+      }
+      (config as Record<string, unknown>).bedrock = bedrockConfig;
       return config;
+    }
     case 'anthropic':
       (config as Record<string, unknown>).anthropic = {
         apiKey: {
@@ -133,6 +146,9 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         name: currentFormValues.name,
         provider: currentFormValues.provider,
         model: currentFormValues.model,
+        bedrockAuthMethod: currentFormValues.bedrockAuthMethod ?? 'iam',
+        bedrockApiKeySecretName: '',
+        bedrockApiKeySecretKey: 'token',
         bedrockAccessKeyIdSecretName: '',
         bedrockAccessKeyIdSecretKey: 'token',
         bedrockSecretAccessKeySecretName: '',
@@ -306,11 +322,31 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
         azureTenantId,
       };
     }
-    case 'bedrock':
+    case 'bedrock': {
+      const bedrockApiKeySecretName = getConfigValue<string>(model.config, [
+        'bedrock',
+        'apiKey',
+        'valueFrom',
+        'secretKeyRef',
+        'name',
+      ]);
+      const bedrockAuthMethod: 'apiKey' | 'iam' = bedrockApiKeySecretName
+        ? 'apiKey'
+        : 'iam';
       return {
         name: model.name,
         provider: model.provider,
         model: model.model,
+        bedrockAuthMethod,
+        bedrockApiKeySecretName: bedrockApiKeySecretName || '',
+        bedrockApiKeySecretKey:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'apiKey',
+            'valueFrom',
+            'secretKeyRef',
+            'key',
+          ]) || 'token',
         bedrockAccessKeyIdSecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -356,6 +392,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'value',
           ]) || '',
       };
+    }
     case 'anthropic':
       return {
         name: model.name,

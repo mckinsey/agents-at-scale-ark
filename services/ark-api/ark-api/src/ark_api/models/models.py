@@ -70,6 +70,7 @@ class BedrockConfig(BaseModel):
     access_key_id: Optional[Union[str, ModelValueSource]] = Field(None, alias="accessKeyId")
     secret_access_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="secretAccessKey")
     session_token: Optional[Union[str, ModelValueSource]] = Field(None, alias="sessionToken")
+    api_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="apiKey")
     model_arn: Optional[Union[str, ModelValueSource]] = Field(None, alias="modelArn")
     max_tokens: Optional[int] = Field(None, alias="maxTokens", ge=1, le=100000)
     temperature: Optional[str] = Field(None, pattern=r"^(0(\.\d+)?|1(\.0+)?)$")

@@ -516,36 +516,89 @@ function AWSBedrockSpecificFields({
   isSecretsPending,
   secrets,
 }: ProviderFieldsProps) {
+  const { initialBedrockAuthMethod } = useModelConfigurationForm();
+  const watchedAuthMethod = useWatch({
+    control,
+    name: 'bedrockAuthMethod',
+  });
+  const bedrockAuthMethod =
+    watchedAuthMethod ?? initialBedrockAuthMethod ?? 'iam';
   return (
     <>
-      <SecretSelectorField
+      <FormField
         control={control}
-        isSecretsPending={isSecretsPending}
-        secrets={secrets}
-        fieldName="bedrockAccessKeyIdSecretName"
-        label="Access Key ID Secret"
-        placeholder="Select a secret for Access Key ID"
+        name="bedrockAuthMethod"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Authentication</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value ?? 'iam'}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select auth method" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="iam">IAM Credentials</SelectItem>
+                <SelectItem value="apiKey">API Key (Bearer Token)</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              IAM: access key ID and secret access key. API Key: a Bedrock
+              bearer token. When both are set, the API key takes precedence.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
       />
-      <SecretKeySelectField
-        control={control}
-        secretFieldName="bedrockAccessKeyIdSecretName"
-        keyFieldName="bedrockAccessKeyIdSecretKey"
-        label="Access Key ID Secret Key"
-      />
-      <SecretSelectorField
-        control={control}
-        isSecretsPending={isSecretsPending}
-        secrets={secrets}
-        fieldName="bedrockSecretAccessKeySecretName"
-        label="Secret Access Key Secret"
-        placeholder="Select a secret for Secret Access Key"
-      />
-      <SecretKeySelectField
-        control={control}
-        secretFieldName="bedrockSecretAccessKeySecretName"
-        keyFieldName="bedrockSecretAccessKeySecretKey"
-        label="Secret Access Key Secret Key"
-      />
+      {bedrockAuthMethod === 'apiKey' ? (
+        <>
+          <SecretSelectorField
+            control={control}
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            fieldName="bedrockApiKeySecretName"
+            label="API Key Secret"
+            placeholder="Select a secret for the API key"
+          />
+          <SecretKeySelectField
+            control={control}
+            secretFieldName="bedrockApiKeySecretName"
+            keyFieldName="bedrockApiKeySecretKey"
+            label="API Key Secret Key"
+          />
+        </>
+      ) : (
+        <>
+          <SecretSelectorField
+            control={control}
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            fieldName="bedrockAccessKeyIdSecretName"
+            label="Access Key ID Secret"
+            placeholder="Select a secret for Access Key ID"
+          />
+          <SecretKeySelectField
+            control={control}
+            secretFieldName="bedrockAccessKeyIdSecretName"
+            keyFieldName="bedrockAccessKeyIdSecretKey"
+            label="Access Key ID Secret Key"
+          />
+          <SecretSelectorField
+            control={control}
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            fieldName="bedrockSecretAccessKeySecretName"
+            label="Secret Access Key Secret"
+            placeholder="Select a secret for Secret Access Key"
+          />
+          <SecretKeySelectField
+            control={control}
+            secretFieldName="bedrockSecretAccessKeySecretName"
+            keyFieldName="bedrockSecretAccessKeySecretKey"
+            label="Secret Access Key Secret Key"
+          />
+        </>
+      )}
       <FormField
         control={control}
         name="region"
