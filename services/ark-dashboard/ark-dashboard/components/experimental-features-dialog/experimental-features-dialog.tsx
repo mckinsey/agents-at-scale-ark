@@ -1,7 +1,7 @@
 'use client';
 
 import { useAtom } from 'jotai';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import {
@@ -60,7 +60,12 @@ type NumberFeatureProps = {
 function NumberFeature({ feature }: Readonly<NumberFeatureProps>) {
   const [atomValue, setAtom] = useAtom(feature.atom);
 
+  const [draft, setDraft] = useState(
+    () => `${Number.parseInt(atomValue, 10) || ''}`,
+  );
+
   const handleChange = (raw: string) => {
+    setDraft(raw);
     if (/^\d+$/.test(raw) && Number(raw) > 0) {
       setAtom(`${raw}m`);
     }
@@ -79,7 +84,7 @@ function NumberFeature({ feature }: Readonly<NumberFeatureProps>) {
       <div className="flex items-center gap-2">
         <Input
           type="number"
-          value={Number.parseInt(atomValue, 10) || ''}
+          value={draft}
           onChange={e => handleChange(e.target.value)}
           className="w-[120px]"
         />
