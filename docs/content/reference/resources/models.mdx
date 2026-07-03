@@ -250,9 +250,9 @@ spec:
 
 `maxTokens` accepts an integer in `1`–`100000`; `temperature` is a string in the range `0`–`1`.
 
-### Google Gemini and Anthropic
+### Anthropic
 
-Anthropic Claude models can be used through the native `anthropic` provider:
+The `anthropic` provider talks to the Anthropic **Messages API** natively — you do **not** need an OpenAI-compatible endpoint. The completions executor converts between Ark's internal message format and the Messages API (including tool use and system prompts), so you point it straight at Anthropic's own API:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -266,18 +266,25 @@ spec:
   config:
     anthropic:
       baseUrl:
-        value: "https://api.anthropic.com/v1"
+        value: "https://api.anthropic.com/v1"   # the native Messages API endpoint
       apiKey:
         valueFrom:
           secretKeyRef:
             name: anthropic-key
             key: token
+      version:
+        value: "2023-06-01"                      # optional; sets the anthropic-version header
 ```
 
-Google Gemini does not have a dedicated provider — it is reached through the `openai` provider against Gemini's OpenAI-compatible endpoint. Anthropic also exposes an OpenAI-compatible endpoint, so it can likewise be used via `provider: openai`:
+The optional `version` field sets the `anthropic-version` request header. This provider works with any Messages-API-compatible endpoint, including Anthropic direct and gateways that expose the Messages API.
+
+Anthropic *also* publishes an OpenAI-compatible endpoint, so if you prefer you can reach it through the `openai` provider with `baseUrl: https://api.anthropic.com/v1` instead — but the native `anthropic` provider is the recommended path for Claude.
+
+### Google Gemini
+
+Google Gemini has no dedicated provider — reach it through the `openai` provider against Gemini's OpenAI-compatible endpoint:
 
 - `https://generativelanguage.googleapis.com/v1beta/openai` — Google Gemini
-- `https://api.anthropic.com/v1` — Anthropic Claude
 
 Most other providers publish OpenAI-compatible base URLs too — check their docs.
 
