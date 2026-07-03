@@ -79,6 +79,11 @@ function setupMocks(overrides?: {
 }) {
   const installMutate = vi.fn();
   const uninstallMutate = vi.fn();
+  const uninstallMutateAsync = vi.fn().mockResolvedValue({
+    status: 'command',
+    helmCommand: 'helm uninstall test',
+    name: 'Test Item',
+  });
 
   vi.mocked(useRouter).mockReturnValue({
     push: mockPush,
@@ -104,10 +109,11 @@ function setupMocks(overrides?: {
 
   mockUseUninstallMarketplaceItem.mockReturnValue({
     mutate: uninstallMutate,
+    mutateAsync: uninstallMutateAsync,
     isPending: overrides?.uninstallIsPending ?? false,
   } as any);
 
-  return { installMutate, uninstallMutate };
+  return { installMutate, uninstallMutate, uninstallMutateAsync };
 }
 
 describe('MarketplaceDetailPage', () => {
@@ -174,7 +180,7 @@ describe('MarketplaceDetailPage', () => {
 
   it('shows uninstall button and "Currently installed" when status is installed', async () => {
     const installedItem = { ...baseItem, status: 'installed' as const };
-    const { uninstallMutate } = setupMocks({ item: installedItem });
+    const { uninstallMutateAsync } = setupMocks({ item: installedItem });
 
     renderWithProviders(<MarketplaceDetailPage />);
 
@@ -183,7 +189,7 @@ describe('MarketplaceDetailPage', () => {
     expect(screen.getByText('Currently installed')).toBeInTheDocument();
 
     await userEvent.click(uninstallButton);
-    expect(uninstallMutate).toHaveBeenCalledWith('test-item');
+    expect(uninstallMutateAsync).toHaveBeenCalledWith('test-item');
   });
 
   it('disables install button while install mutation is pending', () => {

@@ -1,12 +1,13 @@
+---
+title: Memory
+description: Memory CRD reference — spec, status, and the HTTP backend contract
+---
+
 # Memory
 
-The `Memory` resource represents persistent storage for converations with agents. It is designed to be agnostic of the backend implementation, meaning that a database, queue or other system can be used.
+A `Memory` points Ark at an HTTP service that stores conversation history keyed by `conversationId` / `queryId`. The CRD is backend-agnostic — any service that implements the [Memory HTTP API](#memory-http-api) can back it (a database, queue, or other store). The in-cluster [ark-broker](/reference/broker) is the reference implementation. Queries reference a `Memory` via `spec.memory.name`; when unset, resolution falls back to a `Memory` named `default` in the same namespace.
 
-The backend for a memory resource is an HTTP server that implements the [Memory API Specification](#memory-api-specification).
-
-In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [ARK Broker](#ark-broker) is available.
-
-## Specification
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -14,22 +15,55 @@ kind: Memory
 metadata:
   name: ark-broker
 spec:
-  # The address of the service that handles memory API calls.
-  address:
-    # A 'value' can be provided to give a specific URL, or a service ref to
-    # point to a specific service in the cluster.
+  # --- Required ----------------------------------------------------------
+  address:                                    # the memory service endpoint (ValueSource)
     valueFrom:
-      # In this example, we point to a deployment of the "ARK Broker".
-      serviceRef:
+      serviceRef:                             # point at an in-cluster service
         name: ark-broker
-        port: 8080
+        port: "8080"
+    # value: http://memory.example.com:8080   # OR a direct URL
+
+  # --- Optional ----------------------------------------------------------
+  headers:                                    # HTTP headers sent on every backend request
+    - name: Authorization
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: memory-credentials
+            key: token
 ```
 
-## Usage
+## Fields
 
-Memory can be specified in a query resource. If a Memory resource named `default` exists in the namespace, it will be automatically selected for queries that don't explicitly specify a memory.
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.address` | `ValueSource` | yes | The memory service endpoint. Supply a direct `value` (URL) or a `valueFrom` source — `serviceRef` (in-cluster service), `configMapKeyRef`, `secretKeyRef`, or `queryParameterRef`. The resolved value is written back to `status.lastResolvedAddress`. |
+| `spec.headers[]` | list of `Header` | no | HTTP headers included in every request to the backend. Each entry has a `name` and a `value` that is either a direct `value` or a `valueFrom` source (`configMapKeyRef`, `secretKeyRef`, `queryParameterRef`). Use for auth tokens or routing headers. |
 
-Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+## Address resolution
+
+`spec.address` is a `ValueSource`, so the backend endpoint can be a literal URL or resolved from cluster state:
+
+```yaml
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-broker      # resolves to the in-cluster service address
+        port: "8080"
+```
+
+```yaml
+spec:
+  address:
+    value: http://memory.example.com:8080   # direct URL
+```
+
+The controller resolves the address and records the result in `status.lastResolvedAddress`. Consumers (the completions executor, the Query cleanup finalizer) read the resolved address, falling back to `spec.address` if the status field is empty.
+
+## Using memory from a query
+
+A query selects a `Memory` via `spec.memory.name`. If a `Memory` named `default` exists in the namespace, it is used automatically for queries that don't name one. Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
 
 Memory in a query to a tool:
 
@@ -46,7 +80,7 @@ spec:
   conversationId: "my-conversation"
 ```
 
-A follow-up query to an agent on the same conversation ID will have access to the tool query's messages:
+A follow-up query to an agent on the same conversation ID has access to the tool query's messages:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -68,19 +102,19 @@ Memory can also be specified via the CLIs:
 fark query --input "Start our conversation" --conversation-id "my-conversation" my-agent
 
 # Using ark
-ark query tool/noop "Remember this message for later" --conversation-id "my-conversation" 
+ark query tool/noop "Remember this message for later" --conversation-id "my-conversation"
 ark query agent/my-agent "What was the last message?" --conversation-id "my-conversation"
 ```
 
 **Session ID vs Conversation ID:**
-- **sessionId**: Groups related queries for tracking and telemetry purposes
+- **sessionId**: Groups related queries for tracking and telemetry purposes.
 - **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
 
-When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
+When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashboard 'chat' window, no memory is used — messages are simply stored client-side as is common for chat applications.
 
-## Memory API Specification
+## Memory HTTP API
 
-Memory is implemented as a simple HTTP server:
+A memory backend is an HTTP server implementing the following endpoints. The [ark-broker](/reference/broker) is the reference implementation; the [Ark API](/reference/ark-apis) gateway proxies the same contract.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -210,3 +244,30 @@ Response:
 ```
 
 A backend that does not implement this endpoint should return `404` or `405`; the controller treats both as "not supported" and skips cleanup.
+
+## Status
+
+```yaml
+status:
+  phase: ready
+  lastResolvedAddress: http://ark-broker.default.svc.cluster.local:8080
+  message: Memory backend reachable
+```
+
+### Status fields
+
+| Field | Description |
+| --- | --- |
+| `status.phase` | One of `running`, `ready`, `error`. |
+| `status.lastResolvedAddress` | Last resolved value of `spec.address`, kept for reference. Consumers read this first, falling back to `spec.address`. |
+| `status.message` | Additional information about the current status (e.g. a resolution or reachability error). |
+
+### Print columns
+
+`kubectl get memories` prints `NAME`, `PHASE` (`.status.phase`), `ADDRESS` (`.status.lastResolvedAddress`), and `AGE`.
+
+## Related
+
+- [Query](/reference/resources/query) — references a `Memory` via `spec.memory`.
+- [Broker Service](/reference/broker) — the reference memory backend and its HTTP API.
+- [Ark API](/reference/ark-apis) — gateway that proxies the memory contract.

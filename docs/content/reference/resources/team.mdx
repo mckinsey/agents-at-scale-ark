@@ -212,6 +212,10 @@ The `Available` condition flips to `False` when validation fails or a referenced
 
 `maxTurns` reached during execution does **not** emit a Kubernetes event. Instead the runtime appends a system message to the conversation (`Team conversation reached maximum turns limit (N)`), the Query completes with `phase: done` (not an error), and the dashboard surfaces a `Maximum turns reached (N)` badge in the chat panel. To detect a maxTurns hit programmatically, parse `query.status.response.raw` (a JSON array of messages) and look for the marker string.
 
+### Print columns
+
+`kubectl get teams` prints `Strategy`, `Available`, `Age`.
+
 ## Related
 
 - [User Guide → Teams](/user-guide/teams) — task-oriented walkthrough, including selector-prompt customisation.
