@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -432,15 +433,27 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	if err != nil {
 		return fmt.Errorf("failed to access list metadata: %w", err)
 	}
-	var maxRV string
+	// Compute the list's resourceVersion numerically. Lexicographic string max
+	// mis-orders across digit-count boundaries (e.g. "9" > "10"), which yields
+	// a lower-than-true list RV and breaks the list→watch handoff (the client
+	// then resumes watch from a stale point).
+	var maxRV uint64
 	for _, obj := range objects {
-		if objMeta, err := meta.Accessor(obj); err == nil {
-			if rv := objMeta.GetResourceVersion(); rv > maxRV {
-				maxRV = rv
-			}
+		objMeta, err := meta.Accessor(obj)
+		if err != nil {
+			continue
+		}
+		n, err := strconv.ParseUint(objMeta.GetResourceVersion(), 10, 64)
+		if err != nil {
+			continue
+		}
+		if n > maxRV {
+			maxRV = n
 		}
 	}
-	accessor.SetResourceVersion(maxRV)
+	if maxRV > 0 {
+		accessor.SetResourceVersion(strconv.FormatUint(maxRV, 10))
+	}
 	if continueToken != "" {
 		accessor.SetContinue(continueToken)
 	}

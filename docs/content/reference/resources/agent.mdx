@@ -1,13 +1,13 @@
 ---
 title: Agent
-description: AI agents with prompts, models, tools, and reconciliation behavior
+description: Agent CRD reference — fields, tool types, structured output, and reconciliation
 ---
 
 # Agent
 
-Agents are the core execution units in ARK. They process inputs using AI models and can use tools to extend their capabilities.
+An `Agent` is an execution unit that runs a prompt against a model and can call tools. It resolves a `Model` (directly or via the `default` Model), runs on the built-in completions executor or a named `ExecutionEngine`, and can expose other tools — including HTTP tools, MCP servers, and even other agents or teams — to the model. For a task-oriented walkthrough see [User Guide → Agents](/user-guide/agents); this page is the field-by-field reference.
 
-## Specification
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -15,34 +15,26 @@ kind: Agent
 metadata:
   name: example-agent
 spec:
-  # Agent's system prompt that defines its behavior
-  prompt: |
+  # --- Common optional fields --------------------------------------------
+  prompt: |                                    # system prompt; supports {{.name}} templating
     You are a helpful assistant.
-    
-  # Human-readable description
-  description: General-purpose assistant agent
-  
-  # Model reference (optional - defaults to 'default' if not specified)
-  modelRef:
+  description: General-purpose assistant agent  # human-readable description
+
+  modelRef:                                     # Model to use; defaults to Model named 'default' if omitted
     name: gpt-4-model
-    namespace: default
-    
-  # Execution engine (optional - uses built-in OpenAI-compatible engine if not specified)
-  executionEngine:
+    namespace: default                          # optional; defaults to the agent's namespace
+
+  executionEngine:                              # optional; uses the built-in completions executor if unset
     name: langchain-engine
-    namespace: default
-    
-  # Tools the agent can use
-  tools:
-    - type: builtin  # System-provided tools (terminate, noop)
-      name: terminate
-    - type: http      # HTTP tool references
-      name: my-http-tool
-    - type: mcp       # MCP server tool references
+    namespace: default                          # optional; defaults to the agent's namespace
+
+  tools:                                        # tools exposed to the model
+    - type: http                                # built-in | custom | mcp | http | agent | team | builtin
+      name: my-http-tool                        # required (minLength 1) unless type is built-in
+    - type: mcp
       name: my-mcp-tool
-      
-  # Parameters for template processing in prompts
-  parameters:
+
+  parameters:                                   # values for {{.name}} templating in prompt
     - name: api_endpoint
       valueFrom:
         configMapKeyRef:
@@ -52,9 +44,8 @@ spec:
       valueFrom:
         queryParameterRef:
           name: agent_name
-          
-  # JSON schema for structured output (optional)
-  outputSchema:
+
+  outputSchema:                                 # JSON schema for structured output
     type: object
     properties:
       summary:
@@ -62,51 +53,132 @@ spec:
       confidence:
         type: number
 
-  # Header overrides for models and MCP servers (optional)
-  overrides:
-    - headers:
+  overrides:                                    # HTTP header overrides for downstream model / MCP calls
+    - resourceType: model                       # model | mcpserver
+      headers:
         - name: X-User-ID
           value:
             value: "user123"
-      resourceType: model
       labelSelector:
         matchLabels:
           provider: openai
-
-status:
-  # Status conditions indicate agent health and availability
-  conditions:
-  - type: Available
-    status: "True"
-    reason: AllDependenciesReady
-    message: Agent is ready for execution
 ```
 
-## Status and Conditions
+## Fields
 
-Agents use status conditions to indicate their availability and health:
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.prompt` | string | no | System prompt defining the agent's behavior. Supports Go template substitution via `{{.name}}` against `spec.parameters`. |
+| `spec.description` | string | no | Human-readable description of the agent. |
+| `spec.modelRef` | object | no | Model the agent uses. **If omitted, defaults to a `Model` named `default`** in the agent's namespace. |
+| `spec.modelRef.name` | string | yes (when `modelRef` set) | Name of the `Model` resource (minLength 1). |
+| `spec.modelRef.namespace` | string | no | Namespace of the `Model`. Defaults to the agent's namespace. |
+| `spec.executionEngine` | object | no | Named `ExecutionEngine` to run this agent (e.g. LangChain, A2A). **If unset, the built-in completions executor is used.** |
+| `spec.executionEngine.name` | string | yes (when `executionEngine` set) | Name of the `ExecutionEngine` resource (minLength 1). |
+| `spec.executionEngine.namespace` | string | no | Namespace of the `ExecutionEngine`. Defaults to the agent's namespace. |
+| `spec.tools[]` | list | no | Tools exposed to the model. See [Tool types](#tool-types). |
+| `spec.tools[].type` | enum (`built-in`, `custom`, `mcp`, `http`, `agent`, `team`, `builtin`) | yes | Kind of tool. `built-in`/`builtin` are controller-provided (e.g. `terminate`, `noop`) and need no `Tool` CRD; `http`, `mcp`, and `custom` reference a `Tool` CRD; `agent` and `team` reference another `Agent` or `Team` in the same namespace. |
+| `spec.tools[].name` | string | conditional | Name exposed to the model (minLength 1). Required for every type except `built-in`. For non-built-in types it must match a resource of that type in the namespace, unless overridden by `partial.name`. |
+| `spec.tools[].description` | string | no | Description of the tool as exposed to the model. |
+| `spec.tools[].functions[]` | list | no | Preconfigured function values (`name` + `value` or `valueFrom`) passed to the tool. |
+| `spec.tools[].partial` | object | no | Overrides the tool's exposed name and preconfigures/hides parameters from the model. See [Partial tools](#partial-tools). |
+| `spec.parameters[]` | list | no | Template values substituted into `spec.prompt`. Each entry has a `name` (minLength 1) and either a `value` or `valueFrom` (`configMapKeyRef`, `secretKeyRef`, `serviceRef`, `queryParameterRef`). `value` and `valueFrom` are mutually exclusive. |
+| `spec.outputSchema` | JSON schema | no | JSON schema for structured output. Preserves unknown fields — supply any valid JSON Schema object. |
+| `spec.overrides[]` | list | no | HTTP header overrides applied when the agent calls its model or an MCP server. See [Overrides](#overrides). |
 
-### Conditions
+## Tool types
 
-| Condition Type | Status | Description |
-|----------------|--------|-------------|
-| **Available** | True | Agent is ready for execution with all dependencies resolved |
-| **Available** | False | Agent has unresolved dependencies or configuration issues |
+`spec.tools[].type` accepts:
 
-### Status Fields
+| Type | References | Notes |
+| --- | --- | --- |
+| `built-in` / `builtin` | none | Controller-provided tools such as `terminate` and `noop`. No `Tool` CRD lookup; not validated. |
+| `http` | a `Tool` CRD of type `http` | HTTP endpoint tool. |
+| `mcp` | a `Tool` CRD of type `mcp` | Tool served by an MCP server. |
+| `custom` | a `Tool` CRD | Deprecated generic type; the CRD type is not cross-checked. |
+| `agent` | another `Agent` | Lets the agent call another agent as a tool. |
+| `team` | a `Team` | Lets the agent call a team as a tool. |
+
+The controller validates that non-built-in tools exist in the agent's namespace and that the declared `type` matches the referenced `Tool` CRD's `spec.type` (except for `custom`).
+
+### Agent and team tools
+
+An agent can expose another `Agent` or a `Team` to the model as a callable tool:
 
 ```yaml
-status:
-  conditions:
-  - type: Available
-    status: "True"
-    reason: AllDependenciesReady
-    message: Agent is ready for execution
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator
+spec:
+  prompt: |
+    You coordinate specialists. Delegate sub-tasks to the tools available.
+  tools:
+    - type: agent
+      name: research-agent            # another Agent in this namespace
+    - type: team
+      name: review-team               # a Team in this namespace
+```
+
+## Overrides
+
+Inject HTTP headers when the agent calls its model or an MCP server. `resourceType` is `model` or `mcpserver`; an optional `labelSelector` scopes the override to matching resources. Header values can be literal (`value`) or sourced (`valueFrom`).
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: custom-headers-agent
+spec:
+  prompt: You are a helpful assistant.
+  overrides:
+    - resourceType: model
+      headers:
+        - name: X-User-ID
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: user-session
+                key: user-id
+        - name: X-Request-Context
+          value:
+            value: "production"
+      labelSelector:
+        matchLabels:
+          provider: openai
+```
+
+See [Overrides](/user-guide/overrides) for details.
+
+## Partial tools
+
+`partial` binds an agent tool to a real `Tool` CRD under a different exposed name and preconfigures (or hides) parameters. Parameters set in `partial.parameters` are injected at runtime and are not visible or editable by the model.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent
+spec:
+  tools:
+    - type: http
+      name: weather-forecast              # name exposed to the model
+      description: "Get latest weather forecast"
+      partial:
+        name: weather-api                 # actual Tool CRD name (type: http)
+        parameters:
+          - name: city
+            value: "{{ .Query.city }}"    # from query parameters
+          - name: units
+            value: "metric"               # static value
+          - name: language
+            value: nil                    # exclude; leave for the model to supply
 ```
 
 ## Examples
 
-### Simple Agent
+### Simple agent
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
@@ -116,7 +188,8 @@ spec:
   prompt: You are a helpful assistant.
 ```
 
-### Agent with Tools
+### Agent with tools
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
@@ -133,7 +206,8 @@ spec:
       name: get-forecast
 ```
 
-### Agent with Structured Output
+### Structured output
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
@@ -154,7 +228,8 @@ spec:
         maximum: 1
 ```
 
-### Agent with Templated Prompt from ConfigMap
+### Templated prompt from ConfigMap
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
@@ -163,9 +238,9 @@ metadata:
 spec:
   prompt: |
     You are a policy review assistant. Review documents according to these guidelines:
-    
+
     Policy documents are located at: {{.policyDocumentsPath}}
-    
+
     Use the following criteria for review:
     {{.reviewCriteria}}
   parameters:
@@ -181,7 +256,8 @@ spec:
           key: review-criteria
 ```
 
-### Agent with Query Parameter Reference
+### Query parameter reference
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
@@ -195,73 +271,21 @@ spec:
   parameters:
     - name: agent_name
       valueFrom:
-        queryParameterRef:  # Resolved from Query's parameters at runtime
+        queryParameterRef:                # resolved from the Query's parameters at runtime
           name: agent_name
     - name: mode
       valueFrom:
         queryParameterRef:
           name: operation_mode
     - name: expertise_level
-      value: "expert"  # Static value
+      value: "expert"                     # static value
 ```
 
-### Agent with Overrides
+See [Query → Pass parameter values at query time](/user-guide/agents#pass-parameter-values-at-query-time) for the dashboard walkthrough.
 
-Inject custom headers when interacting with models:
+### A2A agent (created by an A2AServer)
 
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: custom-headers-agent
-spec:
-  prompt: You are a helpful assistant.
-  overrides:
-    - headers:
-        - name: X-User-ID
-          value:
-            valueFrom:
-              secretKeyRef:
-                name: user-session
-                key: user-id
-        - name: X-Request-Context
-          value:
-            value: "production"
-      resourceType: model
-      labelSelector:
-        matchLabels:
-          provider: openai
-```
-
-See [Overrides](/user-guide/overrides) for detailed documentation.
-
-### Agent with Partial Tools
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: my-agent
-spec:
-  tools:
-    - type: http
-      name: weather-forecast  # Name exposed to Agent
-      description: "Get latest weather forecast"  # Description exposed to Agent
-      partial:
-        name: weather-api  # Actual Tool CRD name (type: http)
-        parameters:
-          - name: city
-            value: "{{ .Query.city }}"  # From query parameters
-          - name: units
-            value: "metric"  # Static value
-          - name: language
-            value: nil  # Explicitly exclude parameter to be provided by Agent
-```
-
-
-
-### A2A Agent (Created by A2AServer)
-
-Agents created by [A2AServer](/reference/resources/a2aserver) resources use the A2A execution engine:
+Agents created by [A2AServer](/reference/resources/a2aserver) resources run on the `a2a` execution engine and are owned by the A2AServer:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -269,43 +293,70 @@ kind: Agent
 metadata:
   name: aws-operator-agent
   annotations:
-    # A2A server that created this agent
     ark.mckinsey.com/a2a-server-name: aws-operator-agent
-    # Resolved address of the A2A server
     ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
-    # Skills discovered from the A2A server
     ark.mckinsey.com/a2a-server-skills: '[{"name":"describe_ec2_instances","description":"List and describe EC2 instances"}]'
 spec:
   description: AWS operations agent with read-only access to AWS services
   prompt: You are aws_operator_agent. AWS operations agent with read-only access to AWS services
   executionEngine:
     name: a2a
-  # modelRef omitted - A2A agents don't require models by default
-  # If the underlying A2A server uses an ARK model, the agent can optionally link to it via modelRef.
-  # When modelRef is set, the agent will only show as Available if both the model and A2A server are available.
-  # Otherwise, only the A2A server availability is checked.
+  # modelRef omitted — A2A agents do not require a model.
+  # If set, the agent shows Available only when both the model and the A2AServer are available;
+  # otherwise only A2AServer availability is checked.
 ```
 
-## Reconciliation Behavior
+## Reconciliation behavior
 
-The agent controller continuously reconciles agent resources to ensure dependencies are met:
+The agent controller continuously reconciles agents to ensure their dependencies resolve, writing the result to the `Available` condition.
 
-### Model Resolution
+### Model resolution
 
-1. **Model Reference**: Controller validates the specified model exists in agent's namespace
-2. **Model not found**: Agent status condition "Available" is set to False with warning event
-3. **A2A Agents**: Agents owned by A2AServer resources do not require a model reference
+- When `spec.modelRef` is set, the controller checks the referenced `Model` exists and has its `ModelAvailable` condition `True`. Missing → `Available: False` with reason `ModelNotFound`; present but not available → `Available: False` with a "not available" message.
+- A2A agents (those owned by an `A2AServer`) can omit `modelRef` — availability is governed by the owning A2AServer, not a model.
 
-### Tool Resolution
+### Tool resolution
 
-1. **Custom tools**: Controller validates each custom tool exists in agent's namespace
-2. **Built-in tools**: No validation needed (always available)
-3. **Tool not found**: Agent status condition "Available" is set to False with warning event
+- Built-in tools (`built-in`/`builtin`) are always available and are not validated.
+- Other tools must exist in the agent's namespace and their declared `type` must match the referenced `Tool` CRD's `spec.type` (except `custom`). A missing tool sets `Available: False` with reason `ToolNotFound`.
 
-### Dependency Watching
+### Execution engine resolution
 
-The controller watches for changes to:
-- **Models**: When a model is created/updated, reconciles all dependent agents
-- **Tools**: When a tool is created/updated, reconciles all agents using that tool
+- The built-in `a2a` engine needs no `ExecutionEngine` CR. Any other named engine must exist and be in phase `ready`; otherwise `Available: False` with reason `ExecutionEngineNotFound` or `ExecutionEngineNotReady`.
 
-This ensures agents automatically become Available when missing dependencies are resolved.
+### Dependency watching
+
+The controller watches `Model`, `Tool`, `ExecutionEngine`, and `A2AServer` resources and re-reconciles dependent agents on change, so an agent automatically becomes `Available` once its missing dependencies resolve.
+
+## Status
+
+```yaml
+status:
+  conditions:
+    - type: Available
+      status: "True"
+      reason: Available
+      message: All dependencies are available
+```
+
+### Status fields
+
+| Field | Description |
+| --- | --- |
+| `status.conditions[]` | Standard Kubernetes conditions. The `Available` condition reports readiness. |
+| `Available` = `True` | All dependencies (model, tools, execution engine, A2AServer) resolve. Reason `Available`. |
+| `Available` = `False` | A dependency is missing or not ready. Reasons include `ModelNotFound`, `ToolNotFound`, `ExecutionEngineNotFound`, `ExecutionEngineNotReady`, `A2AServerNotReady`. |
+| `Available` = `Unknown` | Availability is still being determined (reason `Initializing`). |
+
+### Print columns
+
+`kubectl get agents` prints `NAME`, `MODEL` (`.spec.modelRef.name`), `AVAILABLE` (the `Available` condition status), and `AGE`.
+
+## Related
+
+- [User Guide → Agents](/user-guide/agents) — task-oriented walkthrough.
+- [Models](/reference/resources/models) — the model an agent runs against (`spec.modelRef`).
+- [Tools](/reference/resources/tools) — tools referenced by `spec.tools`.
+- [Query](/reference/resources/query) — dispatch work to an agent (`target.type: agent`).
+- [A2AServer](/reference/resources/a2aserver) — creates A2A-backed agents.
+- [Overrides](/user-guide/overrides) — header overrides via `spec.overrides`.
