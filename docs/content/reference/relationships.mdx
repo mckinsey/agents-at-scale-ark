@@ -86,7 +86,7 @@ The admission webhooks reject relationships that can't work, so most problems su
 - **Query targets are same-namespace.** The named target (or selector match) must exist in the query's namespace.
 - **Teams can't mix execution engines.** All agent members must be either internal (no `executionEngine`, or the built-in `a2a` engine) or external (a named engine) — a team can't contain both.
 - **Teams can't reference themselves.** A member can't share the team's own name; nested teams (`members[].type: team`) are allowed otherwise.
-- **Deprecated team strategies are migrated.** `round-robin` and standalone `graph` are accepted but rewritten by the mutating webhook (`round-robin` → `sequential` with loops; `graph` → `selector`). Author new teams with `sequential` or `selector`. See [Teams](/reference/resources/team).
+- **Deprecated team strategies are migrated.** `round-robin` and standalone `graph` are accepted but rewritten by the mutating webhook (`round-robin` → `sequential` with loops; `graph` → `sequential`, with the graph edges discarded). Author new teams with `sequential` or `selector`. See [Teams](/reference/resources/team).
 - **Missing dependencies block readiness.** If a referenced Model, Tool, or engine doesn't exist, the dependent resource's `Available` condition stays `False` with a reason such as `ModelNotFound`, and flips to `True` automatically once the dependency appears.
 
 ```yaml
