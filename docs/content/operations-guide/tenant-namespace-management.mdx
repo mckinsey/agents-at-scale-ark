@@ -83,9 +83,11 @@ The cross-tenant isolation above applies to Kubernetes resources and is enforced
 
 When the broker uses the default in-memory message store, each broker pod holds its own messages, so isolation follows the deployment. With the Postgres message backend (`backends.message: postgres`) the `messages` table has no `tenant_id` column and no row-level security — its columns are `sequence_number`, `conversation_id`, `query_id`, `message`, `created_at`, and `expires_at`. Data isolation between tenants therefore depends entirely on the deployment, not on the data.
 
-Each per-tenant broker must point at its own database (or at least its own schema) with its own credentials. Do not share one `DATABASE_URL` across brokers of different tenants — their messages would be commingled in the same `messages` table with no way to separate them after the fact. Only the messages store is affected; chunks, traces, events, and sessions remain in memory.
+Each per-tenant broker must point at its own database (or at least its own schema) with its own credentials. Do not share one `DATABASE_URL` across brokers of different tenants — their messages would be commingled in the same `messages` table with no way to separate them after the fact.
 
-See [Message backend (Postgres)](/developer-guide/services/ark-broker#message-backend-postgres) for backend configuration.
+The same applies to the Redis chunks backend (`backends.chunk: redis`): chunk streams carry no per-tenant separation, and `REDIS_KEY_PREFIX` namespaces keys but is not an isolation boundary. Each per-tenant broker must point at its own Redis instance (or keyspace) with its own credentials — never share one `REDIS_URL` across brokers of different tenants. Traces, events, and sessions remain in memory regardless of backend.
+
+See [Message backend (Postgres)](/developer-guide/services/ark-broker#message-backend-postgres) and [Chunk backend (Redis)](/developer-guide/services/ark-broker#chunk-backend-redis) for backend configuration.
 
 ## Developing with Tenants
 
