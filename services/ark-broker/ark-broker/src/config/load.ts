@@ -27,6 +27,8 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     backends: Object.freeze({
       message: parsed.MESSAGE_BACKEND,
       messageVisibilityTtlSeconds: parsed.MESSAGE_VISIBILITY_TTL_SECONDS,
+      event: parsed.EVENT_BACKEND,
+      eventVisibilityTtlSeconds: parsed.EVENT_VISIBILITY_TTL_SECONDS,
       chunk: parsed.CHUNK_BACKEND,
     }),
     database: Object.freeze({

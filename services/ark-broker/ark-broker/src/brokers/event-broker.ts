@@ -1,5 +1,4 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {InMemoryStream} from './stream/in-memory-stream.js';
 import type {Stream} from './stream/stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
@@ -22,20 +21,20 @@ export interface EventData {
   };
 }
 
+export type EventStream = Stream<EventData>;
+
 export class EventBroker {
   private readonly stream: Stream<EventData>;
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new InMemoryStream<EventData>(
-      logger,
-      'Event',
-      path,
-      maxItems
-    );
+  constructor(stream: EventStream, _logger?: Logger) {
+    this.stream = stream;
   }
 
-  async addEvent(event: EventData): Promise<BrokerItem<EventData>> {
-    return this.stream.append(event);
+  async addEvent(
+    event: EventData,
+    ttlSeconds?: number
+  ): Promise<BrokerItem<EventData>> {
+    return this.stream.append(event, ttlSeconds);
   }
 
   async getByQuery(queryId: string): Promise<BrokerItem<EventData>[]> {
