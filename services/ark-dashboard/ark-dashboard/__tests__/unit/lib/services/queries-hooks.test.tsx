@@ -4,11 +4,12 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queriesService } from '@/lib/services/queries';
-import { useListQueries } from '@/lib/services/queries-hooks';
+import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 
 vi.mock('@/lib/services/queries', () => ({
   queriesService: {
     list: vi.fn(),
+    get: vi.fn(),
   },
 }));
 
@@ -127,5 +128,53 @@ describe('useListQueries', () => {
     expect(queriesService.list).toHaveBeenCalledTimes(2);
     expect(queriesService.list).toHaveBeenNthCalledWith(1, { page: 1 });
     expect(queriesService.list).toHaveBeenNthCalledWith(2, { page: 2 });
+  });
+});
+
+describe('useGetQuery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches a query by name and returns the data', async () => {
+    const mockQuery = { name: 'q-1', namespace: 'default', status: { phase: 'done' } };
+    vi.mocked(queriesService.get).mockResolvedValue(mockQuery as any);
+
+    const { result } = renderHook(() => useGetQuery('q-1'), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queriesService.get).toHaveBeenCalledWith('q-1');
+    expect(result.current.data).toEqual(mockQuery);
+  });
+
+  it('does not fetch when query name is null', () => {
+    const { result } = renderHook(() => useGetQuery(null), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(queriesService.get).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch when disabled', () => {
+    const { result } = renderHook(() => useGetQuery('q-1', false), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(queriesService.get).not.toHaveBeenCalled();
+  });
+
+  it('surfaces errors from the service', async () => {
+    vi.mocked(queriesService.get).mockRejectedValue(new Error('boom'));
+
+    const { result } = renderHook(() => useGetQuery('q-1'), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });
