@@ -2,12 +2,13 @@
 
 ### Requirement: Production umbrella chart for kubernetes-mcp-server
 
-The repo SHALL provide a `services/kubernetes-mcp-server/chart/` umbrella chart that mirrors the `services/argo-workflows/chart/` pattern, so the read-only `kubernetes-mcp-server` ships with a real Ark install and not only `devspace dev`. The chart's `Chart.yaml` SHALL declare the upstream `kubernetes-mcp-server` chart (version `0.1.0`) from repository `oci://ghcr.io/containers/charts` as a Helm dependency. The chart SHALL layer the Ark-specific values that the merged devspace deployment (PR #2536) already uses: `config.read_only: true`, a namespace-scoped read-only `Role`/`RoleBinding` (`get`/`list`/`watch` on the `ark.mckinsey.com` resources), and the `localhost-gateway` `HTTPRoute` with Ingress disabled.
+The repo SHALL provide a `services/kubernetes-mcp-server/chart/` umbrella chart that mirrors the `services/argo-workflows/chart/` pattern, so the read-only `kubernetes-mcp-server` ships with a real Ark install and not only `devspace dev`. The chart's `Chart.yaml` SHALL declare the upstream `kubernetes-mcp-server` chart (version `0.1.0`) from repository `oci://ghcr.io/containers/charts` as a Helm dependency. The chart SHALL layer the Ark-specific values that the merged devspace deployment (PR #2536) already uses: `config.read_only: true`, a namespace-scoped read-only `Role`/`RoleBinding` (`get`/`list`/`watch` on the `ark.mckinsey.com` resources and on the `argoproj.io` `workflows`/`workflowtemplates`), and the `localhost-gateway` `HTTPRoute` with Ingress disabled.
 
 #### Scenario: Chart renders with read-only config
 - **WHEN** the umbrella chart is rendered (helm template / lint)
 - **THEN** it sets `config.read_only: true`
 - **AND** it defines a namespace-scoped read-only `Role`/`RoleBinding` limited to `get`/`list`/`watch`
+- **AND** the read-only `Role` grants access to the `argoproj.io` `workflows` and `workflowtemplates` in the namespace
 - **AND** it enables the `localhost-gateway` `HTTPRoute` with Ingress disabled
 
 #### Scenario: Upstream dependency declared

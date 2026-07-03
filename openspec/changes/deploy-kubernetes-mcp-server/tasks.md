@@ -4,7 +4,7 @@
 
 - [x] Create `services/kubernetes-mcp-server/chart/` mirroring `services/argo-workflows/chart/`.
 - [x] Write `Chart.yaml` (`apiVersion: v2`, `type: application`) declaring the upstream `kubernetes-mcp-server` `0.1.0` from repository `oci://ghcr.io/containers/charts` as a dependency.
-- [x] Write `values.yaml` layering the Ark configuration from the merged devspace: `config.read_only: true`, `ingress.enabled: false`, `httpRoute.enabled: true` with a `parentRef` to the `localhost-gateway` Gateway in `ark-system`, and `rbac.create: true` with the `ark-reader` Role/RoleBinding granting `get`/`list`/`watch` on the `ark.mckinsey.com` resources (`agents`, `teams`, `queries`, `models`, `mcpservers`, `a2aservers`, `a2atasks`, `tools`, `memories`, `executionengines`, `arkconfigs`).
+- [x] Write `values.yaml` layering the Ark configuration from the merged devspace: `config.read_only: true`, `ingress.enabled: false`, `httpRoute.enabled: true` with a `parentRef` to the `localhost-gateway` Gateway in `ark-system`, and `rbac.create: true` with the `ark-reader` Role/RoleBinding granting `get`/`list`/`watch` on the `ark.mckinsey.com` resources (`agents`, `teams`, `queries`, `models`, `mcpservers`, `a2aservers`, `a2atasks`, `tools`, `memories`, `executionengines`, `arkconfigs`) and on the `argoproj.io` `workflows`/`workflowtemplates`.
 - [x] Ship the Ark `MCPServer` registration (from PR #2536's `manifests/mcpserver.yaml`) as a chart template so a Helm install registers the server and discovers its `Tool` CRDs.
 - [x] Verify the chart renders: `helm dependency build` then `helm template`/`helm lint` produce `config.read_only: true`, the namespace-scoped read-only RBAC, the `localhost-gateway` `HTTPRoute` with Ingress disabled, and the `MCPServer` resource.
 

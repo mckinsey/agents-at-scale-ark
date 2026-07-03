@@ -22,7 +22,7 @@ kubernetes-mcp-server:
       - kubernetes-mcp-server.127.0.0.1.nip.io
 
   # Namespace-scoped read-only access to the Ark resources the server grounds
-  # agents on.
+  # agents on, plus the Argo workflows and workflow templates in the namespace.
   rbac:
     create: true
     extraRoles:
@@ -41,6 +41,11 @@ kubernetes-mcp-server:
               - memories
               - executionengines
               - arkconfigs
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["argoproj.io"]
+            resources:
+              - workflows
+              - workflowtemplates
             verbs: ["get", "list", "watch"]
     extraRoleBindings:
       - name: ark-reader
