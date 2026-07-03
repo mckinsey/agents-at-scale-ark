@@ -137,7 +137,7 @@ spec:
 
           kubectl wait --for=condition=Completed --timeout="$ARK_TIMEOUT" query/"$QUERY_NAME" || true
 
-          kubectl get query "$QUERY_NAME" -o json > /tmp/query.json 2>/dev/null \
+          kubectl get query "$QUERY_NAME" -o json 2>/dev/null | jq -c . > /tmp/query.json \
             || { echo "{}" > /tmp/query.json; fail "failed to read Query $QUERY_NAME after wait"; }
 
           PHASE=$(jq -r '.status.phase // ""' /tmp/query.json)
