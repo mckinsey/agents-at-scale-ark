@@ -3,7 +3,6 @@ export default {
   'ark-apis': 'Ark API',
   'broker': 'Broker Service',
 
-  crds: 'Custom Resource Definitions',
   resources: 'Resources',
   'marketplace-sources': 'Marketplace Sources',
 
