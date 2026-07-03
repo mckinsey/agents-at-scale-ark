@@ -22,7 +22,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ include "ark-completions.serviceAccountName" . }} # NOSONAR - RBAC defined in ark-controller chart (shared install) or rbac.yaml (per-tenant)
+      serviceAccountName: {{ include "ark-completions.serviceAccountName" . }}
       automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}

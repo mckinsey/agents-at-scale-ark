@@ -1,15 +1,23 @@
 {{- if .Values.rbac.create }}
-# Namespace-scoped RBAC for a per-tenant completions pod. The pod resolves
-# Query/Agent/Model/MCPServer config locally using its ServiceAccount, so it
-# needs read access to those resources plus the secrets/configmaps referenced
-# by model credentials and MCP headers, and services so it can resolve the
-# streaming/memory broker ServiceReference to a URL. The shared install reuses
-# the ark-controller SA (cluster RBAC) and does not need this.
+{{- /*
+Least-privilege RBAC for the completions pod. It never mutates ark resources —
+it reads Query/Agent/Team/Model/MCPServer/Tool/A2AServer/ExecutionEngine config
+plus the secrets/configmaps referenced by model credentials & MCP headers, and
+services to resolve broker ServiceReferences to URLs. The only write is updating
+Memory status. It does not emit Kubernetes Events (events go to the broker).
+
+Scope follows discovery scope: the central install serves every namespace, so it
+gets a cluster-scoped Role; a per-tenant install (namespaceScopedDiscovery=true)
+only serves its own namespace and gets a namespaced Role.
+*/}}
+{{- $clusterScoped := not .Values.namespaceScopedDiscovery }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ if $clusterScoped }}ClusterRole{{ else }}Role{{ end }}
 metadata:
   name: {{ include "ark-completions.fullname" . }}
+  {{- if not $clusterScoped }}
   namespace: {{ include "ark-completions.namespace" . }}
+  {{- end }}
   labels:
     app: ark-completions
 rules:
@@ -23,10 +31,20 @@ rules:
   - mcpservers
   - memories
   - tools
+  - a2aservers
+  - executionengines
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - memories/status
+  verbs:
+  - get
+  - update
+  - patch
 - apiGroups:
   - ""
   resources:
@@ -39,10 +57,12 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: {{ if $clusterScoped }}ClusterRoleBinding{{ else }}RoleBinding{{ end }}
 metadata:
   name: {{ include "ark-completions.fullname" . }}
+  {{- if not $clusterScoped }}
   namespace: {{ include "ark-completions.namespace" . }}
+  {{- end }}
   labels:
     app: ark-completions
 subjects:
@@ -51,6 +71,6 @@ subjects:
   namespace: {{ include "ark-completions.namespace" . }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: {{ if $clusterScoped }}ClusterRole{{ else }}Role{{ end }}
   name: {{ include "ark-completions.fullname" . }}
 {{- end }}
