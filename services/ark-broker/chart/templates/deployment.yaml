@@ -19,7 +19,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "ark-broker.serviceAccountName" . }}
-      {{- if eq .Values.backends.message "postgres" }}
+      {{- if or (eq .Values.backends.message "postgres") (eq .Values.backends.event "postgres") }}
       initContainers:
         - name: migrate
           image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag | default .Values.app.image.tag | default .Chart.AppVersion }}"
@@ -79,6 +79,8 @@ spec:
             {{- end }}
             - name: MESSAGE_BACKEND
               value: {{ .Values.backends.message | quote }}
+            - name: EVENT_BACKEND
+              value: {{ .Values.backends.event | quote }}
             - name: CHUNK_BACKEND
               value: {{ .Values.backends.chunk | quote }}
             {{- if eq .Values.backends.chunk "redis" }}
@@ -113,7 +115,7 @@ spec:
               value: {{ printf "%s/ca.crt" .Values.redis.tls.mountPath | quote }}
             {{- end }}
             {{- end }}
-            {{- if eq .Values.backends.message "postgres" }}
+            {{- if or (eq .Values.backends.message "postgres") (eq .Values.backends.event "postgres") }}
             - name: DATABASE_URL
               {{- if .Values.database.urlSecretRef.name }}
               valueFrom:
@@ -130,7 +132,9 @@ spec:
             - name: DATABASE_STATEMENT_TIMEOUT_MS
               value: {{ .Values.database.statementTimeoutMs | quote }}
             - name: MESSAGE_VISIBILITY_TTL_SECONDS
-              value: {{ .Values.database.visibilityTtlSeconds | int | quote }}
+              value: {{ .Values.database.messageVisibilityTtlSeconds | int | quote }}
+            - name: EVENT_VISIBILITY_TTL_SECONDS
+              value: {{ .Values.database.eventVisibilityTtlSeconds | int | quote }}
             {{- if .Values.database.debugQueries }}
             - name: DATABASE_DEBUG_QUERIES
               value: "true"
