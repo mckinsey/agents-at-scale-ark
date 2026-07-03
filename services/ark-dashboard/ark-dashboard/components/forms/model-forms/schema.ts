@@ -60,6 +60,7 @@ const bedrockSchema = z
     bedrockAccessKeyIdSecretKey: z.string(),
     bedrockSecretAccessKeySecretName: z.string(),
     bedrockSecretAccessKeySecretKey: z.string(),
+    baseUrl: z.string().nullish(),
     region: z.string().nullish(),
     modelARN: z.string().nullish(),
   })

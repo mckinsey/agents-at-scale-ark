@@ -601,6 +601,27 @@ function AWSBedrockSpecificFields({
       )}
       <FormField
         control={control}
+        name="baseUrl"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Base URL (Optional)</FormLabel>
+            <FormControl>
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                placeholder="https://bedrock-runtime.us-east-1.amazonaws.com"
+              />
+            </FormControl>
+            <FormDescription>
+              Leave blank to use the default AWS Bedrock endpoint. Set this to
+              route through a gateway (e.g. an AI gateway fronting Bedrock).
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
         name="region"
         render={({ field }) => (
           <FormItem>

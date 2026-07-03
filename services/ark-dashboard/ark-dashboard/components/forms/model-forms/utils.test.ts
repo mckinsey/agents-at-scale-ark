@@ -16,6 +16,7 @@ const baseBedrockForm: FormValues = {
   bedrockAccessKeyIdSecretKey: 'access-key-id',
   bedrockSecretAccessKeySecretName: 'aws-credentials',
   bedrockSecretAccessKeySecretKey: 'secret-access-key',
+  baseUrl: '',
   region: 'us-west-2',
   modelARN: '',
 };
@@ -66,6 +67,26 @@ describe('createConfig (bedrock)', () => {
     });
     expect(config.bedrock?.accessKeyId).toBeUndefined();
     expect(config.bedrock?.secretAccessKey).toBeUndefined();
+  });
+
+  it('includes baseUrl when set (e.g. a gateway endpoint)', () => {
+    const config = createConfig({
+      ...baseBedrockForm,
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'ai-gateway',
+      bedrockApiKeySecretKey: 'token',
+      baseUrl: 'https://aws-bedrock.example.com/project-id',
+    });
+
+    expect(config.bedrock?.baseUrl).toBe(
+      'https://aws-bedrock.example.com/project-id',
+    );
+  });
+
+  it('omits baseUrl when blank', () => {
+    const config = createConfig(baseBedrockForm);
+
+    expect(config.bedrock?.baseUrl).toBeUndefined();
   });
 });
 

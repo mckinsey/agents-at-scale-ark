@@ -61,6 +61,7 @@ export function createConfig(
     }
     case 'bedrock': {
       const bedrockConfig: Record<string, unknown> = {
+        ...(formValues.baseUrl && { baseUrl: formValues.baseUrl }),
         ...(formValues.region && { region: formValues.region }),
         ...(formValues.modelARN && { modelArn: formValues.modelARN }),
       };
@@ -153,6 +154,7 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         bedrockAccessKeyIdSecretKey: 'token',
         bedrockSecretAccessKeySecretName: '',
         bedrockSecretAccessKeySecretKey: 'token',
+        baseUrl: '',
         region: '',
         modelARN: '',
       };
@@ -379,6 +381,12 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'key',
           ]) || 'token',
+        baseUrl:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'baseUrl',
+            'value',
+          ]) || '',
         region:
           getConfigValue<string>(model.config, [
             'bedrock',
