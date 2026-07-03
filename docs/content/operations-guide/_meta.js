@@ -19,8 +19,6 @@ export default {
   'data-flow-and-encryption': 'Data Flow and Encryption',
   'model-url-security': 'Model URL Security',
   'penetration-testing-reports': 'Penetration Testing Reports',
-  'code-analysis-reports': 'Code Analysis Reports',
-  'artifact-analysis-reports': 'Artifact Analysis Reports',
 
   '---roadmap': { type: 'separator', title: 'Roadmap and refactoring' },
   'technical-debt-and-upcoming-refactoring': 'Technical Debt and Upcoming Refactoring'

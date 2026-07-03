@@ -7,5 +7,6 @@ export default {
   query: 'Queries',
   team: 'Teams',
   tools: 'Tools',
-  a2atask: 'A2ATask'
+  a2atask: 'A2ATask',
+  executionengine: 'ExecutionEngine'
 }

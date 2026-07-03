@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +24,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -56,6 +58,11 @@ const (
 
 	messageCleanupGracePeriod   = 5 * time.Minute
 	messageCleanupRetryInterval = 15 * time.Second
+
+	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
+	// when MaxConcurrentQueries is reached. Short enough to be responsive,
+	// long enough to avoid a busy-loop while in-flight queries drain.
+	queryCapacityRequeueDelay = 250 * time.Millisecond
 )
 
 type QueryReconciler struct {
@@ -64,7 +71,22 @@ type QueryReconciler struct {
 	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
 	CompletionsAddr string
-	operations      sync.Map
+
+	// MaxConcurrentQueries caps the number of Query executions running in
+	// goroutines at once. When the cap is reached, Reconcile() requeues so
+	// the workqueue (cheap, object keys only) holds the backlog instead of
+	// the controller heap. Set to 0 to disable enforcement.
+	MaxConcurrentQueries int
+
+	// MaxConcurrentReconciles sets how many Query keys can be reconciled in
+	// parallel. The controller-runtime workqueue dedupes per-key, so concurrent
+	// reconciles only run for different Query objects — Reconcile() for the
+	// same key is still serialized. Set to 0 to use the controller-runtime
+	// default (1).
+	MaxConcurrentReconciles int
+
+	sem        *semaphore.Weighted
+	operations sync.Map
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -89,17 +111,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Check TTL expiry if TTL is set.
-	// TTL may be nil when using aggregated API server (non-CRD storage)
-	// because the field is omitempty and may not be initialized.
-	if obj.Spec.TTL != nil {
-		expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
-		if time.Now().After(expiry) {
-			if err := r.Delete(ctx, &obj); err != nil {
-				log.Error(err, "unable to delete object")
-				return ctrl.Result{}, err
-			}
+	// Garbage-collect the Query once it has been in a terminal phase for
+	// longer than its TTL. TTL is measured from completion, not creation,
+	// so long-running or queued queries are never reaped mid-flight.
+	// TTL may be nil when using aggregated API server (non-CRD storage).
+	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) {
+		if err := r.Delete(ctx, &obj); err != nil {
+			log.Error(err, "unable to delete object")
+			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, nil
 	}
 
 	if result, err := r.handleFinalizer(ctx, &obj); result != nil {
@@ -148,42 +169,55 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	// Calculate expiry time for requeue. Use 1 hour default if TTL is not set.
-	// TTL may be nil when using aggregated API server (non-CRD storage).
-	ttl := time.Hour
-	if obj.Spec.TTL != nil {
-		ttl = obj.Spec.TTL.Duration
-	}
-	expiry := obj.CreationTimestamp.Add(ttl)
-
 	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
-			return ctrl.Result{
-				RequeueAfter: time.Until(expiry),
-			}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
-		return ctrl.Result{
-			RequeueAfter: time.Until(expiry),
-		}, nil
+		remaining := ttlRemaining(&obj)
+		if remaining == 0 {
+			return ctrl.Result{}, nil
+		}
+		if remaining < 0 {
+			// RequeueAfter requires a positive time: 1ns means it will be
+			// requeued for GC almost immediately
+			remaining = time.Nanosecond
+		}
+		return ctrl.Result{RequeueAfter: remaining}, nil
 	case statusInputRequired:
 		// Query is awaiting approval/input, check if A2ATask has completed
-		return r.handleInputRequiredPhase(ctx, &obj, expiry)
+		return r.handleInputRequiredPhase(ctx, &obj)
 	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			return ctrl.Result{
-				RequeueAfter: time.Until(expiry),
-			}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
+}
+
+// ttlRemaining returns the time left until the Query's post-completion TTL
+// elapses: zero means TTL is not configured, negative means TTL has already
+// elapsed, positive means time left until expiry. The anchor is the
+// QueryCompleted condition's LastTransitionTime; if that condition is
+// missing on a terminal-phase Query (a corrupt state our updater should
+// not produce), the anchor falls back to CreationTimestamp so GC still
+// fires eventually instead of stranding the object.
+func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
+	if obj.Spec.TTL == nil {
+		return 0
+	}
+	anchor := obj.CreationTimestamp.Time
+	if completedAt := queryCompletedAt(obj); completedAt != nil {
+		anchor = *completedAt
+	}
+	return time.Until(anchor.Add(obj.Spec.TTL.Duration))
 }
 
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
@@ -194,29 +228,28 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	queryTimeout := time.Hour
-	if obj.Spec.TTL != nil {
-		queryTimeout = obj.Spec.TTL.Duration
-	}
-	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
-	if remaining <= 0 {
-		return ctrl.Result{}, nil
+	if r.sem != nil && !r.sem.TryAcquire(1) {
+		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
+		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
 	}
 
-	opCtx, cancel := context.WithTimeout(ctx, remaining)
+	// Execution deadline is governed by Spec.Timeout, applied per-A2A-call in
+	// sendQueryA2A. The cancel handle is stored so Spec.Cancel can interrupt
+	// the goroutine via cleanupExistingOperation.
+	opCtx, cancel := context.WithCancel(ctx)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
 	return ctrl.Result{}, nil
 }
 
-func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *arkv1alpha1.Query, expiry time.Time) (ctrl.Result, error) {
+func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *arkv1alpha1.Query) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
 	// Check if there's an associated A2ATask
 	if obj.Status.Response == nil || obj.Status.Response.A2A == nil || obj.Status.Response.A2A.TaskID == "" {
 		log.Info("Query in input-required phase but no A2ATask found, waiting")
-		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	taskID := obj.Status.Response.A2A.TaskID
@@ -237,7 +270,7 @@ func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *ark
 	case arka2a.PhaseCompleted:
 		return r.handleApprovedTask(ctx, obj, taskID)
 	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
-		return r.handleDeniedOrFailedTask(ctx, obj, &a2aTask, taskID, expiry)
+		return r.handleDeniedOrFailedTask(ctx, obj, &a2aTask, taskID)
 	default:
 		// Task still pending, keep waiting
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -268,14 +301,14 @@ func (r *QueryReconciler) handleApprovedTask(ctx context.Context, obj *arkv1alph
 
 // handleDeniedOrFailedTask resumes the agent on a resumable denial, otherwise
 // marks the query as errored.
-func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *arkv1alpha1.Query, a2aTask *arkv1alpha1.A2ATask, taskID string, expiry time.Time) (ctrl.Result, error) {
+func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *arkv1alpha1.Query, a2aTask *arkv1alpha1.A2ATask, taskID string) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
 	// A denial the agent can react to (explicit reject or timeout-reject) resumes
 	// execution so the agent produces a final response. Only true failures land
 	// the query in error.
 	if arka2a.IsResumableDenial(a2aTask) {
-		return r.handleResumableDenial(ctx, obj, taskID, expiry)
+		return r.handleResumableDenial(ctx, obj, taskID)
 	}
 
 	log.Info("A2ATask failed or cancelled, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase, "error", a2aTask.Status.Error)
@@ -293,21 +326,15 @@ func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *ark
 	if err := r.updateStatus(ctx, obj, statusError); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+	// The status update to error re-triggers reconcile, where the terminal-phase
+	// case computes the TTL-based requeue for garbage collection.
+	return ctrl.Result{}, nil
 }
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
-	cleanupCache := true
 
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error(fmt.Errorf("query execution goroutine panic: %v", r), "Query execution goroutine panicked")
-		}
-		if cleanupCache {
-			r.operations.Delete(namespacedName)
-		}
-	}()
+	defer r.finishExecuteQueryAsync(opCtx, namespacedName)
 
 	// Re-fetch query to get latest status (may have been updated with A2A taskID for resumption)
 	if err := r.Get(opCtx, namespacedName, &obj); err != nil {
@@ -336,7 +363,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		sessionId = string(obj.UID)
 	}
 
-	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
+	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(
+		opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, obj.Name),
@@ -354,6 +382,16 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	if err := r.handleQueryDispatch(opCtx, &obj, dispatchSpan, impersonatedClient); err != nil {
 		_ = r.updateStatus(opCtx, &obj, statusError)
+	}
+}
+
+func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
+	if rec := recover(); rec != nil {
+		logf.FromContext(ctx).Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
+	}
+	r.operations.Delete(namespacedName)
+	if r.sem != nil {
+		r.sem.Release(1)
 	}
 }
 
@@ -754,6 +792,28 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 	return nil, fmt.Errorf("no matching resources found for selector")
 }
 
+func isTerminalPhase(phase string) bool {
+	switch phase {
+	case statusDone, statusError, statusCanceled:
+		return true
+	}
+	return false
+}
+
+// queryCompletedAt returns the timestamp when the Query reached a terminal
+// phase, or nil if it has not. The QueryCompleted condition flips to
+// Status=True only on terminal phases (Done/Error/Canceled), and
+// setConditionCompleted writes LastTransitionTime explicitly each time, so
+// the field is a reliable post-terminal anchor for TTL retention.
+func queryCompletedAt(obj *arkv1alpha1.Query) *time.Time {
+	cond := meta.FindStatusCondition(obj.Status.Conditions, string(arkv1alpha1.QueryCompleted))
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		return nil
+	}
+	t := cond.LastTransitionTime.Time
+	return &t
+}
+
 func (r *QueryReconciler) setConditionCompleted(query *arkv1alpha1.Query, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
 		Type:               string(arkv1alpha1.QueryCompleted),
@@ -979,7 +1039,7 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 // handleResumableDenial runs the resumption path for a denial the agent can
 // react to (explicit reject or timeout-reject). It enforces the cascade cap to
 // stop an LLM that keeps retrying a denied tool from spinning forever.
-func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1alpha1.Query, taskID string, expiry time.Time) (ctrl.Result, error) {
+func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1alpha1.Query, taskID string) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	count := readApprovalCascadeCount(obj)
 	if count >= maxApprovalCascades {
@@ -996,7 +1056,9 @@ func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1a
 		if err := r.updateStatus(ctx, obj, statusError); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Until(expiry)}, nil
+		// The status update to error re-triggers reconcile, where the
+		// terminal-phase case computes the TTL-based requeue for GC.
+		return ctrl.Result{}, nil
 	}
 
 	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
@@ -1106,6 +1168,7 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.initSemaphore()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Query{}).
 		Watches(
@@ -1113,6 +1176,7 @@ func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.findQueriesForA2ATask),
 		).
 		Named("query").
+		WithOptions(r.buildControllerOptions()).
 		Complete(r)
 }
 
@@ -1235,4 +1299,18 @@ func (r *QueryReconciler) handleQueryDispatch(
 	_ = r.updateStatusWithDuration(opCtx, obj, queryStatus, duration)
 
 	return nil
+}
+
+func (r *QueryReconciler) initSemaphore() {
+	if r.MaxConcurrentQueries > 0 {
+		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
+	}
+}
+
+func (r *QueryReconciler) buildControllerOptions() controller.Options {
+	opts := controller.Options{}
+	if r.MaxConcurrentReconciles > 0 {
+		opts.MaxConcurrentReconciles = r.MaxConcurrentReconciles
+	}
+	return opts
 }

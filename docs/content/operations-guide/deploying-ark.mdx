@@ -6,16 +6,9 @@ Deploy Ark locally using the CLI, Helm, or to remote clusters with registry-base
 
 Running Ark requires at least 2 vCPU and 4 GiB of RAM. Further resource consumption depends on individual workflows and load.
 
-## CLI Deployment
+## Install with the CLI
 
-Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
-
-```
-npm install -g @agents-at-scale/ark
-ark install
-```
-
-This will run an interactive install of the core Ark controller, dependencies, and optional additional services.
+For the standard CLI install, follow the [Quickstart](/quickstart), which is kept current and tested. This page covers: Helm and remote-cluster deployment, storage backends, private registries, CI/CD RBAC, and multi-tenant operation.
 
 ### Storage backend
 
@@ -90,7 +83,7 @@ The `fark` (Fast Agentic Runtime Kit) CLI can be built from source:
 
 ```bash
 cd tools/fark
-go build -o ark ./cmd/fark
+go build -o fark ./cmd/fark
 cp fark /usr/local/bin
 fark
 ```
@@ -108,7 +101,7 @@ helm upgrade --install \
   --namespace ark-system \
   --create-namespace \
   --set controllerManager.container.image.repository=your-registry.com/ark-controller \
-  --set controllerManager.container.image.tag=0.1.21 \
+  --set controllerManager.container.image.tag=0.1.31 \
   --set containerRegistry.enabled=true \
   --set containerRegistry.server=your-registry.com \
   --set containerRegistry.username=your_username \
@@ -120,7 +113,7 @@ helm upgrade --install \
   --version 0.1.31 \
   --namespace ark-system \
   --set image.repository=your-registry.com/ark-completions \
-  --set image.tag=0.1.21
+  --set image.tag=0.1.31
 ```
 
 If you need to transfer containers between registries, use the transfer script:
@@ -131,7 +124,7 @@ export SOURCE_DOCKER_REGISTRY=source-registry.com
 export TARGET_DOCKER_REGISTRY=your-registry.com
 export TARGET_DOCKER_USERNAME=your_username
 export TARGET_DOCKER_TOKEN=your_token
-export VERSION=0.1.21
+export VERSION=0.1.31
 ./scripts/deploy/transfer-ark-containers.sh
 ```
 
@@ -179,7 +172,7 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 ## The Ark Controller
 
-By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field. Impersonation is nenabled by default and can be configured via the `ark-controller` chart values:
+By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field. Impersonation is enabled by default and can be configured via the `ark-controller` chart values:
 
 ```yaml
 # values.yaml for ark-controller
@@ -210,27 +203,6 @@ This creates:
 - A RoleBinding linking the service account to the role
 - Builtin tools (`terminate`, `noop`) for agent workflows
 
-Additional options include resource quotas and network policies, which are documented in the chart.
+Resource quotas and network policies are also available, documented in the chart. Queries then run under this service account via their `query.serviceAccount` field (subject to the impersonation setting above); omit it to use the controller's own identity.
 
-### Using the Tenant Service Account
-
-Configure queries to use the service account:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: my-query
-  namespace: tenant-1
-spec:
-  # Optional - omit to use controller identity.
-  serviceAccount: ark-tenant  
-  input: "Hello from tenant-1"
-  target:
-    type: agent
-    name: my-agent
-```
-
-When no service account is specified, the query runs with the controller's identity. This is suitable for development and single-tenant deployments.
-
-> Note: Future releases will move query execution to per-namespace executor pods, eliminating the need for service account impersonation.
+The [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) guide is the canonical reference for multi-tenancy — CLI-based setup, cross-tenant access via RBAC, broker storage isolation, and the development workflow.

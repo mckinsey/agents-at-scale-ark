@@ -1,46 +1,112 @@
-# Models
+---
+title: Model
+description: Model CRD reference — provider selection, per-provider config, authentication, and health status
+---
 
-Models define AI language model configurations for agents to use. Agents use the model named `default` if no specific model is configured.
+# Model
 
-### OpenAI
+A `Model` defines an AI language model endpoint that agents call. Each model names a `provider` (the backend client), a `model` identifier, and a provider-specific `config` block holding the base URL, credentials, and generation properties. Agents reference a model by name via `modelRef`, falling back to the model named `default` when none is set. For a task-oriented walkthrough see [User Guide → Configure models](/user-guide/models); this page is the field-by-field reference.
+
+## Spec
 
 ```yaml
-# Example OpenAI model.
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
   name: default
 spec:
-  # type defaults to 'completions' (chat completions) — the only value
-  # accepted today, so it can be omitted.
-  # The 'openai' provider supports any OpenAI specification compatible model,
-  # including OpenAI, Google Gemini (in OpenAI compatibility mode), Anthropic
-  # Claude and so on.
-  provider: openai
-  type: completions
+  # --- Required ----------------------------------------------------------
+  provider: openai                            # openai | azure | bedrock | anthropic
   model:
-    # The specific model type.
-    value: gpt-4o
-  config:
+    value: gpt-4o                             # model identifier (ValueSource)
+  config:                                     # exactly one provider block below
     openai:
-      # API endpoint URL
       baseUrl:
         value: "https://api.openai.com/v1"
-      # API authentication key - this should be set to a Kubernetes Secret
-      # for security purposes.
       apiKey:
         valueFrom:
           secretKeyRef:
             name: default-model-token
             key: token
-      # Optional model generation parameters
+
+  # --- Common optional fields --------------------------------------------
+  type: completions                           # DEPRECATED selector; default 'completions'
+  pollInterval: 1m                            # health-probe interval (default '1m')
+```
+
+## Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.provider` | enum (`openai`, `azure`, `bedrock`, `anthropic`) | yes | Selects the backend client. This is the authoritative selector — the matching `config.<provider>` block must be present. |
+| `spec.model` | `ValueSource` | yes | The model identifier (e.g. `gpt-4o`, `us.anthropic.claude-3-5-haiku-20241022-v1:0`). Supports `value` or `valueFrom` (`secretKeyRef`, `configMapKeyRef`, `serviceRef`, `queryParameterRef`). |
+| `spec.config` | `ModelConfig` | yes | Provider-specific configuration. Holds exactly one of `openai`, `azure`, `bedrock`, `anthropic`, matching `spec.provider`. |
+| `spec.type` | enum (`completions`, `openai`, `azure`, `bedrock`, `anthropic`) | no | **Deprecated.** Default `completions`. Legacy provider values (`openai`, `azure`, `bedrock`) are migrated to `spec.provider` by the mutating webhook. Use `spec.provider` instead — `spec.type` will be removed in release 1.0. |
+| `spec.pollInterval` | duration | no | How often the controller probes the model for health. Defaults to `1m`. |
+
+### Provider config fields
+
+`spec.config` carries one block keyed by provider. Every credential/URL field is a `ValueSource` (direct `value` or `valueFrom` a Secret, ConfigMap, service, or query parameter).
+
+| Provider block | Field | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `config.openai` | `baseUrl` | `ValueSource` | yes | API endpoint URL. |
+| | `apiKey` | `ValueSource` | yes | API key. Store in a Secret. |
+| | `headers[]` | `[]Header` | no | Custom HTTP headers. |
+| | `properties` | `map[string]ValueSource` | no | Generation parameters (`temperature`, `max_tokens`, …). |
+| `config.azure` | `baseUrl` | `ValueSource` | yes | Azure OpenAI resource URL. |
+| | `auth` | `AzureAuth` | no | Exactly one of `apiKey`, `managedIdentity`, `workloadIdentity`. |
+| | `apiKey` | `ValueSource` | no | **Deprecated** — use `auth.apiKey`. Accepted when `auth` is unset. |
+| | `apiVersion` | `ValueSource` | no | Azure API version (e.g. `2024-12-01-preview`). |
+| | `headers[]` | `[]Header` | no | Custom HTTP headers. |
+| | `properties` | `map[string]ValueSource` | no | Generation parameters. |
+| `config.bedrock` | `region` | `ValueSource` | no | AWS region. |
+| | `baseUrl` | `ValueSource` | no | Override endpoint (defaults to the AWS Bedrock endpoint). |
+| | `accessKeyId` | `ValueSource` | no | Explicit credential (defaults to the IAM role). |
+| | `secretAccessKey` | `ValueSource` | no | Explicit credential. |
+| | `sessionToken` | `ValueSource` | no | Temporary-credential / JWT token. |
+| | `modelArn` | `ValueSource` | no | Custom model ARN. |
+| | `maxTokens` | int (1–100000) | no | Max response tokens. |
+| | `temperature` | string (`0`–`1`) | no | Sampling temperature, as a string. |
+| | `properties` | `map[string]ValueSource` | no | Generation parameters. |
+| `config.anthropic` | `baseUrl` | `ValueSource` | yes | Anthropic API URL. |
+| | `apiKey` | `ValueSource` | yes | API key. Store in a Secret. |
+| | `version` | `ValueSource` | no | Anthropic API version header. |
+| | `headers[]` | `[]Header` | no | Custom HTTP headers. |
+| | `properties` | `map[string]ValueSource` | no | Generation parameters. |
+
+## Providers
+
+### OpenAI
+
+The `openai` provider supports any OpenAI-specification-compatible endpoint, including OpenAI itself and OpenAI-compatible gateways.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  provider: openai
+  type: completions                           # legacy; defaults to 'completions'
+  model:
+    value: gpt-4o
+  config:
+    openai:
+      baseUrl:
+        value: "https://api.openai.com/v1"
+      # Store the key in a Secret rather than inline.
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: default-model-token
+            key: token
       properties:
         temperature:
           value: "0.7"
         max_tokens:
           value: "4096"
 ---
-# Example of a secret that can be used to configure the API key for a model.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -50,7 +116,7 @@ stringData:
   token: "your-api-key-here"
 ```
 
-An API key secret can also be created like so:
+Create the API-key Secret directly with:
 
 ```bash
 kubectl create secret generic default-model-token --from-literal=token="your-api-key-here"
@@ -58,9 +124,9 @@ kubectl create secret generic default-model-token --from-literal=token="your-api
 
 ### Azure OpenAI
 
-Azure models support three authentication methods via `config.azure.auth`: **API Key** (default), **Managed Identity** (AKS node identity), and **Workload Identity** (K8s ServiceAccount federated to Azure). Use exactly one.
+Azure models support three authentication methods via `config.azure.auth`: **API Key** (default), **Managed Identity** (AKS node identity), and **Workload Identity** (Kubernetes ServiceAccount federated to Azure). Set exactly one.
 
-**API Key (legacy or explicit):**
+**API Key (explicit or legacy):**
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -76,14 +142,17 @@ spec:
     azure:
       baseUrl:
         value: "https://your-resource.openai.azure.com"
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: azure-openai-key
-            key: token
+      auth:
+        apiKey:
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai-key
+              key: token
       apiVersion:
         value: "2024-12-01-preview"
 ```
+
+The top-level `config.azure.apiKey` field still works but is deprecated in favour of `config.azure.auth.apiKey`.
 
 **Managed Identity (AKS):** Use when Ark runs on AKS and the cluster or node pool has a User-Assigned Managed Identity with access to the Azure OpenAI resource. No API key is stored on the cluster.
 
@@ -104,13 +173,13 @@ spec:
         value: "2024-02-15-preview"
       auth:
         managedIdentity: {}
-        # Or with user-assigned identity:
+        # Or with a user-assigned identity:
         # managedIdentity:
         #   clientId:
         #     value: "12345678-1234-1234-1234-123456789abc"
 ```
 
-**Workload Identity:** Use when running on any Kubernetes cluster (including non-Azure) with Azure Workload Identity configured. The pod's ServiceAccount is federated to an Azure Managed Identity.
+**Workload Identity:** Use when running on any Kubernetes cluster (including non-Azure) with Azure Workload Identity configured. The pod's ServiceAccount is federated to an Azure Managed Identity. Both `clientId` and `tenantId` are required.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -135,8 +204,6 @@ spec:
             value: "87654321-4321-4321-4321-210987654321"
 ```
 
-**Testing Azure auth:** (1) API Key: create a Secret with your key, apply a model using `config.azure.auth.apiKey` (or legacy top-level `apiKey`), then run a query. (2) Managed Identity: on AKS with managed identity enabled, apply a model with `auth.managedIdentity` and ensure the identity has "Cognitive Services User" on the Azure OpenAI resource. (3) Workload Identity: configure federation (e.g. Azure AD Workload Identity), apply a model with `auth.workloadIdentity` and the same clientId/tenantId, then run a query from a pod using the federated ServiceAccount.
-
 ### AWS Bedrock
 
 ```yaml
@@ -145,20 +212,19 @@ kind: Model
 metadata:
   name: claude-haiku
 spec:
-  # The AWS Bedrock provider with completions (chat) capability.
   provider: bedrock
   type: completions
   model:
     value: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
   config:
     bedrock:
-      # AWS region (optional, uses default)
+      # AWS region (optional).
       region:
         value: "us-west-2"
-      # Base URL - optional only needed if the non-default is required.
+      # Base URL (optional — only needed for a non-default endpoint).
       baseUrl:
-        value: "https://aws-bedrock.prod.ai-gateway.quantumblack.com/your-project-id"
-      # Explicit credentials (optional, defaults to IAM role)
+        value: "https://your-bedrock-gateway.example.com/your-project-id"
+      # Explicit credentials (optional; defaults to the IAM role).
       accessKeyId:
         valueFrom:
           secretKeyRef:
@@ -169,54 +235,63 @@ spec:
           secretKeyRef:
             name: aws-credentials
             key: secret-access-key
-      # Session token for temporary credentials or JWT tokens
+      # Session token for temporary credentials or JWT tokens.
       sessionToken:
         valueFrom:
           secretKeyRef:
             name: aws-credentials
             key: session-token
-      # Custom model ARN (optional)
+      # Custom model ARN (optional).
       modelArn:
         value: "arn:aws:bedrock:..."
-      properties:
-        temperature:
-          value: "0.7"
-        max_tokens:
-          value: "4096"
+      maxTokens: 4096
+      temperature: "0.7"
 ```
 
-### Google Gemini and Anthropic Models
+`maxTokens` accepts an integer in `1`–`100000`; `temperature` is a string in the range `0`–`1`.
 
-Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` provider. The base URLs are:
+### Google Gemini and Anthropic
 
-- `https://generativelanguage.googleapis.com/v1beta/openai` for Google Gemini
-- `https://api.anthropic.com/v1` for Anthropic Claude
-
-Most other providers also support OpenAI compatible base URLs - check their docs for details.
-
-## Model Properties
-
-All model providers support a flexible properties system that allows you to customize model behavior by setting parameters like temperature, max tokens, and other OpenAI ChatCompletion parameters.
-
-### Basic Properties Example
+Anthropic Claude models can be used through the native `anthropic` provider:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
-  name: gpt-4-custom
+  name: claude
+spec:
+  provider: anthropic
+  model:
+    value: claude-3-5-sonnet-20241022
+  config:
+    anthropic:
+      baseUrl:
+        value: "https://api.anthropic.com/v1"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: anthropic-key
+            key: token
+```
+
+Google Gemini does not have a dedicated provider — it is reached through the `openai` provider against Gemini's OpenAI-compatible endpoint. Anthropic also exposes an OpenAI-compatible endpoint, so it can likewise be used via `provider: openai`:
+
+- `https://generativelanguage.googleapis.com/v1beta/openai` — Google Gemini
+- `https://api.anthropic.com/v1` — Anthropic Claude
+
+Most other providers publish OpenAI-compatible base URLs too — check their docs.
+
+## Model properties
+
+Every provider block supports a `properties` map for generation parameters. Values are passed through to the underlying chat-completion call.
+
+```yaml
 spec:
   provider: openai
-  type: completions
   model:
     value: gpt-4o
   config:
     openai:
-      properties:
-        temperature:
-          value: "0.1"
-        max_tokens:
-          value: "1000"
       baseUrl:
         value: "https://api.openai.com/v1"
       apiKey:
@@ -224,25 +299,24 @@ spec:
           secretKeyRef:
             name: openai-secret
             key: token
+      properties:
+        temperature:
+          value: "0.1"
+        max_tokens:
+          value: "1000"
 ```
 
-Any OpenAI ChatCompletion parameters can be provided through the properties system, including `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`, `stop`, `seed`, and more.
+Any OpenAI ChatCompletion parameter is accepted, including `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`, `stop`, and `seed`.
 
-## Custom HTTP Headers
+## Custom HTTP headers
 
-OpenAI and Azure models support custom HTTP headers for advanced authentication and routing scenarios. Headers can be specified with direct values or loaded from Kubernetes Secrets and ConfigMaps.
-
-**Supported Providers:**
-- OpenAI
-- Azure OpenAI
-
-### Basic Headers Example
+The `openai`, `azure`, and `anthropic` provider blocks accept `headers[]` for advanced authentication and routing. Each header value is a direct `value` or loaded `valueFrom` a Secret or ConfigMap.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
-  name: default
+  name: gateway-model
 spec:
   provider: azure
   type: completions
@@ -252,176 +326,94 @@ spec:
     azure:
       baseUrl:
         value: "https://your-resource.openai.azure.com"
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: azure-openai-key
-            key: token
-      apiVersion:
-        value: "2024-12-01-preview"
-      # Custom HTTP headers sent with every request
-      headers:
-        - name: X-Custom-Header
-          value:
-            value: "direct-header-value"
-        - name: X-Request-ID
-          value:
-            value: "my-app-v1"
-```
-
-### Headers from Secrets and ConfigMaps
-
-Load sensitive header values from Kubernetes Secrets or configuration from ConfigMaps:
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: gateway-credentials
-type: Opaque
-stringData:
-  api-key: "your-gateway-api-key"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
-data:
-  user-agent: "MyApp/1.0"
----
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Model
-metadata:
-  name: default
-spec:
-  provider: azure
-  type: completions
-  model:
-    value: gpt-4o
-  config:
-    azure:
-      baseUrl:
-        value: "https://your-resource.openai.azure.com"
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: azure-openai-key
-            key: token
+      auth:
+        apiKey:
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai-key
+              key: token
       apiVersion:
         value: "2024-12-01-preview"
       headers:
-        # Load from Secret
+        # Direct value.
+        - name: X-Client-ID
+          value:
+            value: "production-client"
+        # From a Secret.
         - name: X-API-Gateway-Key
           value:
             valueFrom:
               secretKeyRef:
                 name: gateway-credentials
                 key: api-key
-        # Load from ConfigMap
+        # From a ConfigMap.
         - name: User-Agent
           value:
             valueFrom:
               configMapKeyRef:
                 name: app-config
                 key: user-agent
-        # Direct value
-        - name: X-Client-ID
-          value:
-            value: "production-client"
 ```
 
-### OpenAI Provider Headers
-
-Headers work the same way with OpenAI provider:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Model
-metadata:
-  name: openai-with-headers
-spec:
-  provider: openai
-  type: completions
-  model:
-    value: gpt-4o
-  config:
-    openai:
-      baseUrl:
-        value: "https://api.openai.com/v1"
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: openai-secret
-            key: token
-      headers:
-        - name: X-Custom-Header
-          value:
-            value: "my-value"
-```
-
-## Status and Health Checking
-
-ARK continuously monitors model availability through periodic health checks. The model controller probes each model at regular intervals to ensure it remains accessible and functional.
-
-### Health Check Configuration
-
-The `pollInterval` field controls how often the model is probed:
-
-```yaml
-spec:
-  pollInterval: 1m  # Default: 1 minute
-```
-
-### Status Conditions
-
-Model status is tracked using Kubernetes conditions pattern. The primary condition is `ModelAvailable`:
+## Status
 
 ```yaml
 status:
+  resolvedAddress: "https://api.openai.com/v1"
   conditions:
-  - type: ModelAvailable
-    status: "True"        # True/False/Unknown
-    reason: "Available"   # Short reason for the condition
-    message: "Model is available and probed successfully"
-    lastTransitionTime: "2024-01-15T10:30:00Z"
+    - type: ModelAvailable
+      status: "True"
+      reason: Available
+      message: "Model is available and probed successfully"
+      lastTransitionTime: "2026-01-15T10:30:00Z"
 ```
 
-**Condition States:**
-- **ModelAvailable: True** - Model successfully responds to test prompts
-- **ModelAvailable: False** - Model probe failed (network error, authentication issue, etc.)
-- **ModelAvailable: Unknown** - Initial state before first probe completes
+The controller probes each model every `spec.pollInterval` and records the result in the `ModelAvailable` condition.
 
-### Viewing Model Status
+### Status fields
 
-Check model availability using kubectl:
+| Field | Description |
+| --- | --- |
+| `status.resolvedAddress` | The resolved base URL the controller reached during the health probe. |
+| `status.conditions[]` | Standard Kubernetes conditions. `ModelAvailable` reflects the health probe. |
+
+**`ModelAvailable` states:**
+
+| Status | Reason | Meaning |
+| --- | --- | --- |
+| `True` | `Available` | Model responded to the probe successfully. |
+| `False` | `ModelProbeFailed` | Probe failed (network, authentication, or configuration error) — details in `message`. |
+| `Unknown` | `Initializing` | Initial state before the first probe completes. |
+
+### Print columns
+
+`kubectl get models` prints:
+
+| Column | Source |
+| --- | --- |
+| `NAME` | `metadata.name` |
+| `TYPE` | `.spec.type` |
+| `PROVIDER` | `.spec.provider` |
+| `MODEL` | `.spec.model.value` |
+| `AVAILABLE` | `ModelAvailable` condition status |
+| `AGE` | `metadata.creationTimestamp` |
 
 ```bash
-# List models with availability status
 kubectl get models
 
-NAME                TYPE      MODEL                    AVAILABLE   AGE
-gpt-4-model         azure     gpt-4.1-mini             True        5m
-claude-model        bedrock   claude-3-sonnet-v1       False       3m
-
-# Get detailed status
-kubectl describe model gpt-4-model
+NAME           TYPE          PROVIDER   MODEL            AVAILABLE   AGE
+default        completions   azure      gpt-4.1-mini     True        5m
+claude-haiku   completions   bedrock    claude-3-haiku   False       3m
 ```
 
-The `AVAILABLE` column shows the current state of the `ModelAvailable` condition, making it easy to identify models that may have connectivity or configuration issues.
+Use `kubectl describe model <name>` for the full condition message.
 
-## Agent Model Configuration
+## Migration: `type` → `provider`
 
-Agents can specify which model to use. If no model is specified, the `default` model is used. If an agent references a model that doesn't exist, the agent will remain in `pending` state. The `modelRef` parameter is used to specify the model name:
+`spec.provider` is the current backend selector; `spec.type` is deprecated. For backward compatibility, when `spec.provider` is empty and `spec.type` holds a legacy provider value (`openai`, `azure`, or `bedrock`), the mutating webhook copies it into `spec.provider`, resets `spec.type` to `completions`, and stamps an `ark.mckinsey.com/migration-warning-provider` annotation. A model with neither `spec.provider` nor a migratable `spec.type` is rejected with `provider is required`. Set `spec.provider` explicitly and leave `spec.type` at its `completions` default (or omit it).
 
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: weather-agent
-spec:
-  prompt: "You are a helpful weather assistant"
-  # Explicitly set the model to use
-  modelRef: 
-    # Specify the model name. If no modelRef is provided then 'default' is used.
-    name: gpt-4o-mini
-```
+## Related
+
+- [Agents](/reference/resources/agent) — reference a model via `spec.modelRef`.
+- [Query](/reference/resources/query) — target a model directly with `target.type: model`.
+- [Secrets & authentication](/user-guide/models#credentials) — storing API keys and credentials for model config.

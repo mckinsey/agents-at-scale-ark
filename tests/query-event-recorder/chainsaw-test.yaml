@@ -71,13 +71,19 @@ spec:
           if [ -z "$BROKER_PORT" ] || [ "$BROKER_PORT" = "http" ]; then BROKER_PORT=80; fi
           BROKER_URL="http://${BROKER_SVC}.${BROKER_NS}.svc.cluster.local:${BROKER_PORT}"
 
+          EXPECTED_REASONS="QueryExecutionStart AgentExecutionStart LLMCallStart LLMCallComplete AgentExecutionComplete QueryExecutionComplete"
+
           events='[]'
           for attempt in $(seq 1 10); do
             BROKER_RESPONSE=$(kubectl run broker-query-$$ --image=curlimages/curl:8.11.1 --restart=Never --rm -i -n "$NAMESPACE" \
               -- curl -s "$BROKER_URL/events/$QUERY_UID" 2>/dev/null | grep '^{' | sed 's/pod ".*$//')
             events=$(echo "$BROKER_RESPONSE" | jq '.items // []')
-            count=$(echo "$events" | jq 'length')
-            if [ "$count" -gt 0 ] 2>/dev/null; then break; fi
+            missing=0
+            for reason in $EXPECTED_REASONS; do
+              count=$(echo "$events" | jq "[.[] | select(.reason == \"$reason\")] | length")
+              [ "$count" -gt 0 ] 2>/dev/null || missing=1
+            done
+            [ "$missing" -eq 0 ] && break
             sleep 2
           done
 
