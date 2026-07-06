@@ -16,7 +16,7 @@ from ...models.queries import (
     QueryListResponse,
     QueryCreateRequest,
     QueryUpdateRequest,
-    QueryDetailResponse
+    QueryDetailResponse,
 )
 from .exceptions import handle_k8s_errors
 

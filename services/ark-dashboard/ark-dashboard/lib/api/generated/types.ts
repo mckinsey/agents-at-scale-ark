@@ -191,6 +191,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/a2a-tasks/{task_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit A2A Task Approval
+         * @description Submit an approval decision for a HITL A2ATask.
+         *
+         *     The task must be in the 'input-required' phase. The decision is written to
+         *     spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+         *     controller picks it up and transitions the task to completed or failed.
+         */
+        post: operations["submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -1251,7 +1275,8 @@ export interface paths {
         put?: never;
         /**
          * Create Marketplace Source
-         * @description Create a source via server-side apply (creates the ConfigMap if absent).
+         * @description Create a source via server-side apply. With a credential: validate it, store it
+         *     in a per-source Secret, and write only ``{scheme, secretRef}`` to the ConfigMap.
          */
         post: operations["create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post"];
         delete?: never;
@@ -1296,14 +1321,16 @@ export interface paths {
         post?: never;
         /**
          * Delete Marketplace Source
-         * @description Delete a marketplace source entry by removing its ConfigMap data key.
+         * @description Delete a source: remove its ConfigMap key and its credential Secret.
          */
         delete: operations["delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete"];
         options?: never;
         head?: never;
         /**
          * Update Marketplace Source
-         * @description Update a source via server-side apply. Replaces the value (omitting displayName clears it).
+         * @description Update a source via server-side apply. Omitting ``auth`` makes it anonymous and
+         *     deletes the credential Secret; changing the URL or scheme requires re-supplying the
+         *     credential (the existing Secret is never carried to a new URL).
          */
         patch: operations["update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch"];
         trace?: never;
@@ -2103,7 +2130,7 @@ export interface components {
          * @description Detailed A2ATask response model.
          */
         A2ATaskDetailResponse: {
-            a2aServerRef: components["schemas"]["A2AServerRef"];
+            a2aServerRef?: components["schemas"]["A2AServerRef"] | null;
             agentRef: components["schemas"]["AgentRef"];
             /** Contextid */
             contextId?: string | null;
@@ -2625,6 +2652,32 @@ export interface components {
             headers?: components["schemas"]["AgentHeader"][] | null;
             /** Version */
             version?: string | components["schemas"]["ModelValueSource"] | null;
+        };
+        /**
+         * ApprovalDecision
+         * @description Approval decision for a HITL tool call.
+         * @enum {string}
+         */
+        ApprovalDecision: "approved" | "rejected";
+        /**
+         * ApprovalSubmissionRequest
+         * @description Request body to approve or reject an A2ATask's pending tool calls.
+         */
+        ApprovalSubmissionRequest: {
+            decision: components["schemas"]["ApprovalDecision"];
+        };
+        /**
+         * ApprovalSubmissionResponse
+         * @description Response after submitting an approval decision.
+         */
+        ApprovalSubmissionResponse: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
         };
         /**
          * ArkConfigResponse
@@ -3534,10 +3587,39 @@ export interface components {
             canEdit: boolean;
         };
         /**
+         * MarketplaceSourceAuthInfo
+         * @description Non-secret auth metadata returned to clients (never the credential).
+         */
+        MarketplaceSourceAuthInfo: {
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
+         * MarketplaceSourceAuthInput
+         * @description Auth config supplied on create/update.
+         *
+         *     ``credential`` is write-only (stored in a Secret, never returned). It has no
+         *     length constraint on purpose: a failed constraint would echo the token into the
+         *     422 body. Emptiness is checked in the endpoint, returning a clean 400.
+         */
+        MarketplaceSourceAuthInput: {
+            /** Credential */
+            credential?: string | null;
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
          * MarketplaceSourceCreate
          * @description Request body for creating a marketplace source.
          */
         MarketplaceSourceCreate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
             /** Displayname */
             displayName?: string | null;
             /** Name */
@@ -3547,11 +3629,17 @@ export interface components {
         };
         /**
          * MarketplaceSourceResponse
-         * @description A single marketplace source entry.
+         * @description A single marketplace source entry. Never carries the credential value.
          */
         MarketplaceSourceResponse: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInfo"] | null;
             /** Displayname */
             displayName?: string | null;
+            /**
+             * Hascredential
+             * @default false
+             */
+            hasCredential: boolean;
             /** Name */
             name: string;
             /** Url */
@@ -3562,6 +3650,7 @@ export interface components {
          * @description Request body for updating a marketplace source.
          */
         MarketplaceSourceUpdate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
             /** Displayname */
             displayName?: string | null;
             /** Url */
@@ -4161,6 +4250,11 @@ export interface components {
             } | null;
             /** Id */
             id: string;
+            /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
             /** Name */
             name: string;
             /** Secret Length */
@@ -4696,6 +4790,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalSubmissionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

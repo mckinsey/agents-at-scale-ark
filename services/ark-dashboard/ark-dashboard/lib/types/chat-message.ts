@@ -19,15 +19,35 @@ export interface ArkCompletedQueryData {
   };
 }
 
-export type ArkExtendedChunk = ChatCompletionChunk & {
-  error?: { message?: string; code?: string };
-  ark?: ArkCompletedQueryData & {
-    agent?: string;
-    query?: string;
-    systemMessage?: string;
-  };
-};
+export interface ToolApprovalRequest {
+  type: 'tool_approval_request';
+  taskId: string;
+  toolCalls: Array<{
+    id: string;
+    type: string;
+    function?: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  timeout?: string;
+  onTimeout?: string;
+  agentName?: string;
+  // Wall-clock timestamp (ms since epoch) when this approval request was
+  // received by the dashboard. Used to compute approval expiry on the client.
+  receivedAtMs?: number;
+}
 
+export type ArkExtendedChunk =
+  | (ChatCompletionChunk & {
+      error?: { message?: string; code?: string };
+      ark?: ArkCompletedQueryData & {
+        agent?: string;
+        query?: string;
+        systemMessage?: string;
+      };
+    })
+  | ToolApprovalRequest;
 
 export interface GraphEdge {
   from: string;
@@ -51,4 +71,5 @@ export type ExtendedChatMessage = ChatMessage & {
     status?: 'pending' | 'processing' | 'completed' | 'failed';
     queryName?: string;
   };
+  approvalRequest?: ToolApprovalRequest;
 };

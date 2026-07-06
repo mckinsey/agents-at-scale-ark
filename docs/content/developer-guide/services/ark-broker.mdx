@@ -5,6 +5,7 @@ import { Callout } from 'nextra/components'
 In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
 
 - In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages store
+- Completion chunks held in memory by default, optionally backed by Redis Streams for live streaming across broker replicas
 - Implements the [Memory API](/reference/resources/memory#memory-api-specification)
 - Supports [streaming queries](/developer-guide/queries/streaming)
 
@@ -157,6 +158,87 @@ database:
 ```
 
 `urlSecretRef` takes priority over `database.url` and applies to both the broker container and the migrate init container.
+
+## Chunk backend (Redis)
+
+By default the broker holds completion chunks in process memory, served from a single replica. The **chunks** store can opt in to Redis Streams so that chunks produced by one broker replica can be streamed live to a client whose SSE connection landed on another replica. Only the chunks store is affected — messages (unless on Postgres), traces, events, and sessions remain in memory (or file-based, as above).
+
+Each query gets its own Redis Stream key (`{prefix}:chunks:{queryId}`), plus a capped global key (`{prefix}:chunks:all`) backing the paginated and watch endpoints. Live tail uses `XREAD BLOCK` so chunks arrive cross-replica.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  chunk: redis
+
+redis:
+  url: "redis://:password@redis-host:6379"
+```
+
+<Callout type="warning">
+  In a multi-tenant deployment, each broker release must use its own Redis instance (or keyspace): the chunk streams carry no per-tenant separation. `REDIS_KEY_PREFIX` namespaces keys but is not an isolation boundary. Never share a `REDIS_URL` across brokers of different tenants. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHUNK_BACKEND` | `memory` | Completion chunk storage backend: `memory` or `redis` |
+| `REDIS_URL` | — | Redis connection string. Required when `CHUNK_BACKEND=redis`. Use `redis://` for plain or `rediss://` for TLS. |
+| `REDIS_USERNAME` | — | Redis ACL username (optional) |
+| `REDIS_PASSWORD` | — | Redis password (optional) |
+| `REDIS_TLS_CA_CERT_PATH` | — | Path to a CA certificate for TLS connections with self-signed certs. Set automatically by the Helm chart when `redis.tls.enabled=true`. |
+| `REDIS_KEY_PREFIX` | `ark-broker` | Prefix for all Redis keys |
+| `REDIS_STREAM_TTL_SECONDS` | `3600` | TTL applied to per-query chunk streams |
+| `REDIS_CONNECT_TIMEOUT_MS` | `10000` | Redis connection timeout |
+| `REDIS_DEBUG_COMMANDS` | `false` | Log Redis connection lifecycle events at debug level (never logs payloads) |
+
+See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace and integration tests.
+
+### Securing the Redis connection
+
+**In-transit encryption (`rediss://`)**
+
+Use the `rediss://` scheme in the connection URL to connect over TLS. For a Redis endpoint with a CA trusted by the system store, no certificates need to be mounted.
+
+**CA verification (self-signed certs) — recommended for production**
+
+Create a Kubernetes Secret containing the Redis CA certificate:
+
+```bash
+kubectl create secret generic redis-tls \
+  --from-file=ca.crt=/path/to/redis-ca.crt
+```
+
+Then enable the TLS mount:
+
+```yaml
+redis:
+  url: "rediss://:password@redis-host:6380"
+  tls:
+    enabled: true
+    secretName: redis-tls
+```
+
+When `tls.enabled=true`, the chart mounts the secret and sets `REDIS_TLS_CA_CERT_PATH` in the broker container automatically. The secret must contain a `ca.crt` key.
+
+**Hiding the connection URL from Helm values**
+
+`redis.url` embeds the password in plain text, which is visible in `kubectl get deployment -o yaml`. For production, store the full URL in a Secret and reference it instead:
+
+```bash
+kubectl create secret generic broker-redis-url \
+  --from-literal=redis-url="rediss://:password@redis-host:6380"
+```
+
+```yaml
+redis:
+  urlSecretRef:
+    name: broker-redis-url
+    key: redis-url   # default key; can be omitted
+```
+
+The password can also be supplied separately from the URL via `redis.passwordSecretRef`, sourced into `REDIS_PASSWORD`.
 
 ## Sessions Endpoint
 

@@ -105,4 +105,71 @@ describe('ManageMarketplaceSettings', () => {
     await user.click(deleteButton);
     expect(deleteMutate).toHaveBeenCalledWith('agents-at-scale-marketplace');
   });
+
+  it('sends the scheme and credential when adding an authenticated source', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    render(<ManageMarketplaceSettings />);
+
+    await user.click(screen.getByRole('button', { name: /add new marketplace/i }));
+    await user.type(
+      screen.getByPlaceholderText(/marketplace\.json/i),
+      'https://priv.test/marketplace.json',
+    );
+    await user.click(screen.getByRole('button', { name: /bearer \/ token/i }));
+    await user.type(screen.getByPlaceholderText(/sent once on save/i), 'tok-123');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).toHaveBeenCalledTimes(1);
+    expect(createMutate.mock.calls[0][0].auth).toEqual({
+      scheme: 'bearer',
+      credential: 'tok-123',
+    });
+  });
+
+  it('blocks an authenticated source with no credential', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    render(<ManageMarketplaceSettings />);
+
+    await user.click(screen.getByRole('button', { name: /add new marketplace/i }));
+    await user.type(
+      screen.getByPlaceholderText(/marketplace\.json/i),
+      'https://priv.test/marketplace.json',
+    );
+    await user.click(screen.getByRole('button', { name: /bearer \/ token/i }));
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).not.toHaveBeenCalled();
+    expect(screen.getByText(/credential is required/i)).toBeInTheDocument();
+  });
+
+  it('shows a credential badge without revealing the stored value', () => {
+    vi.mocked(useMarketplaceSources).mockReturnValue({
+      data: [
+        {
+          name: 'priv',
+          url: 'https://priv.test/marketplace.json',
+          displayName: 'Private',
+          auth: { scheme: 'bearer' },
+          hasCredential: true,
+        },
+      ],
+      isPending: false,
+    } as never);
+    vi.mocked(useMarketplaceCanEdit).mockReturnValue({ data: { canEdit: true } } as never);
+    vi.mocked(useCreateMarketplaceSource).mockReturnValue({
+      mutate: createMutate,
+      isPending: false,
+    } as never);
+    vi.mocked(useDeleteMarketplaceSource).mockReturnValue({
+      mutate: deleteMutate,
+      isPending: false,
+    } as never);
+
+    render(<ManageMarketplaceSettings />);
+    expect(screen.getByText('Bearer')).toBeInTheDocument();
+    // No password/token input is rendered for an existing source (no edit form).
+    expect(screen.queryByPlaceholderText(/sent once on save/i)).not.toBeInTheDocument();
+  });
 });

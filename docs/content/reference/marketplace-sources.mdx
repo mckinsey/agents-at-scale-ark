@@ -27,7 +27,7 @@ data:
   agents-at-scale-marketplace: |
     {"url":"https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json","displayName":"Ark Marketplace"}
   internal-mirror: |
-    {"url":"https://internal.example.com/marketplace.json"}
+    {"url":"https://internal.example.com/marketplace.json","auth":{"scheme":"bearer","secretRef":"marketplace-source-internal-mirror-auth"}}
 ```
 
 One key per source lets server-side apply track ownership at the data-key level,
@@ -39,21 +39,45 @@ so Helm-seeded entries and user edits can coexist.
 | --- | --- | --- |
 | `url` | yes | Absolute `https` URL of a marketplace manifest. The filename is not constrained. |
 | `displayName` | no | Human label shown in the dashboard. Defaults to the source name. |
+| `auth` | no | Authenticated fetch. Object with `scheme` (`bearer` or `basic`) and `secretRef` (the credential Secret name). The token is never stored here — only in the Secret. |
 
 Source names must match the Kubernetes ConfigMap key rules (alphanumeric, `-`,
 `_`, `.`). ark-api validates `url` on every write (HTTPS-only, parseable
 absolute URL) and returns HTTP 422 on failure.
 
+### Authenticated sources
+
+A source whose manifest requires authentication carries an `auth` block. The
+credential lives in a per-source Kubernetes Secret named
+`marketplace-source-<name>-auth` with a single key `value`; the ConfigMap holds
+only the non-secret `scheme` + `secretRef`. ark-api attaches the header
+server-side:
+
+- `bearer` → `Authorization: Bearer <value>` — GitHub raw, GitHub Enterprise, most artifact stores.
+- `basic` → `Authorization: Basic base64(":<value>")` — Azure DevOps (empty username + PAT).
+
+The credential is never returned by the API and never logged. The aggregator
+reads the Secret **under the requesting user's identity** (impersonation), so a
+user who cannot read the Secret cannot fetch with it — the source reports an
+`auth_error` for them. Credentialed fetches keep the SSRF guard and never follow
+redirects or send the header to another host.
+
 ## RBAC
 
-The dashboard chart ships a `marketplace-source-editor` ClusterRole granting
-`get`, `update`, and `patch` on the `marketplace-sources` ConfigMap
-(`resourceNames: ["marketplace-sources"]`). It is **bound to no one by
-default** — platform teams bind it per namespace:
+The dashboard chart ships a `marketplace-source-editor` **Role** (namespace-scoped,
+never a `ClusterRole`) granting `get`/`update`/`patch` on the `marketplace-sources`
+ConfigMap and `create`/`get`/`update`/`patch`/`delete` on `secrets`. It is **bound
+to no one by default** — platform teams replicate the Role and bind it per
+namespace:
 
 ```bash
 kubectl apply -f samples/marketplace/marketplace-source-editor-binding.yaml
 ```
+
+The Role is namespace-scoped because RBAC cannot scope `create` on secrets by
+name (the Secret does not exist yet), so per-Secret write isolation is not
+expressible. A namespaced Role bounds the blast radius to the marketplace
+namespace — a `ClusterRole` would be unacceptable over-privilege.
 
 Read access to the catalogue is already granted to dashboard users by their
 tenant role, so every user sees the sources regardless of edit permission. The
@@ -61,6 +85,23 @@ dashboard's Manage Marketplace page renders add/edit/delete controls only when
 the permission probe
 (`GET /api/v1/namespaces/{namespace}/marketplace-sources/permissions`) reports
 `canEdit: true`.
+
+### Who may use an authenticated source
+
+Because ark-api reads a credential Secret under the requesting user's identity,
+a user's `get` on that Secret **is** the "may use this private source" grant —
+there is no app-level permission table. Grant the catalogue's viewer group `get`
+on the credential Secret (scoped by `resourceName`, so it is tightly bound to the
+one Secret):
+
+```bash
+kubectl apply -f samples/marketplace/authenticated-source-rbac.yaml
+```
+
+A user outside that binding gets an `auth_error` for the source; the credential
+is never borrowed on their behalf. The credential is a service identity (a token
+to the upstream), so this is typically one `RoleBinding` to a group, not a
+per-user grant.
 
 ## Helm seeding
 
@@ -73,9 +114,12 @@ marketplaceSources:
   - name: agents-at-scale-marketplace
     url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
     displayName: "Ark Marketplace"
-  - name: internal
+  - name: internal-mirror
     url: https://internal.example.com/marketplace.json
     namespace: team-a
+    auth:
+      scheme: bearer                                     # or "basic" for Azure DevOps
+      secretRef: marketplace-source-internal-mirror-auth # references a pre-existing Secret
 ```
 
 A `post-install,post-upgrade` Job applies each entry as a key in the target
@@ -84,6 +128,24 @@ field manager `helm-marketplace-seeder`. Because ownership is tracked per key, a
 user edit to a seeded entry transfers that key's ownership; a later `helm
 upgrade` reconciles the keys it still owns and leaves user-edited keys intact.
 Setting `marketplaceSources: []` seeds nothing and skips the Job.
+
+### Seeding an authenticated source
+
+The `auth` block carries only the non-secret `scheme` + `secretRef`; the **seed
+Job writes only the ConfigMap entry and never creates the credential Secret**.
+The token must never appear in `values.yaml` or the rendered manifests.
+
+1. Create the credential Secret out-of-band (External Secrets Operator,
+   sealed-secrets, SOPS, or Vault) named `marketplace-source-<name>-auth` with a
+   single key `value` holding the token.
+2. Declare the source with its `auth` block in `marketplaceSources` (above).
+3. Grant the catalogue's viewer group `get` on that Secret so it resolves for
+   them (see [Who may use an authenticated source](#who-may-use-an-authenticated-source)).
+
+Deploy-time writes bypass the dashboard's validate-before-save and
+re-supply-on-URL-change guards (those are UX guards, not security invariants); a
+wrong or missing credential simply surfaces the per-source `auth_error` at fetch
+time and does not fail the install.
 
 ## ark-api endpoints
 
@@ -103,4 +165,10 @@ The items aggregator fetches each source's manifest concurrently
 (per-source timeout 10s, aggregator total 30s), caches successful fetches for
 one hour per `(namespace, source, url)`, and always returns HTTP 200 — per-source
 failures are reported inline with an `error.code` of `fetch_timeout`,
-`aggregator_timeout`, `http_error`, `parse_error`, or `network_error`.
+`aggregator_timeout`, `http_error`, `parse_error`, `network_error`, or
+`auth_error` (credential not accessible, or the source rejected it with 401/403).
+
+`POST`/`PATCH` with an `auth` credential validate-before-save: ark-api
+test-fetches the manifest with the credential and rejects the write with HTTP 400
+if it is missing or rejected. Changing the URL (or scheme) requires re-supplying
+the credential — the existing Secret is never carried to a new URL.

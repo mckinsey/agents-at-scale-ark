@@ -14,6 +14,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
@@ -379,9 +380,12 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		return fmt.Errorf("unable to determine A2A Task originating query")
 	}
 
-	var a2aServerName string
+	var a2aServerRef *arkv1alpha1.A2AServerRef
 	if a2aServer, ok := obj.(*arkv1prealpha1.A2AServer); ok {
-		a2aServerName = a2aServer.Name
+		a2aServerRef = &arkv1alpha1.A2AServerRef{
+			Name:      a2aServer.Name,
+			Namespace: namespace,
+		}
 	}
 
 	a2aTask := &arkv1alpha1.A2ATask{
@@ -396,10 +400,7 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 				Name:      queryName,
 				Namespace: namespace,
 			},
-			A2AServerRef: arkv1alpha1.A2AServerRef{
-				Name:      a2aServerName,
-				Namespace: namespace,
-			},
+			A2AServerRef: a2aServerRef,
 			AgentRef: arkv1alpha1.AgentRef{
 				Name:      agentName,
 				Namespace: namespace,
@@ -410,15 +411,91 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		},
 	}
 
-	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+	// For HITL approval tasks the executor publishes the approval timeout in
+	// task metadata. Surface it on Spec.Timeout so the API does not return the
+	// misleading 12h polling default.
+	if approvalTimeout, ok := extractApprovalTimeout(task.Metadata); ok {
+		a2aTask.Spec.Timeout = &metav1.Duration{Duration: approvalTimeout}
+	}
 
+	// Populate status before creation (for informational purposes)
+	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
 	now := metav1.NewTime(time.Now())
 	a2aTask.Status.StartTime = &now
 
+	// Create the resource (status will be ignored during create)
 	if err := k8sClient.Create(ctx, a2aTask); err != nil {
 		log.Error(err, "failed to create A2ATask resource", "taskId", task.ID)
 		return fmt.Errorf("failed to create A2ATask resource: %w", err)
 	}
 
-	return nil
+	// Refetch to get the latest resourceVersion before updating status
+	// Retry a few times in case the cache hasn't been updated yet
+	taskName := a2aTask.Name
+	var refetchErr error
+	for i := 0; i < 3; i++ {
+		refetchErr = k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask)
+		if refetchErr == nil {
+			break
+		}
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if refetchErr != nil {
+		log.Error(refetchErr, "failed to refetch A2ATask after creation", "taskId", task.ID)
+		return fmt.Errorf("failed to refetch A2ATask: %w", refetchErr)
+	}
+
+	// Repopulate status with fresh data and update
+	// Retry status update in case of conflicts with the A2ATask controller
+	var updateErr error
+	for i := 0; i < 3; i++ {
+		// Refetch before each update attempt to get latest resourceVersion
+		if i > 0 {
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask); err != nil {
+				log.Error(err, "failed to refetch A2ATask before status update retry", "taskId", task.ID, "attempt", i+1)
+				updateErr = err
+				continue
+			}
+		}
+
+		PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+		a2aTask.Status.StartTime = &now
+
+		updateErr = k8sClient.Status().Update(ctx, a2aTask)
+		if updateErr == nil {
+			return nil
+		}
+
+		if i < 2 {
+			log.Info("A2ATask status update conflict, retrying", "taskId", task.ID, "attempt", i+1, "error", updateErr.Error())
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	log.Error(updateErr, "failed to update A2ATask status after retries", "taskId", task.ID)
+	return fmt.Errorf("failed to update A2ATask status: %w", updateErr)
+}
+
+// extractApprovalTimeout reads the approval timeout (Go duration string) from
+// the protocol task metadata. The HITL approval flow publishes "timeout" via
+// task metadata; other tasks do not, so this is a no-op for them.
+func extractApprovalTimeout(metadata map[string]any) (time.Duration, bool) {
+	if metadata == nil {
+		return 0, false
+	}
+	raw, ok := metadata["timeout"]
+	if !ok {
+		return 0, false
+	}
+	str, ok := raw.(string)
+	if !ok || str == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(str)
+	if err != nil {
+		return 0, false
+	}
+	return d, true
 }

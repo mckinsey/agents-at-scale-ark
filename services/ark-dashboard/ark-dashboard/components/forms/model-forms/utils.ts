@@ -65,7 +65,7 @@ export function createConfig(
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockAccessKeyIdSecretName,
-              key: 'token',
+              key: formValues.bedrockAccessKeyIdSecretKey,
             },
           },
         },
@@ -73,7 +73,7 @@ export function createConfig(
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockSecretAccessKeySecretName,
-              key: 'token',
+              key: formValues.bedrockSecretAccessKeySecretKey,
             },
           },
         },
@@ -134,7 +134,9 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         provider: currentFormValues.provider,
         model: currentFormValues.model,
         bedrockAccessKeyIdSecretName: '',
+        bedrockAccessKeyIdSecretKey: 'token',
         bedrockSecretAccessKeySecretName: '',
+        bedrockSecretAccessKeySecretKey: 'token',
         region: '',
         modelARN: '',
       };
@@ -317,6 +319,14 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
+        bedrockAccessKeyIdSecretKey:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'accessKeyId',
+            'valueFrom',
+            'secretKeyRef',
+            'key',
+          ]) || 'token',
         bedrockSecretAccessKeySecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -325,6 +335,14 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
+        bedrockSecretAccessKeySecretKey:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'secretAccessKey',
+            'valueFrom',
+            'secretKeyRef',
+            'key',
+          ]) || 'token',
         region:
           getConfigValue<string>(model.config, [
             'bedrock',
