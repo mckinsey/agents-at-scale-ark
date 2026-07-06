@@ -16,8 +16,9 @@ import {
 } from '../../lib/waitForReady.js';
 import {
   runReadinessChecks,
-  detectStorageBackend,
+  describeStorageBackend,
   type ReadinessCheckResult,
+  type BackendDetection,
 } from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
@@ -72,9 +73,33 @@ function enrichServiceDetails(service: ServiceStatus): {
   };
 }
 
+function backendStatusLine(detection: BackendDetection) {
+  const display: Record<
+    BackendDetection['status'],
+    {color: StatusColor; details: string}
+  > = {
+    etcd: {color: 'green', details: 'etcd'},
+    postgresql: {color: 'green', details: 'postgresql'},
+    'not-installed': {color: 'yellow', details: 'not installed'},
+    unreachable: {color: 'yellow', details: 'cluster unreachable'},
+    forbidden: {color: 'yellow', details: 'access denied'},
+    undetermined: {color: 'yellow', details: 'undetermined'},
+  };
+  const {color, details} = display[detection.status];
+  return {
+    icon: '●',
+    iconColor: color,
+    status: 'storage backend',
+    statusColor: color,
+    name: '',
+    details,
+  };
+}
+
 function buildStatusSections(
   data: StatusData & {clusterAccess?: boolean; clusterInfo?: any},
-  versionInfo?: ArkVersionInfo
+  versionInfo?: ArkVersionInfo,
+  backend?: BackendDetection
 ): StatusSection[] {
   const sections: StatusSection[] = [];
 
@@ -280,6 +305,10 @@ function buildStatusSections(
       }
     }
   }
+  if (backend) {
+    arkStatusLines.push(backendStatusLine(backend));
+  }
+
   sections.push({title: 'ark status:', lines: arkStatusLines});
 
   return sections;
@@ -305,14 +334,31 @@ export async function checkStatus(
       fetchVersionInfo(),
     ]);
 
+    // Only probe for the storage backend if the cluster is reachable; probing an
+    // unreachable cluster would just retry to its timeout.
+    const detection: BackendDetection = statusData.clusterAccess
+      ? await describeStorageBackend()
+      : {
+          backend: 'unknown',
+          status: 'unreachable',
+          message:
+            'Cluster is not reachable — cannot determine the storage backend.',
+        };
+
     spinner.stop();
 
-    const sections = buildStatusSections(statusData, versionInfo);
+    const sections = buildStatusSections(statusData, versionInfo, detection);
     StatusFormatter.printSections(sections);
 
     if (options?.waitForReady) {
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
-      const backend = await detectStorageBackend();
+      const backend = detection.backend;
+
+      if (backend === 'unknown') {
+        output.warning(
+          `${detection.message} Skipping backend-specific readiness checks.`
+        );
+      }
 
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
@@ -386,6 +432,7 @@ export async function checkStatus(
       const remainingSeconds = Math.max(1, timeoutSeconds - elapsedSeconds);
       const deepResults = await runReadinessChecks(
         remainingSeconds,
+        backend,
         (r: ReadinessCheckResult) => {
           const icon = r.passed ? chalk.green('✓') : chalk.red('✗');
           const dur = `${(r.durationMs / 1000).toFixed(1)}s`;

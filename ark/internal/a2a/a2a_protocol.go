@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -21,6 +22,13 @@ const (
 	PhaseFailed        = "failed"
 	PhaseCancelled     = "cancelled"
 	PhaseUnknown       = "unknown"
+)
+
+const (
+	ConditionReasonApprovalRejected         = "ApprovalRejected"
+	ConditionReasonApprovalGranted          = "ApprovalGranted"
+	ConditionReasonApprovalTimeoutRejected  = "ApprovalTimeoutRejected"
+	ConditionReasonApprovalTimeoutProceeded = "ApprovalTimeoutProceeded"
 )
 
 const (
@@ -185,6 +193,7 @@ func PopulateA2ATaskStatusFromProtocol(status *arkv1alpha1.A2ATaskStatus, task *
 	}
 
 	status.ProtocolState = string(task.Status.State)
+	status.Phase = ConvertA2AStateToPhase(string(task.Status.State))
 	status.ContextID = task.ContextID
 	status.Artifacts = artifacts
 	status.History = history
@@ -280,4 +289,30 @@ func parseProtocolTimestamp(rfc3339Timestamp string) *metav1.Time {
 	}
 	timestamp := metav1.NewTime(parsedTime)
 	return &timestamp
+}
+
+// IsUserRejection checks if an A2ATask was explicitly rejected by a user.
+// Returns true if the task has a Completed condition with reason ApprovalRejected.
+func IsUserRejection(task *arkv1alpha1.A2ATask) bool {
+	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+	return cond != nil && cond.Reason == ConditionReasonApprovalRejected
+}
+
+// IsResumableDenial reports whether the agent should resume to handle the denial
+// gracefully. Covers both explicit user rejection and timeout-driven rejection so
+// that the agent can respond to the user in either case.
+func IsResumableDenial(task *arkv1alpha1.A2ATask) bool {
+	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+	if cond == nil {
+		return false
+	}
+	return cond.Reason == ConditionReasonApprovalRejected ||
+		cond.Reason == ConditionReasonApprovalTimeoutRejected
+}
+
+// IsTimeoutRejection reports whether the A2ATask was rejected because the
+// approval timeout expired (as opposed to an explicit user rejection).
+func IsTimeoutRejection(task *arkv1alpha1.A2ATask) bool {
+	cond := meta.FindStatusCondition(task.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+	return cond != nil && cond.Reason == ConditionReasonApprovalTimeoutRejected
 }

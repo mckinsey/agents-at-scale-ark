@@ -1,0 +1,87 @@
+---
+title: ExecutionEngine
+description: "ExecutionEngine CRD reference — address resolution, A2A dispatch, and status fields"
+---
+
+# ExecutionEngine
+
+An `ExecutionEngine` defines a pluggable, external runtime that executes agents (and teams) via the A2A protocol, instead of Ark's built-in completions executor. An `Agent` opts in through `spec.executionEngine: {name, namespace}`; agents that leave it unset run on the default executor, which needs no `ExecutionEngine` resource. Downstream engine implementations — such as the Claude Agent SDK and LangChain executors — live in the [Ark marketplace](https://github.com/mckinsey/agents-at-scale-marketplace). This resource is served under **`ark.mckinsey.com/v1prealpha1`** (note: `v1prealpha1`, not `v1alpha1`) and is namespaced.
+
+## Spec
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: custom-engine
+spec:
+  # --- Required ----------------------------------------------------------
+  address:                                      # how to reach the engine (ValueSource)
+    valueFrom:
+      serviceRef:
+        name: custom-engine-service             # in-cluster Service to dispatch to
+        port: "8080"                            # port name/number (optional)
+
+  # --- Optional ----------------------------------------------------------
+  description: "Custom A2A execution engine"     # human-readable info
+```
+
+## Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.address` | `ValueSource` | yes | How to reach the execution engine. The engine is contacted over the A2A protocol at this address. Supply a literal `value` or a `valueFrom` source (`serviceRef`, `configMapKeyRef`, `secretKeyRef`). Typically a `serviceRef` to an in-cluster service. |
+| `spec.address.value` | string | no | Literal address (mutually exclusive with `valueFrom`). |
+| `spec.address.valueFrom.serviceRef` | object | no | Resolve the address from a Kubernetes `Service`. Fields: `name` (required), `namespace` (defaults to the resource's namespace), `port` (name or number; defaults to the service's only/first port), `path` (optional path appended to the address). |
+| `spec.address.valueFrom.configMapKeyRef` | object | no | Resolve the address from a `ConfigMap` key (`name`, `key`, `optional`). |
+| `spec.address.valueFrom.secretKeyRef` | object | no | Resolve the address from a `Secret` key (`name`, `key`, `optional`). |
+| `spec.description` | string | no | Human-readable information about this execution engine. |
+
+## Referencing an engine from an agent
+
+An agent selects a named engine via `spec.executionEngine`. When set, the controller dispatches that agent's queries to the engine's resolved address over A2A instead of the built-in completions executor:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: aws-operator
+spec:
+  prompt: You are an AWS operations agent.
+  executionEngine:
+    name: custom-engine                         # ExecutionEngine in the same namespace
+    # namespace: other-ns                        # optional; defaults to the agent's namespace
+```
+
+The agent becomes `Available` only once the referenced engine reaches `phase: ready`; a missing or not-ready engine surfaces as `Available: False` with reason `ExecutionEngineNotFound` or `ExecutionEngineNotReady`. See [Agents](/reference/resources/agent) for the full agent reference.
+
+## Address resolution
+
+The controller resolves `spec.address` into a concrete URL and records it in `status.lastResolvedAddress`. When `address` uses a `serviceRef`, the address is built from the target `Service`; `port` and `path` refine it. Once resolved and reachable, the engine reports `phase: ready` and its address appears in `kubectl get executionengines`.
+
+## Status
+
+```yaml
+status:
+  phase: ready
+  lastResolvedAddress: http://custom-engine-service.default.svc.cluster.local:8080
+  message: ""
+```
+
+### Status fields
+
+| Field | Description |
+| --- | --- |
+| `status.phase` | Lifecycle phase of the engine (e.g. `ready`). Agents referencing this engine require `ready`. |
+| `status.lastResolvedAddress` | The concrete address resolved from `spec.address` — what the controller dispatches to over A2A. |
+| `status.message` | Human-readable detail, typically set when the engine is not ready (e.g. an address-resolution error). |
+
+### Print columns
+
+`kubectl get executionengines` prints `Name`, `Phase` (`.status.phase`), `Address` (`.status.lastResolvedAddress`), and `Age`.
+
+## Related
+
+- [Agents](/reference/resources/agent) — opt in to an engine via `spec.executionEngine`.
+- [Query](/reference/resources/query) — a query's target agent is dispatched to its engine over A2A.
+- [Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace) — downstream engine implementations (Claude Agent SDK, LangChain).

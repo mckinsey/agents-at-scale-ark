@@ -78,6 +78,7 @@ type QuerySpec struct {
 	// Engines use it for conversation threading (e.g., memory lookup, session management).
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
+	// Time to retain Query after completion.
 	// Default is resolved by the mutating webhook from ArkConfig/default
 	// (spec.queryTTL), falling back to 720h when ArkConfig is absent.
 	TTL *metav1.Duration `json:"ttl,omitempty"`
@@ -137,7 +138,7 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;input-required;error;done;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state

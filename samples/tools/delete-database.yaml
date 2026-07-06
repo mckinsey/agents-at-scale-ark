@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: delete-database
+spec:
+  type: builtin
+  description: Permanently delete a database and all its data
+  inputSchema:
+    type: object
+    properties:
+      databaseName:
+        type: string
+        description: Name of the database to delete
+      confirmName:
+        type: string
+        description: User must type database name again to confirm
+    required:
+      - databaseName
+      - confirmName
+  builtin:
+    name: noop

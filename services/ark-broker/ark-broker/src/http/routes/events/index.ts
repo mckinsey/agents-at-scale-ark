@@ -81,10 +81,10 @@ export function createEventsRouter(
         sendValidationError(res, parse.error, req.id);
         return;
       }
-      const event: PostEventBody = parse.data;
+      const {ttl_seconds: ttlSeconds, ...event}: PostEventBody = parse.data;
 
       try {
-        await events.addEvent(event as unknown as EventData);
+        await events.addEvent(event as unknown as EventData, ttlSeconds);
         await events.save();
 
         sessions.applyEvent({

@@ -1,6 +1,17 @@
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   replicas: 1
+  # Maximum number of Query executions running concurrently in goroutines.
+  # When the cap is reached, Reconcile requeues so the workqueue holds the
+  # backlog instead of the controller heap. Set to 0 to disable enforcement
+  # (not recommended — historical default behaviour, susceptible to OOM
+  # under burst load, see issue #2597).
+  maxConcurrentQueries: 32
+  # Maximum number of Query reconciles running in parallel. The workqueue
+  # dedupes per-key, so this only enables concurrency across different Query
+  # objects. Set to 0 to use the controller-runtime default (1). See issue
+  # #2609.
+  maxConcurrentReconciles: 4
   container:
     image:
       repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller

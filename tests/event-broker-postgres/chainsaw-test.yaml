@@ -1,0 +1,122 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: event-broker-postgres
+  labels:
+    postgresql: "true"
+spec:
+  description: Operation events from a completed query land in the Postgres events table with expires_at set; GET /events/:queryId returns them
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a00-memory.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: events-broker-query
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: events-broker-query
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: events-broker-query
+
+  - name: verify-events-in-postgres
+    try:
+    - script:
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
+          COUNT=0
+          for i in $(seq 1 10); do
+            COUNT=$(bash ../shared/psql-query.sh \
+              "SELECT count(*) FROM events WHERE query_id='${QUERY_UID}' AND expires_at IS NOT NULL;" \
+              | tr -d ' \n')
+            [ "${COUNT}" -ge 1 ] && break
+            sleep 1
+          done
+          echo "events in Postgres: ${COUNT}"
+          [ "${COUNT}" -ge 1 ] || { echo "expected at least 1 event, got ${COUNT}"; exit 1; }
+    catch:
+    - events: {}
+
+  - name: verify-events-via-http
+    try:
+    - script:
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
+          BROKER_NS=$(kubectl get deployment --all-namespaces \
+            -o jsonpath='{range .items[?(@.metadata.name=="ark-broker")]}{.metadata.namespace}{end}' 2>/dev/null)
+          BROKER_NS=${BROKER_NS:-default}
+          COUNT=$(kubectl exec -n "$BROKER_NS" deployment/ark-broker -- \
+            node -e "const h=require('http');h.get('http://localhost:8080/events/${QUERY_UID}',r=>{let d='';r.on('data',c=>{d+=c});r.on('end',()=>{const b=JSON.parse(d);process.stdout.write(String(b.items?b.items.length:0));process.exit(b.items&&b.items.length>=1?0:1)})}).on('error',e=>{process.stderr.write(e.message);process.exit(1)})")
+          echo "HTTP events count: ${COUNT}"
+          [ "${COUNT}" -ge 1 ] || { echo "expected at least 1 event via HTTP, got ${COUNT}"; exit 1; }
+    catch:
+    - events: {}
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
