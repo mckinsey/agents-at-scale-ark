@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -53,3 +54,19 @@ var _ = Describe("MCPServer Controller", func() {
 		Expect(controllerReconciler.updateStatus(ctx, deletedMCPServer)).To(Succeed())
 	})
 })
+
+var _ = DescribeTable(
+	"failureRequeueInterval",
+	func(pollInterval *metav1.Duration, wasAvailable bool, expected time.Duration) {
+		mcpServer := &arkv1alpha1.MCPServer{
+			Spec: arkv1alpha1.MCPServerSpec{PollInterval: pollInterval},
+		}
+		Expect(failureRequeueInterval(mcpServer, wasAvailable)).To(Equal(expected))
+	},
+	Entry("never available, default poll -> fast retry", nil, false, initialConvergenceRetry),
+	Entry("already available, default poll -> steady poll", nil, true, time.Minute),
+	Entry("never available, poll shorter than fast retry -> poll",
+		&metav1.Duration{Duration: 2 * time.Second}, false, 2*time.Second),
+	Entry("already available, custom poll -> custom poll",
+		&metav1.Duration{Duration: 10 * time.Second}, true, 10*time.Second),
+)

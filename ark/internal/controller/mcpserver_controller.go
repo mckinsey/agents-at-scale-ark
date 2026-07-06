@@ -56,6 +56,12 @@ const (
 	MCPServerReasonAuthorized = "Authorized"
 )
 
+// initialConvergenceRetry bounds how long a freshly deployed MCPServer waits
+// between discovery attempts before it first reaches Available. The poll
+// interval governs steady-state re-discovery and is too long for first-time
+// bring-up, where the endpoint may be Ready but not yet serving tools/list.
+const initialConvergenceRetry = 5 * time.Second
+
 type MCPServerReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
@@ -126,14 +132,28 @@ func (r *MCPServerReconciler) deleteAllMCPTools(ctx context.Context, mcpServerNa
 	return r.DeleteAllOf(ctx, &arkv1alpha1.Tool{}, deleteOpts...)
 }
 
+// failureRequeueInterval returns the retry delay after a transient discovery
+// failure: a short interval while the server has never reached Available
+// (initial convergence, endpoint still starting), the steady-state poll
+// interval once it has been Available at least once.
+func failureRequeueInterval(mcpServer *arkv1alpha1.MCPServer, wasAvailable bool) time.Duration {
+	poll := getPollInterval(mcpServer.Spec.PollInterval)
+	if !wasAvailable && initialConvergenceRetry < poll {
+		return initialConvergenceRetry
+	}
+	return poll
+}
+
 func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1alpha1.MCPServer) (ctrl.Result, error) {
+	wasAvailable := meta.IsStatusConditionTrue(mcpServer.Status.Conditions, MCPServerAvailable)
+
 	resolver := r.getResolver()
 	resolvedAddress, err := resolver.ResolveValueSource(ctx, mcpServer.Spec.Address, mcpServer.Namespace)
 	if err != nil {
 		if err := r.reconcileConditionsAddressResolutionFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+		return ctrl.Result{RequeueAfter: failureRequeueInterval(&mcpServer, wasAvailable)}, nil
 	}
 
 	mcpServer.Status.ResolvedAddress = resolvedAddress
@@ -145,7 +165,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 
 	mcpClient, err := r.createMCPClient(ctx, &mcpServer, authMaterial)
 	if err != nil {
-		return r.handleClientCreationError(ctx, &mcpServer, err)
+		return r.handleClientCreationError(ctx, &mcpServer, err, wasAvailable)
 	}
 	defer func() {
 		if err := mcpClient.Client.Close(); err != nil {
@@ -158,7 +178,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		if err := r.reconcileConditionsToolListingFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+		return ctrl.Result{RequeueAfter: failureRequeueInterval(&mcpServer, wasAvailable)}, nil
 	}
 
 	r.applyAuthorizationSuccess(&mcpServer, authMaterial)
@@ -168,7 +188,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		if err := r.reconcileConditionsToolCreationFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+		return ctrl.Result{RequeueAfter: failureRequeueInterval(&mcpServer, wasAvailable)}, nil
 	}
 
 	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged)
@@ -379,8 +399,8 @@ func (r *MCPServerReconciler) reconcileConditionsToolCreationFailed(ctx context.
 // the appropriate condition handler — the OAuth discovery path for a
 // 401 response, the generic client-creation path otherwise — and
 // cleans up any tools owned by the server.
-func (r *MCPServerReconciler) handleClientCreationError(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) (ctrl.Result, error) {
-	requeue := ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}
+func (r *MCPServerReconciler) handleClientCreationError(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error, wasAvailable bool) (ctrl.Result, error) {
+	requeue := ctrl.Result{RequeueAfter: failureRequeueInterval(mcpServer, wasAvailable)}
 
 	if ue, ok := arkmcp.IsUnauthorizedError(err); ok {
 		if err := r.handleAuthorizationRequired(ctx, mcpServer, ue); err != nil {
