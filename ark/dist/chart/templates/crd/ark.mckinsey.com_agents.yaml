@@ -328,6 +328,28 @@ spec:
               tools:
                 items:
                   properties:
+                    approval:
+                      description: Approval configuration for human-in-the-loop tool
+                        execution
+                      properties:
+                        onTimeout:
+                          default: reject
+                          description: 'OnTimeout specifies the action to take when
+                            approval times out: "reject" fails the query, "proceed"
+                            executes the tool'
+                          enum:
+                          - reject
+                          - proceed
+                          type: string
+                        required:
+                          description: Required indicates whether human approval is
+                            required before executing this tool
+                          type: boolean
+                        timeout:
+                          description: Timeout specifies how long to wait for approval
+                            before timing out
+                          type: string
+                      type: object
                     description:
                       description: Description of the tool as exposed to the agent
                       type: string

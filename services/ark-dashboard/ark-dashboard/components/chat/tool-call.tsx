@@ -72,6 +72,7 @@ interface VariantProps {
   parsedResult: Record<string, unknown> | null;
   parseArgsError: boolean;
   parseResultError: boolean;
+  isRejected: boolean;
 }
 
 function TreeVariant({
@@ -81,9 +82,13 @@ function TreeVariant({
   parsedResult,
   parseArgsError,
   parseResultError,
+  isRejected,
 }: VariantProps) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
+
+  const lineColor = isRejected ? "bg-red-300 dark:bg-red-800" : "bg-border/50";
+  const containerBg = isRejected ? "bg-red-50/30 dark:bg-red-950/10 rounded-md px-2 py-1" : "";
 
   return (
     <div className={cn('relative pl-6 text-sm', className)}>
@@ -140,9 +145,14 @@ function CardVariant({
   parsedResult,
   parseArgsError,
   parseResultError,
+  isRejected,
 }: VariantProps) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
+
+  const cardClassName = isRejected
+    ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 rounded-lg border p-3 text-sm shadow-sm"
+    : "bg-card border-border rounded-lg border p-3 text-sm shadow-sm";
 
   return (
     <div
@@ -236,6 +246,9 @@ export function ToolCall({
     }
   }
 
+  // Check if this tool was rejected
+  const isRejected = toolCall.result?.includes("Tool execution rejected by user") ?? false;
+
   const variantProps: VariantProps = {
     toolCall,
     className,
@@ -243,6 +256,7 @@ export function ToolCall({
     parsedResult,
     parseArgsError,
     parseResultError,
+    isRejected,
   };
 
   if (variant === 'tree') {

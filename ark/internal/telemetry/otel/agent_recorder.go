@@ -23,7 +23,8 @@ func NewAgentRecorder(tracer telemetry.Tracer) telemetry.AgentRecorder {
 // StartAgentExecution begins tracing an agent execution.
 func (r *agentRecorder) StartAgentExecution(ctx context.Context, agentName, namespace string) (context.Context, telemetry.Span) {
 	spanName := "agent." + namespace + "/" + agentName
-	return r.tracer.Start(ctx, spanName,
+	return r.tracer.Start(
+		ctx, spanName,
 		telemetry.WithSpanKind(telemetry.SpanKindAgent),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrAgentName, agentName),
@@ -38,7 +39,8 @@ func (r *agentRecorder) StartAgentExecution(ctx context.Context, agentName, name
 
 // StartLLMCall begins tracing a model call within agent execution.
 func (r *agentRecorder) StartLLMCall(ctx context.Context, modelName string) (context.Context, telemetry.Span) {
-	return r.tracer.Start(ctx, "llm.call",
+	return r.tracer.Start(
+		ctx, "llm.call",
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrModelName, modelName),
 			telemetry.String(telemetry.AttrComponentName, "llm"),
@@ -51,7 +53,8 @@ func (r *agentRecorder) StartLLMCall(ctx context.Context, modelName string) (con
 
 // StartToolCall begins tracing a tool execution.
 func (r *agentRecorder) StartToolCall(ctx context.Context, toolName, toolType, toolID, arguments string) (context.Context, telemetry.Span) {
-	return r.tracer.Start(ctx, "tool.execution",
+	return r.tracer.Start(
+		ctx, "tool.execution",
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrToolName, toolName),
 			telemetry.String(telemetry.AttrToolType, toolType),
