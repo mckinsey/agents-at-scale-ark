@@ -138,7 +138,7 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;input-required;error;done;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state

@@ -191,6 +191,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/a2a-tasks/{task_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit A2A Task Approval
+         * @description Submit an approval decision for a HITL A2ATask.
+         *
+         *     The task must be in the 'input-required' phase. The decision is written to
+         *     spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+         *     controller picks it up and transitions the task to completed or failed.
+         */
+        post: operations["submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -2106,7 +2130,7 @@ export interface components {
          * @description Detailed A2ATask response model.
          */
         A2ATaskDetailResponse: {
-            a2aServerRef: components["schemas"]["A2AServerRef"];
+            a2aServerRef?: components["schemas"]["A2AServerRef"] | null;
             agentRef: components["schemas"]["AgentRef"];
             /** Contextid */
             contextId?: string | null;
@@ -2628,6 +2652,32 @@ export interface components {
             headers?: components["schemas"]["AgentHeader"][] | null;
             /** Version */
             version?: string | components["schemas"]["ModelValueSource"] | null;
+        };
+        /**
+         * ApprovalDecision
+         * @description Approval decision for a HITL tool call.
+         * @enum {string}
+         */
+        ApprovalDecision: "approved" | "rejected";
+        /**
+         * ApprovalSubmissionRequest
+         * @description Request body to approve or reject an A2ATask's pending tool calls.
+         */
+        ApprovalSubmissionRequest: {
+            decision: components["schemas"]["ApprovalDecision"];
+        };
+        /**
+         * ApprovalSubmissionResponse
+         * @description Response after submitting an approval decision.
+         */
+        ApprovalSubmissionResponse: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
         };
         /**
          * ArkConfigResponse
@@ -4740,6 +4790,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalSubmissionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
