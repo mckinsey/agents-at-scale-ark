@@ -4277,6 +4277,11 @@ export interface components {
             } | null;
             /** Id */
             id: string;
+            /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
             /** Name */
             name: string;
             /** Secret Length */
