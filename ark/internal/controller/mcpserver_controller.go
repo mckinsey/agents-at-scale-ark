@@ -145,6 +145,10 @@ func failureRequeueInterval(mcpServer *arkv1alpha1.MCPServer, wasAvailable bool)
 }
 
 func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1alpha1.MCPServer) (ctrl.Result, error) {
+	// Snapshot the last persisted Available state before any condition mutation
+	// in this cycle. The failure paths below flip Available to False, so reading
+	// it up front is what lets them distinguish first-time convergence from
+	// steady-state re-discovery.
 	wasAvailable := meta.IsStatusConditionTrue(mcpServer.Status.Conditions, MCPServerAvailable)
 
 	resolver := r.getResolver()

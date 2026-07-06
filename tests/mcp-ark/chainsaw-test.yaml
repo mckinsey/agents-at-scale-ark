@@ -47,7 +47,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: MCPServer
         name: ark-mcp
-        timeout: 4m
+        timeout: 2m
         for:
           condition:
             name: Available
