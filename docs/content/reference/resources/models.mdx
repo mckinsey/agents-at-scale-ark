@@ -274,17 +274,6 @@ Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing y
 
 Most other providers also support OpenAI compatible base URLs - check their docs for details.
 
-## Model Properties
-
-All model providers support a flexible properties system that allows you to customize model behavior by setting parameters like temperature, max tokens, and other OpenAI ChatCompletion parameters.
-
-### Basic Properties Example
-      maxTokens: 4096
-      temperature: "0.7"
-```
-
-`maxTokens` accepts an integer in `1`–`100000`; `temperature` is a string in the range `0`–`1`.
-
 ### Anthropic
 
 The `anthropic` provider talks to the Anthropic **Messages API** natively — you do **not** need an OpenAI-compatible endpoint. The completions executor converts between Ark's internal message format and the Messages API (including tool use and system prompts), so you point it straight at Anthropic's own API:
