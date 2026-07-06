@@ -7,46 +7,27 @@ interface ImportOptions {
   upsert?: boolean;
 }
 
-interface UpsertSummary {
+interface ApplyCounts {
   created: number;
   configured: number;
   unchanged: number;
-  failures: string[];
 }
 
-function summarizeApply(stdout: string, stderr: string): UpsertSummary {
-  const summary: UpsertSummary = {
-    created: 0,
-    configured: 0,
-    unchanged: 0,
-    failures: [],
-  };
+function countApplied(stdout: string): ApplyCounts {
+  const counts: ApplyCounts = {created: 0, configured: 0, unchanged: 0};
 
   for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
     if (trimmed.endsWith(' created')) {
-      summary.created++;
+      counts.created++;
     } else if (trimmed.endsWith(' configured')) {
-      summary.configured++;
+      counts.configured++;
     } else if (trimmed.endsWith(' unchanged')) {
-      summary.unchanged++;
+      counts.unchanged++;
     }
   }
 
-  for (const line of stderr.split('\n')) {
-    const trimmed = line.trim();
-    if (
-      trimmed.startsWith('Error from server') ||
-      trimmed.startsWith('error:')
-    ) {
-      summary.failures.push(trimmed);
-    }
-  }
-
-  return summary;
+  return counts;
 }
 
 async function importResources(filepath: string, options: ImportOptions) {
@@ -78,20 +59,21 @@ async function importResources(filepath: string, options: ImportOptions) {
     reject: false,
   });
 
-  const summary = summarizeApply(result.stdout ?? '', result.stderr ?? '');
+  const counts = countApplied(result.stdout ?? '');
 
-  if (result.exitCode !== 0 || summary.failures.length > 0) {
+  if (result.exitCode !== 0) {
     output.error(
-      `import completed with errors: ${summary.created} created, ${summary.configured} configured, ${summary.unchanged} unchanged, ${summary.failures.length} failed`
+      `import failed (${counts.created} created, ${counts.configured} configured, ${counts.unchanged} unchanged before errors):`
     );
-    for (const failure of summary.failures) {
-      output.error(failure);
+    const details = (result.stderr || result.stdout || '').trim();
+    if (details) {
+      output.error(details);
     }
     process.exit(1);
   }
 
   output.success(
-    `import complete: ${summary.created} created, ${summary.configured} configured, ${summary.unchanged} unchanged`
+    `import complete: ${counts.created} created, ${counts.configured} configured, ${counts.unchanged} unchanged`
   );
 }
 

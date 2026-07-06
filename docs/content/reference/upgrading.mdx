@@ -82,7 +82,7 @@ ark import ark-export.yaml --upsert
 `--upsert` is opt-in on purpose: the default keeps erroring on conflicts so a stray import can't silently overwrite resources on a shared cluster. On completion it prints a summary of how many resources were created, configured, and unchanged.
 
 <Callout type="warning">
-`--upsert` re-applies the exported YAML as-is. `ark export` captures live objects verbatim (including `metadata.resourceVersion`), so if a resource has changed on the destination since the file was written — Ark controllers bump `resourceVersion` on every status update — `kubectl apply` can reject it with a `Conflict`. Re-export immediately before importing to minimise drift. A cleaner, portable export is tracked separately.
+`--upsert` re-applies the exported YAML as-is. `ark export` captures live objects verbatim (including `metadata.resourceVersion`), so if a resource has changed on the destination since the file was written — Ark controllers bump `resourceVersion` on every status update — `kubectl apply` can reject it with a `Conflict`. Re-export immediately before importing to minimise drift. A cleaner, portable export is tracked in [#2794](https://github.com/mckinsey/agents-at-scale-ark/issues/2794).
 </Callout>
 
 ## v0.1.63

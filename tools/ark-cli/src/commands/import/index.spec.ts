@@ -120,7 +120,28 @@ describe('import command', () => {
       command.parseAsync(['node', 'test', 'test.yaml', '--upsert'])
     ).rejects.toThrow('process.exit called');
     expect(mockOutput.error).toHaveBeenCalledWith(
-      'import completed with errors: 0 created, 1 configured, 0 unchanged, 1 failed'
+      'import failed (0 created, 1 configured, 0 unchanged before errors):'
+    );
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'Error from server (Invalid): error when creating "test.yaml": bad spec'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('surfaces the full error on failure whose stderr lacks known prefixes', async () => {
+    mockExeca.mockResolvedValue({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'The connection to the server localhost:8080 was refused',
+    });
+
+    const command = createImportCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'test.yaml', '--upsert'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'The connection to the server localhost:8080 was refused'
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
