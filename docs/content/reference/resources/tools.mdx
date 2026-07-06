@@ -62,6 +62,8 @@ The type-specific block must match `type`: `http` → `spec.http`, `mcp` → `sp
 
 `status.state` is `Ready` with message `Tool configuration is valid` when the tool is usable.
 
+The `Tool` CRD defines no custom print columns, so `kubectl get tools` shows only `Name` and `Age`; use `kubectl describe tool <name>` or `-o yaml` to see `status.state`.
+
 ## HTTP tools
 
 HTTP API calls with two distinct templating syntaxes:

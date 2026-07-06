@@ -32,9 +32,16 @@ export type PersistenceConfig = Readonly<{
 
 export type MessageBackend = 'memory' | 'postgres';
 
+export type EventBackend = 'memory' | 'postgres';
+
+export type ChunkBackend = 'memory' | 'redis';
+
 export type BackendsConfig = Readonly<{
   message: MessageBackend;
   messageVisibilityTtlSeconds: number;
+  event: EventBackend;
+  eventVisibilityTtlSeconds: number;
+  chunk: ChunkBackend;
 }>;
 
 export type DatabaseConfig = Readonly<{
@@ -43,6 +50,18 @@ export type DatabaseConfig = Readonly<{
   connectTimeoutMs: number;
   statementTimeoutMs: number;
   debugQueries: boolean;
+  sslRootCertPath?: string;
+}>;
+
+export type RedisConfig = Readonly<{
+  url?: string;
+  username?: string;
+  password?: string;
+  tlsCaCertPath?: string;
+  keyPrefix: string;
+  streamTtlSeconds: number;
+  connectTimeoutMs: number;
+  debugCommands: boolean;
 }>;
 
 export type AppConfig = Readonly<{
@@ -53,4 +72,5 @@ export type AppConfig = Readonly<{
   persistence: PersistenceConfig;
   backends: BackendsConfig;
   database: DatabaseConfig;
+  redis: RedisConfig;
 }>;

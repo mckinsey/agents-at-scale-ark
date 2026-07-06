@@ -5,7 +5,9 @@ package registry
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -456,6 +458,131 @@ func TestGenericStorage_Delete_WithValidation(t *testing.T) {
 	}
 }
 
+func TestGenericStorage_Delete_WithFinalizers_SetsDeletionTimestamp(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+
+	resultAgent, ok := result.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", result)
+	}
+	if resultAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be set on returned object")
+	}
+
+	stored, ok := backend.objects["Agent/default/test-agent"]
+	if !ok {
+		t.Fatal("expected object to remain in backend while finalizers are present")
+	}
+	storedAgent := stored.(*arkv1alpha1.Agent)
+	if storedAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be persisted in backend")
+	}
+}
+
+func TestGenericStorage_Delete_WithFinalizers_DeletionTimestampNotReset(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	original := metav1.NewTime(time.Now().Add(-time.Hour))
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	agent.DeletionTimestamp = &original
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+
+	resultAgent := result.(*arkv1alpha1.Agent)
+	if !resultAgent.DeletionTimestamp.Equal(&original) {
+		t.Errorf("expected existing deletionTimestamp to be preserved, got %v", resultAgent.DeletionTimestamp)
+	}
+}
+
+func TestGenericStorage_Update_RemovingLastFinalizer_TriggersDelete(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	now := metav1.NewTime(time.Now())
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	agent.DeletionTimestamp = &now
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updated := &arkv1alpha1.Agent{}
+	updated.Name = testAgentName
+	updated.Namespace = testNS()
+	updated.DeletionTimestamp = &now
+	updated.Finalizers = nil
+
+	updater := &simpleUpdatedObjectInfo{obj: updated}
+	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if created {
+		t.Error("expected created to be false")
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; ok {
+		t.Error("expected object to be deleted after last finalizer removed")
+	}
+}
+
+func TestGenericStorage_Update_FinalizersRemaining_DoesNotDelete(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	now := metav1.NewTime(time.Now())
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"a", "b"}
+	agent.DeletionTimestamp = &now
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updated := &arkv1alpha1.Agent{}
+	updated.Name = testAgentName
+	updated.Namespace = testNS()
+	updated.DeletionTimestamp = &now
+	updated.Finalizers = []string{"b"}
+
+	updater := &simpleUpdatedObjectInfo{obj: updated}
+	_, _, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain while a finalizer is still present")
+	}
+}
+
 func TestGenericStorage_Watch(t *testing.T) {
 	t.Parallel()
 	gs, _ := newTestStorage()
@@ -571,5 +698,65 @@ func TestSetListItems(t *testing.T) {
 	}
 	if list.Continue != "next-token" {
 		t.Errorf("expected continue 'next-token', got '%s'", list.Continue)
+	}
+}
+
+func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		rvs      []string
+		expected string
+	}{
+		{
+			name:     "digit-count boundary 9 vs 10",
+			rvs:      []string{"9", "10"},
+			expected: "10",
+		},
+		{
+			name:     "digit-count boundary 9 vs 100",
+			rvs:      []string{"9", "100"},
+			expected: "100",
+		},
+		{
+			name:     "mixed order",
+			rvs:      []string{"3", "20", "100", "5"},
+			expected: "100",
+		},
+		{
+			name:     "empty and invalid rvs are skipped",
+			rvs:      []string{"", "not-a-number", "42"},
+			expected: "42",
+		},
+		{
+			name:     "no valid rvs leaves list rv unset",
+			rvs:      []string{"", "abc"},
+			expected: "",
+		},
+		{
+			name:     "empty list leaves rv unset",
+			rvs:      nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			list := &arkv1alpha1.AgentList{}
+			objects := make([]runtime.Object, 0, len(tt.rvs))
+			for i, rv := range tt.rvs {
+				objects = append(objects, &arkv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{Name: "a" + strconv.Itoa(i), ResourceVersion: rv},
+				})
+			}
+
+			if err := setListItems(list, objects, ""); err != nil {
+				t.Fatalf("setListItems() error = %v", err)
+			}
+
+			if got := list.ResourceVersion; got != tt.expected {
+				t.Errorf("list resourceVersion = %q, want %q", got, tt.expected)
+			}
+		})
 	}
 }

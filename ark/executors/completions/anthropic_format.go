@@ -11,7 +11,7 @@ func extractMessageContent(msg Message) (string, string) {
 
 	if systemMsg := openaiMsg.OfSystem; systemMsg != nil {
 		if content := systemMsg.Content.OfString; content.Value != "" {
-			return content.Value, "system"
+			return content.Value, RoleSystem
 		}
 	}
 
@@ -23,13 +23,13 @@ func extractMessageContent(msg Message) (string, string) {
 
 	if assistantMsg := openaiMsg.OfAssistant; assistantMsg != nil {
 		if content := assistantMsg.Content.OfString; content.Value != "" {
-			return content.Value, "assistant"
+			return content.Value, RoleAssistant
 		}
 	}
 
 	if toolMsg := openaiMsg.OfTool; toolMsg != nil {
 		if content := toolMsg.Content.OfString; content.Value != "" {
-			return content.Value, "tool"
+			return content.Value, RoleTool
 		}
 	}
 
@@ -135,7 +135,7 @@ func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion
 	}
 
 	message := openai.ChatCompletionMessage{
-		Role:    "assistant",
+		Role:    RoleAssistant,
 		Content: content,
 	}
 
@@ -225,7 +225,7 @@ func streamCompletionAsChunks(completion *openai.ChatCompletion, streamFunc func
 					Index: choice.Index,
 					Delta: openai.ChatCompletionChunkChoiceDelta{
 						Content: choice.Message.Content,
-						Role:    "assistant",
+						Role:    RoleAssistant,
 					},
 					FinishReason: choice.FinishReason,
 				},

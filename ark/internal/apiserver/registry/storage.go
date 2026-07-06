@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -262,6 +263,17 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		return nil, false, handleUpdateError(err, s.config, "update", name, start)
 	}
 
+	// Finish a graceful deletion: once a terminating object (deletionTimestamp set)
+	// has no finalizers left, perform the actual removal now.
+	if updatedAccessor.GetDeletionTimestamp() != nil && len(updatedAccessor.GetFinalizers()) == 0 {
+		if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
+			return nil, false, handleUpdateError(err, s.config, "delete", name, start)
+		}
+		metrics.RecordStorageOperation("update", s.config.Kind, "finalized_delete")
+		metrics.RecordStorageLatency("update", s.config.Kind, start)
+		return updated, false, nil
+	}
+
 	metrics.RecordStorageOperation("update", s.config.Kind, "success")
 	metrics.RecordStorageLatency("update", s.config.Kind, start)
 	result, err := s.Get(ctx, name, &metav1.GetOptions{})
@@ -285,6 +297,28 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 			metrics.RecordStorageOperation("delete", s.config.Kind, "validation_error")
 			return nil, false, err
 		}
+	}
+
+	accessor, err := meta.Accessor(existing)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
+	}
+
+	// Graceful deletion: an object with finalizers is not removed yet. Mark it by
+	// setting deletionTimestamp so controllers can run their finalizers; the actual
+	// removal happens in Update once the last finalizer is gone. This mirrors the
+	// behavior of the upstream Kubernetes API server.
+	if len(accessor.GetFinalizers()) > 0 {
+		if accessor.GetDeletionTimestamp() == nil {
+			now := metav1.NewTime(time.Now())
+			accessor.SetDeletionTimestamp(&now)
+			if err := s.backend.Update(sctx, s.config.Kind, namespace, name, existing); err != nil {
+				return nil, false, handleUpdateError(err, s.config, "delete", name, start)
+			}
+		}
+		metrics.RecordStorageOperation("delete", s.config.Kind, "pending_finalizers")
+		metrics.RecordStorageLatency("delete", s.config.Kind, start)
+		return existing, false, nil
 	}
 
 	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
@@ -399,15 +433,27 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	if err != nil {
 		return fmt.Errorf("failed to access list metadata: %w", err)
 	}
-	var maxRV string
+	// Compute the list's resourceVersion numerically. Lexicographic string max
+	// mis-orders across digit-count boundaries (e.g. "9" > "10"), which yields
+	// a lower-than-true list RV and breaks the list→watch handoff (the client
+	// then resumes watch from a stale point).
+	var maxRV uint64
 	for _, obj := range objects {
-		if objMeta, err := meta.Accessor(obj); err == nil {
-			if rv := objMeta.GetResourceVersion(); rv > maxRV {
-				maxRV = rv
-			}
+		objMeta, err := meta.Accessor(obj)
+		if err != nil {
+			continue
+		}
+		n, err := strconv.ParseUint(objMeta.GetResourceVersion(), 10, 64)
+		if err != nil {
+			continue
+		}
+		if n > maxRV {
+			maxRV = n
 		}
 	}
-	accessor.SetResourceVersion(maxRV)
+	if maxRV > 0 {
+		accessor.SetResourceVersion(strconv.FormatUint(maxRV, 10))
+	}
 	if continueToken != "" {
 		accessor.SetContinue(continueToken)
 	}

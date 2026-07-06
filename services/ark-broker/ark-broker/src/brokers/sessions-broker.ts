@@ -384,10 +384,13 @@ export class SessionsBroker {
       existing.completedAt = now;
     } else if (
       phase === QueryPhases.Done &&
-      existing.phase !== QueryPhases.Error &&
       existing.phase !== QueryPhases.Canceled
     ) {
+      // A later 'done' supersedes a prior 'error'. A query that paused for
+      // tool approval is transiently recorded as error; once it completes
+      // successfully the error must be cleared so errorCount reflects reality.
       existing.phase = QueryPhases.Done;
+      existing.error = undefined;
       existing.completedAt = now;
     }
   }

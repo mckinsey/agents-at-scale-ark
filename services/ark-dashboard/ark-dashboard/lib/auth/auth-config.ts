@@ -39,7 +39,7 @@ async function jwtCallback({
   }
 
   if (trigger === 'update' && session?.shouldRefreshToken) {
-    return await TokenManager.getNewAccessToken(token);
+    return await TokenManager.getNewAccessToken(token as Parameters<typeof TokenManager.getNewAccessToken>[0]);
   }
 
   return token;
@@ -127,6 +127,19 @@ const cookies: NextAuthConfig['cookies'] = {
     name: `${cookiePrefix}${COOKIE_NONCE}`,
   },
 };
+
+// Transient OIDC-flow cookies (state, PKCE verifier, nonce, callback-url, CSRF
+// token). Sign-out must clear these alongside the session: Auth.js writes a
+// fresh `state`/PKCE cookie at sign-in and reads it back at the callback, but a
+// stale value left over from a prior flow fails state validation
+// (CallbackRouteError -> error=Configuration), breaking the next sign-in.
+export const OIDC_FLOW_COOKIE_NAMES = [
+  `${cookiePrefix}${COOKIE_CALLBACK_URL}`,
+  `${useSecureCookies ? '__Host-' : ''}${COOKIE_CSRF_TOKEN}`,
+  `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`,
+  `${cookiePrefix}${COOKIE_STATE}`,
+  `${cookiePrefix}${COOKIE_NONCE}`,
+];
 
 const callbacks: NextAuthConfig['callbacks'] = {
   jwt: jwtCallback,

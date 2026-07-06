@@ -272,32 +272,14 @@ export async function DELETE(
     }
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
-    console.log('Executing:', helmCommand);
 
-    try {
-      const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
-
-      logHelmStderr(stderr);
-      console.log('Helm stdout:', stdout);
-
-      return NextResponse.json({
-        message: `Successfully uninstalled ${item!.name}`,
-        status: 'uninstalled',
-        output: stdout,
-      });
-    } catch (error) {
-      console.error('Helm uninstallation failed:', error);
-
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      return NextResponse.json(
-        {
-          error: 'Uninstallation failed',
-          details: errorMessage,
-        },
-        { status: 500 },
-      );
-    }
+    return NextResponse.json({
+      status: 'command',
+      name: item!.name,
+      helmCommand,
+      namespace: ark.namespace,
+      message: 'Run this command in your terminal to uninstall',
+    });
   } catch (error) {
     console.error('Error uninstalling marketplace item:', error);
     return NextResponse.json(

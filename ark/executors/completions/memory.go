@@ -40,6 +40,7 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	DeleteQuery(ctx context.Context, queryID string) error
 	Close() error
 }
 

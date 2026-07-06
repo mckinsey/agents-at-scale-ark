@@ -910,6 +910,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
+          install-broker: "true"
 
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
@@ -1534,6 +1535,16 @@ jobs:
             mv tmp.json .github/release-please-config-rc.json
           fi
 
+          # Clean up last-release-sha (added during promotion to anchor stable notes - issue #2655)
+          if jq -e 'has("last-release-sha")' .github/release-please-config.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config.json > tmp.json
+            mv tmp.json .github/release-please-config.json
+          fi
+          if jq -e 'has("last-release-sha")' .github/release-please-config-rc.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config-rc.json > tmp.json
+            mv tmp.json .github/release-please-config-rc.json
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
@@ -1549,7 +1560,7 @@ jobs:
           Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
 
           ### What this PR does
-          - Cleans up \`release-as\` from config files
+          - Cleans up \`release-as\` and \`last-release-sha\` from config files
 
           ### What happens when merged
           - Release-please will create v${NEXT}-rc from conventional commits

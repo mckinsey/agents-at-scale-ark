@@ -45,7 +45,6 @@ runs:
         sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
         sudo chmod +x /usr/local/bin/yq
         curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-        curl -sS https://webinstall.dev/k9s | bash
         export PATH="$HOME/.local/bin:$PATH"
         sudo apt-get update && sudo apt-get install -y gettext
 

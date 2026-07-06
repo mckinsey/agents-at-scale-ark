@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: kubernetes-mcp-server
+  namespace: default
+spec:
+  address:
+    value: http://kubernetes-mcp-server.default.svc.cluster.local:8080/mcp # NOSONAR - cluster-internal service communication
+  description: k8s mcp server
+  transport: http
+  pollInterval: 1m
+  timeout: 30s
