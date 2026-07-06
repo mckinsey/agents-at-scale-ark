@@ -82,15 +82,15 @@ spec:
         timeout: 30s
         content: |
           set -e
-          WF=$(kubectl -n "$NAMESPACE" get workflow ark-query-agent -o json)
+          kubectl -n "$NAMESPACE" get workflow ark-query-agent -o json > /tmp/wf-agent.json
 
-          PHASE=$(echo "$WF" | jq -r '.status.phase')
+          PHASE=$(jq -r '.status.phase' /tmp/wf-agent.json)
           echo "workflow phase: $PHASE"
           [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
 
-          RESPONSE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' | head -1)
-          QUERY_PHASE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' | head -1)
-          CONVERSATION_ID=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="conversation-id") | .value' | head -1)
+          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-agent.json | head -1)
+          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-agent.json | head -1)
+          CONVERSATION_ID=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="conversation-id") | .value' /tmp/wf-agent.json | head -1)
 
           echo "response: $RESPONSE"
           echo "query phase: $QUERY_PHASE"
@@ -125,14 +125,14 @@ spec:
         timeout: 30s
         content: |
           set -e
-          WF=$(kubectl -n "$NAMESPACE" get workflow ark-query-team -o json)
+          kubectl -n "$NAMESPACE" get workflow ark-query-team -o json > /tmp/wf-team.json
 
-          PHASE=$(echo "$WF" | jq -r '.status.phase')
+          PHASE=$(jq -r '.status.phase' /tmp/wf-team.json)
           echo "workflow phase: $PHASE"
           [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
 
-          RESPONSE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' | head -1)
-          QUERY_PHASE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' | head -1)
+          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-team.json | head -1)
+          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-team.json | head -1)
 
           echo "response: $RESPONSE"
           echo "query phase: $QUERY_PHASE"
@@ -166,15 +166,15 @@ spec:
         timeout: 30s
         content: |
           set -e
-          WF=$(kubectl -n "$NAMESPACE" get workflow ark-query-error -o json)
+          kubectl -n "$NAMESPACE" get workflow ark-query-error -o json > /tmp/wf-error.json
 
-          NODE_PHASE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .phase' | head -1)
+          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-error.json | head -1)
           echo "ark-query node phase: $NODE_PHASE"
           [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
 
-          QUERY_PHASE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' | head -1)
-          RESPONSE=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' | head -1)
-          QUERY_JSON=$(echo "$WF" | jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' | head -1)
+          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-error.json | head -1)
+          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-error.json | head -1)
+          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-error.json | head -1)
 
           echo "query phase output: $QUERY_PHASE"
           echo "response output: $RESPONSE"
