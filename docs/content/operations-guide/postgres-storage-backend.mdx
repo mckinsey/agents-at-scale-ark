@@ -177,6 +177,14 @@ Then connect to Postgres and confirm the row exists:
 SELECT kind, namespace, name, uid FROM resources WHERE kind = 'Agent';
 ```
 
+## Security model
+
+The aggregated apiserver enforces the same access control as the rest of the cluster:
+
+- **Delegated authentication and authorization.** Every request is authenticated against the kube-apiserver (TokenReview and requestheader/front-proxy identity) and authorized via SubjectAccessReview, so Kubernetes RBAC on `ark.mckinsey.com` resources applies to direct service access as well as to the kubectl path. Health endpoints (`/healthz`, `/readyz`, `/livez`) stay unauthenticated. Set `ARK_APISERVER_AUTH_MODE=off` (for example via `extraEnv`) only for local development outside a cluster.
+- **Verified serving TLS.** With `certManager.enabled` (the default), cert-manager issues the serving certificate for the `ark-apiserver` service, mounts it into the pod, and injects the CA into both APIServices — the kube-apiserver verifies the aggregated apiserver's identity instead of `insecureSkipTLSVerify`. The certificate rotates through cert-manager and the server reloads it without a restart. Setting `certManager.enabled=false` restores the previous behavior (ephemeral self-signed certificate, unverified proxy channel) for clusters without cert-manager.
+- **Optional NetworkPolicy.** `networkPolicy.enabled=true` restricts ingress to the serving and health ports; use `networkPolicy.extraIngressFrom` to pin the allowed sources for the serving port (the origin of kube-apiserver traffic depends on your CNI, which is why this is off by default).
+
 ## Multi-replica behaviour
 
 The `ark-apiserver` chart defaults to a single replica. The chart wires the RBAC needed for controller-runtime leader election on a `Lease` named `ark-apiserver-leader`.
