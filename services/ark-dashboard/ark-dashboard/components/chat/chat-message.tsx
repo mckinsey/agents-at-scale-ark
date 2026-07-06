@@ -252,31 +252,6 @@ export function ChatMessage({
     );
   }
 
-  if (approvalRequest) {
-    // Generate a unique key from tool call IDs to reset component state on new approvals
-    const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
-    return (
-      <div
-        className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
-        <ApprovalNotification
-          key={approvalKey}
-          queryName={queryName || ''}
-          queryNamespace={namespace}
-          taskId={approvalRequest.taskId}
-          toolCalls={approvalRequest.toolCalls}
-          timeout={approvalRequest.timeout}
-          onTimeout={approvalRequest.onTimeout}
-          agentName={approvalRequest.agentName}
-          expiresAtMs={approvalExpiresAtMs}
-          existingDecision={approvalDecision}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onExpired={pollAfterApproval}
-        />
-      </div>
-    );
-  }
-
   if (!hasContent && hasToolCalls) {
     return (
       <div

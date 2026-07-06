@@ -3,7 +3,6 @@
 import { useSearchParams } from 'next/navigation';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
 import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
@@ -15,12 +14,9 @@ import type {
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 import type { ChatMessage } from '@/lib/types/chat-message';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconShell } from '@/components/ui/icon-shell';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
-import { SessionMessage } from './session-message';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
