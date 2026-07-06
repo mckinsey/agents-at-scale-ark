@@ -14,7 +14,6 @@ export default {
   '---ops': { type: 'separator', title: 'Operations' },
   upgrading: 'Upgrading',
   troubleshooting: 'Troubleshooting',
-  'utility-images': 'Utility Images',
   'release-process': 'Release Process and Artifacts',
   'secure-sdlc': 'Secure Software Development Lifecycle',
   'secure-software-architecture': 'Secure Software Architecture',

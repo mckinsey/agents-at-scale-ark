@@ -4,6 +4,7 @@ import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
+import { a2aTasksService } from '@/lib/services/a2a-tasks';
 
 interface AxiosError extends Error {
   response?: {
@@ -32,7 +33,7 @@ export type QueryUpdateRequest = Omit<
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running';
+type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running' | 'input-required';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -45,7 +46,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'unknown',
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'provisioning', 'running'] as const;
+  ['pending', 'provisioning', 'running', 'input-required'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
@@ -156,6 +157,10 @@ export const chatService = {
       }
       throw error;
     }
+  },
+
+  async getA2ATask(taskId: string) {
+    return await a2aTasksService.get(taskId);
   },
 
   async listQueries(): Promise<QueryListResponse> {

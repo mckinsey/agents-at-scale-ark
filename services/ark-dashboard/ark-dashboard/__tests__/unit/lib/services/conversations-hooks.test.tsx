@@ -274,7 +274,9 @@ describe('conversations hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(conversationsService.sendMessage).toHaveBeenCalledWith({
+      expect(conversationsService.sendMessage).toHaveBeenCalled();
+      const [[firstArg]] = vi.mocked(conversationsService.sendMessage).mock.calls;
+      expect(firstArg).toEqual({
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -333,7 +335,9 @@ describe('conversations hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(conversationsService.sendMessage).toHaveBeenCalledWith(params);
+      expect(conversationsService.sendMessage).toHaveBeenCalled();
+      const [[firstArg]] = vi.mocked(conversationsService.sendMessage).mock.calls;
+      expect(firstArg).toEqual(params);
     });
   });
 });

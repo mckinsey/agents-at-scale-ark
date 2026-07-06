@@ -14,7 +14,7 @@ Guidance for structuring Ark documentation using Diataxis adapted for Ark's need
 - Reviewing documentation PRs
 - Restructuring existing documentation
 
-## ARK's Diataxis structure
+## Ark's Diataxis structure
 
 ```
 docs/content/
@@ -65,13 +65,13 @@ docs/content/
 
 **Organized by persona**:
 
-#### Build with ARK (application developers)
+#### Build with Ark (application developers)
 - Configure models, create agents, coordinate teams, run queries, add tools.
 
-#### Extend ARK (contributors)
+#### Extend Ark (contributors)
 - Build services locally, implement APIs, build A2A servers, add tests.
 
-#### Operate ARK (operators / SRE / security)
+#### Operate Ark (operators / SRE / security)
 - **Platform operations**: Provisioning, deploying
 - **CI/CD and supply chain**: Build pipelines
 - **Security & assurance**: Pen testing, code analysis
@@ -89,10 +89,10 @@ docs/content/
 
 ### 3. Core concepts (understanding-oriented)
 
-**Purpose**: Explain what ARK is, how it's designed, and why.
+**Purpose**: Explain what Ark is, how it's designed, and why.
 
 **Topics**:
-- What ARK is and how it works.
+- What Ark is and how it works.
 - Design effective agentic systems.
 - Platform architecture concepts.
 - Extensibility concepts.
@@ -115,7 +115,7 @@ docs/content/
 **Purpose**: Factual lookup material.
 
 **Organized by type**:
-- **Interfaces**: ARK APIs.
+- **Interfaces**: Ark API, Broker Service.
 - **Kubernetes API**: CRDs, resources.
 - **System behavior**: Query execution, relationships.
 - **Operations**: Upgrading, troubleshooting.
@@ -173,7 +173,7 @@ Hub pages should:
 ## Writing guidelines
 
 ### Lexicon
-- The product is known as ARK rather than Ark.
+- The product is written **Ark** — capital A, lowercase `rk`. Never `ARK`. This matches the repo's CLAUDE.md and is enforced in review.
 
 
 ### General style
@@ -181,7 +181,7 @@ Hub pages should:
 - Use simple language.
 - Keep descriptions to 1-2 sentences.
 - Use active voice: "Creates agent" not "Agent is created".
-- Write "ARK" not "Ark".
+- Write "Ark" not "ARK".
 - Use US English.
 - Use Oxford commas in lists.
 
@@ -204,7 +204,7 @@ Hub pages should:
 - Don't use passive tense: "Complete the steps" not "The steps should be completed".
 
 ### Links
-- Make hyperlinks descriptive: `Learn how to [contribute to ARK](url)`.
+- Make hyperlinks descriptive: `Learn how to [contribute to Ark](url)`.
 - Don't write: `To contribute, see [here](url)`.
 
 ### Avoid
@@ -220,6 +220,37 @@ Hub pages should:
 | How-to guides | Teaching, complete reference. |
 | Core concepts | Instructions, reference. |
 | Reference | Instructions, explanations. |
+
+## Reference page structure
+
+CRD and service reference pages follow a consistent template. Use `reference/resources/query.mdx`, `team.mdx`, and `tools.mdx` as the models:
+
+1. **Frontmatter** — `title` and a `description` of the form `"<Kind> CRD reference — ..."`.
+2. **Intro** — one paragraph on what the resource is, linking the task-oriented user-guide walkthrough; state plainly that this page is the field-by-field reference.
+3. **`## Spec`** — a single annotated YAML example, comments grouped Required / optional.
+4. **`## Fields`** — a table with columns `Field | Type | Required | Description`, including enum values, defaults, and cross-field rules.
+5. **Topic sections** as warranted (strategies, parameters, auth, …).
+6. **`## Status`** — a status YAML block, a `### Status fields` table, a `### Phases` table where a phase enum exists, and a `### Print columns` line naming the columns `kubectl get` renders.
+7. **`## Related`** — links to adjacent pages.
+
+For an overview/index page, use one table listing every resource with its `Kind` and API version. Don't keep a second overlapping overview page — one topic, one page. The same applies to service APIs: one service, one reference page (Ark API, Broker Service), with the built-in OpenAPI/Swagger framed as the always-current source of truth.
+
+## Accuracy: verify against the source
+
+Reference docs must be true to the code, not to intent or memory. Pages can read plausibly and still be wrong — this is the most common defect. Before writing or reviewing a reference page, verify every claim:
+
+- **Fields, enums, defaults** — read the Go types in `ark/api/v1alpha1/*_types.go` and the generated CRD in `ark/config/crd/bases/`. `+kubebuilder:validation:Enum`, `+kubebuilder:default`, and the json tags are authoritative — not the existing prose.
+- **Behavior and constraints** — read the controller and webhooks (`ark/internal/controller/`, `ark/internal/validation/`). Migration targets, same- vs cross-namespace resolution, and validation rules live here. Example: a deprecated `graph` team strategy migrates to `sequential` (edges discarded), not `selector` — confirmed in `validation/defaults.go`. Verify even when a reviewer asserts otherwise.
+- **Live cluster** — where one is available, confirm with `kubectl explain`, `kubectl get <kind>` (for the print columns), and real resource YAML. For a service API, hit the running service's `/openapi.json` and Swagger.
+- **Version and release claims** — check the release tags, not the calendar. `git grep <pattern> <tag>` shows when something changed; `git merge-base --is-ancestor <commit> <tag>` confirms what actually shipped. Don't label a section "Unreleased" or cite a version (e.g. there is no `v0.2.0`) without checking.
+
+This session's rewrites found extensive fictional fields (`spec.model`, `systemPrompt`, `spec.agents`), non-existent CLI commands (`ark check`, `ark describe`; it's `devspace run routes`, not `make routes`), and wrong migration targets — all in pages that looked fine.
+
+## Build and preview before pushing
+
+- Build with `cd docs && npm run build` (Turbopack). The production build catches MDX and mermaid errors the dev server silently tolerates, and prints a page count on success. Never push a docs change without a clean build.
+- Preview the rendered page (dev server + screenshot). Mermaid renders lazily — scroll to the diagram or render a tall enough viewport before capturing.
+- Keep diagrams and prose **complementary, not duplicated**. When two pages cover related ground (e.g. Core Architecture and Query Execution Flow, or the Core Concepts and Core Architecture diagrams), cross-link and defer rather than repeat.
 
 ## References
 
