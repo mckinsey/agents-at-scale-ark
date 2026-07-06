@@ -172,7 +172,7 @@ The execution engine SHALL NOT learn a dedicated code path for inline tools. Whe
 
 ### Requirement: Inline tools are authorable from the dashboard and persist to the cluster
 
-The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard Tool editor SHALL offer an `Inline` option in its Type selector with `Language` and `Source` inputs, and creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace.
+The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard Tool editor SHALL offer an `Inline` option in its Type selector; when selected it SHALL show a required multiline `Source` input and a `Language` selector offering `Auto`, `Bash`, `Python`, `Node`, and `TS`. Selecting `Auto` SHALL omit `spec.inline.language` from the created resource so the controller infers the language. Creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace. The editor SHALL apply client-side validation that mirrors the webhook (non-empty source, source ≤ 900 KiB, language within the allowed set) for fast feedback, with the webhook remaining authoritative.
 
 #### Scenario: Create inline tool via ark-api round-trips
 
@@ -183,9 +183,21 @@ The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline
 #### Scenario: Create inline tool from the dashboard editor
 
 - **GIVEN** the dashboard Tool editor with `Inline` selected as the type
-- **WHEN** the author supplies a name, a source script, and a language, and submits
-- **THEN** a `Tool` of `type: inline` is created in the active namespace
-- **AND** the new tool appears in the tools list with a language badge
+- **WHEN** the author supplies a name, a description, an input schema, a source script, and an explicit language, and submits
+- **THEN** a `Tool` of `type: inline` is created in the active namespace with `spec.inline.source` and `spec.inline.language` set
+- **AND** the new tool appears in the tools list with an `(inline · <language>)` badge
+
+#### Scenario: Language `Auto` omits the language field
+
+- **GIVEN** the dashboard Tool editor with `Inline` selected and `Language` left as `Auto`
+- **WHEN** the author submits a valid inline tool
+- **THEN** the created `Tool` has `spec.inline.source` set and no `spec.inline.language` field
+
+#### Scenario: Empty source blocked client-side
+
+- **GIVEN** the dashboard Tool editor with `Inline` selected and an empty `Source`
+- **WHEN** the author attempts to submit
+- **THEN** the editor blocks submission and shows a validation message naming the source field
 
 ### Requirement: v1 feature scope is explicitly bounded
 

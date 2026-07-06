@@ -143,6 +143,23 @@ There is no `spec.inline.security` knob in v1. An author needing to relax any of
 
 **Alternative — ship relax-knobs from the start.** Faster path to real use cases. Rejected for v1: we would be designing the relaxation surface without evidence of what authors need, and re-adding it later is purely additive.
 
+### Decision: Dashboard authoring reuses the existing Tool editor patterns
+
+The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialog` + react-hook-form + zod form that already does per-type conditional fields via `.refine()` (e.g. `httpUrl` is required only when `type == http`). Inline tools slot into that shape:
+
+- **Type dropdown** gains an `Inline` option alongside the existing curated subset (`http`, `mcp`, `agent`, `team`). The dropdown is already narrower than the CRD enum, so adding one item is routine.
+- **`Source` field** is a plain expandable `<Textarea>` (monospace), reusing the same expand/collapse + character/line-counter treatment as the existing `Input Schema` and `Annotations` fields. Shown only when `type == inline`. It is required in that case.
+- **`Language` selector** offers `Auto`, `Bash`, `Python`, `Node`, `TS`. **`Auto` means the field is omitted from the payload** so the controller infers from the shebang (defaulting to bash) — the UI does not send `language: auto`.
+- **Client-side validation mirrors the webhook** via zod `.refine()`: when `type == inline`, `source` must be non-empty and ≤ 900 KiB, and `language` (when not `Auto`) must be one of the four allowed values. This is UX-only fast feedback; the webhook remains the authority.
+- **`inputSchema` stays required for all types**, inline included. The model needs the argument shape; a script that genuinely takes no arguments still declares an empty-object schema. Relaxing this is out of scope.
+- **Tools list badge.** `components/rows/tool-row.tsx` renders a small `(inline · <language>)` badge so inline tools are visually distinct in the list.
+
+**Why a plain `<Textarea>`, not a code editor.** The dashboard has `react-syntax-highlighter` (display-only) but no editable code-editor dependency (no Monaco/CodeMirror). A textarea matches the existing `Input Schema` field exactly, adds zero dependencies, and ships fastest. Syntax highlighting and line numbers are a v1.1 UX upgrade, not a v1 blocker for the "write twenty lines, attach, run" flow.
+
+**Alternative — add Monaco/CodeMirror.** Better authoring UX (highlighting, line numbers, indentation). Rejected for v1: heavy new dependency for a PoC-phase on-ramp; the value prop is "skip the container," not "best-in-class code editor."
+
+**Alternative — textarea + read-only highlighted preview** (via the existing `react-syntax-highlighter`). A middle ground, but a two-pane dialog is more UI surface than v1 needs. Revisitable.
+
 ## Risks / Trade-offs
 
 - **Cold-start latency** → Scale-from-zero pod start is on the order of seconds depending on image-cache state; first invocation feels slower than an HTTP tool. Mitigation: keep the runner image tight, document the latency, consider `spec.inline.keepWarm` in v1.1.
