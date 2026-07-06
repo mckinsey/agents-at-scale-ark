@@ -56,6 +56,16 @@ rbac:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["agents", "teams", "models"]
     verbs: ["get", "list"]
+  # Impersonate the signed-in user + run SelfSubjectAccessReview so the landing
+  # page can list only the namespaces that user (and their groups) may access.
+  # Without these the SSAR in canListAgents() 403s and every user sees an empty
+  # namespace list.
+  - apiGroups: [""]
+    resources: ["users", "groups"]
+    verbs: ["impersonate"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["selfsubjectaccessreviews"]
+    verbs: ["create"]
 
 service:
   name: ark-landing-page

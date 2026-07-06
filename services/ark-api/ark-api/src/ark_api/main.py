@@ -27,10 +27,16 @@ from .middleware import ReadOnlyMiddleware
 from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
-from .impersonation_groups_patch import apply as _apply_group_impersonation_patch
 
-# Fix multi-group impersonation: ensure repeated Impersonate-Group headers so
-# group-based RBAC works for users in more than one group (see module docstring).
+# Fix multi-group impersonation: emit one Impersonate-Group header per group so
+# group-based RBAC works for users in more than one group. The canonical fix now
+# lives in ark_sdk (ark_sdk.impersonation_patch, auto-applied when ark_sdk.k8s is
+# imported); prefer it, and fall back to the bundled shim for older ark_sdk
+# releases that predate it. Both are idempotent, so applying both is harmless.
+try:
+    from ark_sdk.impersonation_patch import apply as _apply_group_impersonation_patch
+except ImportError:
+    from .impersonation_groups_patch import apply as _apply_group_impersonation_patch
 _apply_group_impersonation_patch()
 
 # Load environment variables from .env file

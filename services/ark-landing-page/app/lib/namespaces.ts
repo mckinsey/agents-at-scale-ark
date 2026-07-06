@@ -20,29 +20,11 @@ const DISPLAY_NAME_ANNOTATION = 'ark.mckinsey.com/display-name';
 const DESCRIPTION_ANNOTATION = 'ark.mckinsey.com/namespace-description';
 const DASHBOARD_URL_ANNOTATION = 'ark.mckinsey.com/dashboard-url';
 
-// Decode (without verifying) the JWT payload to read the user's identity. The
-// session is the trust boundary — NextAuth already validated it at login — and
-// even an expired access token still carries the email/groups claims we need.
-function decodeClaims(token?: string): { email?: string; groups: string[] } {
-  if (!token) return { groups: [] };
-  const parts = token.split('.');
-  if (parts.length < 2) return { groups: [] };
-  try {
-    const json = Buffer.from(
-      parts[1].replace(/-/g, '+').replace(/_/g, '/'),
-      'base64',
-    ).toString('utf8');
-    const claims = JSON.parse(json);
-    const raw = claims.groups;
-    const groups = Array.isArray(raw)
-      ? raw.map(String)
-      : typeof raw === 'string'
-        ? [raw]
-        : [];
-    return { email: claims.email, groups };
-  } catch {
-    return { groups: [] };
-  }
+// Identity to impersonate, sourced from the (server-side) session — email and
+// groups only, never the raw access token.
+export interface UserIdentity {
+  email?: string;
+  groups?: string[];
 }
 
 // Ask the API server (as the impersonated user) whether they may list agents in
@@ -100,9 +82,10 @@ function canListAgents(
 }
 
 export async function fetchAccessibleNamespaces(
-  accessToken?: string,
+  identity: UserIdentity,
 ): Promise<AccessibleNamespace[]> {
-  const { email, groups } = decodeClaims(accessToken);
+  const email = identity.email;
+  const groups = identity.groups ?? [];
   if (!email) return [];
 
   const kc = new k8s.KubeConfig();

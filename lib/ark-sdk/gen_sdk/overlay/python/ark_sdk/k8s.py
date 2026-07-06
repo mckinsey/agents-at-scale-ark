@@ -14,9 +14,19 @@ from kubernetes import client as sync_client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 
+from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
+
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "ArkSDK"
+
+# Make multi-group impersonation work for every ark_sdk consumer. Every path that
+# builds a Kubernetes client imports this module (the async clients here, the
+# generated sync clients in versions.py, and client.py), so applying the patch on
+# import guarantees a comma-joined Impersonate-Group is split into repeated
+# headers before it reaches the API server. Idempotent and a no-op unless a
+# comma-joined header is actually present.
+_apply_impersonation_patch()
 
 
 def create_sync_api_client() -> sync_client.ApiClient:
@@ -141,6 +151,9 @@ class SecretClient:
         if self.impersonation:
             api.set_default_header("Impersonate-User", self.impersonation.username)
             if self.impersonation.groups:
+                # set_default_header stores headers in a plain dict, so groups must
+                # be comma-joined here. impersonation_patch splits this back into
+                # one Impersonate-Group header per group at the transport layer.
                 api.set_default_header("Impersonate-Group", ",".join(self.impersonation.groups))
         return api
 

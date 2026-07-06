@@ -15,6 +15,32 @@ import { createOIDCProvider } from './create-oidc-provider';
 
 type JwtCallback = NonNullable<NonNullable<NextAuthConfig['callbacks']>['jwt']>;
 
+// Decode (without verifying) the `groups` claim from a JWT. Only reads a token
+// we just received from the IdP in this callback — it's our own data, and the
+// group list is not a secret. Used so the session can carry groups without
+// exposing the raw access token to the browser.
+function extractGroups(accessToken?: string): string[] {
+  if (!accessToken) return [];
+  const payload = accessToken.split('.')[1];
+  if (!payload) return [];
+  try {
+    const claims = JSON.parse(
+      Buffer.from(
+        payload.replace(/-/g, '+').replace(/_/g, '/'),
+        'base64',
+      ).toString('utf8'),
+    );
+    const raw = claims.groups;
+    return Array.isArray(raw)
+      ? raw.map(String)
+      : typeof raw === 'string'
+        ? [raw]
+        : [];
+  } catch {
+    return [];
+  }
+}
+
 async function jwtCallback({
   token,
   profile,
@@ -29,6 +55,11 @@ async function jwtCallback({
       token.access_token = account.access_token;
       token.refresh_token = account.refresh_token;
       token.expires_at = account.expires_at!;
+      // Capture the user's groups now so the session can expose them without
+      // ever surfacing the raw access token to client-side JS.
+      (token as { groups?: string[] }).groups = extractGroups(
+        account.access_token,
+      );
     }
     if (account?.id_token) {
       token.id_token = account.id_token;
@@ -46,15 +77,16 @@ function sessionCallback({
   session,
   token,
 }: Parameters<SessionCallback>['0']): ReturnType<SessionCallback> {
-  if (session?.user && token?.id) {
-    session.user.id = String(token.id);
-  }
-  // Expose the OIDC access token so the landing page can read the user's
-  // identity/groups (to list the namespaces they can access via impersonation).
-  if (token?.access_token) {
-    (session as unknown as { accessToken?: string }).accessToken = String(
-      token.access_token,
-    );
+  if (session?.user) {
+    if (token?.id) {
+      session.user.id = String(token.id);
+    }
+    // Expose the user's groups (not the raw access token) so the landing page can
+    // list accessible namespaces via impersonation. email is already on the
+    // session by default; groups + email are non-secret identity claims, whereas
+    // the raw OIDC token must not be readable from client-side JS.
+    (session.user as { groups?: string[] }).groups =
+      (token as { groups?: string[] }).groups ?? [];
   }
   return session;
 }

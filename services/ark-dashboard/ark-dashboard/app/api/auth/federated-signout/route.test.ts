@@ -36,6 +36,18 @@ describe('GET /api/auth/federated-signout', () => {
     process.env.BASE_URL = 'https://dashboard.example.com';
     process.env.AUTH_SECRET = 'test-secret';
     delete process.env.OIDC_CLIENT_ID;
+    delete process.env.AUTH_HUB_URL;
+  });
+
+  it('redirects to the hub federated-signout when AUTH_HUB_URL is set', async () => {
+    process.env.AUTH_HUB_URL = 'https://hub.example.com/';
+    vi.mocked(getToken).mockResolvedValue({ id_token: 'id-tok' } as never);
+
+    const res = await GET(request());
+
+    expect(res.headers.get('location')).toBe(
+      'https://hub.example.com/api/auth/federated-signout',
+    );
   });
 
   it('clears the session cookie + chunks and redirects to /signout when there is no session', async () => {

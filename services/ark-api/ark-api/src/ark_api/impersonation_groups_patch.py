@@ -7,17 +7,24 @@ comma-joined header — which the API server reads as ONE group with a comma in
 its name. Group-based RBAC therefore silently fails for any user in more than
 one group.
 
-ark uses BOTH clients:
-  * ``kubernetes_asyncio`` — the ``/v1/context`` permission preflight & namespaces
-  * ``kubernetes`` (sync)  — the resource endpoints (agents/models/teams/...) via
-    ark_sdk's generated ``with_ark_client``
+The comma-join lives in ark_sdk's hand-written overlay — ``client.py``
+(``_build_headers``) and ``k8s.py`` (``SecretClient``) — not in generated code.
+Fixing it there is the right long-term home, but it can't emit repeated headers
+on its own: both clients funnel headers through a plain ``dict`` (``default_headers``
+/ per-call ``header_params``), which cannot hold two values for the same name. The
+lowest common choke point that CAN is ``RESTClientObject.request`` (aiohttp accepts
+a ``CIMultiDict`` and urllib3 an ``HTTPHeaderDict``, both of which emit repeated
+headers). ark uses BOTH clients — ``kubernetes_asyncio`` for the ``/v1/context``
+preflight & namespaces, and the sync ``kubernetes`` client for the resource
+endpoints via ``with_ark_client`` — so we patch both.
 
-Rather than touch every generated call site, we patch the single choke point each
-library funnels through — ``RESTClientObject.request`` — to split a comma-joined
-``Impersonate-Group`` back into one repeated header per group. aiohttp
-(``CIMultiDict``) and urllib3 (``HTTPHeaderDict``) both emit repeated headers.
+The canonical fix now lives in ark_sdk itself (``ark_sdk.impersonation_patch``),
+auto-applied when ``ark_sdk.k8s`` is imported, so every consumer (executors, CLI,
+...) benefits — not just ark-api. main.py prefers that module and only falls back
+to this bundled copy for older ark_sdk releases that predate it. This shim can be
+deleted once ark-api depends on an ark_sdk release that includes the fix.
 
-Import and call ``apply()`` once at startup (see main.py).
+Import and call ``apply()`` once at startup.
 """
 import logging
 

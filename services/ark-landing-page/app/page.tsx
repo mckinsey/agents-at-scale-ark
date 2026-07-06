@@ -45,9 +45,13 @@ export default async function LandingPage() {
   let namespaces: (AccessibleNamespace & { url: string })[] = [];
   try {
     const session = await auth();
-    const accessToken = (session as unknown as { accessToken?: string })
-      ?.accessToken;
-    const found = await fetchAccessibleNamespaces(accessToken);
+    const user = session?.user as
+      | { email?: string; groups?: string[] }
+      | undefined;
+    const found = await fetchAccessibleNamespaces({
+      email: user?.email,
+      groups: user?.groups,
+    });
     namespaces = found.map((n) => ({
       ...n,
       // Prefer an explicit dashboard URL annotation; otherwise derive it.

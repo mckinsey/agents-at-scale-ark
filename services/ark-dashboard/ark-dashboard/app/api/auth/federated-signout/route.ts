@@ -8,6 +8,14 @@ import {
   useSecureCookies,
 } from '@/lib/auth/auth-config';
 import { openidConfigManager } from '@/lib/auth/openid-config-manager';
+import { FEDERATED_SIGNOUT_PATH } from '@/lib/constants/auth';
+
+// Strip trailing slashes without a regex (avoids Sonar S5852 ReDoS heuristics).
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === '/') end -= 1;
+  return value.slice(0, end);
+}
 
 // NextAuth splits a session JWT larger than ~4KB into `${name}.0`, `${name}.1`,
 // ... Large OIDC tokens (id + access + refresh) routinely exceed this, and the
@@ -36,6 +44,15 @@ function clearSessionCookies(res: NextResponse) {
 }
 
 export async function GET(request: NextRequest) {
+  // Hub model: centralize logout at the hub, which owns the shared Path=/ session
+  // cookie and the single registered post-logout redirect URI. Mirrors the hub
+  // login, which keys off the same server-side AUTH_HUB_URL — one runtime env var
+  // for both, so login and logout can't drift out of sync.
+  const hubUrl = stripTrailingSlashes(process.env.AUTH_HUB_URL ?? '');
+  if (hubUrl) {
+    return NextResponse.redirect(`${hubUrl}${FEDERATED_SIGNOUT_PATH}`);
+  }
+
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,

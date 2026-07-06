@@ -48,12 +48,6 @@ jest.mock('@kubernetes/client-node', () => ({
   CoreV1Api: jest.fn(),
 }));
 
-function makeToken(payload: Record<string, unknown>): string {
-  const b64 = (o: unknown) =>
-    Buffer.from(JSON.stringify(o)).toString('base64url');
-  return `${b64({ alg: 'none' })}.${b64(payload)}.sig`;
-}
-
 beforeEach(() => {
   jest.clearAllMocks();
   seenImpersonateGroups.length = 0;
@@ -77,21 +71,20 @@ beforeEach(() => {
 
 describe('fetchAccessibleNamespaces', () => {
   it('returns only namespaces the impersonated user may access', async () => {
-    const token = makeToken({
+    const result = await fetchAccessibleNamespaces({
       email: 'jane@acme.com',
       groups: ['All Firm Users', 'Admins for ARK'],
     });
-
-    const result = await fetchAccessibleNamespaces(token);
 
     expect(result.map((n) => n.name)).toEqual(['tenant-a', 'tenant-b']);
     expect(result.map((n) => n.name)).not.toContain('kube-system');
   });
 
   it('maps display name / description / dashboard URL from annotations with fallbacks', async () => {
-    const token = makeToken({ email: 'jane@acme.com', groups: ['g'] });
-
-    const result = await fetchAccessibleNamespaces(token);
+    const result = await fetchAccessibleNamespaces({
+      email: 'jane@acme.com',
+      groups: ['g'],
+    });
     const a = result.find((n) => n.name === 'tenant-a')!;
     const b = result.find((n) => n.name === 'tenant-b')!;
 
@@ -106,12 +99,10 @@ describe('fetchAccessibleNamespaces', () => {
   });
 
   it('sends one Impersonate-Group header per group (array, not comma-joined)', async () => {
-    const token = makeToken({
+    await fetchAccessibleNamespaces({
       email: 'jane@acme.com',
       groups: ['All Firm Users', 'Admins for ARK'],
     });
-
-    await fetchAccessibleNamespaces(token);
 
     expect(seenImpersonateGroups.length).toBeGreaterThan(0);
     for (const groups of seenImpersonateGroups) {
@@ -119,9 +110,9 @@ describe('fetchAccessibleNamespaces', () => {
     }
   });
 
-  it('returns [] when the token has no identity', async () => {
-    expect(await fetchAccessibleNamespaces(undefined)).toEqual([]);
-    expect(await fetchAccessibleNamespaces(makeToken({ sub: 'x' }))).toEqual([]);
+  it('returns [] when the identity has no email', async () => {
+    expect(await fetchAccessibleNamespaces({})).toEqual([]);
+    expect(await fetchAccessibleNamespaces({ groups: ['g'] })).toEqual([]);
     expect(listNamespace).not.toHaveBeenCalled();
   });
 });
