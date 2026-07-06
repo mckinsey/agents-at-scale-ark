@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -19,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -683,5 +685,223 @@ var _ = Describe("Query Controller Fallback Raw", func() {
 			Expect(jsonStr).To(ContainSubstring(`"role":"assistant"`))
 			Expect(jsonStr).To(ContainSubstring(`"content":""`))
 		})
+	})
+})
+
+var _ = Describe("Query Controller handleInputRequiredPhase", func() {
+	const queryName = "hitl-test-query"
+	const taskID = "approval-task-123"
+	taskName := "a2a-task-" + taskID
+
+	cleanup := func(ctx context.Context) {
+		_ = k8sClient.Delete(ctx, &arkv1alpha1.A2ATask{ObjectMeta: metav1.ObjectMeta{Name: taskName, Namespace: "default"}})
+		_ = k8sClient.Delete(ctx, &arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: queryName, Namespace: "default"}})
+	}
+
+	createQueryAwaitingApproval := func(ctx context.Context) *arkv1alpha1.Query {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      queryName,
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+			},
+		}
+		Expect(query.Spec.SetInputString("trigger")).To(Succeed())
+		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		query.Status.Phase = statusInputRequired
+		query.Status.Response = &arkv1alpha1.Response{
+			Target: *query.Spec.Target,
+			A2A: &arkv1alpha1.A2AMetadata{
+				TaskID: taskID,
+			},
+		}
+		Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+		return query
+	}
+
+	It("resumes execution when approval timed out (treated as resumable denial)", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      taskName,
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "failed",
+			Error: "Approval timeout exceeded after 5m",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalTimeoutRejected",
+				Message:            "Approval timeout exceeded",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, query)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Query should be running (not error) so the executor can resume
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(statusRunning))
+	})
+
+	It("propagates A2ATask error into Response.Content when a true failure occurs", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      taskName,
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "failed",
+			Error: "underlying executor crashed",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "InvalidApprovalDecision",
+				Message:            "Could not parse decision",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, query)
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(statusError))
+		Expect(updated.Status.Response).NotTo(BeNil())
+		Expect(updated.Status.Response.Content).To(Equal("underlying executor crashed"))
+	})
+
+	It("ends the query in error once the cascade cap is reached", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		// Pre-set the cascade count to the cap.
+		query.Annotations = map[string]string{
+			annotations.ApprovalCascadeCount: fmt.Sprintf("%d", maxApprovalCascades),
+		}
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
+		// Re-fetch so query has the freshest status with response.a2a still set.
+		latestQuery := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, latestQuery)).To(Succeed())
+		latestQuery.Status = query.Status
+		Expect(k8sClient.Status().Update(ctx, latestQuery)).To(Succeed())
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      taskName,
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "failed",
+			Error: "Approval timeout exceeded after 5m",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalTimeoutRejected",
+				Message:            "Approval timeout exceeded",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, latestQuery)
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(statusError))
+		Expect(updated.Status.Response).NotTo(BeNil())
+		Expect(updated.Status.Response.Content).To(ContainSubstring("Approval cascade limit reached"))
+	})
+
+	It("resets the cascade counter when the user grants approval", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		// Seed a non-zero cascade count.
+		query.Annotations = map[string]string{
+			annotations.ApprovalCascadeCount: "2",
+		}
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
+		latestQuery := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, latestQuery)).To(Succeed())
+		latestQuery.Status = query.Status
+		Expect(k8sClient.Status().Update(ctx, latestQuery)).To(Succeed())
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      taskName,
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "completed",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalGranted",
+				Message:            "User approved",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, latestQuery)
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(statusRunning))
+		_, present := updated.Annotations[annotations.ApprovalCascadeCount]
+		Expect(present).To(BeFalse(), "annotation should be cleared after approval")
 	})
 })
