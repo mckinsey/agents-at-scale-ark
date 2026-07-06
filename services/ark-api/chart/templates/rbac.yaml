@@ -55,6 +55,10 @@ rules:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Ark resource status subresources (for HITL approval)
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["a2atasks/status"]
+    verbs: ["get", "patch", "update"]
   # Argo Workflows resources
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]

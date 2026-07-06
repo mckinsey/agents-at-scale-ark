@@ -134,14 +134,21 @@ class ARKResourceClient(Generic[T]):
         """
         ns = namespace or self.namespace
 
-        result = self.custom_api.get_namespaced_custom_object(
-            group=self.group,
-            version=self.version,
-            namespace=ns,
-            plural=self.plural,
-            name=name
-        )
-        return self._dict_to_model(result)
+        # Create fresh client for GET to avoid caching stale data
+        fresh_api_client = client.ApiClient()
+        fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
+
+        try:
+            result = fresh_custom_api.get_namespaced_custom_object(
+                group=self.group,
+                version=self.version,
+                namespace=ns,
+                plural=self.plural,
+                name=name
+            )
+            return self._dict_to_model(result)
+        finally:
+            fresh_api_client.close()
     
     def list(self, namespace: Optional[str] = None, label_selector: Optional[str] = None) -> List[T]:
         """List all resources
@@ -158,16 +165,23 @@ class ARKResourceClient(Generic[T]):
         if label_selector:
             kwargs['label_selector'] = label_selector
 
-        result = self.custom_api.list_namespaced_custom_object(
-            group=self.group,
-            version=self.version,
-            namespace=ns,
-            plural=self.plural,
-            **kwargs
-        )
+        # Create fresh client for LIST to avoid caching stale data
+        fresh_api_client = client.ApiClient()
+        fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
 
-        items = result.get('items', [])
-        return [self._dict_to_model(item) for item in items]
+        try:
+            result = fresh_custom_api.list_namespaced_custom_object(
+                group=self.group,
+                version=self.version,
+                namespace=ns,
+                plural=self.plural,
+                **kwargs
+            )
+
+            items = result.get('items', [])
+            return [self._dict_to_model(item) for item in items]
+        finally:
+            fresh_api_client.close()
     
     def update(self, resource: T, namespace: Optional[str] = None) -> T:
         """Update an existing resource
