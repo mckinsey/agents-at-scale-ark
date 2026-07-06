@@ -993,7 +993,7 @@ class TestEnsureTokenSecretRef(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "custom")
         client.mcpservers.a_update.assert_not_awaited()
 
-    @patch("ark_sdk.models.mcp_server_v1alpha1.MCPServerV1alpha1")
+    @patch("ark_api.services.mcp_auth_persistence.MCPServerV1alpha1")
     async def test_absent_ref_defaults_to_name_oauth(self, mock_model):
         from ark_api.services.mcp_auth_persistence import ensure_mcpserver_token_secret_ref
 
@@ -1008,6 +1008,49 @@ class TestEnsureTokenSecretRef(unittest.IsolatedAsyncioTestCase):
         client.mcpservers.a_update.assert_awaited_once()
         sent = mock_model.call_args.kwargs
         self.assertEqual(sent["spec"]["authorization"]["tokenSecretRef"]["name"], "svc-oauth")
+
+    @patch("ark_api.services.mcp_auth_persistence.MCPServerV1alpha1")
+    async def test_retries_on_conflict_then_succeeds(self, mock_model):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        from ark_api.services.mcp_auth_persistence import ensure_mcpserver_token_secret_ref
+
+        def _fresh_mcp(*_args, **_kwargs):
+            mcp = MagicMock()
+            mcp.to_dict.return_value = {
+                "metadata": {"name": "svc"},
+                "spec": {"authorization": {}},
+            }
+            return mcp
+
+        client = AsyncMock()
+        client.mcpservers.a_get = AsyncMock(side_effect=_fresh_mcp)
+        client.mcpservers.a_update = AsyncMock(
+            side_effect=[ApiException(status=409), None]
+        )
+
+        result = await ensure_mcpserver_token_secret_ref(client, "svc")
+
+        self.assertEqual(result, "svc-oauth")
+        self.assertEqual(client.mcpservers.a_get.await_count, 2)
+        self.assertEqual(client.mcpservers.a_update.await_count, 2)
+
+    @patch("ark_api.services.mcp_auth_persistence.MCPServerV1alpha1")
+    async def test_non_conflict_error_is_not_retried(self, mock_model):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        from ark_api.services.mcp_auth_persistence import ensure_mcpserver_token_secret_ref
+
+        mcp = MagicMock()
+        mcp.to_dict.return_value = {"metadata": {"name": "svc"}, "spec": {"authorization": {}}}
+        client = AsyncMock()
+        client.mcpservers.a_get = AsyncMock(return_value=mcp)
+        client.mcpservers.a_update = AsyncMock(side_effect=ApiException(status=403))
+
+        with self.assertRaises(ApiException):
+            await ensure_mcpserver_token_secret_ref(client, "svc")
+
+        client.mcpservers.a_update.assert_awaited_once()
 
 
 if __name__ == "__main__":
