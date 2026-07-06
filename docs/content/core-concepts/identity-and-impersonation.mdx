@@ -1,12 +1,12 @@
 # Identity and impersonation
 
-This page explains how ARK maps an authenticated user's OIDC identity to a Kubernetes
+This page explains how Ark maps an authenticated user's OIDC identity to a Kubernetes
 user, and why Kubernetes RBAC must bind that same identity. For configuration steps and
 provider examples, see the [authentication guide](/developer-guide/authentication).
 
 ## From OIDC identity to Kubernetes user
 
-ARK authenticates dashboard and API users with OpenID Connect (OIDC), then talks to the
+Ark authenticates dashboard and API users with OpenID Connect (OIDC), then talks to the
 Kubernetes API on their behalf. Without impersonation, every call would use the ark-api
 service account, so per-user RBAC would never apply.
 
@@ -68,25 +68,14 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-A common source of unexpected `403`s is a mismatch between the claim ARK forwards and the
+A common source of unexpected `403`s is a mismatch between the claim Ark forwards and the
 identity named in the binding.
 
 ## Where impersonation applies
 
-Impersonation applies only when ARK has a human user identity to forward. With API-key
-(`basic`) access the caller is a machine identity, and in `open` mode there is no
-authentication, so both run as the service account. ark-api enforces impersonation across
-its routes, so authenticated user requests are authorized as the user rather than the
-service account ([PR #2376](https://github.com/mckinsey/agents-at-scale-ark/pull/2376)).
-Clients cannot supply their own `Impersonate-*` headers; ark-api rejects such requests.
+Impersonation applies only when Ark has a human user identity to forward. Under `sso` (and the JWT path of `hybrid`) the request is authorized as the user named by the username claim. Under `basic`, the API-key path of `hybrid`, and `open` mode the caller is a machine identity or unauthenticated, so the request runs as the ark-api service account.
 
-| Auth mode | Impersonated identity | Why |
-|-----------|----------------------|-----|
-| `sso` | User from the username claim | User identity is present in the JWT. |
-| `hybrid` (JWT path) | User from the username claim | Same as `sso`. |
-| `hybrid` (API-key path) | Service account | API keys are machine identities. |
-| `basic` | Service account | Service-to-service, no human user. |
-| `open` | Service account | No authentication. |
+ark-api enforces impersonation across its routes ([PR #2376](https://github.com/mckinsey/agents-at-scale-ark/pull/2376)), and clients cannot supply their own `Impersonate-*` headers — ark-api rejects such requests. For the per-mode breakdown and the configuration, see [Authentication → User Impersonation](/developer-guide/authentication#user-impersonation).
 
 ## Related
 
