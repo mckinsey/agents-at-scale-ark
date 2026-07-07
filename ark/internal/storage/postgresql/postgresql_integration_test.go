@@ -681,6 +681,30 @@ func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
 	if len(seen) != 30 {
 		t.Errorf("expected 30 rows across all pages (10 seed + 20 post), got %d: %v", len(seen), seen)
 	}
+
+	// A fresh LIST captures a new snapshot that now sees the committed row —
+	// pinning to page 1's snapshot must not permanently hide it.
+	reListSeen := map[string]bool{}
+	var reListToken string
+	for {
+		var page []runtime.Object
+		page, reListToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: reListToken})
+		if err != nil {
+			t.Fatalf("re-List failed: %v", err)
+		}
+		for _, o := range page {
+			reListSeen[o.(*integrationTestObject).Metadata.Name] = true
+		}
+		if reListToken == "" {
+			break
+		}
+	}
+	if !reListSeen["in-flight-model"] {
+		t.Errorf("re-List after commit did not return in-flight-model (rv=%d) — pinned snapshot must not persist across calls", inflightRV)
+	}
+	if len(reListSeen) != 31 {
+		t.Errorf("re-List: expected 31 rows (10 seed + 20 post + in-flight), got %d: %v", len(reListSeen), reListSeen)
+	}
 }
 
 func decodeCursorForTest(token string) (int64, error) {
