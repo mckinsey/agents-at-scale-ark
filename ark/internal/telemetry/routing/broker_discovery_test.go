@@ -223,6 +223,20 @@ func TestResolveBrokerEndpoint(t *testing.T) {
 			},
 			want: "http://ark-broker.tenant-a.svc.cluster.local:80",
 		},
+		{
+			name:      "falls back to the only enabled broker when namespace has no ConfigMap of its own",
+			namespace: "team-namespace",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "default"},
+					Data: map[string]string{
+						"enabled":    "true",
+						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "http://ark-broker.default.svc.cluster.local:80",
+		},
 	}
 
 	for _, tt := range tests {

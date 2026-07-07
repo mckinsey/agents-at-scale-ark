@@ -75,16 +75,25 @@ func DiscoverBrokerEndpoints(ctx context.Context, k8sClient client.Client) ([]Br
 }
 
 // ResolveBrokerEndpoint returns the broker endpoint for namespace, or "" when
-// no ark-config-broker ConfigMap exists there or the broker is not enabled.
+// no enabled ark-config-broker ConfigMap exists in the cluster. Mirrors
+// BrokerEventEmitter.getEndpointForNamespace: an exact namespace match wins,
+// otherwise it falls back to any other enabled broker — the same broker that
+// receives this namespace's operation events when it has no dedicated
+// ark-config-broker ConfigMap of its own.
 func ResolveBrokerEndpoint(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
-	config, err := GetBrokerConfig(ctx, k8sClient, namespace)
+	endpoints, err := DiscoverBrokerEndpoints(ctx, k8sClient)
 	if err != nil {
 		return "", err
 	}
-	if config == nil || config.Enabled != "true" {
+	if len(endpoints) == 0 {
 		return "", nil
 	}
-	return buildEndpoint(namespace, config.ServiceRef)
+	for _, ep := range endpoints {
+		if ep.Namespace == namespace {
+			return ep.Endpoint, nil
+		}
+	}
+	return endpoints[0].Endpoint, nil
 }
 
 func GetBrokerConfig(ctx context.Context, k8sClient client.Client, namespace string) (*BrokerConfig, error) {
