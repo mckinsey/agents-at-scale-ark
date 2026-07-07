@@ -237,6 +237,7 @@ class SecretClient:
                 "id": str(secret.metadata.uid),
                 "type": secret.type,
                 "secret_length": self.calculate_secret_length(secret.data or {}),
+                "keys": sorted((secret.data or {}).keys()),
                 "annotations": secret.metadata.annotations
             }
 

@@ -55,9 +55,15 @@ const bedrockSchema = z.object({
   bedrockAccessKeyIdSecretName: z
     .string()
     .min(1, { message: 'Access Key ID Secret is required' }),
+  bedrockAccessKeyIdSecretKey: z
+    .string()
+    .min(1, { message: 'Access Key ID Secret key is required' }),
   bedrockSecretAccessKeySecretName: z
     .string()
     .min(1, { message: 'Secret Access Key Secret is required' }),
+  bedrockSecretAccessKeySecretKey: z
+    .string()
+    .min(1, { message: 'Secret Access Key Secret key is required' }),
   region: z.string().nullish(),
   modelARN: z.string().nullish(),
 });

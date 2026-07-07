@@ -84,7 +84,7 @@ kubectl get tenant   # check Minio tenant status
 Every Ark interaction inside a workflow is one of two patterns:
 
 1. **A `Query` resource** — `kubectl apply` a `Query` CR, `kubectl wait --for=condition=Completed`, then read `.status.response.content`. This is what the bundled samples use; it works anywhere and gives you labels, TTL, timeout, parameters, and session/conversation IDs.
-2. **The `fark` CLI** — run the pre-built [`ark-tools`](/reference/utility-images#ark-tools) image and call `fark <agent|team|model|tool> <name> "<message>"`. Shorter for one-shot calls.
+2. **The `fark` CLI** — run the pre-built [`ark-tools`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/images/ark-tools/README.md) image and call `fark <agent|team|model|tool> <name> "<message>"`. Shorter for one-shot calls.
 
 <Callout type="warning">
 Use **`fark`**, not `ark`, inside a workflow pod. `fark` talks to the Kubernetes API directly (in-cluster config), so it works with the workflow's ServiceAccount. The `ark` CLI port-forwards to the `ark-api` service, which requires `pods/portforward` permission the `argo-workflow` ServiceAccount doesn't have — `ark query …` will fail in a workflow step with *"cannot create resource pods/portforward"*. Keep `ark query` for local/interactive use.
@@ -384,5 +384,5 @@ kubectl get query <name> -o jsonpath='{.status.response.content}'
 ## Related
 
 - [Run queries / chat with agents and teams](/user-guide/queries) — the `Query` resource these steps create.
-- [`ark-tools` image](/reference/utility-images#ark-tools) — the CLI image used in workflow steps.
+- [`ark-tools` image](https://github.com/mckinsey/agents-at-scale-ark/blob/main/images/ark-tools/README.md) — the CLI image used in workflow steps.
 - [Ark API — Generic Resources API](/reference/ark-apis#generic-resources-api) — access workflow templates via the API.
