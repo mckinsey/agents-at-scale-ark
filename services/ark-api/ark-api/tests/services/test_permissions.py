@@ -66,8 +66,18 @@ def _mock_helper(review=None, raises=None):
 
 
 class TestGetArkPermissions(unittest.IsolatedAsyncioTestCase):
-    async def test_no_impersonation_unavailable(self):
-        result = await get_ark_permissions(None, "default")
+    async def test_open_mode_no_impersonation_is_unrestricted(self):
+        # Open mode performs no auth, so there is no identity to impersonate;
+        # that is not an error — access is unrestricted.
+        with patch.dict(os.environ, {"AUTH_MODE": "open"}):
+            result = await get_ark_permissions(None, "default")
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.rules, {"*": ["*"]})
+
+    async def test_sso_mode_no_impersonation_unavailable(self):
+        # Auth-enabled modes with no identity still cannot evaluate permissions.
+        with patch.dict(os.environ, {"AUTH_MODE": "sso"}):
+            result = await get_ark_permissions(None, "default")
         self.assertEqual(result.status, "unavailable")
         self.assertEqual(result.rules, {})
 
