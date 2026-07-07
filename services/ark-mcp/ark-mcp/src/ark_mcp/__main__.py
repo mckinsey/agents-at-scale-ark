@@ -25,7 +25,7 @@ def main():
     
     try:
         # Run the MCP server on port 2627 (AMCP on dial pad)
-        app.run(transport="http", host="0.0.0.0", port=2627, path="/mcp")
+        app.run(transport="http", host="0.0.0.0", port=2627, path="/mcp", host_origin_protection=False)
     except KeyboardInterrupt:
         logger.info("Received shutdown signal")
     finally:
