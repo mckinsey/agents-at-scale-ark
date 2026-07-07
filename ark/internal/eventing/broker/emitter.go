@@ -14,6 +14,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry/routing"
 )
@@ -48,14 +49,6 @@ func NewBrokerEventEmitter(endpoints []routing.BrokerEndpoint) eventing.EventEmi
 		endpoints: endpointMap,
 		sem:       semaphore.NewWeighted(64),
 	}
-}
-
-func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
-	if query.Spec.TTL == nil {
-		return nil
-	}
-	secs := int64(query.Spec.TTL.Seconds())
-	return &secs
 }
 
 func (e *BrokerEventEmitter) getEndpointForNamespace(namespace string) string {
@@ -104,7 +97,7 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 		Reason:     reason,
 		Message:    message,
 		Data:       eventData,
-		TtlSeconds: ttlSecondsFromQuery(query),
+		TtlSeconds: common.TtlSecondsFromQuery(query),
 	}
 
 	if e.sem.TryAcquire(1) {
