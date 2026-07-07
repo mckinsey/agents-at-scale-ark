@@ -83,14 +83,6 @@ func DefaultConfig() Config {
 	}
 }
 
-func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
-	if query.Spec.TTL == nil {
-		return nil
-	}
-	secs := int64(query.Spec.TTL.Seconds())
-	return &secs
-}
-
 func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	return NewMemoryWithConfig(ctx, k8sClient, memoryName, namespace, DefaultConfig(), memoryRecorder)
 }
