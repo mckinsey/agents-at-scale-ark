@@ -59,8 +59,9 @@ interface CacheEntry {
 const namespaceCache = new Map<string, CacheEntry>();
 
 function identityKey(email: string, groups: string[]): string {
-  // Sort groups so membership order doesn't fragment the cache.
-  return `${email}\n${[...groups].sort().join(',')}`;
+  // Sort groups so membership order doesn't fragment the cache. Explicit
+  // comparator (Sonar S2871) — any stable order works for a cache key.
+  return `${email}\n${[...groups].sort((a, b) => a.localeCompare(b)).join(',')}`;
 }
 
 // Exposed for tests; also handy if a future signal (e.g. RoleBinding webhook)
