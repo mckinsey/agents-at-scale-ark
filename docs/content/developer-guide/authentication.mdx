@@ -448,6 +448,8 @@ normally use the ark-api service account. This bypasses any RBAC rules configure
 User impersonation forwards the SSO user's identity to Kubernetes via
 `Impersonate-User` and `Impersonate-Group` headers, so K8s RBAC applies to the actual user.
 
+For the concepts behind this — how the OIDC claim becomes the Kubernetes user and why RBAC RoleBindings must bind that exact identity — see [Identity and impersonation](/core-concepts/identity-and-impersonation).
+
 ### When impersonation applies
 
 | Auth Mode | Impersonation | Reason |
