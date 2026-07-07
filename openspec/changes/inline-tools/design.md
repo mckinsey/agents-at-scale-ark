@@ -147,6 +147,7 @@ There is no `spec.inline.security` knob in v1. An author needing to relax any of
 
 The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialog` + react-hook-form + zod form that already does per-type conditional fields via `.refine()` (e.g. `httpUrl` is required only when `type == http`). Inline tools slot into that shape:
 
+- **Dedicated entry point (first-class).** Beyond the dropdown, the Tools page gets a dedicated "New inline tool" action that opens the editor pre-set to `Inline`. Per Nab's feedback, inline authoring is a primary flow — not something a user discovers by scrolling a type dropdown. The generic "Add Tool" path still reaches inline via the dropdown; the dedicated action just makes the PoC on-ramp obvious.
 - **Type dropdown** gains an `Inline` option alongside the existing curated subset (`http`, `mcp`, `agent`, `team`). The dropdown is already narrower than the CRD enum, so adding one item is routine.
 - **`Source` field** is a plain expandable `<Textarea>` (monospace), reusing the same expand/collapse + character/line-counter treatment as the existing `Input Schema` and `Annotations` fields. Shown only when `type == inline`. It is required in that case.
 - **`Language` selector** offers `Auto`, `Bash`, `Python`, `Node`, `TS`. **`Auto` means the field is omitted from the payload** so the controller infers from the shebang (defaulting to bash) — the UI does not send `language: auto`.
@@ -155,6 +156,8 @@ The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialo
 - **Tools list badge.** `components/rows/tool-row.tsx` renders a small `(inline · <language>)` badge so inline tools are visually distinct in the list.
 
 **Why a plain `<Textarea>`, not a code editor.** The dashboard has `react-syntax-highlighter` (display-only) but no editable code-editor dependency (no Monaco/CodeMirror). A textarea matches the existing `Input Schema` field exactly, adds zero dependencies, and ships fastest. Syntax highlighting and line numbers are a v1.1 UX upgrade, not a v1 blocker for the "write twenty lines, attach, run" flow.
+
+**Phasing: dashboard v0 first.** The dashboard authoring slice (CRD + webhook + ark-api + editor) is Phase 1 in `tasks.md`, delivered before the per-tool runtime (Phase 2). This validates the PoC-building experience early, per Nab's request. The trade-off: at the end of Phase 1 an inline tool persists and is authorable but does **not execute yet** (no runner/activator). To avoid the UI misleading users, the Phase 1 controller sets an honest non-`Ready` status (e.g. `Pending — inline runtime not installed`) until Phase 2 lands. A user-facing "prototype / not yet executable" hint in the editor is optional but recommended for the v0 demo.
 
 **Alternative — add Monaco/CodeMirror.** Better authoring UX (highlighting, line numbers, indentation). Rejected for v1: heavy new dependency for a PoC-phase on-ramp; the value prop is "skip the container," not "best-in-class code editor."
 

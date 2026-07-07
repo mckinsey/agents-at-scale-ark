@@ -1,6 +1,12 @@
 'use client';
 
-import { ChevronRight, MessageCircle, Trash2, Wrench } from 'lucide-react';
+import {
+  ChevronRight,
+  MessageCircle,
+  Pencil,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -18,9 +24,19 @@ import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { getOriginIcon } from '@/lib/utils/origin-icon';
 
+function toolTypeBadge(tool: Tool): string | null {
+  if (!tool.type) return null;
+  if (tool.type === 'inline') {
+    const language = tool.inline?.language;
+    return language ? `inline · ${language}` : 'inline';
+  }
+  return tool.type;
+}
+
 type ToolRowProps = {
   readonly tool: Tool;
   readonly onInfo?: (tool: Tool) => void;
+  readonly onEdit?: (tool: Tool) => void;
   readonly onDelete?: (id: string) => void;
   readonly inUse?: boolean;
   readonly inUseReason?: string;
@@ -28,7 +44,7 @@ type ToolRowProps = {
 };
 
 export function ToolRow(props: ToolRowProps) {
-  const { tool, onInfo, onDelete, inUse, inUseReason } = props;
+  const { tool, onInfo, onEdit, onDelete, inUse, inUseReason } = props;
   const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -45,6 +61,14 @@ export function ToolRow(props: ToolRowProps) {
     }
   };
 
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(tool);
+    }
+  };
+
+  const canEdit = Boolean(onEdit) && tool.type === 'inline';
+
   const handleQueryTool = () => {
     push(`/query/new?target_tool=${tool.name}`);
   };
@@ -57,11 +81,28 @@ export function ToolRow(props: ToolRowProps) {
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p
-              className="flex items-center gap-x-1.5 truncate text-sm font-medium"
-              title={tool.name}>
-              {tool.name} <span>{originIcon}</span>
-            </p>
+            <div className="flex items-center gap-2">
+              <p
+                className="flex items-center gap-x-1.5 truncate text-sm font-medium"
+                title={tool.name}>
+                {tool.name} <span>{originIcon}</span>
+              </p>
+              {(() => {
+                const badge = toolTypeBadge(tool);
+                if (!badge) return null;
+                return (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                      tool.type === 'inline'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'border-muted-foreground/30 bg-muted text-muted-foreground',
+                    )}>
+                    {badge}
+                  </span>
+                );
+              })()}
+            </div>
             <p
               className="text-muted-foreground truncate text-xs"
               title={tool.description ?? ''}>
@@ -83,6 +124,23 @@ export function ToolRow(props: ToolRowProps) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>View tool details</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {canEdit && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={handleEdit}
+                    aria-label="Edit tool">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit tool</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}

@@ -172,7 +172,13 @@ The execution engine SHALL NOT learn a dedicated code path for inline tools. Whe
 
 ### Requirement: Inline tools are authorable from the dashboard and persist to the cluster
 
-The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard Tool editor SHALL offer an `Inline` option in its Type selector; when selected it SHALL show a required multiline `Source` input and a `Language` selector offering `Auto`, `Bash`, `Python`, `Node`, and `TS`. Selecting `Auto` SHALL omit `spec.inline.language` from the created resource so the controller infers the language. Creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace. The editor SHALL apply client-side validation that mirrors the webhook (non-empty source, source ≤ 900 KiB, language within the allowed set) for fast feedback, with the webhook remaining authoritative.
+The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard SHALL make inline-tool authoring a first-class flow: the Tools page SHALL provide a dedicated "New inline tool" entry point that opens the editor pre-set to `Inline`, in addition to the `Inline` option in the Type selector. When `Inline` is selected the editor SHALL show a required multiline `Source` input and a `Language` selector offering `Auto`, `Bash`, `Python`, `Node`, and `TS`. Selecting `Auto` SHALL omit `spec.inline.language` from the created resource so the controller infers the language. Creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace. The editor SHALL apply client-side validation that mirrors the webhook (non-empty source, source ≤ 900 KiB, language within the allowed set) for fast feedback, with the webhook remaining authoritative.
+
+#### Scenario: Dedicated "New inline tool" entry point
+
+- **GIVEN** the Tools page in the dashboard
+- **WHEN** the user activates the "New inline tool" action
+- **THEN** the Tool editor opens pre-set to `Inline` with the `Source` and `Language` fields visible
 
 #### Scenario: Create inline tool via ark-api round-trips
 
