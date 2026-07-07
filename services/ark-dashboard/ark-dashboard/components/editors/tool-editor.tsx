@@ -64,7 +64,6 @@ interface ToolEditorProps {
   onOpenChange: (open: boolean) => void;
   onSave: (tool: ToolSpec) => void;
   namespace: string;
-  initialType?: string;
   editingTool?: InlineTool | null;
 }
 
@@ -199,7 +198,6 @@ export function ToolEditor({
   onOpenChange,
   onSave,
   namespace,
-  initialType,
   editingTool,
 }: Readonly<ToolEditorProps>) {
   const [isInputSchemaExpanded, setIsInputSchemaExpanded] = useState(false);
@@ -242,12 +240,12 @@ export function ToolEditor({
         inlineLanguage: editingTool.inline.language ?? INLINE_LANGUAGE_AUTO,
       });
     } else {
-      form.reset({ ...DEFAULT_FORM_VALUES, type: initialType ?? '' });
+      form.reset(DEFAULT_FORM_VALUES);
     }
     setIsInputSchemaExpanded(false);
     setIsAnnotationsExpanded(false);
     setIsInlineSourceExpanded(false);
-  }, [open, form, editingTool, initialType]);
+  }, [open, form, editingTool]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     let parsedInputSchema: Record<string, unknown> | undefined;

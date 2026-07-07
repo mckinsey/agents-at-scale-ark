@@ -65,9 +65,6 @@ export const ToolsSection = forwardRef<
   const [showCompactView, setShowCompactView] = useState(false);
   const { push } = useNamespacedNavigation();
   const [toolEditorOpen, setToolEditorOpen] = useState(false);
-  const [editorInitialType, setEditorInitialType] = useState<
-    string | undefined
-  >(undefined);
   const [editingInlineTool, setEditingInlineTool] = useState<InlineTool | null>(
     null,
   );
@@ -75,21 +72,13 @@ export const ToolsSection = forwardRef<
   useImperativeHandle(ref, () => ({
     openAddEditor: () => {
       setEditingInlineTool(null);
-      setEditorInitialType(undefined);
       setToolEditorOpen(true);
     },
   }));
 
-  const openNewInlineTool = () => {
-    setEditingInlineTool(null);
-    setEditorInitialType('inline');
-    setToolEditorOpen(true);
-  };
-
   const handleEdit = (tool: Tool) => {
     if (!isInlineTool(tool)) return;
     setEditingInlineTool(tool);
-    setEditorInitialType('inline');
     setToolEditorOpen(true);
   };
 
@@ -97,7 +86,6 @@ export const ToolsSection = forwardRef<
     setToolEditorOpen(nextOpen);
     if (!nextOpen) {
       setEditingInlineTool(null);
-      setEditorInitialType(undefined);
     }
   };
 
@@ -320,22 +308,14 @@ export const ToolsSection = forwardRef<
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEditingInlineTool(null);
-                  setEditorInitialType(undefined);
-                  setToolEditorOpen(true);
-                }}>
-                <Plus className="h-4 w-4" />
-                Add Tool
-              </Button>
-              <Button onClick={openNewInlineTool}>
-                <Plus className="h-4 w-4" />
-                New inline tool
-              </Button>
-            </div>
+            <Button
+              onClick={() => {
+                setEditingInlineTool(null);
+                setToolEditorOpen(true);
+              }}>
+              <Plus className="h-4 w-4" />
+              Add Tool
+            </Button>
           </EmptyContent>
           <Button
             variant="link"
@@ -354,7 +334,6 @@ export const ToolsSection = forwardRef<
           onOpenChange={handleEditorOpenChange}
           onSave={handleSaveTool}
           namespace={namespace}
-          initialType={editorInitialType}
           editingTool={editingInlineTool}
         />
       </>
@@ -364,11 +343,7 @@ export const ToolsSection = forwardRef<
   return (
     <>
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between px-6 py-3">
-          <Button variant="outline" size="sm" onClick={openNewInlineTool}>
-            <Plus className="h-4 w-4" />
-            New inline tool
-          </Button>
+        <div className="flex items-center justify-end px-6 py-3">
           <ToggleSwitch
             options={viewOptions}
             onChange={id => setShowCompactView(id === 'card')}
@@ -469,7 +444,6 @@ export const ToolsSection = forwardRef<
         onOpenChange={handleEditorOpenChange}
         onSave={handleSaveTool}
         namespace={namespace}
-        initialType={editorInitialType}
         editingTool={editingInlineTool}
       />
     </>
