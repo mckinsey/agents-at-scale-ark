@@ -127,6 +127,9 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
+		if errors.Is(err, storage.ErrInvalidRequest) {
+			return nil, apierrors.NewBadRequest(err.Error())
+		}
 		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
 	}
 
@@ -343,7 +346,14 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 		opts.ResourceVersion = options.ResourceVersion
 	}
 
-	return s.backend.Watch(ctx, s.config.Kind, namespace, opts)
+	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidRequest) {
+			return nil, apierrors.NewBadRequest(err.Error())
+		}
+		return nil, err
+	}
+	return watcher, nil
 }
 
 func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions runtime.Object) (*metav1.Table, error) {

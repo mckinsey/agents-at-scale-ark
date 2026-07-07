@@ -9,10 +9,14 @@ const baseBedrockForm: FormValues = {
   name: 'test-bedrock',
   provider: 'bedrock',
   model: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+  bedrockAuthMethod: 'iam',
+  bedrockApiKeySecretName: '',
+  bedrockApiKeySecretKey: 'token',
   bedrockAccessKeyIdSecretName: 'aws-credentials',
   bedrockAccessKeyIdSecretKey: 'access-key-id',
   bedrockSecretAccessKeySecretName: 'aws-credentials',
   bedrockSecretAccessKeySecretKey: 'secret-access-key',
+  baseUrl: '',
   region: 'us-west-2',
   modelARN: '',
 };
@@ -46,6 +50,43 @@ describe('createConfig (bedrock)', () => {
     expect(config.bedrock?.secretAccessKey).toEqual({
       valueFrom: { secretKeyRef: { name: 'aws-credentials', key: 'token' } },
     });
+  });
+
+  it('emits only apiKey when auth method is apiKey', () => {
+    const config = createConfig({
+      ...baseBedrockForm,
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'bedrock-credentials',
+      bedrockApiKeySecretKey: 'bedrock-api-key',
+    });
+
+    expect(config.bedrock?.apiKey).toEqual({
+      valueFrom: {
+        secretKeyRef: { name: 'bedrock-credentials', key: 'bedrock-api-key' },
+      },
+    });
+    expect(config.bedrock?.accessKeyId).toBeUndefined();
+    expect(config.bedrock?.secretAccessKey).toBeUndefined();
+  });
+
+  it('includes baseUrl when set (e.g. a gateway endpoint)', () => {
+    const config = createConfig({
+      ...baseBedrockForm,
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'ai-gateway',
+      bedrockApiKeySecretKey: 'token',
+      baseUrl: 'https://aws-bedrock.example.com/project-id',
+    });
+
+    expect(config.bedrock?.baseUrl).toBe(
+      'https://aws-bedrock.example.com/project-id',
+    );
+  });
+
+  it('omits baseUrl when blank', () => {
+    const config = createConfig(baseBedrockForm);
+
+    expect(config.bedrock?.baseUrl).toBeUndefined();
   });
 });
 
@@ -85,10 +126,39 @@ describe('getDefaultValuesForUpdate (bedrock)', () => {
     const values = getDefaultValuesForUpdate(model);
 
     expect(values).toMatchObject({
+      bedrockAuthMethod: 'iam',
       bedrockAccessKeyIdSecretName: 'aws-credentials',
       bedrockAccessKeyIdSecretKey: 'access-key-id',
       bedrockSecretAccessKeySecretName: 'aws-credentials',
       bedrockSecretAccessKeySecretKey: 'secret-access-key',
+    });
+  });
+
+  it('detects apiKey auth method and reads the api key secret', () => {
+    const model = {
+      name: 'test-bedrock',
+      provider: 'bedrock',
+      model: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+      config: {
+        bedrock: {
+          apiKey: {
+            valueFrom: {
+              secretKeyRef: {
+                name: 'bedrock-credentials',
+                key: 'bedrock-api-key',
+              },
+            },
+          },
+        },
+      },
+    } as unknown as Model;
+
+    const values = getDefaultValuesForUpdate(model);
+
+    expect(values).toMatchObject({
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'bedrock-credentials',
+      bedrockApiKeySecretKey: 'bedrock-api-key',
     });
   });
 

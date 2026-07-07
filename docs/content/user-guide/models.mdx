@@ -36,7 +36,7 @@ The example below creates an OpenAI `gpt-4o-mini` model called `default`. You ca
 The form changes per provider:
 
 - **Azure OpenAI** adds an **Authentication** dropdown (API Key / Managed Identity / Workload Identity) and an **API Version** field.
-- **AWS Bedrock** replaces the API Key with separate **Access Key ID Secret** and **Secret Access Key Secret** pickers, plus optional **Region** and **Model ARN**.
+- **AWS Bedrock** adds an **Authentication** dropdown (IAM Credentials / API Key). IAM shows **Access Key ID Secret** and **Secret Access Key Secret** pickers; API Key shows a single **API Key Secret** picker. Both offer optional **Region** and **Model ARN**.
 - **Anthropic** has the same shape as OpenAI plus an optional **Anthropic Version** field.
 
 ### Via kubectl
@@ -112,7 +112,7 @@ Ark probes each model periodically (default every 1 minute, configurable via `sp
 | --- | --- | --- |
 | **OpenAI** | OpenAI hosted models, or any OpenAI-compatible endpoint (Google Gemini in compatibility mode, vLLM, Ollama, custom gateways) | [OpenAI](/reference/resources/models#openai) |
 | **Azure OpenAI** | Azure-hosted OpenAI deployments. Supports API Key, AKS Managed Identity, and Workload Identity authentication | [Azure OpenAI](/reference/resources/models#azure-openai) |
-| **AWS Bedrock** | Bedrock-hosted models (Anthropic Claude, Mistral, Cohere, etc.). Uses IAM by default; explicit credentials supported | [AWS Bedrock](/reference/resources/models#aws-bedrock) |
+| **AWS Bedrock** | Bedrock-hosted models (Anthropic Claude, Mistral, Cohere, etc.). Supports API-key (bearer token) or IAM credentials; uses the pod IAM role by default | [AWS Bedrock](/reference/resources/models#aws-bedrock) |
 | **Anthropic** | Native Anthropic API for Claude models | [Anthropic](/reference/resources/models#google-gemini-and-anthropic-models) |
 
 The legacy form `spec.type: openai|azure|bedrock|anthropic` (using `type` as the provider) is **deprecated**. The mutating webhook migrates it to `spec.provider` automatically and stamps a `ark.mckinsey.com/migration-warning/...` annotation on the Model. New configs should use `spec.provider`.
