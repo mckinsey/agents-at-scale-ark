@@ -428,7 +428,10 @@ type listContinueToken struct {
 }
 
 func encodeListContinueToken(tok listContinueToken) string {
-	raw, _ := json.Marshal(tok)
+	raw, err := json.Marshal(tok)
+	if err != nil {
+		panic(fmt.Errorf("encode continue token: %w", err))
+	}
 	return base64.StdEncoding.EncodeToString(raw)
 }
 
@@ -436,6 +439,7 @@ func encodeListContinueToken(tok listContinueToken) string {
 // before snapshot-based pagination, so in-flight clients survive the upgrade.
 func decodeListContinueToken(s string) (listContinueToken, error) {
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		// Empty Snapshot signals cursor-only pagination for legacy callers.
 		return listContinueToken{Cursor: n}, nil
 	}
 	raw, err := base64.StdEncoding.DecodeString(s)
