@@ -189,7 +189,7 @@ export function ToolForm({
   );
 
   return (
-    <div className="flex min-h-0 w-full mx-auto max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden">
+    <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
       {header}
 
       <Form {...form}>

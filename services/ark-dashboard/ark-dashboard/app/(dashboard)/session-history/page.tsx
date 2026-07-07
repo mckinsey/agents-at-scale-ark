@@ -14,7 +14,7 @@ export default function SessionsConversationsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <div className="flex h-full w-full mx-auto max-w-[1600px] flex-col gap-5">
+    <div className="flex h-full w-full content-shell flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1" data-testid="page-header">
           <div className="flex items-center gap-1">

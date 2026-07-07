@@ -156,7 +156,7 @@ export default function SessionDetailPage() {
       <SessionConversationHeader session={session} formattedDate={formattedDate} />
 
       <div className="flex min-h-0 flex-1 justify-start overflow-hidden">
-        <Tabs defaultValue={HISTORY_TAB} className="flex min-h-0 flex-1 mx-auto max-w-[1600px] flex-col">
+        <Tabs defaultValue={HISTORY_TAB} className="flex min-h-0 flex-1 content-shell flex-col">
           <TabsList className="shrink-0 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
             <TabsTrigger
               value={HISTORY_TAB}

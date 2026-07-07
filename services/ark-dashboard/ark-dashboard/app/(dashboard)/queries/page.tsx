@@ -103,7 +103,7 @@ export default function QueriesPage() {
   };
 
   return (
-    <div className="flex min-h-0 w-full mx-auto max-w-[1600px] flex-1 flex-col">
+    <div className="flex min-h-0 w-full content-shell flex-1 flex-col">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1">

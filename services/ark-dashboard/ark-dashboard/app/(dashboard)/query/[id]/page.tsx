@@ -279,7 +279,7 @@ function QueryViewMode({
   const eventsHref = `/events?kind=Query&name=${query.name}`;
 
   return (
-    <div className="flex w-full mx-auto max-w-[1600px] flex-col gap-5">
+    <div className="flex w-full content-shell flex-col gap-5">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <nav
@@ -793,7 +793,7 @@ function QueryDetailContent() {
   const isToolTarget = toolSchema && query.target?.type === 'tool';
 
   return (
-    <div className="flex w-full mx-auto max-w-[1600px] flex-col gap-5">
+    <div className="flex w-full content-shell flex-col gap-5">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <nav
