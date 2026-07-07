@@ -993,7 +993,19 @@ func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1
 		baseURL = strings.TrimSuffix(resolved, "/")
 	}
 
-	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, baseURL, url.PathEscape(query.Name))
+	path := fmt.Sprintf(common.QueryMessagesEndpointFmt, url.PathEscape(query.Name))
+	return deleteBrokerResource(ctx, baseURL, path, "messages", query.Name)
+}
+
+// deleteBrokerResource issues a DELETE for path against baseURL and interprets
+// the response the way every broker cleanup call needs to: 404/405 means the
+// broker doesn't support this delete (skip, not an error), any other non-2xx
+// is a real failure the finalizer should retry. resource is used only for
+// logging (e.g. "messages", "events").
+func deleteBrokerResource(ctx context.Context, baseURL, path, resource, queryName string) error {
+	log := logf.FromContext(ctx)
+
+	requestURL := strings.TrimSuffix(baseURL, "/") + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
@@ -1008,15 +1020,15 @@ func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
-		log.Info("broker does not support delete query messages, skipping", "query", query.Name, "status", resp.StatusCode)
+		log.Info("broker does not support delete request, skipping", "resource", resource, "query", queryName, "status", resp.StatusCode)
 		return nil
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", baseURL, resp.StatusCode, query.Name)
+		return fmt.Errorf("broker at %s returned HTTP %d deleting %s for query %s", baseURL, resp.StatusCode, resource, queryName)
 	}
 
-	log.Info("deleted broker messages for query", "query", query.Name)
+	log.Info("deleted broker resource for query", "resource", resource, "query", queryName)
 	return nil
 }
 
@@ -1046,31 +1058,8 @@ func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1al
 		return nil
 	}
 
-	requestURL := strings.TrimSuffix(endpoint, "/") + fmt.Sprintf(common.QueryEventsEndpointFmt, url.PathEscape(string(query.UID)))
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create delete request: %w", err)
-	}
-	req.Header.Set("User-Agent", "ark-controller/1.0")
-
-	httpClient := common.NewHTTPClientWithLogging()
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
-		log.Info("broker does not support delete query events, skipping", "query", query.Name, "status", resp.StatusCode)
-		return nil
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("broker at %s returned HTTP %d deleting events for query %s", endpoint, resp.StatusCode, query.Name)
-	}
-
-	log.Info("deleted broker events for query", "query", query.Name)
-	return nil
+	path := fmt.Sprintf(common.QueryEventsEndpointFmt, url.PathEscape(string(query.UID)))
+	return deleteBrokerResource(ctx, endpoint, path, "events", query.Name)
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
