@@ -426,6 +426,10 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		setupLog.Error(err, "unable to add embedded apiserver to manager")
 		os.Exit(1)
 	}
+	if err := mgr.Add(server.WALConsumer()); err != nil {
+		setupLog.Error(err, "unable to add WAL consumer to manager")
+		os.Exit(1)
+	}
 	setupLog.Info("embedded apiserver configured", "backend", backend)
 }
 

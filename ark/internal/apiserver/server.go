@@ -114,9 +114,10 @@ type Config struct {
 }
 
 type Server struct {
-	config  Config
-	backend storage.Backend
-	stopCh  chan struct{}
+	config       Config
+	backend      *postgresql.PostgreSQLBackend
+	backendReady chan struct{}
+	stopCh       chan struct{}
 }
 
 func New(cfg Config) *Server {
@@ -127,9 +128,37 @@ func New(cfg Config) *Server {
 		cfg.AuthMode = AuthModeDelegated
 	}
 	return &Server{
-		config: cfg,
-		stopCh: make(chan struct{}),
+		config:       cfg,
+		backendReady: make(chan struct{}),
+		stopCh:       make(chan struct{}),
 	}
+}
+
+// walConsumer starts the backend's WAL consumer once this replica holds the
+// leader lease. The replication slot is single-consumer: without this gate,
+// extra replicas error-loop trying to acquire the slot.
+type walConsumer struct {
+	server *Server
+}
+
+func (w *walConsumer) Start(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-w.server.backendReady:
+	}
+	klog.Info("Leader lease acquired; starting WAL consumer")
+	w.server.backend.StartWALConsumer()
+	<-ctx.Done()
+	return nil
+}
+
+func (w *walConsumer) NeedLeaderElection() bool {
+	return true
+}
+
+func (s *Server) WALConsumer() *walConsumer {
+	return &walConsumer{server: s}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -143,20 +172,22 @@ func (s *Server) Start(ctx context.Context) error {
 	var err error
 
 	cfg := postgresql.Config{
-		Host:        s.config.PostgresHost,
-		Port:        s.config.PostgresPort,
-		Database:    s.config.PostgresDB,
-		User:        s.config.PostgresUser,
-		Password:    s.config.PostgresPass,
-		SSLMode:     s.config.PostgresSSL,
-		SSLRootCert: s.config.PostgresSSLRoot,
-		SSLCert:     s.config.PostgresSSLCert,
-		SSLKey:      s.config.PostgresSSLKey,
+		Host:             s.config.PostgresHost,
+		Port:             s.config.PostgresPort,
+		Database:         s.config.PostgresDB,
+		User:             s.config.PostgresUser,
+		Password:         s.config.PostgresPass,
+		SSLMode:          s.config.PostgresSSL,
+		SSLRootCert:      s.config.PostgresSSLRoot,
+		SSLCert:          s.config.PostgresSSLCert,
+		SSLKey:           s.config.PostgresSSLKey,
+		DeferWALConsumer: true,
 	}
 	s.backend, err = postgresql.New(cfg, converter)
 	if err != nil {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
+	close(s.backendReady)
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()

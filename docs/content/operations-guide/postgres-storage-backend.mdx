@@ -209,16 +209,22 @@ The aggregated apiserver enforces the same access control as the rest of the clu
 - **Verified serving TLS.** With `certManager.enabled` (the default), cert-manager issues the serving certificate for the `ark-apiserver` service, mounts it into the pod, and injects the CA into both APIServices — the kube-apiserver verifies the aggregated apiserver's identity instead of `insecureSkipTLSVerify`. The certificate rotates through cert-manager and the server reloads it without a restart. Setting `certManager.enabled=false` restores the previous behavior (ephemeral self-signed certificate, unverified proxy channel) for clusters without cert-manager.
 - **Optional NetworkPolicy.** `networkPolicy.enabled=true` restricts ingress to the serving and health ports; use `networkPolicy.extraIngressFrom` to pin the allowed sources for the serving port (the origin of kube-apiserver traffic depends on your CNI, which is why this is off by default).
 
-## Multi-replica behaviour
+## Availability and multi-replica behaviour
 
-The `ark-apiserver` chart defaults to a single replica. The chart wires the RBAC needed for controller-runtime leader election on a `Lease` named `ark-apiserver-leader`.
+The chart defaults to a single replica. Understand what that means before running it in production: when the aggregated apiserver is unavailable, the `ark.mckinsey.com` APIService goes unavailable, which degrades kube-apiserver API discovery and the garbage-collection and namespace controllers **cluster-wide** — a standard Kubernetes aggregation-layer failure mode, not something specific to Ark. A single replica is therefore a cluster-wide single point of failure during pod restarts, node drains, and crashes.
 
-If you scale to multiple replicas:
+For production, run two replicas and enable the disruption budget:
 
-- Only one instance acquires the lease and runs the WAL consumer.
-- The replication slot's `active` flag is a second backstop — even without leader election, Postgres only lets one connection hold the slot at a time.
+```bash
+--set replicas=2 --set podDisruptionBudget.enabled=true
+```
 
-Multi-replica mainly improves API request throughput; the WAL stream is still single-consumer by design.
+How multiple replicas behave:
+
+- **API serving is active-active.** Every replica serves reads and writes directly against Postgres; the Service load-balances across them. Killing any one pod leaves the APIService available.
+- **The watch stream is single-consumer by design.** Only the replica holding the `ark-apiserver-leader` lease runs the WAL consumer that drives real-time watch events (the logical replication slot admits one connection; the slot's `active` flag is a backstop even without the lease). Non-leader replicas do not touch the slot.
+- **Watches served by non-leader replicas are relist-bound.** Without the WAL stream, a non-leader refreshes its watchers on a periodic relist (up to ~120 seconds stale). Controllers tolerate this — informers resync — but if consistently low watch latency matters, keep a single replica and accept the SPOF trade-off, or route watch-heavy clients through the kubectl path.
+- **Failover:** if the leader dies, a surviving replica acquires the lease (roughly the 15s lease duration) and starts the WAL consumer; the slot position is persistent, so no events are lost across the handover.
 
 ## Backups and restore
 
