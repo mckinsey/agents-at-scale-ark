@@ -132,7 +132,7 @@ FILE=$(jq -r .file <<< "$1")
 const args = JSON.parse(process.argv[2]);
 ```
 
-**Why.** Simplest path that works uniformly across every language in the runner: no argparse, no flag-to-property mapping, no nested-object edge cases, no extra read step.
+**Why.** Simplest path that works uniformly across every supported language: no argparse, no flag-to-property mapping, no nested-object edge cases, no extra read step.
 
 **Alternative — JSON on stdin.** Cleaner for very large payloads, more boilerplate for the common case. Rejected for v1; addable as an opt-in mode later.
 
