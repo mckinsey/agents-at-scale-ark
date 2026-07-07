@@ -177,6 +177,72 @@ port: "4318"`,
 	}
 }
 
+func TestResolveBrokerEndpoint(t *testing.T) {
+	tests := []struct {
+		name       string
+		namespace  string
+		configMaps []client.Object
+		want       string
+	}{
+		{
+			name:      "nil client returns empty",
+			namespace: "default",
+			want:      "",
+		},
+		{
+			name:       "missing configmap returns empty",
+			namespace:  "default",
+			configMaps: []client.Object{},
+			want:       "",
+		},
+		{
+			name:      "disabled broker returns empty",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data: map[string]string{
+						"enabled":    "false",
+						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name:      "enabled broker returns built endpoint",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data: map[string]string{
+						"enabled":    "true",
+						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "http://ark-broker.tenant-a.svc.cluster.local:80",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var k8sClient client.Client
+			if tt.configMaps != nil {
+				k8sClient = fake.NewClientBuilder().WithObjects(tt.configMaps...).Build()
+			}
+
+			got, err := ResolveBrokerEndpoint(context.Background(), k8sClient, tt.namespace)
+			if err != nil {
+				t.Fatalf("ResolveBrokerEndpoint() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseServiceRef(t *testing.T) {
 	tests := []struct {
 		name     string
