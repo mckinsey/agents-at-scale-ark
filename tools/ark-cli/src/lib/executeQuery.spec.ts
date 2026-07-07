@@ -56,7 +56,9 @@ const mockStdoutWrite = vi
   .spyOn(process.stdout, 'write')
   .mockImplementation(() => true);
 
-const {executeQuery, parseTarget} = await import('./executeQuery.js');
+const {executeQuery, parseTarget, parseParameters} = await import(
+  './executeQuery.js'
+);
 const {ExitCodes} = await import('./errors.js');
 
 describe('executeQuery', () => {
@@ -100,6 +102,44 @@ describe('executeQuery', () => {
       expect(parseTarget('invalid')).toBeNull();
       expect(parseTarget('')).toBeNull();
       expect(parseTarget('model/default/extra')).toBeNull();
+    });
+  });
+
+  describe('parseParameters', () => {
+    it('returns an empty array for no parameters', () => {
+      expect(parseParameters([])).toEqual([]);
+    });
+
+    it('parses multiple pairs preserving order', () => {
+      expect(parseParameters(['a=1', 'b=2'])).toEqual([
+        {name: 'a', value: '1'},
+        {name: 'b', value: '2'},
+      ]);
+    });
+
+    it('splits only on the first = so values may contain =', () => {
+      expect(parseParameters(['token=ab=cd'])).toEqual([
+        {name: 'token', value: 'ab=cd'},
+      ]);
+    });
+
+    it('trims whitespace and allows an empty value', () => {
+      expect(parseParameters([' name = value '])).toEqual([
+        {name: 'name', value: 'value'},
+      ]);
+      expect(parseParameters(['empty='])).toEqual([{name: 'empty', value: ''}]);
+    });
+
+    it('throws when there is no =', () => {
+      expect(() => parseParameters(['bad'])).toThrow(
+        'parameter must be in name=value format, got: bad'
+      );
+    });
+
+    it('throws when the name is empty', () => {
+      expect(() => parseParameters(['=value'])).toThrow(
+        'parameter name cannot be empty in: =value'
+      );
     });
   });
 

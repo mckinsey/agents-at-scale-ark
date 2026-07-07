@@ -5,7 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: Operation events from a completed query land in the Postgres events table with expires_at set; GET /events/:queryId returns them
+  description: Operation events from a completed query land in the Postgres events table with expires_at set from Query.spec.ttl; GET /events/:queryId returns them
   steps:
   - name: setup-mock-llm
     try:
@@ -91,6 +91,28 @@ spec:
           done
           echo "events in Postgres: ${COUNT}"
           [ "${COUNT}" -ge 1 ] || { echo "expected at least 1 event, got ${COUNT}"; exit 1; }
+    catch:
+    - events: {}
+
+  - name: verify-event-ttl-in-postgres
+    try:
+    - script:
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
+          TTL=""
+          for i in $(seq 1 10); do
+            TTL=$(bash ../shared/psql-query.sh \
+              "SELECT EXTRACT(EPOCH FROM (expires_at - created_at))::int FROM events WHERE query_id='${QUERY_UID}' LIMIT 1;" \
+              | tr -d ' \n')
+            [ -n "${TTL}" ] && break
+            sleep 1
+          done
+          echo "DB ttl_seconds: ${TTL}"
+          [ "${TTL}" = "3600" ] || { echo "expected 3600, got '${TTL}'"; exit 1; }
     catch:
     - events: {}
 
