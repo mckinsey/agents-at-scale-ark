@@ -95,9 +95,32 @@ spec:
           - name: NAMESPACE
             value: ($namespace)
           timeout: 30s
+
+    - name: first-deletion-mark-bumps
+      try:
+      - script:
+          content: |
+            set -eu
+            # Finalizer keeps the row alive so `kubectl delete` only marks it. The
+            # deletionTimestamp transition (null → set) must bump generation, matching
+            # upstream rest.BeforeDelete.
+            kubectl patch model gen-model -n "$NAMESPACE" --type=merge \
+              -p '{"metadata":{"finalizers":["ark.mckinsey.com/test"]}}' >/dev/null
+            kubectl delete model gen-model -n "$NAMESPACE" --wait=false >/dev/null
+            GEN=$(kubectl get model gen-model -n "$NAMESPACE" -o jsonpath='{.metadata.generation}')
+            DT=$(kubectl get model gen-model -n "$NAMESPACE" -o jsonpath='{.metadata.deletionTimestamp}')
+            [ -n "$DT" ] || { echo "FAIL: deletionTimestamp not set"; exit 1; }
+            [ "$GEN" = "3" ] || { echo "FAIL after first delete: generation=$GEN want 3"; exit 1; }
+            echo "OK first delete mark: generation=$GEN deletionTimestamp=$DT"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 30s
       cleanup:
       - script:
           content: |
+            kubectl patch model gen-model -n "$NAMESPACE" --type=merge \
+              -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true
             kubectl delete model gen-model -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
           env:
           - name: NAMESPACE
