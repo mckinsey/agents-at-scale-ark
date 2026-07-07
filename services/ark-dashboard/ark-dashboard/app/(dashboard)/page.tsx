@@ -21,7 +21,7 @@ export default function HomePage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex w-full max-w-[1344px] flex-col gap-5">
+        <div className="flex w-full mx-auto max-w-[1600px] flex-col gap-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1">

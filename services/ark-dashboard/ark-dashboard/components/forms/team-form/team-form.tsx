@@ -157,7 +157,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
   if (isCreating) {
     return (
-      <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-5 overflow-hidden">
+      <div className="flex min-h-0 w-full mx-auto max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
           <div className="flex items-center justify-between">
             <nav

@@ -63,7 +63,7 @@ export function CreateAgentForm({
   const cancelHref = onCancel ? undefined : '/agents';
 
   return (
-    <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col gap-5 overflow-hidden">
+    <div className="flex min-h-0 w-full mx-auto max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden">
       {/* Header — figma 4254:21323 (80px tall, 16px gap between rows) */}
       <header className="flex flex-none flex-col gap-4">
         <div className="flex items-center justify-between">
