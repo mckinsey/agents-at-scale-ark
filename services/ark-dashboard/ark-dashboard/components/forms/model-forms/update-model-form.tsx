@@ -71,6 +71,10 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
           defaultValues.provider === 'azure'
             ? defaultValues.azureAuthMethod
             : undefined,
+        initialBedrockAuthMethod:
+          defaultValues.provider === 'bedrock'
+            ? defaultValues.bedrockAuthMethod
+            : undefined,
       }}>
       <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">

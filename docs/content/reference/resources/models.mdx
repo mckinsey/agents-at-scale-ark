@@ -223,8 +223,15 @@ spec:
         value: "us-west-2"
       # Base URL (optional — only needed for a non-default endpoint).
       baseUrl:
-        value: "https://your-bedrock-gateway.example.com/your-project-id"
-      # Explicit credentials (optional; defaults to the IAM role).
+        value: "https://aws-bedrock.prod.ai-gateway.quantumblack.com/your-project-id"
+      # API key (bearer token) - alternative to IAM credentials.
+      # When set, it takes precedence and IAM credentials are ignored.
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: bedrock-credentials
+            key: bedrock-api-key
+      # Explicit credentials (optional, defaults to IAM role)
       accessKeyId:
         valueFrom:
           secretKeyRef:
@@ -244,11 +251,28 @@ spec:
       # Custom model ARN (optional).
       modelArn:
         value: "arn:aws:bedrock:..."
-      maxTokens: 4096
-      temperature: "0.7"
+      properties:
+        temperature:
+          value: "0.7"
+        max_tokens:
+          value: "4096"
 ```
 
-`maxTokens` accepts an integer in `1`–`100000`; `temperature` is a string in the range `0`–`1`.
+Bedrock supports two authentication methods:
+
+- **API key** (`apiKey`) — a Bedrock bearer token. The executor authenticates with `Authorization: Bearer <key>`, bypassing SigV4 signing.
+- **IAM credentials** (`accessKeyId` / `secretAccessKey` / `sessionToken`) — or, if all are omitted, the pod's IAM role via the AWS default credential chain.
+
+When both `apiKey` and IAM credentials are set, the **API key takes precedence** and the IAM credentials are ignored, even when IAM credentials are also present in the executor environment. The mutating webhook stamps a non-blocking `ark.mckinsey.com/migration-warning/bedrock-auth` annotation in this case. A configured `apiKey` that cannot be resolved (missing Secret or empty value) fails loudly rather than silently falling back to IAM.
+
+### Google Gemini and Anthropic Models
+
+Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` provider. The base URLs are:
+
+- `https://generativelanguage.googleapis.com/v1beta/openai` for Google Gemini
+- `https://api.anthropic.com/v1` for Anthropic Claude
+
+Most other providers also support OpenAI compatible base URLs - check their docs for details.
 
 ### Anthropic
 
