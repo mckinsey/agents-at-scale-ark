@@ -1,11 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Trash } from '@/components/icons';
+import { Autorenew, Logout, MoreVert, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { IconActionButton } from '@/components/ui/icon-action-button';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Table,
   TableBody,
@@ -14,6 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServer } from '@/lib/services/mcp-servers';
 import { cn } from '@/lib/utils';
@@ -36,6 +48,7 @@ const COL = {
   name: 'w-[260px]',
   transport: 'w-[160px]',
   tools: 'w-[100px]',
+  expires: 'w-[200px]',
   status: 'w-[120px]',
   action: 'w-[72px]',
 };
@@ -43,6 +56,8 @@ const COL = {
 const rowHoverOverlayClass =
   'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
+// Availability-based status. Once MCP auth status is available it will render
+// the authorization state (Authorized / Unauthenticated / Error) here instead.
 function McpServerStatus({
   status,
 }: Readonly<{ status?: MCPServer['available'] | null }>) {
@@ -55,6 +70,33 @@ function McpServerStatus({
         {config.label}
       </span>
     </span>
+  );
+}
+
+// Token expiry, with an "expiring soon" warning icon, will populate here once
+// MCP auth expiry data is available.
+function McpServerExpires() {
+  return <span className="text-fg-primary">—</span>;
+}
+
+// Re-authenticate and Sign out stay disabled until MCP auth status is available;
+// the tooltip explains the disabled state, matching the design.
+function DisabledAuthMenuItem({
+  icon,
+  label,
+}: Readonly<{ icon: ReactNode; label: string }>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="block">
+          <DropdownMenuItem disabled>
+            {icon}
+            {label}
+          </DropdownMenuItem>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>Authentication isn&apos;t required for this MCP</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -102,19 +144,43 @@ function McpServerTableRow({
             {server.tool_count ?? '—'}
           </span>
         </TableCell>
+        <TableCell size="small" className={COL.expires}>
+          <McpServerExpires />
+        </TableCell>
         <TableCell size="small">
           <McpServerStatus status={server.available} />
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <div className="flex items-center justify-center">
-            <IconActionButton
-              label="Delete MCP server"
-              disabled={readOnlyMode}
-              onClick={() => {
-                if (!readOnlyMode) setDeleteConfirmOpen(true);
-              }}>
-              <Trash />
-            </IconActionButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="MCP server actions"
+                  disabled={readOnlyMode}>
+                  <IconShell size="sm" variant="secondary">
+                    <MoreVert />
+                  </IconShell>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setDeleteConfirmOpen(true)}>
+                  <Trash className="size-4" />
+                  Delete
+                </DropdownMenuItem>
+                <DisabledAuthMenuItem
+                  icon={<Autorenew className="size-4" />}
+                  label="Re-authenticate"
+                />
+                <DisabledAuthMenuItem
+                  icon={<Logout className="size-4" />}
+                  label="Sign out"
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </TableCell>
       </TableRow>
@@ -152,6 +218,9 @@ export function McpServersTable({
           </TableHead>
           <TableHead size="small" className={COL.tools}>
             Tools
+          </TableHead>
+          <TableHead size="small" className={COL.expires}>
+            Expires
           </TableHead>
           <TableHead size="small" className={COL.status}>
             Status

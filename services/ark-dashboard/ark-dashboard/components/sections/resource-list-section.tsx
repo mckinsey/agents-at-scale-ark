@@ -47,6 +47,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   /** Raw icon element (e.g. <Group />); wrapped in IconShell internally. */
   readonly icon: ReactNode;
   readonly title: string;
+  readonly showCount?: boolean;
   readonly subtitle: string;
   readonly createHref: string;
   readonly createLabel: string;
@@ -70,6 +71,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
 export function ResourceListSection<T extends ResourceListItem>({
   icon,
   title,
+  showCount,
   subtitle,
   createHref,
   createLabel,
@@ -185,7 +187,7 @@ export function ResourceListSection<T extends ResourceListItem>({
               {icon}
             </IconShell>
             <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              {title}
+              {showCount && items.length > 0 ? `${title} (${items.length})` : title}
             </h1>
           </div>
           <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
