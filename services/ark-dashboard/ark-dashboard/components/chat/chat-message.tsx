@@ -1,10 +1,14 @@
 import { AlertCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { submitApproval } from '@/lib/services/a2a-task-approvals';
+import type { ToolApprovalRequest } from '@/lib/types/chat-message';
 import { getResourceEventsUrl } from '@/lib/utils/events';
+import { parseDurationToMs } from '@/lib/utils/time';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system';
@@ -20,6 +24,9 @@ interface ChatMessageProps {
     completion_tokens: number;
     total_tokens: number;
   };
+  approvalRequest?: ToolApprovalRequest;
+  namespace?: string;
+  pollAfterApproval?: () => Promise<void>;
 }
 
 export function ChatMessage({
@@ -32,6 +39,9 @@ export function ChatMessage({
   toolCalls,
   sender,
   tokenUsage,
+  approvalRequest,
+  namespace = 'default',
+  pollAfterApproval,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -42,6 +52,77 @@ export function ChatMessage({
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
 
   const showErrorIcon = isFailed && queryName;
+
+  // Track submitted task decisions in sessionStorage to persist across refreshes
+  const getSubmittedTaskDecisions = (): Map<
+    string,
+    'approved' | 'rejected'
+  > => {
+    if (typeof window === 'undefined') return new Map();
+    const stored = sessionStorage.getItem('submitted-approval-tasks');
+    if (!stored) return new Map();
+    try {
+      const obj = JSON.parse(stored);
+      return new Map(Object.entries(obj));
+    } catch {
+      return new Map();
+    }
+  };
+
+  const addSubmittedTaskDecision = (
+    taskId: string,
+    decision: 'approved' | 'rejected',
+  ) => {
+    if (typeof window === 'undefined') return;
+    const submitted = getSubmittedTaskDecisions();
+    submitted.set(taskId, decision);
+    const obj = Object.fromEntries(submitted);
+    sessionStorage.setItem('submitted-approval-tasks', JSON.stringify(obj));
+  };
+
+  const taskDecision = approvalRequest?.taskId
+    ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
+    : undefined;
+  const [approvalDecision, setApprovalDecision] = useState<
+    'approved' | 'rejected' | null
+  >(taskDecision || null);
+
+  const approvalExpiresAtMs = useMemo(() => {
+    if (!approvalRequest?.timeout || !approvalRequest.receivedAtMs) {
+      return undefined;
+    }
+    const timeoutMs = parseDurationToMs(approvalRequest.timeout);
+    if (timeoutMs === null) return undefined;
+    return approvalRequest.receivedAtMs + timeoutMs;
+  }, [approvalRequest?.timeout, approvalRequest?.receivedAtMs]);
+
+  const handleApprove = async () => {
+    if (!approvalRequest?.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'approved',
+    );
+    setApprovalDecision('approved');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
+
+  const handleReject = async () => {
+    if (!approvalRequest?.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'rejected',
+    );
+    setApprovalDecision('rejected');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
 
   const handleErrorIconClick = () => {
     if (queryName) {
@@ -143,6 +224,31 @@ export function ChatMessage({
 
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
+
+  if (approvalRequest) {
+    // Generate a unique key from tool call IDs to reset component state on new approvals
+    const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
+    return (
+      <div
+        className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
+        <ApprovalNotification
+          key={approvalKey}
+          queryName={queryName || ''}
+          queryNamespace={namespace}
+          taskId={approvalRequest.taskId}
+          toolCalls={approvalRequest.toolCalls}
+          timeout={approvalRequest.timeout}
+          onTimeout={approvalRequest.onTimeout}
+          agentName={approvalRequest.agentName}
+          expiresAtMs={approvalExpiresAtMs}
+          existingDecision={approvalDecision}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onExpired={pollAfterApproval}
+        />
+      </div>
+    );
+  }
 
   if (!hasContent && hasToolCalls) {
     return (

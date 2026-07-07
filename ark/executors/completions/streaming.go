@@ -197,6 +197,73 @@ func StreamError(ctx context.Context, eventStream EventStreamInterface, err erro
 	}
 }
 
+// ToolApprovalRequestEvent represents an approval request for tool calls
+type ToolApprovalRequestEvent struct {
+	Type         string                 `json:"type"`
+	TaskID       string                 `json:"taskId"`
+	ToolCalls    []ToolCall             `json:"toolCalls"`
+	Timeout      string                 `json:"timeout,omitempty"`
+	OnTimeout    string                 `json:"onTimeout,omitempty"`
+	AgentName    string                 `json:"agentName"`
+	AgentContext map[string]interface{} `json:"agentContext,omitempty"`
+}
+
+// ToolApprovalResponseEvent represents the user's response to an approval request
+type ToolApprovalResponseEvent struct {
+	Type      string `json:"type"`
+	TaskID    string `json:"taskId"`
+	Action    string `json:"action"` // "approved" or "rejected"
+	Timestamp string `json:"timestamp"`
+}
+
+// StreamApprovalRequest emits an approval request event with full tool context
+func StreamApprovalRequest(ctx context.Context, eventStream EventStreamInterface, taskID string, toolCalls []ToolCall, config *arkv1alpha1.ToolApprovalConfig, agentName string) {
+	if eventStream == nil {
+		return
+	}
+
+	timeoutStr := ""
+	if config.Timeout != nil {
+		timeoutStr = config.Timeout.Duration.String()
+	}
+
+	approvalEvent := ToolApprovalRequestEvent{
+		Type:      "tool_approval_request",
+		TaskID:    taskID,
+		ToolCalls: toolCalls,
+		Timeout:   timeoutStr,
+		OnTimeout: config.OnTimeout,
+		AgentName: agentName,
+	}
+
+	if err := eventStream.StreamChunk(ctx, approvalEvent); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream approval request event")
+	}
+}
+
+// StreamApprovalResponse emits an approval response event
+func StreamApprovalResponse(
+	ctx context.Context,
+	eventStream EventStreamInterface,
+	taskID string,
+	action string,
+) {
+	if eventStream == nil {
+		return
+	}
+
+	approvalResponse := ToolApprovalResponseEvent{
+		Type:      "tool_approval_response",
+		TaskID:    taskID,
+		Action:    action,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	if err := eventStream.StreamChunk(ctx, approvalResponse); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream approval response event")
+	}
+}
+
 // WrapChunkWithMetadata adds ARK metadata to a streaming chunk
 // If query is provided, includes complete query object in metadata (for final chunk only)
 func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {

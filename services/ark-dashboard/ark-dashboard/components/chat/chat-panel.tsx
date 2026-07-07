@@ -42,6 +42,7 @@ export function ChatPanel({
     messages,
     isProcessing,
     processingPhase,
+    isWaitingForApprovalResponse,
     error,
     sendMessage,
     clearChat,
@@ -49,6 +50,7 @@ export function ChatPanel({
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
+    pollAfterApproval,
     requiredParameters,
     parameterValues,
     setParameterValue,
@@ -98,10 +100,12 @@ export function ChatPanel({
             debugMode={debugMode}
             isProcessing={isProcessing}
             processingPhase={processingPhase}
+            isWaitingForApprovalResponse={isWaitingForApprovalResponse}
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
             messageTokenUsage={messageTokenUsage}
+            pollAfterApproval={pollAfterApproval}
           />
         </div>
       </div>
