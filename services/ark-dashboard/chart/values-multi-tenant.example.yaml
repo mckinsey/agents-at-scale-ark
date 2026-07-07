@@ -26,6 +26,10 @@ app:
       value: https://mydomain.com/namespace1/api/auth
     - name: AUTH_MODE
       value: open
+    # NOTE: if you front these tenants with a separate ark-landing-page login
+    # hub on a DIFFERENT origin, that hub must set AUTH_ALLOWED_CALLBACK_ORIGINS
+    # to include this tenant's origin (see the ark-landing-page chart values),
+    # or the post-login redirect back to the tenant is silently dropped.
 
 # The dashboard chart installs a per-tenant Ingress that captures only this
 # tenant's prefix. The cluster operator is responsible for installing the

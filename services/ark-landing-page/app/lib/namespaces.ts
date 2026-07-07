@@ -20,11 +20,76 @@ const DISPLAY_NAME_ANNOTATION = 'ark.mckinsey.com/display-name';
 const DESCRIPTION_ANNOTATION = 'ark.mckinsey.com/namespace-description';
 const DASHBOARD_URL_ANNOTATION = 'ark.mckinsey.com/dashboard-url';
 
+// Per-SSAR socket timeout. Without this a stalled apiserver connection never
+// settles the request Promise and the whole page hangs. On timeout we treat the
+// namespace as not-accessible (resolve false) rather than blocking the page.
+const SSAR_TIMEOUT_MS = Number(process.env.ARK_SSAR_TIMEOUT_MS) || 5000;
+
+// Max in-flight SelfSubjectAccessReviews. The page issues one SSAR per candidate
+// namespace; on a large cluster firing them all at once (Promise.all) hammers the
+// apiserver. Bound the fan-out with a small worker pool.
+const SSAR_CONCURRENCY = Number(process.env.ARK_SSAR_CONCURRENCY) || 8;
+
+// Per-identity result cache TTL. The page is force-dynamic (per-user), so without
+// this the full fan-out re-runs on every load. This only gates the hub's card
+// list — access is still enforced downstream by the dashboard/api — so a short
+// staleness window is acceptable. Set to 0 to disable caching.
+const CACHE_TTL_MS = Number(process.env.ARK_NAMESPACE_CACHE_TTL_MS ?? 30000);
+
+// Optional label selector applied to the namespace listing, so operators on large
+// clusters can restrict candidates to ARK tenant namespaces server-side (e.g.
+// "ark.mckinsey.com/tenant=true"). Default unset => list all namespaces (previous
+// behavior), so this is opt-in and never hides a namespace a user could access.
+const NAMESPACE_SELECTOR = process.env.ARK_TENANT_NAMESPACE_SELECTOR?.trim();
+
 // Identity to impersonate, sourced from the (server-side) session — email and
 // groups only, never the raw access token.
 export interface UserIdentity {
   email?: string;
   groups?: string[];
+}
+
+interface CacheEntry {
+  expires: number;
+  value: AccessibleNamespace[];
+}
+
+// Module-level cache keyed by the impersonated identity. Persists across requests
+// within a server process (each pod has its own); entries expire after CACHE_TTL_MS.
+const namespaceCache = new Map<string, CacheEntry>();
+
+function identityKey(email: string, groups: string[]): string {
+  // Sort groups so membership order doesn't fragment the cache.
+  return `${email}\n${[...groups].sort().join(',')}`;
+}
+
+// Exposed for tests; also handy if a future signal (e.g. RoleBinding webhook)
+// wants to invalidate proactively.
+export function clearNamespaceCache(): void {
+  namespaceCache.clear();
+}
+
+// Run `fn` over `items` with at most `limit` concurrent executions. Results are
+// written by index so ordering is preserved. A worker pool (not chunked batching)
+// keeps all lanes busy — one slow item can't stall a whole batch.
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  const size = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: size }, () => worker()));
+  return results;
 }
 
 // Ask the API server (as the impersonated user) whether they may list agents in
@@ -62,7 +127,7 @@ function canListAgents(
   return new Promise((resolve) => {
     const req = https.request(
       `${server}/apis/authorization.k8s.io/v1/selfsubjectaccessreviews`,
-      { method: 'POST', agent, headers },
+      { method: 'POST', agent, headers, timeout: SSAR_TIMEOUT_MS },
       (res) => {
         let data = '';
         res.on('data', (c) => (data += c));
@@ -76,6 +141,12 @@ function canListAgents(
       },
     );
     req.on('error', () => resolve(false));
+    // Socket idle past SSAR_TIMEOUT_MS: abort and treat as not-accessible so one
+    // slow apiserver response can't hang the page.
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
     req.write(body);
     req.end();
   });
@@ -88,6 +159,12 @@ export async function fetchAccessibleNamespaces(
   const groups = identity.groups ?? [];
   if (!email) return [];
 
+  const key = identityKey(email, groups);
+  if (CACHE_TTL_MS > 0) {
+    const hit = namespaceCache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.value;
+  }
+
   const kc = new k8s.KubeConfig();
   kc.loadFromDefault();
   const cluster = kc.getCurrentCluster();
@@ -97,8 +174,9 @@ export async function fetchAccessibleNamespaces(
   const ca = fs.readFileSync(`${SA_DIR}/ca.crt`);
   const agent = new https.Agent({ ca });
 
-  // List all namespaces with the landing page's own ServiceAccount, then keep
-  // only those the signed-in user is allowed to use.
+  // List candidate namespaces with the landing page's own ServiceAccount, then
+  // keep only those the signed-in user is allowed to use. An optional label
+  // selector lets large clusters narrow the candidate set server-side.
   type NsMeta = {
     metadata?: {
       name?: string;
@@ -106,7 +184,9 @@ export async function fetchAccessibleNamespaces(
     };
   };
   const coreApi = kc.makeApiClient(k8s.CoreV1Api);
-  const resp = (await coreApi.listNamespace()) as unknown as {
+  const resp = (await coreApi.listNamespace(
+    NAMESPACE_SELECTOR ? { labelSelector: NAMESPACE_SELECTOR } : undefined,
+  )) as unknown as {
     body?: { items?: NsMeta[] };
     items?: NsMeta[];
   };
@@ -125,8 +205,10 @@ export async function fetchAccessibleNamespaces(
     })
     .filter((c): c is AccessibleNamespace => c !== null);
 
-  const checks = await Promise.all(
-    candidates.map(async (ns) => ({
+  const checks = await mapWithConcurrency(
+    candidates,
+    SSAR_CONCURRENCY,
+    async (ns) => ({
       ns,
       allowed: await canListAgents(
         cluster.server,
@@ -136,11 +218,16 @@ export async function fetchAccessibleNamespaces(
         groups,
         ns.name,
       ),
-    })),
+    }),
   );
 
-  return checks
+  const result = checks
     .filter((c) => c.allowed)
     .map((c) => c.ns)
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  if (CACHE_TTL_MS > 0) {
+    namespaceCache.set(key, { expires: Date.now() + CACHE_TTL_MS, value: result });
+  }
+  return result;
 }

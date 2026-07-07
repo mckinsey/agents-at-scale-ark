@@ -50,7 +50,13 @@ export async function GET(request: NextRequest) {
   // for both, so login and logout can't drift out of sync.
   const hubUrl = stripTrailingSlashes(process.env.AUTH_HUB_URL ?? '');
   if (hubUrl) {
-    return NextResponse.redirect(`${hubUrl}${FEDERATED_SIGNOUT_PATH}`);
+    // Clear this tenant's local session cookies before handing off to the hub.
+    // A shared same-origin Path=/ cookie would be cleared by the hub anyway, but
+    // a tenant served from a separate origin has its own session cookie the hub
+    // cannot reach — without this, that local session survives "logout".
+    return clearSessionCookies(
+      NextResponse.redirect(`${hubUrl}${FEDERATED_SIGNOUT_PATH}`),
+    );
   }
 
   const token = await getToken({
