@@ -90,6 +90,7 @@ interface CollapsibleSectionProps {
   onNavigate: (key: string) => void;
   isNamespaceResolved: boolean;
   loading: boolean;
+  onboardingId?: string;
 }
 
 function CollapsibleSection({
@@ -104,6 +105,7 @@ function CollapsibleSection({
   onNavigate,
   isNamespaceResolved,
   loading,
+  onboardingId,
 }: CollapsibleSectionProps) {
   return (
     <Collapsible
@@ -115,6 +117,7 @@ function CollapsibleSection({
           asChild
           isActive={isActive}
           tooltip={label}
+          data-onboarding-id={onboardingId}
           className="group/button">
           <CollapsibleTrigger
             className="flex w-full items-center gap-2"
@@ -313,7 +316,8 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   onClick={() => navigateToSection('')}
                   isActive={getCurrentSection() === ''}
-                  tooltip="Home">
+                  tooltip="Home"
+                  data-onboarding-id="nav-home">
                   <Dashboard />
                   <span>Home</span>
                 </SidebarMenuButton>
@@ -334,13 +338,15 @@ export function AppSidebar() {
                 onNavigate={navigateToSection}
                 isNamespaceResolved={isNamespaceResolved}
                 loading={loading}
+                onboardingId="nav-agent-builder"
               />
 
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('workflow-templates')}
                   isActive={getCurrentSection() === 'workflow-templates'}
-                  tooltip="Workflows">
+                  tooltip="Workflows"
+                  data-onboarding-id="nav-workflows">
                   <AccountTree />
                   <span>Workflows</span>
                 </SidebarMenuButton>
@@ -350,7 +356,8 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   onClick={() => navigateToSection('mcp')}
                   isActive={getCurrentSection() === 'mcp'}
-                  tooltip="MCPs">
+                  tooltip="MCPs"
+                  data-onboarding-id="nav-mcps">
                   <PlugConnect />
                   <span>MCPs</span>
                 </SidebarMenuButton>
@@ -380,7 +387,8 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   onClick={() => navigateToSection('models')}
                   isActive={getCurrentSection() === 'models'}
-                  tooltip="Models">
+                  tooltip="Models"
+                  data-onboarding-id="nav-models">
                   <Memory />
                   <span>Models</span>
                 </SidebarMenuButton>
@@ -401,13 +409,15 @@ export function AppSidebar() {
                 onNavigate={navigateToSection}
                 isNamespaceResolved={isNamespaceResolved}
                 loading={loading}
+                onboardingId="nav-monitoring"
               />
 
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('marketplace')}
                   isActive={getCurrentSection() === 'marketplace'}
-                  tooltip="Marketplace">
+                  tooltip="Marketplace"
+                  data-onboarding-id="nav-marketplace">
                   <Storefront />
                   <span>Marketplace</span>
                 </SidebarMenuButton>
@@ -479,7 +489,8 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   onClick={() => navigateToSection('settings')}
                   isActive={getCurrentSection() === 'settings'}
-                  tooltip="Settings">
+                  tooltip="Settings"
+                  data-onboarding-id="nav-settings">
                   <Settings className="h-4 w-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>

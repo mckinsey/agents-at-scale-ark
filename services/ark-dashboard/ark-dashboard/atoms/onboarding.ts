@@ -14,3 +14,15 @@ export const onboardingCompletedAtom = atom(get => {
 });
 
 export const onboardingWizardOpenAtom = atom<boolean>(false);
+
+export const tourActiveAtom = atom<boolean>(false);
+
+export const tourStepAtom = atom<number>(0);
+
+export const tourPausedAtom = atom<boolean>(false);
+
+export const postTourOpenAtom = atom<boolean>(false);
+
+export const completeOnboardingAtom = atom(null, (_get, set) => {
+  set(storedOnboardingCompletedAtom, true);
+});
