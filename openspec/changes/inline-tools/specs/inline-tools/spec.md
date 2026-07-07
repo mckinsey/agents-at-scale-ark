@@ -40,6 +40,42 @@ The `spec.inline` field SHALL be permitted only when `spec.type == inline`. The 
 - **WHEN** a `Tool` is applied whose `spec.inline.source` exceeds 64 KiB
 - **THEN** the validating webhook rejects the admission with a message pointing the author at `MCPServer` for larger payloads
 
+### Requirement: Creating a `type: inline` Tool requires a dedicated permission and an enabled feature flag
+
+Because `spec.type == inline` embeds code that Ark executes in a pod, creating one is arbitrary code execution in the namespace — a higher privilege than any other tool type, which only registers config. The validating webhook SHALL reject a `Tool` with `spec.type == inline` unless BOTH conditions hold:
+
+1. the cluster-level inline-tools feature flag (`inlineTools.enabled`) is enabled (default `false`), AND
+2. the requesting user is authorised by a `SubjectAccessReview` for the dedicated permission (`use` on `inlinetools.ark.mckinsey.com`).
+
+The authorisation check SHALL use the requester identity from the AdmissionReview request (`userInfo`), so it runs while the author's identity is still present. This gate SHALL apply only to `spec.type == inline`; `create` permission on `tools` and every other tool type SHALL be unaffected.
+
+#### Scenario: Authorised user with the feature enabled
+
+- **GIVEN** the `inlineTools.enabled` flag is `true`
+- **AND** the requesting user holds `use` on `inlinetools.ark.mckinsey.com`
+- **WHEN** the user applies a valid `Tool` with `spec.type: inline`
+- **THEN** the validating webhook admits the object
+
+#### Scenario: User without the dedicated permission is rejected
+
+- **GIVEN** the `inlineTools.enabled` flag is `true`
+- **AND** the requesting user can `create` `tools` but does NOT hold `use` on `inlinetools.ark.mckinsey.com`
+- **WHEN** the user applies a valid `Tool` with `spec.type: inline`
+- **THEN** the validating webhook rejects the admission with a message naming the missing permission
+
+#### Scenario: Feature flag disabled rejects even an authorised user
+
+- **GIVEN** the `inlineTools.enabled` flag is `false`
+- **AND** the requesting user holds `use` on `inlinetools.ark.mckinsey.com`
+- **WHEN** the user applies a valid `Tool` with `spec.type: inline`
+- **THEN** the validating webhook rejects the admission with a message stating inline tools are disabled on this cluster
+
+#### Scenario: The gate does not affect other tool types
+
+- **GIVEN** the requesting user can `create` `tools` but does NOT hold `use` on `inlinetools.ark.mckinsey.com`
+- **WHEN** the user applies a `Tool` with `spec.type: http`
+- **THEN** the validating webhook admits the object (the inline gate is not consulted)
+
 ### Requirement: Inline tools attach via the existing `Agent.spec.tools`
 
 The `Agent` CRD SHALL surface inline tools through the existing `spec.tools` mechanism with no new field. From an agent author's perspective, attaching an inline `Tool` is identical to attaching any other `Tool`.
@@ -99,6 +135,30 @@ For each `Tool` with `spec.type == inline`, the controller SHALL reconcile a set
 - **WHEN** a `Tool` with `spec.type: http` is reconciled
 - **THEN** no `ConfigMap`, `Deployment`, `Service`, or `NetworkPolicy` is created for it
 - **AND** its status transitions to `Ready` exactly as before this change
+
+### Requirement: Egress isolation is verified, not assumed
+
+The deny-all-egress `NetworkPolicy` provides isolation only if the cluster CNI enforces NetworkPolicy. Ark SHALL NOT assume enforcement. Enabling inline tools SHALL run a preflight that actively verifies egress is blocked (e.g. a canary pod under a deny-all policy attempting an outbound connection), and SHALL fail enablement loudly, identifying the cause, when egress is not blocked. A negative end-to-end test SHALL assert that an inline script's outbound network call is denied.
+
+#### Scenario: Preflight fails on a non-enforcing CNI
+
+- **GIVEN** a cluster whose CNI does not enforce NetworkPolicy
+- **WHEN** inline tools are enabled and the preflight runs
+- **THEN** enablement fails with an error stating that egress is not enforced and naming the CNI as the likely cause
+- **AND** no `type: inline` Tool is admitted while enablement is failed
+
+#### Scenario: Preflight passes on an enforcing CNI
+
+- **GIVEN** a cluster whose CNI enforces NetworkPolicy
+- **WHEN** inline tools are enabled and the preflight runs
+- **THEN** the preflight confirms the canary's outbound connection is blocked and enablement proceeds
+
+#### Scenario: Inline script outbound call is blocked (negative e2e)
+
+- **GIVEN** an enabled inline `Tool` whose script attempts an outbound network connection
+- **WHEN** the model invokes the tool
+- **THEN** the outbound connection fails
+- **AND** the script observes the failure rather than reaching the external host
 
 ### Requirement: Scale-to-zero activator brings pods from 0 to 1 on demand
 

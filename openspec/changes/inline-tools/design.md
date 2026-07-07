@@ -35,6 +35,14 @@ Three hard constraints carry forward from the original proposal:
 
 Inline tools are a *harness-side* primitive — neither Anthropic's API nor any other provider has a native concept here. What models supply is **tool calling**; inline tools are implemented on top of that. From the model's side the flow is identical to any MCP tool: the model picks a tool, a tool call comes back, the executor invokes it. The only difference is *where* the executor sends the call — to a per-tool Ark-managed runner pod instead of an author-built MCP server. The script always runs in a per-tool sandbox pod inside the cluster, regardless of the agent's model provider (Anthropic, OpenAI, Azure OpenAI, Bedrock, Gemini).
 
+## Threat model
+
+v1 makes explicit assumptions about who supplies the script and who supplies its inputs, and what each control covers:
+
+- **Script authorship is restricted at admission.** The admission gate (see the decision below) limits creation of a `type: inline` Tool to identities holding a dedicated permission; generic `create tools` RBAC is not sufficient. The design therefore assumes the script author is an authorised subject, and treats broadening that set as an explicit administrative action.
+- **Invocation inputs are untrusted.** Tool arguments are model-generated and may be adversarial (e.g. prompt-injected) regardless of who authored the script. The runner passes them as data (JSON on `argv[1]`); validating and sanitising input, and bounding output size and format, are the script author's responsibility.
+- **Escape by an authorised author is out of scope.** Pod hardening (non-root, read-only root, dropped capabilities, deny-all egress, PID limit) bounds the blast radius of a script that misbehaves at runtime, but does not prevent a container escape attempted by the author of the script — that requires a kernel-level sandbox (`runtimeClass` such as gVisor or Kata), which v1 does not mandate. The admission gate, not pod hardening, is the control that bounds who can author a script; a cluster requiring defence against authorised-but-malicious authors configures a sandboxing `runtimeClass` out of band.
+
 ## Decisions
 
 ### Decision: Extend the existing `Tool` CRD; do not introduce a new kind
@@ -168,6 +176,27 @@ There is no `spec.inline.security` knob in v1. An author needing to relax any of
 
 **Alternative — ship relax-knobs from the start.** Faster path to real use cases. Rejected for v1: we would be designing the relaxation surface without evidence of what authors need, and re-adding it later is purely additive.
 
+### Decision: Verify NetworkPolicy enforcement rather than assume it
+
+The deny-all-egress `NetworkPolicy` restricts traffic only if the cluster CNI enforces NetworkPolicy. Some CNIs (or CNI configurations) accept the object and ignore it — the policy exists in the API but does nothing, and the egress guarantee silently evaporates.
+
+Ark therefore does not assume enforcement. When inline tools are enabled (`inlineTools.enabled`), a preflight verifies it — applying a deny-all policy to a canary pod and confirming an outbound connection is actually blocked — and fails enablement loudly, naming the CNI, if egress is not blocked. A negative e2e test asserts that a real inline script's outbound call is denied, so a regression in enforcement is caught in CI rather than in production.
+
+**Why fail loud, not warn.** A silently non-enforced egress policy is worse than none: operators believe scripts cannot reach the network and extend trust accordingly. Failing enablement forces the gap to be closed (an enforcing CNI, or an explicit decision to run without egress isolation) before any inline tool runs.
+
+### Decision: Gate `type: inline` at admission, behind a dedicated permission and an off-by-default flag
+
+Every other `Tool` type registers config pointing at something external; `type: inline` embeds code Ark runs in a pod. Creating one is therefore arbitrary code execution in the namespace — a different privilege from creating an `http` or `mcp` tool. Kubernetes RBAC cannot express that difference: it authorises on resource + verb, so `create tools` cannot distinguish `inline` from `http`. On upgrade, everyone already holding `create tools` (developer Roles, CI service accounts, dashboard users) would silently gain code execution.
+
+Two controls, both in the validating webhook that already validates inline tools:
+
+1. **Dedicated permission via SubjectAccessReview.** Admitting a `Tool` with `type == inline`, the webhook issues a `SubjectAccessReview` for the requesting user (from the AdmissionReview `userInfo`) against a dedicated verb/resource — `use` on `inlinetools.ark.mckinsey.com`, mirroring the PodSecurityPolicy `use` pattern. Denied → admission rejected. Admins grant this via RBAC, independent of `create tools`.
+2. **Off-by-default feature flag.** A cluster-level flag (`inlineTools.enabled`, default `false`) gates the whole capability. Disabled → the webhook rejects every `type: inline` Tool regardless of permission.
+
+**Why admission, not execution time.** The check must run while the author's identity is still in the request. By the time the script runs, the work is driven by the controller's own service account — the original user has left the path. Admission is the last point where "who asked" exists.
+
+**Why a flag on top of the permission.** Defense in depth: an upgrade alone changes nothing until an operator opts in. Enabling the flag is the deliberate moment they accept "this cluster runs inline code, and I've granted the permission to the right subjects."
+
 ### Decision: Dashboard authoring reuses the existing Tool editor patterns
 
 The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialog` + react-hook-form + zod form that already does per-type conditional fields via `.refine()` (e.g. `httpUrl` is required only when `type == http`). Inline tools slot into that shape:
@@ -201,7 +230,7 @@ The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialo
 
 Purely additive — no migration of existing resources.
 
-- **Deploy order:** publish `ark-inline-runner:v1` → ship the CRD extension + webhook (validation only, inert without the reconciler) → ship the reconciler + activator → ship ark-api/dashboard surface.
+- **Deploy order:** publish `ark-inline-runner:v1` → ship the CRD extension + webhook (validation + admission gate; inert because `inlineTools.enabled` defaults `false`) → ship the reconciler + activator → ship ark-api/dashboard surface. Upgrading changes nothing until an operator flips the flag and grants the dedicated permission.
 - **Backwards compatibility:** existing `Tool` resources (`http`/`mcp`/`agent`/`team`/`builtin`) are untouched; their controller path is unchanged. The new enum value and `spec.inline` field are optional.
 - **Rollback:** deleting all inline `Tool` resources GCs their owned infrastructure via owner references. Reverting the operator image removes the reconciler/activator; leftover inline `Tool` resources become inert (status-only) rather than breaking the controller. Reverting the CRD enum is only safe once no inline `Tool` resources remain.
 
