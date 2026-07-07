@@ -63,7 +63,7 @@ export interface A2ATaskDetailResponse {
   name: string;
   namespace: string;
   taskId: string;
-  a2aServerRef: {
+  a2aServerRef?: {
     name: string;
     namespace?: string;
   };

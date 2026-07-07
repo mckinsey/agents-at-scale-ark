@@ -3,7 +3,6 @@ export default {
   'ark-apis': 'Ark API',
   'broker': 'Broker Service',
 
-  crds: 'Custom Resource Definitions',
   resources: 'Resources',
   'marketplace-sources': 'Marketplace Sources',
 
@@ -15,7 +14,6 @@ export default {
   '---ops': { type: 'separator', title: 'Operations' },
   upgrading: 'Upgrading',
   troubleshooting: 'Troubleshooting',
-  'utility-images': 'Utility Images',
   'release-process': 'Release Process and Artifacts',
   'secure-sdlc': 'Secure Software Development Lifecycle',
   'secure-software-architecture': 'Secure Software Architecture',

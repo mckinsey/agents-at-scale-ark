@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatAge, simplifyDuration } from '../time';
+import { formatAge, parseDurationToMs, simplifyDuration } from '../time';
 
 describe('formatAge', () => {
   beforeEach(() => {
@@ -148,5 +148,39 @@ describe('simplifyDuration', () => {
     expect(simplifyDuration('invalid')).toBe('invalid');
     expect(simplifyDuration('5minutes')).toBe('5minutes');
     expect(simplifyDuration('h0m0s')).toBe('h'); // Removes trailing zeros even from malformed input
+  });
+});
+
+describe('parseDurationToMs', () => {
+  it('returns null for null or undefined', () => {
+    expect(parseDurationToMs(null)).toBeNull();
+    expect(parseDurationToMs(undefined)).toBeNull();
+    expect(parseDurationToMs('')).toBeNull();
+    expect(parseDurationToMs('   ')).toBeNull();
+  });
+
+  it('parses single-unit durations', () => {
+    expect(parseDurationToMs('30s')).toBe(30_000);
+    expect(parseDurationToMs('5m')).toBe(5 * 60_000);
+    expect(parseDurationToMs('2h')).toBe(2 * 60 * 60_000);
+    expect(parseDurationToMs('1d')).toBe(24 * 60 * 60_000);
+    expect(parseDurationToMs('500ms')).toBe(500);
+  });
+
+  it('parses compound durations', () => {
+    expect(parseDurationToMs('1h30m')).toBe((60 + 30) * 60_000);
+    expect(parseDurationToMs('1h5m30s')).toBe(((60 + 5) * 60 + 30) * 1000);
+  });
+
+  it('returns null for unparseable strings', () => {
+    expect(parseDurationToMs('gibberish')).toBeNull();
+    expect(parseDurationToMs('5')).toBeNull();
+    expect(parseDurationToMs('5xs')).toBeNull();
+    expect(parseDurationToMs('5m extra')).toBeNull();
+  });
+
+  it('parses zero durations', () => {
+    expect(parseDurationToMs('0s')).toBe(0);
+    expect(parseDurationToMs('0m')).toBe(0);
   });
 });

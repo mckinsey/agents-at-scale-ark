@@ -1,3 +1,43 @@
+const UNIT_TO_MS: Record<string, number> = {
+  ns: 1 / 1_000_000,
+  us: 1 / 1_000,
+  µs: 1 / 1_000,
+  ms: 1,
+  s: 1_000,
+  m: 60_000,
+  h: 60 * 60_000,
+  d: 24 * 60 * 60_000,
+};
+
+/**
+ * Parses a Go-style duration string ("5m", "30s", "1h30m") into milliseconds.
+ * Returns null if the string is missing or unparseable.
+ */
+export function parseDurationToMs(
+  duration: string | null | undefined,
+): number | null {
+  if (!duration) return null;
+  const trimmed = duration.trim();
+  if (trimmed === '') return null;
+
+  // Anchored, single-token regex consumed against a shrinking string. Matching
+  // only ever starts at position 0 of `rest`, so total work is linear in the
+  // input length (no global rescan that would make it super-linear).
+  const token = /^(-?\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h|d)/;
+  let rest = trimmed;
+  let total = 0;
+  while (rest.length > 0) {
+    const match = token.exec(rest);
+    if (!match) return null;
+    const value = Number.parseFloat(match[1]);
+    const factor = UNIT_TO_MS[match[2]];
+    if (factor === undefined || Number.isNaN(value)) return null;
+    total += value * factor;
+    rest = rest.slice(match[0].length);
+  }
+  return total;
+}
+
 /**
  * Simplifies Kubernetes duration strings by removing trailing zero units
  * Examples: "5m0s" → "5m", "720h0m0s" → "720h", "1h30m0s" → "1h30m"

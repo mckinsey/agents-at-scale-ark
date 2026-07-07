@@ -1,10 +1,30 @@
+import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MessageDisplay } from '@/components/sessions-conversations/message-display';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
+import { useGetQuery } from '@/lib/services/queries-hooks';
+import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
+import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 
 vi.mock('@/lib/services/conversations-hooks');
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useGetQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useListQueries: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
+  useA2ATask: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock('@/lib/services/a2a-task-approvals-hooks', () => ({
+  useSubmitApproval: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false })),
+}));
+vi.mock('next/navigation', () => ({
+  useSearchParams: vi.fn(() => ({
+    get: vi.fn((key: string) => key === 'namespace' ? 'default' : null),
+  })),
+}));
 vi.mock('@/components/sessions-conversations/session-message', () => ({
   SessionMessage: ({ role, content }: any) => (
     <div data-testid={`message-${role}`}>{content}</div>
@@ -41,6 +61,18 @@ describe('MessageDisplay', () => {
 
   const mockOnClearPending = vi.fn();
 
+  function createWrapper() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    return ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useGetMessages).mockReturnValue({
@@ -64,7 +96,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
@@ -80,7 +113,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('test-agent')).toBeInTheDocument();
@@ -97,7 +131,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByTestId('message-user')).toHaveTextContent('Hello');
@@ -118,7 +153,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getAllByTestId('message-user')).toHaveLength(2); // 1 backend + 1 pending
@@ -134,7 +170,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={true}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     // Processing indicator has animated dots
@@ -159,7 +196,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText(/Conversation started with/i)).toBeInTheDocument();
@@ -181,7 +219,8 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText(/No conversation messages available/i)).toBeInTheDocument();
@@ -202,12 +241,108 @@ describe('MessageDisplay', () => {
         onClearPending={mockOnClearPending}
         isProcessing={false}
         showToolCalls={true}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     // Should only show 2 messages: 1 from backend (Hello) and 1 from backend (Hi there!)
     // The pending "Hello" should be filtered out as duplicate
     const userMessages = screen.getAllByTestId('message-user');
     expect(userMessages).toHaveLength(1);
+  });
+
+  describe('tool approval', () => {
+    const approvalA2ATask = {
+      name: 'a2a-task-task-123',
+      namespace: 'default',
+      taskId: 'task-123',
+      agentRef: { name: 'deploy-agent' },
+      queryRef: { name: 'q1' },
+      status: {
+        phase: 'input-required',
+        protocolMetadata: {
+          toolCalls: JSON.stringify([
+            {
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'write-file', arguments: '{"path":"/tmp/x"}' },
+            },
+          ]),
+          timeout: '5m',
+          onTimeout: 'reject',
+          context: JSON.stringify({ AgentName: 'deploy-agent' }),
+        },
+      },
+    };
+
+    const mutateAsync = vi.fn().mockResolvedValue(undefined);
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      vi.mocked(useGetQuery).mockReturnValue({
+        data: {
+          status: {
+            phase: 'input-required',
+            response: { a2a: { taskId: 'task-123' } },
+          },
+        },
+        isLoading: false,
+      } as any);
+      vi.mocked(useA2ATask).mockReturnValue({
+        data: approvalA2ATask,
+        isLoading: false,
+      } as any);
+      vi.mocked(useSubmitApproval).mockReturnValue({
+        mutate: vi.fn(),
+        mutateAsync,
+        isPending: false,
+      } as any);
+    });
+
+    function renderApproval() {
+      return render(
+        <MessageDisplay
+          conversationId="conv-1"
+          sessionId="session-1"
+          conversation={mockConversation}
+          pendingMessages={[]}
+          onClearPending={mockOnClearPending}
+          isProcessing={true}
+          showToolCalls={true}
+        />,
+        { wrapper: createWrapper() },
+      );
+    }
+
+    it('renders the approval notification when a query awaits approval', () => {
+      renderApproval();
+
+      expect(
+        screen.getByRole('button', { name: /approve/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /reject/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('submits an approval when approve is clicked', async () => {
+      renderApproval();
+
+      fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+      await waitFor(() =>
+        expect(mutateAsync).toHaveBeenCalledWith('approved'),
+      );
+    });
+
+    it('submits a rejection when reject is clicked', async () => {
+      renderApproval();
+
+      fireEvent.click(screen.getByRole('button', { name: /reject/i }));
+
+      await waitFor(() =>
+        expect(mutateAsync).toHaveBeenCalledWith('rejected'),
+      );
+    });
   });
 });
