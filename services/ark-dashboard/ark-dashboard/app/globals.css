@@ -626,6 +626,11 @@
     var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
+@utility content-shell {
+  margin-inline: auto;
+  max-width: 1600px;
+}
+
 @layer utilities {
   /** Icon classes */
   .icon {

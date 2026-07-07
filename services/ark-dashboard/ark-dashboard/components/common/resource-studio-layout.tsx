@@ -58,7 +58,7 @@ export function ResourceStudioLayout({
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-0 w-full max-w-[1344px] flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 w-full content-shell flex-1 flex-col overflow-hidden">
       <header className="flex flex-none flex-col gap-4 pb-5">
         <div className="flex items-center justify-between">
           <nav
