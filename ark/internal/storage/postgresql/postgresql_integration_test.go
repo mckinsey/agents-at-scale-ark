@@ -668,4 +668,45 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 	if g := generation(); g != 2 {
 		t.Errorf("after status+label update: generation = %d, want 2", g)
 	}
+
+	// First graceful-deletion marking (DT null → non-null) bumps generation,
+	// matching upstream rest.BeforeDelete.
+	step = currentObj()
+	ts := "2026-01-02T15:04:05Z"
+	mark := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	mark.Metadata.Name = testName
+	mark.Metadata.Namespace = testNS
+	mark.Metadata.UID = step.Metadata.UID
+	mark.Metadata.ResourceVersion = step.Metadata.ResourceVersion
+	mark.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	mark.Metadata.DeletionTimestamp = &ts
+	mark.Spec = step.Spec
+	if err := backend.Update(ctx, testKind, testNS, testName, mark); err != nil {
+		t.Fatalf("deletion-marking Update failed: %v", err)
+	}
+	if g := generation(); g != 3 {
+		t.Errorf("after first deletion mark: generation = %d, want 3", g)
+	}
+
+	// Re-sending the timestamp on an already-marked row (same spec) does not bump.
+	var rv string
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT resource_version FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+		testKind, testNS, testName).Scan(&rv); err != nil {
+		t.Fatalf("read rv after mark: %v", err)
+	}
+	resend := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	resend.Metadata.Name = testName
+	resend.Metadata.Namespace = testNS
+	resend.Metadata.UID = step.Metadata.UID
+	resend.Metadata.ResourceVersion = rv
+	resend.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	resend.Metadata.DeletionTimestamp = &ts
+	resend.Spec = step.Spec
+	if err := backend.Update(ctx, testKind, testNS, testName, resend); err != nil {
+		t.Fatalf("resend-DT Update failed: %v", err)
+	}
+	if g := generation(); g != 3 {
+		t.Errorf("after re-sending existing DT: generation = %d, want 3 (no bump)", g)
+	}
 }
