@@ -4,10 +4,10 @@
 
 The operator SHALL accept a `Tool` custom resource (`ark.mckinsey.com/v1alpha1`) whose `spec.type` is `inline`. When `spec.type == inline`, the resource SHALL include a `spec.inline` sub-object with:
 
-- `source` (string, required, MUST be non-empty)
-- `language` (string, optional, MUST be one of `bash`, `python`, `node`, `ts` when set)
+- `source` (string, required, MUST be non-empty, MUST be ≤ 64 KiB)
+- `language` (string, required, MUST be one of `bash`, `python`, `node`, `ts`)
 
-The `spec.inline` field SHALL be permitted only when `spec.type == inline`. The validating webhook SHALL reject any other combination.
+The `spec.inline` field SHALL be permitted only when `spec.type == inline`. The validating webhook SHALL reject any other combination. There is no shebang inference and no implicit default: `language` MUST be supplied explicitly.
 
 #### Scenario: Minimal valid inline tool
 
@@ -30,9 +30,14 @@ The `spec.inline` field SHALL be permitted only when `spec.type == inline`. The 
 - **WHEN** a `Tool` is applied with `spec.type: inline`, a valid `spec.inline.source`, and `spec.inline.language: ruby`
 - **THEN** the validating webhook rejects the admission with a message naming the allowed values (`bash`, `python`, `node`, `ts`)
 
+#### Scenario: Missing language rejected
+
+- **WHEN** a `Tool` is applied with `spec.type: inline`, a valid `spec.inline.source`, and no `spec.inline.language`
+- **THEN** the validating webhook rejects the admission with a message stating `spec.inline.language` is required and naming the allowed values (`bash`, `python`, `node`, `ts`)
+
 #### Scenario: Source size cap
 
-- **WHEN** a `Tool` is applied whose `spec.inline.source` exceeds 900 KiB
+- **WHEN** a `Tool` is applied whose `spec.inline.source` exceeds 64 KiB
 - **THEN** the validating webhook rejects the admission with a message pointing the author at `MCPServer` for larger payloads
 
 ### Requirement: Inline tools attach via the existing `Agent.spec.tools`
@@ -57,11 +62,18 @@ The `Agent` CRD SHALL surface inline tools through the existing `spec.tools` mec
 
 For each `Tool` with `spec.type == inline`, the controller SHALL reconcile a set of owned Kubernetes objects such that the script body is mounted at `/tool/source`, the pod runs with the documented security defaults, and external traffic reaches the pod only via the scale-to-zero activator. Each owned object SHALL set an owner reference pointing at the `Tool` so deletion cascades. The reconciliation of these objects SHALL be gated on `spec.type == inline`; `Tool` resources of other types SHALL retain their existing status-only reconciliation.
 
-#### Scenario: Content-hashed source ConfigMap
+#### Scenario: In-place source ConfigMap with rollout-triggering annotation
 
 - **WHEN** an inline `Tool` is reconciled
-- **THEN** a `ConfigMap` named `<tool>-<hash>` is created in the tool's namespace containing the script body at key `source`
-- **AND** the hash is a deterministic function of `spec.inline.source` so two byte-identical sources collapse to the same `ConfigMap` name
+- **THEN** a single `ConfigMap` with a stable name (`<tool>-source`) is created in the tool's namespace containing the script body at key `source`
+- **AND** the generated `Deployment`'s pod template carries an annotation (`ark.mckinsey.com/inline-source-hash`) whose value is a deterministic hash of `spec.inline.source`
+
+#### Scenario: Editing source updates in place without orphaning ConfigMaps
+
+- **GIVEN** a reconciled inline `Tool` with its `<tool>-source` ConfigMap
+- **WHEN** `spec.inline.source` is edited and the `Tool` is re-reconciled
+- **THEN** the same `<tool>-source` ConfigMap is updated in place (no new ConfigMap is created and none is orphaned)
+- **AND** the pod-template `ark.mckinsey.com/inline-source-hash` annotation changes, triggering a rollout
 
 #### Scenario: Security-hardened pod template
 
@@ -69,6 +81,7 @@ For each `Tool` with `spec.type == inline`, the controller SHALL reconcile a set
 - **THEN** the generated `Deployment`'s pod template sets `automountServiceAccountToken: false`
 - **AND** the pod security context is `runAsNonRoot: true`, `runAsUser: 65532`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`
 - **AND** the default resource limits are `cpu: 500m`, `memory: 256Mi`
+- **AND** the pod sets a PID limit (default `128`) so a fork bomb cannot exhaust node-level PIDs for other pods
 
 #### Scenario: Default-deny egress
 
@@ -113,31 +126,35 @@ A new `inlinetoolactivator` subsystem in the operator SHALL front each inline to
 
 ### Requirement: Runner image contract
 
-Ark SHALL publish a single multi-language runner image `ark-inline-runner:v1` (Alpine-based) that bundles `bash`, `python@3.12`, `node@20`, and `tsx`. When started, the image SHALL expose an MCP-shaped HTTP endpoint and SHALL dispatch each invocation as follows:
+Ark SHALL publish a single multi-language runner image `ark-inline-runner:v1` (Alpine-based) that bundles `bash`, `python@3.12`, `node@20`, and `tsx`. When started, the image SHALL expose an MCP-shaped HTTP endpoint and SHALL dispatch each invocation solely by the `LANGUAGE` env var (sourced from the required `spec.inline.language`):
 
-1. If `/tool/source` begins with `#!`, the runner SHALL `exec` the file directly and let the kernel honour the shebang.
-2. Otherwise, the runner SHALL dispatch by the `LANGUAGE` env var: `bash` → `bash /tool/source`, `python` → `python3 /tool/source`, `node` → `node /tool/source`, `ts` → `tsx /tool/source`.
-3. Otherwise (no shebang and no language), the runner SHALL default to `bash`.
+- `bash` → `bash /tool/source`
+- `python` → `python3 /tool/source`
+- `node` → `node /tool/source`
+- `ts` → `tsx /tool/source`
 
-The runner SHALL pass the tool's JSON arguments as a single string in `argv[1]`. The runner SHALL stream `stdout` back as the tool result (trimmed to 256 KiB), log `stderr`, and return a tool error if the exit code is non-zero (error message includes the last 4 KiB of `stderr`).
+The runner SHALL NOT inspect the source for a shebang and SHALL NOT apply an implicit language default; `LANGUAGE` is always present because `spec.inline.language` is required.
 
-#### Scenario: Shebang dispatch overrides language
-
-- **GIVEN** an inline `Tool` whose `source` begins with `#!/usr/bin/env python` and `language: bash`
-- **WHEN** the model invokes the tool
-- **THEN** the runner `exec`s the file directly and the kernel runs it under Python
+The runner SHALL pass the tool's JSON arguments as a single string in `argv[1]`. The runner SHALL stream `stdout` back as the tool result (trimmed to 256 KiB), log `stderr`, and return a tool error if the exit code is non-zero (error message includes the last 4 KiB of `stderr`). The runner SHALL enforce a per-invocation execution timeout (default `30s`): when the timeout expires before the script exits, the runner SHALL kill the process group and return a tool error naming the timeout.
 
 #### Scenario: Language env dispatch
 
-- **GIVEN** an inline `Tool` whose `source` has no shebang and `language: python`
+- **GIVEN** an inline `Tool` with `language: python`
 - **WHEN** the model invokes the tool
 - **THEN** the runner executes `python3 /tool/source <args-json>`
 
-#### Scenario: Default to bash when no shebang and no language
+#### Scenario: Shebang in source is not honoured as dispatch
 
-- **GIVEN** an inline `Tool` whose `source` has no shebang and no `language` field
+- **GIVEN** an inline `Tool` with `language: python` whose `source` begins with `#!/usr/bin/env bash`
 - **WHEN** the model invokes the tool
-- **THEN** the runner executes `bash /tool/source <args-json>`
+- **THEN** the runner executes the script under `python3` (the `language` field, not the shebang line, selects the interpreter)
+
+#### Scenario: Runtime timeout kills a hung script
+
+- **GIVEN** an inline `Tool` whose script never exits (infinite loop)
+- **WHEN** the model invokes the tool and the per-invocation execution timeout (default `30s`) expires
+- **THEN** the runner kills the script's process group
+- **AND** the tool call returns an error naming the execution timeout
 
 #### Scenario: JSON arguments arrive on argv[1]
 
@@ -172,13 +189,13 @@ The execution engine SHALL NOT learn a dedicated code path for inline tools. Whe
 
 ### Requirement: Inline tools are authorable from the dashboard and persist to the cluster
 
-The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard SHALL make inline-tool authoring a first-class flow: the Tools page SHALL provide a dedicated "New inline tool" entry point that opens the editor pre-set to `Inline`, in addition to the `Inline` option in the Type selector. When `Inline` is selected the editor SHALL show a required multiline `Source` input and a `Language` selector offering `Auto`, `Bash`, `Python`, `Node`, and `TS`. Selecting `Auto` SHALL omit `spec.inline.language` from the created resource so the controller infers the language. Creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace. The editor SHALL apply client-side validation that mirrors the webhook (non-empty source, source ≤ 900 KiB, language within the allowed set) for fast feedback, with the webhook remaining authoritative.
+The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard SHALL surface inline-tool authoring through the existing Tool editor: the Type selector SHALL offer an `Inline` option alongside the other tool types. When `Inline` is selected the editor SHALL show a required multiline `Source` input and a required `Language` selector offering `Bash`, `Python`, `Node`, and `TS` (no `Auto` option, and no default selection). Creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace. The editor SHALL apply client-side validation that mirrors the webhook (non-empty source, source ≤ 64 KiB, a language chosen from the allowed set) for fast feedback, with the webhook remaining authoritative.
 
-#### Scenario: Dedicated "New inline tool" entry point
+#### Scenario: Selecting Inline reveals the source and language fields
 
-- **GIVEN** the Tools page in the dashboard
-- **WHEN** the user activates the "New inline tool" action
-- **THEN** the Tool editor opens pre-set to `Inline` with the `Source` and `Language` fields visible
+- **GIVEN** the dashboard Tool editor opened via "Add Tool"
+- **WHEN** the user selects `Inline` in the Type selector
+- **THEN** the editor shows the required `Source` and `Language` fields
 
 #### Scenario: Create inline tool via ark-api round-trips
 
@@ -193,11 +210,11 @@ The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline
 - **THEN** a `Tool` of `type: inline` is created in the active namespace with `spec.inline.source` and `spec.inline.language` set
 - **AND** the new tool appears in the tools list with an `(inline · <language>)` badge
 
-#### Scenario: Language `Auto` omits the language field
+#### Scenario: Language must be chosen before submit
 
-- **GIVEN** the dashboard Tool editor with `Inline` selected and `Language` left as `Auto`
-- **WHEN** the author submits a valid inline tool
-- **THEN** the created `Tool` has `spec.inline.source` set and no `spec.inline.language` field
+- **GIVEN** the dashboard Tool editor with `Inline` selected and no `Language` chosen
+- **WHEN** the author attempts to submit
+- **THEN** the editor blocks submission and shows a validation message that a language is required
 
 #### Scenario: Empty source blocked client-side
 
@@ -207,7 +224,9 @@ The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline
 
 ### Requirement: v1 feature scope is explicitly bounded
 
-The v1 `inline-tools` capability SHALL NOT support: bundling multiple scripts in one `Tool`, `SKILL.md`-style prose / lazy-load catalogs, languages outside the default runner image (Go, Rust, Ruby, custom interpreter versions), per-tool custom runner images, OCI / Git / HTTP script sources, mounted reference files, cross-namespace tool references, streaming tool responses, or relaxation of the security defaults (egress allow-lists, mounted secrets, RBAC role refs). Authors requiring any of these SHALL continue to use `MCPServer`.
+The v1 `inline-tools` capability SHALL NOT support: bundling multiple scripts in one `Tool`, `SKILL.md`-style prose / lazy-load catalogs, languages outside the default runner image (Go, Rust, Ruby, custom interpreter versions), per-tool custom runner images, third-party dependencies (`pip`/`npm` packages beyond each interpreter's standard library, or any package-install step), OCI / Git / HTTP script sources, mounted reference files, cross-namespace tool references, streaming tool responses, or relaxation of the security defaults (egress allow-lists, mounted secrets, RBAC role refs). Authors requiring any of these SHALL continue to use `MCPServer`.
+
+Standard-library-only is a documented non-goal, not webhook-enforced: admission does not parse source for imports. Deny-all egress makes a runtime `pip`/`npm install` fail, so a third-party import fails at execution time — the signal to move to an `MCPServer`.
 
 #### Scenario: Custom runner image rejected
 
