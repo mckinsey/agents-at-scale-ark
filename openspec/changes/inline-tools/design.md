@@ -26,7 +26,7 @@ Three hard constraints carry forward from the original proposal:
 
 - Bundling multiple scripts into one resource. Three related scripts means three `Tool` resources.
 - The full Claude-Code skill shape (`SKILL.md` + frontmatter + lazy-load catalog). Out of scope; future work if demand materialises.
-- Custom runner images in v1. Authors pick `bash`, `python@3.12`, or `node@20` from the built-in image.
+- Custom (author-supplied) runner images in v1. Authors pick `bash`, `python`, `node`, or `ts`; each maps to an Ark-published per-language image.
 - **Third-party dependencies.** No `pip`/`npm` install mechanism; deny-all egress blocks runtime fetches anyway. Scripts use each interpreter's standard library only (plus `jq`/coreutils for bash). Needing packages means an `MCPServer`.
 - A marketplace publishing story for inline tools. v1 is `kubectl apply` / dashboard and a sample directory.
 - Cross-namespace tool references, streaming tool responses, OCI/Git/HTTP source URLs, and reference-file mounts. Anything needing these is an `MCPServer`.
@@ -94,26 +94,29 @@ A `Tool` of `type: inline` is exactly one script with exactly one input schema. 
 
 **Cost accepted.** One `Deployment` per inline tool even where two could share a pod. Mitigated by scale-to-zero: idle tools cost nothing. Pooling same-language runners is a backwards-compatible future change if object count becomes a real problem.
 
-### Decision: Single multi-language runner image; per-tool dispatch by required `language`
+### Decision: Per-language distroless runner images, selected by required `language`
 
-v1 ships one image, `ark-inline-runner:v1`, Alpine-based (~150 MB), containing `bash` (5.x), `python@3.12`, `node@20`, and `tsx` for TypeScript. It mounts the tool's `ConfigMap` at `/tool/source` and dispatches solely on the required `spec.inline.language`:
+v1 ships one minimal image per language rather than a single catch-all. `python`, `node`, and `ts` are built on distroless bases; `bash` is built on Alpine (there is no distroless shell — a shell *is* the tooling distroless removes). Each image bundles a common **static Go runner binary** (`CGO_ENABLED=0`) that exposes an MCP-shaped HTTP endpoint, mounts the tool's `ConfigMap` at `/tool/source`, and executes the script under that image's interpreter:
 
 ```
-spec.inline.language:  bash  ──► bash /tool/source <args-json>
-                       python ──► python3 /tool/source <args-json>
-                       node   ──► node /tool/source <args-json>
-                       ts     ──► tsx /tool/source <args-json>
+spec.inline.language → image (base)             → interpreter
+  bash                → ark-inline-runner-bash   (alpine)      → bash /tool/source <args-json>
+  python              → ark-inline-runner-python (distroless)  → python3 /tool/source <args-json>
+  node                → ark-inline-runner-node   (distroless)  → node /tool/source <args-json>
+  ts                  → ark-inline-runner-ts      (distroless) → tsx /tool/source <args-json>
 ```
 
-`language` is **required**. The runner never inspects the source for a shebang; the declared `language` is the only thing that selects the interpreter.
+`language` is **required**, and the controller selects the image from it at reconcile time and writes it into the PodSpec. The runner never inspects the source for a shebang; the declared `language` is the only thing that selects both the image and the interpreter.
 
-**Why required, not shebang-inferred.** A shebang plus an explicit `language` are two sources of truth: the shebang silently overrides the field, and "neither present" falls back to bash — the least-visible default. Requiring `language` removes the ambiguity and lets the controller pick a per-language image at reconcile time (precondition for the alternative below). Shebang's only unique power — interpreter flags — is unneeded in v1.
+**Why required, not shebang-inferred.** A shebang plus an explicit `language` are two sources of truth: the shebang silently overrides the field, and "neither present" falls back to bash — the least-visible default. Requiring `language` removes the ambiguity and is the precondition for per-language images: the controller must know the language at reconcile time to pick the image, which a runtime shebang could not provide. Shebang's only unique power — interpreter flags — is unneeded in v1.
 
-**Why one image.** Per-language images mean three images to maintain, three reconciliation paths, and lookup logic in the controller. One image means the controller writes the same PodSpec regardless of language; dispatch is a few lines of shell. Cold start is dominated by container startup once the image is cached, not by image size delta.
+**Why per-language distroless, not one catch-all.** Attack surface. A catch-all image carries every runtime into every pod — a Python tool would ship the node/tsx runtimes it never uses, each an extra thing to attack if the script is compromised. Per-language images carry only what runs. Distroless goes further: it drops the shell and package manager entirely, removing common post-compromise routes (`sh -c …`, `pip install …`, `curl … | sh`). This stacks with the other defaults (deny-all egress, non-root, read-only root, dropped caps, PID limit) — same "minimum blast radius" principle, applied to image composition. Distroless `nonroot` images also run as uid 65532, matching the `runAsUser` already chosen.
 
-**Alternative — per-language images.** Smaller footprint and less attack surface per pod, multiplied maintenance. Deferred, not rejected: requiring `language` keeps this door open as a backwards-compatible follow-up.
+**Why the maintenance cost is low.** The MCP runner is a single static Go binary needed regardless of packaging. Each image is therefore `FROM <base>` + `COPY runner`, sharing one runner build and one publish pipeline — not four independently-maintained images. `node` and `ts` share the distroless Node base; the `ts` image additionally vendors the `tsx` loader.
 
-**TypeScript.** The runner includes `tsx` so `language: ts` runs TypeScript directly, matching the original proposal. The CRD `language` enum lists `bash`, `python`, `node`, `ts` in v1. Cost: `tsx` adds ~50 MB to the image.
+**Cost accepted.** Four images to build, sign, and publish instead of one, and a small controller lookup from `language` to image. Bounded by the shared runner binary and shared build tooling; published via the existing signed image-publish workflow with pinned base digests.
+
+**TypeScript.** `language: ts` runs under `tsx` on the distroless Node base. The CRD `language` enum lists `bash`, `python`, `node`, `ts` in v1.
 
 ### Decision: JSON-on-`argv[1]` runtime contract
 
@@ -134,6 +137,13 @@ const args = JSON.parse(process.argv[2]);
 **Alternative — JSON on stdin.** Cleaner for very large payloads, more boilerplate for the common case. Rejected for v1; addable as an opt-in mode later.
 
 **Alternative — named CLI flags from `inputSchema`.** Natural for shell scripts but breaks on nested objects/arrays and forces authors to learn a pseudo-argparse surface. Rejected.
+
+**Input/output handling and responsibility.** The contract splits into what Ark guarantees (safe *transport*) and what the author owns (*semantics*):
+
+- **Ark's side.** Arguments are passed as a single JSON string in `argv[1]`, never interpolated into a shell command — a value like `"; rm -rf /"` reaches the script as that literal string, not as a command. The script's `stdout` is returned as opaque bytes (trimmed to 256 KiB), not parsed or reformatted; binary or unexpectedly-shaped output is returned as-is.
+- **The author's side.** Inputs are model-generated and may be adversarial (see the threat model), so validating argument values, and bounding and shaping output, are the author's responsibility. In particular, output flows back to the model as a tool result, so an author whose tool echoes untrusted input into its output can produce a prompt-injection vector — guarding against that is the author's job, not Ark's.
+
+Ark cannot judge either semantic: it does not know a given argument's valid range, nor whether a byte sequence is a legitimate result or a hostile prompt. It therefore transports faithfully and leaves meaning to the author, which is the only division that holds without Ark parsing every tool's domain.
 
 ### Decision: Per-tool sandbox; scale-to-zero by default
 
@@ -224,13 +234,13 @@ The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialo
 - **`argv[1]` quoting surprises for bash authors** → JSON-in-an-argv-element is unfamiliar. Mitigation: docs lead with `jq -r .field <<< "$1"`; sample tools use it.
 - **Insufficient stderr surfacing** → Tool errors return only the last 4 KiB of stderr. Mitigation: per-tool pod logs are reachable via `kubectl logs`; the debugging doc calls this out.
 - **New reconciliation pattern in a status-only controller** → The inline branch adds owner-reference GC, in-place ConfigMap updates with an annotation-driven rollout, and readiness gating to a controller that had none. Mitigation: gate the entire branch on `spec.type == inline`; cover child-object creation and delete-cascade with envtest before wiring the activator.
-- **Runner image supply chain** → A single Ark-published image runs all inline tool code. Mitigation: publish via the existing signed image-publish workflow; pin base image digest; the deny-all-egress default limits blast radius of a compromised script.
+- **Runner image supply chain** → Ark-published per-language images run all inline tool code. Mitigation: publish via the existing signed image-publish workflow; pin base image digests; distroless bases plus the deny-all-egress default limit the blast radius of a compromised script.
 
 ## Migration Plan
 
 Purely additive — no migration of existing resources.
 
-- **Deploy order:** publish `ark-inline-runner:v1` → ship the CRD extension + webhook (validation + admission gate; inert because `inlineTools.enabled` defaults `false`) → ship the reconciler + activator → ship ark-api/dashboard surface. Upgrading changes nothing until an operator flips the flag and grants the dedicated permission.
+- **Deploy order:** publish the per-language runner images (`ark-inline-runner-{bash,python,node,ts}`) → ship the CRD extension + webhook (validation + admission gate; inert because `inlineTools.enabled` defaults `false`) → ship the reconciler + activator → ship ark-api/dashboard surface. Upgrading changes nothing until an operator flips the flag and grants the dedicated permission.
 - **Backwards compatibility:** existing `Tool` resources (`http`/`mcp`/`agent`/`team`/`builtin`) are untouched; their controller path is unchanged. The new enum value and `spec.inline` field are optional.
 - **Rollback:** deleting all inline `Tool` resources GCs their owned infrastructure via owner references. Reverting the operator image removes the reconciler/activator; leftover inline `Tool` resources become inert (status-only) rather than breaking the controller. Reverting the CRD enum is only safe once no inline `Tool` resources remain.
 

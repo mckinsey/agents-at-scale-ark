@@ -186,18 +186,24 @@ A new `inlinetoolactivator` subsystem in the operator SHALL front each inline to
 
 ### Requirement: Runner image contract
 
-Ark SHALL publish a single multi-language runner image `ark-inline-runner:v1` (Alpine-based) that bundles `bash`, `python@3.12`, `node@20`, and `tsx`. When started, the image SHALL expose an MCP-shaped HTTP endpoint and SHALL dispatch each invocation solely by the `LANGUAGE` env var (sourced from the required `spec.inline.language`):
+Ark SHALL publish one runner image per supported language — `bash` on an Alpine base, and `python`, `node`, `ts` on distroless bases (no shell or package manager). Each image SHALL bundle a common static Go runner binary that exposes an MCP-shaped HTTP endpoint, mounts the tool's source at `/tool/source`, and executes it under that image's interpreter. The controller SHALL select the image from the required `spec.inline.language` at reconcile time:
 
-- `bash` → `bash /tool/source`
-- `python` → `python3 /tool/source`
-- `node` → `node /tool/source`
-- `ts` → `tsx /tool/source`
+- `bash` → bash image → `bash /tool/source`
+- `python` → python image → `python3 /tool/source`
+- `node` → node image → `node /tool/source`
+- `ts` → ts image → `tsx /tool/source`
 
-The runner SHALL NOT inspect the source for a shebang and SHALL NOT apply an implicit language default; `LANGUAGE` is always present because `spec.inline.language` is required.
+The runner SHALL NOT inspect the source for a shebang and SHALL NOT apply an implicit language default; the image and interpreter are fixed by `spec.inline.language`, which is required. Distroless images SHALL run as uid 65532, matching the pod security default.
 
-The runner SHALL pass the tool's JSON arguments as a single string in `argv[1]`. The runner SHALL stream `stdout` back as the tool result (trimmed to 256 KiB), log `stderr`, and return a tool error if the exit code is non-zero (error message includes the last 4 KiB of `stderr`). The runner SHALL enforce a per-invocation execution timeout (default `30s`): when the timeout expires before the script exits, the runner SHALL kill the process group and return a tool error naming the timeout.
+The runner SHALL pass the tool's JSON arguments as a single string in `argv[1]`, without shell interpolation, so argument values are never executed as commands. The runner SHALL stream `stdout` back as the tool result (trimmed to 256 KiB) as opaque bytes, without parsing or reformatting it, log `stderr`, and return a tool error if the exit code is non-zero (error message includes the last 4 KiB of `stderr`). Validating input values and shaping output are the script author's responsibility (see the design threat model); the runner guarantees transport, not semantics. The runner SHALL enforce a per-invocation execution timeout (default `30s`): when the timeout expires before the script exits, the runner SHALL kill the process group and return a tool error naming the timeout.
 
-#### Scenario: Language env dispatch
+#### Scenario: Controller selects the per-language image
+
+- **GIVEN** an inline `Tool` with `language: python`
+- **WHEN** the controller reconciles the `Deployment`
+- **THEN** the pod uses the `python` runner image (distroless), not a catch-all or another language's image
+
+#### Scenario: Language dispatch within the image
 
 - **GIVEN** an inline `Tool` with `language: python`
 - **WHEN** the model invokes the tool
@@ -221,6 +227,13 @@ The runner SHALL pass the tool's JSON arguments as a single string in `argv[1]`.
 - **GIVEN** an inline Python `Tool` whose source contains `import sys, json; args = json.loads(sys.argv[1])`
 - **WHEN** the model invokes the tool with `{"file": "data.csv", "limit": 10}`
 - **THEN** the script's `args` dict equals `{"file": "data.csv", "limit": 10}`
+
+#### Scenario: Argument values are passed literally, not shell-interpreted
+
+- **GIVEN** an inline `Tool` invoked with an argument value of `; rm -rf /`
+- **WHEN** the model invokes the tool
+- **THEN** the runner delivers the JSON containing that value as a single `argv[1]` element
+- **AND** no part of the argument value is executed as a shell command
 
 #### Scenario: Script fails with non-zero exit
 
@@ -284,7 +297,7 @@ The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline
 
 ### Requirement: v1 feature scope is explicitly bounded
 
-The v1 `inline-tools` capability SHALL NOT support: bundling multiple scripts in one `Tool`, `SKILL.md`-style prose / lazy-load catalogs, languages outside the default runner image (Go, Rust, Ruby, custom interpreter versions), per-tool custom runner images, third-party dependencies (`pip`/`npm` packages beyond each interpreter's standard library, or any package-install step), OCI / Git / HTTP script sources, mounted reference files, cross-namespace tool references, streaming tool responses, or relaxation of the security defaults (egress allow-lists, mounted secrets, RBAC role refs). Authors requiring any of these SHALL continue to use `MCPServer`.
+The v1 `inline-tools` capability SHALL NOT support: bundling multiple scripts in one `Tool`, `SKILL.md`-style prose / lazy-load catalogs, languages outside the published runner images (Go, Rust, Ruby, custom interpreter versions), per-tool custom (author-supplied) runner images, third-party dependencies (`pip`/`npm` packages beyond each interpreter's standard library, or any package-install step), OCI / Git / HTTP script sources, mounted reference files, cross-namespace tool references, streaming tool responses, or relaxation of the security defaults (egress allow-lists, mounted secrets, RBAC role refs). Authors requiring any of these SHALL continue to use `MCPServer`.
 
 Standard-library-only is a documented non-goal, not webhook-enforced: admission does not parse source for imports. Deny-all egress makes a runtime `pip`/`npm install` fail, so a third-party import fails at execution time — the signal to move to an `MCPServer`.
 
