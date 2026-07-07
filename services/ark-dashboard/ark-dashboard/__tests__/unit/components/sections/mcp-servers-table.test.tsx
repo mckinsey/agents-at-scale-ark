@@ -62,6 +62,7 @@ describe('McpServersTable', () => {
     expect(screen.getByText('Address')).toBeInTheDocument();
     expect(screen.getByText('Transport')).toBeInTheDocument();
     expect(screen.getByText('Tools')).toBeInTheDocument();
+    expect(screen.getByText('Expires')).toBeInTheDocument();
     expect(screen.getByText('Status')).toBeInTheDocument();
   });
 
@@ -74,14 +75,17 @@ describe('McpServersTable', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
-  it('renders an em dash for missing address, transport and tools', () => {
+  it('renders an em dash for missing address, transport, tools and expires', () => {
     render(
       <McpServersTable servers={[servers[1]]} onDelete={vi.fn()} />,
     );
-    // server-two has no address, transport or tool_count.
-    expect(screen.getAllByText('—')).toHaveLength(3);
+    // TODO: server-two has no address, transport or tool_count; expires is a
+    // placeholder until MCP auth expiry data is available.
+    expect(screen.getAllByText('—')).toHaveLength(4);
   });
 
+  // TODO: availability-based status; update to authorization state
+  // (Authorized / Unauthenticated / Error) once MCP auth status is available.
   it('renders status labels for True / False / undefined', () => {
     const withUnknown = [
       ...servers,
@@ -113,16 +117,17 @@ describe('McpServersTable', () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();
     render(<McpServersTable servers={servers} onDelete={onDelete} />);
-    await user.click(screen.getAllByLabelText('Delete MCP server')[0]);
+    await user.click(screen.getAllByLabelText('MCP server actions')[0]);
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(screen.getByTestId('confirmation-dialog')).toBeInTheDocument();
-    await user.click(screen.getByText('Delete'));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
     expect(onDelete).toHaveBeenCalledWith('server-one');
   });
 
-  it('disables delete buttons in read-only mode', () => {
+  it('disables the actions menu in read-only mode', () => {
     readOnly = true;
     render(<McpServersTable servers={servers} onDelete={vi.fn()} />);
-    for (const button of screen.getAllByLabelText('Delete MCP server')) {
+    for (const button of screen.getAllByLabelText('MCP server actions')) {
       expect(button).toBeDisabled();
     }
   });

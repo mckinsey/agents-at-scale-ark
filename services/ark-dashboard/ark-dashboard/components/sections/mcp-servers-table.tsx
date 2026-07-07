@@ -56,7 +56,7 @@ const COL = {
 const rowHoverOverlayClass =
   'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
-// Availability-based status. Once MCP auth status is available it will render
+// TODO: Availability-based status. Once MCP auth status is available it will render
 // the authorization state (Authorized / Unauthenticated / Error) here instead.
 function McpServerStatus({
   status,
@@ -73,13 +73,13 @@ function McpServerStatus({
   );
 }
 
-// Token expiry, with an "expiring soon" warning icon, will populate here once
+// TODO: Token expiry, with an "expiring soon" warning icon, will populate here once
 // MCP auth expiry data is available.
 function McpServerExpires() {
   return <span className="text-fg-primary">—</span>;
 }
 
-// Re-authenticate and Sign out stay disabled until MCP auth status is available;
+// TODO: Re-authenticate and Sign out stay disabled until MCP auth status is available;
 // the tooltip explains the disabled state, matching the design.
 function DisabledAuthMenuItem({
   icon,
