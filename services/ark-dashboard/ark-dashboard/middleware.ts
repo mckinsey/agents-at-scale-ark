@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { auth, type NextRequestWithAuth } from './auth';
+import { type NextRequestWithAuth, auth } from './auth';
 import { SIGNIN_PATH } from './lib/constants/auth';
 
 // Auth-only edge gate. The proxy logic that used to live here now lives in
@@ -24,22 +24,39 @@ const PUBLIC_PREFIXES = [
   '/_next/image',
 ];
 
+// Strip trailing slashes without a regex (avoids Sonar S5852 ReDoS heuristics).
+function stripTrailingSlashes(value?: string): string | undefined {
+  if (!value) return value;
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === '/') end -= 1;
+  return value.slice(0, end);
+}
+
 export default auth(async (req: NextRequestWithAuth) => {
   const { pathname } = req.nextUrl;
 
   if (
     pathname === '/favicon.ico' ||
-    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
   if (!req.auth && pathname !== SIGNIN_PATH) {
-    const signInUrl = new URL(
-      `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(req.nextUrl.href)}`,
-      process.env.BASE_URL,
-    );
-    return NextResponse.redirect(signInUrl);
+    const callbackUrl = encodeURIComponent(req.nextUrl.href);
+    // Hub model: when AUTH_HUB_URL is set, send unauthenticated users to the
+    // central landing-page login rather than this tenant's own signin. Under a
+    // basePath the local signin path resolves wrong (a leading-slash path drops
+    // the prefix), and the hub issues a Path=/ session cookie shared by every
+    // tenant on the host — so one login at the hub covers them all.
+    const hubUrl = stripTrailingSlashes(process.env.AUTH_HUB_URL);
+    const target = hubUrl
+      ? `${hubUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`
+      : new URL(
+          `${SIGNIN_PATH}?callbackUrl=${callbackUrl}`,
+          process.env.BASE_URL,
+        ).toString();
+    return NextResponse.redirect(target);
   }
   return NextResponse.next();
 });
