@@ -1,10 +1,12 @@
 {{- if .Values.rbac.create }}
 {{- /*
-Least-privilege RBAC for the completions pod. It never mutates ark resources —
-it reads Query/Agent/Team/Model/MCPServer/Tool/A2AServer/ExecutionEngine config
-plus the secrets/configmaps referenced by model credentials & MCP headers, and
-services to resolve broker ServiceReferences to URLs. The only write is updating
-Memory status. It does not emit Kubernetes Events (events go to the broker).
+Least-privilege RBAC for the completions pod. It reads
+Query/Agent/Team/Model/MCPServer/Tool/A2AServer/ExecutionEngine config plus the
+secrets/configmaps referenced by model credentials & MCP headers, and services
+to resolve broker ServiceReferences to URLs. Its writes are: updating Memory
+status, and creating A2ATask resources to record A2A task responses (the
+a2atask controller reconciles their status). It does not emit Kubernetes Events
+(events go to the broker).
 
 Scope follows discovery scope: the central install serves every namespace, so it
 gets a cluster-scoped Role; a per-tenant install (namespaceScopedDiscovery=true)
@@ -45,6 +47,12 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - a2atasks
+  verbs:
+  - create
 - apiGroups:
   - ""
   resources:
