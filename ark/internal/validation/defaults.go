@@ -116,4 +116,16 @@ func DefaultModel(model *arkv1alpha1.Model) {
 			originalType,
 		)
 	}
+
+	if model.Spec.Provider == ProviderBedrock && model.Spec.Config.Bedrock != nil {
+		bedrock := model.Spec.Config.Bedrock
+		hasAPIKey := bedrock.APIKey != nil
+		hasIAM := bedrock.AccessKeyID != nil || bedrock.SecretAccessKey != nil
+		if hasAPIKey && hasIAM {
+			if model.Annotations == nil {
+				model.Annotations = make(map[string]string)
+			}
+			model.Annotations[annotations.MigrationWarningPrefix+"bedrock-auth"] = "both apiKey and IAM credentials are set for the bedrock provider - apiKey takes precedence and the IAM credentials are ignored"
+		}
+	}
 }

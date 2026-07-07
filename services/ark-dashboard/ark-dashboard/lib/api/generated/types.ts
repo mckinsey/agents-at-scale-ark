@@ -2893,6 +2893,10 @@ export interface components {
         BedrockConfig: {
             /** Accesskeyid */
             accessKeyId?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Apikey */
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Baseurl */
+            baseUrl?: string | components["schemas"]["ModelValueSource"] | null;
             /** Maxtokens */
             maxTokens?: number | null;
             /** Modelarn */
