@@ -112,5 +112,32 @@ export function createEventsRouter(
     }
   });
 
+  router.delete<{query_id: string}>('/:query_id', async (req, res) => {
+    const {query_id: queryId} = req.params;
+
+    if (!queryId) {
+      res.status(400).json({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Query ID is required',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+
+    try {
+      req.log.info({queryId}, 'deleting events for query');
+      await events.deleteByQuery(queryId);
+      res.json({
+        status: 'success',
+        message: `Query ${queryId} events deleted`,
+      });
+    } catch (error) {
+      req.log.error({err: error}, 'failed to delete query events');
+      sendInternalError(res, req.id);
+    }
+  });
+
   return router;
 }
