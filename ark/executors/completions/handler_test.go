@@ -1126,7 +1126,7 @@ func TestSaveInputMessagesToMemory(t *testing.T) {
 		assert.Zero(t, mem.addCalls, "should not call AddMessages on empty input")
 	})
 
-	t.Run("no-op when memoryMessages already populated", func(t *testing.T) {
+	t.Run("saves input on follow-up turn with existing history", func(t *testing.T) {
 		mem := &stubMemory{}
 		state := &executionState{
 			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
@@ -1135,7 +1135,8 @@ func TestSaveInputMessagesToMemory(t *testing.T) {
 			memoryMessages: []Message{NewUserMessage("previous")},
 		}
 		h.saveInputMessagesToMemory(ctx, state)
-		assert.Zero(t, mem.addCalls, "should skip save when memory already has history")
+		require.Equal(t, 1, mem.addCalls, "should save follow-up input even when memory has history")
+		assert.Len(t, mem.receivedMsg[0], 1)
 	})
 
 	t.Run("saves input messages on first approval", func(t *testing.T) {
@@ -1242,11 +1243,26 @@ func TestSaveFinalMessagesToMemory(t *testing.T) {
 			memory:         mem,
 			inputMessages:  []Message{NewUserMessage("orig")},
 			memoryMessages: []Message{NewUserMessage("from-memory")},
+			isResumption:   true,
 		}
 		response := []Message{NewAssistantMessage("post-approval")}
 		h.saveFinalMessagesToMemory(ctx, state, response)
 		require.Equal(t, 1, mem.addCalls)
 		assert.Len(t, mem.receivedMsg[0], 1)
+	})
+
+	t.Run("follow-up turn saves input and response despite existing history", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q-followup"}},
+			memory:         mem,
+			inputMessages:  []Message{NewUserMessage("second question")},
+			memoryMessages: []Message{NewUserMessage("first"), NewAssistantMessage("first-answer")},
+		}
+		response := []Message{NewAssistantMessage("second answer")}
+		h.saveFinalMessagesToMemory(ctx, state, response)
+		require.Equal(t, 1, mem.addCalls)
+		assert.Len(t, mem.receivedMsg[0], 2, "must persist the new user message alongside the response")
 	})
 
 	t.Run("tolerates AddMessages error", func(t *testing.T) {
