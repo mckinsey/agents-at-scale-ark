@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,7 +16,10 @@ import (
 
 	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/fields"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog/v2"
 
@@ -24,30 +28,129 @@ import (
 
 const jsonNull = "null"
 
-func parseLabelSelector(selector string) (map[string]string, error) {
+// fieldPredicate is a validated (column, op, value) triple derived from a client-
+// supplied field selector. columns come from supportedFieldColumns (never client
+// input), so composing SQL by concatenating column and op is safe from injection.
+type fieldPredicate struct {
+	column string
+	op     string
+	value  string
+}
+
+// supportedFieldColumns maps k8s field selectors to the resources table
+// column they filter on. Resource-specific fields (e.g. status.phase) are
+// rejected pending typed field indexers — not permanently forbidden.
+var supportedFieldColumns = map[string]string{
+	"metadata.name":      "name",
+	"metadata.namespace": "namespace",
+}
+
+var supportedFieldOps = map[selection.Operator]string{
+	selection.Equals:       "=",
+	selection.DoubleEquals: "=",
+	selection.NotEquals:    "<>",
+}
+
+func supportedFieldsList() string {
+	keys := make([]string, 0, len(supportedFieldColumns))
+	for k := range supportedFieldColumns {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+func supportedFieldOpsList() string {
+	keys := make([]string, 0, len(supportedFieldOps))
+	for k := range supportedFieldOps {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+// parseFieldSelector validates opts.FieldSelector and returns SQL predicates for
+// supported metadata fields. Unsupported fields or operators produce storage.ErrInvalidRequest.
+// Additional fields can be added by extending supportedFieldColumns.
+func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	if selector == "" {
 		return nil, nil
 	}
-	result := map[string]string{}
-	for _, part := range strings.Split(selector, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if strings.Contains(part, "!=") || strings.Contains(part, " in ") || strings.Contains(part, " notin ") || strings.HasPrefix(part, "!") {
-			return nil, fmt.Errorf("unsupported label selector operator in %q, only equality (=, ==) is supported", part)
-		}
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid label selector %q", part)
-		}
-		key := strings.TrimSuffix(strings.TrimSpace(kv[0]), "=")
-		result[strings.TrimSpace(key)] = strings.TrimSpace(kv[1])
+	sel, err := fields.ParseSelector(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid field selector %q: %v", storage.ErrInvalidRequest, selector, err)
 	}
-	if len(result) == 0 {
+	if sel.Empty() {
 		return nil, nil
 	}
-	return result, nil
+	reqs := sel.Requirements()
+	preds := make([]fieldPredicate, 0, len(reqs))
+	for _, req := range reqs {
+		col, ok := supportedFieldColumns[req.Field]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: %s)", storage.ErrInvalidRequest, req.Field, supportedFieldsList())
+		}
+		op, ok := supportedFieldOps[req.Operator]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector operator %q is not yet implemented (currently supported: %s)", storage.ErrInvalidRequest, req.Operator, supportedFieldOpsList())
+		}
+		preds = append(preds, fieldPredicate{column: col, op: op, value: req.Value})
+	}
+	return preds, nil
+}
+
+func parseLabelSelector(selector string) (k8slabels.Selector, error) {
+	if selector == "" {
+		return nil, nil
+	}
+	sel, err := k8slabels.Parse(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid label selector %q: %v", storage.ErrInvalidRequest, selector, err)
+	}
+	if sel.Empty() {
+		return nil, nil
+	}
+	return sel, nil
+}
+
+// labelSelectorSQL emits " AND ..." clauses and appends bind values to *args.
+// Placeholders are len(*args)+1 at each use, so the caller passes the same
+// slice and doesn't track an index. Values are bound; operators are fixed.
+func labelSelectorSQL(sel k8slabels.Selector, args *[]interface{}) string {
+	if sel == nil || sel.Empty() {
+		return ""
+	}
+	reqs, _ := sel.Requirements()
+	var sb strings.Builder
+	for _, req := range reqs {
+		key := req.Key()
+		op := req.Operator()
+		vals := req.Values().List()
+		p := len(*args) + 1
+		switch op {
+		case selection.Equals, selection.DoubleEquals:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = $%d`, p, p+1)
+			*args = append(*args, key, vals[0])
+		case selection.NotEquals:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> $%d)`, p, p, p+1)
+			*args = append(*args, key, vals[0])
+		case selection.In:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = ANY($%d::text[])`, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
+		case selection.NotIn:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> ALL($%d::text[]))`, p, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
+		case selection.Exists:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NOT NULL`, p)
+			*args = append(*args, key)
+		case selection.DoesNotExist:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, p)
+			*args = append(*args, key)
+		default:
+			panic(fmt.Sprintf("labelSelectorSQL: unhandled operator %q from k8slabels.Parse output", op))
+		}
+	}
+	return sb.String()
 }
 
 type Config struct {
@@ -332,17 +435,23 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		argIndex++
 	}
 
-	if opts.LabelSelector != "" {
-		labelMap, err := parseLabelSelector(opts.LabelSelector)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to parse label selector: %w", err)
-		}
-		if labelMap != nil {
-			labelJSON, _ := json.Marshal(labelMap)
-			query += fmt.Sprintf(" AND labels @> $%d::jsonb", argIndex)
-			args = append(args, string(labelJSON))
-			argIndex++
-		}
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
+	if err != nil {
+		return nil, "", err
+	}
+	if labelSel != nil {
+		query += labelSelectorSQL(labelSel, &args)
+		argIndex = len(args) + 1
+	}
+
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, p := range fieldPreds {
+		query += fmt.Sprintf(" AND %s %s $%d", p.column, p.op, argIndex)
+		args = append(args, p.value)
+		argIndex++
 	}
 
 	if opts.Continue != "" {
@@ -588,9 +697,14 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 
-	labelFilter, err := parseLabelSelector(opts.LabelSelector)
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+		return nil, err
+	}
+
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return nil, err
 	}
 
 	w := &postgresWatcher{
@@ -600,7 +714,8 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		key:         key,
 		kind:        kind,
 		ns:          namespace,
-		labelFilter: labelFilter,
+		labelSel:    labelSel,
+		fieldPreds:  fieldPreds,
 		ctx:         ctx,
 		done:        make(chan struct{}),
 		initialList: true,
@@ -752,7 +867,8 @@ type postgresWatcher struct {
 	key             string
 	kind            string
 	ns              string
-	labelFilter     map[string]string
+	labelSel        k8slabels.Selector
+	fieldPreds      []fieldPredicate
 	ctx             context.Context
 	done            chan struct{}
 	stopped         atomic.Bool
@@ -900,11 +1016,14 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 		args = append(args, w.ns)
 		argIndex++
 	}
-	if w.labelFilter != nil {
-		labelJSON, _ := json.Marshal(w.labelFilter)
-		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
-		args = append(args, string(labelJSON))
-		_ = argIndex
+	if w.labelSel != nil {
+		query += labelSelectorSQL(w.labelSel, &args)
+		argIndex = len(args) + 1
+	}
+	for _, p := range w.fieldPreds {
+		query += fmt.Sprintf(` AND %s %s $%d`, p.column, p.op, argIndex)
+		args = append(args, p.value)
+		argIndex++
 	}
 	query += ` ORDER BY resource_version ASC`
 	return query, args
