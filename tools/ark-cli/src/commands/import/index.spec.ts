@@ -68,6 +68,18 @@ describe('import command', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
+  it('surfaces error.message when kubectl create throws an Error', async () => {
+    mockExeca.mockRejectedValue(new Error('boom'));
+
+    const command = createImportCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'test.yaml'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith('import failed:', 'boom');
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
   it('uses kubectl apply with --upsert', async () => {
     mockExeca.mockResolvedValue({
       exitCode: 0,
@@ -106,6 +118,22 @@ describe('import command', () => {
     expect(mockExit).not.toHaveBeenCalled();
   });
 
+  it('handles missing stdout with --upsert', async () => {
+    mockExeca.mockResolvedValue({
+      exitCode: 0,
+      stdout: undefined,
+      stderr: '',
+    });
+
+    const command = createImportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'test.yaml', '--upsert']);
+
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'import complete: 0 created, 0 configured, 0 unchanged'
+    );
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
   it('reports failures and exits 1 with --upsert', async () => {
     mockExeca.mockResolvedValue({
       exitCode: 1,
@@ -125,6 +153,41 @@ describe('import command', () => {
     expect(mockOutput.error).toHaveBeenCalledWith(
       'Error from server (Invalid): error when creating "test.yaml": bad spec'
     );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('falls back to stdout details on failure when stderr is empty with --upsert', async () => {
+    mockExeca.mockResolvedValue({
+      exitCode: 1,
+      stdout: 'partial apply output',
+      stderr: '',
+    });
+
+    const command = createImportCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'test.yaml', '--upsert'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith('partial apply output');
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('omits the details line on failure when stderr and stdout are empty with --upsert', async () => {
+    mockExeca.mockResolvedValue({
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
+    });
+
+    const command = createImportCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'test.yaml', '--upsert'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'import failed (0 created, 0 configured, 0 unchanged before errors):'
+    );
+    expect(mockOutput.error).toHaveBeenCalledTimes(1);
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
