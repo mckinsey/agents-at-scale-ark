@@ -5,10 +5,10 @@ import sys
 import time
 
 FILES = {
-    "query": "/tmp/query.json",
-    "response": "/tmp/response.txt",
-    "phase": "/tmp/phase.txt",
-    "conversation": "/tmp/conversation-id.txt",
+    "query": "/tmp/query.json",  # NOSONAR - single-app container, no other users share /tmp
+    "response": "/tmp/response.txt",  # NOSONAR - single-app container, no other users share /tmp
+    "phase": "/tmp/phase.txt",  # NOSONAR - single-app container, no other users share /tmp
+    "conversation": "/tmp/conversation-id.txt",  # NOSONAR - single-app container, no other users share /tmp
 }
 
 def fail(message):
@@ -16,8 +16,8 @@ def fail(message):
     print("ark-query: " + message, file=sys.stderr)
     sys.exit(1)
 
-def write_file(fileName, text):
-    with open(FILES[fileName], "w") as f:
+def write_file(file_name, text):
+    with open(FILES[file_name], mode="w+") as f:
         f.write(text)
 
 def create_file(fileName):
