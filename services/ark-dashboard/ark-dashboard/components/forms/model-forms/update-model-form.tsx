@@ -68,6 +68,10 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
           defaultValues.provider === 'azure'
             ? defaultValues.azureAuthMethod
             : undefined,
+        initialBedrockAuthMethod:
+          defaultValues.provider === 'bedrock'
+            ? defaultValues.bedrockAuthMethod
+            : undefined,
       }}>
       <div className="shrink-0 space-y-4 md:w-md md:max-w-md">
         <section>

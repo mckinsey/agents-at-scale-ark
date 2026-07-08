@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -277,6 +278,24 @@ func TestGenericStorage_List_WithLabelSelector(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("List() with selector error = %v", err)
+	}
+}
+
+func TestGenericStorage_List_FieldSelectorReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	fs, err := fields.ParseSelector("status.phase=Running")
+	if err != nil {
+		t.Fatalf("ParseSelector() error = %v", err)
+	}
+	_, err = gs.List(ctx, &metainternalversion.ListOptions{FieldSelector: fs})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsBadRequest(err) {
+		t.Errorf("expected BadRequest, got %T: %v", err, err)
 	}
 }
 
@@ -596,6 +615,24 @@ func TestGenericStorage_Watch(t *testing.T) {
 		t.Error("expected non-nil watcher")
 	}
 	watcher.Stop()
+}
+
+func TestGenericStorage_Watch_FieldSelectorReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	fs, err := fields.ParseSelector("status.phase=Running")
+	if err != nil {
+		t.Fatalf("ParseSelector() error = %v", err)
+	}
+	_, err = gs.Watch(ctx, &metainternalversion.ListOptions{FieldSelector: fs})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsBadRequest(err) {
+		t.Errorf("expected BadRequest, got %T: %v", err, err)
+	}
 }
 
 func TestGenericStorage_ConvertToTable_Single(t *testing.T) {
