@@ -14,8 +14,8 @@ dependencies:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
-  kubernetes-mcp-server:
-    path: ./services/kubernetes-mcp-server
+#  kubernetes-mcp-server:
+#    path: ./services/kubernetes-mcp-server
 #  argo-workflows:
 #    path: ./services/argo-workflows
 #  ark-api-a2a:
@@ -57,11 +57,11 @@ vars:
   ENABLE_ARGO:
     source: env
     default: false
-  # kubernetes-mcp-server is deployed by default. To disable it, run with
-  # ENABLE_KUBERNETES_MCP_SERVER=false devspace dev (or deploy).
+  # kubernetes-mcp-server is optional. To enable it, run with
+  # ENABLE_KUBERNETES_MCP_SERVER=true devspace dev (or deploy).
   ENABLE_KUBERNETES_MCP_SERVER:
     source: env
-    default: true
+    default: false
 
 commands:
   routes:
@@ -139,13 +139,16 @@ profiles:
         value:
           argo-workflows:
             path: ./services/argo-workflows
-  - name: disable-kubernetes-mcp-server
+  - name: enable-kubernetes-mcp-server
     activation:
       - vars:
-          ENABLE_KUBERNETES_MCP_SERVER: false
+          ENABLE_KUBERNETES_MCP_SERVER: true
     patches:
-      - op: remove
-        path: dependencies.kubernetes-mcp-server
+      - op: add
+        path: dependencies
+        value:
+          kubernetes-mcp-server:
+            path: ./services/kubernetes-mcp-server
 
 pipelines:
   deploy: |-

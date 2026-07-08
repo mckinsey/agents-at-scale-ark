@@ -14,9 +14,14 @@
 - [x] Add `services/kubernetes-mcp-server/build.mk` following the existing service `build.mk` pattern: define stamps and `kubernetes-mcp-server-install` / `-uninstall` / `-dev` targets that `helm upgrade --install` / `helm uninstall` the chart.
 - [x] Add the chart to the `deploy` workflow chart matrix so it is packaged and pushed to the OCI chart registry alongside the other service charts.
 
-## 3. Enable by default in devspace
+## 3. Opt-in in devspace
 
-- [x] In the root `devspace.yaml`, uncomment the `kubernetes-mcp-server` dependency under `dependencies`.
-- [x] Wire `kubernetes-mcp-server` active into the `deploy` and `dev` pipelines so `devspace dev`/`deploy` bring it up by default (default on, not gated behind an `ENABLE_` flag like `argo-workflows`). It is picked up by the existing `run_dependency_pipelines --all` step (not in the `--exclude` list), unlike `argo-workflows`.
-- [x] Confirm `devspace dev` and `devspace deploy` deploy the server by default and that the `MCPServer` registration produces the `resources_list` / `resources_get` `Tool` CRDs. Verified statically: `devspace print` resolves the dependency default-on and drops it under `ENABLE_KUBERNETES_MCP_SERVER=false`; `helm template` renders the `MCPServer`. Runtime Tool discovery is the already-merged PR #2536 behavior.
-- [x] Document that an operator can disable the default-on deployment (via `ENABLE_KUBERNETES_MCP_SERVER=false`, wired through the `disable-kubernetes-mcp-server` profile and documented in `devspace.yaml`).
+- [x] In the root `devspace.yaml`, keep the `kubernetes-mcp-server` dependency commented out under `dependencies`.
+- [x] Gate `kubernetes-mcp-server` behind an `ENABLE_KUBERNETES_MCP_SERVER` var (default `false`) wired through an `enable-kubernetes-mcp-server` profile that `op: add`s the dependency, mirroring how `argo-workflows` is opt-in via `ENABLE_ARGO`.
+- [x] Confirm `devspace dev`/`deploy` do not deploy the server by default and do deploy it with `ENABLE_KUBERNETES_MCP_SERVER=true`. Verified statically: the base `dependencies` no longer include `kubernetes-mcp-server` and the `enable-kubernetes-mcp-server` profile is present.
+- [x] Document that an operator can enable the deployment via `ENABLE_KUBERNETES_MCP_SERVER=true`, documented in `devspace.yaml`.
+
+## 4. Register as an optional service in the ark CLI
+
+- [x] Add a `kubernetes-mcp-server` entry to `tools/ark-cli/src/arkServices.ts` with `enabled: false`, pointing at the OCI chart registry, mirroring `localhost-gateway`.
+- [x] Confirm the CLI typechecks, lints, and `arkServices.spec.ts` passes.
