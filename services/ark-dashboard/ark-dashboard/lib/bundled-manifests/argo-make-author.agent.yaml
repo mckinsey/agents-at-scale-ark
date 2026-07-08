@@ -1,15 +1,21 @@
+# Prerequisites:
+#   - Set a model on this agent before running a query; it ships without one so
+#     you can pick your own. Until a model is set, queries against it will fail.
+#   - The resources_list / resources_get tools are provided by the in-cluster
+#     kubernetes-mcp-server. Install that MCP server before querying this agent;
+#     the agent installs fine without it, but queries fail until it is present.
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: argo-make-author
+  labels:
+    ark.mckinsey.com/skip-webhook-validation: "true"
 spec:
   description: >-
     Conversational author for Argo WorkflowTemplate resources that compose
     generic Argo steps with the user's existing Ark agents, models, and teams.
     Grounds every query target on the live cluster and refuses to reference
     resources it cannot find.
-  modelRef:
-    name: default
   tools:
     - type: mcp
       name: resources_list

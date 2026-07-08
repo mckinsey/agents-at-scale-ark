@@ -18,8 +18,9 @@ verified target via the `ark-query` `templateRef`.
   registered via `tests/shared/install-kubernetes-mcp-server.sh`) materialises
   the `resources_list` / `resources_get` `Tool` CRDs.
 - `mock-llm` scripts the agent's turns: first a `resources_list` tool call, then
-  the final template once the tool result is present. The mock creates the
-  `default` model the agent's `spec.modelRef` points at.
+  the final template once the tool result is present. The bundled agent ships
+  without a `spec.modelRef` (users set their own model), so the mock creates a
+  `default` model and the test patches the agent to point at it before querying.
 
 ## Running
 ```bash

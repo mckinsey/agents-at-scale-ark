@@ -95,6 +95,15 @@ spec:
     catch:
     - events: {}
 
+  - name: set-model
+    try:
+    - script:
+        content: |
+          kubectl patch agent argo-make-author -n $NAMESPACE --type=merge -p '{"spec":{"modelRef":{"name":"default"}}}'
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: run-query
     try:
     - apply:
