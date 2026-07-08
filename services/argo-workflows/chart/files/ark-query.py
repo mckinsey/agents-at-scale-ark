@@ -46,15 +46,14 @@ def parse_target():
     return target_type, target_name
 
 def parse_parameters():
-    parameters = json.loads(os.environ["ARK_PARAMETERS"])
-    if not isinstance(parameters, list):
+    try:
+        parameters = json.loads(os.environ["ARK_PARAMETERS"])
+        if not isinstance(parameters, list):
+            raise ValueError
+    except ValueError:
         fail("invalid parameters: expected a JSON array of {name,value} objects")
 
     return parameters
-
-write_file(FILES["query"], "{}")
-for key in ("response", "phase", "conversation"):
-    write_file(FILES[key], "")
 
 write_file("query", "{}")
 create_file("response")
@@ -110,11 +109,11 @@ for _ in range(30):
     result = kubectl(["get", "query", query_name, "-o", "json"])
     if result.returncode == 0:
         query_obj = json.loads(result.stdout)
-        write_file(FILES["query"], json.dumps(query_obj, separators=(",", ":")))
+        write_file("query", json.dumps(query_obj, separators=(",", ":")))
         phase = (query_obj.get("status") or {}).get("phase", "")
     else:
         query_obj = {}
-        write_file(FILES["query"], "{}")
+        write_file("query", "{}")
         phase = ""
     if phase in ("done", "error"):
         break
@@ -122,9 +121,9 @@ for _ in range(30):
 
 status = query_obj.get("status") or {}
 
-write_file(FILES["phase"], phase)
-write_file(FILES["response"], (status.get("response") or {}).get("content", ""))
-write_file(FILES["conversation"], status.get("conversationId", ""))
+write_file("phase", phase)
+write_file("response", (status.get("response") or {}).get("content", ""))
+write_file("conversation", status.get("conversationId", ""))
 
 if phase == "done":
     print("Query " + query_name + " completed: done")
