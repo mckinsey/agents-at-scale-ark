@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
@@ -1275,6 +1276,51 @@ func TestSaveFinalMessagesToMemory(t *testing.T) {
 		h.saveFinalMessagesToMemory(ctx, state, []Message{NewAssistantMessage("done")})
 		assert.Equal(t, 1, mem.addCalls)
 	})
+}
+
+func TestProcessMessageRoutesToResumption(t *testing.T) {
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "resume-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"},
+			Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+		},
+		Status: arkv1alpha1.QueryStatus{
+			Response: &arkv1alpha1.Response{
+				A2A: &arkv1alpha1.A2AMetadata{TaskID: "resume-123"},
+			},
+		},
+	}
+	a2aTask := &arkv1alpha1.A2ATask{
+		ObjectMeta: metav1.ObjectMeta{Name: "a2a-task-resume-123", Namespace: "default"},
+		Status: arkv1alpha1.A2ATaskStatus{
+			Phase: arka2a.PhaseCompleted,
+			ProtocolMetadata: map[string]string{
+				"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"t","arguments":"{}"}}]`,
+			},
+		},
+	}
+
+	h := newTestHandler(query, a2aTask)
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("hello")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name": "resume-query", "namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	// Verifies routing only: a completed A2ATask sends ProcessMessage down the
+	// resumption branch (setting state.isResumption). handleResumption then fails
+	// on the missing contextId, so ProcessMessage surfaces "resumption failed".
+	// The effect of state.isResumption on what gets persisted is covered by
+	// TestSaveFinalMessagesToMemory / TestSaveInputMessagesToMemory.
+	_, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resumption failed")
 }
 
 func TestHandleResumption_EarlyExits(t *testing.T) {
