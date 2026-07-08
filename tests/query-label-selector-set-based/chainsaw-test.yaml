@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-label-selector-set-based
+  labels:
+    postgresql: "true"
+spec:
+  description: Query dispatch with a set-based LabelSelector (matchExpressions).
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/*.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-set-based-selector
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-set-based-selector
+          status:
+            # phase=done (not just Completed=True): pre-fix code errored the query.
+            phase: done
+            (response != null): true
+            (response.target.name == 'test-agent-math' || response.target.name == 'test-agent-weather'): true
+            (response.target.name != 'test-agent-general'): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-set-based-selector
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
