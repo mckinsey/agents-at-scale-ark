@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1278,7 +1282,36 @@ func TestSaveFinalMessagesToMemory(t *testing.T) {
 	})
 }
 
-func TestProcessMessageRoutesToResumption(t *testing.T) {
+func TestProcessMessageResumptionSucceeds(t *testing.T) {
+	var mu sync.Mutex
+	var llmRequestBody string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		llmRequestBody = string(body)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"resumed answer"},"finish_reason":"stop"}],"usage":{}}`))
+	}))
+	defer llm.Close()
+
+	model := &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-test"},
+			Provider: ProviderOpenAI,
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: llm.URL},
+					APIKey:  arkv1alpha1.ValueSource{Value: "test"},
+				},
+			},
+		},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "default"},
+		Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "test-model"}},
+	}
 	query := &arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{Name: "resume-query", Namespace: "default"},
 		Spec: arkv1alpha1.QuerySpec{
@@ -1293,15 +1326,16 @@ func TestProcessMessageRoutesToResumption(t *testing.T) {
 	}
 	a2aTask := &arkv1alpha1.A2ATask{
 		ObjectMeta: metav1.ObjectMeta{Name: "a2a-task-resume-123", Namespace: "default"},
+		Spec:       arkv1alpha1.A2ATaskSpec{TaskID: "resume-123", ContextID: "conv-1"},
 		Status: arkv1alpha1.A2ATaskStatus{
 			Phase: arka2a.PhaseCompleted,
 			ProtocolMetadata: map[string]string{
-				"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"t","arguments":"{}"}}]`,
+				"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]`,
 			},
 		},
 	}
 
-	h := newTestHandler(query, a2aTask)
+	h := newTestHandler(model, agent, query, a2aTask)
 	msg := protocol.Message{
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("hello")},
@@ -1313,14 +1347,17 @@ func TestProcessMessageRoutesToResumption(t *testing.T) {
 	}
 	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
 
-	// Verifies routing only: a completed A2ATask sends ProcessMessage down the
-	// resumption branch (setting state.isResumption). handleResumption then fails
-	// on the missing contextId, so ProcessMessage surfaces "resumption failed".
-	// The effect of state.isResumption on what gets persisted is covered by
-	// TestSaveFinalMessagesToMemory / TestSaveInputMessagesToMemory.
-	_, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "resumption failed")
+	result, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Result)
+
+	// Proves the resumption branch ran (not a fresh dispatch): the reconstructed
+	// approved tool call and its result were sent to the model.
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, llmRequestBody, "call-1")
+	assert.Contains(t, llmRequestBody, "tool")
 }
 
 func TestHandleResumption_EarlyExits(t *testing.T) {
