@@ -31,6 +31,46 @@ interface ChatMessageProps {
   pollAfterApproval?: () => Promise<void>;
 }
 
+type ApprovalDecision = 'approved' | 'rejected';
+
+function getSubmittedTaskDecisions(): Map<string, ApprovalDecision> {
+  if (globalThis.window === undefined) return new Map();
+  const stored = sessionStorage.getItem('submitted-approval-tasks');
+  if (!stored) return new Map();
+  try {
+    const obj = JSON.parse(stored);
+    return new Map(Object.entries(obj));
+  } catch {
+    return new Map();
+  }
+}
+
+function addSubmittedTaskDecision(
+  taskId: string,
+  decision: ApprovalDecision,
+): void {
+  if (globalThis.window === undefined) return;
+  const submitted = getSubmittedTaskDecisions();
+  submitted.set(taskId, decision);
+  const obj = Object.fromEntries(submitted);
+  sessionStorage.setItem('submitted-approval-tasks', JSON.stringify(obj));
+}
+
+function findScrollableElements(element: Element): Element[] {
+  const scrollable: Element[] = [];
+  const style = globalThis.getComputedStyle(element);
+
+  if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+    scrollable.push(element);
+  }
+
+  for (const child of Array.from(element.children)) {
+    scrollable.push(...findScrollableElements(child));
+  }
+
+  return scrollable;
+}
+
 export function ChatMessage({
   role,
   content,
@@ -54,33 +94,6 @@ export function ChatMessage({
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
 
   const showErrorIcon = isFailed && queryName;
-
-  // Track submitted task decisions in sessionStorage to persist across refreshes
-  const getSubmittedTaskDecisions = (): Map<
-    string,
-    'approved' | 'rejected'
-  > => {
-    if (typeof window === 'undefined') return new Map();
-    const stored = sessionStorage.getItem('submitted-approval-tasks');
-    if (!stored) return new Map();
-    try {
-      const obj = JSON.parse(stored);
-      return new Map(Object.entries(obj));
-    } catch {
-      return new Map();
-    }
-  };
-
-  const addSubmittedTaskDecision = (
-    taskId: string,
-    decision: 'approved' | 'rejected',
-  ) => {
-    if (typeof window === 'undefined') return;
-    const submitted = getSubmittedTaskDecisions();
-    submitted.set(taskId, decision);
-    const obj = Object.fromEntries(submitted);
-    sessionStorage.setItem('submitted-approval-tasks', JSON.stringify(obj));
-  };
 
   const taskDecision = approvalRequest?.taskId
     ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
@@ -138,21 +151,6 @@ export function ChatMessage({
       if (!contentRef.current) return;
 
       const container = contentRef.current;
-
-      const findScrollableElements = (element: Element): Element[] => {
-        const scrollable: Element[] = [];
-        const style = window.getComputedStyle(element);
-
-        if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
-          scrollable.push(element);
-        }
-
-        for (const child of Array.from(element.children)) {
-          scrollable.push(...findScrollableElements(child));
-        }
-
-        return scrollable;
-      };
 
       const scrollableElements = findScrollableElements(container);
 
