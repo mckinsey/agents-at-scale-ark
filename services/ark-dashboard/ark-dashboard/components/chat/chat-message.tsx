@@ -34,7 +34,7 @@ interface ChatMessageProps {
 type ApprovalDecision = 'approved' | 'rejected';
 
 function getSubmittedTaskDecisions(): Map<string, ApprovalDecision> {
-  if (typeof globalThis.window === 'undefined') return new Map();
+  if (globalThis.window === undefined) return new Map();
   const stored = sessionStorage.getItem('submitted-approval-tasks');
   if (!stored) return new Map();
   try {
@@ -49,7 +49,7 @@ function addSubmittedTaskDecision(
   taskId: string,
   decision: ApprovalDecision,
 ): void {
-  if (typeof globalThis.window === 'undefined') return;
+  if (globalThis.window === undefined) return;
   const submitted = getSubmittedTaskDecisions();
   submitted.set(taskId, decision);
   const obj = Object.fromEntries(submitted);
