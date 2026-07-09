@@ -2,7 +2,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useParams } from 'next/navigation';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FlowDetailPage from '@/app/(dashboard)/workflow-templates/[id]/page';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
@@ -21,13 +21,16 @@ vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
     get: vi.fn(),
     getYaml: vi.fn(),
+    getStats: vi.fn(() =>
+      Promise.resolve({ total: 0, succeeded: 0, running: 0, failed: 0 }),
+    ),
+    canCreate: vi.fn(() => Promise.resolve(false)),
+    canUpdate: vi.fn(() => Promise.resolve(false)),
   },
 }));
 
 vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => (
-    <div data-testid="page-header">Page Header</div>
-  ),
+  PageHeader: () => <div data-testid="page-header">Page Header</div>,
 }));
 
 vi.mock('@/components/workflow-dag-viewer', () => ({
@@ -88,7 +91,9 @@ describe('FlowDetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useParams).mockReturnValue({ id: 'test-workflow' });
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
     Object.assign(navigator, {
       clipboard: {
@@ -109,10 +114,10 @@ describe('FlowDetailPage', () => {
 
   it('should show loading state', async () => {
     vi.mocked(workflowTemplatesService.get).mockImplementation(
-      () => new Promise(() => {})
+      () => new Promise(() => {}),
     );
     vi.mocked(workflowTemplatesService.getYaml).mockImplementation(
-      () => new Promise(() => {})
+      () => new Promise(() => {}),
     );
 
     render(<FlowDetailPage />);
@@ -121,10 +126,10 @@ describe('FlowDetailPage', () => {
 
   it('should show error state when fetch fails', async () => {
     vi.mocked(workflowTemplatesService.get).mockRejectedValue(
-      new Error('Failed to fetch')
+      new Error('Failed to fetch'),
     );
     vi.mocked(workflowTemplatesService.getYaml).mockRejectedValue(
-      new Error('Failed to fetch')
+      new Error('Failed to fetch'),
     );
 
     render(<FlowDetailPage />);
@@ -135,7 +140,9 @@ describe('FlowDetailPage', () => {
   });
 
   it('should render flow details successfully', async () => {
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
@@ -157,7 +164,7 @@ describe('FlowDetailPage', () => {
     };
 
     vi.mocked(workflowTemplatesService.get).mockResolvedValue(
-      templateWithoutAnnotations as any
+      templateWithoutAnnotations as any,
     );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
@@ -172,7 +179,9 @@ describe('FlowDetailPage', () => {
 
   it('should copy flow ID to clipboard', async () => {
     const { toast } = await import('sonner');
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
@@ -182,7 +191,7 @@ describe('FlowDetailPage', () => {
     });
 
     const copyButtons = screen.getAllByRole('button');
-    const copyIdButton = copyButtons.find((button) => {
+    const copyIdButton = copyButtons.find(button => {
       const svg = button.querySelector('svg');
       return svg?.classList.contains('lucide-copy');
     });
@@ -191,7 +200,9 @@ describe('FlowDetailPage', () => {
       await userEvent.click(copyIdButton);
 
       await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('test-workflow');
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+          'test-workflow',
+        );
         expect(toast.success).toHaveBeenCalledWith('Copied', {
           description: 'Workflow name copied to clipboard',
         });
@@ -207,7 +218,9 @@ describe('FlowDetailPage', () => {
       },
     });
 
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
@@ -217,7 +230,7 @@ describe('FlowDetailPage', () => {
     });
 
     const copyButtons = screen.getAllByRole('button');
-    const copyIdButton = copyButtons.find((button) => {
+    const copyIdButton = copyButtons.find(button => {
       const svg = button.querySelector('svg');
       return svg?.classList.contains('lucide-copy');
     });
@@ -235,14 +248,19 @@ describe('FlowDetailPage', () => {
 
   it('should copy manifest to clipboard', async () => {
     const { toast } = await import('sonner');
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     const yamlTab = screen.getByRole('tab', { name: /yaml/i });
     await userEvent.click(yamlTab);
@@ -266,14 +284,19 @@ describe('FlowDetailPage', () => {
       },
     });
 
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     const yamlTab = screen.getByRole('tab', { name: /yaml/i });
     await userEvent.click(yamlTab);
@@ -289,19 +312,21 @@ describe('FlowDetailPage', () => {
   });
 
   it.skip('should download manifest', async () => {
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     const mockClick = vi.fn();
-    const mockAppendChild = vi.spyOn(document.body, 'appendChild').mockImplementation(
-      (node) => node
-    );
-    const mockRemoveChild = vi.spyOn(document.body, 'removeChild').mockImplementation(
-      (node) => node
-    );
+    const mockAppendChild = vi
+      .spyOn(document.body, 'appendChild')
+      .mockImplementation(node => node);
+    const mockRemoveChild = vi
+      .spyOn(document.body, 'removeChild')
+      .mockImplementation(node => node);
 
     const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+    vi.spyOn(document, 'createElement').mockImplementation(tag => {
       if (tag === 'a') {
         return {
           click: mockClick,
@@ -314,9 +339,12 @@ describe('FlowDetailPage', () => {
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Test Workflow')).toBeInTheDocument();
@@ -338,31 +366,43 @@ describe('FlowDetailPage', () => {
   });
 
   it.skip('should display manifest in YAML tab', async () => {
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Test Workflow')).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/apiVersion: argoproj.io\/v1alpha1/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/apiVersion: argoproj.io\/v1alpha1/),
+    ).toBeInTheDocument();
   });
 
   it.skip('should switch to tree tab', async () => {
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Test Workflow')).toBeInTheDocument();
@@ -377,14 +417,19 @@ describe('FlowDetailPage', () => {
   });
 
   it('should show title and description for flows with metadata', async () => {
-    vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
+    vi.mocked(workflowTemplatesService.get).mockResolvedValue(
+      mockTemplate as any,
+    );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     await waitFor(() => {
       expect(screen.getAllByText('Test Workflow').length).toBeGreaterThan(0);
@@ -401,19 +446,24 @@ describe('FlowDetailPage', () => {
     };
 
     vi.mocked(workflowTemplatesService.get).mockResolvedValue(
-      templateWithoutTitle as any
+      templateWithoutTitle as any,
     );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
     render(<FlowDetailPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
 
     await waitFor(() => {
       expect(screen.queryByText('Test Workflow')).not.toBeInTheDocument();
-      expect(screen.queryByText('A test workflow template')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('A test workflow template'),
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -27,6 +27,7 @@ interface ChatMessageProps {
   approvalRequest?: ToolApprovalRequest;
   namespace?: string;
   pollAfterApproval?: () => Promise<void>;
+  defaultCodeCollapsed?: boolean;
 }
 
 export function ChatMessage({
@@ -42,10 +43,11 @@ export function ChatMessage({
   approvalRequest,
   namespace = 'default',
   pollAfterApproval,
+  defaultCodeCollapsed,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
-  const markdownContent = renderMarkdown(content);
+  const markdownContent = renderMarkdown(content, { defaultCodeCollapsed });
   const { push } = useNamespacedNavigation();
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);

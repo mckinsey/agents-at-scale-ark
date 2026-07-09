@@ -1246,6 +1246,246 @@ class TestResourcesEndpoint(unittest.TestCase):
             label_selector=None
         )
 
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_update_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test successful replace of a core Kubernetes resource in place."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_existing = Mock()
+        mock_existing.metadata.resourceVersion = "999"
+
+        mock_api_resource = AsyncMock()
+        mock_resource = Mock()
+        resource_body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "test-cm", "resourceVersion": "999"},
+            "data": {"key": "value"},
+        }
+        mock_resource.to_dict.return_value = resource_body
+        mock_api_resource.get = AsyncMock(return_value=mock_existing)
+        mock_api_resource.replace = AsyncMock(return_value=mock_resource)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        submitted = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "test-cm", "resourceVersion": "111"},
+            "data": {"key": "value"},
+        }
+        response = self.client.put("/v1/resources/api/v1/ConfigMap/test-cm", json=submitted)
+
+        self.assertEqual(response.status_code, 200)
+        expected_body = dict(submitted)
+        expected_body["metadata"] = {"name": "test-cm", "resourceVersion": "999"}
+        mock_api_resource.replace.assert_called_once_with(body=expected_body, namespace="default")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_update_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test successful replace of a grouped Kubernetes resource in place."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_existing = Mock()
+        mock_existing.metadata.resourceVersion = "555"
+
+        mock_api_resource = AsyncMock()
+        mock_resource = Mock()
+        result_body = {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt", "resourceVersion": "555"},
+        }
+        mock_resource.to_dict.return_value = result_body
+        mock_api_resource.get = AsyncMock(return_value=mock_existing)
+        mock_api_resource.replace = AsyncMock(return_value=mock_resource)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        submitted = {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt"},
+        }
+        response = self.client.put(
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-wt",
+            json=submitted,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["kind"], "WorkflowTemplate")
+        expected_body = dict(submitted)
+        expected_body["metadata"] = {"name": "test-wt", "resourceVersion": "555"}
+        mock_api_resource.replace.assert_called_once_with(body=expected_body, namespace="default")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_update_resource_without_resource_version(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test replace succeeds when submitted body has no resourceVersion."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_existing = Mock()
+        mock_existing.metadata.resourceVersion = "12345"
+
+        mock_api_resource = AsyncMock()
+        mock_resource = Mock()
+        mock_resource.to_dict.return_value = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "test-cm", "resourceVersion": "12345"},
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_existing)
+        mock_api_resource.replace = AsyncMock(return_value=mock_resource)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        submitted = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "test-cm"},
+        }
+        response = self.client.put("/v1/resources/api/v1/ConfigMap/test-cm", json=submitted)
+
+        self.assertEqual(response.status_code, 200)
+        called_body = mock_api_resource.replace.call_args.kwargs["body"]
+        self.assertEqual(called_body["metadata"]["resourceVersion"], "12345")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_update_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test replace uses explicit namespace parameter."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_existing = Mock()
+        mock_existing.metadata.resourceVersion = "7"
+
+        mock_api_resource = AsyncMock()
+        mock_resource = Mock()
+        mock_resource.to_dict.return_value = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "test-cm", "namespace": "custom-ns", "resourceVersion": "7"},
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_existing)
+        mock_api_resource.replace = AsyncMock(return_value=mock_resource)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        submitted = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "test-cm"}}
+        response = self.client.put(
+            "/v1/resources/api/v1/ConfigMap/test-cm?namespace=custom-ns",
+            json=submitted,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_api_resource.get.assert_called_once_with(name="test-cm", namespace="custom-ns")
+        called_kwargs = mock_api_resource.replace.call_args.kwargs
+        self.assertEqual(called_kwargs["namespace"], "custom-ns")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.get_context')
+    @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
+    def test_access_review_allowed(self, mock_auth_api_cls, mock_get_context, mock_api_client):
+        """Test access review returns allowed=True when RBAC permits the action."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_auth_api = Mock()
+        mock_result = Mock()
+        mock_result.status = Mock(allowed=True)
+        mock_auth_api.create_self_subject_access_review = AsyncMock(return_value=mock_result)
+        mock_auth_api_cls.return_value = mock_auth_api
+
+        response = self.client.post(
+            "/v1/resources/access-review",
+            json={"group": "argoproj.io", "resource": "workflowtemplates", "verb": "update"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"allowed": True})
+        mock_auth_api.create_self_subject_access_review.assert_called_once()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.get_context')
+    @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
+    def test_access_review_denied(self, mock_auth_api_cls, mock_get_context, mock_api_client):
+        """Test access review returns allowed=False when RBAC denies the action."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_auth_api = Mock()
+        mock_result = Mock()
+        mock_result.status = Mock(allowed=False)
+        mock_auth_api.create_self_subject_access_review = AsyncMock(return_value=mock_result)
+        mock_auth_api_cls.return_value = mock_auth_api
+
+        response = self.client.post(
+            "/v1/resources/access-review",
+            json={"group": "argoproj.io", "resource": "workflowtemplates", "verb": "update"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"allowed": False})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.get_context')
+    @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
+    def test_access_review_defaults_namespace(self, mock_auth_api_cls, mock_get_context, mock_api_client):
+        """Test access review defaults namespace to context when omitted."""
+        mock_get_context.return_value = {"namespace": "context-ns"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_auth_api = Mock()
+        mock_result = Mock()
+        mock_result.status = Mock(allowed=True)
+        mock_auth_api.create_self_subject_access_review = AsyncMock(return_value=mock_result)
+        mock_auth_api_cls.return_value = mock_auth_api
+
+        response = self.client.post(
+            "/v1/resources/access-review",
+            json={"resource": "configmaps", "verb": "get"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["allowed"])
+        review_arg = mock_auth_api.create_self_subject_access_review.call_args.args[0]
+        self.assertEqual(review_arg.spec.resource_attributes.namespace, "context-ns")
+        self.assertEqual(review_arg.spec.resource_attributes.verb, "get")
+        self.assertEqual(review_arg.spec.resource_attributes.resource, "configmaps")
+
 
 if __name__ == "__main__":
     unittest.main()

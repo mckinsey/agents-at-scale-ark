@@ -5,14 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkflowTemplatesPage from '@/app/(dashboard)/workflow-templates/page';
 
 vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => (
-    <div data-testid="page-header">Page Header</div>
-  ),
+  PageHeader: () => <div data-testid="page-header">Page Header</div>,
 }));
 
 vi.mock('@/components/sections/workflow-templates-section', () => ({
   WorkflowTemplatesSection: () => (
-    <div data-testid="workflow-templates-section">Workflow Templates Section</div>
+    <div data-testid="workflow-templates-section">
+      Workflow Templates Section
+    </div>
   ),
 }));
 
@@ -21,6 +21,22 @@ vi.mock('@/lib/services/workflow-templates-hooks', () => ({
     data: [{ name: 'test-workflow-1' }, { name: 'test-workflow-2' }],
     isPending: false,
     error: null,
+  })),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({ namespace: 'default', readOnlyMode: false })),
+}));
+
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: vi.fn(() => ({ push: vi.fn(), replace: vi.fn() })),
+}));
+
+vi.mock('@/lib/hooks/use-workflow-template-access', () => ({
+  useWorkflowTemplateAccess: vi.fn(() => ({
+    canCreate: false,
+    canUpdate: false,
+    loading: false,
   })),
 }));
 
@@ -37,7 +53,7 @@ describe('WorkflowTemplatesPage', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <WorkflowTemplatesPage />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
     expect(screen.getByTestId('page-header')).toBeInTheDocument();
   });
@@ -46,16 +62,18 @@ describe('WorkflowTemplatesPage', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <WorkflowTemplatesPage />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
-    expect(screen.getByTestId('workflow-templates-section')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('workflow-templates-section'),
+    ).toBeInTheDocument();
   });
 
   it('should render page title with count', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <WorkflowTemplatesPage />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
     expect(screen.getByText('Workflow Templates (2)')).toBeInTheDocument();
   });

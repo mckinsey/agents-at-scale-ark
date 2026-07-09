@@ -1,0 +1,285 @@
+'use client';
+
+import yaml from 'js-yaml';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import {
+  type WorkflowTemplateSaveMode,
+  workflowTemplatesService,
+} from '@/lib/services/workflow-templates';
+
+export type WorkflowStudioMode = 'new' | 'edit';
+export type WorkflowStudioView = 'diagram' | 'yaml';
+
+export interface UseWorkflowStudioOptions {
+  mode: WorkflowStudioMode;
+  initialName?: string;
+}
+
+export interface WorkflowStudioState {
+  mode: WorkflowStudioMode;
+  workflowName: string;
+  draftYaml: string;
+  setDraftYaml: (value: string) => void;
+  lastSavedYaml: string;
+  lastAgentYaml: string | undefined;
+  commitAgentYaml: (value: string) => void;
+  isDirty: boolean;
+  handEdited: boolean;
+  setHandEdited: (value: boolean) => void;
+  view: WorkflowStudioView;
+  setView: (value: WorkflowStudioView) => void;
+  building: boolean;
+  setBuilding: (value: boolean) => void;
+  loading: boolean;
+  saving: boolean;
+  isNameModalOpen: boolean;
+  commitName: (name: string) => void;
+  cancelNameModal: () => void;
+  overwriteOpen: boolean;
+  confirmOverwrite: () => Promise<void>;
+  cancelOverwrite: () => void;
+  save: () => Promise<void>;
+  saveAsNewName: (name: string) => Promise<void>;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function useWorkflowStudio({
+  mode,
+  initialName,
+}: UseWorkflowStudioOptions): WorkflowStudioState {
+  const { push, replace } = useNamespacedNavigation();
+
+  const [workflowName, setWorkflowName] = useState<string>(initialName ?? '');
+  const [draftYaml, setDraftYaml] = useState<string>('');
+  const [lastSavedYaml, setLastSavedYaml] = useState<string>('');
+  const [lastAgentYaml, setLastAgentYaml] = useState<string | undefined>(
+    undefined,
+  );
+  const [handEdited, setHandEdited] = useState<boolean>(false);
+  const [view, setView] = useState<WorkflowStudioView>('diagram');
+  const [building, setBuilding] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(mode === 'edit');
+  const [saving, setSaving] = useState<boolean>(false);
+  const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(
+    mode === 'new' && !initialName,
+  );
+  const [overwriteOpen, setOverwriteOpen] = useState<boolean>(false);
+  const pendingYaml = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'edit' || !initialName) {
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    workflowTemplatesService
+      .getYaml(initialName)
+      .then(fetched => {
+        if (cancelled) {
+          return;
+        }
+        setDraftYaml(fetched);
+        setLastSavedYaml(fetched);
+        setLastAgentYaml(undefined);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        toast.error('Failed to load workflow', {
+          description: errorMessage(error),
+        });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, initialName]);
+
+  const isDirty = draftYaml.trim() !== '' && draftYaml !== lastSavedYaml;
+
+  const commitAgentYaml = useCallback((value: string) => {
+    setDraftYaml(value);
+    setLastAgentYaml(value);
+    setHandEdited(false);
+  }, []);
+
+  const commitName = useCallback((name: string) => {
+    setWorkflowName(name);
+    setIsNameModalOpen(false);
+  }, []);
+
+  const cancelNameModal = useCallback(() => {
+    setIsNameModalOpen(false);
+    push('/workflow-templates');
+  }, [push]);
+
+  const stampYaml = useCallback(
+    (name: string): string | null => {
+      let parsed: unknown;
+      try {
+        parsed = yaml.load(draftYaml);
+      } catch (error) {
+        toast.error(`Fix the YAML before saving: ${errorMessage(error)}`);
+        return null;
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        toast.error(
+          'Fix the YAML before saving: expected a WorkflowTemplate mapping',
+        );
+        return null;
+      }
+      const resource: Record<string, unknown> = {
+        ...(parsed as Record<string, unknown>),
+      };
+      const existingMetadata =
+        resource.metadata &&
+        typeof resource.metadata === 'object' &&
+        !Array.isArray(resource.metadata)
+          ? (resource.metadata as Record<string, unknown>)
+          : {};
+      resource.metadata = { ...existingMetadata, name };
+      return yaml.dump(resource);
+    },
+    [draftYaml],
+  );
+
+  const performSave = useCallback(
+    async (
+      stamped: string,
+      saveMode: WorkflowTemplateSaveMode,
+      targetName: string,
+      navigateToEdit: boolean,
+    ) => {
+      setSaving(true);
+      try {
+        await workflowTemplatesService.save(stamped, saveMode);
+        setLastSavedYaml(draftYaml);
+        setHandEdited(false);
+        toast.success('Workflow saved', {
+          description: targetName,
+        });
+        if (navigateToEdit) {
+          replace(`/workflow-templates/${targetName}/edit`);
+        }
+      } catch (error) {
+        toast.error('Failed to save workflow', {
+          description: errorMessage(error),
+        });
+      } finally {
+        setSaving(false);
+      }
+    },
+    [draftYaml, replace],
+  );
+
+  const save = useCallback(async () => {
+    if (!draftYaml.trim() || building || saving) {
+      return;
+    }
+    const stamped = stampYaml(workflowName);
+    if (stamped === null) {
+      return;
+    }
+    if (mode === 'new') {
+      let exists = false;
+      try {
+        exists = await workflowTemplatesService.nameExists(workflowName);
+      } catch (error) {
+        toast.error('Failed to save workflow', {
+          description: errorMessage(error),
+        });
+        return;
+      }
+      if (exists) {
+        pendingYaml.current = stamped;
+        setOverwriteOpen(true);
+        return;
+      }
+      await performSave(stamped, 'create', workflowName, true);
+      return;
+    }
+    await performSave(stamped, 'update', workflowName, false);
+  }, [draftYaml, building, saving, stampYaml, workflowName, mode, performSave]);
+
+  const confirmOverwrite = useCallback(async () => {
+    const stamped = pendingYaml.current;
+    setOverwriteOpen(false);
+    pendingYaml.current = null;
+    if (stamped === null) {
+      return;
+    }
+    await performSave(stamped, 'update', workflowName, true);
+  }, [performSave, workflowName]);
+
+  const cancelOverwrite = useCallback(() => {
+    setOverwriteOpen(false);
+    pendingYaml.current = null;
+  }, []);
+
+  const saveAsNewName = useCallback(
+    async (name: string) => {
+      if (!draftYaml.trim() || saving) {
+        return;
+      }
+      const stamped = stampYaml(name);
+      if (stamped === null) {
+        return;
+      }
+      let exists = false;
+      try {
+        exists = await workflowTemplatesService.nameExists(name);
+      } catch (error) {
+        toast.error('Failed to save workflow', {
+          description: errorMessage(error),
+        });
+        return;
+      }
+      if (exists) {
+        toast.error('Name already exists', {
+          description: `A workflow template named "${name}" already exists`,
+        });
+        return;
+      }
+      await performSave(stamped, 'create', name, true);
+    },
+    [draftYaml, saving, stampYaml, performSave],
+  );
+
+  return {
+    mode,
+    workflowName,
+    draftYaml,
+    setDraftYaml,
+    lastSavedYaml,
+    lastAgentYaml,
+    commitAgentYaml,
+    isDirty,
+    handEdited,
+    setHandEdited,
+    view,
+    setView,
+    building,
+    setBuilding,
+    loading,
+    saving,
+    isNameModalOpen,
+    commitName,
+    cancelNameModal,
+    overwriteOpen,
+    confirmOverwrite,
+    cancelOverwrite,
+    save,
+    saveAsNewName,
+  };
+}

@@ -1,4 +1,7 @@
+import yaml from 'js-yaml';
+
 import { apiClient } from '@/lib/api/client';
+import { accessReviewService } from '@/lib/services/access-review';
 
 export interface WorkflowTemplateMetadata {
   name: string;
@@ -87,6 +90,8 @@ export interface WorkflowStats {
   running: number;
   failed: number;
 }
+
+export type WorkflowTemplateSaveMode = 'create' | 'update';
 
 export const workflowTemplatesService = {
   async list(): Promise<WorkflowTemplate[]> {
@@ -180,6 +185,76 @@ export const workflowTemplatesService = {
       }
       throw error;
     }
+  },
+
+  async save(
+    yamlText: string,
+    mode: WorkflowTemplateSaveMode,
+  ): Promise<WorkflowTemplate> {
+    let parsed: unknown;
+    try {
+      parsed = yaml.load(yamlText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid YAML: ${message}`);
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('YAML must be a mapping with kind: WorkflowTemplate');
+    }
+
+    const resource = parsed as Record<string, unknown>;
+    if (resource.kind !== 'WorkflowTemplate') {
+      throw new Error(
+        `Expected kind "WorkflowTemplate" but got "${String(resource.kind)}"`,
+      );
+    }
+
+    if (mode === 'create') {
+      return apiClient.post<WorkflowTemplate>(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
+        resource,
+      );
+    }
+
+    const metadata = resource.metadata;
+    const name =
+      metadata &&
+      typeof metadata === 'object' &&
+      'name' in metadata &&
+      typeof (metadata as Record<string, unknown>).name === 'string'
+        ? (metadata as Record<string, unknown>).name
+        : undefined;
+
+    if (!name) {
+      throw new Error('WorkflowTemplate metadata.name is required for update');
+    }
+
+    return apiClient.put<WorkflowTemplate>(
+      `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${String(name)}`,
+      resource,
+    );
+  },
+
+  async nameExists(name: string): Promise<boolean> {
+    const templates = await workflowTemplatesService.list();
+    return templates.some(template => template.metadata.name === name);
+  },
+
+  async canCreate(): Promise<boolean> {
+    return accessReviewService.check({
+      group: 'argoproj.io',
+      resource: 'workflowtemplates',
+      verb: 'create',
+    });
+  },
+
+  async canUpdate(): Promise<boolean> {
+    return accessReviewService.check({
+      group: 'argoproj.io',
+      resource: 'workflowtemplates',
+      verb: 'update',
+    });
   },
 
   async delete(name: string): Promise<void> {

@@ -5,6 +5,7 @@ import yaml
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import Optional
+from kubernetes_asyncio import client
 from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.dynamic import DynamicClient
 from ark_sdk.k8s import get_context
@@ -15,6 +16,7 @@ from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
 )
+from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 
@@ -344,6 +346,156 @@ async def create_grouped_resource(
         resource = await api_resource.create(body=body, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
+
+
+@router.put("/api/{version}/{kind}/{resource_name}")
+@handle_k8s_errors(operation="update", resource_type="resource")
+async def update_core_resource(
+    request: Request,
+    version: str,
+    kind: str,
+    resource_name: str,
+    body: dict,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
+) -> Response:
+    """
+    Update (replace) a core Kubernetes resource by name.
+
+    Reads the live object to reconcile its resourceVersion onto the submitted
+    body, then performs a replace (last-write-wins).
+
+    Args:
+        version: API version (e.g., 'v1')
+        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+        resource_name: The name of the resource
+        body: The resource definition as JSON
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: The updated Kubernetes resource as JSON
+
+    Examples:
+        - PUT /v1/resources/api/v1/ConfigMap/my-config
+        - PUT /v1/resources/api/v1/Service/my-service
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=version,
+            kind=kind
+        )
+
+        existing = await api_resource.get(name=resource_name, namespace=namespace)
+        body.setdefault("metadata", {})
+        body["metadata"]["resourceVersion"] = existing.metadata.resourceVersion
+
+        resource = await api_resource.replace(body=body, namespace=namespace)
+
+        return _create_resource_response(resource.to_dict(), request)
+
+
+@router.put("/apis/{group}/{version}/{kind}/{resource_name}")
+@handle_k8s_errors(operation="update", resource_type="resource")
+async def update_grouped_resource(
+    request: Request,
+    group: str,
+    version: str,
+    kind: str,
+    resource_name: str,
+    body: dict,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
+) -> Response:
+    """
+    Update (replace) a grouped Kubernetes resource by name.
+
+    Reads the live object to reconcile its resourceVersion onto the submitted
+    body, then performs a replace (last-write-wins).
+
+    Args:
+        group: API group (e.g., 'apps', 'batch', 'argoproj.io')
+        version: API version (e.g., 'v1', 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        resource_name: The name of the resource
+        body: The resource definition as JSON
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: The updated Kubernetes resource as JSON
+
+    Examples:
+        - PUT /v1/resources/apis/apps/v1/Deployment/my-deployment
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    api_version = f"{group}/{version}"
+    logger.info(f"Updating resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
+
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=api_version,
+            kind=kind
+        )
+
+        existing = await api_resource.get(name=resource_name, namespace=namespace)
+        body.setdefault("metadata", {})
+        body["metadata"]["resourceVersion"] = existing.metadata.resourceVersion
+
+        resource = await api_resource.replace(body=body, namespace=namespace)
+
+        return _create_resource_response(resource.to_dict(), request)
+
+
+@router.post("/access-review", response_model=AccessReviewResponse)
+@handle_k8s_errors(operation="create", resource_type="access review")
+async def create_access_review(
+    body: AccessReviewRequest,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
+) -> AccessReviewResponse:
+    """
+    Check whether the caller may perform a verb on a resource via SelfSubjectAccessReview.
+
+    Runs under the impersonated identity, so the result reflects the user's RBAC.
+    When impersonation is disabled it runs as the service account.
+
+    Args:
+        body: group, resource, and verb to review
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        AccessReviewResponse: {"allowed": <bool>}
+
+    Examples:
+        - POST /v1/resources/access-review
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with get_impersonating_api_client(impersonation) as api:
+        review = client.V1SelfSubjectAccessReview(
+            spec=client.V1SelfSubjectAccessReviewSpec(
+                resource_attributes=client.V1ResourceAttributes(
+                    namespace=namespace,
+                    verb=body.verb,
+                    group=body.group,
+                    resource=body.resource,
+                )
+            )
+        )
+        result = await client.AuthorizationV1Api(api).create_self_subject_access_review(review)
+        allowed = bool(result.status and result.status.allowed)
+
+        return AccessReviewResponse(allowed=allowed)
 
 
 @router.delete("/api/{version}/{kind}/{resource_name}")

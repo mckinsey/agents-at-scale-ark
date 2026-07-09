@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileCode,
   Network,
+  Pencil,
   Play,
   Trash2,
   Workflow,
@@ -33,6 +34,7 @@ import {
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-access';
 import {
   type WorkflowStats,
   type WorkflowTemplate,
@@ -49,6 +51,7 @@ export default function FlowDetailPage() {
   const params = useParams();
   const { push } = useNamespacedNavigation();
   const { namespace, readOnlyMode } = useNamespace();
+  const { canUpdate } = useWorkflowTemplateAccess();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
@@ -340,6 +343,25 @@ export default function FlowDetailPage() {
                   <TooltipContent>Open in Argo</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {canUpdate && !readOnlyMode && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Edit template"
+                        className="h-8 w-8 cursor-pointer p-0"
+                        onClick={() =>
+                          push(`/workflow-templates/${flowId}/edit`)
+                        }>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit template</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
