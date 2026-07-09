@@ -1,8 +1,10 @@
 import {Command} from 'commander';
 import {execa} from 'execa';
+import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
-import {executeQuery} from '../../lib/executeQuery.js';
+import {executeQuery, parseParameters} from '../../lib/executeQuery.js';
+import {ExitCodes} from '../../lib/errors.js';
 import type {Agent, K8sListResource} from '../../lib/types.js';
 
 async function listAgents(options: {output?: string}) {
@@ -66,13 +68,34 @@ export function createAgentsCommand(config: ArkConfig): Command {
     .argument('<name>', 'Agent name')
     .argument('<message>', 'Message to send')
     .option('--timeout <timeout>', 'Query timeout (e.g., 30s, 5m, 1h)')
+    .option(
+      '-p, --parameter <name=value>',
+      'Template parameter in name=value format (can be used multiple times)',
+      (val: string, acc: string[]) => [...acc, val],
+      [] as string[]
+    )
     .action(
-      async (name: string, message: string, options: {timeout?: string}) => {
+      async (
+        name: string,
+        message: string,
+        options: {timeout?: string; parameter?: string[]}
+      ) => {
+        let parameters;
+        try {
+          parameters = parseParameters(options.parameter || []);
+        } catch (error) {
+          console.error(
+            chalk.red(error instanceof Error ? error.message : 'Unknown error')
+          );
+          process.exit(ExitCodes.CliError);
+        }
+
         await executeQuery({
           targetType: 'agent',
           targetName: name,
           message,
           timeout: options.timeout || config.queryTimeout,
+          parameters,
         });
       }
     );

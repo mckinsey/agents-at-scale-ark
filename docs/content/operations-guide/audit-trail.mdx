@@ -1,0 +1,78 @@
+import { Callout } from 'nextra/components'
+
+# Audit Trail
+
+This page shows how to answer "which user created, edited, or deleted this resource?" for Agents, Teams, Models, Queries, and Argo Workflows.
+
+<Callout type="info">
+Ark ships no audit store or audit UI. User attribution comes from the Kubernetes API server audit log, which is standard cluster infrastructure you enable and own. Ark's job is to carry the real user identity through to the API server so the log records a person, not a service account.
+</Callout>
+
+## What you need
+
+Three things must be in place. Miss any one and the audit log shows the ark-api service account instead of a user.
+
+1. **SSO on the dashboard and ark-api.** Set `AUTH_MODE=sso` (or `hybrid`) so requests carry a real user identity. See [Authentication](/developer-guide/authentication).
+2. **Impersonation enabled on ark-api.** Set `impersonation.enabled=true`. ark-api forwards the SSO identity to Kubernetes via `Impersonate-User` and `Impersonate-Group` headers, so RBAC and the audit log see the actual user. See [User Impersonation](/developer-guide/authentication#user-impersonation).
+3. **Kubernetes API server audit logging.** A standard k8s feature, owned by the platform team.
+
+Kubernetes never stores a "created by" field on objects, so the API server audit log is the only place attribution lives.
+
+## Enable the audit log
+
+On self-managed clusters, set `--audit-policy-file` and `--audit-log-path` on the API server. Managed clusters expose it as control-plane logging:
+
+| Platform | How |
+|----------|-----|
+| EKS | Enable the "Audit" control-plane log, sent to CloudWatch |
+| GKE | Admin Activity audit logs, on by default, sent to Cloud Logging |
+| AKS | Diagnostic setting `kube-audit` or `kube-audit-admin`, sent to Log Analytics |
+
+Here is a minimal policy that captures writes to Ark and Argo resources:
+
+```yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages: ["RequestReceived"]
+rules:
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: "ark.mckinsey.com"
+      - group: "argoproj.io"
+        resources: ["workflows", "workflowtemplates", "cronworkflows"]
+  - level: None
+```
+
+## What an event looks like
+
+A create through ark-api produces an audit event like this:
+
+```json
+{
+  "verb": "create",
+  "user":            { "username": "system:serviceaccount:ark:ark-api" },
+  "impersonatedUser": { "username": "nab@example.com", "groups": ["ark-editors"] },
+  "objectRef": { "apiGroup": "argoproj.io", "resource": "workflows", "name": "my-workflow-abc12" },
+  "annotations": { "authorization.k8s.io/decision": "allow" }
+}
+```
+
+The `impersonatedUser` field is the person. Denied attempts are captured too, with `decision: "forbid"` and status `403`.
+
+<Callout type="warning">
+Keep `impersonation.fallback=false` in production. When `true`, a request denied by the user's own RBAC is silently retried as the ark-api service account, so the audit log shows the service account for exactly the actions you most want attributed.
+</Callout>
+
+## Limits
+
+- **Defaults give no attribution.** Out of the box `AUTH_MODE=open` and `impersonation.enabled=false`, so everything is created as the ark-api service account.
+- **Attribution stops at the Workflow.** Query resources created inside Argo workflow steps run as the `argo-workflow` service account, not the launching user. You can see who created the Workflow, then correlate child resources by workflow name or owner references.
+- **Viewing the trail** means querying your cluster's log backend (CloudWatch, Cloud Logging, or Log Analytics), not the Ark dashboard.
+
+## More reading
+
+- [Authentication](/developer-guide/authentication) - SSO, auth modes, and API keys.
+- [User Impersonation](/developer-guide/authentication#user-impersonation) - how the SSO identity reaches Kubernetes.
+- [Tenant and Namespace Management](/operations-guide/tenant-namespace-management) - RBAC and namespace isolation.
+- [Kubernetes Auditing](https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/) - the upstream audit-log reference.

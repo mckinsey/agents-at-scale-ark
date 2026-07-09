@@ -27,6 +27,7 @@ vi.mock('@/auth', () => ({
 }));
 
 const BASE_URL = 'https://example.com';
+const HUB_URL = 'https://hub.example.com';
 
 const createMockRequest = (pathname: string): NextRequestWithAuth => {
   const url = new URL(`${BASE_URL}${pathname}`);
@@ -57,9 +58,10 @@ describe('middleware (auth gate)', () => {
 
   afterEach(() => {
     delete process.env.BASE_URL;
+    delete process.env.AUTH_HUB_URL;
   });
 
-  describe('unauthenticated requests are redirected to sign-in', () => {
+  describe('unauthenticated requests redirect to the local sign-in (no AUTH_HUB_URL)', () => {
     // Regression guard: the proxied API must be gated, not just UI pages.
     // Before the middleware was restored, GET /api/v1/* returned 200 + data
     // to anonymous callers.
@@ -74,7 +76,7 @@ describe('middleware (auth gate)', () => {
         new URL(
           '/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fapi%2Fv1%2Fcontext',
           BASE_URL,
-        ),
+        ).toString(),
       );
       expect(NextResponse.next).not.toHaveBeenCalled();
     });
@@ -90,14 +92,47 @@ describe('middleware (auth gate)', () => {
         new URL(
           '/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fdashboard',
           BASE_URL,
-        ),
+        ).toString(),
+      );
+    });
+  });
+
+  describe('hub model: unauthenticated requests redirect to AUTH_HUB_URL', () => {
+    beforeEach(() => {
+      process.env.AUTH_HUB_URL = HUB_URL;
+    });
+
+    it('redirects to the hub sign-in with the tenant URL as callbackUrl', async () => {
+      const request = createMockRequest('/tenant-a');
+      request.auth = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      expect(NextResponse.redirect).toHaveBeenCalledWith(
+        `${HUB_URL}/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-a`,
+      );
+      expect(NextResponse.next).not.toHaveBeenCalled();
+    });
+
+    it('strips a trailing slash from AUTH_HUB_URL', async () => {
+      process.env.AUTH_HUB_URL = `${HUB_URL}/`;
+      const request = createMockRequest('/tenant-b');
+      request.auth = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      expect(NextResponse.redirect).toHaveBeenCalledWith(
+        `${HUB_URL}/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-b`,
       );
     });
   });
 
   describe('authenticated requests pass through', () => {
-    it('calls NextResponse.next() and does not redirect', async () => {
-      const request = createMockRequest('/api/v1/context');
+    it('calls NextResponse.next() and does not redirect (even with AUTH_HUB_URL set)', async () => {
+      process.env.AUTH_HUB_URL = HUB_URL;
+      const request = createMockRequest('/tenant-a/api/v1/context');
       request.auth = {
         user: { id: 'user123', email: 'test@example.com' },
         expires: '',

@@ -19,6 +19,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -253,7 +254,7 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	if conversationId == "" {
 		conversationId = query.Spec.ConversationId
 	}
-	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, ttlSecondsFromQuery(query), h.eventing.MemoryRecorder())
+	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, common.TtlSecondsFromQuery(query), h.eventing.MemoryRecorder())
 	if err != nil {
 		querySpan.End()
 		return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)

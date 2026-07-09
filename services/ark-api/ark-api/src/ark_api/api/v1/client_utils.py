@@ -22,6 +22,10 @@ async def get_impersonating_api_client(impersonation: Optional[ImpersonationConf
         async with get_impersonating_api_client(impersonation) as api:
             custom_api = CustomObjectsApi(api)
             # ... use custom_api
+
+    Note: the comma-joined ``Impersonate-Group`` header produced here (and by
+    ark_sdk) is split back into one header per group by the rest-client patch in
+    ``impersonation_groups_patch`` so Kubernetes RBAC sees each group.
     """
     async with create_api_client() as api:
         api.user_agent = USER_AGENT
