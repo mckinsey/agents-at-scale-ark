@@ -20,8 +20,8 @@ def write_file(file_name, text):
     with open(FILES[file_name], mode="w+") as f:
         f.write(text)
 
-def create_file(fileName):
-    write_file(fileName, "")
+def create_file(file_name):
+    write_file(file_name, "")
 
 def kubectl(args, stdin=None):
     return subprocess.run(
