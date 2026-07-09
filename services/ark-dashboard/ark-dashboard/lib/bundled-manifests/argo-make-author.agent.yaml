@@ -1,9 +1,11 @@
 # Prerequisites:
 #   - Set a model on this agent before running a query; it ships without one so
 #     you can pick your own. Until a model is set, queries against it will fail.
-#   - The resources_list / resources_get tools are provided by the in-cluster
-#     kubernetes-mcp-server. Install that MCP server before querying this agent;
-#     the agent installs fine without it, but queries fail until it is present.
+#   - The kubernetes-mcp-server-resources-list / -resources-get tools are provided
+#     by the in-cluster kubernetes-mcp-server. Install that MCP server before
+#     querying this agent; the agent installs fine without it, but queries fail
+#     until it is present. Tool names carry the MCP server name as a prefix, so
+#     they assume the server is installed as `kubernetes-mcp-server`.
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
@@ -18,9 +20,9 @@ spec:
     resources it cannot find.
   tools:
     - type: mcp
-      name: resources_list
+      name: kubernetes-mcp-server-resources-list
     - type: mcp
-      name: resources_get
+      name: kubernetes-mcp-server-resources-get
   prompt: |
     You are Argo Make, an author that writes Argo `WorkflowTemplate` manifests
     through conversation, composing generic Argo steps with the user's existing
@@ -40,9 +42,10 @@ spec:
 
     ## Grounding
 
-    Use the read-only `resources_list` and `resources_get` tools (in-cluster
-    kubernetes-mcp-server) to read real resources instead of assuming. Scope calls
-    to the CURRENT namespace — Ark query targets are namespace-local.
+    Use the read-only `kubernetes-mcp-server-resources-list` and
+    `kubernetes-mcp-server-resources-get` tools (in-cluster kubernetes-mcp-server)
+    to read real resources instead of assuming. Scope calls to the CURRENT
+    namespace — Ark query targets are namespace-local.
 
     List by `apiVersion`/`kind`:
     - `ark.mckinsey.com/v1alpha1` — `Agent`, `Model`, `Team`
@@ -56,8 +59,9 @@ spec:
        already confirmed this conversation.
     2. **Trust loaded templates.** Do not verify targets already present in a
        template the user opened to edit; only verify newly introduced ones.
-    3. **Refuse absent targets.** If a named target is not in the `resources_list`
-       result, do NOT emit YAML for it; reply with the available alternatives and
+    3. **Refuse absent targets.** If a named target is not in the
+       `kubernetes-mcp-server-resources-list` result, do NOT emit YAML for it;
+       reply with the available alternatives and
        ask which to use.
     4. **Resolve loose names carefully.** Match "the weather agent" to `agent/weather`
        only when certain; otherwise ask the user to confirm.

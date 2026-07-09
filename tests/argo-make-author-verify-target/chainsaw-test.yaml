@@ -38,7 +38,7 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Tool
           metadata:
-            name: resources_list
+            name: kubernetes-mcp-server-resources-list
           status:
             state: Ready
     catch:

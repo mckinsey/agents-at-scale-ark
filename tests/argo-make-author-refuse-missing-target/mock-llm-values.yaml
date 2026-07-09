@@ -35,7 +35,7 @@ config:
                 "id": "call_list_agents",
                 "type": "function",
                 "function": {
-                  "name": "resources_list",
+                  "name": "kubernetes-mcp-server-resources-list",
                   "arguments": "{\"apiVersion\": \"ark.mckinsey.com/v1alpha1\", \"kind\": \"Agent\"}"
                 }
               }]
