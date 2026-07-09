@@ -182,8 +182,8 @@ function AvatarFallback({
   ...props
 }: Readonly<AvatarFallbackProps>) {
   const context = useAvatarContext();
-  const size = sizeProp !== undefined ? sizeProp : context.size;
-  const disabled = disabledProp !== undefined ? disabledProp : context.disabled;
+  const size = sizeProp ?? context.size;
+  const disabled = disabledProp ?? context.disabled;
 
   return (
     <AvatarPrimitive.Fallback

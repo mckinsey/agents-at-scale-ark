@@ -18,7 +18,7 @@ interface MarketplaceSourceErrorsProps {
 // instead of silently dropping those items from the grid.
 export function MarketplaceSourceErrors({
   errors,
-}: MarketplaceSourceErrorsProps) {
+}: Readonly<MarketplaceSourceErrorsProps>) {
   if (!errors || errors.length === 0) return null;
   return (
     <Alert layout="long">

@@ -234,12 +234,12 @@ export function ParameterEditor({
             </h3>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
-                  tabIndex={0}
+                <button
+                  type="button"
                   aria-label="How to use variables"
-                  className="text-fg-secondary inline-flex cursor-help">
+                  className="text-fg-secondary inline-flex cursor-help p-0">
                   <Info className="size-4" />
-                </span>
+                </button>
               </TooltipTrigger>
               <TooltipContent>{VARIABLES_TOOLTIP_TEXT}</TooltipContent>
             </Tooltip>

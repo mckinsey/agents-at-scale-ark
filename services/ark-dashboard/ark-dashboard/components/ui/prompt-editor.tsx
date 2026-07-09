@@ -82,7 +82,11 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
 
       const parts = value.split(TEMPLATE_REGEX);
 
-      return parts.map((part, index) => {
+      let charOffset = 0;
+      return parts.map(part => {
+        const key = `${charOffset}:${part}`;
+        charOffset += part.length;
+
         const match = part.match(PARAM_NAME_REGEX);
         if (match) {
           const paramName = match?.[1] || '';
@@ -102,7 +106,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
 
           return (
             <span
-              key={index}
+              key={key}
               className={spanClass}
               title={
                 isDefined
@@ -113,7 +117,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
             </span>
           );
         }
-        return <span key={index}>{part}</span>;
+        return <span key={key}>{part}</span>;
       });
     };
 

@@ -124,7 +124,7 @@ export function Pagination({
           <Select
             value={itemsPerPage.toString()}
             onValueChange={(value: unknown) =>
-              onItemsPerPageChange(parseInt(value as string, 10))
+              onItemsPerPageChange(Number.parseInt(value as string, 10))
             }>
             <SelectTrigger className="h-8 w-20">
               <SelectValue placeholder={itemsPerPage.toString()} />
