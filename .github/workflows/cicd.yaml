@@ -1033,6 +1033,7 @@ jobs:
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
           - { name: argo-workflows, path: services/argo-workflows/chart }
+          - { name: kubernetes-mcp-server, path: services/kubernetes-mcp-server/chart }
     steps:
       - uses: actions/checkout@v6
 
@@ -1305,6 +1306,7 @@ jobs:
           - localhost-gateway
           - ark-tenant
           - argo-workflows
+          - kubernetes-mcp-server
     steps:
       - uses: actions/checkout@v6
 
