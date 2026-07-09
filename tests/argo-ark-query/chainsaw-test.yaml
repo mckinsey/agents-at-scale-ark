@@ -371,7 +371,7 @@ spec:
         kind: Workflow
         name: ark-query-bad-params-nonlist
 
-  - name: apply-fail-invalid-name
+  - name: apply-fail-missing-target
     try:
     - apply:
         file: manifests/wf-apply-fail.yaml

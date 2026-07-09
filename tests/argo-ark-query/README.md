@@ -10,7 +10,7 @@ Validates the `ark-query` `WorkflowTemplate` shipped in the argo-workflows chart
 - Input-validation failures mark the node Failed and write the error to the `response` output:
   - target without `type/name` form, unknown target type, empty target name.
   - `parameters` that is not valid JSON, and JSON that is not an array.
-- A `query-name` that is not a valid Kubernetes name makes `kubectl apply` fail, surfaced as `failed to create Query`.
+- A target referencing a resource that does not exist makes `kubectl apply` fail admission, surfaced as `failed to create Query`.
 - Optional spec fields (`query-name`, `ttl`, `session-id`, non-empty `parameters`) are serialized into the created Query (verified via the `query-json` output).
 
 ## Not covered

@@ -17,10 +17,8 @@ spec:
             arguments:
               parameters:
                 - name: target
-                  value: "agent/weather"
+                  value: "agent/does-not-exist"
                 - name: input
                   value: "What is the weather?"
                 - name: timeout
                   value: "2m"
-                - name: query-name
-                  value: "Bad_Name!"
