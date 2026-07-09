@@ -45,6 +45,15 @@ def parse_target():
     
     return target_type, target_name
 
+def clean_metadata(query_obj):
+    metadata = query_obj.get("metadata") or {}
+    metadata.pop("managedFields", None)
+    annotations = metadata.get("annotations") or {}
+    annotations.pop("kubectl.kubernetes.io/last-applied-configuration", None)
+    if not annotations:
+        metadata.pop("annotations", None)
+    return query_obj
+
 def parse_parameters():
     try:
         parameters = json.loads(os.environ["ARK_PARAMETERS"])
@@ -109,7 +118,7 @@ def main(): # NOSONAR - main function of a script.
     for _ in range(30):
         result = kubectl(["get", "query", query_name, "-o", "json"])
         if result.returncode == 0:
-            query_obj = json.loads(result.stdout)
+            query_obj = clean_metadata(json.loads(result.stdout))
             write_file("query", json.dumps(query_obj, separators=(",", ":")))
             phase = (query_obj.get("status") or {}).get("phase", "")
         else:

@@ -441,7 +441,7 @@ spec:
           SESSION_ID=$(echo "$QUERY_JSON" | jq -r '.spec.sessionId')
           echo "query name: $NAME, ttl: $TTL, sessionId: $SESSION_ID"
           [ "$NAME" = "ark-query-custom-name" ] || { echo "expected custom query name"; exit 1; }
-          [ "$TTL" = "60s" ] || { echo "expected ttl 60s"; exit 1; }
+          [ "$TTL" = "1m0s" ] || { echo "expected ttl 1m0s"; exit 1; }
           [ "$SESSION_ID" = "argo-ark-query-session" ] || { echo "expected sessionId argo-ark-query-session"; exit 1; }
         env:
         - name: NAMESPACE
