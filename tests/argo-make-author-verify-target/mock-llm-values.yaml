@@ -1,0 +1,60 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    name: default
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {"id": "gpt-4.1-mini", "object": "model", "owned_by": "openai"}
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Argo Make')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_list_agents",
+                "type": "function",
+                "function": {
+                  "name": "resources_list",
+                  "arguments": "{\"apiVersion\": \"ark.mckinsey.com/v1alpha1\", \"kind\": \"Agent\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "body.messages[?role=='tool']"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "Verified agent/weather is available. Here is the template:\n\n```yaml\napiVersion: argoproj.io/v1alpha1\nkind: WorkflowTemplate\nmetadata:\n  name: weather-forecast\nspec:\n  entrypoint: main\n  templates:\n    - name: main\n      steps:\n        - - name: ask-weather\n            templateRef:\n              name: ark-query\n              template: query\n            arguments:\n              parameters:\n                - name: target\n                  value: agent/weather\n                - name: input\n                  value: \"What is the weather in Paris?\"\n```"
+            },
+            "finish_reason": "stop"
+          }]
+        }
