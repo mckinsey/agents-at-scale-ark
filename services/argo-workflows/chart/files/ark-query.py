@@ -55,82 +55,87 @@ def parse_parameters():
 
     return parameters
 
-write_file("query", "{}")
-create_file("response")
-create_file("phase")
-create_file("conversation")
+def main():
+    write_file("query", "{}")
+    create_file("response")
+    create_file("phase")
+    create_file("conversation")
 
-target_type, target_name = parse_target()
+    target_type, target_name = parse_target()
 
-parameters = parse_parameters()
+    parameters = parse_parameters()
 
-workflow = os.environ["ARK_WORKFLOW_NAME"]
-query_name = os.environ["ARK_QUERY_NAME"] or "q-" + workflow + "-" + os.environ["ARK_POD_NAME"]
-timeout = os.environ["ARK_TIMEOUT"]
+    workflow = os.environ["ARK_WORKFLOW_NAME"]
+    query_name = os.environ["ARK_QUERY_NAME"] or "q-" + workflow + "-" + os.environ["ARK_POD_NAME"]
+    timeout = os.environ["ARK_TIMEOUT"]
 
-spec = {
-    "input": os.environ["ARK_INPUT"],
-    "target": {"type": target_type, "name": target_name},
-    "timeout": timeout,
-    "parameters": parameters,
-}
+    spec = {
+        "input": os.environ["ARK_INPUT"],
+        "target": {"type": target_type, "name": target_name},
+        "timeout": timeout,
+        "parameters": parameters,
+    }
 
-if os.environ["ARK_TTL"]:
-    spec["ttl"] = os.environ["ARK_TTL"]
-if os.environ["ARK_SESSION_ID"]:
-    spec["sessionId"] = os.environ["ARK_SESSION_ID"]
-if os.environ["ARK_MEMORY"]:
-    spec["memory"] = {"name": os.environ["ARK_MEMORY"]}
-if os.environ["ARK_SERVICE_ACCOUNT"]:
-    spec["serviceAccount"] = os.environ["ARK_SERVICE_ACCOUNT"]
+    if os.environ["ARK_TTL"]:
+        spec["ttl"] = os.environ["ARK_TTL"]
+    if os.environ["ARK_SESSION_ID"]:
+        spec["sessionId"] = os.environ["ARK_SESSION_ID"]
+    if os.environ["ARK_MEMORY"]:
+        spec["memory"] = {"name": os.environ["ARK_MEMORY"]}
+    if os.environ["ARK_SERVICE_ACCOUNT"]:
+        spec["serviceAccount"] = os.environ["ARK_SERVICE_ACCOUNT"]
 
-query_manifest = {
-    "apiVersion": "ark.mckinsey.com/v1alpha1",
-    "kind": "Query",
-    "metadata": {
-        "name": query_name,
-        "labels": {
-            "workflow": workflow
-        }
-    },
-    "spec": spec,
-}
+    query_manifest = {
+        "apiVersion": "ark.mckinsey.com/v1alpha1",
+        "kind": "Query",
+        "metadata": {
+            "name": query_name,
+            "labels": {
+                "workflow": workflow
+            }
+        },
+        "spec": spec,
+    }
 
-result = kubectl(["apply", "-f", "-"], stdin=json.dumps(query_manifest))
+    result = kubectl(["apply", "-f", "-"], stdin=json.dumps(query_manifest))
 
-if result.returncode != 0:
-    fail("failed to create Query " + query_name + ": " + result.stderr.strip())
+    if result.returncode != 0:
+        fail("failed to create Query " + query_name + ": " + result.stderr.strip())
 
-kubectl(["wait", "--for=condition=Completed", "--timeout=" + timeout, "query/" + query_name])
+    kubectl(["wait", "--for=condition=Completed", "--timeout=" + timeout, "query/" + query_name])
 
-phase = ""
-query_obj = {}
-for _ in range(30):
-    result = kubectl(["get", "query", query_name, "-o", "json"])
-    if result.returncode == 0:
-        query_obj = json.loads(result.stdout)
-        write_file("query", json.dumps(query_obj, separators=(",", ":")))
-        phase = (query_obj.get("status") or {}).get("phase", "")
+    phase = ""
+    query_obj = {}
+    for _ in range(30):
+        result = kubectl(["get", "query", query_name, "-o", "json"])
+        if result.returncode == 0:
+            query_obj = json.loads(result.stdout)
+            write_file("query", json.dumps(query_obj, separators=(",", ":")))
+            phase = (query_obj.get("status") or {}).get("phase", "")
+        else:
+            query_obj = {}
+            write_file("query", "{}")
+            phase = ""
+        if phase in ("done", "error"):
+            break
+        time.sleep(1)
+
+    status = query_obj.get("status") or {}
+
+    write_file("phase", phase)
+    write_file("response", (status.get("response") or {}).get("content", ""))
+    write_file("conversation", status.get("conversationId", ""))
+
+    if phase == "done":
+        print("Query " + query_name + " completed: done")
+        sys.exit(0)
     else:
-        query_obj = {}
-        write_file("query", "{}")
-        phase = ""
-    if phase in ("done", "error"):
-        break
-    time.sleep(1)
+        print(
+            "Query " + query_name + " did not complete successfully (phase: " + (phase or "<none>") + ")",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-status = query_obj.get("status") or {}
 
-write_file("phase", phase)
-write_file("response", (status.get("response") or {}).get("content", ""))
-write_file("conversation", status.get("conversationId", ""))
-
-if phase == "done":
-    print("Query " + query_name + " completed: done")
-    sys.exit(0)
-else:
-    print(
-        "Query " + query_name + " did not complete successfully (phase: " + (phase or "<none>") + ")",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+if __name__ == "__main__":
+    main()
