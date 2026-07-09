@@ -224,7 +224,7 @@ func TestResolveBrokerEndpoint(t *testing.T) {
 			want: "http://ark-broker.tenant-a.svc.cluster.local:80",
 		},
 		{
-			name:      "falls back to the only enabled broker when namespace has no ConfigMap of its own",
+			name:      "no fallback: other namespaces' brokers are ignored when this namespace has none",
 			namespace: "team-namespace",
 			configMaps: []client.Object{
 				&corev1.ConfigMap{
@@ -232,6 +232,22 @@ func TestResolveBrokerEndpoint(t *testing.T) {
 					Data: map[string]string{
 						"enabled":    "true",
 						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name:      "explicit serviceRef.namespace points at a broker in another namespace",
+			namespace: "team-namespace",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "team-namespace"},
+					Data: map[string]string{
+						"enabled": "true",
+						"serviceRef": `name: "ark-broker"` + "\n" +
+							`namespace: "default"` + "\n" +
+							`port: "80"`,
 					},
 				},
 			},
@@ -259,17 +275,25 @@ func TestResolveBrokerEndpoint(t *testing.T) {
 
 func TestParseServiceRef(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantName string
-		wantPort string
-		wantErr  bool
+		name          string
+		input         string
+		wantName      string
+		wantPort      string
+		wantNamespace string
+		wantErr       bool
 	}{
 		{
 			name:     "parses name and port",
 			input:    "name: \"collector\"\nport: \"4318\"",
 			wantName: "collector",
 			wantPort: "4318",
+		},
+		{
+			name:          "parses namespace override",
+			input:         "name: collector\nnamespace: default\nport: 4318",
+			wantName:      "collector",
+			wantPort:      "4318",
+			wantNamespace: "default",
 		},
 		{
 			name:     "parses without quotes",
@@ -314,6 +338,9 @@ func TestParseServiceRef(t *testing.T) {
 			if ref.Port != tt.wantPort {
 				t.Errorf("Port = %s, want %s", ref.Port, tt.wantPort)
 			}
+			if ref.Namespace != tt.wantNamespace {
+				t.Errorf("Namespace = %s, want %s", ref.Namespace, tt.wantNamespace)
+			}
 		})
 	}
 }
@@ -355,6 +382,12 @@ func TestBuildEndpoint(t *testing.T) {
 			namespace:  "tenant-a",
 			serviceRef: ServiceRef{Name: "", Port: "4318"},
 			wantErr:    true,
+		},
+		{
+			name:       "serviceRef.Namespace overrides the configmap namespace",
+			namespace:  "tenant-a",
+			serviceRef: ServiceRef{Name: "collector", Port: "4318", Namespace: "shared"},
+			want:       "http://collector.shared.svc.cluster.local:4318",
 		},
 	}
 
