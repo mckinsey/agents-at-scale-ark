@@ -55,7 +55,7 @@ def parse_parameters():
 
     return parameters
 
-def main():
+def main(): # NOSONAR - main function of a script.
     write_file("query", "{}")
     create_file("response")
     create_file("phase")
