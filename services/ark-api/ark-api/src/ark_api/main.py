@@ -5,6 +5,7 @@ from importlib.metadata import version, PackageNotFoundError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from ark_sdk.k8s import create_api_client
@@ -250,8 +251,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # Return a detailed error response
     return JSONResponse(
         status_code=422,
-        content={
+        content=jsonable_encoder({
             "detail": exc.errors(),
             "body": exc.body
-        }
+        })
     )
