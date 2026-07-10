@@ -95,6 +95,23 @@ describe('middleware (auth gate)', () => {
         ).toString(),
       );
     });
+
+    // Regression: a subpath-hosted tenant must keep its prefix in the sign-in
+    // redirect. `new URL(SIGNIN_PATH, BASE_URL)` dropped it because SIGNIN_PATH
+    // is root-absolute; concatenation onto BASE_URL preserves it.
+    it('preserves the tenant base-path prefix in the local sign-in redirect', async () => {
+      process.env.BASE_URL = 'https://example.com/tenant-a';
+      const request = createMockRequest('/tenant-a/dashboard');
+      request.auth = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      expect(NextResponse.redirect).toHaveBeenCalledWith(
+        'https://example.com/tenant-a/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-a%2Fdashboard',
+      );
+      expect(NextResponse.next).not.toHaveBeenCalled();
+    });
   });
 
   describe('hub model: unauthenticated requests redirect to AUTH_HUB_URL', () => {

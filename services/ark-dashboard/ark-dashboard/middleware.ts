@@ -49,13 +49,16 @@ export default auth(async (req: NextRequestWithAuth) => {
     // basePath the local signin path resolves wrong (a leading-slash path drops
     // the prefix), and the hub issues a Path=/ session cookie shared by every
     // tenant on the host — so one login at the hub covers them all.
+    //
+    // Both branches concatenate onto the (hub or tenant) base URL rather than
+    // using `new URL(SIGNIN_PATH, base)`: SIGNIN_PATH is root-absolute, so
+    // `new URL` would discard the base's path segment and drop the tenant
+    // prefix (e.g. https://host/tenant-a -> https://host/api/auth/signin).
     const hubUrl = stripTrailingSlashes(process.env.AUTH_HUB_URL);
+    const baseUrl = stripTrailingSlashes(process.env.BASE_URL) ?? '';
     const target = hubUrl
       ? `${hubUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`
-      : new URL(
-          `${SIGNIN_PATH}?callbackUrl=${callbackUrl}`,
-          process.env.BASE_URL,
-        ).toString();
+      : `${baseUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`;
     return NextResponse.redirect(target);
   }
   return NextResponse.next();
