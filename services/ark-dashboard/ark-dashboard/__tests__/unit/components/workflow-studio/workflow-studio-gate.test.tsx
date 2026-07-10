@@ -1,9 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { StudioChatGate } from '@/components/workflow-studio/studio-chat-gate';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
+import {
+  ARGO_MAKE_AUTHOR_AGENT_NAME,
+  ARGO_MAKE_AUTHOR_INSTALL_CMD,
+} from '@/lib/constants/argo-make';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
 import { chatService } from '@/lib/services/chat';
+import { toast } from 'sonner';
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
@@ -188,12 +194,7 @@ describe('WorkflowStudio author-agent gate', () => {
 });
 
 describe('WorkflowStudio YAML validation banner', () => {
-  it('shows "Fix for me" on an invalid draft and dispatches the repair turn', async () => {
-    vi.mocked(chatService.startStreamChatResponse).mockResolvedValue({
-      queryName: 'q',
-      chunks: makeChunks([{ id: 'chatcmpl-final', ark: {} }]),
-    });
-
+  it('shows the validation banner on an invalid draft', async () => {
     render(<WorkflowStudio mode="new" initialName="wf" />);
 
     await waitFor(() =>
@@ -206,49 +207,83 @@ describe('WorkflowStudio YAML validation banner', () => {
     });
 
     expect(await screen.findByTestId('studio-yaml-banner')).toBeInTheDocument();
-    const fix = screen.getByTestId('studio-yaml-fix');
-    expect(fix).not.toBeDisabled();
+    expect(screen.queryByTestId('studio-yaml-fix')).not.toBeInTheDocument();
+  });
+});
 
-    fireEvent.click(fix);
+describe('StudioChatGate', () => {
+  const writeTextMock = vi.fn<(value: string) => Promise<void>>();
 
-    await waitFor(() =>
-      expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
-    );
-    const dispatched = vi.mocked(chatService.startStreamChatResponse).mock
-      .calls[0][0];
-    expect(dispatched).toContain('Fix the YAML errors for me');
+  beforeEach(() => {
+    writeTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
   });
 
-  it('disables "Fix for me" while a turn is building', async () => {
-    let release: () => void = () => {};
-    const gateStream = new Promise<void>(resolve => {
-      release = resolve;
-    });
-    vi.mocked(chatService.startStreamChatResponse).mockImplementation(
-      async () => {
-        await gateStream;
-        return { queryName: 'q', chunks: makeChunks([]) };
-      },
-    );
+  it('renders the locked card with heading and lead', () => {
+    render(<StudioChatGate agentMissing mcpMissing />);
 
-    render(<WorkflowStudio mode="new" initialName="wf" />);
+    const gate = screen.getByTestId('studio-chat-gate');
+    expect(gate).toBeInTheDocument();
+    expect(
+      screen.getByText('Chat with the agent is locked'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Set up this namespace to start chatting with the builder agent:',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('numbers both steps sequentially when both are missing', () => {
+    render(<StudioChatGate agentMissing mcpMissing />);
+
+    const agentStep = screen.getByTestId('studio-gate-step-agent');
+    const mcpStep = screen.getByTestId('studio-gate-step-mcp');
+
+    expect(agentStep).toHaveTextContent('1');
+    expect(agentStep).toHaveTextContent(
+      `Install the ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent`,
+    );
+    expect(mcpStep).toHaveTextContent('2');
+    expect(mcpStep).toHaveTextContent('Add the Kubernetes MCP server');
+  });
+
+  it('numbers the sole visible step as 1 when only the agent is missing', () => {
+    render(<StudioChatGate agentMissing mcpMissing={false} />);
+
+    const agentStep = screen.getByTestId('studio-gate-step-agent');
+    expect(agentStep).toHaveTextContent('1');
+    expect(screen.queryByTestId('studio-gate-step-mcp')).toBeNull();
+  });
+
+  it('numbers the sole visible step as 1 when only the MCP is missing', () => {
+    render(<StudioChatGate agentMissing={false} mcpMissing />);
+
+    const mcpStep = screen.getByTestId('studio-gate-step-mcp');
+    expect(mcpStep).toHaveTextContent('1');
+    expect(screen.queryByTestId('studio-gate-step-agent')).toBeNull();
+  });
+
+  it('copies the install command and toasts on click', async () => {
+    render(<StudioChatGate agentMissing mcpMissing={false} />);
+
+    fireEvent.click(screen.getByTestId('studio-gate-copy'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled(),
+      expect(writeTextMock).toHaveBeenCalledWith(ARGO_MAKE_AUTHOR_INSTALL_CMD),
     );
-
-    fireEvent.click(screen.getByTestId('studio-view-yaml'));
-    fireEvent.change(screen.getByTestId('studio-yaml-editor'), {
-      target: { value: 'kind: Pod\n' },
-    });
-
-    const fix = await screen.findByTestId('studio-yaml-fix');
-    fireEvent.click(fix);
-
-    await waitFor(() =>
-      expect(screen.getByTestId('studio-yaml-fix')).toBeDisabled(),
+    expect(toast.success).toHaveBeenCalledWith(
+      'Install command copied to clipboard.',
     );
+  });
 
-    release();
+  it('navigates to MCPs from the MCP step', () => {
+    render(<StudioChatGate agentMissing={false} mcpMissing />);
+
+    fireEvent.click(screen.getByTestId('studio-gate-go-to-mcps'));
+    expect(pushMock).toHaveBeenCalledWith('/mcp');
   });
 });

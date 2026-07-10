@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatPanel } from '@/components/workflow-studio/studio-chat-panel';
 import { useStudioChat } from '@/components/workflow-studio/use-studio-chat';
+import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
 
 vi.mock('@/lib/services/chat', () => ({
@@ -140,6 +141,51 @@ async function waitForTurnComplete() {
 describe('StudioChatPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('empty state', () => {
+    it('renders the describe-your-workflow copy and numbered steps', () => {
+      renderPanel();
+
+      const empty = screen.getByTestId('studio-chat-empty');
+      expect(empty).toHaveTextContent('Describe your workflow');
+      expect(empty).toHaveTextContent(
+        'The argo-make-author agent drafts an Argo WorkflowTemplate live as you chat.',
+      );
+      expect(empty).toHaveTextContent('Say what to build in plain language');
+      expect(empty).toHaveTextContent('The agent drafts it live');
+      expect(empty).toHaveTextContent(
+        "Edit the YAML, then Save your changes — it's already in your workflows",
+      );
+    });
+
+    it('fills the composer with the example prompt when the chip is clicked', () => {
+      renderPanel();
+
+      const chip = screen.getByTestId('studio-chat-example');
+      expect(chip).toHaveTextContent(
+        'e.g. Build a workflow to check HR tickets, categorise them, then send each to the right department',
+      );
+
+      fireEvent.click(chip);
+
+      expect(screen.getByTestId('studio-chat-input')).toHaveValue(
+        'Build a workflow to check HR tickets, categorise them, then send each to the right department',
+      );
+    });
+  });
+
+  describe('sender name', () => {
+    it('labels assistant messages with the author agent name', async () => {
+      mockStream(() => [contentChunk('drafted it'), finalChunk()]);
+      renderPanel({ draft: validYaml, lastAgent: validYaml });
+
+      typeAndSend('build something');
+
+      expect(
+        await screen.findByText(ARGO_MAKE_AUTHOR_AGENT_NAME),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('grounding', () => {

@@ -345,3 +345,11 @@
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+
+.yaml-tok-key { color: #b794f6; }
+.yaml-tok-str { color: #7ee787; }
+.yaml-tok-num, .yaml-tok-bool { color: #e3a679; }
+.yaml-tok-comment { color: var(--muted-foreground); font-style: italic; }
+.yaml-tok-punc { color: var(--muted-foreground); }
+.yaml-tok-val { color: var(--foreground); }
+.yaml-err-line { display: inline-block; min-width: 100%; background: color-mix(in srgb, var(--destructive) 18%, transparent); text-decoration: underline wavy var(--destructive); text-underline-offset: 3px; }

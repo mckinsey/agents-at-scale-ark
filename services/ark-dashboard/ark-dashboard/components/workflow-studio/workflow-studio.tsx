@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  ChevronLeft,
-  FileCode,
-  Lock,
-  Network,
-  Play,
-  TriangleAlert,
-} from 'lucide-react';
+import { ChevronLeft, FileCode, Info, Network, Play } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -23,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -36,10 +28,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
-import { cn } from '@/lib/utils';
 import { parseWorkflowParameters } from '@/lib/utils/parse-workflow-parameters';
 import { validateWorkflowYaml } from '@/lib/utils/validate-workflow-yaml';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
@@ -47,6 +43,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { StudioChatPanel } from './studio-chat-panel';
 import { StudioHeaderActions } from './studio-header-actions';
+import { StudioYamlEditor } from './studio-yaml-editor';
 import { useAuthorAgentGate } from './use-author-agent-gate';
 import { useStudioChat } from './use-studio-chat';
 import {
@@ -259,8 +256,6 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
     studio.draftYaml.trim() === ''
       ? { ok: true as const }
       : validateWorkflowYaml(studio.draftYaml);
-  const showYamlBanner = studio.view === 'yaml' && !validation.ok;
-  const fixDisabled = studio.building || chat.isStreaming || gate.gated;
 
   const handleSave = async () => {
     await studio.save();
@@ -280,14 +275,17 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
             </NamespacedLink>
             <span>/</span>
             <span className="text-foreground truncate font-medium">
-              {studio.workflowName || 'Untitled'}
+              {studio.workflowName || 'New workflow'}
             </span>
           </div>
           <div className="flex items-center gap-3">
             {studio.isDirty && (
-              <Badge variant="secondary" data-testid="studio-dirty-badge">
+              <span
+                className="text-muted-foreground flex items-center gap-2 text-sm"
+                data-testid="studio-dirty-badge">
+                <span className="bg-primary h-1.5 w-1.5 rounded-full" />
                 Unsaved changes
-              </Badge>
+              </span>
             )}
             {mode === 'edit' && (
               <Button
@@ -307,26 +305,54 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
               data-testid="studio-save">
               Save changes
             </Button>
-            <RunWorkflowDialog
-              templateName={studio.workflowName}
-              parameters={runParameters}
-              onRun={handleRun}
-              trigger={
-                <Button
-                  type="button"
-                  disabled={!canRun}
-                  data-testid="studio-run">
-                  <Play className="mr-2 h-4 w-4" />
-                  Run workflow
-                </Button>
-              }
-            />
+            {persisted ? (
+              <RunWorkflowDialog
+                templateName={studio.workflowName}
+                parameters={runParameters}
+                onRun={handleRun}
+                trigger={
+                  <Button
+                    type="button"
+                    disabled={!canRun}
+                    data-testid="studio-run">
+                    <Play className="mr-2 h-4 w-4" />
+                    Run
+                  </Button>
+                }
+              />
+            ) : (
+              <Button
+                type="button"
+                disabled={!canSave}
+                onClick={() => void handleSave()}
+                data-testid="studio-create">
+                Create
+              </Button>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between gap-4 px-6 pt-2 pb-4">
-          <h3 className="truncate text-lg font-semibold">
-            {studio.workflowName || 'Untitled workflow'}
-          </h3>
+          <div className="flex items-center gap-1">
+            <h3 className="text-lg font-semibold">Workflow studio</h3>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="About Workflow studio">
+                    <Info className="text-muted-foreground h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  Describe a workflow in plain language and the
+                  argo-make-author agent drafts an Argo WorkflowTemplate live.
+                  Edit the YAML or diagram, then save.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div
             className="flex items-center gap-2"
             data-testid="studio-header-actions">
@@ -351,76 +377,50 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
           />
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="border-border flex shrink-0 items-center justify-end border-b px-6 py-3">
+        <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="absolute top-4 right-4 z-10">
             <ViewToggle view={studio.view} onChange={studio.setView} />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto p-6">
+          <div className="relative min-h-0 flex-1">
             {studio.loading ? (
               <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
                 <Spinner />
                 Loading workflow...
               </div>
             ) : studio.view === 'diagram' ? (
-              studio.draftYaml.trim() === '' ? (
-                <div
-                  className="bg-muted text-muted-foreground flex h-full items-center justify-center rounded-md p-6 text-sm"
-                  data-testid="studio-diagram-empty">
-                  The workflow diagram will appear here.
-                </div>
-              ) : (
-                <WorkflowDagViewer manifest={studio.draftYaml} />
-              )
-            ) : (
-              <div className="relative flex h-full min-h-0 flex-col gap-3">
-                {showYamlBanner && !validation.ok && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: 'var(--background)',
+                  backgroundImage:
+                    'radial-gradient(color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px)',
+                  backgroundSize: '22px 22px',
+                }}>
+                {studio.draftYaml.trim() === '' ? (
                   <div
-                    role="alert"
-                    className="border-destructive/50 bg-destructive/10 text-destructive flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                    data-testid="studio-yaml-banner">
-                    <div className="flex items-start gap-2">
-                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{validation.message}</span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={fixDisabled}
-                      onClick={() =>
-                        void chat.sendMessage('Fix the YAML errors for me')
-                      }
-                      data-testid="studio-yaml-fix">
-                      Fix for me
-                    </Button>
+                    className="text-muted-foreground absolute top-12 left-1/2 -translate-x-1/2 text-sm"
+                    data-testid="studio-diagram-empty">
+                    The workflow diagram will appear here.
                   </div>
+                ) : (
+                  <WorkflowDagViewer manifest={studio.draftYaml} fill />
                 )}
-                <div className="relative min-h-0 flex-1">
-                  <Textarea
-                    data-testid="studio-yaml-editor"
-                    value={studio.draftYaml}
-                    spellCheck={false}
-                    readOnly={studio.building}
-                    onChange={event => {
-                      studio.setDraftYaml(event.target.value);
-                      studio.setHandEdited(true);
-                    }}
-                    placeholder="Enter WorkflowTemplate YAML..."
-                    className={cn(
-                      'h-full min-h-[400px] w-full resize-none font-mono text-sm',
-                    )}
-                  />
-                  {studio.building && (
-                    <div
-                      className="bg-background/70 text-muted-foreground absolute inset-0 flex items-center justify-center gap-2 rounded-md text-sm backdrop-blur-[1px]"
-                      data-testid="studio-build-lock">
-                      <Lock className="h-4 w-4" />
-                      Agent is building — editing locked
-                    </div>
-                  )}
-                </div>
               </div>
+            ) : (
+              <StudioYamlEditor
+                value={studio.draftYaml}
+                onChange={value => {
+                  studio.setDraftYaml(value);
+                  studio.setHandEdited(true);
+                }}
+                readOnly={studio.building}
+                error={
+                  validation.ok
+                    ? undefined
+                    : { message: validation.message }
+                }
+              />
             )}
           </div>
         </div>

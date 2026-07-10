@@ -95,7 +95,7 @@ describe('WorkflowStudio', () => {
   });
 
   describe('save on /new', () => {
-    it('creates without collision and navigates to the edit route', async () => {
+    it('creates without collision and navigates to the studio route', async () => {
       vi.mocked(workflowTemplatesService.nameExists).mockResolvedValue(false);
       vi.mocked(workflowTemplatesService.save).mockResolvedValue({
         apiVersion: 'argoproj.io/v1alpha1',
@@ -120,7 +120,7 @@ describe('WorkflowStudio', () => {
 
       await waitFor(() => {
         expect(replaceMock).toHaveBeenCalledWith(
-          '/workflow-templates/my-workflow/edit',
+          '/workflow-templates/my-workflow',
         );
       });
     });
@@ -201,6 +201,49 @@ describe('WorkflowStudio', () => {
         'update',
       );
       expect(workflowTemplatesService.nameExists).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('layout', () => {
+    it('renders the studio title and breadcrumb crumb', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(screen.getByText('Workflow studio')).toBeInTheDocument();
+      expect(screen.getByText('my-workflow')).toBeInTheDocument();
+    });
+
+    it('shows a Create primary in new mode and no Run', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(screen.getByTestId('studio-create')).toBeInTheDocument();
+      expect(screen.queryByTestId('studio-run')).not.toBeInTheDocument();
+    });
+
+    it('shows a Run primary in persisted edit mode and no Create', async () => {
+      vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(validYaml);
+      render(<WorkflowStudio mode="edit" initialName="existing-workflow" />);
+      await waitFor(() => {
+        expect(screen.getByTestId('studio-run')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('studio-create')).not.toBeInTheDocument();
+    });
+
+    it('renders the diagram empty state before any YAML', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(screen.getByTestId('studio-diagram-empty')).toBeInTheDocument();
+    });
+
+    it('shows the dirty dot once the draft diverges', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(
+        screen.queryByTestId('studio-dirty-badge'),
+      ).not.toBeInTheDocument();
+      enterYaml(validYaml);
+      expect(screen.getByTestId('studio-dirty-badge')).toBeInTheDocument();
+    });
+
+    it('surfaces the YAML banner when the manifest is invalid', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml('foo: bar');
+      expect(screen.getByTestId('studio-yaml-banner')).toBeInTheDocument();
     });
   });
 

@@ -170,7 +170,7 @@ export function useWorkflowStudio({
           description: targetName,
         });
         if (navigateToEdit) {
-          replace(`/workflow-templates/${targetName}/edit`);
+          replace(`/workflow-templates/${targetName}`);
         }
       } catch (error) {
         toast.error('Failed to save workflow', {

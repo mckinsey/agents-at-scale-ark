@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react';
 
 interface WorkflowDagViewerProps {
   manifest: string;
+  fill?: boolean;
 }
 
 interface DagTask {
@@ -321,7 +322,7 @@ function expandTemplate(
   return { tasks: expandedTasks, entryNodes, exitNodes };
 }
 
-export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
+export function WorkflowDagViewer({ manifest, fill }: WorkflowDagViewerProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -383,7 +384,12 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   }
 
   return (
-    <div className="bg-muted h-[500px] w-full rounded-lg border">
+    <div
+      className={
+        fill
+          ? 'h-full w-full bg-transparent'
+          : 'bg-muted h-[500px] w-full rounded-lg border'
+      }>
       <style jsx global>{`
         .react-flow__controls {
           background: hsl(var(--card)) !important;

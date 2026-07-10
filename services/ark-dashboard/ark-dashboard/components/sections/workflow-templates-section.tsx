@@ -1,7 +1,14 @@
 'use client';
 
-import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowUpRightIcon } from 'lucide-react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
@@ -41,13 +48,24 @@ function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
 
 const getTemplateKey = (template: WorkflowTemplate) => template.metadata.name;
 
-export function WorkflowTemplatesSection() {
+export interface WorkflowTemplatesSectionHandle {
+  openCreateGroup: () => void;
+}
+
+export const WorkflowTemplatesSection = forwardRef<
+  WorkflowTemplatesSectionHandle,
+  object
+>(function WorkflowTemplatesSection({}, ref) {
   const { namespace, readOnlyMode } = useNamespace();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const { layout, setLayout } = useWorkflowsLayout(namespace);
   const listRef = useRef<SortableSectionedListHandle>(null);
+
+  useImperativeHandle(ref, () => ({
+    openCreateGroup: () => listRef.current?.openCreateGroup(),
+  }));
 
   const fetchFlows = useCallback(async () => {
     try {
@@ -156,15 +174,6 @@ export function WorkflowTemplatesSection() {
   return (
     <div className="flex h-full flex-col">
       <main className="mt-4 flex-1 overflow-auto">
-        <div className="mb-4 flex">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => listRef.current?.openCreateGroup()}>
-            <Plus className="mr-1 h-4 w-4" />
-            Create Group
-          </Button>
-        </div>
         <SortableSectionedList
           ref={listRef}
           items={templates}
@@ -186,4 +195,4 @@ export function WorkflowTemplatesSection() {
       </main>
     </div>
   );
-}
+});

@@ -1,7 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkflowTemplatesSection } from '@/components/sections/workflow-templates-section';
+import {
+  WorkflowTemplatesSection,
+  type WorkflowTemplatesSectionHandle,
+} from '@/components/sections/workflow-templates-section';
 import type { WorkflowTemplate } from '@/lib/services/workflow-templates';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 
@@ -359,6 +363,21 @@ describe('WorkflowTemplatesSection', () => {
         const stageTexts = screen.getAllByText(/0 stages/);
         expect(stageTexts).toHaveLength(3);
       });
+    });
+  });
+
+  describe('Imperative handle', () => {
+    it('should expose openCreateGroup via ref', async () => {
+      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
+      const ref = createRef<WorkflowTemplatesSectionHandle>();
+
+      render(<WorkflowTemplatesSection ref={ref} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('simple-workflow')).toBeInTheDocument();
+      });
+
+      expect(typeof ref.current?.openCreateGroup).toBe('function');
     });
   });
 

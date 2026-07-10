@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Sparkles } from 'lucide-react';
+import { RotateCcw, SendHorizontal, Sparkles, Zap } from 'lucide-react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
@@ -8,12 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 
 import { StudioChatGate } from './studio-chat-gate';
 import { type UseStudioChatReturn } from './use-studio-chat';
 
 const EXAMPLE_PROMPT =
-  'Build a workflow that summarizes a document, then extracts action items.';
+  'Build a workflow to check HR tickets, categorise them, then send each to the right department';
 
 interface StudioChatEmptyStateProps {
   onExample: (value: string) => void;
@@ -26,28 +27,54 @@ function StudioChatEmptyState({
 }: StudioChatEmptyStateProps) {
   return (
     <div
-      className="text-muted-foreground flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
+      className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       data-testid="studio-chat-empty">
-      <Sparkles className="h-8 w-8" />
-      <div>
-        <p className="text-foreground text-sm font-medium">
-          Describe your workflow
-        </p>
-        <ol className="mt-2 space-y-1 text-xs">
-          <li>1. Tell the agent what you want to build.</li>
-          <li>2. Review the generated diagram and YAML.</li>
-          <li>3. Iterate, then save when you are happy.</li>
-        </ol>
+      <Sparkles className="text-muted-foreground h-7 w-7" />
+      <p className="text-foreground text-sm font-medium">
+        Describe your workflow
+      </p>
+      <p className="text-muted-foreground text-sm">
+        The argo-make-author agent drafts an Argo WorkflowTemplate live as you
+        chat.
+      </p>
+      <div className="mt-1 flex max-w-xs flex-col gap-2.5 text-left">
+        <div className="flex items-start gap-2.5">
+          <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+            1
+          </span>
+          <span className="text-muted-foreground text-sm">
+            Say what to build in plain language
+          </span>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+            2
+          </span>
+          <span className="text-muted-foreground text-sm">
+            The agent drafts it live
+          </span>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+            3
+          </span>
+          <span className="text-muted-foreground text-sm">
+            Edit the <span className="text-foreground">YAML</span>, then{' '}
+            <span className="text-foreground">Save</span> your changes &mdash;
+            it&apos;s already in your workflows
+          </span>
+        </div>
       </div>
-      <Button
+      <button
         type="button"
-        variant="outline"
-        size="sm"
         disabled={disabled}
         onClick={() => onExample(EXAMPLE_PROMPT)}
-        data-testid="studio-chat-example">
-        Try an example
-      </Button>
+        data-testid="studio-chat-example"
+        className="bg-secondary text-foreground hover:bg-accent inline-flex items-center gap-2 border px-3 py-2 text-left text-sm disabled:opacity-50">
+        <Zap className="text-muted-foreground h-4 w-4 shrink-0" />
+        e.g. Build a workflow to check HR tickets, categorise them, then send
+        each to the right department
+      </button>
     </div>
   );
 }
@@ -82,31 +109,6 @@ export function StudioChatPanel({
         <StudioChatGate agentMissing={agentMissing} mcpMissing={mcpMissing} />
       )}
 
-      <div className="border-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Switch
-            id="studio-show-tool-calls"
-            checked={chat.showToolCalls}
-            onCheckedChange={chat.setShowToolCalls}
-            data-testid="studio-show-tool-calls"
-          />
-          <Label
-            htmlFor="studio-show-tool-calls"
-            className="text-muted-foreground text-xs">
-            Show tool calls
-          </Label>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={chat.newConversation}
-          data-testid="studio-new-conversation">
-          <Plus className="mr-1 h-4 w-4" />
-          New conversation
-        </Button>
-      </div>
-
       <div
         className="min-h-0 flex-1 overflow-auto p-4"
         data-testid="studio-chat-transcript">
@@ -126,7 +128,9 @@ export function StudioChatPanel({
                 defaultCodeCollapsed
                 status={message.status}
                 sender={
-                  message.role === 'assistant' ? 'Author agent' : undefined
+                  message.role === 'assistant'
+                    ? ARGO_MAKE_AUTHOR_AGENT_NAME
+                    : undefined
                 }
                 toolCalls={chat.showToolCalls ? message.toolCalls : undefined}
               />
@@ -151,7 +155,7 @@ export function StudioChatPanel({
             {chat.lockReason}
           </div>
         )}
-        <div className="flex items-end gap-2">
+        <div className="bg-card flex items-center gap-2 border p-2">
           <Textarea
             data-testid="studio-chat-input"
             value={chat.input}
@@ -159,15 +163,40 @@ export function StudioChatPanel({
             spellCheck={false}
             onChange={event => chat.setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe a change to your workflow..."
-            className="max-h-40 min-h-[44px] flex-1 resize-none text-sm"
+            placeholder="Message workflow builder agent"
+            className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0"
           />
           <Button
             type="button"
+            size="icon"
             onClick={() => void chat.send()}
             disabled={composerDisabled || chat.input.trim() === ''}
             data-testid="studio-chat-send">
-            Send
+            <SendHorizontal className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="studio-show-tool-calls"
+              checked={chat.showToolCalls}
+              onCheckedChange={chat.setShowToolCalls}
+              data-testid="studio-show-tool-calls"
+            />
+            <Label
+              htmlFor="studio-show-tool-calls"
+              className="text-muted-foreground text-xs">
+              Show tool calls
+            </Label>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={chat.newConversation}
+            data-testid="studio-new-conversation">
+            <RotateCcw className="mr-1 h-4 w-4" />
+            Reset chat
           </Button>
         </div>
       </div>

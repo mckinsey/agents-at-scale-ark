@@ -1,22 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { useParams } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import {
-  type WorkflowTemplate,
-  workflowTemplatesService,
-} from '@/lib/services/workflow-templates';
+import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import FlowDetailPage from './page';
+import WorkflowTemplatePage from './page';
 
 vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
-    get: vi.fn(),
-    getYaml: vi.fn(),
-    getStats: vi.fn(),
     canCreate: vi.fn(),
     canUpdate: vi.fn(),
   },
@@ -26,124 +18,69 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: vi.fn(),
 }));
 
-vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
-  useNamespacedNavigation: vi.fn(),
-}));
-
 vi.mock('next/navigation', () => ({
-  useParams: vi.fn(),
+  useParams: vi.fn(() => ({ id: 'my-flow' })),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => <div data-testid="page-header" />,
+vi.mock('@/components/workflow-studio/workflow-studio', () => ({
+  WorkflowStudio: () => <div data-testid="workflow-studio" />,
 }));
 
-vi.mock('@/components/cards/workflow-stats-card', () => ({
-  WorkflowStatsCard: () => <div data-testid="stats-card" />,
-}));
-
-vi.mock('@/components/workflow-dag-viewer', () => ({
-  WorkflowDagViewer: () => <div data-testid="dag-viewer" />,
-}));
-
-vi.mock('@/components/code-viewer', () => ({
-  CodeViewer: () => <div data-testid="code-viewer" />,
-}));
-
-vi.mock('@/components/dialogs/run-workflow-dialog', () => ({
-  RunWorkflowDialog: () => <div data-testid="run-dialog" />,
-}));
-
-vi.mock('@/components/dialogs/delete-workflow-template-dialog', () => ({
-  DeleteWorkflowTemplateDialog: () => <div data-testid="delete-dialog" />,
-}));
-
-const mockPush = vi.fn();
 const mockCanCreate = vi.mocked(workflowTemplatesService.canCreate);
 const mockCanUpdate = vi.mocked(workflowTemplatesService.canUpdate);
 
-const template: WorkflowTemplate = {
-  apiVersion: 'argoproj.io/v1alpha1',
-  kind: 'WorkflowTemplate',
-  metadata: { name: 'my-flow', annotations: {} },
-  spec: { entrypoint: 'main', templates: [] },
-};
-
-function setup(overrides?: {
-  canUpdate?: boolean;
-  readOnlyMode?: boolean;
-  namespace?: string;
-}) {
+function setup(overrides?: { canUpdate?: boolean; namespace?: string }) {
   vi.mocked(useParams).mockReturnValue({ id: 'my-flow' });
 
   vi.mocked(useNamespace).mockReturnValue({
     namespace: overrides?.namespace ?? 'default',
-    readOnlyMode: overrides?.readOnlyMode ?? false,
+    readOnlyMode: false,
   } as unknown as ReturnType<typeof useNamespace>);
-
-  vi.mocked(useNamespacedNavigation).mockReturnValue({
-    push: mockPush,
-    replace: vi.fn(),
-  });
-
-  vi.mocked(workflowTemplatesService.get).mockResolvedValue(template);
-  vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(
-    'kind: WorkflowTemplate',
-  );
-  vi.mocked(workflowTemplatesService.getStats).mockResolvedValue({
-    total: 0,
-    succeeded: 0,
-    running: 0,
-    failed: 0,
-  });
 
   mockCanCreate.mockResolvedValue(false);
   mockCanUpdate.mockResolvedValue(overrides?.canUpdate ?? false);
 }
 
-describe('FlowDetailPage Edit button', () => {
+describe('WorkflowTemplatePage guard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('hides the Edit button when canUpdate is false', async () => {
+  it('renders the studio in edit mode when canUpdate is true', async () => {
+    setup({ canUpdate: true });
+
+    render(<WorkflowTemplatePage />);
+
+    expect(await screen.findByTestId('workflow-studio')).toBeInTheDocument();
+  });
+
+  it('renders a not-authorized message with a back link and no studio when canUpdate is false', async () => {
     setup({ canUpdate: false });
 
-    render(<FlowDetailPage />);
+    render(<WorkflowTemplatePage />);
 
-    await screen.findByText('my-flow');
-    await waitFor(() => expect(mockCanUpdate).toHaveBeenCalled());
     expect(
-      screen.queryByRole('button', { name: /edit template/i }),
-    ).not.toBeInTheDocument();
+      await screen.findByText(/don't have permission to edit/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /back to workflow templates/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('workflow-studio')).not.toBeInTheDocument();
   });
 
-  it('shows the Edit button when canUpdate is true and navigates to the edit route', async () => {
-    setup({ canUpdate: true });
-    const user = userEvent.setup();
+  it('re-runs the access check when the namespace changes', async () => {
+    setup({ canUpdate: true, namespace: 'ns-a' });
 
-    render(<FlowDetailPage />);
+    const { rerender } = render(<WorkflowTemplatePage />);
+    await waitFor(() => expect(mockCanUpdate).toHaveBeenCalledTimes(1));
 
-    await screen.findByText('my-flow');
-    const editButton = await screen.findByRole('button', {
-      name: /edit template/i,
-    });
+    vi.mocked(useNamespace).mockReturnValue({
+      namespace: 'ns-b',
+      readOnlyMode: false,
+    } as unknown as ReturnType<typeof useNamespace>);
 
-    await user.click(editButton);
-    expect(mockPush).toHaveBeenCalledWith('/workflow-templates/my-flow/edit');
-  });
-
-  it('hides the Edit button in read-only mode even when canUpdate is true', async () => {
-    setup({ canUpdate: true, readOnlyMode: true });
-
-    render(<FlowDetailPage />);
-
-    await screen.findByText('my-flow');
-    await waitFor(() => expect(mockCanUpdate).toHaveBeenCalled());
-    expect(
-      screen.queryByRole('button', { name: /edit template/i }),
-    ).not.toBeInTheDocument();
+    rerender(<WorkflowTemplatePage />);
+    await waitFor(() => expect(mockCanUpdate).toHaveBeenCalledTimes(2));
   });
 });

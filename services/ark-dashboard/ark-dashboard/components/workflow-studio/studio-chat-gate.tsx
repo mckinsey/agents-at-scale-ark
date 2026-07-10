@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Copy, Lock } from 'lucide-react';
+import { ArrowRight, Check, Copy, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -16,7 +16,23 @@ interface StudioChatGateProps {
   mcpMissing: boolean;
 }
 
-function InstallAgentStep() {
+interface StepBadgeProps {
+  number: number;
+}
+
+function StepBadge({ number }: StepBadgeProps) {
+  return (
+    <span className="bg-muted text-muted-foreground mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-xs">
+      {number}
+    </span>
+  );
+}
+
+interface InstallAgentStepProps {
+  number: number;
+}
+
+function InstallAgentStep({ number }: InstallAgentStepProps) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -27,49 +43,58 @@ function InstallAgentStep() {
   };
 
   return (
-    <li data-testid="studio-gate-step-agent">
-      <p className="text-foreground text-sm font-medium">
-        Install the {ARGO_MAKE_AUTHOR_AGENT_NAME} agent
-      </p>
-      <div className="border-border bg-muted mt-2 flex items-center gap-2 rounded-md border p-2">
-        <code className="flex-1 overflow-x-auto font-mono text-xs whitespace-pre">
-          {ARGO_MAKE_AUTHOR_INSTALL_CMD}
-        </code>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => void copy()}
-          aria-label="Copy install command"
-          data-testid="studio-gate-copy">
-          {copied ? (
-            <Check className="h-4 w-4" />
-          ) : (
-            <Copy className="h-4 w-4" />
-          )}
-        </Button>
+    <li className="flex items-start gap-2.5" data-testid="studio-gate-step-agent">
+      <StepBadge number={number} />
+      <div className="flex flex-1 flex-col gap-2">
+        <p className="text-foreground text-sm">
+          Install the {ARGO_MAKE_AUTHOR_AGENT_NAME} agent
+        </p>
+        <div className="bg-muted flex items-start gap-2 border p-2">
+          <code className="text-foreground min-w-0 flex-1 break-all font-mono text-xs">
+            {ARGO_MAKE_AUTHOR_INSTALL_CMD}
+          </code>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => void copy()}
+            aria-label="Copy install command"
+            data-testid="studio-gate-copy">
+            {copied ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
       </div>
     </li>
   );
 }
 
-function AddMcpStep() {
+interface AddMcpStepProps {
+  number: number;
+}
+
+function AddMcpStep({ number }: AddMcpStepProps) {
   const { push } = useNamespacedNavigation();
 
   return (
-    <li data-testid="studio-gate-step-mcp">
-      <p className="text-foreground text-sm font-medium">
-        Add the Kubernetes MCP server
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-2"
-        onClick={() => push('/mcp')}
-        data-testid="studio-gate-go-to-mcps">
-        Go to MCPs
-      </Button>
+    <li className="flex items-start gap-2.5" data-testid="studio-gate-step-mcp">
+      <StepBadge number={number} />
+      <div className="flex flex-1 flex-col gap-2">
+        <p className="text-foreground text-sm">Add the Kubernetes MCP server</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() => push('/mcp')}
+          data-testid="studio-gate-go-to-mcps">
+          Go to MCPs
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
     </li>
   );
 }
@@ -78,23 +103,25 @@ export function StudioChatGate({
   agentMissing,
   mcpMissing,
 }: StudioChatGateProps) {
+  let stepNumber = 0;
+
   return (
     <div
-      className="bg-background/95 absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 p-6 text-center backdrop-blur-sm"
+      className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center p-6 backdrop-blur-sm"
       data-testid="studio-chat-gate">
-      <Lock className="text-muted-foreground h-8 w-8" />
-      <div>
+      <div className="bg-popover flex max-w-xs flex-col items-center gap-3 border p-6 text-center shadow-lg">
+        <Lock className="text-muted-foreground h-7 w-7" />
         <p className="text-foreground text-base font-semibold">
           Chat with the agent is locked
         </p>
-        <p className="text-muted-foreground mt-1 text-sm">
+        <p className="text-muted-foreground text-sm">
           Set up this namespace to start chatting with the builder agent:
         </p>
+        <ol className="flex w-full flex-col gap-4 text-left">
+          {agentMissing && <InstallAgentStep number={++stepNumber} />}
+          {mcpMissing && <AddMcpStep number={++stepNumber} />}
+        </ol>
       </div>
-      <ol className="flex w-full max-w-md flex-col gap-4 text-left">
-        {agentMissing && <InstallAgentStep />}
-        {mcpMissing && <AddMcpStep />}
-      </ol>
     </div>
   );
 }

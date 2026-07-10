@@ -241,9 +241,10 @@ describe('WorkflowStudio run button', () => {
     readOnlyMode = false;
   });
 
-  it('disables run on a fresh unpersisted workflow', () => {
+  it('shows create instead of run on a fresh unpersisted workflow', () => {
     render(<WorkflowStudio mode="new" initialName="my-workflow" />);
-    expect(screen.getByTestId('studio-run')).toBeDisabled();
+    expect(screen.queryByTestId('studio-run')).not.toBeInTheDocument();
+    expect(screen.getByTestId('studio-create')).toBeInTheDocument();
   });
 
   it('disables run while there are unsaved changes', async () => {

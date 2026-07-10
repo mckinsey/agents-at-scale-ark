@@ -5,7 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkflowTemplatesPage from '@/app/(dashboard)/workflow-templates/page';
 
 vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => <div data-testid="page-header">Page Header</div>,
+  PageHeader: ({ currentPage, actions }: { currentPage: string; actions?: React.ReactNode }) => (
+    <div data-testid="page-header">
+      <span>{currentPage}</span>
+      {actions}
+    </div>
+  ),
 }));
 
 vi.mock('@/components/sections/workflow-templates-section', () => ({
@@ -14,14 +19,6 @@ vi.mock('@/components/sections/workflow-templates-section', () => ({
       Workflow Templates Section
     </div>
   ),
-}));
-
-vi.mock('@/lib/services/workflow-templates-hooks', () => ({
-  useGetAllWorkflowTemplates: vi.fn(() => ({
-    data: [{ name: 'test-workflow-1' }, { name: 'test-workflow-2' }],
-    isPending: false,
-    error: null,
-  })),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -69,12 +66,36 @@ describe('WorkflowTemplatesPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('should render page title with count', () => {
+  it('should render page title and subtitle', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <WorkflowTemplatesPage />
       </QueryClientProvider>,
     );
-    expect(screen.getByText('Workflow Templates (2)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Workflows' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Automate complex processes with agentic orchestration'),
+    ).toBeInTheDocument();
+  });
+
+  it('should render "Workflows" breadcrumb current page', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkflowTemplatesPage />
+      </QueryClientProvider>,
+    );
+    const header = screen.getByTestId('page-header');
+    expect(header).toHaveTextContent('Workflows');
+  });
+
+  it('should render the "Add group" button', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkflowTemplatesPage />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId('workflow-add-group')).toBeInTheDocument();
   });
 });
