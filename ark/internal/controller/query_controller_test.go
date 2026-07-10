@@ -678,7 +678,6 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		Expect(k8sClient.Update(ctx, &refetched)).To(Succeed())
 		Expect(k8sClient.Delete(ctx, &refetched)).To(Succeed())
 	})
-
 })
 
 var _ = Describe("Query Controller Fallback Raw", func() {
