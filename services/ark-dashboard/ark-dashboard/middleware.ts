@@ -32,8 +32,24 @@ function stripTrailingSlashes(value?: string): string | undefined {
   return value.slice(0, end);
 }
 
+// Under a tenant prefix, Next.js does not reliably strip the configured
+// basePath from req.nextUrl.pathname in middleware, so the request arrives as
+// e.g. /tenant-a/api/auth/signin. The public/sign-in allow-list below is
+// expressed with root-absolute paths, so we must normalise the pathname first
+// or /tenant-a/api/auth/signin fails startsWith('/api/auth') and !== SIGNIN_PATH,
+// and the gate redirects the sign-in route to itself forever. No-op when Next
+// already stripped the prefix, or when NEXT_PUBLIC_BASE_PATH is unset (root
+// hosting). Same env var the api-url helper uses; substituted at container start.
+function stripBasePath(pathname: string, basePath: string): string {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return '/';
+  if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
+  return pathname;
+}
+
 export default auth(async (req: NextRequestWithAuth) => {
-  const { pathname } = req.nextUrl;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const pathname = stripBasePath(req.nextUrl.pathname, basePath);
 
   if (
     pathname === '/favicon.ico' ||
