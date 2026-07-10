@@ -3,6 +3,8 @@ kind: WorkflowTemplate
 metadata:
   name: ark-query
   namespace: {{ .Release.Namespace }}
+  labels:
+    ark.mckinsey.com/dashboard-hidden: "true"
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "5"

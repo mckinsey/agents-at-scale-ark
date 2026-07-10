@@ -1,6 +1,7 @@
 import yaml from 'js-yaml';
 
 import { apiClient } from '@/lib/api/client';
+import { ARK_LABELS } from '@/lib/constants/labels';
 import { accessReviewService } from '@/lib/services/access-review';
 
 export interface WorkflowTemplateMetadata {
@@ -97,6 +98,7 @@ export const workflowTemplatesService = {
   async list(): Promise<WorkflowTemplate[]> {
     const response = await apiClient.get<WorkflowTemplateList>(
       '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
+      { params: { labelSelector: `${ARK_LABELS.DASHBOARD_HIDDEN}!=true` } },
     );
     return response.items;
   },

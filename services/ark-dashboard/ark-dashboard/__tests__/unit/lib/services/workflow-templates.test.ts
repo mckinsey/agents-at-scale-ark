@@ -65,6 +65,7 @@ describe('workflowTemplatesService', () => {
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
+        { params: { labelSelector: 'ark.mckinsey.com/dashboard-hidden!=true' } },
       );
       expect(result).toHaveLength(2);
       expect(result[0].metadata.name).toBe('test-template');
