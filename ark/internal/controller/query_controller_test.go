@@ -532,6 +532,10 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 	ctx := context.Background()
 
 	It("deletes a terminal-phase Query whose TTL has elapsed since completion", func() {
+		// Also covers #2828: with the finalizer present, r.Delete only
+		// marks the Query Terminating, so Reconcile must reach
+		// handleFinalizer in the same pass to clear the finalizer.
+		// Without it the Query stays Terminating forever.
 		name := "ttl-elapsed-terminal-query"
 		key := types.NamespacedName{Name: name, Namespace: "default"}
 
@@ -544,6 +548,10 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		}
 		Expect(query.Spec.SetInputString("hello")).To(Succeed())
 		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		controllerutil.AddFinalizer(query, finalizer)
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
 
 		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
 		query.Status.Phase = statusDone
@@ -561,7 +569,7 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		err = k8sClient.Get(ctx, key, &arkv1alpha1.Query{})
-		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be deleted when terminal phase + TTL elapsed since completion")
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be fully reaped when terminal phase + TTL elapsed, not stuck Terminating with finalizer")
 	})
 
 	It("does NOT delete a non-terminal Query even when its TTL has elapsed since creation", func() {
@@ -671,57 +679,6 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		Expect(k8sClient.Delete(ctx, &refetched)).To(Succeed())
 	})
 
-	It("finalizes and removes the finalizer on a terminal, TTL-expired Query so it does not get stuck in Terminating", func() {
-		// Regression test for #2828: once the GC guard sets deletionTimestamp
-		// on a terminal-phase, TTL-expired Query, subsequent reconciles must
-		// reach handleFinalizer so the broker cleanup runs and the finalizer
-		// is removed. Previously Reconcile returned early at the TTL guard,
-		// so a Query carrying the query.ark.mckinsey.com finalizer stayed in
-		// Terminating forever.
-		name := "ttl-elapsed-terminal-with-finalizer"
-		key := types.NamespacedName{Name: name, Namespace: "default"}
-
-		query := &arkv1alpha1.Query{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-			Spec: arkv1alpha1.QuerySpec{
-				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-				TTL:    &metav1.Duration{Duration: time.Nanosecond},
-			},
-		}
-		Expect(query.Spec.SetInputString("hello")).To(Succeed())
-		Expect(k8sClient.Create(ctx, query)).To(Succeed())
-
-		// Add the finalizer so r.Delete only marks the object Terminating
-		// instead of reaping it immediately.
-		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
-		controllerutil.AddFinalizer(query, finalizer)
-		Expect(k8sClient.Update(ctx, query)).To(Succeed())
-
-		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
-		query.Status.Phase = statusDone
-		query.Status.Conditions = []metav1.Condition{{
-			Type:               string(arkv1alpha1.QueryCompleted),
-			Status:             metav1.ConditionTrue,
-			Reason:             "QuerySucceeded",
-			Message:            "Query completed successfully",
-			LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Hour)),
-		}}
-		Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
-
-		r := &QueryReconciler{
-			Client: k8sClient,
-			Scheme: k8sClient.Scheme(),
-		}
-
-		// Reconcile must both issue r.Delete AND clear the finalizer so
-		// the API server can reap the object; before the fix, Reconcile
-		// returned right after r.Delete and looped forever on the guard.
-		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
-		Expect(err).NotTo(HaveOccurred())
-
-		err = k8sClient.Get(ctx, key, &arkv1alpha1.Query{})
-		Expect(errors.IsNotFound(err)).To(BeTrue(), "terminal, TTL-expired Query with finalizer must be reaped, not stuck Terminating")
-	})
 })
 
 var _ = Describe("Query Controller Fallback Raw", func() {
