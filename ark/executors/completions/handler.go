@@ -59,6 +59,7 @@ type executionState struct {
 	eventStream    EventStreamInterface
 	querySpan      telemetry.Span
 	targetSpan     telemetry.Span
+	isResumption   bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -120,6 +121,7 @@ func (h *Handler) ProcessMessage(
 	// Check if this is a resumption from HITL approval or rejection
 	//nolint:nestif // TODO: Refactor to reduce nesting complexity
 	if isResumption, a2aTask := h.checkResumption(ctx, query); isResumption {
+		state.isResumption = true
 		decision := "approved"
 		if a2aTask.Status.Phase == arka2a.PhaseFailed {
 			decision = "rejected"
@@ -913,7 +915,7 @@ func resolveResumptionAgent(state *executionState, a2aTask *arkv1alpha1.A2ATask)
 
 // saveInputMessagesToMemory saves input messages to memory before first approval
 func (h *Handler) saveInputMessagesToMemory(ctx context.Context, state *executionState) {
-	if state.memory == nil || len(state.inputMessages) == 0 || len(state.memoryMessages) != 0 {
+	if state.memory == nil || len(state.inputMessages) == 0 {
 		return
 	}
 
@@ -950,9 +952,8 @@ func (h *Handler) saveFinalMessagesToMemory(ctx context.Context, state *executio
 
 	log := logf.FromContext(ctx)
 	var messagesToSave []Message
-	isResumption := len(state.memoryMessages) > 0
 
-	if isResumption {
+	if state.isResumption {
 		messagesToSave = responseMessages
 		log.Info("Saving final messages (resumption)", "messageCount", len(messagesToSave), "queryName", state.query.Name)
 	} else {

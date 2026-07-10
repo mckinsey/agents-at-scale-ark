@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
@@ -1126,7 +1131,7 @@ func TestSaveInputMessagesToMemory(t *testing.T) {
 		assert.Zero(t, mem.addCalls, "should not call AddMessages on empty input")
 	})
 
-	t.Run("no-op when memoryMessages already populated", func(t *testing.T) {
+	t.Run("saves input on follow-up turn with existing history", func(t *testing.T) {
 		mem := &stubMemory{}
 		state := &executionState{
 			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
@@ -1135,7 +1140,8 @@ func TestSaveInputMessagesToMemory(t *testing.T) {
 			memoryMessages: []Message{NewUserMessage("previous")},
 		}
 		h.saveInputMessagesToMemory(ctx, state)
-		assert.Zero(t, mem.addCalls, "should skip save when memory already has history")
+		require.Equal(t, 1, mem.addCalls, "should save follow-up input even when memory has history")
+		assert.Len(t, mem.receivedMsg[0], 1)
 	})
 
 	t.Run("saves input messages on first approval", func(t *testing.T) {
@@ -1242,11 +1248,26 @@ func TestSaveFinalMessagesToMemory(t *testing.T) {
 			memory:         mem,
 			inputMessages:  []Message{NewUserMessage("orig")},
 			memoryMessages: []Message{NewUserMessage("from-memory")},
+			isResumption:   true,
 		}
 		response := []Message{NewAssistantMessage("post-approval")}
 		h.saveFinalMessagesToMemory(ctx, state, response)
 		require.Equal(t, 1, mem.addCalls)
 		assert.Len(t, mem.receivedMsg[0], 1)
+	})
+
+	t.Run("follow-up turn saves input and response despite existing history", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q-followup"}},
+			memory:         mem,
+			inputMessages:  []Message{NewUserMessage("second question")},
+			memoryMessages: []Message{NewUserMessage("first"), NewAssistantMessage("first-answer")},
+		}
+		response := []Message{NewAssistantMessage("second answer")}
+		h.saveFinalMessagesToMemory(ctx, state, response)
+		require.Equal(t, 1, mem.addCalls)
+		assert.Len(t, mem.receivedMsg[0], 2, "must persist the new user message alongside the response")
 	})
 
 	t.Run("tolerates AddMessages error", func(t *testing.T) {
@@ -1259,6 +1280,84 @@ func TestSaveFinalMessagesToMemory(t *testing.T) {
 		h.saveFinalMessagesToMemory(ctx, state, []Message{NewAssistantMessage("done")})
 		assert.Equal(t, 1, mem.addCalls)
 	})
+}
+
+func TestProcessMessageResumptionSucceeds(t *testing.T) {
+	var mu sync.Mutex
+	var llmRequestBody string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		llmRequestBody = string(body)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"resumed answer"},"finish_reason":"stop"}],"usage":{}}`))
+	}))
+	defer llm.Close()
+
+	model := &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-test"},
+			Provider: ProviderOpenAI,
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: llm.URL},
+					APIKey:  arkv1alpha1.ValueSource{Value: "test"},
+				},
+			},
+		},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "default"},
+		Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "test-model"}},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "resume-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"},
+			Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+		},
+		Status: arkv1alpha1.QueryStatus{
+			Response: &arkv1alpha1.Response{
+				A2A: &arkv1alpha1.A2AMetadata{TaskID: "resume-123"},
+			},
+		},
+	}
+	a2aTask := &arkv1alpha1.A2ATask{
+		ObjectMeta: metav1.ObjectMeta{Name: "a2a-task-resume-123", Namespace: "default"},
+		Spec:       arkv1alpha1.A2ATaskSpec{TaskID: "resume-123", ContextID: "conv-1"},
+		Status: arkv1alpha1.A2ATaskStatus{
+			Phase: arka2a.PhaseCompleted,
+			ProtocolMetadata: map[string]string{
+				"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]`,
+			},
+		},
+	}
+
+	h := newTestHandler(model, agent, query, a2aTask)
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("hello")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name": "resume-query", "namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	result, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Result)
+
+	// Proves the resumption branch ran (not a fresh dispatch): the reconstructed
+	// approved tool call and its result were sent to the model.
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, llmRequestBody, "call-1")
+	assert.Contains(t, llmRequestBody, "tool")
 }
 
 func TestHandleResumption_EarlyExits(t *testing.T) {
