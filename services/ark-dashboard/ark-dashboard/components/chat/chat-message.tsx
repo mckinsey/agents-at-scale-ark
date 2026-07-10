@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
@@ -71,80 +78,10 @@ function findScrollableElements(element: Element): Element[] {
   return scrollable;
 }
 
-export function ChatMessage({
-  role,
-  content,
-  status,
-  className,
-  viewMode = 'text',
-  queryName,
-  toolCalls,
-  sender,
-  tokenUsage,
-  approvalRequest,
-  namespace = 'default',
-  pollAfterApproval,
-}: Readonly<ChatMessageProps>) {
-  const isUser = role === 'user';
-  const isFailed = status === 'failed';
-  const markdownContent = renderMarkdown(content);
-  const { push } = useNamespacedNavigation();
+function useContentExpansion(content: string, markdownContent: ReactNode) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
-
-  const showErrorIcon = isFailed && queryName;
-
-  const taskDecision = approvalRequest?.taskId
-    ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
-    : undefined;
-  const [approvalDecision, setApprovalDecision] = useState<
-    'approved' | 'rejected' | null
-  >(taskDecision || null);
-
-  const approvalExpiresAtMs = useMemo(() => {
-    if (!approvalRequest?.timeout || !approvalRequest.receivedAtMs) {
-      return undefined;
-    }
-    const timeoutMs = parseDurationToMs(approvalRequest.timeout);
-    if (timeoutMs === null) return undefined;
-    return approvalRequest.receivedAtMs + timeoutMs;
-  }, [approvalRequest?.timeout, approvalRequest?.receivedAtMs]);
-
-  const handleApprove = async () => {
-    if (!approvalRequest?.taskId) return;
-    addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
-    await submitApproval(
-      `a2a-task-${approvalRequest.taskId}`,
-      namespace,
-      'approved',
-    );
-    setApprovalDecision('approved');
-    if (pollAfterApproval) {
-      await pollAfterApproval();
-    }
-  };
-
-  const handleReject = async () => {
-    if (!approvalRequest?.taskId) return;
-    addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
-    await submitApproval(
-      `a2a-task-${approvalRequest.taskId}`,
-      namespace,
-      'rejected',
-    );
-    setApprovalDecision('rejected');
-    if (pollAfterApproval) {
-      await pollAfterApproval();
-    }
-  };
-
-  const handleErrorIconClick = () => {
-    if (queryName) {
-      const eventsUrl = getResourceEventsUrl('Query', queryName);
-      push(eventsUrl);
-    }
-  };
 
   useEffect(() => {
     const checkContentWidth = () => {
@@ -222,49 +159,219 @@ export function ChatMessage({
     };
   }, [content, markdownContent]);
 
+  return { contentRef, needsExpansion, expandedWidth };
+}
+
+function ApprovalMessage({
+  approvalRequest,
+  isUser,
+  className,
+  queryName,
+  namespace,
+  pollAfterApproval,
+}: Readonly<{
+  approvalRequest: ToolApprovalRequest;
+  isUser: boolean;
+  className?: string;
+  queryName?: string;
+  namespace: string;
+  pollAfterApproval?: () => Promise<void>;
+}>) {
+  const taskDecision = approvalRequest.taskId
+    ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
+    : undefined;
+  const [approvalDecision, setApprovalDecision] = useState<
+    'approved' | 'rejected' | null
+  >(taskDecision || null);
+
+  const approvalExpiresAtMs = useMemo(() => {
+    if (!approvalRequest.timeout || !approvalRequest.receivedAtMs) {
+      return undefined;
+    }
+    const timeoutMs = parseDurationToMs(approvalRequest.timeout);
+    if (timeoutMs === null) return undefined;
+    return approvalRequest.receivedAtMs + timeoutMs;
+  }, [approvalRequest.timeout, approvalRequest.receivedAtMs]);
+
+  const handleApprove = async () => {
+    if (!approvalRequest.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'approved',
+    );
+    setApprovalDecision('approved');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
+
+  const handleReject = async () => {
+    if (!approvalRequest.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'rejected',
+    );
+    setApprovalDecision('rejected');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
+
+  // Generate a unique key from tool call IDs to reset component state on new approvals
+  const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
+  return (
+    <div
+      className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
+      <ApprovalNotification
+        key={approvalKey}
+        queryName={queryName || ''}
+        queryNamespace={namespace}
+        taskId={approvalRequest.taskId}
+        toolCalls={approvalRequest.toolCalls}
+        timeout={approvalRequest.timeout}
+        onTimeout={approvalRequest.onTimeout}
+        agentName={approvalRequest.agentName}
+        expiresAtMs={approvalExpiresAtMs}
+        existingDecision={approvalDecision}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onExpired={pollAfterApproval}
+      />
+    </div>
+  );
+}
+
+function ToolCallsOnlyMessage({
+  toolCalls,
+  isUser,
+  className,
+}: Readonly<{
+  toolCalls: ToolCallData[];
+  isUser: boolean;
+  className?: string;
+}>) {
+  return (
+    <div
+      data-testid="chat-message"
+      className={cn(
+        'flex flex-col gap-2',
+        isUser ? 'items-end' : 'items-start',
+        className,
+      )}>
+      {toolCalls.map(toolCall => (
+        <ToolCall key={toolCall.id} toolCall={toolCall} />
+      ))}
+    </div>
+  );
+}
+
+function MessageBubbleContent({
+  isUser,
+  isFailed,
+  content,
+  markdownContent,
+  viewMode,
+  sender,
+  tokenUsage,
+  queryName,
+  contentRef,
+}: Readonly<{
+  isUser: boolean;
+  isFailed: boolean;
+  content: string;
+  markdownContent: ReactNode;
+  viewMode: 'text' | 'markdown';
+  sender?: string;
+  tokenUsage?: ChatMessageProps['tokenUsage'];
+  queryName?: string;
+  contentRef: RefObject<HTMLDivElement | null>;
+}>) {
+  const { push } = useNamespacedNavigation();
+  const showErrorIcon = isFailed && queryName;
+
+  const handleErrorIconClick = () => {
+    if (queryName) {
+      const eventsUrl = getResourceEventsUrl('Query', queryName);
+      push(eventsUrl);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {sender && !isUser && (
+        <div className="text-fg-tertiary text-xs font-medium">{sender}</div>
+      )}
+      <div className="flex items-center gap-2">
+        <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
+          {viewMode === 'markdown' ? (
+            <div className="text-sm break-words">{markdownContent}</div>
+          ) : (
+            <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
+              {content}
+            </pre>
+          )}
+        </div>
+        {showErrorIcon && (
+          <button
+            onClick={handleErrorIconClick}
+            className="text-status-error hover:bg-status-error/10 flex-shrink-0 p-1 transition-colors"
+            title="View events for this query">
+            <IconShell size="sm">
+              <Warning />
+            </IconShell>
+          </button>
+        )}
+      </div>
+      {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
+        <div className="text-fg-tertiary text-xs opacity-60">
+          {tokenUsage.total_tokens.toLocaleString()} tokens (
+          {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
+          {tokenUsage.completion_tokens.toLocaleString()} out)
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StandardMessage({
+  isUser,
+  isFailed,
+  content,
+  viewMode,
+  sender,
+  tokenUsage,
+  queryName,
+  toolCalls,
+  className,
+}: Readonly<{
+  isUser: boolean;
+  isFailed: boolean;
+  content: string;
+  viewMode: 'text' | 'markdown';
+  sender?: string;
+  tokenUsage?: ChatMessageProps['tokenUsage'];
+  queryName?: string;
+  toolCalls?: ToolCallData[];
+  className?: string;
+}>) {
+  const markdownContent = renderMarkdown(content);
+  const { contentRef, needsExpansion, expandedWidth } = useContentExpansion(
+    content,
+    markdownContent,
+  );
+
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
-
-  if (approvalRequest) {
-    // Generate a unique key from tool call IDs to reset component state on new approvals
-    const approvalKey = approvalRequest.toolCalls.map(tc => tc.id).join('-');
-    return (
-      <div
-        className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
-        <ApprovalNotification
-          key={approvalKey}
-          queryName={queryName || ''}
-          queryNamespace={namespace}
-          taskId={approvalRequest.taskId}
-          toolCalls={approvalRequest.toolCalls}
-          timeout={approvalRequest.timeout}
-          onTimeout={approvalRequest.onTimeout}
-          agentName={approvalRequest.agentName}
-          expiresAtMs={approvalExpiresAtMs}
-          existingDecision={approvalDecision}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onExpired={pollAfterApproval}
-        />
-      </div>
-    );
-  }
-
-  if (!hasContent && hasToolCalls) {
-    return (
-      <div
-        data-testid="chat-message"
-        className={cn(
-          'flex flex-col gap-2',
-          isUser ? 'items-end' : 'items-start',
-          className,
-        )}>
-        {toolCalls.map(toolCall => (
-          <ToolCall key={toolCall.id} toolCall={toolCall} />
-        ))}
-      </div>
-    );
-  }
+  const alignClass = isUser ? 'items-end' : 'items-start';
+  const bubbleWidthClass = needsExpansion ? '' : 'max-w-[80%]';
+  const bubbleStyle =
+    needsExpansion && expandedWidth
+      ? { minWidth: `${expandedWidth}px` }
+      : undefined;
 
   let bubbleClass = 'bg-surface-bg-secondary text-fg-primary';
   if (isUser) {
@@ -276,58 +383,22 @@ export function ChatMessage({
   return (
     <div
       data-testid="chat-message"
-      className={cn(
-        'flex flex-col gap-2',
-        isUser ? 'items-end' : 'items-start',
-        className,
-      )}>
+      className={cn('flex flex-col gap-2', alignClass, className)}>
       {hasContent && (
         <div
-          className={cn(
-            'px-3 py-2',
-            needsExpansion ? '' : 'max-w-[80%]',
-            bubbleClass,
-          )}
-          style={
-            needsExpansion && expandedWidth
-              ? { minWidth: `${expandedWidth}px` }
-              : undefined
-          }>
-          <div className="flex flex-col gap-2">
-            {sender && !isUser && (
-              <div className="text-fg-tertiary text-xs font-medium">
-                {sender}
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
-                {viewMode === 'markdown' ? (
-                  <div className="text-sm break-words">{markdownContent}</div>
-                ) : (
-                  <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
-                    {content}
-                  </pre>
-                )}
-              </div>
-              {showErrorIcon && (
-                <button
-                  onClick={handleErrorIconClick}
-                  className="text-status-error hover:bg-status-error/10 flex-shrink-0 p-1 transition-colors"
-                  title="View events for this query">
-                  <IconShell size="sm">
-                    <Warning />
-                  </IconShell>
-                </button>
-              )}
-            </div>
-            {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
-              <div className="text-fg-tertiary text-xs opacity-60">
-                {tokenUsage.total_tokens.toLocaleString()} tokens (
-                {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
-                {tokenUsage.completion_tokens.toLocaleString()} out)
-              </div>
-            )}
-          </div>
+          className={cn('px-3 py-2', bubbleWidthClass, bubbleClass)}
+          style={bubbleStyle}>
+          <MessageBubbleContent
+            isUser={isUser}
+            isFailed={isFailed}
+            content={content}
+            markdownContent={markdownContent}
+            viewMode={viewMode}
+            sender={sender}
+            tokenUsage={tokenUsage}
+            queryName={queryName}
+            contentRef={contentRef}
+          />
         </div>
       )}
 
@@ -339,5 +410,63 @@ export function ChatMessage({
         </div>
       )}
     </div>
+  );
+}
+
+export function ChatMessage({
+  role,
+  content,
+  status,
+  className,
+  viewMode = 'text',
+  queryName,
+  toolCalls,
+  sender,
+  tokenUsage,
+  approvalRequest,
+  namespace = 'default',
+  pollAfterApproval,
+}: Readonly<ChatMessageProps>) {
+  const isUser = role === 'user';
+  const isFailed = status === 'failed';
+
+  if (approvalRequest) {
+    return (
+      <ApprovalMessage
+        approvalRequest={approvalRequest}
+        isUser={isUser}
+        className={className}
+        queryName={queryName}
+        namespace={namespace}
+        pollAfterApproval={pollAfterApproval}
+      />
+    );
+  }
+
+  const hasContent = content && content.trim().length > 0;
+  const hasToolCalls = toolCalls && toolCalls.length > 0;
+
+  if (!hasContent && hasToolCalls) {
+    return (
+      <ToolCallsOnlyMessage
+        toolCalls={toolCalls ?? []}
+        isUser={isUser}
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <StandardMessage
+      isUser={isUser}
+      isFailed={isFailed}
+      content={content}
+      viewMode={viewMode}
+      sender={sender}
+      tokenUsage={tokenUsage}
+      queryName={queryName}
+      toolCalls={toolCalls}
+      className={className}
+    />
   );
 }

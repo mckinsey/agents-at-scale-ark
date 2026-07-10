@@ -124,9 +124,12 @@ function Avatar({
   children,
   ...props
 }: Readonly<AvatarProps>) {
+  const contextValue = React.useMemo(
+    () => ({ size: size ?? undefined, disabled: disabled ?? undefined }),
+    [size, disabled],
+  );
   return (
-    <AvatarContext.Provider
-      value={{ size: size ?? undefined, disabled: disabled ?? undefined }}>
+    <AvatarContext.Provider value={contextValue}>
       <AvatarPrimitive.Root
         data-slot="avatar"
         tabIndex={disabled ? -1 : 0}
