@@ -28,16 +28,16 @@ var log = logf.Log.WithName("queryengine")
 // lingering executions to finalize their event stream before the process exits. The
 // pod's terminationGracePeriodSeconds must budget for preStop + --shutdown-timeout +
 // finalizeGrace + buffer so this window never pushes shutdown past the SIGKILL (see the
-// chart's gracefulShutdown values).
-const finalizeGrace = 2 * time.Second
+// chart's gracefulShutdown values). Var (not const) so tests can shorten it.
+var finalizeGrace = 2 * time.Second
 
 // Redis connection retry at boot. A shared-Redis blip (failover/restart) must not
 // crashloop the whole fleet synchronously, so tolerate transient unavailability with a
 // bounded retry before failing startup. Kept well inside the liveness failure budget.
-const (
-	redisConnectAttempts = 3
-	redisConnectBackoff  = 2 * time.Second
-)
+const redisConnectAttempts = 3
+
+// redisConnectBackoff is a var (not const) so tests can shorten it.
+var redisConnectBackoff = 2 * time.Second
 
 // ServerConfig configures the completions server, including how A2A task state is stored.
 type ServerConfig struct {
@@ -169,24 +169,28 @@ func NewServer(
 	return s, nil
 }
 
+// handleHealth is the liveness probe: always healthy while the process is up.
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+}
+
+// handleReady is the readiness probe: reports not-ready during shutdown so the pod is
+// removed from Service endpoints before in-flight requests are drained.
+func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if !s.ready.Load() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "shutting-down"})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+}
+
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
-	// Liveness: always healthy while the process is up.
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
-	})
-	// Readiness: reports not-ready during shutdown so the pod is removed from Service
-	// endpoints before in-flight requests are drained.
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if !s.ready.Load() {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "shutting-down"})
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
-	})
+	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/ready", s.handleReady)
 	mux.Handle("/", otelhttp.NewHandler(s.a2aServer.Handler(), "executor.completions"))
 
 	s.httpServer = &http.Server{
