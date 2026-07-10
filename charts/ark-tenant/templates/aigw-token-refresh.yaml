@@ -45,7 +45,7 @@ spec:
             - name: refresh
               image: {{ .Values.aigwTokenRefresh.image }}
               command:
-                - /bin/bash
+                - /bin/sh
                 - -c
                 - |
                   set -euo pipefail
