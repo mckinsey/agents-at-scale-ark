@@ -140,9 +140,14 @@ function TabsRoot({
   padded = true,
   ...props
 }: Readonly<TabsProps>) {
+  const sizeContextValue = React.useMemo(() => ({ size }), [size]);
+  const layoutContextValue = React.useMemo(
+    () => ({ hideBaseline, padded }),
+    [hideBaseline, padded],
+  );
   return (
-    <TabsSizeContext.Provider value={{ size }}>
-      <TabsLayoutContext.Provider value={{ hideBaseline, padded }}>
+    <TabsSizeContext.Provider value={sizeContextValue}>
+      <TabsLayoutContext.Provider value={layoutContextValue}>
         <TabsPrimitive.Root
           data-slot="tabs"
           className={cn(defaultStyles.tabs, className)}

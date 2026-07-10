@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
@@ -71,80 +71,10 @@ function findScrollableElements(element: Element): Element[] {
   return scrollable;
 }
 
-export function ChatMessage({
-  role,
-  content,
-  status,
-  className,
-  viewMode = 'text',
-  queryName,
-  toolCalls,
-  sender,
-  tokenUsage,
-  approvalRequest,
-  namespace = 'default',
-  pollAfterApproval,
-}: Readonly<ChatMessageProps>) {
-  const isUser = role === 'user';
-  const isFailed = status === 'failed';
-  const markdownContent = renderMarkdown(content);
-  const { push } = useNamespacedNavigation();
+function useContentExpansion(content: string, markdownContent: ReactNode) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
-
-  const showErrorIcon = isFailed && queryName;
-
-  const taskDecision = approvalRequest?.taskId
-    ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
-    : undefined;
-  const [approvalDecision, setApprovalDecision] = useState<
-    'approved' | 'rejected' | null
-  >(taskDecision || null);
-
-  const approvalExpiresAtMs = useMemo(() => {
-    if (!approvalRequest?.timeout || !approvalRequest.receivedAtMs) {
-      return undefined;
-    }
-    const timeoutMs = parseDurationToMs(approvalRequest.timeout);
-    if (timeoutMs === null) return undefined;
-    return approvalRequest.receivedAtMs + timeoutMs;
-  }, [approvalRequest?.timeout, approvalRequest?.receivedAtMs]);
-
-  const handleApprove = async () => {
-    if (!approvalRequest?.taskId) return;
-    addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
-    await submitApproval(
-      `a2a-task-${approvalRequest.taskId}`,
-      namespace,
-      'approved',
-    );
-    setApprovalDecision('approved');
-    if (pollAfterApproval) {
-      await pollAfterApproval();
-    }
-  };
-
-  const handleReject = async () => {
-    if (!approvalRequest?.taskId) return;
-    addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
-    await submitApproval(
-      `a2a-task-${approvalRequest.taskId}`,
-      namespace,
-      'rejected',
-    );
-    setApprovalDecision('rejected');
-    if (pollAfterApproval) {
-      await pollAfterApproval();
-    }
-  };
-
-  const handleErrorIconClick = () => {
-    if (queryName) {
-      const eventsUrl = getResourceEventsUrl('Query', queryName);
-      push(eventsUrl);
-    }
-  };
 
   useEffect(() => {
     const checkContentWidth = () => {
@@ -221,6 +151,85 @@ export function ChatMessage({
       window.removeEventListener('resize', checkContentWidth);
     };
   }, [content, markdownContent]);
+
+  return { contentRef, needsExpansion, expandedWidth };
+}
+
+export function ChatMessage({
+  role,
+  content,
+  status,
+  className,
+  viewMode = 'text',
+  queryName,
+  toolCalls,
+  sender,
+  tokenUsage,
+  approvalRequest,
+  namespace = 'default',
+  pollAfterApproval,
+}: Readonly<ChatMessageProps>) {
+  const isUser = role === 'user';
+  const isFailed = status === 'failed';
+  const markdownContent = renderMarkdown(content);
+  const { push } = useNamespacedNavigation();
+  const { contentRef, needsExpansion, expandedWidth } = useContentExpansion(
+    content,
+    markdownContent,
+  );
+
+  const showErrorIcon = isFailed && queryName;
+
+  const taskDecision = approvalRequest?.taskId
+    ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
+    : undefined;
+  const [approvalDecision, setApprovalDecision] = useState<
+    'approved' | 'rejected' | null
+  >(taskDecision || null);
+
+  const approvalExpiresAtMs = useMemo(() => {
+    if (!approvalRequest?.timeout || !approvalRequest.receivedAtMs) {
+      return undefined;
+    }
+    const timeoutMs = parseDurationToMs(approvalRequest.timeout);
+    if (timeoutMs === null) return undefined;
+    return approvalRequest.receivedAtMs + timeoutMs;
+  }, [approvalRequest?.timeout, approvalRequest?.receivedAtMs]);
+
+  const handleApprove = async () => {
+    if (!approvalRequest?.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'approved');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'approved',
+    );
+    setApprovalDecision('approved');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
+
+  const handleReject = async () => {
+    if (!approvalRequest?.taskId) return;
+    addSubmittedTaskDecision(approvalRequest.taskId, 'rejected');
+    await submitApproval(
+      `a2a-task-${approvalRequest.taskId}`,
+      namespace,
+      'rejected',
+    );
+    setApprovalDecision('rejected');
+    if (pollAfterApproval) {
+      await pollAfterApproval();
+    }
+  };
+
+  const handleErrorIconClick = () => {
+    if (queryName) {
+      const eventsUrl = getResourceEventsUrl('Query', queryName);
+      push(eventsUrl);
+    }
+  };
 
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;

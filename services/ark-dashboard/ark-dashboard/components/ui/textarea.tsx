@@ -56,6 +56,12 @@ interface TextareaRootProps extends React.ComponentProps<'div'> {
   size?: 'sm' | 'default' | 'lg';
 }
 
+const textareaFontSizeBySize = {
+  sm: 'paragraph-small-primary',
+  default: 'paragraph-regular-primary',
+  lg: 'paragraph-large-primary',
+} as const;
+
 function TextareaRoot({
   className,
   children,
@@ -67,11 +73,14 @@ function TextareaRoot({
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // Extract form-related props that should be passed to the textarea, strip from div.
-  const formProps: TextareaContextValue['formProps'] = {
-    'aria-invalid': props['aria-invalid'],
-    'aria-describedby': props['aria-describedby'],
-    id: props.id,
-  };
+  const formProps = React.useMemo<TextareaContextValue['formProps']>(
+    () => ({
+      'aria-invalid': props['aria-invalid'],
+      'aria-describedby': props['aria-describedby'],
+      id: props.id,
+    }),
+    [props['aria-invalid'], props['aria-describedby'], props.id],
+  );
   const {
     'aria-invalid': _a,
     'aria-describedby': _b,
@@ -101,22 +110,21 @@ function TextareaRoot({
     return () => textarea.removeEventListener('input', handleInput);
   }, []);
 
-  const fontSize =
-    size === 'lg'
-      ? 'paragraph-large-primary'
-      : size === 'sm'
-        ? 'paragraph-small-primary'
-        : 'paragraph-regular-primary';
+  const fontSize = textareaFontSizeBySize[size ?? 'default'];
+
+  const contextValue = React.useMemo<TextareaContextValue>(
+    () => ({
+      hasRoot: true,
+      count,
+      maxCharacters,
+      registerTextarea,
+      formProps,
+    }),
+    [count, maxCharacters, registerTextarea, formProps],
+  );
 
   return (
-    <TextareaContext.Provider
-      value={{
-        hasRoot: true,
-        count,
-        maxCharacters,
-        registerTextarea,
-        formProps,
-      }}>
+    <TextareaContext.Provider value={contextValue}>
       <div
         className={cn('flex flex-col gap-2', fontSize, className)}
         {...divProps}>

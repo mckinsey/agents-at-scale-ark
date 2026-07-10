@@ -52,8 +52,9 @@ type SelectProps = React.ComponentProps<typeof SelectPrimitive.Root> & {
  * ```
  */
 function Select({ size = 'default', children, ...props }: SelectProps) {
+  const sizeContextValue = React.useMemo(() => ({ size }), [size]);
   return (
-    <SelectSizeContext.Provider value={{ size }}>
+    <SelectSizeContext.Provider value={sizeContextValue}>
       <SelectPrimitive.Root data-slot="select" {...props}>
         {children}
       </SelectPrimitive.Root>
