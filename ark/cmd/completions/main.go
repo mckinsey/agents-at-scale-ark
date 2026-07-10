@@ -114,6 +114,8 @@ func main() {
 		}
 	case <-ctx.Done():
 		log.Info("shutting down", "timeout", shutdownTimeout)
+		// Fail readiness immediately so the pod leaves Service endpoints before draining.
+		srv.SetNotReady()
 		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancelShutdown()
 		if err := srv.Stop(shutdownCtx); err != nil {

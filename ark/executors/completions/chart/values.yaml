@@ -40,13 +40,24 @@ podDisruptionBudget:
   minAvailable: 1
 
 # Bounded drain window on shutdown. Queries can run up to ~5m, but scale-downs/drains are
-# not blocked that long: in-flight queries exceeding the window are cut and retried by the
-# controller's reconcile. Raise for longer drains.
-terminationGracePeriodSeconds: 60
+# not blocked that long: in-flight queries exceeding the window are cut and fail
+# TERMINALLY — the controller records them as errored and does NOT re-dispatch them, so the
+# client must resubmit. If in-flight queries must survive a drain, size the values below for
+# your real max query duration rather than relying on retries.
+#
+# terminationGracePeriodSeconds must budget the full shutdown sequence, since it covers both
+# the preStop hook and post-SIGTERM handling:
+#   terminationGracePeriodSeconds >= preStopSleepSeconds + shutdownTimeoutSeconds + ~2s finalize + buffer
+# Defaults: 5 + 50 + 2 = 57s, leaving 13s headroom under 70s before SIGKILL.
+terminationGracePeriodSeconds: 70
 gracefulShutdown:
   # preStop sleep so kube-proxy removes the pod from Service endpoints before the server
   # starts refusing — stops new requests landing on a terminating pod.
   preStopSleepSeconds: 5
+  # Max time http.Server.Shutdown drains in-flight requests after SIGTERM (the binary's
+  # --shutdown-timeout). Exposed here so it can't silently drift past
+  # terminationGracePeriodSeconds and get cut by SIGKILL; keep the budget above satisfied.
+  shutdownTimeoutSeconds: 50
 
 # A2A task-state store. "memory" keeps task state per-pod (correct for single-pod installs
 # and the controller's blocking dispatch path). "redis" uses a shared Redis-backed task

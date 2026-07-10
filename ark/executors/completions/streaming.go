@@ -490,9 +490,15 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 		h.streamWriter = nil
 	}
 
-	// Send completion signal
+	// Send completion signal.
+	// Use a fresh, bounded context rather than the request context: on the drain-deadline
+	// path the request context is already cancelled (server shutdown), which would fail
+	// this POST even though the broker still needs the explicit terminal completion signal.
+	// This mirrors startStream, which detaches the stream body from the request context.
+	completeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	completeURL := fmt.Sprintf("%s/stream/%s/complete", h.baseURL, url.QueryEscape(h.queryName))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
+	req, err := http.NewRequestWithContext(completeCtx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return fmt.Errorf("failed to create completion request: %w", err)
 	}

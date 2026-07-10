@@ -28,6 +28,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "--addr=:{{ .Values.targetPort }}"
+            - "--shutdown-timeout={{ .Values.gracefulShutdown.shutdownTimeoutSeconds }}s"
           ports:
             - containerPort: {{ .Values.targetPort }}
               protocol: TCP

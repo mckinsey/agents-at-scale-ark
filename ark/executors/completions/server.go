@@ -25,10 +25,19 @@ import (
 var log = logf.Log.WithName("queryengine")
 
 // finalizeGrace is the short window granted, after the drain deadline is hit, for
-// lingering executions to finalize their event stream before the process exits. It
-// must stay well under the gap between --shutdown-timeout and the pod's
-// terminationGracePeriodSeconds so it never pushes shutdown past the SIGKILL.
+// lingering executions to finalize their event stream before the process exits. The
+// pod's terminationGracePeriodSeconds must budget for preStop + --shutdown-timeout +
+// finalizeGrace + buffer so this window never pushes shutdown past the SIGKILL (see the
+// chart's gracefulShutdown values).
 const finalizeGrace = 2 * time.Second
+
+// Redis connection retry at boot. A shared-Redis blip (failover/restart) must not
+// crashloop the whole fleet synchronously, so tolerate transient unavailability with a
+// bounded retry before failing startup. Kept well inside the liveness failure budget.
+const (
+	redisConnectAttempts = 3
+	redisConnectBackoff  = 2 * time.Second
+)
 
 // ServerConfig configures the completions server, including how A2A task state is stored.
 type ServerConfig struct {
@@ -85,9 +94,23 @@ func buildTaskManager(cfg ServerConfig, processor taskmanager.MessageProcessor) 
 		opts = append(opts, redistm.WithExpireTime(cfg.TaskExpiry))
 	}
 
-	tm, err := redistm.NewTaskManager(redisClient, processor, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create redis task manager: %w", err)
+	// NewTaskManager pings Redis synchronously and hard-fails if it is unreachable. Retry
+	// with backoff so a transient blip at boot doesn't crashloop every replica at once; a
+	// permanent misconfig still fails fast after the bounded attempts.
+	var tm taskmanager.TaskManager
+	var lastErr error
+	for attempt := 1; attempt <= redisConnectAttempts; attempt++ {
+		tm, lastErr = redistm.NewTaskManager(redisClient, processor, opts...)
+		if lastErr == nil {
+			break
+		}
+		log.Error(lastErr, "redis task manager init failed", "attempt", attempt, "maxAttempts", redisConnectAttempts, "addr", opt.Addr)
+		if attempt < redisConnectAttempts {
+			time.Sleep(redisConnectBackoff)
+		}
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to create redis task manager after %d attempts: %w", redisConnectAttempts, lastErr)
 	}
 	log.Info("using redis-backed A2A task manager", "addr", opt.Addr, "db", opt.DB)
 	return tm, nil
@@ -174,8 +197,9 @@ func (s *Server) Start() error {
 	return s.httpServer.ListenAndServe()
 }
 
-// SetNotReady flips the readiness probe to failing. Call this on receipt of a termination
-// signal, before Stop, so new requests stop being routed while in-flight work drains.
+// SetNotReady flips the readiness probe to failing. main calls this on receipt of a
+// termination signal, before Stop, so /ready reports not-ready as early as possible while
+// in-flight work drains. Stop also flips it defensively as its first action.
 func (s *Server) SetNotReady() {
 	s.ready.Store(false)
 }
