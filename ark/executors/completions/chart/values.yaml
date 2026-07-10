@@ -70,6 +70,14 @@ taskManager:
 # Redis connection, used only when taskManager.backend is "redis". Mirrors ark-broker:
 # provide a plain url for dev, or a Secret reference for production. Use a dedicated Redis
 # logical DB (e.g. redis://host:6379/2) to isolate keys from other Ark services.
+#
+# TLS: use a rediss:// url. Unlike ark-broker (Node/ioredis ignores the OS trust store),
+# the Go client verifies against the pod's system trust store, so rediss:// works out of the
+# box for Redis served by a public/system-trusted CA — no extra config. A private/self-signed
+# Redis CA is NOT yet wired here (follow-up: a scoped redis.tls CA block like ark-broker's).
+# Do NOT reach for customCACert/SSL_CERT_FILE to trust a private Redis CA: SSL_CERT_FILE
+# replaces the whole system bundle and can knock out the public roots the executor needs for
+# outbound HTTPS (LLM providers).
 redis:
   url: ""                          # e.g. redis://:pass@ark-redis-dev:6379/0
   urlSecretRef:
