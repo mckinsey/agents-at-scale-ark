@@ -14,12 +14,12 @@ from ark_api.api.v1.a2agw import manager as manager_module
 from ark_api.api.v1.a2agw.manager import DynamicManager
 from ark_api.api.v1.a2agw.registry import (
     apply_forwarded_url,
-    external_base_from_headers,
+    external_forwarded_base_from_headers,
     forwarded_base_ctx,
 )
 
 
-def _make_card(name="weather", url="http://localhost:8000/a2a/agent/weather/"):
+def _make_test_card(name="weather", url="http://localhost:8000/a2a/agent/weather/"):
     return AgentCard(
         name=name,
         description="A test agent",
@@ -42,11 +42,11 @@ def _make_card(name="weather", url="http://localhost:8000/a2a/agent/weather/"):
 
 
 class TestExternalBaseFromHeaders(unittest.TestCase):
-    """external_base_from_headers only activates on X-Forwarded-Prefix."""
+    """external_forwarded_base_from_headers only activates on X-Forwarded-Prefix."""
 
     def test_empty_without_prefix(self):
-        self.assertEqual(external_base_from_headers({}), "")
-        self.assertEqual(external_base_from_headers({"host": "example.com"}), "")
+        self.assertEqual(external_forwarded_base_from_headers({}), "")
+        self.assertEqual(external_forwarded_base_from_headers({"host": "example.com"}), "")
 
     def test_builds_from_forwarded_headers(self):
         headers = {
@@ -55,23 +55,23 @@ class TestExternalBaseFromHeaders(unittest.TestCase):
             "x-forwarded-proto": "https",
         }
         self.assertEqual(
-            external_base_from_headers(headers), "https://example.com/tenant-a"
+            external_forwarded_base_from_headers(headers), "https://example.com/tenant-a"
         )
 
     def test_falls_back_to_host_header_and_http(self):
         headers = {"x-forwarded-prefix": "/t", "host": "svc:8080"}
-        self.assertEqual(external_base_from_headers(headers), "http://svc:8080/t")
+        self.assertEqual(external_forwarded_base_from_headers(headers), "http://svc:8080/t")
 
 
 class TestApplyForwardedUrl(unittest.TestCase):
     """apply_forwarded_url rewrites the card URL only when a base is published."""
 
     def test_no_context_returns_card_unchanged(self):
-        card = _make_card()
+        card = _make_test_card()
         self.assertIs(apply_forwarded_url(card), card)
 
     def test_rewrites_url_from_context_without_mutating_original(self):
-        card = _make_card()
+        card = _make_test_card()
         token = forwarded_base_ctx.set("https://example.com/tenant-a")
         try:
             result = apply_forwarded_url(card)
@@ -107,7 +107,7 @@ class TestAgentCardServing(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_well_known_card_uses_forwarded_prefix(self):
-        client = TestClient(_mount_gateway_with_agent(_make_card()))
+        client = TestClient(_mount_gateway_with_agent(_make_test_card()))
         response = client.get(
             "/a2a/agent/weather/.well-known/agent.json",
             headers={
@@ -123,7 +123,7 @@ class TestAgentCardServing(unittest.TestCase):
         )
 
     def test_well_known_card_without_prefix_keeps_static_base(self):
-        client = TestClient(_mount_gateway_with_agent(_make_card()))
+        client = TestClient(_mount_gateway_with_agent(_make_test_card()))
         response = client.get("/a2a/agent/weather/.well-known/agent.json")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("/tenant-a/", response.json()["url"])

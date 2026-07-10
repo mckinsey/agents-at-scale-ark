@@ -14,7 +14,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from .execution import ARKAgentExecutor
 from .registry import (
     apply_forwarded_url,
-    external_base_from_headers,
+    external_forwarded_base_from_headers,
     forwarded_base_ctx,
     get_registry,
 )
@@ -82,9 +82,9 @@ class ProxyApp:
                 key.decode("latin-1").lower(): value.decode("latin-1")
                 for key, value in scope.get("headers", [])
             }
-            base = external_base_from_headers(headers)
-            if base:
-                token = forwarded_base_ctx.set(base)
+            forwarded_base = external_forwarded_base_from_headers(headers)
+            if forwarded_base:
+                token = forwarded_base_ctx.set(forwarded_base)
 
         # Forward to current app - this is safe because we hold a reference
         # Even if set_app() is called during this await, we continue using

@@ -36,12 +36,16 @@ forwarded_base_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
     "a2a_forwarded_base", default=""
 )
 
-def external_base_from_headers(headers):
-    """Build scheme://host{prefix} from standard forwarding headers.
+def external_forwarded_base_from_headers(headers):
+    """Base URL (scheme://host{prefix}) for the FORWARDED-PREFIX case only.
 
-    Returns "" unless X-Forwarded-Prefix is present, mirroring the OpenAPI
-    server-URL logic: the prefix is the signal that an external gateway is
-    path-routing this deployment, and without it the static env values apply.
+    This is not a general "what is my base URL" helper: it returns a non-empty
+    value only when the request carries X-Forwarded-Prefix, which is the signal
+    that an external gateway is path-routing this deployment (mirrors the OpenAPI
+    server-URL logic). It returns "" in every other case — meaning "no external
+    prefix, fall back to the static ARK_A2A_AGENT_CARD_* env / a relative link" —
+    which callers compose directly (see list_agents), so "" is deliberate rather
+    than None.
     """
     prefix = headers.get("x-forwarded-prefix", "")
     if not prefix:
@@ -53,12 +57,20 @@ def external_base_from_headers(headers):
 def apply_forwarded_url(card: AgentCard) -> AgentCard:
     """Card modifier: advertise a URL built from the request's forwarding prefix
     when present, so path-based multi-tenant deployments serve a card whose URL
-    carries the tenant prefix. Returns a copy; never mutates the shared card
-    cached by the manager."""
-    base = forwarded_base_ctx.get()
-    if not base:
+    carries the tenant prefix.
+
+    Returns a copy, never mutating the input. The DynamicManager is a single
+    shared instance whose cached AgentCard objects are reused for every request;
+    the prefix, by contrast, is request-scoped (from X-Forwarded-Prefix), so
+    concurrent requests for the same agent can carry different prefixes. Mutating
+    the shared card in place would race across those requests.
+    """
+    forwarded_base = forwarded_base_ctx.get()
+    if not forwarded_base:
         return card
-    return card.model_copy(update={"url": f"{base}{_agent_suffix(card.name)}"})
+    return card.model_copy(
+        update={"url": f"{forwarded_base}{_agent_suffix(card.name)}"}
+    )
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata
