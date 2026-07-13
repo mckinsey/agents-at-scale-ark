@@ -1,11 +1,4 @@
-"""Regression tests for the 422 validation exception handler:
-
-- #2829: ValueError-raising field validators must return 422, not 500.
-- The handler must not leak the request body (e.g. credentials) into the
-  response or logs.
-
-Uses the real app so the custom handler is exercised.
-"""
+"""Regression tests for the 422 validation exception handler."""
 import os
 import unittest
 
