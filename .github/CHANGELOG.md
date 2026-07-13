@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.66-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.66-rc...v0.1.66-rc.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* address CVEs from issue [#2838](https://github.com/mckinsey/agents-at-scale-ark/issues/2838) (js-yaml 4.3.0, Go 1.26.5) ([#2840](https://github.com/mckinsey/agents-at-scale-ark/issues/2840)) ([685f640](https://github.com/mckinsey/agents-at-scale-ark/commit/685f6408e586ed81f8ad09c44cfb4080b3a8f501))
+* honor tenant prefix (base path) across dashboard streaming, SSO sign-in/callback, and A2A agent cards ([#2831](https://github.com/mckinsey/agents-at-scale-ark/issues/2831)) ([31ef692](https://github.com/mckinsey/agents-at-scale-ark/commit/31ef692e748127439880997f219abca0c02ab1f6))
+* persist follow up user messages ([#2814](https://github.com/mckinsey/agents-at-scale-ark/issues/2814)) ([3fc1676](https://github.com/mckinsey/agents-at-scale-ark/commit/3fc1676a7e6210037941258cde5383209d2e2df3))
+* prevent sensitive data leakage in validation error responses ([#2836](https://github.com/mckinsey/agents-at-scale-ark/issues/2836)) ([e9abf7b](https://github.com/mckinsey/agents-at-scale-ark/commit/e9abf7bf1467a4b858a943cae678bf3060b668ef))
+* unblock Query TTL GC when finalizer is present ([#2828](https://github.com/mckinsey/agents-at-scale-ark/issues/2828)) ([#2835](https://github.com/mckinsey/agents-at-scale-ark/issues/2835)) ([3168979](https://github.com/mckinsey/agents-at-scale-ark/commit/3168979a1c90d1085880ba403b71a47fa73a0a35))
+
+
+### Documentation
+
+* add audit trail guide for user attribution ([#2812](https://github.com/mckinsey/agents-at-scale-ark/issues/2812)) ([dcf9300](https://github.com/mckinsey/agents-at-scale-ark/commit/dcf93008be7e14ed01c82011ffa885fdc8c48ecf))
+
 ## [0.1.66-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.65...v0.1.66-rc) (2026-07-07)
 
 
