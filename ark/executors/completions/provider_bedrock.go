@@ -13,6 +13,7 @@ import (
 	"github.com/aws/smithy-go/auth/bearer"
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type BedrockModel struct {
@@ -123,6 +124,12 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 	if err := json.Unmarshal(result.Body, &response); err != nil {
 		return nil, err
 	}
+
+	logf.FromContext(ctx).Info("bedrock token usage",
+		"input", response.Usage.InputTokens,
+		"cacheCreation", response.Usage.CacheCreationInputTokens,
+		"cacheRead", response.Usage.CacheReadInputTokens,
+		"output", response.Usage.OutputTokens)
 
 	return convertAnthropicResponse(response), nil
 }

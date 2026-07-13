@@ -126,8 +126,12 @@ export const QueriesSection = forwardRef<
     const usage = query.status.tokenUsage as {
       promptTokens?: number;
       completionTokens?: number;
+      cachedTokens?: number;
     };
-    return `${usage.promptTokens || 0} / ${usage.completionTokens || 0}`;
+    const cached = usage.cachedTokens || 0;
+    const newInput = Math.max(0, (usage.promptTokens || 0) - cached);
+    const base = `${newInput} / ${usage.completionTokens || 0}`;
+    return cached > 0 ? `${base} (${cached} cached)` : base;
   };
 
   const getTargetDisplay = (query: QueryResponse) => {
@@ -306,7 +310,7 @@ export const QueriesSection = forwardRef<
                         </div>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Token Usage (Prompt / Completion)</th>
+                    <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Token Usage (Input / Completion)</th>
                     <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">Status</th>
                     <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Actions</th>
                   </tr>
