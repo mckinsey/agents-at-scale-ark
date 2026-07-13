@@ -9,6 +9,7 @@ import {
   onboardingWizardOpenAtom,
   postTourOpenAtom,
   tourActiveAtom,
+  tourActiveSectionAtom,
   tourPausedAtom,
   tourStepAtom,
 } from '@/atoms/onboarding';
@@ -24,6 +25,7 @@ export function OnboardingManager() {
 
   const completed = useAtomValue(onboardingCompletedAtom);
   const completeOnboarding = useSetAtom(completeOnboardingAtom);
+  const setTourActiveSection = useSetAtom(tourActiveSectionAtom);
 
   const [welcomeOpen, setWelcomeOpen] = useAtom(onboardingWizardOpenAtom);
   const [tourActive, setTourActive] = useAtom(tourActiveAtom);
@@ -40,6 +42,12 @@ export function OnboardingManager() {
       setWelcomeOpen(true);
     }
   }, [completed, setWelcomeOpen]);
+
+  useEffect(() => {
+    setTourActiveSection(
+      tourActive ? (TOUR_STEPS[tourStep]?.targetId ?? null) : null,
+    );
+  }, [tourActive, tourStep, setTourActiveSection]);
 
   const startTour = () => {
     setWelcomeOpen(false);

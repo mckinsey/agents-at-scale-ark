@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { IconShell } from '@/components/ui/icon-shell';
 import { TOUR_STEPS } from './tour-steps';
 
 interface WelcomeDialogProps {
@@ -31,7 +30,7 @@ export function WelcomeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="gap-7 p-10 sm:max-w-lg">
+        className="gap-7 border-0 p-10 sm:max-w-lg">
         <Button
           variant="ghost"
           size="icon"
@@ -43,9 +42,7 @@ export function WelcomeDialog({
 
         <DialogHeader className="items-center text-center sm:text-center">
           <div className="bg-fill-muted mb-2 flex size-12 items-center justify-center">
-            <IconShell size="lg" className="text-fg-primary">
-              <Rocket />
-            </IconShell>
+            <Rocket className="text-fg-primary size-6" />
           </div>
           <DialogTitle className="headings-h3-regular text-fg-primary">
             Welcome to ARK

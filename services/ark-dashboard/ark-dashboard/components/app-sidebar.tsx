@@ -11,6 +11,7 @@ import {
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
+import { tourActiveSectionAtom } from '@/atoms/onboarding';
 import {
   AccountTree,
   Bedtime,
@@ -194,6 +195,7 @@ export function AppSidebar() {
     isExperimentalDarkModeEnabledAtom,
   );
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
+  const tourActiveSection = useAtomValue(tourActiveSectionAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
     storedIsExperimentalDarkModeEnabledAtom,
   );
@@ -238,6 +240,16 @@ export function AppSidebar() {
       setMonitoringOpen(false);
     }
   }, [sidebarState]);
+
+  useEffect(() => {
+    if (tourActiveSection === 'nav-agent-builder') {
+      setSidebarOpen(true);
+      setAgentBuilderOpen(true);
+    } else if (tourActiveSection === 'nav-monitoring') {
+      setSidebarOpen(true);
+      setMonitoringOpen(true);
+    }
+  }, [tourActiveSection, setSidebarOpen]);
 
   const navigateToSection = (sectionKey: string) => {
     trackEvent({

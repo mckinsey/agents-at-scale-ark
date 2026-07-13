@@ -21,6 +21,8 @@ export const tourStepAtom = atom<number>(0);
 
 export const tourPausedAtom = atom<boolean>(false);
 
+export const tourActiveSectionAtom = atom<string | null>(null);
+
 export const postTourOpenAtom = atom<boolean>(false);
 
 export const completeOnboardingAtom = atom(null, (_get, set) => {

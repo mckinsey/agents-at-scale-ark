@@ -106,7 +106,7 @@ export function TourSpotlight({
 
       <div
         style={{ left: tooltipX, top: tooltipY, width: CARD_WIDTH }}
-        className="animate-in fade-in zoom-in-95 bg-surface-bg-primary border-stroke-divider shadow-elevation-2 pointer-events-auto absolute border p-6 duration-200">
+        className="animate-in fade-in zoom-in-95 bg-surface-bg-primary shadow-elevation-2 pointer-events-auto absolute p-6 duration-200">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex gap-1">
             {steps.map((step, i) => (

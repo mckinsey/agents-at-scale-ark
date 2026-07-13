@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleCheck, ChevronRight } from 'lucide-react';
+import { ChevronRight, PartyPopper } from 'lucide-react';
 
 import { Close } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { IconShell } from '@/components/ui/icon-shell';
 
 interface PostTourDialogProps {
   open: boolean;
@@ -30,7 +29,7 @@ export function PostTourDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="gap-7 p-10 sm:max-w-lg">
+        className="gap-7 border-0 p-10 sm:max-w-lg">
         <Button
           variant="ghost"
           size="icon"
@@ -41,10 +40,8 @@ export function PostTourDialog({
         </Button>
 
         <DialogHeader className="items-center text-center sm:text-center">
-          <div className="bg-fill-muted mb-2 flex size-12 items-center justify-center">
-            <IconShell size="lg" className="text-fg-primary">
-              <CircleCheck />
-            </IconShell>
+          <div className="bg-brand-accents-qb-accent/15 mb-2 flex size-12 items-center justify-center">
+            <PartyPopper className="text-brand-accents-qb-accent size-6" />
           </div>
           <DialogTitle className="headings-h3-regular text-fg-primary">
             Tour complete
