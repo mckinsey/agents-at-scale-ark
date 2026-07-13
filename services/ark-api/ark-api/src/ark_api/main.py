@@ -242,17 +242,9 @@ async def session_aware_middleware(request: Request, call_next):
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle validation errors with detailed logging."""
-    # Log the full error details
-    logger.error(f"Validation error for {request.method} {request.url}")
-    logger.error(f"Request body: {await request.body()}")
-    logger.error(f"Validation errors: {exc.errors()}")
-    
-    # Return a detailed error response
+    """Return 422s without logging or echoing the request body, which may hold secrets."""
+    logger.error(f"Validation error: {request.method} {request.url.path}")
     return JSONResponse(
         status_code=422,
-        content=jsonable_encoder({
-            "detail": exc.errors(),
-            "body": exc.body
-        })
+        content={"detail": jsonable_encoder(exc.errors())},
     )

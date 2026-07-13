@@ -59,6 +59,7 @@ describe('middleware (auth gate)', () => {
   afterEach(() => {
     delete process.env.BASE_URL;
     delete process.env.AUTH_HUB_URL;
+    delete process.env.NEXT_PUBLIC_BASE_PATH;
   });
 
   describe('unauthenticated requests redirect to the local sign-in (no AUTH_HUB_URL)', () => {
@@ -94,6 +95,23 @@ describe('middleware (auth gate)', () => {
           BASE_URL,
         ).toString(),
       );
+    });
+
+    // Regression: a subpath-hosted tenant must keep its prefix in the sign-in
+    // redirect. `new URL(SIGNIN_PATH, BASE_URL)` dropped it because SIGNIN_PATH
+    // is root-absolute; concatenation onto BASE_URL preserves it.
+    it('preserves the tenant base-path prefix in the local sign-in redirect', async () => {
+      process.env.BASE_URL = 'https://example.com/tenant-a';
+      const request = createMockRequest('/tenant-a/dashboard');
+      request.auth = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      expect(NextResponse.redirect).toHaveBeenCalledWith(
+        'https://example.com/tenant-a/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-a%2Fdashboard',
+      );
+      expect(NextResponse.next).not.toHaveBeenCalled();
     });
   });
 
@@ -167,6 +185,45 @@ describe('middleware (auth gate)', () => {
 
       expect(NextResponse.redirect).not.toHaveBeenCalled();
       expect(NextResponse.next).toHaveBeenCalled();
+    });
+  });
+
+  describe('base-path prefix is normalised before matching the allow-list', () => {
+    // Regression: Next.js delivers the pathname WITH the tenant prefix to
+    // middleware (e.g. /nstenant/api/auth/signin), so the auth routes must still be
+    // recognised as public or the sign-in page redirects to itself forever.
+    beforeEach(() => {
+      process.env.NEXT_PUBLIC_BASE_PATH = '/nstenant';
+    });
+
+    it.each([
+      '/nstenant/api/auth/signin',
+      '/nstenant/api/auth/session',
+      '/nstenant/signout',
+      '/nstenant/_next/static/chunk.js',
+      '/nstenant/favicon.ico',
+    ])('passes through prefixed public path %s', async pathname => {
+      const request = createMockRequest(pathname);
+      request.auth = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      expect(NextResponse.redirect).not.toHaveBeenCalled();
+      expect(NextResponse.next).toHaveBeenCalled();
+    });
+
+    it('still redirects a prefixed protected page with the prefix intact', async () => {
+      process.env.BASE_URL = 'https://example.com/nstenant';
+      const request = createMockRequest('/nstenant/dashboard');
+      request.auth = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (middleware as any)(request);
+
+      expect(NextResponse.redirect).toHaveBeenCalledWith(
+        'https://example.com/nstenant/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fnstenant%2Fdashboard',
+      );
     });
   });
 });
