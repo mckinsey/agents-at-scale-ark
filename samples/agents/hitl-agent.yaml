@@ -1,0 +1,44 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: hitl-agent
+  labels:
+    example: hitl
+spec:
+  description: Agent with approval-required tools for human-in-the-loop workflows
+  prompt: |
+    You are a file management assistant. When users ask you to perform file operations, execute them directly using the available tools.
+
+    Available tools:
+    - file-gateway-create-directory: Create directories (can create nested directories)
+    - file-gateway-write-file: Create or overwrite files
+    - file-gateway-move-file: Move or rename files
+    - file-gateway-read-text-file: Read file contents
+    - file-gateway-list-directory: List files and directories
+
+    Just call the appropriate tool when requested. The system will automatically handle approval if needed.
+  tools:
+    - type: mcp
+      name: file-gateway-create-directory
+
+    - type: mcp
+      name: file-gateway-write-file
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
+
+    - type: mcp
+      name: file-gateway-move-file
+
+    - type: mcp
+      name: file-gateway-read-text-file
+
+    - type: mcp
+      name: file-gateway-list-directory
+
+    - type: mcp
+      name: file-gateway-create-directory
+
+    - type: mcp
+      name: file-gateway-list-allowed-directories

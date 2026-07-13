@@ -84,6 +84,8 @@ type BedrockModelConfig struct {
 	// +kubebuilder:validation:Optional
 	SessionToken *ValueSource `json:"sessionToken,omitempty"`
 	// +kubebuilder:validation:Optional
+	APIKey *ValueSource `json:"apiKey,omitempty"`
+	// +kubebuilder:validation:Optional
 	ModelArn *ValueSource `json:"modelArn,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1

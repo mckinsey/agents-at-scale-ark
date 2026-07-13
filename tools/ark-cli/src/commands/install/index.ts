@@ -401,7 +401,7 @@ export async function installArk(
         if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
           const spinner = ora('Waiting for ark-apiserver to be ready...').start();
           try {
-            const results = await runReadinessChecks(120); // 2 minute timeout
+            const results = await runReadinessChecks(120, backend); // 2 minute timeout
             const failed = results.find((r) => !r.passed);
             if (failed) {
               spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
@@ -607,7 +607,7 @@ export async function installArk(
         if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
           const spinner = ora('Waiting for ark-apiserver to be ready...').start();
           try {
-            const results = await runReadinessChecks(120); // 2 minute timeout
+            const results = await runReadinessChecks(120, backend); // 2 minute timeout
             const failed = results.find((r) => !r.passed);
             if (failed) {
               spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);

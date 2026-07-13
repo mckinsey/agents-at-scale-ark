@@ -1,6 +1,7 @@
 import logging
 import random
 from datetime import datetime
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -181,10 +182,11 @@ class TeamsPage(BasePage):
             name_element = self.page.get_by_text(team_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete team'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete team'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=team_name).first
+            delete_btn = row.get_by_role("button", name="Delete team")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for team '%s': %s", team_name, e)
             return self._delete_not_available(team_name)

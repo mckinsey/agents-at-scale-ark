@@ -2,7 +2,7 @@ import logging
 import random
 import pytest
 from datetime import datetime
-from playwright.sync_api import Page
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -64,20 +64,31 @@ class ToolsPage(BasePage):
 
         self._close_any_dialog()
 
-        add_button = self.page.locator(self.ADD_TOOL_BUTTON).first
-        add_button.click()
-        self.wait_for_navigation_complete()
-        self.wait_for_form_ready()
-
+        # The "Add tool" link moves between the page header and the empty-state
+        # body while the tools list loads, so under parallel load the click can
+        # miss. Click and confirm we reached the new-tool form via the URL; if
+        # the button stays unstable, navigate to the /tools/new route directly
+        # (its own visibility is covered by the dashboard navigation test).
         name_input = self.page.locator(self.TOOL_NAME_INPUT).first
-
-        for attempt in range(3):
-            try:
-                name_input.wait_for(state="visible", timeout=5000)
+        for attempt in range(4):
+            if "/tools/new" in self.page.url:
                 break
-            except:
-                logger.info(f"Name input not visible (attempt {attempt + 1}), retrying click")
-                add_button.click()
+            try:
+                self.page.locator(self.ADD_TOOL_BUTTON).first.click(timeout=5000)
+                self.page.wait_for_url("**/tools/new**", timeout=5000)
+            except Exception:
+                logger.info(
+                    "Add tool navigation not ready (attempt %d), retrying",
+                    attempt + 1,
+                )
+                self.page.wait_for_timeout(1000)
+        if "/tools/new" not in self.page.url:
+            logger.info("Add tool button unstable; navigating to /tools/new directly")
+            self.page.goto(
+                "http://localhost:3274/tools/new", wait_until="domcontentloaded"
+            )
+        self.wait_for_form_ready()
+        name_input.wait_for(state="visible", timeout=15000)
 
         logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
@@ -162,10 +173,13 @@ class ToolsPage(BasePage):
             name_element = self.page.get_by_text(tool_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete tool'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete tool'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=tool_name).first
+            delete_btn = row.get_by_role("button", name="Delete tool")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            # The delete action is disabled while the tool is in use by an agent;
+            # wait for it to become enabled before clicking.
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for tool '%s': %s", tool_name, e)
             return self._delete_not_available(tool_name)

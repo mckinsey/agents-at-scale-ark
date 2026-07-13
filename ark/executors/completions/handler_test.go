@@ -4,11 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr/funcr"
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
@@ -713,46 +719,763 @@ func TestDispatchTargetUnsupportedType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported target type")
 }
 
-func TestTtlSecondsFromQuery(t *testing.T) {
+func TestCheckResumption(t *testing.T) {
 	tests := []struct {
-		name        string
-		queryTTL    *metav1.Duration
-		expectNil   bool
-		expectedSec int64
+		name             string
+		a2aTask          *arkv1alpha1.A2ATask
+		expectResumption bool
+		expectPhase      string
 	}{
 		{
-			name:        "1 hour TTL converts to 3600 seconds",
-			queryTTL:    &metav1.Duration{Duration: time.Hour},
-			expectNil:   false,
-			expectedSec: 3600,
+			name: "resumption with approved task",
+			a2aTask: &arkv1alpha1.A2ATask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a2a-task-test-123",
+					Namespace: "default",
+				},
+				Status: arkv1alpha1.A2ATaskStatus{
+					Phase: arka2a.PhaseCompleted,
+					ProtocolMetadata: map[string]string{
+						"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"test-tool","arguments":"{}"}}]`,
+					},
+				},
+			},
+			expectResumption: true,
+			expectPhase:      arka2a.PhaseCompleted,
 		},
 		{
-			name:        "30 days converts to 2592000 seconds",
-			queryTTL:    &metav1.Duration{Duration: 30 * 24 * time.Hour},
-			expectNil:   false,
-			expectedSec: 2592000,
+			name: "resumption with rejected task",
+			a2aTask: &arkv1alpha1.A2ATask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a2a-task-test-123",
+					Namespace: "default",
+				},
+				Status: arkv1alpha1.A2ATaskStatus{
+					Phase: arka2a.PhaseFailed,
+					Error: "Tool execution rejected by user",
+					Conditions: []metav1.Condition{
+						{
+							Type:   string(arkv1alpha1.A2ATaskCompleted),
+							Status: metav1.ConditionTrue,
+							Reason: arka2a.ConditionReasonApprovalRejected,
+						},
+					},
+				},
+			},
+			expectResumption: true,
+			expectPhase:      arka2a.PhaseFailed,
 		},
 		{
-			name:      "nil TTL stays nil",
-			queryTTL:  nil,
-			expectNil: true,
+			name:             "no resumption - no task",
+			a2aTask:          nil,
+			expectResumption: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			query := &arkv1alpha1.Query{
-				Spec: arkv1alpha1.QuerySpec{TTL: tt.queryTTL},
+			scheme := runtime.NewScheme()
+			_ = arkv1alpha1.AddToScheme(scheme)
+
+			var objects []client.Object
+			if tt.a2aTask != nil {
+				objects = append(objects, tt.a2aTask)
 			}
 
-			result := ttlSecondsFromQuery(query)
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&arkv1alpha1.A2ATask{}).
+				Build()
 
-			if tt.expectNil {
-				require.Nil(t, result)
-			} else {
-				require.NotNil(t, result)
-				require.Equal(t, tt.expectedSec, *result)
+			h := &Handler{
+				k8sClient: k8sClient,
+			}
+
+			query := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Status: arkv1alpha1.QueryStatus{
+					Response: &arkv1alpha1.Response{
+						A2A: &arkv1alpha1.A2AMetadata{
+							TaskID: "test-123",
+						},
+					},
+				},
+			}
+
+			ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+			isResumption, task := h.checkResumption(ctx, query)
+
+			assert.Equal(t, tt.expectResumption, isResumption)
+			if tt.expectResumption {
+				require.NotNil(t, task)
+				assert.Equal(t, tt.expectPhase, task.Status.Phase)
 			}
 		})
 	}
+}
+
+func TestParseApprovalDecision(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectApproved bool
+		expectError    bool
+	}{
+		{
+			name:           "approved decision",
+			input:          `{"decision": "approved"}`,
+			expectApproved: true,
+		},
+		{
+			name:           "rejected decision",
+			input:          `{"decision": "rejected"}`,
+			expectApproved: false,
+		},
+		{
+			name:        "invalid json",
+			input:       `not json`,
+			expectError: true,
+		},
+		{
+			name:        "missing decision field",
+			input:       `{"other": "field"}`,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var decision struct {
+				Decision string `json:"decision"`
+			}
+			err := json.Unmarshal([]byte(tt.input), &decision)
+
+			if tt.expectError {
+				if err == nil && decision.Decision == "" {
+					// Missing decision field
+					return
+				}
+				if err != nil {
+					return
+				}
+				t.Error("Expected error but got none")
+				return
+			}
+
+			require.NoError(t, err)
+			isApproved := decision.Decision == "approved"
+			assert.Equal(t, tt.expectApproved, isApproved)
+		})
+	}
+}
+
+func TestToolApprovalConfigParsing(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          *arkv1alpha1.ToolApprovalConfig
+		expectTimeout   time.Duration
+		expectOnTimeout string
+	}{
+		{
+			name: "standard config",
+			config: &arkv1alpha1.ToolApprovalConfig{
+				Timeout:   &metav1.Duration{Duration: 5 * time.Minute},
+				OnTimeout: "reject",
+			},
+			expectTimeout:   5 * time.Minute,
+			expectOnTimeout: "reject",
+		},
+		{
+			name: "approve on timeout",
+			config: &arkv1alpha1.ToolApprovalConfig{
+				Timeout:   &metav1.Duration{Duration: 10 * time.Minute},
+				OnTimeout: "approve",
+			},
+			expectTimeout:   10 * time.Minute,
+			expectOnTimeout: "approve",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expectTimeout, tt.config.Timeout.Duration)
+			assert.Equal(t, tt.expectOnTimeout, tt.config.OnTimeout)
+		})
+	}
+}
+
+func TestHandleApprovalRequired(t *testing.T) {
+	h := newTestHandler()
+	tracer := telemetrynoop.NewTracer()
+	ctx, span := tracer.Start(context.Background(), "test")
+
+	state := &executionState{
+		query: arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+		},
+		conversationId: "conv-abc",
+		querySpan:      span,
+		targetSpan:     span,
+	}
+
+	toolCalls := []ToolCall{
+		{
+			ID: "call-1",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      "deploy-application",
+				Arguments: `{"env":"prod"}`,
+			},
+		},
+	}
+
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: toolCalls,
+		Config: &arkv1alpha1.ToolApprovalConfig{
+			Required:  true,
+			Timeout:   &metav1.Duration{Duration: 5 * time.Minute},
+			OnTimeout: "reject",
+		},
+		Context: &ExecutionContext{
+			ConversationID:       "conv-abc",
+			PendingToolCallIndex: 0,
+			AgentName:            "deploy-agent",
+			AgentNamespace:       "default",
+		},
+	}
+
+	result := h.handleApprovalRequired(ctx, state, approvalErr)
+
+	require.NotNil(t, result)
+	task, ok := result.Result.(*protocol.Task)
+	require.True(t, ok, "expected Result to be *protocol.Task")
+	assert.NotEmpty(t, task.ID, "task should have a generated ID")
+	assert.Equal(t, "conv-abc", task.ContextID)
+	assert.Equal(t, protocol.TaskStateInputRequired, task.Status.State)
+
+	require.NotNil(t, task.Metadata)
+	assert.Equal(t, "5m0s", task.Metadata["timeout"])
+	assert.Equal(t, "reject", task.Metadata["onTimeout"])
+
+	toolCallsJSON, ok := task.Metadata["toolCalls"].(string)
+	require.True(t, ok, "toolCalls metadata should be a JSON string")
+	var roundtrip []ToolCall
+	require.NoError(t, json.Unmarshal([]byte(toolCallsJSON), &roundtrip))
+	require.Len(t, roundtrip, 1)
+	assert.Equal(t, "call-1", roundtrip[0].ID)
+	assert.Equal(t, "deploy-application", roundtrip[0].Function.Name)
+
+	contextJSON, ok := task.Metadata["context"].(string)
+	require.True(t, ok, "context metadata should be a JSON string")
+	var roundtripCtx ExecutionContext
+	require.NoError(t, json.Unmarshal([]byte(contextJSON), &roundtripCtx))
+	assert.Equal(t, "deploy-agent", roundtripCtx.AgentName)
+	assert.Equal(t, "default", roundtripCtx.AgentNamespace)
+}
+
+func TestHandleApprovalRequiredEmitsStreamEvent(t *testing.T) {
+	h := newTestHandler()
+	tracer := telemetrynoop.NewTracer()
+	ctx, span := tracer.Start(context.Background(), "test")
+
+	stream := &mockEventStream{}
+	state := &executionState{
+		query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}},
+		conversationId: "conv-stream",
+		querySpan:      span,
+		targetSpan:     span,
+		eventStream:    stream,
+	}
+
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{
+			{
+				ID:       "call-1",
+				Function: openai.ChatCompletionMessageToolCallFunction{Name: "deploy-application", Arguments: "{}"},
+			},
+		},
+		Config: &arkv1alpha1.ToolApprovalConfig{
+			Required:  true,
+			Timeout:   &metav1.Duration{Duration: 30 * time.Second},
+			OnTimeout: "proceed",
+		},
+		Context: &ExecutionContext{ConversationID: "conv-stream", AgentName: "deploy-agent", AgentNamespace: "default"},
+	}
+
+	result := h.handleApprovalRequired(ctx, state, approvalErr)
+
+	task, ok := result.Result.(*protocol.Task)
+	require.True(t, ok)
+	assert.Equal(t, protocol.TaskStateInputRequired, task.Status.State)
+	assert.Equal(t, "conv-stream", task.ContextID)
+	require.NotEmpty(t, stream.chunks, "approval request event should be streamed")
+}
+
+func TestResolveResumptionAgent(t *testing.T) {
+	makeTask := func(ctx *ExecutionContext) *arkv1alpha1.A2ATask {
+		meta := map[string]string{}
+		if ctx != nil {
+			raw, _ := json.Marshal(ctx)
+			meta["context"] = string(raw)
+		}
+		return &arkv1alpha1.A2ATask{Status: arkv1alpha1.A2ATaskStatus{ProtocolMetadata: meta}}
+	}
+	state := func(targetName string) *executionState {
+		return &executionState{
+			target: &arkv1alpha1.QueryTarget{Type: "agent", Name: targetName},
+			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}},
+		}
+	}
+
+	t.Run("falls back to target when no context", func(t *testing.T) {
+		name, ns := resolveResumptionAgent(state("my-agent"), makeTask(nil))
+		assert.Equal(t, "my-agent", name)
+		assert.Equal(t, "default", ns)
+	})
+
+	t.Run("uses context agent for team target", func(t *testing.T) {
+		task := makeTask(&ExecutionContext{AgentName: "member-agent", AgentNamespace: "team-ns"})
+		name, ns := resolveResumptionAgent(state("test-team"), task)
+		assert.Equal(t, "member-agent", name, "team member from context, not the team name")
+		assert.Equal(t, "team-ns", ns)
+	})
+
+	t.Run("keeps query namespace when context omits namespace", func(t *testing.T) {
+		task := makeTask(&ExecutionContext{AgentName: "member-agent"})
+		name, ns := resolveResumptionAgent(state("test-team"), task)
+		assert.Equal(t, "member-agent", name)
+		assert.Equal(t, "default", ns)
+	})
+
+	t.Run("falls back to target on unparseable context", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Status: arkv1alpha1.A2ATaskStatus{ProtocolMetadata: map[string]string{"context": "{not json"}},
+		}
+		name, ns := resolveResumptionAgent(state("my-agent"), task)
+		assert.Equal(t, "my-agent", name)
+		assert.Equal(t, "default", ns)
+	})
+}
+
+func TestBuildA2AResponse(t *testing.T) {
+	h := newTestHandler()
+	tracer := telemetrynoop.NewTracer()
+	ctx, span := tracer.Start(context.Background(), "test")
+
+	state := &executionState{
+		query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}},
+		target:         &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"},
+		conversationId: "conv-1",
+		querySpan:      span,
+		targetSpan:     span,
+	}
+
+	responseMessages := []Message{NewAssistantMessage("the final answer")}
+	execResult := &ExecutionResult{Messages: responseMessages}
+
+	result := h.buildA2AResponse(ctx, state, responseMessages, execResult)
+
+	require.NotNil(t, result)
+	msg, ok := result.Result.(*protocol.Message)
+	require.True(t, ok, "expected Result to be *protocol.Message")
+	assert.Equal(t, protocol.MessageRoleAgent, msg.Role)
+	require.NotEmpty(t, msg.Parts)
+}
+
+type stubMemory struct {
+	addCalls    int
+	receivedIDs []string
+	receivedMsg [][]Message
+	failOnAdd   error
+	getMessages []Message
+	failOnGet   error
+}
+
+func (m *stubMemory) AddMessages(_ context.Context, queryID string, messages []Message) error {
+	m.addCalls++
+	m.receivedIDs = append(m.receivedIDs, queryID)
+	m.receivedMsg = append(m.receivedMsg, messages)
+	return m.failOnAdd
+}
+
+func (m *stubMemory) GetMessages(_ context.Context) ([]Message, error) {
+	return m.getMessages, m.failOnGet
+}
+
+func (m *stubMemory) DeleteQuery(_ context.Context, _ string) error { return nil }
+
+func (m *stubMemory) Close() error { return nil }
+
+func TestSaveInputMessagesToMemory(t *testing.T) {
+	h := newTestHandler()
+	ctx := context.Background()
+
+	t.Run("no-op when memory is nil", func(t *testing.T) {
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			inputMessages: []Message{NewUserMessage("hi")},
+		}
+		h.saveInputMessagesToMemory(ctx, state)
+	})
+
+	t.Run("no-op when inputMessages is empty", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory: mem,
+		}
+		h.saveInputMessagesToMemory(ctx, state)
+		assert.Zero(t, mem.addCalls, "should not call AddMessages on empty input")
+	})
+
+	t.Run("saves input on follow-up turn with existing history", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory:         mem,
+			inputMessages:  []Message{NewUserMessage("hi")},
+			memoryMessages: []Message{NewUserMessage("previous")},
+		}
+		h.saveInputMessagesToMemory(ctx, state)
+		require.Equal(t, 1, mem.addCalls, "should save follow-up input even when memory has history")
+		assert.Len(t, mem.receivedMsg[0], 1)
+	})
+
+	t.Run("saves input messages on first approval", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "query-1"}},
+			memory:        mem,
+			inputMessages: []Message{NewUserMessage("approve me")},
+		}
+		h.saveInputMessagesToMemory(ctx, state)
+		require.Equal(t, 1, mem.addCalls)
+		assert.Equal(t, "query-1", mem.receivedIDs[0])
+		assert.Len(t, mem.receivedMsg[0], 1)
+	})
+
+	t.Run("tolerates AddMessages error without panicking", func(t *testing.T) {
+		mem := &stubMemory{failOnAdd: fmt.Errorf("memory down")}
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory:        mem,
+			inputMessages: []Message{NewUserMessage("hi")},
+		}
+		h.saveInputMessagesToMemory(ctx, state)
+		assert.Equal(t, 1, mem.addCalls)
+	})
+}
+
+func TestSaveErrorMessagesToMemory(t *testing.T) {
+	h := newTestHandler()
+	ctx := context.Background()
+	someErr := fmt.Errorf("boom")
+
+	t.Run("no-op when memory is nil", func(t *testing.T) {
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			inputMessages: []Message{NewUserMessage("hi")},
+		}
+		h.saveErrorMessagesToMemory(ctx, state, someErr)
+	})
+
+	t.Run("no-op when inputMessages is empty", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory: mem,
+		}
+		h.saveErrorMessagesToMemory(ctx, state, someErr)
+		assert.Zero(t, mem.addCalls)
+	})
+
+	t.Run("appends error message and persists", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory:        mem,
+			inputMessages: []Message{NewUserMessage("hi")},
+		}
+		h.saveErrorMessagesToMemory(ctx, state, someErr)
+		require.Equal(t, 1, mem.addCalls)
+		require.NotEmpty(t, mem.receivedMsg[0])
+	})
+}
+
+func TestSaveFinalMessagesToMemory(t *testing.T) {
+	h := newTestHandler()
+	ctx := context.Background()
+
+	t.Run("no-op when memory is nil", func(t *testing.T) {
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			inputMessages: []Message{NewUserMessage("hi")},
+		}
+		h.saveFinalMessagesToMemory(ctx, state, []Message{NewAssistantMessage("done")})
+	})
+
+	t.Run("no-op when responseMessages is empty", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory: mem,
+		}
+		h.saveFinalMessagesToMemory(ctx, state, nil)
+		assert.Zero(t, mem.addCalls)
+	})
+
+	t.Run("first-execution path saves prepared messages", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q-first"}},
+			memory:        mem,
+			inputMessages: []Message{NewUserMessage("ask")},
+		}
+		response := []Message{NewAssistantMessage("answer")}
+		h.saveFinalMessagesToMemory(ctx, state, response)
+		require.Equal(t, 1, mem.addCalls)
+		assert.Equal(t, "q-first", mem.receivedIDs[0])
+		assert.NotEmpty(t, mem.receivedMsg[0])
+	})
+
+	t.Run("resumption path saves only response messages", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q-resume"}},
+			memory:         mem,
+			inputMessages:  []Message{NewUserMessage("orig")},
+			memoryMessages: []Message{NewUserMessage("from-memory")},
+			isResumption:   true,
+		}
+		response := []Message{NewAssistantMessage("post-approval")}
+		h.saveFinalMessagesToMemory(ctx, state, response)
+		require.Equal(t, 1, mem.addCalls)
+		assert.Len(t, mem.receivedMsg[0], 1)
+	})
+
+	t.Run("follow-up turn saves input and response despite existing history", func(t *testing.T) {
+		mem := &stubMemory{}
+		state := &executionState{
+			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q-followup"}},
+			memory:         mem,
+			inputMessages:  []Message{NewUserMessage("second question")},
+			memoryMessages: []Message{NewUserMessage("first"), NewAssistantMessage("first-answer")},
+		}
+		response := []Message{NewAssistantMessage("second answer")}
+		h.saveFinalMessagesToMemory(ctx, state, response)
+		require.Equal(t, 1, mem.addCalls)
+		assert.Len(t, mem.receivedMsg[0], 2, "must persist the new user message alongside the response")
+	})
+
+	t.Run("tolerates AddMessages error", func(t *testing.T) {
+		mem := &stubMemory{failOnAdd: fmt.Errorf("boom")}
+		state := &executionState{
+			query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q"}},
+			memory:        mem,
+			inputMessages: []Message{NewUserMessage("hi")},
+		}
+		h.saveFinalMessagesToMemory(ctx, state, []Message{NewAssistantMessage("done")})
+		assert.Equal(t, 1, mem.addCalls)
+	})
+}
+
+func TestProcessMessageResumptionSucceeds(t *testing.T) {
+	var mu sync.Mutex
+	var llmRequestBody string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		llmRequestBody = string(body)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"resumed answer"},"finish_reason":"stop"}],"usage":{}}`))
+	}))
+	defer llm.Close()
+
+	model := &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-test"},
+			Provider: ProviderOpenAI,
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: llm.URL},
+					APIKey:  arkv1alpha1.ValueSource{Value: "test"},
+				},
+			},
+		},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "default"},
+		Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "test-model"}},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "resume-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"},
+			Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+		},
+		Status: arkv1alpha1.QueryStatus{
+			Response: &arkv1alpha1.Response{
+				A2A: &arkv1alpha1.A2AMetadata{TaskID: "resume-123"},
+			},
+		},
+	}
+	a2aTask := &arkv1alpha1.A2ATask{
+		ObjectMeta: metav1.ObjectMeta{Name: "a2a-task-resume-123", Namespace: "default"},
+		Spec:       arkv1alpha1.A2ATaskSpec{TaskID: "resume-123", ContextID: "conv-1"},
+		Status: arkv1alpha1.A2ATaskStatus{
+			Phase: arka2a.PhaseCompleted,
+			ProtocolMetadata: map[string]string{
+				"toolCalls": `[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]`,
+			},
+		},
+	}
+
+	h := newTestHandler(model, agent, query, a2aTask)
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("hello")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name": "resume-query", "namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	result, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Result)
+
+	// Proves the resumption branch ran (not a fresh dispatch): the reconstructed
+	// approved tool call and its result were sent to the model.
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, llmRequestBody, "call-1")
+	assert.Contains(t, llmRequestBody, "tool")
+}
+
+func TestHandleResumption_EarlyExits(t *testing.T) {
+	tracer := telemetrynoop.NewTracer()
+	target := &arkv1alpha1.QueryTarget{Type: "agent", Name: "missing-agent"}
+	baseQuery := arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+	}
+
+	t.Run("returns error when A2ATask has no contextId", func(t *testing.T) {
+		h := newTestHandler()
+		_, span := tracer.Start(context.Background(), "test")
+		state := &executionState{
+			query:      baseQuery,
+			target:     target,
+			querySpan:  span,
+			targetSpan: span,
+		}
+		task := &arkv1alpha1.A2ATask{} // no Spec.ContextID
+
+		_, _, err := h.handleResumption(context.Background(), state, task)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "contextId")
+	})
+
+	t.Run("returns error when toolCalls metadata is missing", func(t *testing.T) {
+		h := newTestHandler()
+		_, span := tracer.Start(context.Background(), "test")
+		state := &executionState{
+			query:      baseQuery,
+			target:     target,
+			querySpan:  span,
+			targetSpan: span,
+		}
+		task := &arkv1alpha1.A2ATask{
+			Spec: arkv1alpha1.A2ATaskSpec{ContextID: "conv-1"},
+			Status: arkv1alpha1.A2ATaskStatus{
+				ProtocolMetadata: map[string]string{},
+			},
+		}
+
+		_, _, err := h.handleResumption(context.Background(), state, task)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "toolCalls")
+	})
+
+	t.Run("returns error when toolCalls JSON is malformed", func(t *testing.T) {
+		h := newTestHandler()
+		_, span := tracer.Start(context.Background(), "test")
+		state := &executionState{
+			query:      baseQuery,
+			target:     target,
+			querySpan:  span,
+			targetSpan: span,
+		}
+		task := &arkv1alpha1.A2ATask{
+			Spec: arkv1alpha1.A2ATaskSpec{ContextID: "conv-1"},
+			Status: arkv1alpha1.A2ATaskStatus{
+				ProtocolMetadata: map[string]string{
+					"toolCalls": `not-valid-json`,
+				},
+			},
+		}
+
+		_, _, err := h.handleResumption(context.Background(), state, task)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse toolCalls")
+	})
+
+	t.Run("returns error when agent CRD is missing", func(t *testing.T) {
+		h := newTestHandler() // empty fake client — no agent
+		_, span := tracer.Start(context.Background(), "test")
+		state := &executionState{
+			query:      baseQuery,
+			target:     target,
+			querySpan:  span,
+			targetSpan: span,
+		}
+		task := &arkv1alpha1.A2ATask{
+			Spec: arkv1alpha1.A2ATaskSpec{ContextID: "conv-1"},
+			Status: arkv1alpha1.A2ATaskStatus{
+				ProtocolMetadata: map[string]string{
+					"toolCalls": `[{"id":"c1","type":"function","function":{"name":"f","arguments":"{}"}}]`,
+				},
+			},
+		}
+
+		_, _, err := h.handleResumption(context.Background(), state, task)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get agent")
+	})
+}
+
+func TestHandleApprovalRequired_OnTimeoutProceed(t *testing.T) {
+	h := newTestHandler()
+	tracer := telemetrynoop.NewTracer()
+	ctx, span := tracer.Start(context.Background(), "test")
+
+	state := &executionState{
+		query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}},
+		conversationId: "conv-xyz",
+		querySpan:      span,
+		targetSpan:     span,
+	}
+
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{{ID: "c1"}},
+		Config: &arkv1alpha1.ToolApprovalConfig{
+			Timeout:   &metav1.Duration{Duration: 30 * time.Second},
+			OnTimeout: "proceed",
+		},
+		Context: &ExecutionContext{ConversationID: "conv-xyz"},
+	}
+
+	result := h.handleApprovalRequired(ctx, state, approvalErr)
+
+	task, ok := result.Result.(*protocol.Task)
+	require.True(t, ok)
+	assert.Equal(t, "30s", task.Metadata["timeout"])
+	assert.Equal(t, "proceed", task.Metadata["onTimeout"])
 }

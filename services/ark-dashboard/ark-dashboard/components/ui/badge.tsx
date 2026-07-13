@@ -23,7 +23,12 @@ function getBadgePadding(
   withIcon: boolean,
   withDot: boolean,
 ) {
-  const mode = withIcon ? 'icon' : withDot ? 'dot' : 'label';
+  let mode: 'icon' | 'dot' | 'label' = 'label';
+  if (withIcon) {
+    mode = 'icon';
+  } else if (withDot) {
+    mode = 'dot';
+  }
   return badgePadding[`${mode}-${format}`][size];
 }
 

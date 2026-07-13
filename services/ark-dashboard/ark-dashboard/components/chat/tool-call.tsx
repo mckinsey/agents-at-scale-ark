@@ -72,6 +72,7 @@ interface VariantProps {
   parsedResult: Record<string, unknown> | null;
   parseArgsError: boolean;
   parseResultError: boolean;
+  isFailed: boolean;
 }
 
 function TreeVariant({
@@ -81,14 +82,18 @@ function TreeVariant({
   parsedResult,
   parseArgsError,
   parseResultError,
-}: VariantProps) {
+  isFailed,
+}: Readonly<VariantProps>) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 
+  const lineColor = isFailed ? 'bg-stroke-status-error' : 'bg-stroke-divider';
+  const containerBg = isFailed ? 'bg-status-error/10 rounded-md px-2 py-1' : '';
+
   return (
-    <div className={cn('relative pl-6 text-sm', className)}>
-      <div className="bg-stroke-divider absolute left-0 top-0 h-[18px] w-px"></div>
-      <div className="bg-stroke-divider absolute left-0 top-[18px] h-px w-4"></div>
+    <div className={cn('relative pl-6 text-sm', containerBg, className)}>
+      <div className={cn('absolute left-0 top-0 h-[18px] w-px', lineColor)}></div>
+      <div className={cn('absolute left-0 top-[18px] h-px w-4', lineColor)}></div>
       <div className="flex items-center gap-2 py-1.5 pl-2">
         <IconShell size="sm" className="text-viz-categorical-08">
           <Handyman />
@@ -100,8 +105,8 @@ function TreeVariant({
 
       <div className="mt-1 space-y-1 pl-2">
         <div className="relative">
-          <div className="bg-stroke-divider absolute left-0 top-0 h-[14px] w-px"></div>
-          <div className="bg-stroke-divider absolute left-0 top-[14px] h-px w-3"></div>
+          <div className={cn('absolute left-0 top-0 h-[14px] w-px', lineColor)}></div>
+          <div className={cn('absolute left-0 top-[14px] h-px w-3', lineColor)}></div>
           <ExpandableSection
             label="Input"
             isExpanded={isInputExpanded}
@@ -115,8 +120,8 @@ function TreeVariant({
 
         {toolCall.result && (
           <div className="relative">
-            <div className="bg-stroke-divider absolute left-0 top-0 h-[14px] w-px"></div>
-            <div className="bg-stroke-divider absolute left-0 top-[14px] h-px w-3"></div>
+            <div className={cn('absolute left-0 top-0 h-[14px] w-px', lineColor)}></div>
+            <div className={cn('absolute left-0 top-[14px] h-px w-3', lineColor)}></div>
             <ExpandableSection
               label="Output"
               isExpanded={isOutputExpanded}
@@ -140,14 +145,18 @@ function CardVariant({
   parsedResult,
   parseArgsError,
   parseResultError,
-}: VariantProps) {
+  isFailed,
+}: Readonly<VariantProps>) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 
   return (
     <div
       className={cn(
-        'bg-surface-bg-secondary border-stroke-divider border p-3 text-sm',
+        'border p-3 text-sm',
+        isFailed
+          ? 'bg-status-error/10 border-stroke-status-error'
+          : 'bg-surface-bg-secondary border-stroke-divider',
         className,
       )}>
       <div className="flex items-center gap-2 px-2 py-1.5">
@@ -236,6 +245,11 @@ export function ToolCall({
     }
   }
 
+  // A tool call is failed if its result indicates rejection or an error.
+  const isFailed =
+    toolCall.result != null &&
+    /error|failed|exception|rejected/i.test(toolCall.result);
+
   const variantProps: VariantProps = {
     toolCall,
     className,
@@ -243,6 +257,7 @@ export function ToolCall({
     parsedResult,
     parseArgsError,
     parseResultError,
+    isFailed,
   };
 
   if (variant === 'tree') {

@@ -63,9 +63,12 @@ export function AgentsAPIDialog({
   })();
 
   const apiPath = '/api/v1/queries/';
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   const externalBaseUrl =
-    typeof window !== 'undefined' ? window.location.origin : '';
-  const internalBaseUrl = 'http://ark-api.<namespace>.svc.cluster.local'; // NOSONAR - in-cluster service DNS; display-only example, never fetched; TLS terminates at ingress
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${basePath}`
+      : '';
+  const internalBaseUrl = 'http://ark-api.<namespace>.svc.cluster.local';
   const fullEndpoint = isInternalEndpoint
     ? `${internalBaseUrl}${apiPath}`
     : `${externalBaseUrl}${apiPath}`;

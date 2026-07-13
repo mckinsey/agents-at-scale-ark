@@ -1,8 +1,12 @@
 import json
 import subprocess
 
-import pytest
-
+from helpers.ark_api_helper import send_request
+from helpers.broker_helper import (
+    message_content,
+    message_role,
+    stream_messages_for_query,
+)
 from helpers.queries_helper import QueriesHelper
 
 
@@ -174,3 +178,44 @@ spec:
         success, count = self.helper.cleanup_queries("test-query-cli-cleanup-")
         assert success, "Failed to cleanup queries"
         assert count >= 1, f"Expected at least 1 query deleted, got {count}"
+
+    def _submit_query(self, query_name, input_text="Reply with a short greeting."):
+        status, body = send_request(
+            "/v1/queries?namespace=default",
+            method="POST",
+            data={
+                "name": query_name,
+                "input": input_text,
+                "target": {"name": self.agent_name, "type": "agent"},
+            },
+            timeout=30,
+        )
+        assert status in (200, 201, 202), f"query submission failed: {status} {body}"
+
+    def test_agent_interaction_via_api(self):
+        query_name = "test-query-cli-agent-interaction"
+        self.created_queries.append(query_name)
+        self._submit_query(query_name)
+
+        completed, err = self.helper.wait_for_completion(query_name)
+        assert completed, f"query {query_name} did not complete: {err}"
+
+        ok, query_data = self.helper.get_query(query_name)
+        assert ok, f"could not read query {query_name}"
+        content = (query_data or {}).get("status", {}).get("response", {}).get("content")
+        assert content, f"agent produced no response for {query_name}: {query_data}"
+
+    def test_query_response_streams_through_broker(self):
+        query_name = "test-query-cli-stream"
+        self.created_queries.append(query_name)
+
+        items = stream_messages_for_query(
+            query_name,
+            on_connected=lambda: self._submit_query(query_name),
+            timeout=90,
+        )
+        assistant = [
+            it for it in items
+            if message_role(it) == "assistant" and message_content(it)
+        ]
+        assert assistant, f"no assistant message streamed through broker for {query_name}: {items}"

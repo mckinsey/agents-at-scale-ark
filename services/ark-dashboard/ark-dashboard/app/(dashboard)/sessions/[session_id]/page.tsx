@@ -105,7 +105,7 @@ export default function SessionDetailPage() {
 
   if (isLoading && !session) {
     return (
-      <div className="flex h-full flex-col space-y-6 p-8">
+      <div className="flex h-full flex-col space-y-6 py-8">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-96 w-full" />
@@ -115,7 +115,7 @@ export default function SessionDetailPage() {
 
   if (!session) {
     return (
-      <div className="flex h-full flex-col space-y-6 p-8">
+      <div className="flex h-full flex-col space-y-6 py-8">
         <button
           onClick={handleBackToSessions}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -144,7 +144,7 @@ export default function SessionDetailPage() {
   const formattedDate = `${dateStr} ${timeStr}`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6 p-8">
+    <div className="flex h-full min-h-0 flex-col gap-6 py-8">
       <button
         onClick={handleBackToSessions}
         className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer self-start"
@@ -156,7 +156,7 @@ export default function SessionDetailPage() {
       <SessionConversationHeader session={session} formattedDate={formattedDate} />
 
       <div className="flex min-h-0 flex-1 justify-start overflow-hidden">
-        <Tabs defaultValue={HISTORY_TAB} className="flex min-h-0 flex-1 max-w-[1344px] flex-col">
+        <Tabs defaultValue={HISTORY_TAB} className="flex min-h-0 flex-1 content-shell flex-col">
           <TabsList className="shrink-0 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
             <TabsTrigger
               value={HISTORY_TAB}

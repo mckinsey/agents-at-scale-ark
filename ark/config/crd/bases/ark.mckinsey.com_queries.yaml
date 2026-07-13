@@ -385,6 +385,7 @@ spec:
                 type: string
               ttl:
                 description: |-
+                  Time to retain Query after completion.
                   Default is resolved by the mutating webhook from ArkConfig/default
                   (spec.queryTTL), falling back to 720h when ArkConfig is absent.
                 type: string
@@ -467,6 +468,7 @@ spec:
                 - pending
                 - provisioning
                 - running
+                - input-required
                 - error
                 - done
                 - canceled

@@ -23,6 +23,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { apiUrl } from '@/lib/api/config';
 import {
   getAttributeStringValue,
   getSessionDisplayNameFromEntries,

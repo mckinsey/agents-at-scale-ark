@@ -59,28 +59,42 @@ export function createConfig(
       (config as Record<string, unknown>).azure = azureConfig;
       return config;
     }
-    case 'bedrock':
-      config.bedrock = {
-        accessKeyId: {
-          valueFrom: {
-            secretKeyRef: {
-              name: formValues.bedrockAccessKeyIdSecretName,
-              key: 'token',
-            },
-          },
-        },
-        secretAccessKey: {
-          valueFrom: {
-            secretKeyRef: {
-              name: formValues.bedrockSecretAccessKeySecretName,
-              key: 'token',
-            },
-          },
-        },
+    case 'bedrock': {
+      const bedrockConfig: Record<string, unknown> = {
+        ...(formValues.baseUrl && { baseUrl: formValues.baseUrl }),
         ...(formValues.region && { region: formValues.region }),
         ...(formValues.modelARN && { modelArn: formValues.modelARN }),
       };
+      if (formValues.bedrockAuthMethod === 'apiKey') {
+        bedrockConfig.apiKey = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockApiKeySecretName,
+              key: formValues.bedrockApiKeySecretKey,
+            },
+          },
+        };
+      } else {
+        bedrockConfig.accessKeyId = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockAccessKeyIdSecretName,
+              key: formValues.bedrockAccessKeyIdSecretKey,
+            },
+          },
+        };
+        bedrockConfig.secretAccessKey = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockSecretAccessKeySecretName,
+              key: formValues.bedrockSecretAccessKeySecretKey,
+            },
+          },
+        };
+      }
+      (config as Record<string, unknown>).bedrock = bedrockConfig;
       return config;
+    }
     case 'anthropic':
       (config as Record<string, unknown>).anthropic = {
         apiKey: {
@@ -133,8 +147,14 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         name: currentFormValues.name,
         provider: currentFormValues.provider,
         model: currentFormValues.model,
+        bedrockAuthMethod: currentFormValues.bedrockAuthMethod ?? 'iam',
+        bedrockApiKeySecretName: '',
+        bedrockApiKeySecretKey: 'token',
         bedrockAccessKeyIdSecretName: '',
+        bedrockAccessKeyIdSecretKey: 'token',
         bedrockSecretAccessKeySecretName: '',
+        bedrockSecretAccessKeySecretKey: 'token',
+        baseUrl: '',
         region: '',
         modelARN: '',
       };
@@ -304,11 +324,31 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
         azureTenantId,
       };
     }
-    case 'bedrock':
+    case 'bedrock': {
+      const bedrockApiKeySecretName = getConfigValue<string>(model.config, [
+        'bedrock',
+        'apiKey',
+        'valueFrom',
+        'secretKeyRef',
+        'name',
+      ]);
+      const bedrockAuthMethod: 'apiKey' | 'iam' = bedrockApiKeySecretName
+        ? 'apiKey'
+        : 'iam';
       return {
         name: model.name,
         provider: model.provider,
         model: model.model,
+        bedrockAuthMethod,
+        bedrockApiKeySecretName: bedrockApiKeySecretName || '',
+        bedrockApiKeySecretKey:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'apiKey',
+            'valueFrom',
+            'secretKeyRef',
+            'key',
+          ]) || 'token',
         bedrockAccessKeyIdSecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -317,6 +357,14 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
+        bedrockAccessKeyIdSecretKey:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'accessKeyId',
+            'valueFrom',
+            'secretKeyRef',
+            'key',
+          ]) || 'token',
         bedrockSecretAccessKeySecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -324,6 +372,20 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'valueFrom',
             'secretKeyRef',
             'name',
+          ]) || '',
+        bedrockSecretAccessKeySecretKey:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'secretAccessKey',
+            'valueFrom',
+            'secretKeyRef',
+            'key',
+          ]) || 'token',
+        baseUrl:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'baseUrl',
+            'value',
           ]) || '',
         region:
           getConfigValue<string>(model.config, [
@@ -338,6 +400,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'value',
           ]) || '',
       };
+    }
     case 'anthropic':
       return {
         name: model.name,

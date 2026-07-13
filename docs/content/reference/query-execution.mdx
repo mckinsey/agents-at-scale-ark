@@ -16,7 +16,7 @@ Every query moves through four stages:
 3. **Execute** — the engine runs the agent or team: model calls, tools, memory, and streaming.
 4. **Respond** — the result is written to the query's status and saved to memory.
 
-The rest of this page covers each stage in detail. For how this maps onto Ark's deployment and storage backends (etcd or PostgreSQL), see [Core Architecture](/reference/core-architecture).
+The rest of this page covers each stage in detail, then [how the query is stored](#how-the-query-is-stored) on either backend. For the platform components and how Ark fits a cloud deployment, see [Core Architecture](/reference/core-architecture).
 
 ## 1. Declare the query
 
@@ -86,6 +86,80 @@ When execution finishes:
 2. It returns the A2A response with the assistant message, token usage, and conversation ID.
 3. The controller writes the response, token usage, and conversation ID to the query's status.
 4. The controller marks the query done (`phase: done`).
+
+## How the query is stored
+
+The `Query` and its status are persisted like any other Kubernetes resource. The execution path above is identical on both storage backends — only *where* the resource lives changes.
+
+### etcd (default)
+
+In the standard deployment, Ark resources are stored in etcd alongside standard Kubernetes resources. The controller learns about a new query through a Kubernetes **watch** notification, then dispatches it.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant KubeAPI as Kubernetes API
+    participant etcd as etcd
+    participant Controller as Ark Controller
+    participant Engine as Completions Engine
+    participant Model as Model Provider
+
+    User->>KubeAPI: Create Query
+    KubeAPI->>etcd: Store Query resource
+    etcd-->>Controller: Watch notification
+    Controller->>KubeAPI: Get Query details
+    KubeAPI->>etcd: Retrieve Query
+    etcd-->>KubeAPI: Query data
+    KubeAPI-->>Controller: Query data
+    Controller->>Engine: A2A SendMessage
+    Engine->>Model: LLM API call
+    Model-->>Engine: Response
+    Engine-->>Controller: A2A Response
+    Controller->>KubeAPI: Update Query status
+    KubeAPI->>etcd: Store Query status
+```
+
+### PostgreSQL (aggregated)
+
+For larger deployments, Ark can store its resources in PostgreSQL behind a [Kubernetes aggregated API server](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/) instead of etcd. The Kubernetes API server proxies `ark.mckinsey.com` requests to the embedded Ark API server, which persists to Postgres. Execution is unchanged; the write path notifies the controller directly in-process, and `pg_notify` fans the event out to other replicas.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant KubeAPI as Kubernetes API
+    participant ArkAPI as Embedded Ark API Server
+    participant ArkDB as PostgreSQL
+    participant Controller as Ark Controller
+    participant Engine as Completions Engine
+    participant Model as Model Provider
+
+    Note over KubeAPI,ArkAPI: Kubernetes Aggregation Layer<br/>proxies ark.mckinsey.com requests
+
+    User->>KubeAPI: Create Query
+    KubeAPI->>ArkAPI: Forward to aggregated API
+    ArkAPI->>ArkDB: Store Query
+    ArkDB-->>ArkAPI: Stored
+    ArkAPI-->>KubeAPI: Success
+    KubeAPI-->>User: Query created
+
+    Note over ArkAPI,Controller: Direct in-process notification
+
+    ArkAPI-->>Controller: Watch event (from write path)
+    Controller->>ArkAPI: Get Query details
+    ArkAPI->>ArkDB: Retrieve Query
+    ArkDB-->>ArkAPI: Query data
+    ArkAPI-->>Controller: Query data
+    Controller->>Engine: A2A SendMessage
+    Engine->>Model: LLM API call
+    Model-->>Engine: Response
+    Engine-->>Controller: A2A Response
+    Controller->>ArkAPI: Update Query status
+    ArkAPI->>ArkDB: Store result
+
+    Note over ArkDB: pg_notify signals other replicas<br/>for cross-replica event delivery
+```
+
+Which backend you run is a deployment choice that's transparent to clients — `kubectl` and the Ark API work the same either way. See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup and operation.
 
 ## Custom execution engines
 
