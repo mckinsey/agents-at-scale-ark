@@ -6,11 +6,7 @@ import { useEffect, useRef } from 'react';
 import {
   completeOnboardingAtom,
   onboardingCompletedAtom,
-  onboardingWizardOpenAtom,
-  postTourOpenAtom,
-  tourActiveAtom,
-  tourActiveSectionAtom,
-  tourPausedAtom,
+  onboardingPhaseAtom,
   tourStepAtom,
 } from '@/atoms/onboarding';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
@@ -25,13 +21,9 @@ export function OnboardingManager() {
 
   const completed = useAtomValue(onboardingCompletedAtom);
   const completeOnboarding = useSetAtom(completeOnboardingAtom);
-  const setTourActiveSection = useSetAtom(tourActiveSectionAtom);
 
-  const [welcomeOpen, setWelcomeOpen] = useAtom(onboardingWizardOpenAtom);
-  const [tourActive, setTourActive] = useAtom(tourActiveAtom);
+  const [phase, setPhase] = useAtom(onboardingPhaseAtom);
   const [tourStep, setTourStep] = useAtom(tourStepAtom);
-  const [tourPaused, setTourPaused] = useAtom(tourPausedAtom);
-  const [postTourOpen, setPostTourOpen] = useAtom(postTourOpenAtom);
 
   const hasCheckedFirstVisit = useRef(false);
 
@@ -39,34 +31,24 @@ export function OnboardingManager() {
     if (hasCheckedFirstVisit.current) return;
     hasCheckedFirstVisit.current = true;
     if (!completed) {
-      setWelcomeOpen(true);
+      setPhase('welcome');
     }
-  }, [completed, setWelcomeOpen]);
-
-  useEffect(() => {
-    setTourActiveSection(
-      tourActive ? (TOUR_STEPS[tourStep]?.targetId ?? null) : null,
-    );
-  }, [tourActive, tourStep, setTourActiveSection]);
+  }, [completed, setPhase]);
 
   const startTour = () => {
-    setWelcomeOpen(false);
     setTourStep(0);
-    setTourPaused(false);
-    setTourActive(true);
+    setPhase('tour');
   };
 
   const skipWelcome = () => {
-    setWelcomeOpen(false);
+    setPhase('idle');
     completeOnboarding();
   };
 
   const handleNext = () => {
     if (tourStep >= TOUR_STEPS.length - 1) {
-      setTourActive(false);
-      setTourPaused(false);
       completeOnboarding();
-      setPostTourOpen(true);
+      setPhase('post_tour');
     } else {
       setTourStep(tourStep + 1);
     }
@@ -77,32 +59,25 @@ export function OnboardingManager() {
   };
 
   const skipTour = () => {
-    setTourActive(false);
-    setTourPaused(false);
+    setPhase('idle');
     completeOnboarding();
   };
 
   const handleAction = (href: string) => {
     setTourStep(Math.min(tourStep + 1, TOUR_STEPS.length - 1));
-    setTourActive(false);
-    setTourPaused(true);
+    setPhase('paused');
     push(href);
   };
 
   const handleFloatingClick = () => {
-    if (tourPaused) {
-      setTourPaused(false);
-      setTourActive(true);
-    } else {
-      setTourStep(0);
-      setTourActive(true);
-    }
+    if (phase !== 'paused') setTourStep(0);
+    setPhase('tour');
   };
 
   return (
     <>
       <WelcomeDialog
-        open={welcomeOpen}
+        open={phase === 'welcome'}
         onOpenChange={open => {
           if (!open) skipWelcome();
         }}
@@ -110,7 +85,7 @@ export function OnboardingManager() {
         onSkip={skipWelcome}
       />
 
-      {tourActive && (
+      {phase === 'tour' && (
         <TourSpotlight
           steps={TOUR_STEPS}
           activeStep={tourStep}
@@ -122,18 +97,20 @@ export function OnboardingManager() {
       )}
 
       <PostTourDialog
-        open={postTourOpen}
-        onOpenChange={setPostTourOpen}
+        open={phase === 'post_tour'}
+        onOpenChange={open => {
+          if (!open) setPhase('idle');
+        }}
         onCreateAgent={() => {
-          setPostTourOpen(false);
+          setPhase('idle');
           push('/agents/new');
         }}
-        onDismiss={() => setPostTourOpen(false)}
+        onDismiss={() => setPhase('idle')}
       />
 
-      {!tourActive && !welcomeOpen && !postTourOpen && (
+      {(phase === 'idle' || phase === 'paused') && (
         <FloatingTourButton
-          label={tourPaused ? 'Resume tour' : 'Take the Tour'}
+          label={phase === 'paused' ? 'Resume tour' : 'Take the Tour'}
           onClick={handleFloatingClick}
         />
       )}

@@ -1,7 +1,6 @@
 'use client';
 
-import { Rocket } from 'lucide-react';
-
+import { Rocket } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 
 interface FloatingTourButtonProps {

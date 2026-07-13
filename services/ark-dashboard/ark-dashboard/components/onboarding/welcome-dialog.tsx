@@ -1,8 +1,6 @@
 'use client';
 
-import { ChevronRight, Rocket } from 'lucide-react';
-
-import { Close } from '@/components/icons';
+import { ChevronRight, Close, Rocket } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -11,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { IconShell } from '@/components/ui/icon-shell';
 import { TOUR_STEPS } from './tour-steps';
 
 interface WelcomeDialogProps {
@@ -42,7 +41,9 @@ export function WelcomeDialog({
 
         <DialogHeader className="items-center text-center sm:text-center">
           <div className="bg-fill-muted mb-2 flex size-12 items-center justify-center">
-            <Rocket className="text-fg-primary size-6" />
+            <IconShell size="lg" className="text-fg-primary">
+              <Rocket />
+            </IconShell>
           </div>
           <DialogTitle className="headings-h3-regular text-fg-primary">
             Welcome to ARK

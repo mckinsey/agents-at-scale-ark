@@ -1,8 +1,6 @@
 'use client';
 
-import { ChevronRight, PartyPopper } from 'lucide-react';
-
-import { Close } from '@/components/icons';
+import { Celebration, ChevronRight, Close } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -11,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { IconShell } from '@/components/ui/icon-shell';
 
 interface PostTourDialogProps {
   open: boolean;
@@ -41,7 +40,9 @@ export function PostTourDialog({
 
         <DialogHeader className="items-center text-center sm:text-center">
           <div className="bg-brand-accents-qb-accent/15 mb-2 flex size-12 items-center justify-center">
-            <PartyPopper className="text-brand-accents-qb-accent size-6" />
+            <IconShell size="lg" className="text-brand-accents-qb-accent">
+              <Celebration />
+            </IconShell>
           </div>
           <DialogTitle className="headings-h3-regular text-fg-primary">
             Tour complete
