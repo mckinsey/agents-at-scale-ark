@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.1.66](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.66...v0.1.66) (2026-07-14)
+
+
+### Features
+
+* add bedrock api key ([#2776](https://github.com/mckinsey/agents-at-scale-ark/issues/2776)) ([787f1d8](https://github.com/mckinsey/agents-at-scale-ark/commit/787f1d84b9c1db1500d97c2c2b8de5aa2f767b1b))
+* add kubernetes-mcp-server as a devspace dependency ([#2536](https://github.com/mckinsey/agents-at-scale-ark/issues/2536)) ([6861a30](https://github.com/mckinsey/agents-at-scale-ark/commit/6861a30f529d89b5a4b2ce6928c06a37f4f768ef))
+* add support for authenticated marketplace sources ([#2570](https://github.com/mckinsey/agents-at-scale-ark/issues/2570)) ([660a276](https://github.com/mckinsey/agents-at-scale-ark/commit/660a276cfc0b32fc253125b72c9cf59a6da15c48))
+* **broker:** Phase 2 — completion chunks on Redis Streams (opt-in, HA-ready) ([#2663](https://github.com/mckinsey/agents-at-scale-ark/issues/2663)) ([b631a18](https://github.com/mckinsey/agents-at-scale-ark/commit/b631a18b28ed2fc1391bf118bcc56f7034c453a9)), closes [#2654](https://github.com/mckinsey/agents-at-scale-ark/issues/2654)
+* **broker:** Phase 3 — durable Postgres backend for operation events ([#2737](https://github.com/mckinsey/agents-at-scale-ark/issues/2737)) ([e954f00](https://github.com/mckinsey/agents-at-scale-ark/commit/e954f00dcaf6192d3c1a265f4a42278dfe8bc027))
+* cascade-delete broker messages when Query is deleted ([#2557](https://github.com/mckinsey/agents-at-scale-ark/issues/2557)) ([302e370](https://github.com/mckinsey/agents-at-scale-ark/commit/302e3700ac7bf0a002bde2e648cd2e46cfd771c2))
+* HITL Tool calls implementation  ([#2187](https://github.com/mckinsey/agents-at-scale-ark/issues/2187)) ([6521d96](https://github.com/mckinsey/agents-at-scale-ark/commit/6521d965a7270017ff1c2bcb624a0a63cb00ddd4))
+* single-login hub for multi-tenant dashboards with per-user/group namespace access (+ fix multi-group impersonation and open permissions) ([#2719](https://github.com/mckinsey/agents-at-scale-ark/issues/2719)) ([710d9f3](https://github.com/mckinsey/agents-at-scale-ark/commit/710d9f305ccce2b925fbd3656e0b74e9bd88be63))
+* uninstall command dialog for marketplace ([#2487](https://github.com/mckinsey/agents-at-scale-ark/issues/2487)) ([a624f5e](https://github.com/mckinsey/agents-at-scale-ark/commit/a624f5ea9bc2afb94cd0bbc9ae21def89250ac1a))
+
+
+### Bug Fixes
+
+* Add parameter option to agent and query command ([#2572](https://github.com/mckinsey/agents-at-scale-ark/issues/2572)) ([71be845](https://github.com/mckinsey/agents-at-scale-ark/commit/71be8455ebabd149adb357e2e438590faf4e8307))
+* address CVE-2026-13149 on issue [#2756](https://github.com/mckinsey/agents-at-scale-ark/issues/2756) ([#2772](https://github.com/mckinsey/agents-at-scale-ark/issues/2772)) ([4575da0](https://github.com/mckinsey/agents-at-scale-ark/commit/4575da09798163d1234e12f1ae8788174538d7c2))
+* address CVEs from issue [#2838](https://github.com/mckinsey/agents-at-scale-ark/issues/2838) (js-yaml 4.3.0, Go 1.26.5) ([#2840](https://github.com/mckinsey/agents-at-scale-ark/issues/2840)) ([685f640](https://github.com/mckinsey/agents-at-scale-ark/commit/685f6408e586ed81f8ad09c44cfb4080b3a8f501))
+* **apiserver:** compute list resourceVersion numerically ([#2760](https://github.com/mckinsey/agents-at-scale-ark/issues/2760)) ([b242f47](https://github.com/mckinsey/agents-at-scale-ark/commit/b242f479d49cc0c99a1541d2eba801493e8d9c15))
+* **apiserver:** honor field selectors and set-based label selectors ([#2773](https://github.com/mckinsey/agents-at-scale-ark/issues/2773)) ([0c16226](https://github.com/mckinsey/agents-at-scale-ark/commit/0c16226ad7fb3732434d1ee84a240f8019dd9ccd))
+* **ark-sdk:** call init_k8s before ApiClient in SecretClient methods ([#2252](https://github.com/mckinsey/agents-at-scale-ark/issues/2252)) ([af9bb7f](https://github.com/mckinsey/agents-at-scale-ark/commit/af9bb7fa0fe20213ec4b3ab080b4f12fd8ac5b12))
+* AWS Bedrock model creation ([#2726](https://github.com/mckinsey/agents-at-scale-ark/issues/2726)) ([4041c95](https://github.com/mckinsey/agents-at-scale-ark/commit/4041c9506a7b39262311c2a7cb562c22542582c5))
+* **cli:** correct generate templates to match current CRD schemas ([#2465](https://github.com/mckinsey/agents-at-scale-ark/issues/2465)) ([7a92eac](https://github.com/mckinsey/agents-at-scale-ark/commit/7a92eac07a43da8014cd97ad7c55c065a1e1e76b))
+* **controller:** bound Query goroutines and enable parallel reconciles ([#2717](https://github.com/mckinsey/agents-at-scale-ark/issues/2717)) ([1a5b640](https://github.com/mckinsey/agents-at-scale-ark/commit/1a5b6409402c058ec8f568ac335af6fb91f07cda))
+* fall back to spec.conversationId for query events ([#2679](https://github.com/mckinsey/agents-at-scale-ark/issues/2679)) ([9e1fd3f](https://github.com/mckinsey/agents-at-scale-ark/commit/9e1fd3f34f20d2fcaffd5c101cbb6cc928cfda1d))
+* honor tenant prefix (base path) across dashboard streaming, SSO sign-in/callback, and A2A agent cards ([#2831](https://github.com/mckinsey/agents-at-scale-ark/issues/2831)) ([31ef692](https://github.com/mckinsey/agents-at-scale-ark/commit/31ef692e748127439880997f219abca0c02ab1f6))
+* include query params for chats ([#2535](https://github.com/mckinsey/agents-at-scale-ark/issues/2535)) ([daf4102](https://github.com/mckinsey/agents-at-scale-ark/commit/daf41022b6fda377b3d2b70df16f14fb1194f928))
+* make stable release notes per-release instead of cumulative ([#2714](https://github.com/mckinsey/agents-at-scale-ark/issues/2714)) ([ac98c1a](https://github.com/mckinsey/agents-at-scale-ark/commit/ac98c1a5ceb5fe7720f822b4f3ae8ee8667150f9))
+* persist follow up user messages ([#2814](https://github.com/mckinsey/agents-at-scale-ark/issues/2814)) ([3fc1676](https://github.com/mckinsey/agents-at-scale-ark/commit/3fc1676a7e6210037941258cde5383209d2e2df3))
+* Pin FastMCP and add host_origin_protection=False ([#2799](https://github.com/mckinsey/agents-at-scale-ark/issues/2799)) ([751b0bd](https://github.com/mckinsey/agents-at-scale-ark/commit/751b0bdbaae1edd4354969d2afea0cf8ce9734ed))
+* prevent sensitive data leakage in validation error responses ([#2836](https://github.com/mckinsey/agents-at-scale-ark/issues/2836)) ([e9abf7b](https://github.com/mckinsey/agents-at-scale-ark/commit/e9abf7bf1467a4b858a943cae678bf3060b668ef))
+* restore auth gate for proxied API and pages (SSO bypass) ([#2710](https://github.com/mckinsey/agents-at-scale-ark/issues/2710)) ([ce66b56](https://github.com/mckinsey/agents-at-scale-ark/commit/ce66b561f6f757ac98f7e8c3f8f1462be91e1214))
+* Return 1 as exit code for service version-not-found ([#2690](https://github.com/mckinsey/agents-at-scale-ark/issues/2690)) ([0fe3f0a](https://github.com/mckinsey/agents-at-scale-ark/commit/0fe3f0a2fec43b116fbb6c354ef8441722db3ef8))
+* **security:** bump fast-uri to 3.1.3 to address CVE-2026-13676 ([#2747](https://github.com/mckinsey/agents-at-scale-ark/issues/2747)) ([276429d](https://github.com/mckinsey/agents-at-scale-ark/commit/276429da907ca84a0bf459d5e5bed1ac415b82c4))
+* Storage inference in cli ([#2700](https://github.com/mckinsey/agents-at-scale-ark/issues/2700)) ([98c03d0](https://github.com/mckinsey/agents-at-scale-ark/commit/98c03d0a7a2c616febe3ff377086ad8d71d4ddcd))
+* TTL should be counted from completion, not creation ([#2745](https://github.com/mckinsey/agents-at-scale-ark/issues/2745)) ([2ace47b](https://github.com/mckinsey/agents-at-scale-ark/commit/2ace47bad71b45e33d0e2faa17e7c523fe970c27))
+* unblock Query TTL GC when finalizer is present ([#2828](https://github.com/mckinsey/agents-at-scale-ark/issues/2828)) ([#2835](https://github.com/mckinsey/agents-at-scale-ark/issues/2835)) ([3168979](https://github.com/mckinsey/agents-at-scale-ark/commit/3168979a1c90d1085880ba403b71a47fa73a0a35))
+
+
+### Documentation
+
+* add ark-broker to tenant setup steps ([#2718](https://github.com/mckinsey/agents-at-scale-ark/issues/2718)) ([b6ae8bd](https://github.com/mckinsey/agents-at-scale-ark/commit/b6ae8bd616ac3f3a93f3baa3cf3fc5ffeae2701c))
+* add audit trail guide for user attribution ([#2812](https://github.com/mckinsey/agents-at-scale-ark/issues/2812)) ([dcf9300](https://github.com/mckinsey/agents-at-scale-ark/commit/dcf93008be7e14ed01c82011ffa885fdc8c48ecf))
+* add Bedrock API key auth specification ([#2752](https://github.com/mckinsey/agents-at-scale-ark/issues/2752)) ([31a21c1](https://github.com/mckinsey/agents-at-scale-ark/commit/31a21c14199c318ee3d8f4a0d106e4a183ab74f9))
+* **argo-make:** add ark-query template and full-lifecycle authoring ([#2406](https://github.com/mckinsey/agents-at-scale-ark/issues/2406)) ([546753d](https://github.com/mckinsey/agents-at-scale-ark/commit/546753d67ad2a8d56923afd92a6ed05d74ba059a))
+* **broker:** document Redis chunks backend (Phase 2) ([#2725](https://github.com/mckinsey/agents-at-scale-ark/issues/2725)) ([014f7b2](https://github.com/mckinsey/agents-at-scale-ark/commit/014f7b2e9545b25c0870d5894f052cb904826189))
+* clean up Upgrading page and remove Utility Images page ([#2777](https://github.com/mckinsey/agents-at-scale-ark/issues/2777)) ([493d8c0](https://github.com/mckinsey/agents-at-scale-ark/commit/493d8c00355d2fea3a5ed08214e3692491a5db36))
+* consolidate, verify, and complete the reference API pages ([#2746](https://github.com/mckinsey/agents-at-scale-ark/issues/2746)) ([817cd68](https://github.com/mckinsey/agents-at-scale-ark/commit/817cd68eb2c707833771aca2472675d2dde71d43))
+* document Memory message TTL, delete-query endpoint, Query cleanup, and broker tenant isolation ([#2630](https://github.com/mckinsey/agents-at-scale-ark/issues/2630)) ([b0cc1b7](https://github.com/mckinsey/agents-at-scale-ark/commit/b0cc1b780ce17794be5e923bdfe933c8ed07f4b3))
+* document the native Anthropic Messages API provider on Models ([#2784](https://github.com/mckinsey/agents-at-scale-ark/issues/2784)) ([a9469f2](https://github.com/mckinsey/agents-at-scale-ark/commit/a9469f29ae75e7937fe91dea3fb7057ceae24f9e))
+* expand and rename Traces reference to Broker Service ([#2748](https://github.com/mckinsey/agents-at-scale-ark/issues/2748)) ([d99cef9](https://github.com/mckinsey/agents-at-scale-ark/commit/d99cef960579a6ad1332c7512b61b392d3af28f5))
+* ground Query Execution Flow against the controller code ([#2729](https://github.com/mckinsey/agents-at-scale-ark/issues/2729)) ([c689034](https://github.com/mckinsey/agents-at-scale-ark/commit/c6890345ae44c839487908d3d4faed118040dea4))
+* **mcp-auth-dashboard:** propose dashboard MCP authentication flow ([#2365](https://github.com/mckinsey/agents-at-scale-ark/issues/2365)) ([e91749f](https://github.com/mckinsey/agents-at-scale-ark/commit/e91749f8fcd190c3c7352c19e29c32bdbc09dd02))
+* refocus Core Architecture; move query storage-flow to Query Execution ([#2757](https://github.com/mckinsey/agents-at-scale-ark/issues/2757)) ([3f39cb0](https://github.com/mckinsey/agents-at-scale-ark/commit/3f39cb0bcaa8d9e85a16b40dfe49d8461c251496))
+* remove duplicate Team Selector Strategy sample ([#2523](https://github.com/mckinsey/agents-at-scale-ark/issues/2523)) ([0d7bedc](https://github.com/mckinsey/agents-at-scale-ark/commit/0d7bedc8cef8a138902a28aef092c556c6849808))
+* reorganize how-to-guides nav (Penetration testing → Reference, Build pipelines → Develop ARK, remove analysis reports) ([#2709](https://github.com/mckinsey/agents-at-scale-ark/issues/2709)) ([f262a39](https://github.com/mckinsey/agents-at-scale-ark/commit/f262a39e036e36f040a7990c0149e11a0769c67f))
+* revamp observability — native monitoring + Phoenix/Langfuse flow ([#2704](https://github.com/mckinsey/agents-at-scale-ark/issues/2704)) ([0cb4a71](https://github.com/mckinsey/agents-at-scale-ark/commit/0cb4a714a41cc13c849ecb962298429c7985a7b2))
+* rewrite Core concepts as a conceptual page ([#2727](https://github.com/mckinsey/agents-at-scale-ark/issues/2727)) ([8ed14d6](https://github.com/mckinsey/agents-at-scale-ark/commit/8ed14d61b2bd24feef8896c18f33ab309e9aef5e))
+* rewrite Resource Relationships to match the CRDs ([#2775](https://github.com/mckinsey/agents-at-scale-ark/issues/2775)) ([7fe393c](https://github.com/mckinsey/agents-at-scale-ark/commit/7fe393c8ea9e1e080e82207dc7c96c4f37fc5afd))
+* scope Core Architecture to platform/storage and cross-link related pages ([#2732](https://github.com/mckinsey/agents-at-scale-ark/issues/2732)) ([372ba10](https://github.com/mckinsey/agents-at-scale-ark/commit/372ba1005083b47204551574c7769fea90af7482))
+* show all contributors on the Contributors page ([#2778](https://github.com/mckinsey/agents-at-scale-ark/issues/2778)) ([30ddaac](https://github.com/mckinsey/agents-at-scale-ark/commit/30ddaac741640acf4cc9b959467103ea2bb8f2d2))
+* standardize and verify CRD reference pages ([#2754](https://github.com/mckinsey/agents-at-scale-ark/issues/2754)) ([d5356cc](https://github.com/mckinsey/agents-at-scale-ark/commit/d5356cc82c1ebdb34d78d78d5269974aed52da1f))
+* trim Deploy Ark CLI duplication and fix inaccuracies ([#2716](https://github.com/mckinsey/agents-at-scale-ark/issues/2716)) ([27aa434](https://github.com/mckinsey/agents-at-scale-ark/commit/27aa43429060defc529981a53bb033b9a6a11072))
+* update documentation skill with reference-doc learnings ([#2790](https://github.com/mckinsey/agents-at-scale-ark/issues/2790)) ([0427b01](https://github.com/mckinsey/agents-at-scale-ark/commit/0427b0168fcb7ad35b7ec4c13369a1e7004a2be0))
+
 ## [0.1.66-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.66-rc...v0.1.66-rc.1) (2026-07-13)
 
 
