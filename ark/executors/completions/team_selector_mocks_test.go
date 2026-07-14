@@ -158,6 +158,7 @@ type mockTeamRecorder struct {
 	lastMemberName         string
 	lastMemberType         string
 	lastOutputMessageCount int
+	lastOutput             string
 }
 
 func (m *mockTeamRecorder) StartTeamExecution(ctx context.Context, teamName, namespace, strategy string, memberCount, maxTurns int) (context.Context, telemetry.Span) {
@@ -172,9 +173,10 @@ func (m *mockTeamRecorder) StartTurn(ctx context.Context, turn int, memberName, 
 	return ctx, &mockTelemetrySpan{}
 }
 
-func (m *mockTeamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
+func (m *mockTeamRecorder) RecordTurnOutput(span telemetry.Span, output string, messageCount int) {
 	m.recordOutputCalled = true
 	m.lastOutputMessageCount = messageCount
+	m.lastOutput = output
 }
 
 func (m *mockTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
