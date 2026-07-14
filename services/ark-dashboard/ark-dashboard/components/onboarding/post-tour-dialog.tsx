@@ -39,8 +39,8 @@ export function PostTourDialog({
         </Button>
 
         <DialogHeader className="items-center text-center sm:text-center">
-          <div className="bg-brand-accents-qb-accent/15 mb-2 flex size-12 items-center justify-center">
-            <IconShell size="lg" className="text-brand-accents-qb-accent">
+          <div className="bg-fill-muted mb-2 flex size-12 items-center justify-center">
+            <IconShell size="lg" className="text-fg-primary">
               <Celebration />
             </IconShell>
           </div>
