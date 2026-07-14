@@ -137,7 +137,7 @@ ark query agent/my-agent "Remember my name is Alice." --conversation-id chat-1
 ark query agent/my-agent "What's my name?"  --conversation-id chat-1
 ```
 
-`-o` accepts `yaml`, `json`, `name`, or `events` (structured event stream). `--timeout`, `--session-id`, and `--conversation-id` are also available.
+`-o` accepts `yaml`, `json`, `name`, `events` (structured event stream), or `events-pretty` (human-readable event stream with color-coded reasons and expanded detail). `--timeout`, `--session-id`, and `--conversation-id` are also available.
 
 `ark agents query <name> <message>`, `ark teams query <name> <message>`, and `ark models query <name> <message>` are equivalent shorthands for the respective target type.
 
