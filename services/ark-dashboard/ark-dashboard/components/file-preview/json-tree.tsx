@@ -1,176 +1,116 @@
 'use client';
 
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+
+import { ChevronDown, ChevronRight } from '@/components/icons';
+import { cn } from '@/lib/utils';
 
 interface JsonTreeProps {
   data: unknown;
 }
 
+function JsonValue({ value }: { readonly value: unknown }) {
+  if (typeof value === 'string') {
+    return <span className="text-[#67e8f9]">&quot;{value}&quot;</span>;
+  }
+  if (value === null) {
+    return <span className="text-fg-tertiary">null</span>;
+  }
+  return <span className="text-fg-primary">{String(value)}</span>;
+}
+
 interface JsonTreeNodeProps {
-  data: unknown;
-  path: string;
-  keyName?: string;
-  level: number;
-  expandedPaths: Set<string>;
-  onToggle: (path: string) => void;
+  readonly data: unknown;
+  readonly keyName?: string;
+  readonly path: string;
+  readonly expandedPaths: Set<string>;
+  readonly onToggle: (path: string) => void;
 }
 
 function JsonTreeNode({
   data,
-  path,
   keyName,
-  level,
+  path,
   expandedPaths,
   onToggle,
 }: JsonTreeNodeProps) {
+  const isArray = Array.isArray(data);
+  const isObject = !isArray && data !== null && typeof data === 'object';
+
+  if (!isArray && !isObject) {
+    return (
+      <div className="flex items-center gap-1 p-2">
+        {keyName !== undefined && (
+          <span className="text-fg-secondary">{keyName}:</span>
+        )}
+        <JsonValue value={data} />
+      </div>
+    );
+  }
+
+  const entries: [string, unknown][] = isArray
+    ? (data as unknown[]).map((value, index) => [String(index), value])
+    : Object.entries(data as Record<string, unknown>);
+  const count = entries.length;
+  const summary = isArray
+    ? `[${count}]`
+    : `{ ${count} ${count === 1 ? 'key' : 'keys'} }`;
   const isExpanded = expandedPaths.has(path);
-  const indent = level * 16;
-
-  const toggle = () => {
-    onToggle(path);
-  };
-
-  if (data === null) {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-gray-500 dark:text-gray-400">null</span>
-      </div>
-    );
-  }
-
-  if (typeof data === 'string') {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-green-600 dark:text-green-400">
-          &quot;{data}&quot;
-        </span>
-      </div>
-    );
-  }
-
-  if (typeof data === 'number') {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-purple-600 dark:text-purple-400">{data}</span>
-      </div>
-    );
-  }
-
-  if (typeof data === 'boolean') {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-orange-600 dark:text-orange-400">
-          {String(data)}
-        </span>
-      </div>
-    );
-  }
-
-  if (Array.isArray(data)) {
-    return (
-      <div>
-        <div
-          style={{ paddingLeft: `${indent}px` }}
-          className="flex cursor-pointer items-center gap-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
-          onClick={toggle}>
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-          {keyName && (
-            <span className="text-blue-600 dark:text-blue-400">
-              {keyName}:{' '}
-            </span>
-          )}
-          <span className="text-gray-600 dark:text-gray-400">
-            [{data.length}]
-          </span>
-        </div>
-        {isExpanded && (
-          <div>
-            {data.map((item, index) => (
-              <JsonTreeNode
-                key={index}
-                data={item}
-                path={`${path}[${index}]`}
-                level={level + 1}
-                expandedPaths={expandedPaths}
-                onToggle={onToggle}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (typeof data === 'object') {
-    const entries = Object.entries(data);
-    return (
-      <div>
-        <div
-          style={{ paddingLeft: `${indent}px` }}
-          className="flex cursor-pointer items-center gap-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
-          onClick={toggle}>
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-          {keyName && (
-            <span className="text-blue-600 dark:text-blue-400">
-              {keyName}:{' '}
-            </span>
-          )}
-          <span className="text-gray-600 dark:text-gray-400">
-            {'{'} {entries.length} {entries.length === 1 ? 'key' : 'keys'} {'}'}
-          </span>
-        </div>
-        {isExpanded && (
-          <div>
-            {entries.map(([key, value]) => (
-              <JsonTreeNode
-                key={key}
-                data={value}
-                path={`${path}.${key}`}
-                keyName={key}
-                level={level + 1}
-                expandedPaths={expandedPaths}
-                onToggle={onToggle}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
-    <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-      {keyName && (
-        <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => onToggle(path)}
+        className={cn(
+          'flex w-full items-center gap-2 p-2 text-left transition-colors',
+          isExpanded
+            ? 'bg-stateslayer-overlay-pressed text-fg-primary'
+            : 'text-fg-secondary hover:bg-stateslayer-overlay-hover',
+        )}>
+        <span className="text-fg-secondary flex size-6 shrink-0 items-center justify-center">
+          {isExpanded ? (
+            <ChevronDown className="size-4" />
+          ) : (
+            <ChevronRight className="size-4" />
+          )}
+        </span>
+        <span className="truncate">
+          {keyName !== undefined && <span>{keyName} </span>}
+          {summary}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="flex flex-col pl-2">
+          {entries.map(([key, value]) => (
+            <div key={key} className="flex items-start">
+              {/* subtle connector rail: vertical + horizontal tick */}
+              <div className="relative w-4 shrink-0 self-stretch">
+                <span className="border-stroke-divider absolute inset-y-0 left-0 border-l" />
+                <span className="border-stroke-divider absolute top-5 left-0 w-full border-t" />
+              </div>
+              {/* thicker vertical-only rail + row content */}
+              <div className="border-stroke-secondary min-w-0 flex-1 border-l-2">
+                <JsonTreeNode
+                  data={value}
+                  keyName={isArray ? undefined : key}
+                  path={`${path}.${key}`}
+                  expandedPaths={expandedPaths}
+                  onToggle={onToggle}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-      <span>{String(data)}</span>
     </div>
   );
 }
 
 export function JsonTree({ data }: JsonTreeProps) {
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
+    () => new Set(['root']),
+  );
 
   const handleToggle = (path: string) => {
     setExpandedPaths(prev => {
@@ -185,11 +125,10 @@ export function JsonTree({ data }: JsonTreeProps) {
   };
 
   return (
-    <div className="rounded-md border border-gray-200 bg-white p-4 font-mono text-sm dark:border-gray-800 dark:bg-gray-900">
+    <div className="text-sm">
       <JsonTreeNode
         data={data}
         path="root"
-        level={0}
         expandedPaths={expandedPaths}
         onToggle={handleToggle}
       />

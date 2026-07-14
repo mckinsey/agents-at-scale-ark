@@ -31,6 +31,9 @@ vi.mock('copy-to-clipboard');
 vi.mock('sonner');
 vi.mock('@/lib/services/files');
 vi.mock('@/lib/services/files-hooks');
+vi.mock('@/lib/services/files-count-hooks', () => ({
+  useGetFilesCount: vi.fn(() => ({ data: 0 })),
+}));
 
 const mockCopy = vi.mocked(copy);
 const mockToast = vi.mocked(toast);
@@ -103,52 +106,18 @@ describe('FilesSection', () => {
     sessionStorage.clear();
   });
 
-  describe('File Row Three-Dots Menu', () => {
-    it('renders three-dots menu button for file rows', () => {
-      render(<FilesSection />);
-
-      const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      expect(menuButton).toBeInTheDocument();
-    });
-
-    it('opens dropdown menu when three-dots button is clicked', async () => {
+  describe('File Row Actions Menu', () => {
+    it('copies file path when Copy path is clicked', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 });
       render(<FilesSection />);
 
       const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      expect(
+      await user.click(
+        within(fileRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
         await screen.findByRole('menuitem', { name: /copy path/i }),
-      ).toBeInTheDocument();
-      expect(
-        await screen.findByRole('menuitem', { name: /delete/i }),
-      ).toBeInTheDocument();
-    });
-
-    it('copies file path when Copy Path is clicked', async () => {
-      const user = userEvent.setup({ pointerEventsCheck: 0 });
-      render(<FilesSection />);
-
-      const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const copyPathItem = await screen.findByRole('menuitem', {
-        name: /copy path/i,
-      });
-      await user.click(copyPathItem);
+      );
 
       expect(mockCopy).toHaveBeenCalledWith('documents/report.pdf');
       expect(mockToast.success).toHaveBeenCalledWith('Path Copied', {
@@ -156,21 +125,35 @@ describe('FilesSection', () => {
       });
     });
 
+    it('downloads file when Download is clicked', async () => {
+      mockFilesService.download = vi.fn();
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      render(<FilesSection />);
+
+      const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
+      await user.click(
+        within(fileRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /download/i }),
+      );
+
+      expect(mockFilesService.download).toHaveBeenCalledWith(
+        'documents/report.pdf',
+      );
+    });
+
     it('opens delete confirmation dialog when Delete is clicked', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 });
       render(<FilesSection />);
 
       const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const deleteItem = await screen.findByRole('menuitem', {
-        name: /delete/i,
-      });
-      await user.click(deleteItem);
+      await user.click(
+        within(fileRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /delete/i }),
+      );
 
       expect(
         await screen.findByRole('heading', { name: /delete report\.pdf/i }),
@@ -194,16 +177,12 @@ describe('FilesSection', () => {
       render(<FilesSection />);
 
       const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const deleteItem = await screen.findByRole('menuitem', {
-        name: /delete/i,
-      });
-      await user.click(deleteItem);
+      await user.click(
+        within(fileRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /delete/i }),
+      );
 
       const confirmButton = await screen.findByRole('button', {
         name: /confirm/i,
@@ -231,16 +210,12 @@ describe('FilesSection', () => {
       render(<FilesSection />);
 
       const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const deleteItem = await screen.findByRole('menuitem', {
-        name: /delete/i,
-      });
-      await user.click(deleteItem);
+      await user.click(
+        within(fileRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /delete/i }),
+      );
 
       const cancelButton = await screen.findByRole('button', {
         name: /cancel/i,
@@ -266,16 +241,12 @@ describe('FilesSection', () => {
       render(<FilesSection />);
 
       const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const menuButton = within(fileRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const deleteItem = await screen.findByRole('menuitem', {
-        name: /delete/i,
-      });
-      await user.click(deleteItem);
+      await user.click(
+        within(fileRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /delete/i }),
+      );
 
       const confirmButton = await screen.findByRole('button', {
         name: /confirm/i,
@@ -290,52 +261,18 @@ describe('FilesSection', () => {
     });
   });
 
-  describe('Directory Row Three-Dots Menu', () => {
-    it('renders three-dots menu button for directory rows', () => {
-      render(<FilesSection />);
-
-      const dirRow = screen.getByRole('row', { name: /archive/i });
-      const menuButton = within(dirRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      expect(menuButton).toBeInTheDocument();
-    });
-
-    it('opens dropdown menu when three-dots button is clicked on directory', async () => {
+  describe('Directory Row Actions Menu', () => {
+    it('copies directory path when Copy path is clicked', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 });
       render(<FilesSection />);
 
       const dirRow = screen.getByRole('row', { name: /archive/i });
-      const menuButton = within(dirRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      expect(
+      await user.click(
+        within(dirRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
         await screen.findByRole('menuitem', { name: /copy path/i }),
-      ).toBeInTheDocument();
-      expect(
-        await screen.findByRole('menuitem', { name: /delete/i }),
-      ).toBeInTheDocument();
-    });
-
-    it('copies directory path when Copy Path is clicked', async () => {
-      const user = userEvent.setup({ pointerEventsCheck: 0 });
-      render(<FilesSection />);
-
-      const dirRow = screen.getByRole('row', { name: /archive/i });
-      const menuButton = within(dirRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const copyPathItem = await screen.findByRole('menuitem', {
-        name: /copy path/i,
-      });
-      await user.click(copyPathItem);
+      );
 
       expect(mockCopy).toHaveBeenCalledWith('documents/archive/');
       expect(mockToast.success).toHaveBeenCalledWith('Path Copied', {
@@ -343,21 +280,33 @@ describe('FilesSection', () => {
       });
     });
 
+    it('does not navigate into directory when opening its actions menu', async () => {
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      render(<FilesSection />);
+
+      const dirRow = screen.getByRole('row', { name: /archive/i });
+      await user.click(
+        within(dirRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /copy path/i }),
+      );
+
+      expect(mockCopy).toHaveBeenCalledWith('documents/archive/');
+      expect(screen.queryByText(/go up/i)).not.toBeInTheDocument();
+    });
+
     it('opens delete confirmation dialog when Delete is clicked on directory', async () => {
       const user = userEvent.setup({ pointerEventsCheck: 0 });
       render(<FilesSection />);
 
       const dirRow = screen.getByRole('row', { name: /archive/i });
-      const menuButton = within(dirRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const deleteItem = await screen.findByRole('menuitem', {
-        name: /delete/i,
-      });
-      await user.click(deleteItem);
+      await user.click(
+        within(dirRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /delete/i }),
+      );
 
       expect(
         await screen.findByRole('heading', {
@@ -383,16 +332,12 @@ describe('FilesSection', () => {
       render(<FilesSection />);
 
       const dirRow = screen.getByRole('row', { name: /archive/i });
-      const menuButton = within(dirRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      const deleteItem = await screen.findByRole('menuitem', {
-        name: /delete/i,
-      });
-      await user.click(deleteItem);
+      await user.click(
+        within(dirRow).getByRole('button', { name: /more actions/i }),
+      );
+      await user.click(
+        await screen.findByRole('menuitem', { name: /delete/i }),
+      );
 
       const confirmButton = await screen.findByRole('button', {
         name: /confirm/i,
@@ -405,52 +350,6 @@ describe('FilesSection', () => {
 
       expect(mockToast.success).toHaveBeenCalledWith(
         'Directory Deleted (5 files)',
-      );
-    });
-
-    it('prevents row navigation when clicking menu button', async () => {
-      const user = userEvent.setup({ pointerEventsCheck: 0 });
-      render(<FilesSection />);
-
-      const dirRow = screen.getByRole('row', { name: /archive/i });
-      const menuButton = within(dirRow).getByRole('button', {
-        name: /more actions/i,
-      });
-
-      await user.click(menuButton);
-
-      await screen.findByRole('menuitem', { name: /copy path/i });
-
-      expect(mockUseListFiles).toHaveBeenCalledWith({
-        prefix: '',
-        max_keys: 100,
-      });
-    });
-  });
-
-  describe('File Download', () => {
-    it('renders download button for file rows', () => {
-      render(<FilesSection />);
-
-      const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const downloadButton = within(fileRow).getAllByRole('button')[1];
-
-      expect(downloadButton).toBeInTheDocument();
-    });
-
-    it('calls download service when download button is clicked', async () => {
-      mockFilesService.download = vi.fn();
-
-      render(<FilesSection />);
-
-      const fileRow = await screen.findByRole('row', { name: /report\.pdf/i });
-      const buttons = within(fileRow).getAllByRole('button');
-      const downloadButton = buttons[1];
-
-      fireEvent.click(downloadButton);
-
-      expect(mockFilesService.download).toHaveBeenCalledWith(
-        'documents/report.pdf',
       );
     });
   });
@@ -637,22 +536,19 @@ describe('FilesSection', () => {
   });
 
   describe('File Upload', () => {
-    it('opens file browser when clicking drop zone', async () => {
-      render(<FilesSection />);
-
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
-      const fileInput = screen.getByLabelText(/browse files/i, {
+    const getFileInput = () =>
+      screen.getByLabelText(/browse files/i, {
         selector: 'input[type="file"]',
       }) as HTMLInputElement;
 
-      const clickSpy = vi.fn();
-      fileInput.click = clickSpy;
+    it('opens file browser when clicking Add file', async () => {
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      render(<FilesSection />);
 
-      if (dropZone) {
-        fireEvent.click(dropZone);
-      }
+      const clickSpy = vi.fn();
+      getFileInput().click = clickSpy;
+
+      await user.click(screen.getByRole('button', { name: /add file/i }));
 
       expect(clickSpy).toHaveBeenCalled();
     });
@@ -660,13 +556,8 @@ describe('FilesSection', () => {
     it('allows uploading file via file input', async () => {
       render(<FilesSection />);
 
-      const fileInput = screen.getByLabelText(/browse files/i, {
-        selector: 'input[type="file"]',
-      }) as HTMLInputElement;
-
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      fireEvent.change(getFileInput(), { target: { files: [file] } });
 
       await waitFor(() => {
         expect(
@@ -677,36 +568,14 @@ describe('FilesSection', () => {
       expect(screen.getByLabelText(/filename/i)).toHaveValue('test.txt');
     });
 
-    it('shows visual indication that drop zone is clickable', () => {
-      render(<FilesSection />);
-
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
-      expect(dropZone).toHaveClass('cursor-pointer');
-    });
-
     it('rejects files larger than 1MB', async () => {
       render(<FilesSection />);
-
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
 
       const largeContent = new Array(1024 * 1024 + 1).fill('a').join('');
       const largeFile = new File([largeContent], 'large.txt', {
         type: 'text/plain',
       });
-      const dataTransfer = {
-        files: [largeFile],
-      };
-
-      if (dropZone) {
-        const dropEvent = new Event('drop', { bubbles: true });
-        Object.defineProperty(dropEvent, 'dataTransfer', {
-          value: dataTransfer,
-        });
-        dropZone.dispatchEvent(dropEvent);
-      }
+      fireEvent.change(getFileInput(), { target: { files: [largeFile] } });
 
       await waitFor(() => {
         expect(mockToast.error).toHaveBeenCalledWith(
@@ -725,24 +594,11 @@ describe('FilesSection', () => {
     it('accepts files that are exactly 1MB', async () => {
       render(<FilesSection />);
 
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
       const exactlyOneMB = new Array(1024 * 1024).fill('a').join('');
       const file = new File([exactlyOneMB], 'exactly-1mb.txt', {
         type: 'text/plain',
       });
-      const dataTransfer = {
-        files: [file],
-      };
-
-      if (dropZone) {
-        const dropEvent = new Event('drop', { bubbles: true });
-        Object.defineProperty(dropEvent, 'dataTransfer', {
-          value: dataTransfer,
-        });
-        dropZone.dispatchEvent(dropEvent);
-      }
+      fireEvent.change(getFileInput(), { target: { files: [file] } });
 
       await waitFor(() => {
         expect(
@@ -753,24 +609,11 @@ describe('FilesSection', () => {
       expect(mockToast.error).not.toHaveBeenCalled();
     });
 
-    it('opens upload dialog when file is dropped', async () => {
+    it('opens upload dialog when a file is selected', async () => {
       render(<FilesSection />);
 
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-      const dataTransfer = {
-        files: [file],
-      };
-
-      if (dropZone) {
-        const dropEvent = new Event('drop', { bubbles: true });
-        Object.defineProperty(dropEvent, 'dataTransfer', {
-          value: dataTransfer,
-        });
-        dropZone.dispatchEvent(dropEvent);
-      }
+      fireEvent.change(getFileInput(), { target: { files: [file] } });
 
       await waitFor(() => {
         expect(
@@ -783,21 +626,8 @@ describe('FilesSection', () => {
       const user = userEvent.setup();
       render(<FilesSection />);
 
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-      const dataTransfer = {
-        files: [file],
-      };
-
-      if (dropZone) {
-        const dropEvent = new Event('drop', { bubbles: true });
-        Object.defineProperty(dropEvent, 'dataTransfer', {
-          value: dataTransfer,
-        });
-        dropZone.dispatchEvent(dropEvent);
-      }
+      fireEvent.change(getFileInput(), { target: { files: [file] } });
 
       await waitFor(() => {
         expect(screen.getByLabelText(/filename/i)).toBeInTheDocument();
@@ -818,21 +648,8 @@ describe('FilesSection', () => {
 
       render(<FilesSection />);
 
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-      const dataTransfer = {
-        files: [file],
-      };
-
-      if (dropZone) {
-        const dropEvent = new Event('drop', { bubbles: true });
-        Object.defineProperty(dropEvent, 'dataTransfer', {
-          value: dataTransfer,
-        });
-        dropZone.dispatchEvent(dropEvent);
-      }
+      fireEvent.change(getFileInput(), { target: { files: [file] } });
 
       await waitFor(() => {
         expect(screen.getByLabelText(/filename/i)).toBeInTheDocument();
@@ -856,21 +673,8 @@ describe('FilesSection', () => {
 
       render(<FilesSection />);
 
-      const dropZone = screen.getByText(/drag and drop a file here/i)
-        .parentElement?.parentElement;
-
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-      const dataTransfer = {
-        files: [file],
-      };
-
-      if (dropZone) {
-        const dropEvent = new Event('drop', { bubbles: true });
-        Object.defineProperty(dropEvent, 'dataTransfer', {
-          value: dataTransfer,
-        });
-        dropZone.dispatchEvent(dropEvent);
-      }
+      fireEvent.change(getFileInput(), { target: { files: [file] } });
 
       await waitFor(() => {
         expect(screen.getByLabelText(/filename/i)).toBeInTheDocument();

@@ -1,41 +1,48 @@
 'use client';
 
-import { ExternalLink } from 'lucide-react';
+import { InsertDriveFile } from '@/components/icons';
+import { ResourceEmptyState } from '@/components/sections/resource-list-states';
+import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
 
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
+const FILE_GATEWAY_DOCS_URL =
+  'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/';
 
 export function FilesSetupInstructions() {
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <DASHBOARD_SECTIONS.files.icon />
-          </EmptyMedia>
-          <EmptyTitle>File Gateway Service Not Configured</EmptyTitle>
-          <EmptyDescription>
-            Set up the{' '}
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors">
-              File Gateway Service
-              <ExternalLink className="h-3 w-3" />
-            </a>{' '}
-            to enable file management capabilities.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent></EmptyContent>
-      </Empty>
+    <div className="content-shell flex h-full w-full flex-col">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <IconShell size="default" variant="primary">
+            <InsertDriveFile />
+          </IconShell>
+          <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+            Files
+          </h1>
+        </div>
+        <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+          Manage datasets, documents, and assets used by agents
+        </p>
+      </div>
+
+      <ResourceEmptyState
+        icon={<InsertDriveFile />}
+        title="File Gateway Service Not Configured"
+        description={
+          <>
+            <p className="mb-2">Set up the File Gateway Service</p>
+            <p>to enable file management capabilities.</p>
+          </>
+        }
+        actions={
+          <a
+            href={FILE_GATEWAY_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer">
+            <Button variant="outline">Learn more</Button>
+          </a>
+        }
+      />
     </div>
   );
 }
