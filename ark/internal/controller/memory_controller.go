@@ -154,6 +154,10 @@ func (r *MemoryReconciler) mapConfigMapToMemories(ctx context.Context, obj clien
 	})
 }
 
+// mapDependencyToMemories lists Memories in the changed object's namespace
+// (typically a small set) and returns those whose address matches. On a list
+// error it returns nil rather than failing: the requeue poll is the recovery
+// backstop, so a missed watch event is not fatal.
 func (r *MemoryReconciler) mapDependencyToMemories(ctx context.Context, obj client.Object, matches func(*arkv1alpha1.ValueFromSource) bool) []reconcile.Request {
 	var memories arkv1alpha1.MemoryList
 	if err := r.List(ctx, &memories, client.InNamespace(obj.GetNamespace())); err != nil {

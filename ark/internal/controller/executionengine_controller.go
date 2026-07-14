@@ -130,6 +130,10 @@ func (r *ExecutionEngineReconciler) mapConfigMapToExecutionEngines(ctx context.C
 	})
 }
 
+// mapDependencyToExecutionEngines lists ExecutionEngines in the changed
+// object's namespace (typically a small set) and returns those whose address
+// matches. On a list error it returns nil rather than failing: the requeue
+// poll is the recovery backstop, so a missed watch event is not fatal.
 func (r *ExecutionEngineReconciler) mapDependencyToExecutionEngines(ctx context.Context, obj client.Object, matches func(*arkv1prealpha1.ValueFromSource) bool) []reconcile.Request {
 	var engines arkv1prealpha1.ExecutionEngineList
 	if err := r.List(ctx, &engines, client.InNamespace(obj.GetNamespace())); err != nil {
