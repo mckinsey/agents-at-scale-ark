@@ -14,7 +14,7 @@ export interface K8sEvent {
   };
 }
 
-function pad(value: number, width: number): string {
+export function pad(value: number, width: number): string {
   return value.toString().padStart(width, '0');
 }
 

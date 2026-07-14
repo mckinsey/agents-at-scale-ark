@@ -4,12 +4,9 @@ import {
   formatEvent,
   formatEventTimestamp,
   formatEventData,
+  pad,
 } from './formatEvent.js';
 import {EVENT_ANNOTATIONS} from './constants.js';
-
-function pad(value: number, width: number): string {
-  return value.toString().padStart(width, '0');
-}
 
 function eventWithData(data: string, overrides = {}) {
   return {
