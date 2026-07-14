@@ -10,6 +10,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -38,6 +40,13 @@ var _ = Describe("ExecutionEngine Controller", func() {
 		for i := range secretList.Items {
 			if secretList.Items[i].Namespace == "default" {
 				_ = k8sClient.Delete(ctx, &secretList.Items[i])
+			}
+		}
+		configMapList := &corev1.ConfigMapList{}
+		_ = k8sClient.List(ctx, configMapList)
+		for i := range configMapList.Items {
+			if configMapList.Items[i].Namespace == "default" {
+				_ = k8sClient.Delete(ctx, &configMapList.Items[i])
 			}
 		}
 	})
@@ -122,6 +131,65 @@ var _ = Describe("ExecutionEngine Controller", func() {
 			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
 			Expect(healed.Status.Phase).To(Equal("ready"))
 			Expect(healed.Status.LastResolvedAddress).To(Equal("http://healed-engine:8080"))
+		})
+
+		It("stays terminal in the ready phase without reprocessing", func() {
+			name := "ee-ready-terminal"
+			engine := &arkv1prealpha1.ExecutionEngine{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec: arkv1prealpha1.ExecutionEngineSpec{
+					Address: arkv1prealpha1.ValueSource{Value: "http://ready:8080"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
+			engine.Status.Phase = "ready"
+			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
+
+			r := newReconciler()
+			nn := types.NamespacedName{Name: name, Namespace: "default"}
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeZero())
+
+			after := &arkv1prealpha1.ExecutionEngine{}
+			Expect(k8sClient.Get(ctx, nn, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal("ready"))
+		})
+
+		It("registers the controller with the manager", func() {
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+			Expect(err).NotTo(HaveOccurred())
+			r := &ExecutionEngineReconciler{
+				Client:   mgr.GetClient(),
+				Scheme:   mgr.GetScheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+			Expect(r.SetupWithManager(mgr)).To(Succeed())
+		})
+
+		It("maps a changed ConfigMap to the ExecutionEngines that reference it", func() {
+			configMapName := "ee-mapped-configmap"
+			referencing := &arkv1prealpha1.ExecutionEngine{
+				ObjectMeta: metav1.ObjectMeta{Name: "ee-ref-cm", Namespace: "default"},
+				Spec: arkv1prealpha1.ExecutionEngineSpec{
+					Address: arkv1prealpha1.ValueSource{
+						ValueFrom: &arkv1prealpha1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
+								Key:                  "addr",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, referencing)).To(Succeed())
+
+			r := newReconciler()
+			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: "default"}}
+			requests := r.mapConfigMapToExecutionEngines(ctx, cm)
+			Expect(requests).To(ConsistOf(reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "ee-ref-cm", Namespace: "default"},
+			}))
 		})
 
 		It("maps a changed Secret to the ExecutionEngines that reference it", func() {

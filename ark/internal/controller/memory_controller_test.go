@@ -10,6 +10,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -590,6 +592,102 @@ var _ = Describe("Memory Controller", func() {
 			healed := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
 			Expect(healed.Status.Phase).To(Equal("ready"))
+		})
+
+		It("stays terminal in the ready phase without reprocessing", func() {
+			memoryName := "memory-ready-terminal"
+			memory := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{Name: memoryName, Namespace: "default"},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{Value: "http://ready:8080"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
+			memory.Status.Phase = "ready"
+			Expect(k8sClient.Status().Update(ctx, memory)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeZero())
+
+			after := &arkv1alpha1.Memory{}
+			Expect(k8sClient.Get(ctx, nn, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal("ready"))
+		})
+
+		It("errors and schedules a retry when the resolved address is empty", func() {
+			memoryName := "memory-empty-addr"
+			secretName := "empty-addr-secret"
+
+			By("Creating a Secret whose value is empty")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+				Data:       map[string][]byte{"addr": []byte("")},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			memory := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{Name: memoryName, Namespace: "default"},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+								Key:                  "addr",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+			errored := &arkv1alpha1.Memory{}
+			Expect(k8sClient.Get(ctx, nn, errored)).To(Succeed())
+			Expect(errored.Status.Phase).To(Equal("error"))
+		})
+
+		It("registers the controller with the manager", func() {
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+			Expect(err).NotTo(HaveOccurred())
+			r := &MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
+			Expect(r.SetupWithManager(mgr)).To(Succeed())
+		})
+
+		It("maps a changed ConfigMap to the Memories that reference it", func() {
+			configMapName := "mapped-configmap"
+			referencing := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{Name: "mem-ref-cm", Namespace: "default"},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
+								Key:                  "addr",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, referencing)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: "default"}}
+			requests := controllerReconciler.mapConfigMapToMemories(ctx, cm)
+			Expect(requests).To(ConsistOf(reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "mem-ref-cm", Namespace: "default"},
+			}))
 		})
 
 		It("maps a changed Secret to the Memories that reference it", func() {
