@@ -460,4 +460,175 @@ var _ = Describe("Memory Controller", func() {
 			Expect(updatedMemory.Spec.Headers[0].Value.ValueFrom.QueryParameterRef.Name).To(Equal("userId"))
 		})
 	})
+
+	// Regression for issue #2658: a transient/NotFound resolution failure must
+	// not permanently strand a Memory in the error phase. ResolveValueSource
+	// wraps a NotFound identically to a transient blip, so a missing-then-created
+	// Secret exercises the self-heal path deterministically.
+	Context("When a referenced Secret is initially missing (issue #2658)", func() {
+		ctx := context.Background()
+
+		AfterEach(func() {
+			memoryList := &arkv1alpha1.MemoryList{}
+			_ = k8sClient.List(ctx, memoryList)
+			for i := range memoryList.Items {
+				_ = k8sClient.Delete(ctx, &memoryList.Items[i])
+			}
+			secretList := &corev1.SecretList{}
+			_ = k8sClient.List(ctx, secretList)
+			for i := range secretList.Items {
+				if secretList.Items[i].Namespace == "default" {
+					_ = k8sClient.Delete(ctx, &secretList.Items[i])
+				}
+			}
+			configMapList := &corev1.ConfigMapList{}
+			_ = k8sClient.List(ctx, configMapList)
+			for i := range configMapList.Items {
+				if configMapList.Items[i].Namespace == "default" {
+					_ = k8sClient.Delete(ctx, &configMapList.Items[i])
+				}
+			}
+		})
+
+		It("retries and self-heals to ready once the Secret appears", func() {
+			memoryName := "memory-selfheal"
+			secretName := "selfheal-secret"
+
+			By("Creating a Memory whose address resolves from a not-yet-existing Secret")
+			memory := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      memoryName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+								Key:                  "addr",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+
+			By("First reconcile initializes phase to running")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Second reconcile fails to resolve the missing Secret and sets error")
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+
+			errored := &arkv1alpha1.Memory{}
+			Expect(k8sClient.Get(ctx, nn, errored)).To(Succeed())
+			Expect(errored.Status.Phase).To(Equal("error"))
+
+			By("A retry is scheduled so the resource is not permanently stranded")
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+			By("Creating the Secret so resolution now succeeds")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"addr": []byte("http://healed-memory-service:8080"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			By("Reconciling from the error phase reprocesses and reaches ready")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+
+			healed := &arkv1alpha1.Memory{}
+			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
+			Expect(healed.Status.Phase).To(Equal("ready"))
+			Expect(healed.Status.LastResolvedAddress).NotTo(BeNil())
+			Expect(*healed.Status.LastResolvedAddress).To(Equal("http://healed-memory-service:8080"))
+		})
+
+		It("recovers from the error phase when the spec is edited", func() {
+			memoryName := "memory-specedit-recover"
+
+			By("Creating a Memory already stuck in the error phase")
+			memory := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      memoryName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{
+						Value: "http://valid-memory-service:8080",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
+			memory.Status.Phase = "error"
+			memory.Status.Message = "Failed to resolve address: simulated"
+			Expect(k8sClient.Status().Update(ctx, memory)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+
+			By("Reconciling an errored resource with a valid address reaches ready")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).NotTo(HaveOccurred())
+
+			healed := &arkv1alpha1.Memory{}
+			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
+			Expect(healed.Status.Phase).To(Equal("ready"))
+		})
+
+		It("maps a changed Secret to the Memories that reference it", func() {
+			secretName := "mapped-secret"
+			By("Creating one Memory referencing the Secret and one that does not")
+			referencing := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{Name: "mem-ref-secret", Namespace: "default"},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+								Key:                  "addr",
+							},
+						},
+					},
+				},
+			}
+			unrelated := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{Name: "mem-direct", Namespace: "default"},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{Value: "http://direct:8080"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, referencing)).To(Succeed())
+			Expect(k8sClient.Create(ctx, unrelated)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			}
+			requests := controllerReconciler.mapSecretToMemories(ctx, secret)
+			Expect(requests).To(ConsistOf(reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "mem-ref-secret", Namespace: "default"},
+			}))
+		})
+	})
 })
