@@ -680,8 +680,26 @@ func TestGenericStorage_ConvertToTable_List(t *testing.T) {
 	if len(table.Rows) != 2 {
 		t.Errorf("expected 2 rows, got %d", len(table.Rows))
 	}
+}
+
+func TestGenericStorage_ConvertToTable_ListWithoutContinueToken(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
 	// A list without a continue token must yield an empty token (not a panic
 	// or stale value), so single-page results are not mislabeled as truncated.
+	list := &arkv1alpha1.AgentList{
+		Items: []arkv1alpha1.Agent{
+			{ObjectMeta: metav1.ObjectMeta{Name: "agent-1", CreationTimestamp: metav1.Now()}},
+		},
+	}
+
+	table, err := gs.ConvertToTable(ctx, list, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
 	if table.Continue != "" {
 		t.Errorf("expected empty continue for un-paginated list, got %q", table.Continue)
 	}
