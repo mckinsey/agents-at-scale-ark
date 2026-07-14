@@ -532,6 +532,10 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 	ctx := context.Background()
 
 	It("deletes a terminal-phase Query whose TTL has elapsed since completion", func() {
+		// Also covers #2828: with the finalizer present, r.Delete only
+		// marks the Query Terminating, so Reconcile must reach
+		// handleFinalizer in the same pass to clear the finalizer.
+		// Without it the Query stays Terminating forever.
 		name := "ttl-elapsed-terminal-query"
 		key := types.NamespacedName{Name: name, Namespace: "default"}
 
@@ -544,6 +548,10 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		}
 		Expect(query.Spec.SetInputString("hello")).To(Succeed())
 		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		controllerutil.AddFinalizer(query, finalizer)
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
 
 		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
 		query.Status.Phase = statusDone
@@ -561,7 +569,7 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		err = k8sClient.Get(ctx, key, &arkv1alpha1.Query{})
-		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be deleted when terminal phase + TTL elapsed since completion")
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be fully reaped when terminal phase + TTL elapsed, not stuck Terminating with finalizer")
 	})
 
 	It("does NOT delete a non-terminal Query even when its TTL has elapsed since creation", func() {
