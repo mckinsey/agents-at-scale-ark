@@ -6,6 +6,20 @@ vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
+const mockExecuteQuery = vi.fn() as any;
+vi.mock('../../lib/executeQuery.js', () => ({
+  executeQuery: mockExecuteQuery,
+  // Real parseParameters is unit-tested in executeQuery.spec.ts; stub its contract here.
+  parseParameters: (params: string[]) =>
+    params.map((p) => {
+      const i = p.indexOf('=');
+      if (i === -1) {
+        throw new Error(`parameter must be in name=value format, got: ${p}`);
+      }
+      return {name: p.slice(0, i).trim(), value: p.slice(i + 1).trim()};
+    }),
+}));
+
 const mockOutput = {
   warning: vi.fn(),
   error: vi.fn(),
@@ -19,6 +33,9 @@ const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
 }) as any);
 
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleError = vi
+  .spyOn(console, 'error')
+  .mockImplementation(() => {});
 
 const {createAgentsCommand} = await import('./index.js');
 
@@ -97,5 +114,80 @@ describe('agents command', () => {
     await command.parseAsync(['node', 'test', 'list']);
 
     expect(mockExeca).toHaveBeenCalled();
+  });
+
+  describe('query subcommand', () => {
+    it('executes an agent query with parsed parameters', async () => {
+      mockExecuteQuery.mockResolvedValue(undefined);
+
+      const command = createAgentsCommand({});
+      await command.parseAsync([
+        'node',
+        'test',
+        'query',
+        'weather-agent',
+        'What is the weather?',
+        '-p',
+        'city=London',
+        '--parameter',
+        'unit=celsius',
+      ]);
+
+      expect(mockExecuteQuery).toHaveBeenCalledWith({
+        targetType: 'agent',
+        targetName: 'weather-agent',
+        message: 'What is the weather?',
+        timeout: undefined,
+        parameters: [
+          {name: 'city', value: 'London'},
+          {name: 'unit', value: 'celsius'},
+        ],
+      });
+    });
+
+    it('passes the timeout option through to executeQuery', async () => {
+      mockExecuteQuery.mockResolvedValue(undefined);
+
+      const command = createAgentsCommand({});
+      await command.parseAsync([
+        'node',
+        'test',
+        'query',
+        'weather-agent',
+        'Hello',
+        '--timeout',
+        '30s',
+      ]);
+
+      expect(mockExecuteQuery).toHaveBeenCalledWith({
+        targetType: 'agent',
+        targetName: 'weather-agent',
+        message: 'Hello',
+        timeout: '30s',
+        parameters: [],
+      });
+    });
+
+    it('exits with an error on a malformed parameter', async () => {
+      const command = createAgentsCommand({});
+
+      await expect(
+        command.parseAsync([
+          'node',
+          'test',
+          'query',
+          'weather-agent',
+          'Hello',
+          '-p',
+          'noequals',
+        ])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockExecuteQuery).not.toHaveBeenCalled();
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('name=value')
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
   });
 });

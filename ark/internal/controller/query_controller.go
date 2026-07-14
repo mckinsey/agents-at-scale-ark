@@ -115,12 +115,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// longer than its TTL. TTL is measured from completion, not creation,
 	// so long-running or queued queries are never reaped mid-flight.
 	// TTL may be nil when using aggregated API server (non-CRD storage).
-	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) {
+	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) && obj.DeletionTimestamp.IsZero() {
 		if err := r.Delete(ctx, &obj); err != nil {
 			log.Error(err, "unable to delete object")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Refetch so handleFinalizer below sees the DeletionTimestamp
+		// and clears the finalizer in this same reconcile (#2828).
+		if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 	}
 
 	if result, err := r.handleFinalizer(ctx, &obj); result != nil {
