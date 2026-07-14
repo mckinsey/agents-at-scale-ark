@@ -212,5 +212,7 @@
         }
       ]
     }
-  }
+  },
+  "release-as": "0.1.66",
+  "last-release-sha": "bb09b2d6155ea06769359b2ff8604752d0d537e5"
 }
