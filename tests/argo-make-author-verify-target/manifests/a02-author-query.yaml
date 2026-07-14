@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: author-query
-spec:
-  target:
-    type: agent
-    name: argo-make-author
-  input: "Write a WorkflowTemplate that queries the weather agent for the forecast in Paris."

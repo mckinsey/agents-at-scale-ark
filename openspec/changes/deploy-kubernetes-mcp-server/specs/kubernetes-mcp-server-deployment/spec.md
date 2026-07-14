@@ -2,13 +2,12 @@
 
 ### Requirement: Production umbrella chart for kubernetes-mcp-server
 
-The repo SHALL provide a `services/kubernetes-mcp-server/chart/` umbrella chart that mirrors the `services/argo-workflows/chart/` pattern, so the read-only `kubernetes-mcp-server` ships with a real Ark install and not only `devspace dev`. The chart's `Chart.yaml` SHALL declare the upstream `kubernetes-mcp-server` chart (version `0.1.0`) from repository `oci://ghcr.io/containers/charts` as a Helm dependency. The chart SHALL layer the Ark-specific values that the merged devspace deployment (PR #2536) already uses: `config.read_only: true`, a namespace-scoped read-only `Role`/`RoleBinding` (`get`/`list`/`watch` on the `ark.mckinsey.com` resources and on the `argoproj.io` `workflows`/`workflowtemplates`), and the `localhost-gateway` `HTTPRoute` with Ingress disabled.
+The repo SHALL provide a `services/kubernetes-mcp-server/chart/` umbrella chart that mirrors the `services/argo-workflows/chart/` pattern, so the read-only `kubernetes-mcp-server` ships with a real Ark install and not only `devspace dev`. The chart's `Chart.yaml` SHALL declare the upstream `kubernetes-mcp-server` chart (version `0.1.0`) from repository `oci://ghcr.io/containers/charts` as a Helm dependency. The chart SHALL layer the Ark-specific values that the merged devspace deployment (PR #2536) already uses: `config.read_only: true`, a namespace-scoped read-only `Role`/`RoleBinding` (`get`/`list`/`watch` on the `ark.mckinsey.com` resources), and the `localhost-gateway` `HTTPRoute` with Ingress disabled.
 
 #### Scenario: Chart renders with read-only config
 - **WHEN** the umbrella chart is rendered (helm template / lint)
 - **THEN** it sets `config.read_only: true`
 - **AND** it defines a namespace-scoped read-only `Role`/`RoleBinding` limited to `get`/`list`/`watch`
-- **AND** the read-only `Role` grants access to the `argoproj.io` `workflows` and `workflowtemplates` in the namespace
 - **AND** it enables the `localhost-gateway` `HTTPRoute` with Ingress disabled
 
 #### Scenario: Upstream dependency declared
@@ -40,27 +39,20 @@ The chart SHALL be registered into the standard service install path via `manife
 - **WHEN** the `deploy` workflow runs
 - **THEN** it packages the `kubernetes-mcp-server` chart and pushes it to the OCI chart registry next to the other service charts
 
-### Requirement: Opt-in in devspace
+### Requirement: Enabled by default in devspace
 
-The root `devspace.yaml` SHALL NOT deploy `kubernetes-mcp-server` by default. The `kubernetes-mcp-server` dependency SHALL be gated behind an `ENABLE_KUBERNETES_MCP_SERVER` flag (default `false`) wired through an `enable-kubernetes-mcp-server` profile, mirroring how `argo-workflows` is opt-in via `ENABLE_ARGO`. An operator MAY enable the deployment explicitly, but the default SHALL be off.
+The root `devspace.yaml` SHALL deploy `kubernetes-mcp-server` by default. The `kubernetes-mcp-server` dependency SHALL be uncommented and active, and wired into the `deploy` and `dev` pipelines so `devspace dev`/`deploy` bring the server up by default — unlike `argo-workflows`, which is opt-in via `ENABLE_ARGO`. An operator MAY disable the deployment, but the default SHALL be on.
 
-#### Scenario: devspace dev does not bring up the server by default
+#### Scenario: devspace dev brings up the server by default
 - **WHEN** an operator runs `devspace dev` with no extra flags or environment variables
-- **THEN** the `kubernetes-mcp-server` is not deployed
-
-#### Scenario: Operator can enable the deployment
-- **WHEN** an operator runs `devspace dev`/`deploy` with `ENABLE_KUBERNETES_MCP_SERVER=true`
 - **THEN** the `kubernetes-mcp-server` is deployed
 - **AND** its `MCPServer` registration produces the `resources_list` / `resources_get` `Tool` CRDs
 
-### Requirement: Registered as an optional service in the ark CLI
+#### Scenario: devspace deploy brings up the server by default
+- **WHEN** an operator runs `devspace deploy` with no extra flags or environment variables
+- **THEN** the `kubernetes-mcp-server` is deployed by default
 
-The ark CLI (`tools/ark-cli/src/arkServices.ts`) SHALL register `kubernetes-mcp-server` as a known service that is disabled by default, so the CLI is aware of it and operators can opt in via config override, matching how `localhost-gateway` is handled.
-
-#### Scenario: CLI knows the service but does not install it by default
-- **WHEN** the ark CLI computes its installable services with no config override
-- **THEN** `kubernetes-mcp-server` is registered but excluded from the default install set because it is disabled
-
-#### Scenario: Operator can enable the service via config override
-- **WHEN** an operator enables `kubernetes-mcp-server` through the CLI config override
-- **THEN** the CLI installs it from the OCI chart registry like any other enabled service
+#### Scenario: Operator can disable the default-on deployment
+- **WHEN** an operator chooses to disable the `kubernetes-mcp-server`
+- **THEN** they can do so explicitly
+- **AND** the absence of any such opt-out still results in the server being deployed

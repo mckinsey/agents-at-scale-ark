@@ -48,11 +48,6 @@ deployments:
                     - executionengines
                     - arkconfigs
                   verbs: ["get", "list", "watch"]
-                - apiGroups: ["argoproj.io"]
-                  resources:
-                    - workflows
-                    - workflowtemplates
-                  verbs: ["get", "list", "watch"]
           extraRoleBindings:
             - name: ark-reader
               namespace: default

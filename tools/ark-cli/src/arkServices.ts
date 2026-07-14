@@ -223,19 +223,6 @@ const defaultArkServices: ServiceCollection = {
     installArgs: [],
   },
 
-  'kubernetes-mcp-server': {
-    name: 'kubernetes-mcp-server',
-    helmReleaseName: 'kubernetes-mcp-server',
-    description:
-      'Read-only kubernetes-mcp-server registered with Ark for grounding agents on cluster resources',
-    enabled: false, // Optional - opt in via config override
-    category: 'service',
-    namespace: 'default',
-    chartPath: `${REGISTRY_BASE}/kubernetes-mcp-server:${CHART_VERSION}`,
-    installArgs: ['--create-namespace'],
-    k8sDeploymentName: 'kubernetes-mcp-server',
-  },
-
   noah: {
     name: 'noah',
     helmReleaseName: 'noah',

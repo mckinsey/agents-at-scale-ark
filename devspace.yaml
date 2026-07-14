@@ -57,11 +57,6 @@ vars:
   ENABLE_ARGO:
     source: env
     default: false
-  # kubernetes-mcp-server is optional. To enable it, run with
-  # ENABLE_KUBERNETES_MCP_SERVER=true devspace dev (or deploy).
-  ENABLE_KUBERNETES_MCP_SERVER:
-    source: env
-    default: false
 
 commands:
   routes:
@@ -139,16 +134,6 @@ profiles:
         value:
           argo-workflows:
             path: ./services/argo-workflows
-  - name: enable-kubernetes-mcp-server
-    activation:
-      - vars:
-          ENABLE_KUBERNETES_MCP_SERVER: true
-    patches:
-      - op: add
-        path: dependencies
-        value:
-          kubernetes-mcp-server:
-            path: ./services/kubernetes-mcp-server
 
 pipelines:
   deploy: |-

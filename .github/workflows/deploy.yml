@@ -222,7 +222,6 @@ jobs:
           - localhost-gateway
           - ark-tenant
           - argo-workflows
-          - kubernetes-mcp-server
     steps:
       - name: Validate version tag exists
         run: |
