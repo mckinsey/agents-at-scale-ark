@@ -240,6 +240,37 @@ func TestBuildTaskManagerCACertValid(t *testing.T) {
 	assert.Contains(t, err.Error(), "after 3 attempts")
 }
 
+// TestNewServerMemory covers NewServer's happy path: with no Redis configured it builds the
+// in-memory task manager and A2A server and starts ready. Providers are only stored (not
+// invoked) during construction, so nil interfaces are fine here.
+func TestNewServerMemory(t *testing.T) {
+	s, err := NewServer(nil, nil, nil, ServerConfig{Addr: ":9090"})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	assert.True(t, s.ready.Load(), "server must start ready")
+
+	// Readiness probe reflects the initial ready state.
+	rr := httptest.NewRecorder()
+	s.handleReady(rr, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Clean up the shutdown context created in NewServer.
+	require.NoError(t, s.Stop(context.Background()))
+}
+
+// TestServerStartInvalidAddr covers Start: it wires the mux and http.Server, then returns the
+// listen error immediately for an invalid address (no blocking on a live listener).
+func TestServerStartInvalidAddr(t *testing.T) {
+	s, err := NewServer(nil, nil, nil, ServerConfig{Addr: "127.0.0.1:-1"})
+	require.NoError(t, err)
+
+	err = s.Start()
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, http.ErrServerClosed)
+
+	require.NoError(t, s.Stop(context.Background()))
+}
+
 // testCACertPEM generates a minimal self-signed CA certificate in PEM form for TLS trust tests.
 func testCACertPEM(t *testing.T) []byte {
 	t.Helper()
