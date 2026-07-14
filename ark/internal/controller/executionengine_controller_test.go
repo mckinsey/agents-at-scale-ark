@@ -72,7 +72,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 
 			updated := &arkv1prealpha1.ExecutionEngine{}
 			Expect(k8sClient.Get(ctx, nn, updated)).To(Succeed())
-			Expect(updated.Status.Phase).To(Equal("ready"))
+			Expect(updated.Status.Phase).To(Equal(statusReady))
 		})
 	})
 
@@ -111,7 +111,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 
 			errored := &arkv1prealpha1.ExecutionEngine{}
 			Expect(k8sClient.Get(ctx, nn, errored)).To(Succeed())
-			Expect(errored.Status.Phase).To(Equal("error"))
+			Expect(errored.Status.Phase).To(Equal(statusError))
 
 			By("A retry is scheduled so the resource is not permanently stranded")
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
@@ -129,7 +129,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 
 			healed := &arkv1prealpha1.ExecutionEngine{}
 			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
-			Expect(healed.Status.Phase).To(Equal("ready"))
+			Expect(healed.Status.Phase).To(Equal(statusReady))
 			Expect(healed.Status.LastResolvedAddress).To(Equal("http://healed-engine:8080"))
 		})
 
@@ -142,7 +142,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "ready"
+			engine.Status.Phase = statusReady
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 
 			r := newReconciler()
@@ -153,7 +153,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 
 			after := &arkv1prealpha1.ExecutionEngine{}
 			Expect(k8sClient.Get(ctx, nn, after)).To(Succeed())
-			Expect(after.Status.Phase).To(Equal("ready"))
+			Expect(after.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("registers the controller with the manager", func() {

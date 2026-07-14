@@ -152,7 +152,7 @@ var _ = Describe("Memory Controller", func() {
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("should accept header from secret and reach ready status", func() {
@@ -219,7 +219,7 @@ var _ = Describe("Memory Controller", func() {
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("should accept header from configmap and reach ready status", func() {
@@ -286,7 +286,7 @@ var _ = Describe("Memory Controller", func() {
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("should accept mixed direct and referenced headers", func() {
@@ -359,7 +359,7 @@ var _ = Describe("Memory Controller", func() {
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("should work with empty headers", func() {
@@ -399,7 +399,7 @@ var _ = Describe("Memory Controller", func() {
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("should accept headers with queryParameterRef in spec", func() {
@@ -457,7 +457,7 @@ var _ = Describe("Memory Controller", func() {
 			By("Verifying memory reached ready state with queryParameterRef in spec")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 			Expect(updatedMemory.Spec.Headers).To(HaveLen(2))
 			Expect(updatedMemory.Spec.Headers[0].Value.ValueFrom.QueryParameterRef.Name).To(Equal("userId"))
 		})
@@ -531,7 +531,7 @@ var _ = Describe("Memory Controller", func() {
 
 			errored := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, nn, errored)).To(Succeed())
-			Expect(errored.Status.Phase).To(Equal("error"))
+			Expect(errored.Status.Phase).To(Equal(statusError))
 
 			By("A retry is scheduled so the resource is not permanently stranded")
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
@@ -554,7 +554,7 @@ var _ = Describe("Memory Controller", func() {
 
 			healed := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
-			Expect(healed.Status.Phase).To(Equal("ready"))
+			Expect(healed.Status.Phase).To(Equal(statusReady))
 			Expect(healed.Status.LastResolvedAddress).NotTo(BeNil())
 			Expect(*healed.Status.LastResolvedAddress).To(Equal("http://healed-memory-service:8080"))
 		})
@@ -575,7 +575,7 @@ var _ = Describe("Memory Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
-			memory.Status.Phase = "error"
+			memory.Status.Phase = statusError
 			memory.Status.Message = "Failed to resolve address: simulated"
 			Expect(k8sClient.Status().Update(ctx, memory)).To(Succeed())
 
@@ -591,7 +591,7 @@ var _ = Describe("Memory Controller", func() {
 
 			healed := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, nn, healed)).To(Succeed())
-			Expect(healed.Status.Phase).To(Equal("ready"))
+			Expect(healed.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("stays terminal in the ready phase without reprocessing", func() {
@@ -603,7 +603,7 @@ var _ = Describe("Memory Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
-			memory.Status.Phase = "ready"
+			memory.Status.Phase = statusReady
 			Expect(k8sClient.Status().Update(ctx, memory)).To(Succeed())
 
 			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
@@ -615,7 +615,7 @@ var _ = Describe("Memory Controller", func() {
 
 			after := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, nn, after)).To(Succeed())
-			Expect(after.Status.Phase).To(Equal("ready"))
+			Expect(after.Status.Phase).To(Equal(statusReady))
 		})
 
 		It("errors and schedules a retry when the resolved address is empty", func() {
@@ -655,7 +655,7 @@ var _ = Describe("Memory Controller", func() {
 
 			errored := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, nn, errored)).To(Succeed())
-			Expect(errored.Status.Phase).To(Equal("error"))
+			Expect(errored.Status.Phase).To(Equal(statusError))
 		})
 
 		It("registers the controller with the manager", func() {
