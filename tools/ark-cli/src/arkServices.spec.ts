@@ -52,6 +52,23 @@ describe('arkServices', () => {
     );
   });
 
+  it('exposes argo-make-author as a marketplace-backed optional agent, disabled by default', () => {
+    const service = originalArkServices['argo-make-author'];
+
+    expect(service).toBeDefined();
+    expect(service.category).toBe('service');
+    expect(service.enabled).toBe(false);
+    expect(service.chartPath).toBe(
+      'oci://test-registry/charts/argo-make-author'
+    );
+  });
+
+  it('excludes argo-make-author from installable services while disabled', () => {
+    const installable = getInstallableServices();
+
+    expect(installable['argo-make-author']).toBeUndefined();
+  });
+
   it('getInstallableServices returns services with chartPath', () => {
     const installable = getInstallableServices();
 

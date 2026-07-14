@@ -250,6 +250,16 @@ const defaultArkServices: ServiceCollection = {
     k8sServicePort: 8080,
     k8sDeploymentName: 'kubernetes-mcp-server',
   },
+
+  'argo-make-author': {
+    name: 'argo-make-author',
+    helmReleaseName: 'argo-make-author',
+    description: 'Conversational Argo WorkflowTemplate authoring agent',
+    enabled: false,
+    category: 'service',
+    chartPath: `${getMarketplaceRegistry()}/argo-make-author`,
+    installArgs: [],
+  },
 };
 
 function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
