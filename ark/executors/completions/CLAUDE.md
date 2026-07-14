@@ -35,6 +35,12 @@ The chart supports multiple replicas (`replicaCount`, or an HPA via `autoscaling
 plus a `PodDisruptionBudget` and a bounded graceful-shutdown drain (`terminationGracePeriodSeconds`,
 `gracefulShutdown.preStopSleepSeconds`, and the binary's `--shutdown-timeout` flag).
 
+The HPA defaults to an **absolute** per-pod CPU target (`autoscaling.targetCPUAverageValue`,
+default `200m`) rather than a `Utilization` percentage, because `requests.cpu` is a deliberately
+low 10m reservation for this I/O-bound proxy — an 80%-of-request target would scale on the first
+query. Switch to `autoscaling.targetCPUUtilizationPercentage` only after raising `requests.cpu`
+to real per-pod usage (`targetCPUAverageValue` takes precedence if both are set).
+
 Running N replicas is **safe for the controller's dispatch path**: each Query is sent as a
 single blocking A2A request-response (`Blocking: true`) handled start-to-finish by one pod,
 `executionState` is request-scoped, and conversation history is stored externally
@@ -53,6 +59,13 @@ work regardless of which pod serves the follow-up. The backend is chosen in
 single-pod installs). Use a dedicated Redis logical DB to isolate keys from other Ark
 services. `Service.sessionAffinity: ClientIP` (chart `service.sessionAffinity`) is available
 as a best-effort routing optimization but is not required for correctness once Redis is on.
+
+TLS: a `rediss://` URL backed by a public/system-trusted CA works with no extra config (Go
+verifies against the pod's system trust store). For a private/self-signed Redis CA, enable
+`redis.tls` (chart) — it mounts the CA and passes `REDIS_TLS_CA_CERT_PATH`, which `server.go`
+`applyRedisCACert` appends to a clone of the system pool and applies to the Redis connection
+only. Do **not** use `customCACert` for this: it sets `SSL_CERT_FILE`, which replaces the whole
+system bundle and would break the executor's outbound HTTPS to LLM providers.
 
 ### Graceful shutdown
 

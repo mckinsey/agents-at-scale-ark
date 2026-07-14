@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -173,6 +175,42 @@ func TestBuildTaskManagerUnreachable(t *testing.T) {
 	_, err := buildTaskManager(ServerConfig{RedisURL: "redis://127.0.0.1:1"}, &Handler{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after 3 attempts")
+}
+
+// TestBuildTaskManagerCACertNonTLS: a CA cert path against a plain redis:// (non-TLS) URL is a
+// misconfig and must fail fast, before any connection attempt.
+func TestBuildTaskManagerCACertNonTLS(t *testing.T) {
+	_, err := buildTaskManager(ServerConfig{
+		RedisURL:        "redis://127.0.0.1:6379",
+		RedisCACertPath: "/tmp/does-not-matter.crt",
+	}, &Handler{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not rediss")
+}
+
+// TestBuildTaskManagerCACertUnreadable: a rediss:// URL with a CA path that doesn't exist fails
+// on the file read, before any connection attempt.
+func TestBuildTaskManagerCACertUnreadable(t *testing.T) {
+	_, err := buildTaskManager(ServerConfig{
+		RedisURL:        "rediss://127.0.0.1:6379",
+		RedisCACertPath: filepath.Join(t.TempDir(), "missing.crt"),
+	}, &Handler{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read redis CA cert")
+}
+
+// TestBuildTaskManagerCACertInvalidPEM: a rediss:// URL with a CA file containing no valid PEM
+// certificates fails on parse, before any connection attempt.
+func TestBuildTaskManagerCACertInvalidPEM(t *testing.T) {
+	caPath := filepath.Join(t.TempDir(), "ca.crt")
+	require.NoError(t, os.WriteFile(caPath, []byte("not a certificate"), 0o600))
+
+	_, err := buildTaskManager(ServerConfig{
+		RedisURL:        "rediss://127.0.0.1:6379",
+		RedisCACertPath: caPath,
+	}, &Handler{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no valid certificates")
 }
 
 // TestMergeShutdown covers the context-merge used per request: the child cancels on

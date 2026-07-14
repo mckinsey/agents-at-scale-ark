@@ -79,10 +79,11 @@ func main() {
 		}
 	}
 	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, completions.ServerConfig{
-		Addr:          addr,
-		RedisURL:      os.Getenv("REDIS_URL"),
-		RedisPassword: os.Getenv("REDIS_PASSWORD"),
-		TaskExpiry:    taskExpiry,
+		Addr:            addr,
+		RedisURL:        os.Getenv("REDIS_URL"),
+		RedisPassword:   os.Getenv("REDIS_PASSWORD"),
+		RedisCACertPath: os.Getenv("REDIS_TLS_CA_CERT_PATH"),
+		TaskExpiry:      taskExpiry,
 	})
 	if err != nil {
 		log.Error(err, "failed to create completions engine server")

@@ -2,10 +2,12 @@ package completions
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -51,6 +53,12 @@ type ServerConfig struct {
 	RedisURL string
 	// RedisPassword, when set, overrides any password embedded in RedisURL.
 	RedisPassword string
+	// RedisCACertPath, when set, points to a PEM CA bundle trusted for the rediss:// Redis
+	// connection. It is appended to a clone of the system trust store and applied to the Redis
+	// client's TLS config ONLY — so a private/self-signed Redis CA can be trusted without
+	// touching the system roots the executor needs for outbound HTTPS (LLM providers). Requires
+	// a rediss:// URL. Public/system-trusted CAs need no path; rediss:// works without it.
+	RedisCACertPath string
 	// TaskExpiry bounds how long task/conversation state lives in Redis (0 = library default).
 	TaskExpiry time.Duration
 }
@@ -72,6 +80,30 @@ type Server struct {
 	shutdownCancel context.CancelFunc
 }
 
+// applyRedisCACert trusts a private/self-signed Redis CA for the rediss:// connection only.
+// The CA is appended to a clone of the system trust store (x509.SystemCertPool returns a copy)
+// and set as the Redis client's RootCAs, so outbound HTTPS to LLM providers keeps using the
+// unmodified system roots — unlike SSL_CERT_FILE/customCACert, which would replace them.
+func applyRedisCACert(opt *redis.Options, path string) error {
+	if opt.TLSConfig == nil {
+		return fmt.Errorf("redis CA cert configured but URL is not rediss:// (TLS): %s", path)
+	}
+	caPEM, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read redis CA cert %q: %w", path, err)
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return fmt.Errorf("no valid certificates found in redis CA cert %q", path)
+	}
+	opt.TLSConfig.RootCAs = pool
+	log.Info("using custom CA for redis TLS", "path", path)
+	return nil
+}
+
 // buildTaskManager selects the A2A task manager based on config: a shared Redis-backed
 // manager when a Redis URL is provided, otherwise the in-memory manager.
 func buildTaskManager(cfg ServerConfig, processor taskmanager.MessageProcessor) (taskmanager.TaskManager, error) {
@@ -86,6 +118,11 @@ func buildTaskManager(cfg ServerConfig, processor taskmanager.MessageProcessor) 
 	}
 	if cfg.RedisPassword != "" {
 		opt.Password = cfg.RedisPassword
+	}
+	if cfg.RedisCACertPath != "" {
+		if err := applyRedisCACert(opt, cfg.RedisCACertPath); err != nil {
+			return nil, err
+		}
 	}
 	redisClient := redis.NewClient(opt)
 

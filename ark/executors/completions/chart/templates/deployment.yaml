@@ -62,6 +62,10 @@ spec:
           - name: REDIS_TASK_EXPIRY_SECONDS
             value: {{ .Values.redis.taskExpirySeconds | quote }}
           {{- end }}
+          {{- if .Values.redis.tls.enabled }}
+          - name: REDIS_TLS_CA_CERT_PATH
+            value: {{ printf "%s/%s" .Values.redis.tls.mountPath .Values.redis.tls.key | quote }}
+          {{- end }}
           {{- end }}
           envFrom:
           - configMapRef:
@@ -95,18 +99,23 @@ spec:
             capabilities:
               drop:
                 - "ALL"
-          {{- if or .Values.customCACert.enabled .Values.extraVolumeMounts }}
+          {{- if or .Values.customCACert.enabled .Values.redis.tls.enabled .Values.extraVolumeMounts }}
           volumeMounts:
             {{- if .Values.customCACert.enabled }}
             - name: custom-ca-cert
               mountPath: /etc/ssl/certs/custom-ca
               readOnly: true
             {{- end }}
+            {{- if .Values.redis.tls.enabled }}
+            - name: redis-ca-cert
+              mountPath: {{ .Values.redis.tls.mountPath }}
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or .Values.customCACert.enabled .Values.extraVolumes }}
+      {{- if or .Values.customCACert.enabled .Values.redis.tls.enabled .Values.extraVolumes }}
       volumes:
         {{- if .Values.customCACert.enabled }}
         - name: custom-ca-cert
@@ -115,6 +124,14 @@ spec:
             items:
               - key: {{ .Values.customCACert.key }}
                 path: {{ .Values.customCACert.key }}
+        {{- end }}
+        {{- if .Values.redis.tls.enabled }}
+        - name: redis-ca-cert
+          secret:
+            secretName: {{ required "redis.tls.secretName is required when redis.tls.enabled=true" .Values.redis.tls.secretName }}
+            items:
+              - key: {{ .Values.redis.tls.key }}
+                path: {{ .Values.redis.tls.key }}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

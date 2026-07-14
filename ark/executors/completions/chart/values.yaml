@@ -30,7 +30,15 @@ autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
+  # CPU scaling target. This is an I/O-bound proxy that reserves only requests.cpu: 10m, so a
+  # percentage-of-request (Utilization) target would trip on the first query — 80% of 10m is
+  # ~8m, which any active TLS+SSE-stream query blows past instantly, pinning to maxReplicas.
+  # Default to an ABSOLUTE per-pod CPU target instead (independent of the scheduling request):
+  # ~200m ≈ 40% of the 500m limit, a meaningful "sustained busy" threshold with headroom.
+  targetCPUAverageValue: 200m
+  # Alternative: percentage-of-request scaling. Only meaningful if you raise requests.cpu to
+  # reflect real per-pod usage. Leave empty to use targetCPUAverageValue (which wins if both set).
+  targetCPUUtilizationPercentage: ""
   # targetMemoryUtilizationPercentage: 80   # optional, off by default
 
 # PodDisruptionBudget. Keeps at least minAvailable replicas Ready during voluntary
@@ -73,11 +81,11 @@ taskManager:
 #
 # TLS: use a rediss:// url. Unlike ark-broker (Node/ioredis ignores the OS trust store),
 # the Go client verifies against the pod's system trust store, so rediss:// works out of the
-# box for Redis served by a public/system-trusted CA — no extra config. A private/self-signed
-# Redis CA is NOT yet wired here (follow-up: a scoped redis.tls CA block like ark-broker's).
-# Do NOT reach for customCACert/SSL_CERT_FILE to trust a private Redis CA: SSL_CERT_FILE
-# replaces the whole system bundle and can knock out the public roots the executor needs for
-# outbound HTTPS (LLM providers).
+# box for Redis served by a public/system-trusted CA — no extra config. For a private/
+# self-signed Redis CA, enable redis.tls below (it mounts the CA and appends it to a clone of
+# the system pool for the Redis connection only). Do NOT reach for customCACert/SSL_CERT_FILE
+# to trust a private Redis CA: SSL_CERT_FILE replaces the whole system bundle and can knock out
+# the public roots the executor needs for outbound HTTPS (LLM providers).
 redis:
   url: ""                          # e.g. redis://:pass@ark-redis-dev:6379/0
   urlSecretRef:
@@ -88,6 +96,15 @@ redis:
     key: "redis-password"
   # Task/conversation key TTL in seconds (0 = library default).
   taskExpirySeconds: 0
+  # Private/self-signed CA trust for a rediss:// endpoint. When enabled, the CA from the named
+  # Secret is mounted and passed to the Redis client as REDIS_TLS_CA_CERT_PATH; the executor
+  # appends it to a clone of the system trust store and applies it to the Redis connection ONLY
+  # — outbound LLM HTTPS keeps the unmodified system roots. Not needed for public-CA Redis.
+  tls:
+    enabled: false
+    secretName: ""                 # Secret containing the CA cert (required when enabled)
+    key: "ca.crt"                  # key within the Secret
+    mountPath: /etc/ssl/certs/redis-ca
 
 resources:
   limits:
