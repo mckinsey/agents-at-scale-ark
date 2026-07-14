@@ -4,9 +4,10 @@ Least-privilege RBAC for the completions pod. It reads
 Query/Agent/Team/Model/MCPServer/Tool/A2AServer/ExecutionEngine config plus the
 secrets/configmaps referenced by model credentials & MCP headers, and services
 to resolve broker ServiceReferences to URLs. Its writes are: updating Memory
-status, and creating A2ATask resources to record A2A task responses (the
-a2atask controller reconciles their status). It does not emit Kubernetes Events
-(events go to the broker).
+status, and recording A2A task responses as A2ATask resources — it creates the
+A2ATask, reads it back (get), and seeds its initial status (a2atasks/status),
+after which the a2atask controller reconciles their status. It does not emit
+Kubernetes Events (events go to the broker).
 
 Scope follows discovery scope: the central install serves every namespace, so it
 gets a cluster-scoped Role; a per-tenant install (namespaceScopedDiscovery=true)
@@ -53,6 +54,15 @@ rules:
   - a2atasks
   verbs:
   - create
+  - get
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - a2atasks/status
+  verbs:
+  - get
+  - update
+  - patch
 - apiGroups:
   - ""
   resources:
