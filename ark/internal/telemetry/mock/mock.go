@@ -356,6 +356,9 @@ func (r *MockTeamRecorder) RecordTurnOutput(span telemetry.Span, output string, 
 	span.SetAttributes(
 		telemetry.Int("turn.output_message_count", messageCount),
 	)
+	if output != "" {
+		span.SetAttributes(telemetry.String("turn.output", output))
+	}
 }
 
 func (r *MockTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
