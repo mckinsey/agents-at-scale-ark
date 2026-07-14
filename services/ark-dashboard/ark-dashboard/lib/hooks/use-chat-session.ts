@@ -512,8 +512,7 @@ export function useChatSession({
                   prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
                   completion_tokens: typedChunk.usage.completion_tokens ?? 0,
                   total_tokens: typedChunk.usage.total_tokens ?? 0,
-                  cached_tokens:
-                    typedChunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
+                  cached_tokens: typedChunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
                 }
               : null;
 
