@@ -3,7 +3,7 @@
 import logging
 from fastmcp import FastMCP
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse
+from starlette.responses import JSONResponse
 from .resources import register_resources
 from .tools import register_tools
 
@@ -18,9 +18,9 @@ register_tools(mcp)
 
 
 @mcp.custom_route("/health", methods=["GET"])
-async def health_check(request: Request) -> PlainTextResponse:
+async def health_check(request: Request) -> JSONResponse:
     """Liveness/readiness endpoint for Kubernetes probes."""
-    return PlainTextResponse("OK")
+    return JSONResponse({"status": "ok"})
 
 
 def create_app():
