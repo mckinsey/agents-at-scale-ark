@@ -352,7 +352,7 @@ func (t *Team) startTurnTelemetry(ctx context.Context, turn int, memberName, mem
 
 func (t *Team) recordTurnOutput(tel turnTelemetry, newMessages []Message) {
 	if len(newMessages) > 0 {
-		t.telemetryRecorder.RecordTurnOutput(tel.span, newMessages, len(newMessages))
+		t.telemetryRecorder.RecordTurnOutput(tel.span, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 	}
 }
 
