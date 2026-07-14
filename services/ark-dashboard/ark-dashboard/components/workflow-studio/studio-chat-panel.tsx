@@ -83,14 +83,18 @@ export interface StudioChatPanelProps {
   chat: UseStudioChatReturn;
   gated: boolean;
   agentMissing: boolean;
+  agentNotReady: boolean;
   mcpMissing: boolean;
+  mcpNotReady: boolean;
 }
 
 export function StudioChatPanel({
   chat,
   gated,
   agentMissing,
+  agentNotReady,
   mcpMissing,
+  mcpNotReady,
 }: StudioChatPanelProps) {
   const composerDisabled = chat.composerDisabled || gated;
 
@@ -106,7 +110,12 @@ export function StudioChatPanel({
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {gated && (
-        <StudioChatGate agentMissing={agentMissing} mcpMissing={mcpMissing} />
+        <StudioChatGate
+          agentMissing={agentMissing}
+          agentNotReady={agentNotReady}
+          mcpMissing={mcpMissing}
+          mcpNotReady={mcpNotReady}
+        />
       )}
 
       <div

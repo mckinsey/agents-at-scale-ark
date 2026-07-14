@@ -116,7 +116,9 @@ function renderPanel(options: HarnessOptions = {}) {
           chat={chat}
           gated={false}
           agentMissing={false}
+          agentNotReady={false}
           mcpMissing={false}
+          mcpNotReady={false}
         />
       </>
     );

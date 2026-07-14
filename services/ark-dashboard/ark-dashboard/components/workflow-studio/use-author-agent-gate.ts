@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
@@ -9,24 +9,22 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 export interface AuthorAgentGate {
   gated: boolean;
   agentMissing: boolean;
+  agentNotReady: boolean;
   mcpMissing: boolean;
+  mcpNotReady: boolean;
   loading: boolean;
-  recheck: () => void;
 }
 
 export function useAuthorAgentGate(): AuthorAgentGate {
   const { namespace } = useNamespace();
 
   const [agentMissing, setAgentMissing] = useState<boolean>(true);
+  const [agentNotReady, setAgentNotReady] = useState<boolean>(false);
   const [mcpMissing, setMcpMissing] = useState<boolean>(true);
+  const [mcpNotReady, setMcpNotReady] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-  const [nonce, setNonce] = useState<number>(0);
 
   const tokenRef = useRef<number>(0);
-
-  const recheck = useCallback(() => {
-    setNonce(value => value + 1);
-  }, []);
 
   useEffect(() => {
     const token = tokenRef.current + 1;
@@ -40,15 +38,19 @@ export function useAuthorAgentGate(): AuthorAgentGate {
         if (cancelled || tokenRef.current !== token) {
           return;
         }
-        setAgentMissing(!result.agentPresent || !result.agentReady);
-        setMcpMissing(!result.mcpToolsOnAgent || !result.mcpToolCrdsPresent);
+        setAgentMissing(!result.agentPresent);
+        setAgentNotReady(result.agentPresent && !result.agentReady);
+        setMcpMissing(!result.mcpServerPresent);
+        setMcpNotReady(result.mcpServerPresent && !result.mcpServerReady);
       })
       .catch(() => {
         if (cancelled || tokenRef.current !== token) {
           return;
         }
         setAgentMissing(true);
+        setAgentNotReady(false);
         setMcpMissing(true);
+        setMcpNotReady(false);
       })
       .finally(() => {
         if (cancelled || tokenRef.current !== token) {
@@ -60,13 +62,14 @@ export function useAuthorAgentGate(): AuthorAgentGate {
     return () => {
       cancelled = true;
     };
-  }, [namespace, nonce]);
+  }, [namespace]);
 
   return {
-    gated: agentMissing || mcpMissing,
+    gated: agentMissing || agentNotReady || mcpMissing || mcpNotReady,
     agentMissing,
+    agentNotReady,
     mcpMissing,
+    mcpNotReady,
     loading,
-    recheck,
   };
 }

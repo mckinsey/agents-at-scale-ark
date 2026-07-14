@@ -43,6 +43,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { StudioChatPanel } from './studio-chat-panel';
 import { StudioHeaderActions } from './studio-header-actions';
+import { StudioResizableBody } from './studio-resizable-body';
 import { StudioYamlEditor } from './studio-yaml-editor';
 import { useAuthorAgentGate } from './use-author-agent-gate';
 import { useStudioChat } from './use-studio-chat';
@@ -77,7 +78,7 @@ function NameModal({ open, onConfirm, onCancel }: NameModalProps) {
       }}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Name your workflow</DialogTitle>
+          <DialogTitle>Name your workflow template</DialogTitle>
           <DialogDescription>
             Choose a name for the workflow template. This cannot be changed
             later.
@@ -244,9 +245,7 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
     } catch (error) {
       toast.error('Failed to start workflow', {
         description:
-          error instanceof Error
-            ? error.message
-            : 'An unknown error occurred',
+          error instanceof Error ? error.message : 'An unknown error occurred',
       });
       throw error;
     }
@@ -259,7 +258,6 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
 
   const handleSave = async () => {
     await studio.save();
-    gate.recheck();
   };
 
   return (
@@ -271,7 +269,7 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
               href="/workflow-templates"
               className="hover:text-foreground flex items-center gap-1">
               <ChevronLeft className="h-4 w-4" />
-              Workflows
+              Workflow Templates
             </NamespacedLink>
             <span>/</span>
             <span className="text-foreground truncate font-medium">
@@ -346,9 +344,9 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  Describe a workflow in plain language and the
-                  argo-make-author agent drafts an Argo WorkflowTemplate live.
-                  Edit the YAML or diagram, then save.
+                  Describe a workflow in plain language and the argo-make-author
+                  agent drafts an Argo WorkflowTemplate live. Edit the YAML or
+                  diagram, then save.
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -365,66 +363,65 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div
-          className="border-border flex w-2/5 min-w-0 shrink-0 flex-col border-r"
-          data-testid="studio-chat-slot">
+      <StudioResizableBody
+        chat={
           <StudioChatPanel
             chat={chat}
             gated={gate.gated}
             agentMissing={gate.agentMissing}
+            agentNotReady={gate.agentNotReady}
             mcpMissing={gate.mcpMissing}
+            mcpNotReady={gate.mcpNotReady}
           />
-        </div>
+        }
+        canvas={
+          <>
+            <div className="absolute top-4 right-4 z-10">
+              <ViewToggle view={studio.view} onChange={studio.setView} />
+            </div>
 
-        <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="absolute top-4 right-4 z-10">
-            <ViewToggle view={studio.view} onChange={studio.setView} />
-          </div>
-
-          <div className="relative min-h-0 flex-1">
-            {studio.loading ? (
-              <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
-                <Spinner />
-                Loading workflow...
-              </div>
-            ) : studio.view === 'diagram' ? (
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundColor: 'var(--background)',
-                  backgroundImage:
-                    'radial-gradient(color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px)',
-                  backgroundSize: '22px 22px',
-                }}>
-                {studio.draftYaml.trim() === '' ? (
-                  <div
-                    className="text-muted-foreground absolute top-12 left-1/2 -translate-x-1/2 text-sm"
-                    data-testid="studio-diagram-empty">
-                    The workflow diagram will appear here.
-                  </div>
-                ) : (
-                  <WorkflowDagViewer manifest={studio.draftYaml} fill />
-                )}
-              </div>
-            ) : (
-              <StudioYamlEditor
-                value={studio.draftYaml}
-                onChange={value => {
-                  studio.setDraftYaml(value);
-                  studio.setHandEdited(true);
-                }}
-                readOnly={studio.building}
-                error={
-                  validation.ok
-                    ? undefined
-                    : { message: validation.message }
-                }
-              />
-            )}
-          </div>
-        </div>
-      </div>
+            <div className="relative min-h-0 flex-1">
+              {studio.loading ? (
+                <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
+                  <Spinner />
+                  Loading workflow...
+                </div>
+              ) : studio.view === 'diagram' ? (
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    backgroundColor: 'var(--background)',
+                    backgroundImage:
+                      'radial-gradient(color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px)',
+                    backgroundSize: '22px 22px',
+                  }}>
+                  {studio.draftYaml.trim() === '' ? (
+                    <div
+                      className="text-muted-foreground absolute top-12 left-1/2 -translate-x-1/2 text-sm"
+                      data-testid="studio-diagram-empty">
+                      The workflow diagram will appear here.
+                    </div>
+                  ) : (
+                    <WorkflowDagViewer manifest={studio.draftYaml} fill />
+                  )}
+                </div>
+              ) : (
+                <StudioYamlEditor
+                  value={studio.draftYaml}
+                  onChange={value => {
+                    studio.setDraftYaml(value);
+                    studio.setHandEdited(true);
+                  }}
+                  readOnly={studio.building}
+                  error={
+                    validation.ok ? undefined : { message: validation.message }
+                  }
+                />
+              )}
+            </div>
+          </>
+        }
+      />
 
       <NameModal
         open={studio.isNameModalOpen}

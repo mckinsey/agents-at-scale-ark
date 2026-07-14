@@ -38,7 +38,7 @@ export function NameWorkflowDialog({
   const handleConfirm = () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Workflow name is required.');
+      setError('Workflow template name is required.');
       return;
     }
     onConfirm(trimmed);
@@ -48,7 +48,7 @@ export function NameWorkflowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Name your workflow</DialogTitle>
+          <DialogTitle>Name your workflow template</DialogTitle>
           <DialogDescription>
             Give your workflow template a name to get started.
           </DialogDescription>
@@ -60,7 +60,7 @@ export function NameWorkflowDialog({
             event.preventDefault();
             handleConfirm();
           }}>
-          <Label htmlFor="workflow-name">Workflow name</Label>
+          <Label htmlFor="workflow-name">Workflow template name</Label>
           <Input
             id="workflow-name"
             value={name}
@@ -86,7 +86,7 @@ export function NameWorkflowDialog({
               Cancel
             </Button>
             <Button type="submit" className="w-full sm:w-auto">
-              Create workflow
+              Create workflow template
             </Button>
           </DialogFooter>
         </form>

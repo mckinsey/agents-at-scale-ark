@@ -1,53 +1,43 @@
-import { ARGO_MAKE_GROUNDING_TOOLS } from '@/lib/constants/argo-make';
+import { KUBERNETES_MCP_SERVER_NAME } from '@/lib/constants/argo-make';
 import { agentsService } from '@/lib/services/agents';
-import { toolsService } from '@/lib/services/tools';
+import { mcpServersService } from '@/lib/services/mcp-servers';
+
+interface AxiosError extends Error {
+  response?: {
+    status?: number;
+  };
+}
 
 export interface AuthorAgentPreflight {
   agentPresent: boolean;
   agentReady: boolean;
-  mcpToolsOnAgent: boolean;
-  mcpToolCrdsPresent: boolean;
+  mcpServerPresent: boolean;
+  mcpServerReady: boolean;
 }
 
-interface AgentToolLike {
-  type: string;
-  name?: string | null;
-}
-
-function agentHasGroundingTools(
-  tools: AgentToolLike[] | null | undefined,
-): boolean {
-  const mcpToolNames = new Set(
-    (tools ?? [])
-      .filter(tool => tool.type === 'mcp' && typeof tool.name === 'string')
-      .map(tool => tool.name),
-  );
-  return ARGO_MAKE_GROUNDING_TOOLS.every(name => mcpToolNames.has(name));
+async function getMcpServerOrNull(name: string) {
+  try {
+    return await mcpServersService.get(name);
+  } catch (error) {
+    if ((error as AxiosError).response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function getAuthorAgentPreflight(
   agentName: string,
 ): Promise<AuthorAgentPreflight> {
-  const agent = await agentsService.getByName(agentName);
-
-  if (!agent) {
-    return {
-      agentPresent: false,
-      agentReady: false,
-      mcpToolsOnAgent: false,
-      mcpToolCrdsPresent: false,
-    };
-  }
-
-  const tools = await toolsService.getAll();
-  const toolNames = new Set(tools.map(tool => tool.name));
+  const [agent, mcpServer] = await Promise.all([
+    agentsService.getByName(agentName),
+    getMcpServerOrNull(KUBERNETES_MCP_SERVER_NAME),
+  ]);
 
   return {
-    agentPresent: true,
-    agentReady: agent.available === 'True',
-    mcpToolsOnAgent: agentHasGroundingTools(agent.tools),
-    mcpToolCrdsPresent: ARGO_MAKE_GROUNDING_TOOLS.every(name =>
-      toolNames.has(name),
-    ),
+    agentPresent: agent !== null,
+    agentReady: agent?.available === 'True',
+    mcpServerPresent: mcpServer !== null,
+    mcpServerReady: mcpServer?.available === 'True',
   };
 }

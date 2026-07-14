@@ -73,21 +73,21 @@ describe('WorkflowTemplatesPage', () => {
       </QueryClientProvider>,
     );
     expect(
-      screen.getByRole('heading', { name: 'Workflows' }),
+      screen.getByRole('heading', { name: 'Workflow Templates' }),
     ).toBeInTheDocument();
     expect(
       screen.getByText('Automate complex processes with agentic orchestration'),
     ).toBeInTheDocument();
   });
 
-  it('should render "Workflows" breadcrumb current page', () => {
+  it('should render "Workflow Templates" breadcrumb current page', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <WorkflowTemplatesPage />
       </QueryClientProvider>,
     );
     const header = screen.getByTestId('page-header');
-    expect(header).toHaveTextContent('Workflows');
+    expect(header).toHaveTextContent('Workflow Templates');
   });
 
   it('should render the "Add group" button', () => {

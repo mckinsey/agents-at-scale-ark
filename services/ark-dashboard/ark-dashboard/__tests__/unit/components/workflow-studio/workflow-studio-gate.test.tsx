@@ -5,11 +5,10 @@ import { StudioChatGate } from '@/components/workflow-studio/studio-chat-gate';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
 import {
   ARGO_MAKE_AUTHOR_AGENT_NAME,
-  ARGO_MAKE_AUTHOR_INSTALL_CMD,
+  ARGO_MAKE_AUTHOR_MARKETPLACE_URL,
+  KUBERNETES_MCP_MARKETPLACE_URL,
 } from '@/lib/constants/argo-make';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
-import { chatService } from '@/lib/services/chat';
-import { toast } from 'sonner';
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
@@ -59,10 +58,15 @@ vi.mock('@/components/namespaced-link', () => ({
   NamespacedLink: ({
     href,
     children,
+    ...props
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 
 const preflightMock = vi.mocked(getAuthorAgentPreflight);
@@ -70,8 +74,8 @@ const preflightMock = vi.mocked(getAuthorAgentPreflight);
 const present = {
   agentPresent: true,
   agentReady: true,
-  mcpToolsOnAgent: true,
-  mcpToolCrdsPresent: true,
+  mcpServerPresent: true,
+  mcpServerReady: true,
 };
 
 const validYaml = [
@@ -85,14 +89,6 @@ const validYaml = [
   '    - name: main',
 ].join('\n');
 
-function makeChunks(chunks: Record<string, unknown>[]) {
-  return (async function* () {
-    for (const chunk of chunks) {
-      yield chunk;
-    }
-  })();
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   currentNamespace = 'default';
@@ -100,12 +96,12 @@ beforeEach(() => {
 });
 
 describe('WorkflowStudio author-agent gate', () => {
-  it('shows the install step and disables the composer when the agent is missing', async () => {
+  it('links to the marketplace and disables the composer when the agent is missing', async () => {
     preflightMock.mockResolvedValue({
       agentPresent: false,
       agentReady: false,
-      mcpToolsOnAgent: false,
-      mcpToolCrdsPresent: false,
+      mcpServerPresent: true,
+      mcpServerReady: true,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -113,27 +109,77 @@ describe('WorkflowStudio author-agent gate', () => {
     await waitFor(() =>
       expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument(),
     );
-    expect(screen.getByTestId('studio-gate-step-agent')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('studio-gate-agent-marketplace-link'),
+    ).toHaveAttribute('href', ARGO_MAKE_AUTHOR_MARKETPLACE_URL);
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
-  it('shows the MCPs step (not the agent step) when only MCP is missing', async () => {
+  it('links to the agent (not the marketplace) when the agent is present but not ready', async () => {
     preflightMock.mockResolvedValue({
       agentPresent: true,
-      agentReady: true,
-      mcpToolsOnAgent: false,
-      mcpToolCrdsPresent: false,
+      agentReady: false,
+      mcpServerPresent: true,
+      mcpServerReady: true,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
 
     await waitFor(() =>
-      expect(screen.getByTestId('studio-gate-step-mcp')).toBeInTheDocument(),
+      expect(
+        screen.getByTestId('studio-gate-step-agent-not-ready'),
+      ).toBeInTheDocument(),
     );
-    expect(screen.queryByTestId('studio-gate-step-agent')).toBeNull();
+    expect(screen.queryByTestId('studio-gate-step-agent-missing')).toBeNull();
+    expect(screen.getByTestId('studio-gate-go-to-agent')).toHaveAttribute(
+      'href',
+      `/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`,
+    );
+    expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+  });
 
-    fireEvent.click(screen.getByTestId('studio-gate-go-to-mcps'));
-    expect(pushMock).toHaveBeenCalledWith('/mcp');
+  it('links to the marketplace when the MCP server is missing', async () => {
+    preflightMock.mockResolvedValue({
+      agentPresent: true,
+      agentReady: true,
+      mcpServerPresent: false,
+      mcpServerReady: false,
+    });
+
+    render(<WorkflowStudio mode="new" initialName="wf" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('studio-gate-step-mcp-missing'),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId('studio-gate-mcp-marketplace-link'),
+    ).toHaveAttribute('href', KUBERNETES_MCP_MARKETPLACE_URL);
+    expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+  });
+
+  it('links to the MCP server (not the marketplace) when it is present but not ready', async () => {
+    preflightMock.mockResolvedValue({
+      agentPresent: true,
+      agentReady: true,
+      mcpServerPresent: true,
+      mcpServerReady: false,
+    });
+
+    render(<WorkflowStudio mode="new" initialName="wf" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('studio-gate-step-mcp-not-ready'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('studio-gate-step-mcp-missing')).toBeNull();
+    expect(screen.getByTestId('studio-gate-go-to-mcp')).toHaveAttribute(
+      'href',
+      '/mcp',
+    );
+    expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
   it('renders no overlay and enables the composer when everything is present', async () => {
@@ -171,8 +217,8 @@ describe('WorkflowStudio author-agent gate', () => {
     preflightMock.mockResolvedValue({
       agentPresent: false,
       agentReady: false,
-      mcpToolsOnAgent: false,
-      mcpToolCrdsPresent: false,
+      mcpServerPresent: false,
+      mcpServerReady: false,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -212,78 +258,130 @@ describe('WorkflowStudio YAML validation banner', () => {
 });
 
 describe('StudioChatGate', () => {
-  const writeTextMock = vi.fn<(value: string) => Promise<void>>();
+  it('renders the disabled card with heading and lead', () => {
+    render(
+      <StudioChatGate
+        agentMissing
+        agentNotReady={false}
+        mcpMissing
+        mcpNotReady={false}
+      />,
+    );
 
-  beforeEach(() => {
-    writeTextMock.mockResolvedValue(undefined);
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: writeTextMock },
-    });
-  });
-
-  it('renders the locked card with heading and lead', () => {
-    render(<StudioChatGate agentMissing mcpMissing />);
-
-    const gate = screen.getByTestId('studio-chat-gate');
-    expect(gate).toBeInTheDocument();
+    expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument();
     expect(
-      screen.getByText('Chat with the agent is locked'),
+      screen.getByText('Chat with the agent is disabled'),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Set up this namespace to start chatting with the builder agent:',
+        'Complete both steps, then reload the page to start chatting with the builder agent:',
       ),
     ).toBeInTheDocument();
   });
 
-  it('numbers both steps sequentially when both are missing', () => {
-    render(<StudioChatGate agentMissing mcpMissing />);
-
-    const agentStep = screen.getByTestId('studio-gate-step-agent');
-    const mcpStep = screen.getByTestId('studio-gate-step-mcp');
-
-    expect(agentStep).toHaveTextContent('1');
-    expect(agentStep).toHaveTextContent(
-      `Install the ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent`,
+  it('always renders both checklist items with the MCP server first', () => {
+    render(
+      <StudioChatGate
+        agentMissing
+        agentNotReady={false}
+        mcpMissing
+        mcpNotReady={false}
+      />,
     );
-    expect(mcpStep).toHaveTextContent('2');
-    expect(mcpStep).toHaveTextContent('Add the Kubernetes MCP server');
-  });
 
-  it('numbers the sole visible step as 1 when only the agent is missing', () => {
-    render(<StudioChatGate agentMissing mcpMissing={false} />);
-
-    const agentStep = screen.getByTestId('studio-gate-step-agent');
-    expect(agentStep).toHaveTextContent('1');
-    expect(screen.queryByTestId('studio-gate-step-mcp')).toBeNull();
-  });
-
-  it('numbers the sole visible step as 1 when only the MCP is missing', () => {
-    render(<StudioChatGate agentMissing={false} mcpMissing />);
-
-    const mcpStep = screen.getByTestId('studio-gate-step-mcp');
-    expect(mcpStep).toHaveTextContent('1');
-    expect(screen.queryByTestId('studio-gate-step-agent')).toBeNull();
-  });
-
-  it('copies the install command and toasts on click', async () => {
-    render(<StudioChatGate agentMissing mcpMissing={false} />);
-
-    fireEvent.click(screen.getByTestId('studio-gate-copy'));
-
-    await waitFor(() =>
-      expect(writeTextMock).toHaveBeenCalledWith(ARGO_MAKE_AUTHOR_INSTALL_CMD),
-    );
-    expect(toast.success).toHaveBeenCalledWith(
-      'Install command copied to clipboard.',
+    const mcpItem = screen.getByTestId('studio-gate-item-mcp');
+    const agentItem = screen.getByTestId('studio-gate-item-agent');
+    expect(mcpItem).toBeInTheDocument();
+    expect(agentItem).toBeInTheDocument();
+    expect(mcpItem.compareDocumentPosition(agentItem)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
 
-  it('navigates to MCPs from the MCP step', () => {
-    render(<StudioChatGate agentMissing={false} mcpMissing />);
+  it('marks a satisfied item done and only shows remediation for the unmet one', () => {
+    render(
+      <StudioChatGate
+        agentMissing
+        agentNotReady={false}
+        mcpMissing={false}
+        mcpNotReady={false}
+      />,
+    );
 
-    fireEvent.click(screen.getByTestId('studio-gate-go-to-mcps'));
-    expect(pushMock).toHaveBeenCalledWith('/mcp');
+    expect(screen.getByTestId('studio-gate-item-mcp-done')).toBeInTheDocument();
+    expect(screen.queryByTestId('studio-gate-item-agent-done')).toBeNull();
+    expect(
+      screen.getByTestId('studio-gate-step-agent-missing'),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('studio-gate-step-mcp-missing')).toBeNull();
+  });
+
+  it('links to the marketplace when the agent is missing', () => {
+    render(
+      <StudioChatGate
+        agentMissing
+        agentNotReady={false}
+        mcpMissing={false}
+        mcpNotReady={false}
+      />,
+    );
+
+    const link = screen.getByTestId('studio-gate-agent-marketplace-link');
+    expect(link).toHaveAttribute('href', ARGO_MAKE_AUTHOR_MARKETPLACE_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('links to the marketplace when the MCP server is missing', () => {
+    render(
+      <StudioChatGate
+        agentMissing={false}
+        agentNotReady={false}
+        mcpMissing
+        mcpNotReady={false}
+      />,
+    );
+
+    const link = screen.getByTestId('studio-gate-mcp-marketplace-link');
+    expect(link).toHaveAttribute('href', KUBERNETES_MCP_MARKETPLACE_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('links to the MCP server page when it is present but not ready', () => {
+    render(
+      <StudioChatGate
+        agentMissing={false}
+        agentNotReady={false}
+        mcpMissing={false}
+        mcpNotReady
+      />,
+    );
+
+    expect(
+      screen.getByTestId('studio-gate-step-mcp-not-ready'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('studio-gate-go-to-mcp')).toHaveAttribute(
+      'href',
+      '/mcp',
+    );
+  });
+
+  it('links to the agent page (not the marketplace) when the agent is present but not ready', () => {
+    render(
+      <StudioChatGate
+        agentMissing={false}
+        agentNotReady
+        mcpMissing={false}
+        mcpNotReady={false}
+      />,
+    );
+
+    expect(
+      screen.getByTestId('studio-gate-step-agent-not-ready'),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('studio-gate-step-agent-missing')).toBeNull();
+    expect(screen.getByTestId('studio-gate-go-to-agent')).toHaveAttribute(
+      'href',
+      `/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`,
+    );
   });
 });

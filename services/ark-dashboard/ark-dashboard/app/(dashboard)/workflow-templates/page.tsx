@@ -33,7 +33,7 @@ export default function WorkflowTemplatesPage() {
     <>
       <PageHeader
         breadcrumbs={BASE_BREADCRUMBS}
-        currentPage="Workflows"
+        currentPage="Workflow Templates"
         actions={
           <div className="flex items-center gap-2">
             {!readOnlyMode && (
@@ -48,7 +48,7 @@ export default function WorkflowTemplatesPage() {
             {showCreate && (
               <Button onClick={() => setShowNameDialog(true)}>
                 <Plus className="h-4 w-4" />
-                Create workflow
+                Create workflow template
               </Button>
             )}
           </div>
@@ -56,7 +56,7 @@ export default function WorkflowTemplatesPage() {
       />
       <div className="flex flex-1 flex-col">
         <div className="">
-          <h1 className="text-xl">Workflows</h1>
+          <h1 className="text-xl">Workflow Templates</h1>
           <p className="text-sm text-muted-foreground">
             Automate complex processes with agentic orchestration
           </p>

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { agentsService } from '@/lib/services/agents';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
-import { toolsService } from '@/lib/services/tools';
+import { mcpServersService } from '@/lib/services/mcp-servers';
 
 vi.mock('@/lib/services/agents', () => ({
   agentsService: {
@@ -10,9 +10,9 @@ vi.mock('@/lib/services/agents', () => ({
   },
 }));
 
-vi.mock('@/lib/services/tools', () => ({
-  toolsService: {
-    getAll: vi.fn(),
+vi.mock('@/lib/services/mcp-servers', () => ({
+  mcpServersService: {
+    get: vi.fn(),
   },
 }));
 
@@ -22,100 +22,89 @@ const readyAgent = {
   namespace: 'default',
   isA2A: false,
   available: 'True',
-  tools: [
-    { type: 'mcp', name: 'resources_list' },
-    { type: 'mcp', name: 'resources_get' },
-  ],
 };
 
-const groundingTools = [
-  { id: 'resources_list', name: 'resources_list' },
-  { id: 'resources_get', name: 'resources_get' },
-];
+const readyMcpServer = {
+  id: 'kubernetes-mcp-server',
+  name: 'kubernetes-mcp-server',
+  available: 'True',
+};
+
+function httpError(status: number): Error {
+  return Object.assign(new Error(`HTTP ${status}`), {
+    response: { status },
+  });
+}
 
 describe('getAuthorAgentPreflight', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should return all true for a ready agent with both tools and CRDs', async () => {
+  it('reports everything present and ready', async () => {
     vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
-    vi.mocked(toolsService.getAll).mockResolvedValueOnce(groundingTools);
+    vi.mocked(mcpServersService.get).mockResolvedValueOnce(readyMcpServer);
 
     const result = await getAuthorAgentPreflight('argo-make-author');
 
     expect(result).toEqual({
       agentPresent: true,
       agentReady: true,
-      mcpToolsOnAgent: true,
-      mcpToolCrdsPresent: true,
+      mcpServerPresent: true,
+      mcpServerReady: true,
     });
   });
 
-  it('should report agentPresent=false when the agent is missing', async () => {
+  it('reports agentPresent=false when the agent is missing', async () => {
     vi.mocked(agentsService.getByName).mockResolvedValueOnce(null);
+    vi.mocked(mcpServersService.get).mockResolvedValueOnce(readyMcpServer);
 
     const result = await getAuthorAgentPreflight('argo-make-author');
 
-    expect(result).toEqual({
-      agentPresent: false,
-      agentReady: false,
-      mcpToolsOnAgent: false,
-      mcpToolCrdsPresent: false,
-    });
-    expect(toolsService.getAll).not.toHaveBeenCalled();
+    expect(result.agentPresent).toBe(false);
+    expect(result.agentReady).toBe(false);
   });
 
-  it('should report agentReady=false when available is not True', async () => {
+  it('reports agentReady=false when available is not True', async () => {
     vi.mocked(agentsService.getByName).mockResolvedValueOnce({
       ...readyAgent,
       available: 'False',
     });
-    vi.mocked(toolsService.getAll).mockResolvedValueOnce(groundingTools);
+    vi.mocked(mcpServersService.get).mockResolvedValueOnce(readyMcpServer);
 
     const result = await getAuthorAgentPreflight('argo-make-author');
 
-    expect(result.agentReady).toBe(false);
     expect(result.agentPresent).toBe(true);
+    expect(result.agentReady).toBe(false);
   });
 
-  it('should report mcpToolsOnAgent=false when a grounding tool is missing on the agent', async () => {
-    vi.mocked(agentsService.getByName).mockResolvedValueOnce({
-      ...readyAgent,
-      tools: [{ type: 'mcp', name: 'resources_list' }],
-    });
-    vi.mocked(toolsService.getAll).mockResolvedValueOnce(groundingTools);
-
-    const result = await getAuthorAgentPreflight('argo-make-author');
-
-    expect(result.mcpToolsOnAgent).toBe(false);
-    expect(result.mcpToolCrdsPresent).toBe(true);
-  });
-
-  it('should report mcpToolsOnAgent=false when the grounding tool is not type mcp', async () => {
-    vi.mocked(agentsService.getByName).mockResolvedValueOnce({
-      ...readyAgent,
-      tools: [
-        { type: 'custom', name: 'resources_list' },
-        { type: 'mcp', name: 'resources_get' },
-      ],
-    });
-    vi.mocked(toolsService.getAll).mockResolvedValueOnce(groundingTools);
-
-    const result = await getAuthorAgentPreflight('argo-make-author');
-
-    expect(result.mcpToolsOnAgent).toBe(false);
-  });
-
-  it('should report mcpToolCrdsPresent=false when a grounding tool CRD is missing', async () => {
+  it('reports mcpServerPresent=false when the MCP server 404s', async () => {
     vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
-    vi.mocked(toolsService.getAll).mockResolvedValueOnce([
-      { id: 'resources_list', name: 'resources_list' },
-    ]);
+    vi.mocked(mcpServersService.get).mockRejectedValueOnce(httpError(404));
 
     const result = await getAuthorAgentPreflight('argo-make-author');
 
-    expect(result.mcpToolCrdsPresent).toBe(false);
-    expect(result.mcpToolsOnAgent).toBe(true);
+    expect(result.mcpServerPresent).toBe(false);
+    expect(result.mcpServerReady).toBe(false);
+  });
+
+  it('reports mcpServerReady=false when the MCP server is not available', async () => {
+    vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
+    vi.mocked(mcpServersService.get).mockResolvedValueOnce({
+      ...readyMcpServer,
+      available: 'False',
+    });
+
+    const result = await getAuthorAgentPreflight('argo-make-author');
+
+    expect(result.mcpServerPresent).toBe(true);
+    expect(result.mcpServerReady).toBe(false);
+  });
+
+  it('propagates non-404 MCP server errors so the gate fails closed', async () => {
+    vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
+    vi.mocked(mcpServersService.get).mockRejectedValueOnce(httpError(500));
+
+    await expect(getAuthorAgentPreflight('argo-make-author')).rejects.toThrow();
   });
 });

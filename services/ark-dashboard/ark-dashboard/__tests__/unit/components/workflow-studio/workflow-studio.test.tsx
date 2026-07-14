@@ -35,8 +35,8 @@ vi.mock('@/lib/services/author-agent-preflight', () => ({
   getAuthorAgentPreflight: vi.fn(async () => ({
     agentPresent: true,
     agentReady: true,
-    mcpToolsOnAgent: true,
-    mcpToolCrdsPresent: true,
+    mcpServerPresent: true,
+    mcpServerReady: true,
   })),
 }));
 
@@ -85,12 +85,12 @@ describe('WorkflowStudio', () => {
   describe('name modal', () => {
     it('shows the name modal on /new without a name', () => {
       render(<WorkflowStudio mode="new" />);
-      expect(screen.getByText('Name your workflow')).toBeInTheDocument();
+      expect(screen.getByText('Name your workflow template')).toBeInTheDocument();
     });
 
     it('hides the name modal on /new when a name is provided', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
-      expect(screen.queryByText('Name your workflow')).not.toBeInTheDocument();
+      expect(screen.queryByText('Name your workflow template')).not.toBeInTheDocument();
     });
   });
 
@@ -224,6 +224,12 @@ describe('WorkflowStudio', () => {
         expect(screen.getByTestId('studio-run')).toBeInTheDocument();
       });
       expect(screen.queryByTestId('studio-create')).not.toBeInTheDocument();
+    });
+
+    it('renders the draggable resize handle between chat and canvas', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(screen.getByTestId('studio-chat-slot')).toBeInTheDocument();
+      expect(screen.getByTestId('studio-resize-handle')).toBeInTheDocument();
     });
 
     it('renders the diagram empty state before any YAML', () => {
