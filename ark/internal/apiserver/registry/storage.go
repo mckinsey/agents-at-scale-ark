@@ -366,9 +366,21 @@ func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions r
 		for _, item := range items {
 			table.Rows = append(table.Rows, s.objectToTableRow(item))
 		}
+		// Propagate list metadata into the Table so paginating clients keep
+		// working. kubectl defaults to Table output and reads metadata.continue
+		// from the response body; without copying it here the token is dropped
+		// and kubectl silently stops after the first page.
+		if listMeta, err := meta.ListAccessor(obj); err == nil {
+			table.ResourceVersion = listMeta.GetResourceVersion()
+			table.Continue = listMeta.GetContinue()
+			table.RemainingItemCount = listMeta.GetRemainingItemCount()
+		}
 		return table, nil
 	}
 
+	if objMeta, err := meta.Accessor(obj); err == nil {
+		table.ResourceVersion = objMeta.GetResourceVersion()
+	}
 	table.Rows = append(table.Rows, s.objectToTableRow(obj))
 	return table, nil
 }
