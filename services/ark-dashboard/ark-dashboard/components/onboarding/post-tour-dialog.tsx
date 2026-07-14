@@ -1,15 +1,9 @@
 'use client';
 
-import { Celebration, ChevronRight, Close } from '@/components/icons';
+import { Celebration, ChevronRight } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { IconShell } from '@/components/ui/icon-shell';
+import { DialogDescription } from '@/components/ui/dialog';
+import { OnboardingDialog } from './onboarding-dialog';
 
 interface PostTourDialogProps {
   open: boolean;
@@ -25,36 +19,14 @@ export function PostTourDialog({
   onDismiss,
 }: Readonly<PostTourDialogProps>) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="gap-7 border-0 p-10 sm:max-w-lg">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Close"
-          onClick={onDismiss}
-          className="absolute right-4 top-4">
-          <Close className="size-5" />
-        </Button>
-
-        <DialogHeader className="items-center text-center sm:text-center">
-          <div className="bg-fill-muted mb-2 flex size-12 items-center justify-center">
-            <IconShell size="lg" className="text-fg-primary">
-              <Celebration />
-            </IconShell>
-          </div>
-          <DialogTitle className="headings-h3-regular text-fg-primary">
-            Tour complete
-          </DialogTitle>
-        </DialogHeader>
-
-        <DialogDescription className="paragraph-regular-primary text-fg-secondary text-center">
-          Great job! You&apos;ve seen how ARK works. Now, let&apos;s get your
-          first AI agent up and running.
-        </DialogDescription>
-
-        <div className="flex justify-center gap-3">
+    <OnboardingDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onClose={onDismiss}
+      icon={<Celebration />}
+      title="Tour complete"
+      footer={
+        <>
           <Button variant="outline" onClick={onDismiss}>
             Maybe later
           </Button>
@@ -62,8 +34,12 @@ export function PostTourDialog({
             Create my first agent
             <ChevronRight className="size-4" />
           </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </>
+      }>
+      <DialogDescription className="paragraph-regular-primary text-fg-secondary text-center">
+        Great job! You&apos;ve seen how ARK works. Now, let&apos;s get your first
+        AI agent up and running.
+      </DialogDescription>
+    </OnboardingDialog>
   );
 }
