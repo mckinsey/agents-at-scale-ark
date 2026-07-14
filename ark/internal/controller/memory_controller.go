@@ -154,28 +154,14 @@ func (r *MemoryReconciler) mapConfigMapToMemories(ctx context.Context, obj clien
 	})
 }
 
-// mapDependencyToMemories lists Memories in the changed object's namespace
-// (typically a small set) and returns those whose address matches. On a list
-// error it returns nil rather than failing: the requeue poll is the recovery
-// backstop, so a missed watch event is not fatal.
 func (r *MemoryReconciler) mapDependencyToMemories(ctx context.Context, obj client.Object, matches func(*arkv1alpha1.ValueFromSource) bool) []reconcile.Request {
-	var memories arkv1alpha1.MemoryList
-	if err := r.List(ctx, &memories, client.InNamespace(obj.GetNamespace())); err != nil {
-		logf.FromContext(ctx).Error(err, "failed to list Memories for dependency mapping", "namespace", obj.GetNamespace())
-		return nil
-	}
-
-	var requests []reconcile.Request
-	for i := range memories.Items {
-		vf := memories.Items[i].Spec.Address.ValueFrom
-		if vf != nil && matches(vf) {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      memories.Items[i].Name,
-					Namespace: memories.Items[i].Namespace,
-				},
-			})
-		}
-	}
-	return requests
+	return mapDependencyRequests(ctx, r.Client, obj, &arkv1alpha1.MemoryList{},
+		func(l *arkv1alpha1.MemoryList) []arkv1alpha1.Memory { return l.Items },
+		func(m arkv1alpha1.Memory) bool {
+			vf := m.Spec.Address.ValueFrom
+			return vf != nil && matches(vf)
+		},
+		func(m arkv1alpha1.Memory) types.NamespacedName {
+			return types.NamespacedName{Name: m.Name, Namespace: m.Namespace}
+		})
 }

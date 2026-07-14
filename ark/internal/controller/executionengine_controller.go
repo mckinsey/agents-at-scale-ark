@@ -130,28 +130,14 @@ func (r *ExecutionEngineReconciler) mapConfigMapToExecutionEngines(ctx context.C
 	})
 }
 
-// mapDependencyToExecutionEngines lists ExecutionEngines in the changed
-// object's namespace (typically a small set) and returns those whose address
-// matches. On a list error it returns nil rather than failing: the requeue
-// poll is the recovery backstop, so a missed watch event is not fatal.
 func (r *ExecutionEngineReconciler) mapDependencyToExecutionEngines(ctx context.Context, obj client.Object, matches func(*arkv1prealpha1.ValueFromSource) bool) []reconcile.Request {
-	var engines arkv1prealpha1.ExecutionEngineList
-	if err := r.List(ctx, &engines, client.InNamespace(obj.GetNamespace())); err != nil {
-		logf.FromContext(ctx).Error(err, "failed to list ExecutionEngines for dependency mapping", "namespace", obj.GetNamespace())
-		return nil
-	}
-
-	var requests []reconcile.Request
-	for i := range engines.Items {
-		vf := engines.Items[i].Spec.Address.ValueFrom
-		if vf != nil && matches(vf) {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      engines.Items[i].Name,
-					Namespace: engines.Items[i].Namespace,
-				},
-			})
-		}
-	}
-	return requests
+	return mapDependencyRequests(ctx, r.Client, obj, &arkv1prealpha1.ExecutionEngineList{},
+		func(l *arkv1prealpha1.ExecutionEngineList) []arkv1prealpha1.ExecutionEngine { return l.Items },
+		func(e arkv1prealpha1.ExecutionEngine) bool {
+			vf := e.Spec.Address.ValueFrom
+			return vf != nil && matches(vf)
+		},
+		func(e arkv1prealpha1.ExecutionEngine) types.NamespacedName {
+			return types.NamespacedName{Name: e.Name, Namespace: e.Namespace}
+		})
 }
