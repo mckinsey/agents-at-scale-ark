@@ -711,7 +711,7 @@ func decodeCursorForTest(token string) (int64, error) {
 	if n, err := strconv.ParseInt(token, 10, 64); err == nil {
 		return n, nil
 	}
-	decoded, err := base64.StdEncoding.DecodeString(token)
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
 		return 0, fmt.Errorf("token is neither int nor base64: %w", err)
 	}

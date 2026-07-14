@@ -432,7 +432,7 @@ func encodeListContinueToken(tok listContinueToken) string {
 	if err != nil {
 		panic(fmt.Errorf("encode continue token: %w", err))
 	}
-	return base64.StdEncoding.EncodeToString(raw)
+	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
 // decodeListContinueToken also accepts the legacy plain-integer form emitted
@@ -442,7 +442,7 @@ func decodeListContinueToken(s string) (listContinueToken, error) {
 		// Empty Snapshot signals cursor-only pagination for legacy callers.
 		return listContinueToken{Cursor: n}, nil
 	}
-	raw, err := base64.StdEncoding.DecodeString(s)
+	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return listContinueToken{}, fmt.Errorf("invalid continue token: %w", err)
 	}
