@@ -2,7 +2,14 @@ package completions
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -211,6 +218,45 @@ func TestBuildTaskManagerCACertInvalidPEM(t *testing.T) {
 	}, &Handler{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no valid certificates")
+}
+
+// TestBuildTaskManagerCACertValid: a rediss:// URL with a valid CA applies it to the client's
+// RootCAs (the applyRedisCACert success path) and only then attempts the connection — so an
+// unreachable host fails at the ping, not at CA setup. Backoff is shortened to stay fast.
+func TestBuildTaskManagerCACertValid(t *testing.T) {
+	orig := redisConnectBackoff
+	redisConnectBackoff = time.Millisecond
+	defer func() { redisConnectBackoff = orig }()
+
+	caPath := filepath.Join(t.TempDir(), "ca.crt")
+	require.NoError(t, os.WriteFile(caPath, testCACertPEM(t), 0o600))
+
+	_, err := buildTaskManager(ServerConfig{
+		RedisURL:        "rediss://127.0.0.1:1",
+		RedisCACertPath: caPath,
+	}, &Handler{})
+	require.Error(t, err)
+	// Reaching the retry/ping error proves CA application succeeded (no CA error returned).
+	assert.Contains(t, err.Error(), "after 3 attempts")
+}
+
+// testCACertPEM generates a minimal self-signed CA certificate in PEM form for TLS trust tests.
+func testCACertPEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test-redis-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
 // TestMergeShutdown covers the context-merge used per request: the child cancels on

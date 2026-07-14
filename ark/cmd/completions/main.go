@@ -39,6 +39,24 @@ func init() {
 	utilruntime.Must(arkv1prealpha1.AddToScheme(scheme))
 }
 
+// serverConfigFromEnv assembles the completions ServerConfig from environment variables.
+// Extracted from main so the Redis wiring and task-expiry parsing are unit-testable.
+func serverConfigFromEnv(addr string) completions.ServerConfig {
+	var taskExpiry time.Duration
+	if raw := os.Getenv("REDIS_TASK_EXPIRY_SECONDS"); raw != "" {
+		if secs, parseErr := strconv.Atoi(raw); parseErr == nil && secs > 0 {
+			taskExpiry = time.Duration(secs) * time.Second
+		}
+	}
+	return completions.ServerConfig{
+		Addr:            addr,
+		RedisURL:        os.Getenv("REDIS_URL"),
+		RedisPassword:   os.Getenv("REDIS_PASSWORD"),
+		RedisCACertPath: os.Getenv("REDIS_TLS_CA_CERT_PATH"),
+		TaskExpiry:      taskExpiry,
+	}
+}
+
 func main() {
 	var addr string
 	var showVersion bool
@@ -72,19 +90,7 @@ func main() {
 	telemetryProvider := telemetryconfig.NewProvider(ctx, k8sClient)
 	eventingProvider := eventingconfig.NewProviderWithClient(ctx, k8sClient)
 
-	var taskExpiry time.Duration
-	if raw := os.Getenv("REDIS_TASK_EXPIRY_SECONDS"); raw != "" {
-		if secs, parseErr := strconv.Atoi(raw); parseErr == nil && secs > 0 {
-			taskExpiry = time.Duration(secs) * time.Second
-		}
-	}
-	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, completions.ServerConfig{
-		Addr:            addr,
-		RedisURL:        os.Getenv("REDIS_URL"),
-		RedisPassword:   os.Getenv("REDIS_PASSWORD"),
-		RedisCACertPath: os.Getenv("REDIS_TLS_CA_CERT_PATH"),
-		TaskExpiry:      taskExpiry,
-	})
+	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, serverConfigFromEnv(addr))
 	if err != nil {
 		log.Error(err, "failed to create completions engine server")
 		if shutdownErr := telemetryProvider.Shutdown(); shutdownErr != nil {
