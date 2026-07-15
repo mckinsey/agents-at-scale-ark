@@ -34,6 +34,14 @@ spec:
           kind: WorkflowTemplate
           metadata:
             name: ark-query
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall argo --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: setup-mock-llm
     try:
@@ -452,12 +460,3 @@ spec:
         apiVersion: argoproj.io/v1alpha1
         kind: Workflow
         name: ark-query-optional-spec
-
-    cleanup:
-    - script:
-        content: |
-          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall argo --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
