@@ -100,7 +100,7 @@ class TestAPIKeyService(unittest.TestCase):
         self.assertIsNone(self.service._parse_datetime("invalid"))
 
 
-class TestAPIKeyServiceIntegration(unittest.TestCase):
+class TestAPIKeyServiceIntegration(unittest.IsolatedAsyncioTestCase):
     """Integration tests for API key service with mocked Kubernetes client."""
     
     @patch('ark_api.services.api_keys.get_context')
@@ -310,7 +310,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         mock_api_instance.patch_namespaced_secret.assert_not_called()
 
 
-class TestAPIKeyNamespaceScoping(unittest.TestCase):
+class TestAPIKeyNamespaceScoping(unittest.IsolatedAsyncioTestCase):
     """Test namespace scoping for API keys (multi-tenant isolation)."""
     
     @patch('ark_api.services.api_keys.get_context')
