@@ -1,6 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
+import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
@@ -423,7 +424,7 @@ export const chatService = {
       unknown
     > {
       const response = await fetch(
-        `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+        apiUrl(`/api/v1/broker/chunks?watch=true&query-id=${queryName}`),
         {
           signal: abortSignal,
         },
