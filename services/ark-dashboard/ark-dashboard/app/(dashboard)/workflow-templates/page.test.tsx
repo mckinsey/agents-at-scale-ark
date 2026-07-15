@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -97,10 +97,13 @@ describe('WorkflowTemplatesPage', () => {
     });
     await user.click(cta);
 
-    const input = await screen.findByLabelText('Workflow name');
+    const input = await screen.findByLabelText('Workflow template name');
     await user.type(input, 'my flow');
 
-    const confirm = screen.getByRole('button', { name: 'Create workflow' });
+    const dialog = screen.getByRole('dialog');
+    const confirm = within(dialog).getByRole('button', {
+      name: 'Create workflow template',
+    });
     await user.click(confirm);
 
     expect(mockPush).toHaveBeenCalledWith(
