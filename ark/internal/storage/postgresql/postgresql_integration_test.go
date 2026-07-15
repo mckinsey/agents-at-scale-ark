@@ -8,8 +8,11 @@ package postgresql
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -553,4 +556,170 @@ func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T)
 	}
 
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+}
+
+// TestList_PaginationSnapshotConsistency_Integration reproduces the BIGSERIAL
+// commit-order race by holding an INSERT in-flight across page 1 and asserting
+// its row does not leak below the cursor once it commits.
+func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testKind := "PaginationTestResource"
+	testNS := "pagination-integration"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	newObj := func(name string, idx int) *integrationTestObject {
+		obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+		obj.Metadata.Name = name
+		obj.Metadata.Namespace = testNS
+		obj.Metadata.UID = "uid-" + name
+		obj.Spec = map[string]interface{}{"idx": idx}
+		return obj
+	}
+
+	for i := 1; i <= 10; i++ {
+		name := fmt.Sprintf("seed-%02d", i)
+		if err := backend.Create(ctx, testKind, testNS, name, newObj(name, i)); err != nil {
+			t.Fatalf("seed Create %s failed: %v", name, err)
+		}
+	}
+
+	tx, err := backend.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTx failed: %v", err)
+	}
+	txCommitted := false
+	defer func() {
+		if !txCommitted {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var inflightRV int64
+	if err := tx.QueryRowContext(ctx, `
+		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
+		RETURNING resource_version
+	`, testKind, testNS, "in-flight-model", "uid-in-flight",
+		`{"idx":11}`, `{}`, `{}`, `{}`, `[]`, `[]`).Scan(&inflightRV); err != nil {
+		t.Fatalf("in-flight INSERT failed: %v", err)
+	}
+
+	// Push page 1's cursor above inflightRV so cursor-only pagination would
+	// leak the row into a later page once it commits.
+	for i := 1; i <= 20; i++ {
+		name := fmt.Sprintf("post-%02d", i)
+		if err := backend.Create(ctx, testKind, testNS, name, newObj(name, 100+i)); err != nil {
+			t.Fatalf("post Create %s failed: %v", name, err)
+		}
+	}
+
+	objs, contToken, err := backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5})
+	if err != nil {
+		t.Fatalf("page 1 List failed: %v", err)
+	}
+	if len(objs) != 5 {
+		t.Fatalf("page 1: got %d rows, want 5", len(objs))
+	}
+	if contToken == "" {
+		t.Fatalf("page 1: expected continue token, got empty")
+	}
+	cursor, err := decodeCursorForTest(contToken)
+	if err != nil {
+		t.Fatalf("decode continue token %q: %v", contToken, err)
+	}
+	if cursor <= inflightRV {
+		t.Fatalf("page 1 cursor %d must be > inflightRV %d to reproduce the race", cursor, inflightRV)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("in-flight Commit failed: %v", err)
+	}
+	txCommitted = true
+
+	seen := map[string]bool{}
+	for _, o := range objs {
+		seen[o.(*integrationTestObject).Metadata.Name] = true
+	}
+	for contToken != "" {
+		var page []runtime.Object
+		page, contToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: contToken})
+		if err != nil {
+			t.Fatalf("subsequent List failed: %v", err)
+		}
+		for _, o := range page {
+			seen[o.(*integrationTestObject).Metadata.Name] = true
+		}
+	}
+
+	if seen["in-flight-model"] {
+		t.Errorf("pagination returned in-flight-model (rv=%d) even though it committed after page 1 — snapshot-consistent pagination must exclude it", inflightRV)
+	}
+	if len(seen) != 30 {
+		t.Errorf("expected 30 rows across all pages (10 seed + 20 post), got %d: %v", len(seen), seen)
+	}
+
+	// A fresh LIST captures a new snapshot that now sees the committed row —
+	// pinning to page 1's snapshot must not permanently hide it.
+	reListSeen := map[string]bool{}
+	var reListToken string
+	for {
+		var page []runtime.Object
+		page, reListToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: reListToken})
+		if err != nil {
+			t.Fatalf("re-List failed: %v", err)
+		}
+		for _, o := range page {
+			reListSeen[o.(*integrationTestObject).Metadata.Name] = true
+		}
+		if reListToken == "" {
+			break
+		}
+	}
+	if !reListSeen["in-flight-model"] {
+		t.Errorf("re-List after commit did not return in-flight-model (rv=%d) — pinned snapshot must not persist across calls", inflightRV)
+	}
+	if len(reListSeen) != 31 {
+		t.Errorf("re-List: expected 31 rows (10 seed + 20 post + in-flight), got %d: %v", len(reListSeen), reListSeen)
+	}
+}
+
+func decodeCursorForTest(token string) (int64, error) {
+	if n, err := strconv.ParseInt(token, 10, 64); err == nil {
+		return n, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return 0, fmt.Errorf("token is neither int nor base64: %w", err)
+	}
+	var payload struct {
+		Cursor int64 `json:"c"`
+	}
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return 0, fmt.Errorf("decoded token %q not JSON: %w", string(decoded), err)
+	}
+	return payload.Cursor, nil
 }
