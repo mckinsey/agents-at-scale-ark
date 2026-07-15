@@ -9,10 +9,6 @@ export interface Tool {
   description?: string;
   annotations?: Record<string, string>;
   labels?: unknown;
-  inline?: {
-    source: string;
-    language?: string;
-  };
 }
 
 // Tool detail response with schema

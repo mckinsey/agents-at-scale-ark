@@ -39,12 +39,6 @@ import {
   agentsService,
   toolsService,
 } from '@/lib/services';
-import {
-  inlineToolsMockService,
-  isInlineTool,
-  type InlineTool,
-  type InlineToolLanguage,
-} from '@/lib/services/inline-tools-mock';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
 
@@ -65,29 +59,10 @@ export const ToolsSection = forwardRef<
   const [showCompactView, setShowCompactView] = useState(false);
   const { push } = useNamespacedNavigation();
   const [toolEditorOpen, setToolEditorOpen] = useState(false);
-  const [editingInlineTool, setEditingInlineTool] = useState<InlineTool | null>(
-    null,
-  );
 
   useImperativeHandle(ref, () => ({
-    openAddEditor: () => {
-      setEditingInlineTool(null);
-      setToolEditorOpen(true);
-    },
+    openAddEditor: () => setToolEditorOpen(true),
   }));
-
-  const handleEdit = (tool: Tool) => {
-    if (!isInlineTool(tool)) return;
-    setEditingInlineTool(tool);
-    setToolEditorOpen(true);
-  };
-
-  const handleEditorOpenChange = (nextOpen: boolean) => {
-    setToolEditorOpen(nextOpen);
-    if (!nextOpen) {
-      setEditingInlineTool(null);
-    }
-  };
 
   const viewOptions: ToggleOption[] = [
     { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -97,35 +72,24 @@ export const ToolsSection = forwardRef<
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const [toolsResult, inlineResult, agentsResult] =
-        await Promise.allSettled([
+      try {
+        const [toolsData, agentsData] = await Promise.all([
           toolsService.getAll(),
-          inlineToolsMockService.getAll(),
           agentsService.getAll(),
         ]);
-
-      const realTools =
-        toolsResult.status === 'fulfilled' ? toolsResult.value : [];
-      const inlineTools =
-        inlineResult.status === 'fulfilled' ? inlineResult.value : [];
-      setTools([...realTools, ...inlineTools]);
-      setAgents(agentsResult.status === 'fulfilled' ? agentsResult.value : []);
-
-      if (
-        toolsResult.status === 'rejected' ||
-        agentsResult.status === 'rejected'
-      ) {
-        console.error(
-          'Failed to load some data:',
-          toolsResult.status === 'rejected' ? toolsResult.reason : null,
-          agentsResult.status === 'rejected' ? agentsResult.reason : null,
-        );
-        toast.error('Some data failed to load', {
+        setTools(toolsData);
+        setAgents(agentsData);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        toast.error('Failed to Load Data', {
           description:
-            'Inline tools are shown; connect the API to see the rest.',
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
         });
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     loadData();
   }, [namespace]);
@@ -151,14 +115,7 @@ export const ToolsSection = forwardRef<
       return;
     }
     try {
-      const target = tools.find(
-        tool => (tool.name || tool.type) === identifier,
-      );
-      if (target?.type === 'inline') {
-        await inlineToolsMockService.delete(identifier);
-      } else {
-        await toolsService.delete(identifier);
-      }
+      await toolsService.delete(identifier);
       setTools(tools.filter(tool => (tool.name || tool.type) !== identifier));
       toast.success('Tool Deleted', {
         description: 'Successfully deleted tool',
@@ -186,44 +143,17 @@ export const ToolsSection = forwardRef<
     inputSchema?: Record<string, unknown>;
     annotations?: Record<string, string>;
     url?: string;
-    agent?: string;
-    team?: string;
-    inline?: { source: string; language?: InlineToolLanguage };
   }) => {
-    const editingName = editingInlineTool?.name ?? null;
     try {
-      if (toolSpec.type === 'inline') {
-        if (!toolSpec.inline) {
-          throw new Error('Inline source is required');
-        }
-        const inlinePayload = {
-          description: toolSpec.description,
-          inputSchema: toolSpec.inputSchema,
-          annotations: toolSpec.annotations,
-          inline: toolSpec.inline,
-        };
-        if (editingName) {
-          await inlineToolsMockService.update(editingName, inlinePayload);
-        } else {
-          await inlineToolsMockService.create({
-            name: toolSpec.name,
-            ...inlinePayload,
-          });
-        }
-      } else {
-        await toolsService.create({ ...toolSpec, namespace });
-      }
-      toast.success(editingName ? 'Tool Updated' : 'Tool Created', {
-        description: `Successfully ${editingName ? 'updated' : 'created'} ${toolSpec.name}`,
+      await toolsService.create({ ...toolSpec, namespace });
+      toast.success('Tool Created', {
+        description: `Successfully created ${toolSpec.name}`,
       });
 
-      const [updatedTools, updatedInlineTools] = await Promise.all([
-        toolsService.getAll(),
-        inlineToolsMockService.getAll(),
-      ]);
-      setTools([...updatedTools, ...updatedInlineTools]);
+      const updatedTools = await toolsService.getAll();
+      setTools(updatedTools);
     } catch (error) {
-      toast.error(editingName ? 'Failed to Update Tool' : 'Failed to Create Tool', {
+      toast.error('Failed to Create Tool', {
         description:
           error instanceof Error
             ? error.message
@@ -308,11 +238,7 @@ export const ToolsSection = forwardRef<
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button
-              onClick={() => {
-                setEditingInlineTool(null);
-                setToolEditorOpen(true);
-              }}>
+            <Button onClick={() => setToolEditorOpen(true)}>
               <Plus className="h-4 w-4" />
               Add Tool
             </Button>
@@ -331,10 +257,9 @@ export const ToolsSection = forwardRef<
         </Empty>
         <ToolEditor
           open={toolEditorOpen}
-          onOpenChange={handleEditorOpenChange}
+          onOpenChange={setToolEditorOpen}
           onSave={handleSaveTool}
           namespace={namespace}
-          editingTool={editingInlineTool}
         />
       </>
     );
@@ -408,7 +333,6 @@ export const ToolsSection = forwardRef<
                               tool={tool}
                               onDelete={handleDelete}
                               onInfo={handleInfo}
-                              onEdit={handleEdit}
                               namespace={namespace}
                               inUse={toolData.inUse}
                               inUseReason={
@@ -441,10 +365,9 @@ export const ToolsSection = forwardRef<
       </div>
       <ToolEditor
         open={toolEditorOpen}
-        onOpenChange={handleEditorOpenChange}
+        onOpenChange={setToolEditorOpen}
         onSave={handleSaveTool}
         namespace={namespace}
-        editingTool={editingInlineTool}
       />
     </>
   );
