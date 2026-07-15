@@ -1,8 +1,16 @@
 import yaml from 'js-yaml';
 
-import { apiClient } from '@/lib/api/client';
+import { APIError, apiClient } from '@/lib/api/client';
 import { ARK_LABELS } from '@/lib/constants/labels';
 import { accessReviewService } from '@/lib/services/access-review';
+
+export function isArgoNotInstalledError(error: unknown): boolean {
+  return (
+    error instanceof APIError &&
+    error.status === 404 &&
+    /not available|not installed|CRD/i.test(error.message)
+  );
+}
 
 export interface WorkflowTemplateMetadata {
   name: string;

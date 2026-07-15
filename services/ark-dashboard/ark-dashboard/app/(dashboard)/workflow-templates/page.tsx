@@ -20,9 +20,10 @@ export default function WorkflowTemplatesPage() {
   const { readOnlyMode } = useNamespace();
   const { canCreate } = useWorkflowTemplateAccess();
   const [showNameDialog, setShowNameDialog] = useState(false);
+  const [argoInstalled, setArgoInstalled] = useState(true);
   const sectionRef = useRef<WorkflowTemplatesSectionHandle>(null);
 
-  const showCreate = canCreate && !readOnlyMode;
+  const showCreate = canCreate && !readOnlyMode && argoInstalled;
 
   const handleConfirmName = (name: string) => {
     setShowNameDialog(false);
@@ -36,7 +37,7 @@ export default function WorkflowTemplatesPage() {
         currentPage="Workflow Templates"
         actions={
           <div className="flex items-center gap-2">
-            {!readOnlyMode && (
+            {!readOnlyMode && argoInstalled && (
               <Button
                 variant="outline"
                 data-testid="workflow-add-group"
@@ -61,7 +62,10 @@ export default function WorkflowTemplatesPage() {
             Automate complex processes with agentic orchestration
           </p>
         </div>
-        <WorkflowTemplatesSection ref={sectionRef} />
+        <WorkflowTemplatesSection
+          ref={sectionRef}
+          onArgoInstalledChange={setArgoInstalled}
+        />
       </div>
       <NameWorkflowDialog
         open={showNameDialog}

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useUnsavedChangesGuard } from '@/lib/hooks/use-navigation-guard';
 import {
   type WorkflowTemplateSaveMode,
   workflowTemplatesService,
@@ -108,6 +109,8 @@ export function useWorkflowStudio({
 
   const isDirty = draftYaml.trim() !== '' && draftYaml !== lastSavedYaml;
 
+  const { bypass } = useUnsavedChangesGuard(isDirty);
+
   const commitAgentYaml = useCallback((value: string) => {
     setDraftYaml(value);
     setLastAgentYaml(value);
@@ -170,7 +173,7 @@ export function useWorkflowStudio({
           description: targetName,
         });
         if (navigateToEdit) {
-          replace(`/workflow-templates/${targetName}`);
+          bypass(() => replace(`/workflow-templates/${targetName}`));
         }
       } catch (error) {
         toast.error('Failed to save workflow', {
@@ -180,7 +183,7 @@ export function useWorkflowStudio({
         setSaving(false);
       }
     },
-    [draftYaml, replace],
+    [draftYaml, replace, bypass],
   );
 
   const save = useCallback(async () => {

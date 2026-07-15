@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APIError } from '@/lib/api/client';
 import { agentsService } from '@/lib/services/agents';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
 import { mcpServersService } from '@/lib/services/mcp-servers';
@@ -31,9 +32,7 @@ const readyMcpServer = {
 };
 
 function httpError(status: number): Error {
-  return Object.assign(new Error(`HTTP ${status}`), {
-    response: { status },
-  });
+  return new APIError(`HTTP ${status}`, status);
 }
 
 describe('getAuthorAgentPreflight', () => {

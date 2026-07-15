@@ -7,12 +7,22 @@ import {
   type WorkflowTemplatesSectionHandle,
 } from '@/components/sections/workflow-templates-section';
 import type { WorkflowTemplate } from '@/lib/services/workflow-templates';
-import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import {
+  isArgoNotInstalledError,
+  workflowTemplatesService,
+} from '@/lib/services/workflow-templates';
 
 vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
     list: vi.fn(),
   },
+  isArgoNotInstalledError: vi.fn(() => false),
+}));
+
+vi.mock('@/components/sections/workflow-templates-not-installed', () => ({
+  WorkflowTemplatesNotInstalled: () => (
+    <div data-testid="not-installed">Argo Workflows isn&apos;t installed</div>
+  ),
 }));
 
 vi.mock('@/lib/hooks', () => ({
@@ -113,6 +123,7 @@ describe('WorkflowTemplatesSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isArgoNotInstalledError).mockReturnValue(false);
   });
 
   describe('Loading state', () => {
@@ -247,6 +258,54 @@ describe('WorkflowTemplatesSection', () => {
       await waitFor(() => {
         expect(consoleErrorSpy).toHaveBeenCalled();
       });
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should show not-installed component when Argo is not installed', async () => {
+      const error = new Error('Resource type not available');
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      vi.mocked(workflowTemplatesService.list).mockRejectedValue(error);
+      vi.mocked(isArgoNotInstalledError).mockReturnValue(true);
+      const onArgoInstalledChange = vi.fn();
+
+      render(
+        <WorkflowTemplatesSection
+          onArgoInstalledChange={onArgoInstalledChange}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('not-installed')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('empty')).not.toBeInTheDocument();
+      expect(onArgoInstalledChange).toHaveBeenCalledWith(false);
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should show plain empty state for generic errors', async () => {
+      const error = new Error('Network error');
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      vi.mocked(workflowTemplatesService.list).mockRejectedValue(error);
+      vi.mocked(isArgoNotInstalledError).mockReturnValue(false);
+      const onArgoInstalledChange = vi.fn();
+
+      render(
+        <WorkflowTemplatesSection
+          onArgoInstalledChange={onArgoInstalledChange}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('empty')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('not-installed')).not.toBeInTheDocument();
+      expect(onArgoInstalledChange).toHaveBeenCalledWith(true);
 
       consoleErrorSpy.mockRestore();
     });

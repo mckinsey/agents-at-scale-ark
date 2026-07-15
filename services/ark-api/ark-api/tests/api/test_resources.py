@@ -418,6 +418,30 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
+    def test_list_grouped_resources_crd_not_installed(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test grouped resource listing returns 404 when the resource type/CRD is not installed."""
+        from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
+
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_dynamic_client_instance.resources.get = AsyncMock(
+            side_effect=ResourceNotFoundError("No matches found for WorkflowTemplate")
+        )
+
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("not available in the cluster", response.json()["detail"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
     def test_delete_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful deletion of a core Kubernetes resource."""
         mock_get_context.return_value = {"namespace": "default"}

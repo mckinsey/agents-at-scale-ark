@@ -2,19 +2,32 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, MouseEvent } from 'react';
+
+import { useNavigationGuardContext } from '@/lib/hooks/use-navigation-guard';
 
 type NamespacedLinkProps = ComponentProps<typeof Link>;
 
-function NamespacedLink({ href, ...props }: NamespacedLinkProps) {
+function isModifiedEvent(event: MouseEvent<HTMLAnchorElement>): boolean {
+  return (
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey ||
+    event.button !== 0
+  );
+}
+
+function NamespacedLink({ href, onClick, target, ...props }: NamespacedLinkProps) {
   const searchParams = useSearchParams();
+  const guard = useNavigationGuardContext();
   const hrefString = typeof href === 'string' ? href : href.pathname ?? '';
 
   const isExternal =
     hrefString.startsWith('http://') || hrefString.startsWith('https://');
 
   if (isExternal) {
-    return <Link href={href} {...props} />;
+    return <Link href={href} onClick={onClick} target={target} {...props} />;
   }
 
   const [pathname, pathQuery] = hrefString.split('?');
@@ -30,7 +43,19 @@ function NamespacedLink({ href, ...props }: NamespacedLinkProps) {
   const queryString = merged.toString();
   const fullHref = queryString ? `${pathname}?${queryString}` : pathname;
 
-  return <Link href={fullHref} {...props} />;
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(event);
+    if (event.defaultPrevented || target === '_blank' || isModifiedEvent(event)) {
+      return;
+    }
+    if (guard.requestNavigation(() => guard.navigateHref(fullHref))) {
+      event.preventDefault();
+    }
+  };
+
+  return (
+    <Link href={fullHref} onClick={handleClick} target={target} {...props} />
+  );
 }
 
 export { NamespacedLink };

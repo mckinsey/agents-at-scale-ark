@@ -12,6 +12,7 @@ import {
 import { toast } from 'sonner';
 
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
+import { WorkflowTemplatesNotInstalled } from '@/components/sections/workflow-templates-not-installed';
 import {
   SortableSectionedList,
   type SortableSectionedListHandle,
@@ -28,6 +29,7 @@ import {
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading, useWorkflowsLayout } from '@/lib/hooks';
 import {
+  isArgoNotInstalledError,
   type WorkflowTemplate,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
@@ -52,12 +54,17 @@ export interface WorkflowTemplatesSectionHandle {
   openCreateGroup: () => void;
 }
 
+export interface WorkflowTemplatesSectionProps {
+  onArgoInstalledChange?: (installed: boolean) => void;
+}
+
 export const WorkflowTemplatesSection = forwardRef<
   WorkflowTemplatesSectionHandle,
-  object
->(function WorkflowTemplatesSection({}, ref) {
+  WorkflowTemplatesSectionProps
+>(function WorkflowTemplatesSection({ onArgoInstalledChange }, ref) {
   const { namespace, readOnlyMode } = useNamespace();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+  const [argoInstalled, setArgoInstalled] = useState(true);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const { layout, setLayout } = useWorkflowsLayout(namespace);
@@ -72,13 +79,18 @@ export const WorkflowTemplatesSection = forwardRef<
       setLoading(true);
       const fetchedTemplates = await workflowTemplatesService.list();
       setTemplates(fetchedTemplates);
+      setArgoInstalled(true);
+      onArgoInstalledChange?.(true);
     } catch (error) {
       console.error('Failed to fetch workflow templates:', error);
       setTemplates([]);
+      const installed = !isArgoNotInstalledError(error);
+      setArgoInstalled(installed);
+      onArgoInstalledChange?.(installed);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onArgoInstalledChange]);
 
   useEffect(() => {
     fetchFlows();
@@ -138,6 +150,10 @@ export const WorkflowTemplatesSection = forwardRef<
         <div className="py-8 text-center">Loading...</div>
       </div>
     );
+  }
+
+  if (!argoInstalled && !loading) {
+    return <WorkflowTemplatesNotInstalled />;
   }
 
   if (templates.length === 0 && !loading) {
