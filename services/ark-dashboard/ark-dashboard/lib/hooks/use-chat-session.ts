@@ -207,6 +207,7 @@ export function useChatSession({
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
+          cached_tokens: 0,
         };
         return {
           ...safePrev,
@@ -217,6 +218,7 @@ export function useChatSession({
               completion_tokens:
                 currentUsage.completion_tokens + usage.completion_tokens,
               total_tokens: currentUsage.total_tokens + usage.total_tokens,
+              cached_tokens: currentUsage.cached_tokens + usage.cached_tokens,
             },
           },
         };
@@ -503,12 +505,14 @@ export function useChatSession({
                 prompt_tokens: arkTokenUsage.promptTokens || 0,
                 completion_tokens: arkTokenUsage.completionTokens || 0,
                 total_tokens: arkTokenUsage.totalTokens || 0,
+                cached_tokens: arkTokenUsage.cachedTokens || 0,
               }
             : typedChunk?.usage
               ? {
                   prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
                   completion_tokens: typedChunk.usage.completion_tokens ?? 0,
                   total_tokens: typedChunk.usage.total_tokens ?? 0,
+                  cached_tokens: typedChunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
                 }
               : null;
 
@@ -1003,7 +1007,12 @@ export function useChatSession({
       [chatKey]: {
         messages: [],
         sessionId: newSessionId,
-        tokenUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        tokenUsage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          cached_tokens: 0,
+        },
         messageTokenUsage: {},
       },
     }));

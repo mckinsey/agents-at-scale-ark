@@ -35,7 +35,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const form = useForm<FormValues>({
-    mode: 'onChange',
+    mode: 'onTouched',
     resolver: zodResolver(schema),
     defaultValues,
   });

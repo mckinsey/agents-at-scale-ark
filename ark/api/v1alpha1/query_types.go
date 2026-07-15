@@ -134,6 +134,7 @@ type TokenUsage struct {
 	PromptTokens     int64 `json:"promptTokens,omitempty"`
 	CompletionTokens int64 `json:"completionTokens,omitempty"`
 	TotalTokens      int64 `json:"totalTokens,omitempty"`
+	CachedTokens     int64 `json:"cachedTokens,omitempty"`
 }
 
 type QueryStatus struct {
