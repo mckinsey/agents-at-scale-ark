@@ -737,12 +737,14 @@ func TestRecordTurnOutput(t *testing.T) {
 		messages         []Message
 		wantRecordCalled bool
 		wantMessageCount int
+		wantOutput       string
 	}{
 		{
 			name:             "records output for non-empty messages",
 			messages:         []Message{NewAssistantMessage("test")},
 			wantRecordCalled: true,
 			wantMessageCount: 1,
+			wantOutput:       "test",
 		},
 		{
 			name:             "skips recording for empty messages",
@@ -750,10 +752,18 @@ func TestRecordTurnOutput(t *testing.T) {
 			wantRecordCalled: false,
 		},
 		{
-			name:             "records multiple messages",
+			name:             "records last assistant content across multiple messages",
 			messages:         []Message{NewUserMessage("q"), NewAssistantMessage("a")},
 			wantRecordCalled: true,
 			wantMessageCount: 2,
+			wantOutput:       "a",
+		},
+		{
+			name:             "extracts assistant content when a system message is last",
+			messages:         []Message{NewAssistantMessage("I AM AGENT A"), NewSystemMessage("done")},
+			wantRecordCalled: true,
+			wantMessageCount: 2,
+			wantOutput:       "I AM AGENT A",
 		},
 	}
 
@@ -773,6 +783,7 @@ func TestRecordTurnOutput(t *testing.T) {
 			assert.Equal(t, tt.wantRecordCalled, mockTelemetry.recordOutputCalled)
 			if tt.wantRecordCalled {
 				assert.Equal(t, tt.wantMessageCount, mockTelemetry.lastOutputMessageCount)
+				assert.Equal(t, tt.wantOutput, mockTelemetry.lastOutput)
 			}
 		})
 	}

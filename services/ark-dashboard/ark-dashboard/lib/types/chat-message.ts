@@ -14,6 +14,7 @@ export interface ArkCompletedQueryData {
         promptTokens?: number;
         completionTokens?: number;
         totalTokens?: number;
+        cachedTokens?: number;
       };
     };
   };
