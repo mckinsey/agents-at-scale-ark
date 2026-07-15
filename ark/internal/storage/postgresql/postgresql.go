@@ -5,8 +5,10 @@ package postgresql
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,7 +17,10 @@ import (
 
 	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/fields"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog/v2"
 
@@ -24,30 +29,129 @@ import (
 
 const jsonNull = "null"
 
-func parseLabelSelector(selector string) (map[string]string, error) {
+// fieldPredicate is a validated (column, op, value) triple derived from a client-
+// supplied field selector. columns come from supportedFieldColumns (never client
+// input), so composing SQL by concatenating column and op is safe from injection.
+type fieldPredicate struct {
+	column string
+	op     string
+	value  string
+}
+
+// supportedFieldColumns maps k8s field selectors to the resources table
+// column they filter on. Resource-specific fields (e.g. status.phase) are
+// rejected pending typed field indexers — not permanently forbidden.
+var supportedFieldColumns = map[string]string{
+	"metadata.name":      "name",
+	"metadata.namespace": "namespace",
+}
+
+var supportedFieldOps = map[selection.Operator]string{
+	selection.Equals:       "=",
+	selection.DoubleEquals: "=",
+	selection.NotEquals:    "<>",
+}
+
+func supportedFieldsList() string {
+	keys := make([]string, 0, len(supportedFieldColumns))
+	for k := range supportedFieldColumns {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+func supportedFieldOpsList() string {
+	keys := make([]string, 0, len(supportedFieldOps))
+	for k := range supportedFieldOps {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+// parseFieldSelector validates opts.FieldSelector and returns SQL predicates for
+// supported metadata fields. Unsupported fields or operators produce storage.ErrInvalidRequest.
+// Additional fields can be added by extending supportedFieldColumns.
+func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	if selector == "" {
 		return nil, nil
 	}
-	result := map[string]string{}
-	for _, part := range strings.Split(selector, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if strings.Contains(part, "!=") || strings.Contains(part, " in ") || strings.Contains(part, " notin ") || strings.HasPrefix(part, "!") {
-			return nil, fmt.Errorf("unsupported label selector operator in %q, only equality (=, ==) is supported", part)
-		}
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid label selector %q", part)
-		}
-		key := strings.TrimSuffix(strings.TrimSpace(kv[0]), "=")
-		result[strings.TrimSpace(key)] = strings.TrimSpace(kv[1])
+	sel, err := fields.ParseSelector(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid field selector %q: %v", storage.ErrInvalidRequest, selector, err)
 	}
-	if len(result) == 0 {
+	if sel.Empty() {
 		return nil, nil
 	}
-	return result, nil
+	reqs := sel.Requirements()
+	preds := make([]fieldPredicate, 0, len(reqs))
+	for _, req := range reqs {
+		col, ok := supportedFieldColumns[req.Field]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: %s)", storage.ErrInvalidRequest, req.Field, supportedFieldsList())
+		}
+		op, ok := supportedFieldOps[req.Operator]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector operator %q is not yet implemented (currently supported: %s)", storage.ErrInvalidRequest, req.Operator, supportedFieldOpsList())
+		}
+		preds = append(preds, fieldPredicate{column: col, op: op, value: req.Value})
+	}
+	return preds, nil
+}
+
+func parseLabelSelector(selector string) (k8slabels.Selector, error) {
+	if selector == "" {
+		return nil, nil
+	}
+	sel, err := k8slabels.Parse(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid label selector %q: %v", storage.ErrInvalidRequest, selector, err)
+	}
+	if sel.Empty() {
+		return nil, nil
+	}
+	return sel, nil
+}
+
+// labelSelectorSQL emits " AND ..." clauses and appends bind values to *args.
+// Placeholders are len(*args)+1 at each use, so the caller passes the same
+// slice and doesn't track an index. Values are bound; operators are fixed.
+func labelSelectorSQL(sel k8slabels.Selector, args *[]interface{}) string {
+	if sel == nil || sel.Empty() {
+		return ""
+	}
+	reqs, _ := sel.Requirements()
+	var sb strings.Builder
+	for _, req := range reqs {
+		key := req.Key()
+		op := req.Operator()
+		vals := req.Values().List()
+		p := len(*args) + 1
+		switch op {
+		case selection.Equals, selection.DoubleEquals:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = $%d`, p, p+1)
+			*args = append(*args, key, vals[0])
+		case selection.NotEquals:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> $%d)`, p, p, p+1)
+			*args = append(*args, key, vals[0])
+		case selection.In:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = ANY($%d::text[])`, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
+		case selection.NotIn:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> ALL($%d::text[]))`, p, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
+		case selection.Exists:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NOT NULL`, p)
+			*args = append(*args, key)
+		case selection.DoesNotExist:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, p)
+			*args = append(*args, key)
+		default:
+			panic(fmt.Sprintf("labelSelectorSQL: unhandled operator %q from k8slabels.Parse output", op))
+		}
+	}
+	return sb.String()
 }
 
 type Config struct {
@@ -318,9 +422,97 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 }
 
+type listContinueToken struct {
+	Snapshot string `json:"s"`
+	Cursor   int64  `json:"c"`
+}
+
+func encodeListContinueToken(tok listContinueToken) string {
+	raw, err := json.Marshal(tok)
+	if err != nil {
+		panic(fmt.Errorf("encode continue token: %w", err))
+	}
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+// decodeListContinueToken also accepts the legacy plain-integer form emitted
+// before snapshot-based pagination, so in-flight clients survive the upgrade.
+func decodeListContinueToken(s string) (listContinueToken, error) {
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		// Empty Snapshot signals cursor-only pagination for legacy callers.
+		return listContinueToken{Cursor: n}, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return listContinueToken{}, fmt.Errorf("invalid continue token: %w", err)
+	}
+	var tok listContinueToken
+	if err := json.Unmarshal(raw, &tok); err != nil {
+		return listContinueToken{}, fmt.Errorf("invalid continue token payload: %w", err)
+	}
+	return tok, nil
+}
+
+// List returns resources in descending resource_version order. Page 1 captures
+// pg_current_snapshot() and the continue token carries it forward so later
+// pages filter to rows visible in that snapshot, keeping the paginated view
+// consistent under concurrent inserts.
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
-	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deletion_timestamp
+	var contTok listContinueToken
+	if opts.Continue != "" {
+		var err error
+		contTok, err = decodeListContinueToken(opts.Continue)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	query, args, err := p.buildListQuery(kind, namespace, opts, contTok)
+	if err != nil {
+		return nil, "", err
+	}
+
+	rows, err := p.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to query resources: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	firstPage := contTok.Snapshot == ""
+	objects, resourceVersions, pageSnapshot, err := p.scanListRows(rows, kind, firstPage)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if firstPage && pageSnapshot == "" {
+		if err := p.db.QueryRowContext(ctx, "SELECT pg_current_snapshot()::text").Scan(&pageSnapshot); err != nil {
+			return nil, "", fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
+		}
+	}
+	if !firstPage {
+		pageSnapshot = contTok.Snapshot
+	}
+
+	var continueToken string
+	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
+		objects = objects[:opts.Limit]
+		resourceVersions = resourceVersions[:opts.Limit]
+		continueToken = encodeListContinueToken(listContinueToken{
+			Snapshot: pageSnapshot,
+			Cursor:   resourceVersions[len(resourceVersions)-1],
+		})
+	}
+
+	return objects, continueToken, nil
+}
+
+func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
+	selectCols := "resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deletion_timestamp"
+	if contTok.Snapshot == "" {
+		selectCols += ", pg_current_snapshot()::text"
+	}
+
+	query := `SELECT ` + selectCols + `
 		FROM resources
 		WHERE kind = $1 AND deleted_at IS NULL`
 	args := []interface{}{kind}
@@ -332,50 +524,48 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		argIndex++
 	}
 
-	if opts.LabelSelector != "" {
-		labelMap, err := parseLabelSelector(opts.LabelSelector)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to parse label selector: %w", err)
-		}
-		if labelMap != nil {
-			labelJSON, _ := json.Marshal(labelMap)
-			query += fmt.Sprintf(" AND labels @> $%d::jsonb", argIndex)
-			args = append(args, string(labelJSON))
-			argIndex++
-		}
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
+	if err != nil {
+		return "", nil, err
+	}
+	if labelSel != nil {
+		query += labelSelectorSQL(labelSel, &args)
+		argIndex = len(args) + 1
 	}
 
-	if opts.Continue != "" {
-		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
-		if err == nil && cursor > 0 {
-			// NOTE: paginated LIST has a known weak-consistency edge case across pages
-			// due to the BIGSERIAL commit-order race documented in postgresWatcher.relist.
-			// A row whose creating transaction was in-flight during page N's snapshot
-			// can commit before page N+1 and not be returned by either page. The proper
-			// fix is snapshot-based pagination (pg_export_snapshot + REPEATABLE READ).
-			// Bites only when total result > opts.Limit (typically 500). Tracked separately.
-			query += fmt.Sprintf(" AND resource_version < $%d", argIndex)
-			args = append(args, cursor)
-			argIndex++
-		}
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return "", nil, err
+	}
+	for _, pred := range fieldPreds {
+		query += fmt.Sprintf(" AND %s %s $%d", pred.column, pred.op, argIndex)
+		args = append(args, pred.value)
+		argIndex++
+	}
+
+	if contTok.Cursor > 0 {
+		query += fmt.Sprintf(" AND resource_version < $%d", argIndex)
+		args = append(args, contTok.Cursor)
+		argIndex++
+	}
+	if contTok.Snapshot != "" {
+		query += fmt.Sprintf(" AND pg_visible_in_snapshot(xmin::text::xid8, $%d::pg_snapshot)", argIndex)
+		args = append(args, contTok.Snapshot)
+		argIndex++
 	}
 
 	query += " ORDER BY resource_version DESC"
-
 	if opts.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argIndex)
 		args = append(args, opts.Limit+1)
 	}
+	return query, args, nil
+}
 
-	rows, err := p.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to query resources: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
+func (p *PostgreSQLBackend) scanListRows(rows *sql.Rows, kind string, firstPage bool) ([]runtime.Object, []int64, string, error) {
 	var objects []runtime.Object
 	var resourceVersions []int64
-
+	var pageSnapshot string
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
@@ -383,8 +573,16 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		var createdAt time.Time
 		var deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp); err != nil {
-			return nil, "", fmt.Errorf("failed to scan row: %w", err)
+		scanTargets := []interface{}{&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp}
+		var snap string
+		if firstPage {
+			scanTargets = append(scanTargets, &snap)
+		}
+		if err := rows.Scan(scanTargets...); err != nil {
+			return nil, nil, "", fmt.Errorf("failed to scan row: %w", err)
+		}
+		if firstPage && pageSnapshot == "" {
+			pageSnapshot = snap
 		}
 
 		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
@@ -396,15 +594,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		objects = append(objects, obj)
 		resourceVersions = append(resourceVersions, rv)
 	}
-
-	var continueToken string
-	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
-		objects = objects[:opts.Limit]
-		resourceVersions = resourceVersions[:opts.Limit]
-		continueToken = fmt.Sprintf("%d", resourceVersions[len(resourceVersions)-1])
-	}
-
-	return objects, continueToken, nil
+	return objects, resourceVersions, pageSnapshot, nil
 }
 
 func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -588,9 +778,14 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 
-	labelFilter, err := parseLabelSelector(opts.LabelSelector)
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+		return nil, err
+	}
+
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return nil, err
 	}
 
 	w := &postgresWatcher{
@@ -600,7 +795,8 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		key:         key,
 		kind:        kind,
 		ns:          namespace,
-		labelFilter: labelFilter,
+		labelSel:    labelSel,
+		fieldPreds:  fieldPreds,
 		ctx:         ctx,
 		done:        make(chan struct{}),
 		initialList: true,
@@ -752,7 +948,8 @@ type postgresWatcher struct {
 	key             string
 	kind            string
 	ns              string
-	labelFilter     map[string]string
+	labelSel        k8slabels.Selector
+	fieldPreds      []fieldPredicate
 	ctx             context.Context
 	done            chan struct{}
 	stopped         atomic.Bool
@@ -900,11 +1097,14 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 		args = append(args, w.ns)
 		argIndex++
 	}
-	if w.labelFilter != nil {
-		labelJSON, _ := json.Marshal(w.labelFilter)
-		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
-		args = append(args, string(labelJSON))
-		_ = argIndex
+	if w.labelSel != nil {
+		query += labelSelectorSQL(w.labelSel, &args)
+		argIndex = len(args) + 1
+	}
+	for _, p := range w.fieldPreds {
+		query += fmt.Sprintf(` AND %s %s $%d`, p.column, p.op, argIndex)
+		args = append(args, p.value)
+		argIndex++
 	}
 	query += ` ORDER BY resource_version ASC`
 	return query, args

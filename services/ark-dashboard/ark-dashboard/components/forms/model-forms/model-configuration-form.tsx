@@ -49,6 +49,7 @@ import type { SecretDetailResponse } from '@/lib/services/secrets';
 import {
   useCreateSecret,
   useGetAllSecrets,
+  useGetSecret,
 } from '@/lib/services/secrets-hooks';
 import type { KeysOfUnion } from '@/lib/types/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
@@ -257,6 +258,77 @@ function SecretSelectorField({
   );
 }
 
+function SecretKeySelectField({
+  control,
+  secretFieldName,
+  keyFieldName,
+  label,
+}: {
+  control: Control<FormValues, unknown, FormValues>;
+  secretFieldName: KeysOfUnion<FormValues>;
+  keyFieldName: KeysOfUnion<FormValues>;
+  label: string;
+}) {
+  const { form } = useModelConfigurationForm();
+  const watchedSecret = useWatch({ control, name: secretFieldName });
+  const secretName =
+    typeof watchedSecret === 'string' && watchedSecret
+      ? watchedSecret
+      : undefined;
+  const { data: secret, isPending } = useGetSecret(secretName);
+  const keys = secret?.keys ?? [];
+
+  useEffect(() => {
+    if (!secretName || keys.length === 0) return;
+    const current = form.getValues(keyFieldName);
+    if (typeof current === 'string' && keys.includes(current)) return;
+    const next = keys.includes('token')
+      ? 'token'
+      : keys.length === 1
+        ? keys[0]
+        : '';
+    form.setValue(keyFieldName, next, { shouldValidate: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretName, keys.join(' ')]);
+
+  return (
+    <FormField
+      control={control}
+      name={keyFieldName}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <Select
+            onValueChange={field.onChange}
+            value={(field.value as string) ?? ''}
+            disabled={!secretName || isPending}>
+            <FormControl>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    secretName ? 'Select a key' : 'Select a secret first'
+                  }
+                />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {keys.map(key => (
+                <SelectItem key={key} value={key}>
+                  {key}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormDescription>
+            The key inside the secret that holds this value.
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
 function BaseUrlField({
   control,
   placeholder,
@@ -444,23 +516,109 @@ function AWSBedrockSpecificFields({
   isSecretsPending,
   secrets,
 }: ProviderFieldsProps) {
+  const { initialBedrockAuthMethod } = useModelConfigurationForm();
+  const watchedAuthMethod = useWatch({
+    control,
+    name: 'bedrockAuthMethod',
+  });
+  const bedrockAuthMethod =
+    watchedAuthMethod ?? initialBedrockAuthMethod ?? 'iam';
   return (
     <>
-      <SecretSelectorField
+      <FormField
         control={control}
-        isSecretsPending={isSecretsPending}
-        secrets={secrets}
-        fieldName="bedrockAccessKeyIdSecretName"
-        label="Access Key ID Secret"
-        placeholder="Select a secret for Access Key ID"
+        name="bedrockAuthMethod"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Authentication</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value ?? 'iam'}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select auth method" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="iam">IAM Credentials</SelectItem>
+                <SelectItem value="apiKey">API Key (Bearer Token)</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              IAM: access key ID and secret access key. API Key: a Bedrock
+              bearer token. When both are set, the API key takes precedence.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
       />
-      <SecretSelectorField
+      {bedrockAuthMethod === 'apiKey' ? (
+        <>
+          <SecretSelectorField
+            control={control}
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            fieldName="bedrockApiKeySecretName"
+            label="API Key Secret"
+            placeholder="Select a secret for the API key"
+          />
+          <SecretKeySelectField
+            control={control}
+            secretFieldName="bedrockApiKeySecretName"
+            keyFieldName="bedrockApiKeySecretKey"
+            label="API Key Secret Key"
+          />
+        </>
+      ) : (
+        <>
+          <SecretSelectorField
+            control={control}
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            fieldName="bedrockAccessKeyIdSecretName"
+            label="Access Key ID Secret"
+            placeholder="Select a secret for Access Key ID"
+          />
+          <SecretKeySelectField
+            control={control}
+            secretFieldName="bedrockAccessKeyIdSecretName"
+            keyFieldName="bedrockAccessKeyIdSecretKey"
+            label="Access Key ID Secret Key"
+          />
+          <SecretSelectorField
+            control={control}
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            fieldName="bedrockSecretAccessKeySecretName"
+            label="Secret Access Key Secret"
+            placeholder="Select a secret for Secret Access Key"
+          />
+          <SecretKeySelectField
+            control={control}
+            secretFieldName="bedrockSecretAccessKeySecretName"
+            keyFieldName="bedrockSecretAccessKeySecretKey"
+            label="Secret Access Key Secret Key"
+          />
+        </>
+      )}
+      <FormField
         control={control}
-        isSecretsPending={isSecretsPending}
-        secrets={secrets}
-        fieldName="bedrockSecretAccessKeySecretName"
-        label="Secret Access Key Secret"
-        placeholder="Select a secret for Secret Access Key"
+        name="baseUrl"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Base URL (Optional)</FormLabel>
+            <FormControl>
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                placeholder="https://bedrock-runtime.us-east-1.amazonaws.com"
+              />
+            </FormControl>
+            <FormDescription>
+              Leave blank to use the default AWS Bedrock endpoint. Set this to
+              route through a gateway (e.g. an AI gateway fronting Bedrock).
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
       />
       <FormField
         control={control}

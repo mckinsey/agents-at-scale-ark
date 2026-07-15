@@ -196,7 +196,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.2"
+          go-version: "1.26.5"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -238,7 +238,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.2"
+          go-version: "1.26.5"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -1125,7 +1125,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.2"
+          go-version: "1.26.5"
           # Coverage tooling only; no project build, so module caching has no value here.
           cache: false
 
@@ -1367,7 +1367,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.2'
+          go-version: '1.26.5'
           # goreleaser builds tools/fark; cache against its go.sum.
           cache-dependency-path: tools/fark/go.sum
 
@@ -1535,6 +1535,16 @@ jobs:
             mv tmp.json .github/release-please-config-rc.json
           fi
 
+          # Clean up last-release-sha (added during promotion to anchor stable notes - issue #2655)
+          if jq -e 'has("last-release-sha")' .github/release-please-config.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config.json > tmp.json
+            mv tmp.json .github/release-please-config.json
+          fi
+          if jq -e 'has("last-release-sha")' .github/release-please-config-rc.json > /dev/null 2>&1; then
+            jq 'del(."last-release-sha")' .github/release-please-config-rc.json > tmp.json
+            mv tmp.json .github/release-please-config-rc.json
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
@@ -1550,7 +1560,7 @@ jobs:
           Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
 
           ### What this PR does
-          - Cleans up \`release-as\` from config files
+          - Cleans up \`release-as\` and \`last-release-sha\` from config files
 
           ### What happens when merged
           - Release-please will create v${NEXT}-rc from conventional commits

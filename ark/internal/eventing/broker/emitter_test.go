@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/semaphore"
@@ -100,6 +101,66 @@ func TestEmitStructured_SendsEventToMatchingNamespace(t *testing.T) {
 
 	assert.Equal(t, "QueryExecutionStart", received.Reason)
 	assert.Equal(t, "test-uid", received.Data["queryId"])
+}
+
+func TestEmitStructured_IncludesTtlSecondsWhenQueryHasTTL(t *testing.T) {
+	var rawBody []byte
+	var received Event
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawBody, _ = io.ReadAll(r.Body)
+		_ = json.Unmarshal(rawBody, &received)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	e := newTestEmitter(map[string]string{"test-ns": srv.URL + "/events"})
+	query := newTestQuery("test-ns")
+	query.Spec.TTL = &metav1.Duration{Duration: time.Hour}
+
+	done := make(chan struct{})
+	origClient := e.httpClient
+	e.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp, err := origClient.Do(req)
+			close(done)
+			return resp, err
+		}),
+	}
+
+	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", map[string]string{"queryId": "test-uid"})
+	<-done
+
+	assert.Contains(t, string(rawBody), `"ttl_seconds":3600`)
+	if assert.NotNil(t, received.TtlSeconds) {
+		assert.Equal(t, int64(3600), *received.TtlSeconds)
+	}
+}
+
+func TestEmitStructured_OmitsTtlSecondsWhenQueryHasNoTTL(t *testing.T) {
+	var rawBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	e := newTestEmitter(map[string]string{"test-ns": srv.URL + "/events"})
+	query := newTestQuery("test-ns")
+
+	done := make(chan struct{})
+	origClient := e.httpClient
+	e.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp, err := origClient.Do(req)
+			close(done)
+			return resp, err
+		}),
+	}
+
+	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", map[string]string{"queryId": "test-uid"})
+	<-done
+
+	assert.NotContains(t, string(rawBody), "ttl_seconds")
 }
 
 func TestEmitStructured_FallsBackToAnyEndpoint(t *testing.T) {
