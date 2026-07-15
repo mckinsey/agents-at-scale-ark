@@ -46,7 +46,7 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, turns)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {
