@@ -1,13 +1,8 @@
 import subprocess
-import time
 from pathlib import Path
 from typing import List, Tuple
 
 from helpers.k8s import apply_yaml, delete_resource as k8s_delete_resource
-
-_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "rbac-test-bindings.yaml"
-_SAMPLES = Path(__file__).resolve().parents[4] / "samples" / "rbac-test-bindings.yaml"
-RBAC_BINDINGS = _FIXTURES if _FIXTURES.exists() else _SAMPLES
 
 # Role + RoleBinding granting the demo group create access on secrets, models,
 # queries and teams. Used to prove RBAC gates resource creation rather than
@@ -15,15 +10,7 @@ RBAC_BINDINGS = _FIXTURES if _FIXTURES.exists() else _SAMPLES
 GRANT = Path(__file__).resolve().parent.parent / "fixtures" / "rbac-model-secret-grant.yaml"
 
 NAMESPACE = "default"
-# A namespace with no RBAC test bindings, used to prove the RoleBindings are
-# namespace-scoped (multi-tenant isolation), not cluster-wide.
-OTHER_NAMESPACE = "kube-system"
 API_GROUP = "ark.mckinsey.com"
-
-ADMIN_USER = "admin@acme.com"
-ADMIN_GROUP = "ark-admin"
-VIEWER_USER = "viewer@acme.com"
-VIEWER_GROUP = "ark-viewers"
 
 # Subject and resource names for the resource-creation RBAC tests. The group is
 # the subject bound by GRANT; the user value is arbitrary (authorization is by
@@ -51,52 +38,6 @@ class RBACHelper:
             return False, "", f"timed out after {timeout}s"
         except Exception as e:
             return False, "", str(e)
-
-    def apply_bindings(self) -> Tuple[bool, str]:
-        apply_timeout = 30
-        ok, _, stderr = self._run(["kubectl", "apply", "-f", str(RBAC_BINDINGS)])
-        if not ok:
-            return False, stderr
-
-        # kubectl apply returns as soon as the RoleBindings are persisted, but the
-        # API server's RBAC authorizer observes them asynchronously via a watch.
-        # Poll can-i until the admin subject is authorized on a probe resource so
-        # the first test doesn't race the authorizer cache.
-        deadline = time.monotonic() + apply_timeout
-        while time.monotonic() < deadline:
-            if self.can_i("get", "agents", ADMIN_USER, ADMIN_GROUP):
-                return True, ""
-            time.sleep(0.5)
-        return False, f"admin binding exists in etcd but authorizer cache did not catch up after {apply_timeout}s"
-
-    def delete_bindings(self) -> Tuple[bool, str]:
-        ok, _, stderr = self._run(
-            ["kubectl", "delete", "-f", str(RBAC_BINDINGS), "--ignore-not-found=true"]
-        )
-        return ok, stderr
-
-    def can_i(
-        self,
-        verb: str,
-        resource: str,
-        user: str,
-        group: str = None,
-        namespace: str = NAMESPACE,
-    ) -> bool:
-        cmd = [
-            "kubectl",
-            "auth",
-            "can-i",
-            verb,
-            f"{resource}.{API_GROUP}",
-            f"--as={user}",
-            "-n",
-            namespace,
-        ]
-        if group:
-            cmd.append(f"--as-group={group}")
-        ok, stdout, _ = self._run(cmd)
-        return ok and stdout.strip() == "yes"
 
     def apply_grant(self) -> Tuple[bool, str]:
         ok, _, stderr = self._run(["kubectl", "apply", "-f", str(GRANT)])
