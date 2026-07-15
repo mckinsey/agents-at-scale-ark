@@ -24,6 +24,7 @@ import {createMarketplaceCommand} from './commands/marketplace/index.js';
 import {createMcpCommand} from './commands/mcp/index.js';
 import {createMemoryCommand} from './commands/memory/index.js';
 import {createModelsCommand} from './commands/models/index.js';
+import {createOkfCommand} from './commands/okf/index.js';
 import {createQueryCommand} from './commands/query/index.js';
 import {createQueriesCommand} from './commands/queries/index.js';
 import {createUninstallCommand} from './commands/uninstall/index.js';
@@ -68,6 +69,7 @@ async function main() {
   program.addCommand(createMcpCommand(config));
   program.addCommand(createMemoryCommand(config));
   program.addCommand(createModelsCommand(config));
+  program.addCommand(createOkfCommand(config));
   program.addCommand(createQueryCommand(config));
   program.addCommand(createQueriesCommand(config));
   program.addCommand(createUninstallCommand(config));
