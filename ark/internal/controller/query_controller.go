@@ -706,6 +706,9 @@ func extractTokenUsage(arkMap map[string]any, responseMeta *engineResponseMeta) 
 	if v, ok := tokenData["total_tokens"].(float64); ok {
 		usage.TotalTokens = int64(v)
 	}
+	if v, ok := tokenData["cached_tokens"].(float64); ok {
+		usage.CachedTokens = int64(v)
+	}
 	if usage.TotalTokens > 0 {
 		responseMeta.TokenUsage = usage
 	}

@@ -70,7 +70,7 @@ export function createConfig(
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockApiKeySecretName,
-              key: formValues.bedrockApiKeySecretKey,
+              key: 'token',
             },
           },
         };
@@ -79,7 +79,7 @@ export function createConfig(
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockAccessKeyIdSecretName,
-              key: formValues.bedrockAccessKeyIdSecretKey,
+              key: 'token',
             },
           },
         };
@@ -87,7 +87,7 @@ export function createConfig(
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockSecretAccessKeySecretName,
-              key: formValues.bedrockSecretAccessKeySecretKey,
+              key: 'token',
             },
           },
         };
@@ -149,11 +149,8 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         model: currentFormValues.model,
         bedrockAuthMethod: currentFormValues.bedrockAuthMethod ?? 'iam',
         bedrockApiKeySecretName: '',
-        bedrockApiKeySecretKey: 'token',
         bedrockAccessKeyIdSecretName: '',
-        bedrockAccessKeyIdSecretKey: 'token',
         bedrockSecretAccessKeySecretName: '',
-        bedrockSecretAccessKeySecretKey: 'token',
         baseUrl: '',
         region: '',
         modelARN: '',
@@ -341,14 +338,6 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
         model: model.model,
         bedrockAuthMethod,
         bedrockApiKeySecretName: bedrockApiKeySecretName || '',
-        bedrockApiKeySecretKey:
-          getConfigValue<string>(model.config, [
-            'bedrock',
-            'apiKey',
-            'valueFrom',
-            'secretKeyRef',
-            'key',
-          ]) || 'token',
         bedrockAccessKeyIdSecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -357,14 +346,6 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
-        bedrockAccessKeyIdSecretKey:
-          getConfigValue<string>(model.config, [
-            'bedrock',
-            'accessKeyId',
-            'valueFrom',
-            'secretKeyRef',
-            'key',
-          ]) || 'token',
         bedrockSecretAccessKeySecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -373,14 +354,6 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
-        bedrockSecretAccessKeySecretKey:
-          getConfigValue<string>(model.config, [
-            'bedrock',
-            'secretAccessKey',
-            'valueFrom',
-            'secretKeyRef',
-            'key',
-          ]) || 'token',
         baseUrl:
           getConfigValue<string>(model.config, [
             'bedrock',
