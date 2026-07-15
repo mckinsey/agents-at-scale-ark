@@ -318,8 +318,8 @@ describe('kubectl', () => {
 
       expect(logSpy).toHaveBeenCalledTimes(1);
       const line = logSpy.mock.calls[0][0] as string;
-      // Pretty mode expands the payload into colorized key/value detail.
-      expect(line).toContain(`${chalk.dim('agent')}: ${chalk.cyan('weather')}`);
+      // Pretty mode expands the payload into colorized key=value detail.
+      expect(line).toContain(`${chalk.blue('agent')}${chalk.dim('=')}${chalk.white('weather')}`);
       expect(line).toContain(chalk.green('ResolveStart'));
       // The raw JSON blob must not leak into the pretty output.
       expect(line).not.toContain(eventData);
