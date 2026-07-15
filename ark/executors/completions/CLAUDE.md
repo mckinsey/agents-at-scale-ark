@@ -72,7 +72,7 @@ system bundle and would break the executor's outbound HTTPS to LLM providers.
 On SIGTERM the server flips its readiness probe (`/ready`) to failing so the pod leaves
 Service endpoints before draining, then `http.Server.Shutdown` waits for in-flight requests
 bounded by `--shutdown-timeout`. Each request's context is merged with the server lifetime
-(`Handler.baseCtx`), so a long-lived stream still running when the drain deadline passes is
+(via `Handler.withShutdown`, injected by `NewServer`), so a long-lived stream still running when the drain deadline passes is
 cancelled and runs its `finalizeStream` path — closing the stream cleanly — instead of being
 severed on process exit. Liveness stays on `/health`; readiness is a separate `/ready`.
 

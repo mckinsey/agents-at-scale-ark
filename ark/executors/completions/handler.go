@@ -29,10 +29,12 @@ type Handler struct {
 	telemetry telemetry.Provider
 	eventing  eventing.Provider
 
-	// baseCtx is the server lifetime context, cancelled when the server is finalizing
-	// shutdown. Merged into each request's context so long-running executions (streams)
-	// stop and run their finalize path instead of being severed on process exit.
-	baseCtx context.Context
+	// withShutdown links a request context to the server lifetime, returning a context that is
+	// cancelled when either the request ends or the server begins finalizing shutdown — so
+	// long-running executions (streams) stop and run their finalize path instead of being
+	// severed on process exit. Injected by NewServer (capturing the server context); when nil
+	// (e.g. a bare Handler in tests) the request context is used unchanged.
+	withShutdown func(context.Context) (context.Context, context.CancelFunc)
 }
 
 // mergeShutdown returns a child of reqCtx that is also cancelled when serverCtx is done,
@@ -116,8 +118,15 @@ func (h *Handler) ProcessMessage(
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
-	// Link the request to the server lifetime so a shutdown finalizes in-flight work.
-	ctx, cancel := mergeShutdown(ctx, h.baseCtx)
+	// Link the request to the server lifetime so a shutdown finalizes in-flight work. Fall
+	// back to a plain cancellable context when no linker is injected (bare Handler in tests).
+	merge := h.withShutdown
+	if merge == nil {
+		merge = func(reqCtx context.Context) (context.Context, context.CancelFunc) {
+			return mergeShutdown(reqCtx, nil)
+		}
+	}
+	ctx, cancel := merge(ctx)
 	defer cancel()
 
 	query, target, err := h.resolveQueryAndTarget(ctx, message)

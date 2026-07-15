@@ -100,6 +100,7 @@ redis:
   # Secret is mounted and passed to the Redis client as REDIS_TLS_CA_CERT_PATH; the executor
   # appends it to a clone of the system trust store and applies it to the Redis connection ONLY
   # — outbound LLM HTTPS keeps the unmodified system roots. Not needed for public-CA Redis.
+  # Requires taskManager.backend=redis (the CA has no consumer otherwise; the chart fails render).
   tls:
     enabled: false
     secretName: ""                 # Secret containing the CA cert (required when enabled)

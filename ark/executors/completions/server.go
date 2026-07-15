@@ -165,7 +165,9 @@ func NewServer(
 		k8sClient: k8sClient,
 		telemetry: telemetryProvider,
 		eventing:  eventingProvider,
-		baseCtx:   shutdownCtx,
+		withShutdown: func(reqCtx context.Context) (context.Context, context.CancelFunc) {
+			return mergeShutdown(reqCtx, shutdownCtx)
+		},
 	}
 
 	tm, err := buildTaskManager(cfg, handler)

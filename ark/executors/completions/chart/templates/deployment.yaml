@@ -1,3 +1,6 @@
+{{- if and .Values.redis.tls.enabled (ne .Values.taskManager.backend "redis") }}
+{{- fail "redis.tls.enabled requires taskManager.backend=redis (the CA is only consumed by the Redis task manager)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
