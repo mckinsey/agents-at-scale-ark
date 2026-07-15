@@ -10,16 +10,20 @@ import (
 )
 
 func TestConvertMessagesToAnthropic(t *testing.T) {
-	t.Run("extracts system prompt", func(t *testing.T) {
+	t.Run("extracts system prompt as cached block", func(t *testing.T) {
 		messages := []Message{
 			NewSystemMessage("You are helpful"),
 			NewUserMessage("Hello"),
 		}
-		result, systemPrompt := convertMessagesToAnthropic(messages)
-		assert.Equal(t, "You are helpful", systemPrompt)
+		result, systemBlocks := convertMessagesToAnthropic(messages)
+		require.Len(t, systemBlocks, 1)
+		assert.Equal(t, "text", systemBlocks[0].Type)
+		assert.Equal(t, "You are helpful", systemBlocks[0].Text)
+		require.NotNil(t, systemBlocks[0].CacheControl)
+		assert.Equal(t, "ephemeral", systemBlocks[0].CacheControl.Type)
 		require.Len(t, result, 1)
 		assert.Equal(t, "user", result[0].Role)
-		assert.Equal(t, "Hello", result[0].Content)
+		assert.Equal(t, json.RawMessage(`"Hello"`), result[0].Content)
 	})
 
 	t.Run("converts user and assistant messages", func(t *testing.T) {
@@ -28,12 +32,38 @@ func TestConvertMessagesToAnthropic(t *testing.T) {
 			NewAssistantMessage("Hello!"),
 			NewUserMessage("How are you?"),
 		}
-		result, systemPrompt := convertMessagesToAnthropic(messages)
-		assert.Empty(t, systemPrompt)
+		result, systemBlocks := convertMessagesToAnthropic(messages)
+		assert.Empty(t, systemBlocks)
 		require.Len(t, result, 3)
 		assert.Equal(t, "user", result[0].Role)
 		assert.Equal(t, "assistant", result[1].Role)
 		assert.Equal(t, "user", result[2].Role)
+	})
+
+	t.Run("marks penultimate message with cache_control", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("Hi"),
+			NewAssistantMessage("Hello!"),
+			NewUserMessage("How are you?"),
+		}
+		result, _ := convertMessagesToAnthropic(messages)
+		require.Len(t, result, 3)
+
+		var blocks []anthropicMessageContent
+		require.NoError(t, json.Unmarshal(result[1].Content, &blocks))
+		require.Len(t, blocks, 1)
+		assert.Equal(t, "Hello!", blocks[0].Text)
+		require.NotNil(t, blocks[0].CacheControl)
+		assert.Equal(t, "ephemeral", blocks[0].CacheControl.Type)
+
+		assert.Equal(t, json.RawMessage(`"How are you?"`), result[2].Content)
+	})
+
+	t.Run("no cache breakpoint with single message", func(t *testing.T) {
+		messages := []Message{NewUserMessage("only one")}
+		result, _ := convertMessagesToAnthropic(messages)
+		require.Len(t, result, 1)
+		assert.Equal(t, json.RawMessage(`"only one"`), result[0].Content)
 	})
 
 	t.Run("skips empty messages", func(t *testing.T) {
@@ -43,7 +73,7 @@ func TestConvertMessagesToAnthropic(t *testing.T) {
 		}
 		result, _ := convertMessagesToAnthropic(messages)
 		require.Len(t, result, 1)
-		assert.Equal(t, "hello", result[0].Content)
+		assert.Equal(t, json.RawMessage(`"hello"`), result[0].Content)
 	})
 }
 
@@ -57,8 +87,10 @@ func TestConvertAnthropicResponse(t *testing.T) {
 				{Type: "text", Text: "Hello!"},
 			},
 			Usage: struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 			}{InputTokens: 10, OutputTokens: 5},
 		}
 
@@ -71,6 +103,26 @@ func TestConvertAnthropicResponse(t *testing.T) {
 		assert.Equal(t, int64(10), result.Usage.PromptTokens)
 		assert.Equal(t, int64(5), result.Usage.CompletionTokens)
 		assert.Equal(t, int64(15), result.Usage.TotalTokens)
+	})
+
+	t.Run("folds cache tokens into prompt and total", func(t *testing.T) {
+		response := anthropicResponse{
+			ID:         "msg_cache",
+			StopReason: "end_turn",
+			Content:    []anthropicContent{{Type: "text", Text: "Hi"}},
+			Usage: struct {
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+			}{InputTokens: 10, OutputTokens: 5, CacheCreationInputTokens: 100, CacheReadInputTokens: 200},
+		}
+
+		result := convertAnthropicResponse(response)
+		assert.Equal(t, int64(310), result.Usage.PromptTokens)
+		assert.Equal(t, int64(5), result.Usage.CompletionTokens)
+		assert.Equal(t, int64(315), result.Usage.TotalTokens)
+		assert.Equal(t, int64(200), result.Usage.PromptTokensDetails.CachedTokens)
 	})
 
 	t.Run("converts tool_use response", func(t *testing.T) {
@@ -123,6 +175,23 @@ func TestConvertToolsToAnthropic(t *testing.T) {
 		assert.NotNil(t, result[0].InputSchema)
 	})
 
+	t.Run("marks last tool with cache_control", func(t *testing.T) {
+		tools := []openai.ChatCompletionToolParam{
+			{Type: "function", Function: openai.FunctionDefinitionParam{Name: "first"}},
+			{Type: "function", Function: openai.FunctionDefinitionParam{Name: "last"}},
+		}
+		result := convertToolsToAnthropic(tools)
+		require.Len(t, result, 2)
+		assert.Nil(t, result[0].CacheControl)
+		require.NotNil(t, result[1].CacheControl)
+		assert.Equal(t, "ephemeral", result[1].CacheControl.Type)
+	})
+
+	t.Run("no panic on nil tools", func(t *testing.T) {
+		result := convertToolsToAnthropic(nil)
+		assert.Empty(t, result)
+	})
+
 	t.Run("skips non-function tools", func(t *testing.T) {
 		tools := []openai.ChatCompletionToolParam{
 			{Type: "other"},
@@ -133,14 +202,16 @@ func TestConvertToolsToAnthropic(t *testing.T) {
 }
 
 func TestBuildAnthropicRequest(t *testing.T) {
-	messages := []anthropicMessage{{Role: "user", Content: "Hi"}}
+	messages := []anthropicMessage{{Role: "user", Content: json.RawMessage(`"Hi"`)}}
 	tools := []anthropicTool{{Name: "test", Description: "test tool"}}
+	system := []anthropicSystemBlock{{Type: "text", Text: "system"}}
 
 	t.Run("uses defaults", func(t *testing.T) {
-		req := buildAnthropicRequest(messages, "system", tools, ToolChoiceUnset, nil)
+		req := buildAnthropicRequest(messages, system, tools, ToolChoiceUnset, nil)
 		assert.Equal(t, 4096, req.MaxTokens)
 		assert.Equal(t, 1.0, req.Temperature)
-		assert.Equal(t, "system", req.SystemPrompt)
+		require.Len(t, req.SystemPrompt, 1)
+		assert.Equal(t, "system", req.SystemPrompt[0].Text)
 		assert.Len(t, req.Messages, 1)
 		assert.Len(t, req.Tools, 1)
 		assert.Nil(t, req.ToolChoice)
@@ -148,32 +219,32 @@ func TestBuildAnthropicRequest(t *testing.T) {
 
 	t.Run("uses properties", func(t *testing.T) {
 		props := map[string]string{"temperature": "0.5", "max_tokens": "1024"}
-		req := buildAnthropicRequest(messages, "", tools, ToolChoiceUnset, props)
+		req := buildAnthropicRequest(messages, nil, tools, ToolChoiceUnset, props)
 		assert.Equal(t, 1024, req.MaxTokens)
 		assert.Equal(t, 0.5, req.Temperature)
 	})
 
 	t.Run("required tool choice maps to type=any", func(t *testing.T) {
-		req := buildAnthropicRequest(messages, "", tools, ToolChoiceRequired, nil)
+		req := buildAnthropicRequest(messages, nil, tools, ToolChoiceRequired, nil)
 		assert.Equal(t, map[string]interface{}{"type": "any"}, req.ToolChoice)
 	})
 
 	t.Run("auto and none tool choice map through", func(t *testing.T) {
-		auto := buildAnthropicRequest(messages, "", tools, ToolChoiceAuto, nil)
+		auto := buildAnthropicRequest(messages, nil, tools, ToolChoiceAuto, nil)
 		assert.Equal(t, map[string]interface{}{"type": "auto"}, auto.ToolChoice)
-		none := buildAnthropicRequest(messages, "", tools, ToolChoiceNone, nil)
+		none := buildAnthropicRequest(messages, nil, tools, ToolChoiceNone, nil)
 		assert.Equal(t, map[string]interface{}{"type": "none"}, none.ToolChoice)
 	})
 
 	t.Run("tool_choice is omitted from JSON when unset", func(t *testing.T) {
-		req := buildAnthropicRequest(messages, "", tools, ToolChoiceUnset, nil)
+		req := buildAnthropicRequest(messages, nil, tools, ToolChoiceUnset, nil)
 		body, err := json.Marshal(req)
 		require.NoError(t, err)
 		assert.NotContains(t, string(body), "tool_choice")
 	})
 
 	t.Run("tool_choice is serialized when set", func(t *testing.T) {
-		req := buildAnthropicRequest(messages, "", tools, ToolChoiceRequired, nil)
+		req := buildAnthropicRequest(messages, nil, tools, ToolChoiceRequired, nil)
 		body, err := json.Marshal(req)
 		require.NoError(t, err)
 		assert.Contains(t, string(body), `"tool_choice":{"type":"any"}`)

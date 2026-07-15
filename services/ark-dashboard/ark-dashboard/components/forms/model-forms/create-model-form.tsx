@@ -26,7 +26,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode, namespace } = useNamespace();
   const form = useForm<FormValues>({
-    mode: 'onChange',
+    mode: 'onTouched',
     resolver: zodResolver(schema),
     defaultValues: {
       name: defaultName || '',

@@ -234,7 +234,7 @@ func (m *mockEventingRecorder) StartTokenCollection(ctx context.Context) context
 	return ctx
 }
 
-func (m *mockEventingRecorder) AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens int64) {
+func (m *mockEventingRecorder) AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens, cachedTokens int64) {
 }
 
 func (m *mockEventingRecorder) AddTokenUsage(ctx context.Context, usage arkv1alpha1.TokenUsage) {}
