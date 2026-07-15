@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: ark-query-bad-target-empty
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+  templates:
+    - name: main
+      steps:
+        - - name: run
+            templateRef:
+              name: ark-query
+              template: query
+            continueOn:
+              failed: true
+            arguments:
+              parameters:
+                - name: target
+                  value: "agent/"
+                - name: input
+                  value: "What is the weather?"
+                - name: timeout
+                  value: "2m"

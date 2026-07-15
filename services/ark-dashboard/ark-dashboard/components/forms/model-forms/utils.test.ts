@@ -9,53 +9,76 @@ const baseBedrockForm: FormValues = {
   name: 'test-bedrock',
   provider: 'bedrock',
   model: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
-  bedrockAccessKeyIdSecretName: 'aws-credentials',
-  bedrockAccessKeyIdSecretKey: 'access-key-id',
-  bedrockSecretAccessKeySecretName: 'aws-credentials',
-  bedrockSecretAccessKeySecretKey: 'secret-access-key',
+  bedrockAuthMethod: 'iam',
+  bedrockApiKeySecretName: '',
+  bedrockAccessKeyIdSecretName: 'aws-access-key-id',
+  bedrockSecretAccessKeySecretName: 'aws-secret-access-key',
+  baseUrl: '',
   region: 'us-west-2',
   modelARN: '',
 };
 
 describe('createConfig (bedrock)', () => {
-  it('uses the secret keys provided in the form', () => {
+  it('uses the token key for each IAM credential secret', () => {
     const config = createConfig(baseBedrockForm);
 
     expect(config.bedrock?.accessKeyId).toEqual({
       valueFrom: {
-        secretKeyRef: { name: 'aws-credentials', key: 'access-key-id' },
+        secretKeyRef: { name: 'aws-access-key-id', key: 'token' },
       },
     });
     expect(config.bedrock?.secretAccessKey).toEqual({
       valueFrom: {
-        secretKeyRef: { name: 'aws-credentials', key: 'secret-access-key' },
+        secretKeyRef: { name: 'aws-secret-access-key', key: 'token' },
       },
     });
   });
 
-  it('passes through token keys when the form keeps the default', () => {
+  it('emits only apiKey (with the token key) when auth method is apiKey', () => {
     const config = createConfig({
       ...baseBedrockForm,
-      bedrockAccessKeyIdSecretKey: 'token',
-      bedrockSecretAccessKeySecretKey: 'token',
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'bedrock-credentials',
     });
 
-    expect(config.bedrock?.accessKeyId).toEqual({
-      valueFrom: { secretKeyRef: { name: 'aws-credentials', key: 'token' } },
+    expect(config.bedrock?.apiKey).toEqual({
+      valueFrom: {
+        secretKeyRef: { name: 'bedrock-credentials', key: 'token' },
+      },
     });
-    expect(config.bedrock?.secretAccessKey).toEqual({
-      valueFrom: { secretKeyRef: { name: 'aws-credentials', key: 'token' } },
+    expect(config.bedrock?.accessKeyId).toBeUndefined();
+    expect(config.bedrock?.secretAccessKey).toBeUndefined();
+  });
+
+  it('includes baseUrl when set (e.g. a gateway endpoint)', () => {
+    const config = createConfig({
+      ...baseBedrockForm,
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'ai-gateway',
+      baseUrl: 'https://aws-bedrock.example.com/project-id',
     });
+
+    expect(config.bedrock?.baseUrl).toBe(
+      'https://aws-bedrock.example.com/project-id',
+    );
+  });
+
+  it('omits baseUrl when blank', () => {
+    const config = createConfig(baseBedrockForm);
+
+    expect(config.bedrock?.baseUrl).toBeUndefined();
   });
 });
 
 describe('getResetValues (bedrock)', () => {
-  it('defaults the secret keys to token', () => {
+  it('clears the credential secret names', () => {
     const reset = getResetValues(baseBedrockForm);
 
     expect(reset).toMatchObject({
-      bedrockAccessKeyIdSecretKey: 'token',
-      bedrockSecretAccessKeySecretKey: 'token',
+      bedrockAuthMethod: 'iam',
+      bedrockApiKeySecretName: '',
+      bedrockAccessKeyIdSecretName: '',
+      bedrockSecretAccessKeySecretName: '',
     });
   });
 });
@@ -85,22 +108,26 @@ describe('getDefaultValuesForUpdate (bedrock)', () => {
     const values = getDefaultValuesForUpdate(model);
 
     expect(values).toMatchObject({
+      bedrockAuthMethod: 'iam',
       bedrockAccessKeyIdSecretName: 'aws-credentials',
-      bedrockAccessKeyIdSecretKey: 'access-key-id',
       bedrockSecretAccessKeySecretName: 'aws-credentials',
-      bedrockSecretAccessKeySecretKey: 'secret-access-key',
     });
   });
 
-  it('falls back to token when the key is absent', () => {
+  it('detects apiKey auth method and reads the api key secret', () => {
     const model = {
       name: 'test-bedrock',
       provider: 'bedrock',
       model: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
       config: {
         bedrock: {
-          accessKeyId: {
-            valueFrom: { secretKeyRef: { name: 'aws-credentials' } },
+          apiKey: {
+            valueFrom: {
+              secretKeyRef: {
+                name: 'bedrock-credentials',
+                key: 'bedrock-api-key',
+              },
+            },
           },
         },
       },
@@ -109,8 +136,8 @@ describe('getDefaultValuesForUpdate (bedrock)', () => {
     const values = getDefaultValuesForUpdate(model);
 
     expect(values).toMatchObject({
-      bedrockAccessKeyIdSecretKey: 'token',
-      bedrockSecretAccessKeySecretKey: 'token',
+      bedrockAuthMethod: 'apiKey',
+      bedrockApiKeySecretName: 'bedrock-credentials',
     });
   });
 });

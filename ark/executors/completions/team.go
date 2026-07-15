@@ -111,7 +111,7 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {
@@ -165,7 +165,7 @@ func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message
 		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {

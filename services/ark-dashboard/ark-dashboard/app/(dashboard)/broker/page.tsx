@@ -137,7 +137,9 @@ export function useSSEStream(endpoint: string | null, memory: string) {
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=1000`;
+        let url = apiUrl(
+          `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=1000`,
+        );
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }
@@ -206,7 +208,7 @@ export function useSSEStream(endpoint: string | null, memory: string) {
   const purge = useCallback(async () => {
     try {
       const res = await fetch(
-        `/api${endpoint}?memory=${encodeURIComponent(memory)}`,
+        apiUrl(`/api${endpoint}?memory=${encodeURIComponent(memory)}`),
         {
           method: 'DELETE',
         },

@@ -431,6 +431,41 @@ describe('ChatClient', () => {
       vi.unstubAllGlobals();
     });
 
+    it('should surface the query error when the stream closes with no content', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      mockCreateQuery.mockResolvedValue({name: 'err-stream-q'});
+      mockGetQuery.mockResolvedValue({
+        status: {
+          phase: 'error',
+          conditions: [
+            {
+              type: 'Completed',
+              status: 'True',
+              message: "query parameter 'weather' not found",
+            },
+          ],
+        },
+      });
+
+      // Stream produces no content and no tool calls, then closes.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(mockSSEResponse(['data: [DONE]\n\n']))
+      );
+
+      await expect(
+        client.sendMessage(
+          'agent/a',
+          [{role: 'user', content: 'Hi'}],
+          {streamingEnabled: true},
+          vi.fn()
+        )
+      ).rejects.toThrow("query parameter 'weather' not found");
+
+      expect(mockGetQuery).toHaveBeenCalledWith('err-stream-q');
+      vi.unstubAllGlobals();
+    });
+
     it('should fall back to pollResponse when fetch returns non-ok', async () => {
       const client = new ChatClient(mockArkApiClient);
       mockCreateQuery.mockResolvedValue({name: 'fallback-q'});

@@ -5,7 +5,7 @@
 import {execa} from 'execa';
 import ora from 'ora';
 import chalk from 'chalk';
-import type {Query, QueryTarget} from './types.js';
+import type {Query, QueryTarget, QueryParameter} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
@@ -22,6 +22,7 @@ export interface QueryOptions {
   outputFormat?: string;
   sessionId?: string;
   conversationId?: string;
+  parameters?: QueryParameter[];
 }
 
 interface StreamState {
@@ -73,6 +74,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
         sessionId,
         conversationId,
         queryTimeout: options.timeout,
+        parameters: options.parameters,
       },
       (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
         if (firstOutput) {
@@ -173,6 +175,9 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
         type: options.targetType,
         name: options.targetName,
       },
+      ...(options.parameters && options.parameters.length > 0
+        ? {parameters: options.parameters}
+        : {}),
     },
   };
 
@@ -243,4 +248,20 @@ export function parseTarget(target: string): QueryTarget | null {
     type: parts[0],
     name: parts[1],
   };
+}
+
+/** Parse repeated `name=value` flags into QueryParameters (mirrors the fark CLI). */
+export function parseParameters(parameters: string[]): QueryParameter[] {
+  return parameters.map((param) => {
+    const idx = param.indexOf('=');
+    if (idx === -1) {
+      throw new Error(`parameter must be in name=value format, got: ${param}`);
+    }
+    const name = param.slice(0, idx).trim();
+    const value = param.slice(idx + 1).trim();
+    if (name === '') {
+      throw new Error(`parameter name cannot be empty in: ${param}`);
+    }
+    return {name, value};
+  });
 }

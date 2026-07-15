@@ -230,6 +230,7 @@ export class ArkApiClient {
     sessionId?: string;
     conversationId?: string;
     timeout?: string;
+    parameters?: Array<{ name: string; value?: string }>;
     metadata?: { annotations?: Record<string, string> };
   }): Promise<Record<string, unknown>> {
     const response = await fetch(`${this.baseUrl}/v1/queries/`, {
@@ -243,6 +244,9 @@ export class ArkApiClient {
         sessionId: params.sessionId,
         conversationId: params.conversationId,
         timeout: params.timeout,
+        ...(params.parameters && params.parameters.length > 0
+          ? { parameters: params.parameters }
+          : {}),
         ...(params.metadata ? { metadata: params.metadata } : {}),
       }),
     });
