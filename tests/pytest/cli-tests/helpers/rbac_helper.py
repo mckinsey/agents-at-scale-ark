@@ -53,19 +53,21 @@ class RBACHelper:
             return False, "", str(e)
 
     def apply_bindings(self) -> Tuple[bool, str]:
+        apply_timeout = 30
         ok, _, stderr = self._run(["kubectl", "apply", "-f", str(RBAC_BINDINGS)])
         if not ok:
-            return ok, stderr
+            return False, stderr
+
         # kubectl apply returns as soon as the RoleBindings are persisted, but the
         # API server's RBAC authorizer observes them asynchronously via a watch.
         # Poll can-i until the admin subject is authorized on a probe resource so
         # the first test doesn't race the authorizer cache.
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + apply_timeout
         while time.monotonic() < deadline:
             if self.can_i("get", "agents", ADMIN_USER, ADMIN_GROUP):
                 return True, ""
             time.sleep(0.5)
-        return False, "timed out waiting for admin RBAC bindings to propagate"
+        return False, f"admin binding exists in etcd but authorizer cache did not catch up after {apply_timeout}s"
 
     def delete_bindings(self) -> Tuple[bool, str]:
         ok, _, stderr = self._run(
