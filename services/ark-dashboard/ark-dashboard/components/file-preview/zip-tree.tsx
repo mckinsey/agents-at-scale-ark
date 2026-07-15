@@ -1,7 +1,14 @@
 'use client';
 
-import { ChevronDown, ChevronRight, File, Folder } from 'lucide-react';
 import { useState } from 'react';
+
+import {
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  InsertDriveFile,
+} from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 
 export interface ZipEntry {
   name: string;
@@ -93,27 +100,29 @@ function TreeNodeComponent({
   return (
     <div>
       <div
-        className="flex cursor-pointer items-center gap-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+        className="hover:bg-fill-muted flex cursor-pointer items-center gap-2 py-1"
         style={{ paddingLeft: `${level * 20}px` }}
         onClick={handleToggle}>
         {node.isDirectory ? (
           <>
-            {expanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-            <Folder className="h-4 w-4 text-blue-500" />
+            <IconShell size="sm">
+              {expanded ? <ChevronDown /> : <ChevronRight />}
+            </IconShell>
+            <IconShell size="sm" variant="secondary">
+              <Folder />
+            </IconShell>
           </>
         ) : (
           <>
             <div className="w-4" />
-            <File className="h-4 w-4 text-gray-500" />
+            <IconShell size="sm" variant="secondary">
+              <InsertDriveFile />
+            </IconShell>
           </>
         )}
         <span className="text-sm">{node.name}</span>
         {!node.isDirectory && node.entry && (
-          <span className="mr-4 ml-auto text-xs text-gray-500">
+          <span className="text-fg-secondary mr-4 ml-auto text-xs">
             {formatFileSize(node.entry.size)}
           </span>
         )}
@@ -141,7 +150,7 @@ export function ZipTree({ entries }: ZipTreeProps) {
 
   return (
     <div className="font-mono text-sm">
-      <div className="mb-4 rounded bg-gray-100 p-2 dark:bg-gray-800">
+      <div className="bg-fill-muted mb-4 rounded p-2">
         <div className="flex justify-between text-xs">
           <span>{entries.filter(e => !e.isDirectory).length} files</span>
           <span>{entries.filter(e => e.isDirectory).length} folders</span>

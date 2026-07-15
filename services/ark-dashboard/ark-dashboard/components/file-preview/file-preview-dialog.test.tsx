@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PreviewTab } from '@/hooks/use-multi-file-preview';
+import type { PreviewFile } from '@/hooks/use-file-preview';
 
-import { MultiTabPreviewDialog } from './multi-tab-preview-dialog';
+import { FilePreviewDialog } from './file-preview-dialog';
 
 vi.mock('@/lib/api/files-client', () => ({
   FILES_API_BASE_URL: 'http://localhost:3000/api',
@@ -18,7 +18,7 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-function makeTab(overrides: Partial<PreviewTab> = {}): PreviewTab {
+function makeFile(overrides: Partial<PreviewFile> = {}): PreviewFile {
   return {
     key: 'scores.md',
     fileName: 'scores.md',
@@ -38,23 +38,13 @@ function makeTab(overrides: Partial<PreviewTab> = {}): PreviewTab {
   };
 }
 
-function renderDialog(activeTab: PreviewTab | null) {
-  const tabs = activeTab ? [activeTab] : [];
+function renderDialog(file: PreviewFile | null) {
   return render(
-    <MultiTabPreviewDialog
-      open={true}
-      onOpenChange={() => {}}
-      tabs={tabs}
-      activeTab={activeTab}
-      activeTabKey={activeTab?.key ?? null}
-      onTabClick={() => {}}
-      onTabClose={() => {}}
-      onCloseAll={() => {}}
-    />,
+    <FilePreviewDialog open={true} onOpenChange={() => {}} file={file} />,
   );
 }
 
-describe('MultiTabPreviewDialog', () => {
+describe('FilePreviewDialog', () => {
   it('renders markdown tables when isMarkdown is true', () => {
     const tableMarkdown = [
       '| Name | Score |',
@@ -64,7 +54,7 @@ describe('MultiTabPreviewDialog', () => {
     ].join('\n');
 
     renderDialog(
-      makeTab({
+      makeFile({
         content: tableMarkdown,
         isMarkdown: true,
         language: 'markdown',
@@ -83,7 +73,7 @@ describe('MultiTabPreviewDialog', () => {
     const tableMarkdown = '| A | B |\n|---|---|\n| 1 | 2 |';
 
     renderDialog(
-      makeTab({
+      makeFile({
         content: tableMarkdown,
         isMarkdown: true,
         language: 'markdown',
@@ -92,11 +82,11 @@ describe('MultiTabPreviewDialog', () => {
 
     expect(screen.getByRole('table')).toBeDefined();
 
-    const sourceToggle = screen.getByRole('radio', { name: 'Source view' });
-    await user.click(sourceToggle);
+    const sourceTab = screen.getByRole('tab', { name: 'Source' });
+    await user.click(sourceTab);
 
     expect(screen.queryByRole('table')).toBeNull();
-    expect(sourceToggle.getAttribute('aria-checked')).toBe('true');
+    expect(sourceTab.getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders markdown source as plain pre to avoid Tailwind class collisions with Prism markdown grammar', async () => {
@@ -104,14 +94,14 @@ describe('MultiTabPreviewDialog', () => {
     const tableMarkdown = '| A | B |\n|---|---|\n| 1 | 2 |';
 
     renderDialog(
-      makeTab({
+      makeFile({
         content: tableMarkdown,
         isMarkdown: true,
         language: 'markdown',
       }),
     );
 
-    await user.click(screen.getByRole('radio', { name: 'Source view' }));
+    await user.click(screen.getByRole('tab', { name: 'Source' }));
 
     const pre = document.querySelector(
       '[role="dialog"] pre',
@@ -124,7 +114,7 @@ describe('MultiTabPreviewDialog', () => {
 
   it('does not render the toggle for non-markdown files (mdx regression)', () => {
     renderDialog(
-      makeTab({
+      makeFile({
         key: 'readme.mdx',
         fileName: 'readme.mdx',
         content: '# Hello\n\n| A | B |\n|---|---|\n| 1 | 2 |',
@@ -133,14 +123,14 @@ describe('MultiTabPreviewDialog', () => {
       }),
     );
 
-    expect(screen.queryByRole('radio', { name: 'Rendered view' })).toBeNull();
-    expect(screen.queryByRole('radio', { name: 'Source view' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Rendered' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Source' })).toBeNull();
     expect(screen.queryByRole('table')).toBeNull();
   });
 
   it('shows loading state', () => {
     renderDialog(
-      makeTab({
+      makeFile({
         loading: true,
       }),
     );

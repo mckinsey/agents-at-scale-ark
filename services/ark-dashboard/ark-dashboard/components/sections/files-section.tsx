@@ -2,16 +2,15 @@
 
 import copy from 'copy-to-clipboard';
 import { useAtom } from 'jotai';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { MultiTabPreviewDialog } from '@/components/file-preview/multi-tab-preview-dialog';
+import { FilePreviewDialog } from '@/components/file-preview/file-preview-dialog';
 import {
   Add,
   Autorenew,
-  ChevronLeft,
   ContentCopy,
   Folder,
   InsertDriveFile,
@@ -46,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
+import { useFilePreview } from '@/hooks/use-file-preview';
 import { filesService } from '@/lib/services/files';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 import {
@@ -107,15 +106,10 @@ export function FilesSection() {
   // Use the multi-file preview hook
   const {
     previewOpen,
-    tabs,
-    activeTab,
-    activeTabKey,
+    file: previewFile,
     handlePreview,
-    closeTab,
-    closeAllTabs,
-    setActiveTabKey,
-    setPreviewOpen,
-  } = useMultiFilePreview();
+    close: closePreview,
+  } = useFilePreview();
 
   const {
     data: listFilesData,
@@ -159,15 +153,6 @@ export function FilesSection() {
     setAllFiles([]);
     setAllDirectories([]);
     setNextToken(undefined);
-  };
-
-  const handleGoUp = () => {
-    const segments = parseBreadcrumbs(prefix);
-    if (segments.length > 0) {
-      segments.pop();
-      const newPrefix = segments.length > 0 ? segments.join('/') + '/' : '';
-      handleNavigateToDirectory(newPrefix);
-    }
   };
 
   const handleBreadcrumbClick = (index: number) => {
@@ -387,29 +372,39 @@ export function FilesSection() {
       />
 
       {prefix && (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGoUp}
-            disabled={!prefix}>
-            <ChevronLeft className="h-4 w-4" />
-            Go Up
-          </Button>
-          <div className="text-muted-foreground flex items-center gap-1 font-mono text-sm">
-            <span>/</span>
-            {breadcrumbs.map((segment, index) => (
-              <span key={index}>
-                <button
-                  onClick={() => handleBreadcrumbClick(index)}
-                  className="hover:text-primary hover:underline">
-                  {segment}
-                </button>
-                <span className="mx-1">/</span>
-              </span>
-            ))}
-          </div>
-        </div>
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+          <button
+            type="button"
+            onClick={() => handleNavigateToDirectory('')}
+            className="text-fg-disabled hover:text-fg-secondary cursor-pointer transition-colors">
+            Files
+          </button>
+          {breadcrumbs.map((segment, index) => {
+            const isLast = index === breadcrumbs.length - 1;
+            const segmentPath = breadcrumbs.slice(0, index + 1).join('/');
+            return (
+              <Fragment key={segmentPath}>
+                <span aria-hidden="true" className="text-fg-secondary">
+                  /
+                </span>
+                {isLast ? (
+                  <span aria-current="page" className="text-fg-secondary">
+                    {segment}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleBreadcrumbClick(index)}
+                    className="text-fg-disabled hover:text-fg-secondary cursor-pointer transition-colors">
+                    {segment}
+                  </button>
+                )}
+              </Fragment>
+            );
+          })}
+        </nav>
       )}
 
       {!hasFiles && !listFilesLoading && (
@@ -659,15 +654,12 @@ export function FilesSection() {
         variant="destructive"
       />
 
-      <MultiTabPreviewDialog
+      <FilePreviewDialog
         open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        tabs={tabs}
-        activeTab={activeTab}
-        activeTabKey={activeTabKey}
-        onTabClick={setActiveTabKey}
-        onTabClose={closeTab}
-        onCloseAll={closeAllTabs}
+        onOpenChange={isOpen => {
+          if (!isOpen) closePreview();
+        }}
+        file={previewFile}
       />
     </div>
   );

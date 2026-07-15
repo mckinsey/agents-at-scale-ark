@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useMultiFilePreview } from './use-multi-file-preview';
+import { useFilePreview } from './use-file-preview';
 
 const buildUrl = vi.fn((endpoint: string) => `http://test/${endpoint}`);
 
@@ -48,32 +48,31 @@ function setFetch(impl: () => Promise<Response>) {
   return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
 }
 
-describe('useMultiFilePreview', () => {
+describe('useFilePreview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     URL.revokeObjectURL = vi.fn();
   });
 
-  it('opens a plain text file in a single tab', async () => {
+  it('opens a plain text file', async () => {
     setFetch(async () =>
       mockResponse({ blob: blobOf('hello world', 'text/plain') }),
     );
 
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
 
     await act(async () => {
       await result.current.handlePreview('dir/notes.txt');
     });
 
     expect(result.current.previewOpen).toBe(true);
-    expect(result.current.tabs).toHaveLength(1);
-    expect(result.current.activeTabKey).toBe('dir/notes.txt');
-    expect(result.current.activeTab?.fileName).toBe('notes.txt');
-    expect(result.current.tabs[0].content).toBe('hello world');
-    expect(result.current.tabs[0].loading).toBe(false);
-    expect(result.current.tabs[0].isImage).toBe(false);
-    expect(result.current.tabs[0].isJson).toBe(false);
+    expect(result.current.file?.key).toBe('dir/notes.txt');
+    expect(result.current.file?.fileName).toBe('notes.txt');
+    expect(result.current.file?.content).toBe('hello world');
+    expect(result.current.file?.loading).toBe(false);
+    expect(result.current.file?.isImage).toBe(false);
+    expect(result.current.file?.isJson).toBe(false);
   });
 
   it('parses valid JSON and flags invalid JSON', async () => {
@@ -82,12 +81,12 @@ describe('useMultiFilePreview', () => {
         blob: blobOf('{"a":1}', 'application/json'),
       }),
     );
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('data.json');
     });
-    expect(result.current.tabs[0].isJson).toBe(true);
-    expect(result.current.tabs[0].jsonData).toEqual({ a: 1 });
+    expect(result.current.file?.isJson).toBe(true);
+    expect(result.current.file?.jsonData).toEqual({ a: 1 });
 
     setFetch(async () =>
       mockResponse({
@@ -97,7 +96,7 @@ describe('useMultiFilePreview', () => {
     await act(async () => {
       await result.current.handlePreview('broken.json');
     });
-    expect(result.current.tabs[0].isJson).toBe(false);
+    expect(result.current.file?.isJson).toBe(false);
   });
 
   it('creates an object URL for image files', async () => {
@@ -106,12 +105,12 @@ describe('useMultiFilePreview', () => {
         blob: blobOf('imgbytes', 'image/png'),
       }),
     );
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('pic.png');
     });
-    expect(result.current.tabs[0].isImage).toBe(true);
-    expect(result.current.tabs[0].imageUrl).toBe('blob:mock-url');
+    expect(result.current.file?.isImage).toBe(true);
+    expect(result.current.file?.imageUrl).toBe('blob:mock-url');
     expect(URL.createObjectURL).toHaveBeenCalled();
   });
 
@@ -121,12 +120,12 @@ describe('useMultiFilePreview', () => {
         blob: blobOf('<svg></svg>', 'image/svg+xml'),
       }),
     );
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('icon.svg');
     });
-    expect(result.current.tabs[0].isImage).toBe(true);
-    expect(result.current.tabs[0].imageUrl).toBe('blob:mock-url');
+    expect(result.current.file?.isImage).toBe(true);
+    expect(result.current.file?.imageUrl).toBe('blob:mock-url');
   });
 
   it('parses ZIP archives and sorts directories first', async () => {
@@ -151,13 +150,13 @@ describe('useMultiFilePreview', () => {
         blob: blobOf('zipbytes', 'application/zip'),
       }),
     );
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('bundle.zip');
     });
-    expect(result.current.tabs[0].isZip).toBe(true);
-    expect(result.current.tabs[0].zipEntries).toHaveLength(2);
-    expect(result.current.tabs[0].zipEntries[0].isDirectory).toBe(true);
+    expect(result.current.file?.isZip).toBe(true);
+    expect(result.current.file?.zipEntries).toHaveLength(2);
+    expect(result.current.file?.zipEntries[0].isDirectory).toBe(true);
   });
 
   it('parses spreadsheets through the preview API', async () => {
@@ -174,20 +173,18 @@ describe('useMultiFilePreview', () => {
       .mockResolvedValueOnce(mockResponse({ json: { sheets: [] } }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('report.xlsx');
     });
-    await waitFor(() =>
-      expect(result.current.tabs[0].isSpreadsheet).toBe(true),
-    );
-    expect(result.current.tabs[0].spreadsheetData).toEqual({ sheets: [] });
+    await waitFor(() => expect(result.current.file?.isSpreadsheet).toBe(true));
+    expect(result.current.file?.spreadsheetData).toEqual({ sheets: [] });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('shows a toast and closes when the download fails', async () => {
     setFetch(async () => mockResponse({}, false));
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('missing.txt');
     });
@@ -195,59 +192,43 @@ describe('useMultiFilePreview', () => {
       'Failed to Preview File',
       expect.objectContaining({ description: expect.any(String) }),
     );
-    expect(result.current.tabs).toHaveLength(0);
+    expect(result.current.file).toBeNull();
+    expect(result.current.previewOpen).toBe(false);
   });
 
-  it('switches to an already open tab without refetching', async () => {
-    const fetchMock = setFetch(async () =>
+  it('replaces the previewed file when a new one is opened', async () => {
+    setFetch(async () =>
+      mockResponse({ blob: blobOf('imgbytes', 'image/png') }),
+    );
+    const { result } = renderHook(() => useFilePreview());
+    await act(async () => {
+      await result.current.handlePreview('first.png');
+    });
+    expect(result.current.file?.key).toBe('first.png');
+
+    setFetch(async () =>
       mockResponse({ blob: blobOf('hello', 'text/plain') }),
     );
-    const { result } = renderHook(() => useMultiFilePreview());
     await act(async () => {
-      await result.current.handlePreview('same.txt');
+      await result.current.handlePreview('second.txt');
     });
-    await act(async () => {
-      await result.current.handlePreview('same.txt');
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.current.tabs).toHaveLength(1);
-    expect(result.current.previewOpen).toBe(true);
-  });
-
-  it('closes a tab and resets when it was the last one', async () => {
-    setFetch(async () =>
-      mockResponse({
-        blob: blobOf('imgbytes', 'image/png'),
-      }),
-    );
-    const { result } = renderHook(() => useMultiFilePreview());
-    await act(async () => {
-      await result.current.handlePreview('pic.png');
-    });
-    act(() => {
-      result.current.closeTab('pic.png');
-    });
-    expect(result.current.tabs).toHaveLength(0);
-    expect(result.current.activeTabKey).toBeNull();
-    expect(result.current.previewOpen).toBe(false);
+    expect(result.current.file?.key).toBe('second.txt');
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
-  it('closes all tabs and revokes object URLs', async () => {
+  it('closes the preview and revokes the object URL', async () => {
     setFetch(async () =>
-      mockResponse({
-        blob: blobOf('imgbytes', 'image/png'),
-      }),
+      mockResponse({ blob: blobOf('imgbytes', 'image/png') }),
     );
-    const { result } = renderHook(() => useMultiFilePreview());
+    const { result } = renderHook(() => useFilePreview());
     await act(async () => {
       await result.current.handlePreview('pic.png');
     });
     act(() => {
-      result.current.closeAllTabs();
+      result.current.close();
     });
-    expect(result.current.tabs).toHaveLength(0);
+    expect(result.current.file).toBeNull();
     expect(result.current.previewOpen).toBe(false);
-    expect(URL.revokeObjectURL).toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 });

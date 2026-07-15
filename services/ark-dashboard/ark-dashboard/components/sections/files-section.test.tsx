@@ -388,34 +388,27 @@ describe('FilesSection', () => {
       expect(screen.queryByText(/go up/i)).not.toBeInTheDocument();
     });
 
-    it('navigates up when Go Up button is clicked', async () => {
-      mockUseListFiles.mockReturnValue({
-        data: { files: [], directories: [], next_token: undefined },
-        isLoading: false,
-        isFetching: false,
-        isError: false,
-        error: null,
-        refetch: vi.fn(),
-      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
-        ListFilesResponse,
-        Error
-      >);
+    it('navigates up when a breadcrumb segment is clicked', async () => {
+      renderWithProviders(<FilesSection />);
 
-      const { rerender } = render(<FilesSection />);
+      const dirRow = await screen.findByRole('row', { name: /archive/i });
+      fireEvent.click(dirRow);
 
-      mockUseListFiles.mockReturnValue({
-        data: { files: [], directories: [], next_token: undefined },
-        isLoading: false,
-        isFetching: false,
-        isError: false,
-        error: null,
-        refetch: vi.fn(),
-      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
-        ListFilesResponse,
-        Error
-      >);
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: 'documents/archive/',
+          max_keys: 100,
+        });
+      });
 
-      rerender(<FilesSection />);
+      fireEvent.click(screen.getByRole('button', { name: 'documents' }));
+
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: 'documents/',
+          max_keys: 100,
+        });
+      });
     });
   });
 
@@ -460,7 +453,9 @@ describe('FilesSection', () => {
         });
       });
 
-      expect(screen.getByText(/go up/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('navigation', { name: /breadcrumb/i }),
+      ).toBeInTheDocument();
     });
 
     it('falls back to root when saved location returns error', async () => {
@@ -507,7 +502,9 @@ describe('FilesSection', () => {
       fireEvent.click(dirRow);
 
       await waitFor(() => {
-        expect(screen.getByText(/go up/i)).toBeInTheDocument();
+        expect(
+          screen.getByRole('navigation', { name: /breadcrumb/i }),
+        ).toBeInTheDocument();
       });
 
       mockUseListFiles.mockReturnValue({
@@ -522,9 +519,7 @@ describe('FilesSection', () => {
         Error
       >);
 
-      const goUpButton = screen.getByRole('button', { name: /go up/i });
-      fireEvent.click(goUpButton);
-      fireEvent.click(goUpButton);
+      fireEvent.click(screen.getByRole('button', { name: 'Files' }));
 
       await waitFor(() => {
         expect(mockUseListFiles).toHaveBeenCalledWith({
