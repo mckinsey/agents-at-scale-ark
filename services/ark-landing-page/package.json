@@ -33,6 +33,10 @@
     "typescript": "5.7.3"
   },
   "overrides": {
+    "js-yaml": "^4.3.0",
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^3.15.0"
+    },
     "brace-expansion": ">=5.0.7",
     "jsonpath-plus": "^10.3.0",
     "tough-cookie": "^4.1.3",

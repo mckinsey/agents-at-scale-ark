@@ -21,6 +21,12 @@ vi.mock('@/lib/utils/uuid', () => ({
   generateUUID: vi.fn(() => 'test-uuid-123'),
 }));
 
+// Non-empty base path so the chunk stream assertions double as a guard that
+// the tenant prefix is preserved (regression: raw fetch dropped it).
+vi.mock('@/lib/api/config', () => ({
+  apiUrl: vi.fn((path: string) => `/tenant-a${path}`),
+}));
+
 describe('chatService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -681,7 +687,7 @@ describe('chatService', () => {
 
       expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/broker/chunks?watch=true&query-id=test-query-1',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1',
         expect.objectContaining({ signal: undefined }),
       );
     });
@@ -865,7 +871,7 @@ describe('chatService', () => {
       }
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
         expect.objectContaining({ signal: controller.signal }),
       );
     });

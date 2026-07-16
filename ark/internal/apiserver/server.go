@@ -89,6 +89,11 @@ func init() {
 	)
 }
 
+const (
+	AuthModeDelegated = "delegated"
+	AuthModeOff       = "off"
+)
+
 type Config struct {
 	PostgresHost string
 	PostgresPort int
@@ -97,6 +102,9 @@ type Config struct {
 	PostgresPass string
 	PostgresSSL  string
 	BindPort     int
+	AuthMode     string
+	TLSCertFile  string
+	TLSKeyFile   string
 	K8sClient    client.Client
 }
 
@@ -110,6 +118,9 @@ func New(cfg Config) *Server {
 	if cfg.BindPort == 0 {
 		cfg.BindPort = 6443
 	}
+	if cfg.AuthMode == "" {
+		cfg.AuthMode = AuthModeDelegated
+	}
 	return &Server{
 		config: cfg,
 		stopCh: make(chan struct{}),
@@ -117,6 +128,10 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	if s.config.AuthMode != AuthModeDelegated && s.config.AuthMode != AuthModeOff {
+		return fmt.Errorf("invalid auth mode %q: must be %q or %q", s.config.AuthMode, AuthModeDelegated, AuthModeOff)
+	}
+
 	klog.Info("Starting embedded Ark API Server")
 
 	converter := NewRegistryTypeConverter()
@@ -140,6 +155,8 @@ func (s *Server) Start(ctx context.Context) error {
 	secureServing.BindPort = s.config.BindPort
 	secureServing.HTTP2MaxStreamsPerConnection = 1000
 	secureServing.ServerCert.CertDirectory = "/tmp/ark-apiserver-certs"
+	secureServing.ServerCert.CertKey.CertFile = s.config.TLSCertFile
+	secureServing.ServerCert.CertKey.KeyFile = s.config.TLSKeyFile
 
 	if err := secureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, nil); err != nil {
 		return fmt.Errorf("error creating self-signed certificates: %v", err)
@@ -164,6 +181,20 @@ func (s *Server) Start(ctx context.Context) error {
 
 	if err := secureServing.ApplyTo(&serverConfig.SecureServing, &serverConfig.LoopbackClientConfig); err != nil {
 		return err
+	}
+
+	if s.config.AuthMode == AuthModeDelegated {
+		authn := genericoptions.NewDelegatingAuthenticationOptions()
+		if err := authn.ApplyTo(&serverConfig.Authentication, serverConfig.SecureServing, serverConfig.OpenAPIConfig); err != nil {
+			return fmt.Errorf("failed to apply delegated authentication: %w", err)
+		}
+		authz := genericoptions.NewDelegatingAuthorizationOptions()
+		if err := authz.ApplyTo(&serverConfig.Authorization); err != nil {
+			return fmt.Errorf("failed to apply delegated authorization: %w", err)
+		}
+		klog.Info("Delegated authentication and authorization enabled")
+	} else {
+		klog.Warning("Request authentication and authorization are DISABLED (auth mode 'off'); any client that can reach the service can read and write all Ark resources")
 	}
 
 	completedConfig := serverConfig.Complete(nil)

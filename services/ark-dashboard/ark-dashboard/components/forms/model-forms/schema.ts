@@ -55,11 +55,8 @@ const bedrockSchema = z
     model: z.string().min(1, { message: 'Model is required' }),
     bedrockAuthMethod: z.enum(['apiKey', 'iam']),
     bedrockApiKeySecretName: z.string(),
-    bedrockApiKeySecretKey: z.string(),
     bedrockAccessKeyIdSecretName: z.string(),
-    bedrockAccessKeyIdSecretKey: z.string(),
     bedrockSecretAccessKeySecretName: z.string(),
-    bedrockSecretAccessKeySecretKey: z.string(),
     baseUrl: z.string().nullish(),
     region: z.string().nullish(),
     modelARN: z.string().nullish(),
@@ -73,13 +70,6 @@ const bedrockSchema = z
           message: 'API Key Secret is required',
         });
       }
-      if (!data.bedrockApiKeySecretKey) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['bedrockApiKeySecretKey'],
-          message: 'API Key Secret key is required',
-        });
-      }
       return;
     }
     if (!data.bedrockAccessKeyIdSecretName) {
@@ -89,25 +79,11 @@ const bedrockSchema = z
         message: 'Access Key ID Secret is required',
       });
     }
-    if (!data.bedrockAccessKeyIdSecretKey) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['bedrockAccessKeyIdSecretKey'],
-        message: 'Access Key ID Secret key is required',
-      });
-    }
     if (!data.bedrockSecretAccessKeySecretName) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['bedrockSecretAccessKeySecretName'],
         message: 'Secret Access Key Secret is required',
-      });
-    }
-    if (!data.bedrockSecretAccessKeySecretKey) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['bedrockSecretAccessKeySecretKey'],
-        message: 'Secret Access Key Secret key is required',
       });
     }
   });
