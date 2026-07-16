@@ -511,6 +511,7 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			"prompt_tokens":     tokenSummary.PromptTokens,
 			"completion_tokens": tokenSummary.CompletionTokens,
 			"total_tokens":      tokenSummary.TotalTokens,
+			"cached_tokens":     tokenSummary.CachedTokens,
 		}
 	}
 	if state.conversationId != "" {

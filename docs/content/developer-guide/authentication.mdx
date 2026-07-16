@@ -387,6 +387,8 @@ API keys use HTTP Basic Authentication where:
 GET /v1/api-keys
 ```
 
+The list response includes `last_used_at`. Ark updates this timestamp after successful API-key authentication, so operators can monitor for unexpected use of issued keys.
+
 #### Create API Key
 ```bash
 # Create in current namespace
@@ -413,6 +415,7 @@ DELETE /v1/api-keys/{public_key}
 - **Tenant Isolation**: Each tenant's API keys are isolated (cannot access other tenants' keys)
 - **Kubernetes RBAC**: Service accounts only have permissions within their deployment namespace
 - **Expiration**: API keys can have optional expiration dates for enhanced security
+- **Usage Signal**: Successful API-key authentication updates `last_used_at` for monitoring and audit review
 - **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
 - **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
 

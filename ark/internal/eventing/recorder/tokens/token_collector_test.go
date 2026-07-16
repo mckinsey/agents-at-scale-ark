@@ -27,32 +27,34 @@ func TestTokenCollector_AddTokens(t *testing.T) {
 	tc := NewTokenCollector()
 	ctx := tc.StartTokenCollection(context.Background())
 
-	tc.AddTokens(ctx, 100, 50, 150)
+	tc.AddTokens(ctx, 100, 50, 150, 40)
 
 	usage := tc.GetTokenSummary(ctx)
 	assert.Equal(t, int64(100), usage.PromptTokens)
 	assert.Equal(t, int64(50), usage.CompletionTokens)
 	assert.Equal(t, int64(150), usage.TotalTokens)
+	assert.Equal(t, int64(40), usage.CachedTokens)
 }
 
 func TestTokenCollector_AddTokens_Multiple(t *testing.T) {
 	tc := NewTokenCollector()
 	ctx := tc.StartTokenCollection(context.Background())
 
-	tc.AddTokens(ctx, 100, 50, 150)
-	tc.AddTokens(ctx, 200, 100, 300)
+	tc.AddTokens(ctx, 100, 50, 150, 40)
+	tc.AddTokens(ctx, 200, 100, 300, 80)
 
 	usage := tc.GetTokenSummary(ctx)
 	assert.Equal(t, int64(300), usage.PromptTokens)
 	assert.Equal(t, int64(150), usage.CompletionTokens)
 	assert.Equal(t, int64(450), usage.TotalTokens)
+	assert.Equal(t, int64(120), usage.CachedTokens)
 }
 
 func TestTokenCollector_AddTokens_NoCollection(t *testing.T) {
 	tc := NewTokenCollector()
 	ctx := context.Background()
 
-	tc.AddTokens(ctx, 100, 50, 150)
+	tc.AddTokens(ctx, 100, 50, 150, 40)
 
 	usage := tc.GetTokenSummary(ctx)
 	assert.Equal(t, int64(0), usage.PromptTokens)
@@ -68,6 +70,7 @@ func TestTokenCollector_AddTokenUsage(t *testing.T) {
 		PromptTokens:     100,
 		CompletionTokens: 50,
 		TotalTokens:      150,
+		CachedTokens:     40,
 	}
 	tc.AddTokenUsage(ctx, tokenUsage)
 
@@ -75,6 +78,7 @@ func TestTokenCollector_AddTokenUsage(t *testing.T) {
 	assert.Equal(t, int64(100), usage.PromptTokens)
 	assert.Equal(t, int64(50), usage.CompletionTokens)
 	assert.Equal(t, int64(150), usage.TotalTokens)
+	assert.Equal(t, int64(40), usage.CachedTokens)
 }
 
 func TestTokenCollector_AddCompletionUsage(t *testing.T) {
@@ -85,6 +89,9 @@ func TestTokenCollector_AddCompletionUsage(t *testing.T) {
 		PromptTokens:     100,
 		CompletionTokens: 50,
 		TotalTokens:      150,
+		PromptTokensDetails: openai.CompletionUsagePromptTokensDetails{
+			CachedTokens: 40,
+		},
 	}
 	tc.AddCompletionUsage(ctx, completionUsage)
 
@@ -92,6 +99,7 @@ func TestTokenCollector_AddCompletionUsage(t *testing.T) {
 	assert.Equal(t, int64(100), usage.PromptTokens)
 	assert.Equal(t, int64(50), usage.CompletionTokens)
 	assert.Equal(t, int64(150), usage.TotalTokens)
+	assert.Equal(t, int64(40), usage.CachedTokens)
 }
 
 func TestTokenCollector_GetTokenSummary_NoCollection(t *testing.T) {
