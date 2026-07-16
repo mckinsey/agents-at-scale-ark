@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: team-schema-validation
   labels:
-    standard: "true"
+    etcd-only: "true"
 spec:
   description: >
     Team strategy and member type are constrained by the CRD OpenAPI schema
