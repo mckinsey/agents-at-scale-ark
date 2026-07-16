@@ -402,6 +402,9 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	if cfg.PostgresSSL == "" {
 		cfg.PostgresSSL = "disable"
 	}
+	cfg.AuthMode = os.Getenv("ARK_APISERVER_AUTH_MODE")
+	cfg.TLSCertFile = os.Getenv("ARK_APISERVER_TLS_CERT_FILE")
+	cfg.TLSKeyFile = os.Getenv("ARK_APISERVER_TLS_KEY_FILE")
 	cfg.K8sClient = mgr.GetClient()
 
 	server := apiserver.New(cfg)

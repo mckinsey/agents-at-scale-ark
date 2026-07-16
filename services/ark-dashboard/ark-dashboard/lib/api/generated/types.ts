@@ -2795,6 +2795,12 @@ export interface components {
              */
             force?: boolean | null;
             /**
+             * Redirect On Complete
+             * @description When true (used by the dashboard), the callback redirects the browser back to the dashboard instead of rendering the HTML completion page. Defaults to false, preserving the CLI's HTML-completion behaviour.
+             * @default false
+             */
+            redirect_on_complete: boolean;
+            /**
              * Scopes
              * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
              */
@@ -2949,6 +2955,7 @@ export interface components {
          */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2961,6 +2968,7 @@ export interface components {
          */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2982,6 +2990,7 @@ export interface components {
          * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
          */
         ChatCompletionContentPartTextParam: {
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /** Text */
             text: string;
             /**
@@ -3248,6 +3257,7 @@ export interface components {
          */
         File: {
             file: components["schemas"]["FileFile"];
+            prompt_cache_breakpoint?: components["schemas"]["FilePromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -3271,6 +3281,19 @@ export interface components {
             filename: string;
             /** Mimetype */
             mimeType?: string | null;
+        };
+        /**
+         * FilePromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        FilePromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * Function
@@ -3411,6 +3434,25 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /**
+         * MCPServerAuthorization
+         * @description Authorization state of an MCPServer, for rendering state and expiry.
+         *
+         *     Sourced from status.authorization and the mcp-auth-authorized-* annotations.
+         *     Never carries token or Secret material.
+         */
+        MCPServerAuthorization: {
+            /** Authorizedat */
+            authorizedAt?: string | null;
+            /** Authorizedby */
+            authorizedBy?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Resourcename */
+            resourceName?: string | null;
+            /** State */
+            state: string;
+        };
         /** MCPServerConfigMapKeyRef */
         MCPServerConfigMapKeyRef: {
             /** Key */
@@ -3444,6 +3486,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
@@ -3494,6 +3537,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Name */
             name: string;
@@ -3957,6 +4001,19 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "unavailable";
+        };
+        /**
+         * PromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        PromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * QueryConfigMapKeyRef

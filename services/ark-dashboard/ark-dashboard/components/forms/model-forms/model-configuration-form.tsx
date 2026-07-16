@@ -62,7 +62,6 @@ import type { SecretDetailResponse } from '@/lib/services/secrets';
 import {
   useCreateSecret,
   useGetAllSecrets,
-  useGetSecret,
 } from '@/lib/services/secrets-hooks';
 import type { KeysOfUnion } from '@/lib/types/utils';
 import { cn } from '@/lib/utils';
@@ -138,7 +137,9 @@ export function ModelConfiguratorForm() {
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={disabledFields?.provider}>
-                  <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
+                  <SelectTrigger
+                    aria-label="Provider"
+                    className={cn(GHOST_TRIGGER, 'w-full')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-fill-onsurface-ui-2">
@@ -271,77 +272,6 @@ function SecretSelectorField({
   );
 }
 
-function SecretKeySelectField({
-  control,
-  secretFieldName,
-  keyFieldName,
-  label,
-}: {
-  control: Control<FormValues, unknown, FormValues>;
-  secretFieldName: KeysOfUnion<FormValues>;
-  keyFieldName: KeysOfUnion<FormValues>;
-  label: string;
-}) {
-  const { form } = useModelConfigurationForm();
-  const watchedSecret = useWatch({ control, name: secretFieldName });
-  const secretName =
-    typeof watchedSecret === 'string' && watchedSecret
-      ? watchedSecret
-      : undefined;
-  const { data: secret, isPending } = useGetSecret(secretName);
-  const keys = secret?.keys ?? [];
-
-  useEffect(() => {
-    if (!secretName || keys.length === 0) return;
-    const current = form.getValues(keyFieldName);
-    if (typeof current === 'string' && keys.includes(current)) return;
-    const next = keys.includes('token')
-      ? 'token'
-      : keys.length === 1
-        ? keys[0]
-        : '';
-    form.setValue(keyFieldName, next, { shouldValidate: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secretName, keys.join(' ')]);
-
-  return (
-    <FormField
-      control={control}
-      name={keyFieldName}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <Select
-            onValueChange={field.onChange}
-            value={(field.value as string) ?? ''}
-            disabled={!secretName || isPending}>
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    secretName ? 'Select a key' : 'Select a secret first'
-                  }
-                />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent>
-              {keys.map(key => (
-                <SelectItem key={key} value={key}>
-                  {key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FormDescription>
-            The key inside the secret that holds this value.
-          </FormDescription>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
-}
-
 function BaseUrlField({
   control,
   placeholder,
@@ -416,7 +346,9 @@ function AzureSpecificFields({
               items={AZURE_AUTH_METHOD_DISPLAY_NAMES}
               onValueChange={field.onChange}
               value={field.value ?? 'apiKey'}>
-              <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
+              <SelectTrigger
+                aria-label="Authentication"
+                className={cn(GHOST_TRIGGER, 'w-full')}>
                 <SelectValue placeholder="Select auth method" />
               </SelectTrigger>
               <SelectContent className="bg-fill-onsurface-ui-2">
@@ -562,22 +494,14 @@ function AWSBedrockSpecificFields({
         )}
       />
       {bedrockAuthMethod === 'apiKey' ? (
-        <>
-          <SecretSelectorField
-            control={control}
-            isSecretsPending={isSecretsPending}
-            secrets={secrets}
-            fieldName="bedrockApiKeySecretName"
-            label="API Key Secret"
-            placeholder="Select a secret for the API key"
-          />
-          <SecretKeySelectField
-            control={control}
-            secretFieldName="bedrockApiKeySecretName"
-            keyFieldName="bedrockApiKeySecretKey"
-            label="API Key Secret Key"
-          />
-        </>
+        <SecretSelectorField
+          control={control}
+          isSecretsPending={isSecretsPending}
+          secrets={secrets}
+          fieldName="bedrockApiKeySecretName"
+          label="API Key Secret"
+          placeholder="Select a secret for the API key"
+        />
       ) : (
         <>
           <SecretSelectorField
@@ -588,12 +512,6 @@ function AWSBedrockSpecificFields({
             label="Access Key ID Secret"
             placeholder="Select a secret for Access Key ID"
           />
-          <SecretKeySelectField
-            control={control}
-            secretFieldName="bedrockAccessKeyIdSecretName"
-            keyFieldName="bedrockAccessKeyIdSecretKey"
-            label="Access Key ID Secret Key"
-          />
           <SecretSelectorField
             control={control}
             isSecretsPending={isSecretsPending}
@@ -601,12 +519,6 @@ function AWSBedrockSpecificFields({
             fieldName="bedrockSecretAccessKeySecretName"
             label="Secret Access Key Secret"
             placeholder="Select a secret for Secret Access Key"
-          />
-          <SecretKeySelectField
-            control={control}
-            secretFieldName="bedrockSecretAccessKeySecretName"
-            keyFieldName="bedrockSecretAccessKeySecretKey"
-            label="Secret Access Key Secret Key"
           />
         </>
       )}

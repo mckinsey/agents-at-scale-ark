@@ -236,15 +236,22 @@ export function ChatPanel({
                   <TooltipContent>
                     <div className="space-y-1 text-xs">
                       <div>
-                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
-                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
+                        Input (new):{' '}
+                        {Math.max(
+                          0,
+                          tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
+                        ).toLocaleString()}
                       </div>
+                      {tokenUsage.cached_tokens > 0 && (
+                        <div>
+                          Cached: {tokenUsage.cached_tokens.toLocaleString()}
+                        </div>
+                      )}
                       <div>
                         Completion:{' '}
                         {tokenUsage.completion_tokens.toLocaleString()}
                       </div>
                       <div className="border-t pt-1 font-medium">
-                        Total: {tokenUsage.total_tokens.toLocaleString()}
                         Total: {tokenUsage.total_tokens.toLocaleString()}
                       </div>
                     </div>

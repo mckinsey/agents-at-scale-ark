@@ -116,6 +116,25 @@ spec:
 
 Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
 
+## Per-tenant built-in completions
+
+The same model applies to the **built-in completions engine**. By default it runs once, centrally, in `ark-system`, and every built-in Agent (one with no `executionEngine` field) is routed there. For tenant isolation — independent scaling, NetworkPolicy/PodSecurity, resource governance, and especially **per-tenant Azure Workload Identity** — deploy the completions chart into the tenant namespace as an opt-in:
+
+```bash
+helm install ark-completions \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions \
+  -n tenant-a \
+  --set serviceAccount.create=true \
+  --set rbac.create=true \
+  --set executionEngine.create=true \
+  --set serviceAccount.annotations."azure\.workload\.identity/client-id"=<client-id> \
+  --set podLabels."azure\.workload\.identity/use"=true
+```
+
+This deploys a completions pod under a tenant-local ServiceAccount (with the tenant's workload identity), grants it namespace-scoped RBAC, and registers an `ExecutionEngine` named `ark-completions` in the tenant namespace. The controller's dispatch then prefers that engine for the tenant's built-in Agents, falling back to the central `ark-system` engine for any namespace without one. No Agent changes are required — the routing is by namespace.
+
+This is fully backward-compatible: the central `ark-completions` keeps working as the default, and existing installs are unaffected.
+
 ## Conversation Threading
 
 When a query includes `spec.conversationId`, the controller sends it to your engine as the A2A `contextId`. The SDK extracts it and populates `request.conversationId`.

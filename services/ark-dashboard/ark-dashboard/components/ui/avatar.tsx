@@ -124,9 +124,12 @@ function Avatar({
   children,
   ...props
 }: Readonly<AvatarProps>) {
+  const contextValue = React.useMemo(
+    () => ({ size: size ?? undefined, disabled: disabled ?? undefined }),
+    [size, disabled],
+  );
   return (
-    <AvatarContext.Provider
-      value={{ size: size ?? undefined, disabled: disabled ?? undefined }}>
+    <AvatarContext.Provider value={contextValue}>
       <AvatarPrimitive.Root
         data-slot="avatar"
         tabIndex={disabled ? -1 : 0}
@@ -182,8 +185,8 @@ function AvatarFallback({
   ...props
 }: Readonly<AvatarFallbackProps>) {
   const context = useAvatarContext();
-  const size = sizeProp !== undefined ? sizeProp : context.size;
-  const disabled = disabledProp !== undefined ? disabledProp : context.disabled;
+  const size = sizeProp ?? context.size;
+  const disabled = disabledProp ?? context.disabled;
 
   return (
     <AvatarPrimitive.Fallback

@@ -24,7 +24,7 @@ func DiscoverTargetEndpoints(ctx context.Context, k8sClient client.Client) ([]Ta
 	}
 
 	secretList := &corev1.SecretList{}
-	if err := k8sClient.List(ctx, secretList); err != nil {
+	if err := k8sClient.List(ctx, secretList, scopedListOptions()...); err != nil {
 		return nil, fmt.Errorf("failed to list Secrets: %w", err)
 	}
 

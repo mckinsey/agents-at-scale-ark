@@ -1,0 +1,11 @@
+title = "Ark Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "ark-api-secret-key"
+description = "Ark API secret key"
+regex = '''sk-ark-[A-Za-z0-9_-]{64}'''
+keywords = ["sk-ark-"]
+tags = ["ark", "api-key", "secret"]

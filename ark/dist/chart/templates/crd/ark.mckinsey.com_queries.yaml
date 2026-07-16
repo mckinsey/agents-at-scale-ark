@@ -522,6 +522,9 @@ spec:
                 type: object
               tokenUsage:
                 properties:
+                  cachedTokens:
+                    format: int64
+                    type: integer
                   completionTokens:
                     format: int64
                     type: integer

@@ -83,7 +83,7 @@ function TreeVariant({
   parseArgsError,
   parseResultError,
   isFailed,
-}: VariantProps) {
+}: Readonly<VariantProps>) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 
@@ -146,7 +146,7 @@ function CardVariant({
   parseArgsError,
   parseResultError,
   isFailed,
-}: VariantProps) {
+}: Readonly<VariantProps>) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 

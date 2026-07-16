@@ -164,3 +164,23 @@ func TestExecuteSequential_ContextCancelled(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 }
+
+func TestExecuteGraph_RecordsTurnOutput(t *testing.T) {
+	members := []TeamMember{
+		&execMockTeamMember{
+			name: "m1",
+			execFunc: func(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("graph response")}}, nil
+			},
+		},
+	}
+	team := newTestTeam(members, "graph", false, nil)
+	rec := &mockTeamRecorder{}
+	team.telemetryRecorder = rec
+
+	result, err := team.Execute(context.Background(), NewUserMessage("hello"), nil, nil, nil, ExecuteOptions{})
+	require.NoError(t, err)
+	assert.Len(t, result.Messages, 1)
+	assert.True(t, rec.recordOutputCalled)
+	assert.Equal(t, "graph response", rec.lastOutput)
+}

@@ -53,8 +53,8 @@ function ParticipantTags({
 
     const compute = () => {
       const available = container.clientWidth;
-      const widths = (Array.from(ghost.children) as HTMLElement[]).map(
-        (el) => el.offsetWidth
+      const widths = Array.from(ghost.children).map(
+        (el) => (el as HTMLElement).offsetWidth
       );
 
       const totalAll = widths.reduce(
