@@ -69,7 +69,7 @@ export class PostgresMessageStream
       VALUES (
         ${data.conversationId},
         ${data.queryId},
-        ${this.db.json(data.message as unknown as postgres.JSONValue)},
+        ${this.db.json(data.message as postgres.JSONValue)},
         now() + make_interval(secs => ${effectiveTtl})
       )
       RETURNING sequence_number, conversation_id, query_id, message, created_at
@@ -90,13 +90,16 @@ export class PostgresMessageStream
         this.db`(
           ${data.conversationId},
           ${data.queryId},
-          ${this.db.json(data.message as unknown as postgres.JSONValue)},
+          ${this.db.json(data.message as postgres.JSONValue)},
           now() + make_interval(secs => ${effectiveTtl})
         )`
     );
+    const values = valueRows
+      .slice(1)
+      .reduce((acc, row) => this.db`${acc}, ${row}`, valueRows[0]);
     const rows = await this.db<MessageRow[]>`
       INSERT INTO messages (conversation_id, query_id, message, expires_at)
-      VALUES ${valueRows.reduce((acc, row) => this.db`${acc}, ${row}`)}
+      VALUES ${values}
       RETURNING sequence_number, conversation_id, query_id, message, created_at
     `;
     const items = rows
