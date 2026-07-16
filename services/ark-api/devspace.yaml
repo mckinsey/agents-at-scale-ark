@@ -78,6 +78,11 @@ dev:
         "cd /app/ark-api && uv sync --frozen && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
       ]
     namespace: default
+    # Forward the OAuth callback loopback port so dashboard-driven MCP auth
+    # reaches ark-api without a manual port-forward. Matches the loopback
+    # literal in ARK_API_PUBLIC_CALLBACK_URL, which strict IdPs accept.
+    ports:
+      - port: 34780:8000
     # Stream logs instead of terminal
     logs:
       lastLines: 50

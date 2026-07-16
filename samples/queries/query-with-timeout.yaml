@@ -6,7 +6,7 @@ spec:
   input: |
     Perform a comprehensive analysis of the following dataset. This may take some time
     to complete as it involves complex calculations and multiple data processing steps.
-    
+
     Please provide detailed insights and recommendations based on the analysis.
   timeout: "10m"
   target:
@@ -24,4 +24,4 @@ spec:
   timeout: "30s"
   targets:
     - type: agent
-    name: market-analyst
+      name: market-analyst

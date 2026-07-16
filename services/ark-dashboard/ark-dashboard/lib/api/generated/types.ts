@@ -2798,6 +2798,12 @@ export interface components {
              */
             force?: boolean | null;
             /**
+             * Redirect On Complete
+             * @description When true (used by the dashboard), the callback redirects the browser back to the dashboard instead of rendering the HTML completion page. Defaults to false, preserving the CLI's HTML-completion behaviour.
+             * @default false
+             */
+            redirect_on_complete: boolean;
+            /**
              * Scopes
              * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
              */
@@ -3431,6 +3437,25 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /**
+         * MCPServerAuthorization
+         * @description Authorization state of an MCPServer, for rendering state and expiry.
+         *
+         *     Sourced from status.authorization and the mcp-auth-authorized-* annotations.
+         *     Never carries token or Secret material.
+         */
+        MCPServerAuthorization: {
+            /** Authorizedat */
+            authorizedAt?: string | null;
+            /** Authorizedby */
+            authorizedBy?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Resourcename */
+            resourceName?: string | null;
+            /** State */
+            state: string;
+        };
         /** MCPServerConfigMapKeyRef */
         MCPServerConfigMapKeyRef: {
             /** Key */
@@ -3464,6 +3489,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
@@ -3514,6 +3540,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Name */
             name: string;

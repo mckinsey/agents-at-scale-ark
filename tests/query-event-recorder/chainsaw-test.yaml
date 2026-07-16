@@ -64,10 +64,11 @@ spec:
           value: ($namespace)
         content: |
           QUERY_UID=$(kubectl get query event-recorder-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
-          BROKER_NS=$(kubectl get configmaps --all-namespaces -o json | jq -r '.items[] | select(.metadata.name == "ark-config-broker") | .metadata.namespace' | head -1)
-          BROKER_DATA=$(kubectl get configmap ark-config-broker -n "$BROKER_NS" -o json | jq -r '.data.serviceRef')
+          BROKER_DATA=$(kubectl get configmap ark-config-broker -n "$NAMESPACE" -o json | jq -r '.data.serviceRef')
           BROKER_SVC=$(echo "$BROKER_DATA" | grep '^name:' | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d ' ')
           BROKER_PORT=$(echo "$BROKER_DATA" | grep '^port:' | sed 's/^port:[[:space:]]*//' | tr -d '"' | tr -d ' ')
+          BROKER_NS=$(echo "$BROKER_DATA" | grep '^namespace:' | sed 's/^namespace:[[:space:]]*//' | tr -d '"' | tr -d ' ')
+          if [ -z "$BROKER_NS" ]; then BROKER_NS="$NAMESPACE"; fi
           if [ -z "$BROKER_PORT" ] || [ "$BROKER_PORT" = "http" ]; then BROKER_PORT=80; fi
           BROKER_URL="http://${BROKER_SVC}.${BROKER_NS}.svc.cluster.local:${BROKER_PORT}"
 
