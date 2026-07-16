@@ -148,6 +148,32 @@ describe('PostgresEventStream', () => {
     });
   });
 
+  describe('deleteByQuery', () => {
+    it('removes only rows with the given query_id', async () => {
+      const qA = 'qa-' + Math.random().toString(36).slice(2);
+      const qB = 'qb-' + Math.random().toString(36).slice(2);
+      const eventA = makeEventData();
+      eventA.data.queryId = qA;
+      const eventB = makeEventData();
+      eventB.data.queryId = qB;
+      await stream.append(eventA);
+      await stream.append({...eventA});
+      await stream.append(eventB);
+
+      await stream.deleteByQuery(qA);
+
+      const all = await stream.all();
+      expect(all).toHaveLength(1);
+      expect(all[0].data.data.queryId).toBe(qB);
+    });
+
+    it('is a no-op when no rows match', async () => {
+      await stream.append(makeEventData());
+      await stream.deleteByQuery('nonexistent-query-id');
+      expect(await stream.all()).toHaveLength(1);
+    });
+  });
+
   describe('getCurrentSequence', () => {
     it('returns 0 when stream is empty', async () => {
       expect(await stream.getCurrentSequence()).toBe(0);

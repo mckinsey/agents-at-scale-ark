@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
-import type {EventData} from '../event-broker.js';
+import type {EventData, EventStream} from '../event-broker.js';
 import {BrokerItem} from './broker-item.js';
 import type {Predicate} from './stream.js';
 import {PostgresStreamBase} from './postgres-stream-base.js';
@@ -23,7 +23,10 @@ function rowToBrokerItem(row: EventRow): BrokerItem<EventData> {
   };
 }
 
-export class PostgresEventStream extends PostgresStreamBase<EventData> {
+export class PostgresEventStream
+  extends PostgresStreamBase<EventData>
+  implements EventStream
+{
   constructor(
     private readonly logger: Logger,
     private readonly db: Db,
@@ -73,6 +76,11 @@ export class PostgresEventStream extends PostgresStreamBase<EventData> {
     const toDelete = items.filter(predicate).map((item) => item.sequenceNumber);
     if (toDelete.length === 0) return;
     await this.db`DELETE FROM events WHERE sequence_number = ANY(${toDelete})`;
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    this.logger.info({queryId}, 'deleting events by query');
+    await this.db`DELETE FROM events WHERE query_id = ${queryId}`;
   }
 
   async getCurrentSequence(): Promise<number> {
