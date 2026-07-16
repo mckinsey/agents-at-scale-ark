@@ -64,10 +64,15 @@ vi.mock('@/components/namespaced-link', () => ({
   NamespacedLink: ({
     href,
     children,
+    ...props
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('@/lib/utils/workflow-toast', () => ({
@@ -123,6 +128,60 @@ describe('StudioHeaderActions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('studio-activity-badge')).toHaveTextContent(
         '5',
+      );
+    });
+  });
+
+  it('links each activity stat to the workflow runs page with filters', async () => {
+    vi.mocked(workflowTemplatesService.getStats).mockResolvedValue({
+      total: 5,
+      succeeded: 3,
+      running: 1,
+      failed: 1,
+    });
+
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
+
+    fireEvent.click(screen.getByTestId('studio-activity-trigger'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('studio-activity-link-total'),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByTestId('studio-activity-link-total').getAttribute('href'),
+    ).toBe('/sessions?workflowTemplateName=existing-workflow');
+    expect(
+      screen.getByTestId('studio-activity-link-succeeded').getAttribute('href'),
+    ).toBe('/sessions?workflowTemplateName=existing-workflow&status=succeeded');
+    expect(
+      screen.getByTestId('studio-activity-link-running').getAttribute('href'),
+    ).toBe('/sessions?workflowTemplateName=existing-workflow&status=running');
+    expect(
+      screen.getByTestId('studio-activity-link-failed').getAttribute('href'),
+    ).toBe('/sessions?workflowTemplateName=existing-workflow&status=failed');
+  });
+
+  it('populates the activity badge on mount without opening the popover', async () => {
+    vi.mocked(workflowTemplatesService.getStats).mockResolvedValue({
+      total: 7,
+      succeeded: 4,
+      running: 2,
+      failed: 1,
+    });
+
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
+
+    await waitFor(() => {
+      expect(workflowTemplatesService.getStats).toHaveBeenCalledWith(
+        'existing-workflow',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-activity-badge')).toHaveTextContent(
+        '7',
       );
     });
   });
@@ -190,7 +249,7 @@ describe('WorkflowStudio run button', () => {
   it('shows create instead of run on a fresh unpersisted workflow', () => {
     render(<WorkflowStudio mode="new" initialName="my-workflow" />);
     expect(screen.queryByTestId('studio-run')).not.toBeInTheDocument();
-    expect(screen.getByTestId('studio-create')).toBeInTheDocument();
+    expect(screen.getByTestId('studio-save')).toHaveTextContent('Create');
   });
 
   it('disables run while there are unsaved changes', async () => {

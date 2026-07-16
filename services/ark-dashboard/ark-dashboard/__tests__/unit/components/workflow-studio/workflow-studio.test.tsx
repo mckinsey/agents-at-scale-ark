@@ -50,6 +50,12 @@ vi.mock('@/lib/services/chat', () => ({
   },
 }));
 
+vi.mock('@/lib/services/studio-chat-history', () => ({
+  studioChatHistoryService: {
+    load: vi.fn(async () => null),
+  },
+}));
+
 vi.mock('@/components/workflow-dag-viewer', () => ({
   WorkflowDagViewer: ({ manifest }: { manifest: string }) => (
     <div data-testid="dag-viewer">{manifest}</div>
@@ -73,6 +79,24 @@ const validYaml = [
   '  name: placeholder',
   'spec:',
   '  entrypoint: main',
+].join('\n');
+
+const dagYaml = [
+  'apiVersion: argoproj.io/v1alpha1',
+  'kind: WorkflowTemplate',
+  'metadata:',
+  '  name: placeholder',
+  'spec:',
+  '  entrypoint: main',
+  '  templates:',
+  '    - name: main',
+  '      dag:',
+  '        tasks:',
+  '          - name: task-a',
+  '            template: task-a-template',
+  '          - name: task-b',
+  '            template: task-b-template',
+  '            dependencies: [task-a]',
 ].join('\n');
 
 function enterYaml(yamlText: string) {
@@ -246,19 +270,21 @@ describe('WorkflowStudio', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('shows a Create primary in new mode and no Run', () => {
+    it('labels the single save button Create in new mode and shows no Run', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
-      expect(screen.getByTestId('studio-create')).toBeInTheDocument();
+      expect(screen.getByTestId('studio-save')).toHaveTextContent('Create');
       expect(screen.queryByTestId('studio-run')).not.toBeInTheDocument();
     });
 
-    it('shows a Run primary in persisted edit mode and no Create', async () => {
+    it('labels the save button Save changes and shows Run in persisted edit mode', async () => {
       vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(validYaml);
       render(<WorkflowStudio mode="edit" initialName="existing-workflow" />);
       await waitFor(() => {
         expect(screen.getByTestId('studio-run')).toBeInTheDocument();
       });
-      expect(screen.queryByTestId('studio-create')).not.toBeInTheDocument();
+      expect(screen.getByTestId('studio-save')).toHaveTextContent(
+        'Save changes',
+      );
     });
 
     it('renders the draggable resize handle between chat and canvas', () => {
@@ -315,6 +341,65 @@ describe('WorkflowStudio', () => {
     it('disables the download trigger before any YAML exists', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
       expect(screen.getByTestId('studio-download')).toBeDisabled();
+    });
+
+    it('downloads the diagram as an SVG', () => {
+      URL.createObjectURL = vi.fn(() => 'blob:mock');
+      URL.revokeObjectURL = vi.fn();
+      const clickSpy = vi
+        .spyOn(HTMLAnchorElement.prototype, 'click')
+        .mockReturnValue(undefined);
+
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml(dagYaml);
+
+      fireEvent.click(screen.getByTestId('studio-download'));
+      fireEvent.click(screen.getByTestId('studio-download-diagram'));
+
+      const anchor = clickSpy.mock.instances[0];
+      expect(anchor).toBeInstanceOf(HTMLAnchorElement);
+      expect((anchor as HTMLAnchorElement).download).toBe('my-workflow.svg');
+
+      clickSpy.mockRestore();
+    });
+
+    it('downloads both YAML and SVG when choosing Both', () => {
+      URL.createObjectURL = vi.fn(() => 'blob:mock');
+      URL.revokeObjectURL = vi.fn();
+      const clickSpy = vi
+        .spyOn(HTMLAnchorElement.prototype, 'click')
+        .mockReturnValue(undefined);
+
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml(dagYaml);
+
+      fireEvent.click(screen.getByTestId('studio-download'));
+      fireEvent.click(screen.getByTestId('studio-download-both'));
+
+      expect(clickSpy).toHaveBeenCalledTimes(2);
+      const downloads = clickSpy.mock.instances.map(
+        instance => (instance as HTMLAnchorElement).download,
+      );
+      expect(downloads).toContain('my-workflow.svg');
+      expect(downloads).toContain('my-workflow.yaml');
+
+      clickSpy.mockRestore();
+    });
+
+    it('surfaces an error when the diagram cannot be exported', () => {
+      URL.createObjectURL = vi.fn(() => 'blob:mock');
+      URL.revokeObjectURL = vi.fn();
+
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml(validYaml);
+
+      fireEvent.click(screen.getByTestId('studio-download'));
+      fireEvent.click(screen.getByTestId('studio-download-diagram'));
+
+      expect(toast.error).toHaveBeenCalledWith(
+        'Unable to export diagram',
+        expect.objectContaining({ description: expect.any(String) }),
+      );
     });
   });
 

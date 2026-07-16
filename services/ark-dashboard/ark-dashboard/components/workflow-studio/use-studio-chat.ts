@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ToolCallData } from '@/components/chat/tool-call';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
+import type { ConversationMessage } from '@/lib/services/conversations';
+import { studioChatHistoryService } from '@/lib/services/studio-chat-history';
 import type { ArkExtendedChunk } from '@/lib/types/chat-message';
 import { extractWorkflowYaml } from '@/lib/utils/extract-workflow-yaml';
 import { generateUUID } from '@/lib/utils/uuid';
@@ -26,6 +28,8 @@ export interface UseStudioChatParams {
   setBuilding: (value: boolean) => void;
   isDirty: boolean;
   handEdited: boolean;
+  sessionId?: string;
+  resumeConversation?: boolean;
   timeout?: string;
 }
 
@@ -41,7 +45,9 @@ export interface UseStudioChatReturn {
   newConversation: () => void;
   composerLocked: boolean;
   composerDisabled: boolean;
+  inputDisabled: boolean;
   lockReason: string | undefined;
+  historyLoading: boolean;
 }
 
 const LOCK_REASON = 'Save your YAML changes to continue chatting';
@@ -58,6 +64,63 @@ function buildDispatchInput(
   return `Here is the current workflow template I am editing:\n\n\`\`\`yaml\n${draftYaml}\n\`\`\`\n\n${typedText}`;
 }
 
+const WORKFLOW_PREAMBLE_PATTERN =
+  /^Here is the current workflow template I am editing:\n\n```yaml\n[\s\S]*?\n```\n\n/;
+
+export function stripWorkflowPreamble(content: string): string {
+  return content.replace(WORKFLOW_PREAMBLE_PATTERN, '');
+}
+
+function toStudioToolCalls(
+  toolCalls: ConversationMessage['message']['tool_calls'],
+  toolResults: Map<string, string>,
+): ToolCallData[] | undefined {
+  if (!toolCalls || toolCalls.length === 0) {
+    return undefined;
+  }
+  return toolCalls.map(toolCall => ({
+    id: toolCall.id,
+    type: 'function',
+    function: {
+      name: toolCall.function.name,
+      arguments: toolCall.function.arguments,
+    },
+    result: toolResults.get(toolCall.id),
+  }));
+}
+
+function historyToStudioMessages(
+  items: ConversationMessage[],
+): StudioChatMessage[] {
+  const toolResults = new Map<string, string>();
+  for (const item of items) {
+    const message = item.message;
+    if (message?.role === 'tool' && message.tool_call_id && message.content) {
+      toolResults.set(message.tool_call_id, message.content);
+    }
+  }
+
+  const studioMessages: StudioChatMessage[] = [];
+  for (const item of items) {
+    const message = item.message;
+    if (!message) {
+      continue;
+    }
+    const role = message.role;
+    if (role !== 'user' && role !== 'assistant' && role !== 'system') {
+      continue;
+    }
+    const rawContent = message.content ?? '';
+    studioMessages.push({
+      id: generateUUID(),
+      role,
+      content: role === 'user' ? stripWorkflowPreamble(rawContent) : rawContent,
+      toolCalls: toStudioToolCalls(message.tool_calls, toolResults),
+    });
+  }
+  return studioMessages;
+}
+
 export function useStudioChat({
   draftYaml,
   lastAgentYaml,
@@ -66,26 +129,66 @@ export function useStudioChat({
   setBuilding,
   isDirty,
   handEdited,
+  sessionId,
+  resumeConversation,
   timeout,
 }: UseStudioChatParams): UseStudioChatReturn {
   const [messages, setMessages] = useState<StudioChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showToolCalls, setShowToolCalls] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(
+    Boolean(resumeConversation && sessionId),
+  );
 
-  const sessionIdRef = useRef<string>(`argo-make-${generateUUID()}`);
+  const fallbackSessionIdRef = useRef<string>(`argo-make-${generateUUID()}`);
   const conversationIdRef = useRef<string | undefined>(undefined);
+  const hydratedSessionRef = useRef<string | undefined>(undefined);
 
   const composerLocked = handEdited && isDirty && !building;
-  const composerDisabled = building || isStreaming || composerLocked;
+  const inputDisabled = building || isStreaming;
+  const composerDisabled = inputDisabled || composerLocked;
   const lockReason = composerLocked ? LOCK_REASON : undefined;
 
+  useEffect(() => {
+    if (!resumeConversation || !sessionId) {
+      setHistoryLoading(false);
+      return;
+    }
+    if (hydratedSessionRef.current === sessionId) {
+      setHistoryLoading(false);
+      return;
+    }
+    let active = true;
+    setHistoryLoading(true);
+    void studioChatHistoryService.load(sessionId).then(history => {
+      if (!active) {
+        return;
+      }
+      hydratedSessionRef.current = sessionId;
+      if (history) {
+        if (conversationIdRef.current === undefined) {
+          conversationIdRef.current = history.conversationId;
+        }
+        setMessages(prev =>
+          prev.length === 0 ? historyToStudioMessages(history.messages) : prev,
+        );
+      }
+      setHistoryLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [resumeConversation, sessionId]);
+
   const newConversation = useCallback(() => {
-    sessionIdRef.current = `argo-make-${generateUUID()}`;
+    if (!sessionId) {
+      fallbackSessionIdRef.current = `argo-make-${generateUUID()}`;
+    }
     conversationIdRef.current = undefined;
     setMessages([]);
     setInput('');
-  }, []);
+  }, [sessionId]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -130,11 +233,12 @@ export function useStudioChat({
       };
 
       try {
+        const activeSessionId = sessionId ?? fallbackSessionIdRef.current;
         const { chunks } = await chatService.startStreamChatResponse(
           dispatchInput,
           'agent',
           ARGO_MAKE_AUTHOR_AGENT_NAME,
-          sessionIdRef.current,
+          activeSessionId,
           conversationIdRef.current,
           timeout,
         );
@@ -265,6 +369,7 @@ export function useStudioChat({
       draftYaml,
       lastAgentYaml,
       setBuilding,
+      sessionId,
       timeout,
       commitAgentYaml,
     ],
@@ -292,7 +397,9 @@ export function useStudioChat({
       newConversation,
       composerLocked,
       composerDisabled,
+      inputDisabled,
       lockReason,
+      historyLoading,
     }),
     [
       messages,
@@ -304,7 +411,9 @@ export function useStudioChat({
       newConversation,
       composerLocked,
       composerDisabled,
+      inputDisabled,
       lockReason,
+      historyLoading,
     ],
   );
 }

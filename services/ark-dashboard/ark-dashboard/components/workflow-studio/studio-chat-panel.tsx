@@ -64,6 +64,7 @@ function StudioChatEmptyState({
 
 export interface StudioChatPanelProps {
   chat: UseStudioChatReturn;
+  loading: boolean;
   gated: boolean;
   agentMissing: boolean;
   agentNotReady: boolean;
@@ -73,6 +74,7 @@ export interface StudioChatPanelProps {
 
 export function StudioChatPanel({
   chat,
+  loading,
   gated,
   agentMissing,
   agentNotReady,
@@ -80,6 +82,7 @@ export function StudioChatPanel({
   mcpNotReady,
 }: StudioChatPanelProps) {
   const composerDisabled = chat.composerDisabled || gated;
+  const inputDisabled = chat.inputDisabled || gated;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -89,6 +92,17 @@ export function StudioChatPanel({
       }
     }
   };
+
+  if (loading) {
+    return (
+      <div
+        className="text-muted-foreground flex h-full min-h-0 flex-col items-center justify-center gap-2 text-sm"
+        data-testid="studio-chat-loading">
+        <Spinner />
+        Loading chat...
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -151,7 +165,7 @@ export function StudioChatPanel({
           <Textarea
             data-testid="studio-chat-input"
             value={chat.input}
-            disabled={composerDisabled}
+            disabled={inputDisabled}
             spellCheck={false}
             onChange={event => chat.setInput(event.target.value)}
             onKeyDown={handleKeyDown}

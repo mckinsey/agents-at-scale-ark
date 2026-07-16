@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,10 +7,17 @@ import { StudioChatPanel } from '@/components/workflow-studio/studio-chat-panel'
 import { useStudioChat } from '@/components/workflow-studio/use-studio-chat';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
+import { studioChatHistoryService } from '@/lib/services/studio-chat-history';
 
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
     startStreamChatResponse: vi.fn(),
+  },
+}));
+
+vi.mock('@/lib/services/studio-chat-history', () => ({
+  studioChatHistoryService: {
+    load: vi.fn(async () => null),
   },
 }));
 
@@ -71,6 +78,10 @@ interface HarnessOptions {
   lastAgent?: string | undefined;
   handEdited?: boolean;
   isDirty?: boolean;
+  sessionId?: string;
+  resumeConversation?: boolean;
+  strict?: boolean;
+  loading?: boolean;
 }
 
 function renderPanel(options: HarnessOptions = {}) {
@@ -100,6 +111,8 @@ function renderPanel(options: HarnessOptions = {}) {
       setBuilding,
       isDirty,
       handEdited,
+      sessionId: options.sessionId,
+      resumeConversation: options.resumeConversation,
     });
 
     return (
@@ -114,6 +127,7 @@ function renderPanel(options: HarnessOptions = {}) {
         </button>
         <StudioChatPanel
           chat={chat}
+          loading={options.loading ?? false}
           gated={false}
           agentMissing={false}
           agentNotReady={false}
@@ -124,7 +138,15 @@ function renderPanel(options: HarnessOptions = {}) {
     );
   }
 
-  render(<Harness />);
+  if (options.strict) {
+    render(
+      <StrictMode>
+        <Harness />
+      </StrictMode>,
+    );
+  } else {
+    render(<Harness />);
+  }
   return { commitSpy };
 }
 
@@ -143,6 +165,25 @@ async function waitForTurnComplete() {
 describe('StudioChatPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('loading', () => {
+    it('shows only the loader and hides the transcript and composer', () => {
+      renderPanel({ loading: true });
+
+      expect(screen.getByTestId('studio-chat-loading')).toBeInTheDocument();
+      expect(screen.queryByTestId('studio-chat-empty')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('studio-chat-input')).not.toBeInTheDocument();
+    });
+
+    it('shows the chat UI once loading resolves', () => {
+      renderPanel({ loading: false });
+
+      expect(
+        screen.queryByTestId('studio-chat-loading'),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId('studio-chat-empty')).toBeInTheDocument();
+    });
   });
 
   describe('empty state', () => {
@@ -289,7 +330,7 @@ describe('StudioChatPanel', () => {
   });
 
   describe('lock', () => {
-    it('locks the composer with unsaved hand edits and unlocks after save', async () => {
+    it('locks only the send button with unsaved hand edits and unlocks after save', async () => {
       renderPanel({
         draft: validYaml,
         lastAgent: validYaml,
@@ -300,14 +341,107 @@ describe('StudioChatPanel', () => {
       expect(screen.getByTestId('studio-composer-lock')).toHaveTextContent(
         'Save your YAML changes to continue chatting',
       );
-      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled();
+      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
+
+      fireEvent.change(screen.getByTestId('studio-chat-input'), {
+        target: { value: 'a message typed while locked' },
+      });
+      expect(screen.getByTestId('studio-chat-input')).toHaveValue(
+        'a message typed while locked',
+      );
 
       fireEvent.click(screen.getByTestId('harness-save'));
 
       await waitFor(() =>
-        expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled(),
+        expect(screen.getByTestId('studio-chat-send')).not.toBeDisabled(),
       );
       expect(screen.queryByTestId('studio-composer-lock')).toBeNull();
+    });
+  });
+
+  describe('resume', () => {
+    const historyMessage = (
+      role: 'user' | 'assistant',
+      content: string,
+      sequence: number,
+    ) => ({
+      timestamp: `2026-01-0${sequence}T00:00:00Z`,
+      conversation_id: 'conv-prev',
+      query_id: `q-${sequence}`,
+      sequence,
+      message: { role, content },
+    });
+
+    it('rehydrates the transcript and strips the yaml preamble from user messages', async () => {
+      vi.mocked(studioChatHistoryService.load).mockResolvedValueOnce({
+        conversationId: 'conv-prev',
+        messages: [
+          historyMessage(
+            'user',
+            `Here is the current workflow template I am editing:\n\n\`\`\`yaml\n${validYaml}\n\`\`\`\n\nadd a review step`,
+            1,
+          ),
+          historyMessage('assistant', 'done, added the review step', 2),
+        ],
+      });
+
+      renderPanel({
+        draft: validYaml,
+        lastAgent: validYaml,
+        sessionId: 'argo-make-default-my-workflow',
+        resumeConversation: true,
+      });
+
+      expect(await screen.findByText('add a review step')).toBeInTheDocument();
+      expect(
+        screen.getByText('done, added the review step'),
+      ).toBeInTheDocument();
+      const transcript = screen.getByTestId('studio-chat-transcript');
+      expect(transcript.textContent).not.toContain('kind: WorkflowTemplate');
+    });
+
+    it('still rehydrates under StrictMode double-invoked effects', async () => {
+      vi.mocked(studioChatHistoryService.load).mockResolvedValue({
+        conversationId: 'conv-prev',
+        messages: [historyMessage('assistant', 'strict-mode reply', 1)],
+      });
+
+      renderPanel({
+        draft: validYaml,
+        lastAgent: validYaml,
+        sessionId: 'argo-make-default-my-workflow',
+        resumeConversation: true,
+        strict: true,
+      });
+
+      expect(await screen.findByText('strict-mode reply')).toBeInTheDocument();
+    });
+
+    it('continues the resumed conversation and reuses the deterministic session id', async () => {
+      vi.mocked(studioChatHistoryService.load).mockResolvedValueOnce({
+        conversationId: 'conv-prev',
+        messages: [historyMessage('assistant', 'earlier reply', 1)],
+      });
+      mockStream(() => [contentChunk('ok'), finalChunk('conv-prev')]);
+
+      renderPanel({
+        draft: validYaml,
+        lastAgent: validYaml,
+        sessionId: 'argo-make-default-my-workflow',
+        resumeConversation: true,
+      });
+
+      expect(await screen.findByText('earlier reply')).toBeInTheDocument();
+
+      typeAndSend('another change');
+
+      await waitFor(() =>
+        expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
+      );
+      const call = vi.mocked(chatService.startStreamChatResponse).mock.calls[0];
+      expect(call[3]).toBe('argo-make-default-my-workflow');
+      expect(call[4]).toBe('conv-prev');
     });
   });
 

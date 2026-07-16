@@ -107,7 +107,6 @@ export interface WorkflowStudioState {
   confirmOverwrite: () => Promise<void>;
   cancelOverwrite: () => void;
   save: () => Promise<void>;
-  saveAsNewName: (name: string) => Promise<void>;
 }
 
 function errorMessage(error: unknown): string {
@@ -336,35 +335,6 @@ export function useWorkflowStudio({
     pendingYaml.current = null;
   }, []);
 
-  const saveAsNewName = useCallback(
-    async (name: string) => {
-      if (!draftYaml.trim() || saving) {
-        return;
-      }
-      const stamped = stampYaml(name);
-      if (stamped === null) {
-        return;
-      }
-      let exists = false;
-      try {
-        exists = await workflowTemplatesService.nameExists(name);
-      } catch (error) {
-        toast.error('Failed to save workflow', {
-          description: errorMessage(error),
-        });
-        return;
-      }
-      if (exists) {
-        toast.error('Name already exists', {
-          description: `A workflow template named "${name}" already exists`,
-        });
-        return;
-      }
-      await performSave(stamped, 'create', name, true);
-    },
-    [draftYaml, saving, stampYaml, performSave],
-  );
-
   return {
     mode,
     workflowName,
@@ -392,6 +362,5 @@ export function useWorkflowStudio({
     confirmOverwrite,
     cancelOverwrite,
     save,
-    saveAsNewName,
   };
 }

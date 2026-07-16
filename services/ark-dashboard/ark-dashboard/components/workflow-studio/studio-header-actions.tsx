@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -51,7 +52,7 @@ export function StudioHeaderActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
-    if (!activityOpen || !persisted || !workflowName) {
+    if (!persisted || !workflowName) {
       return;
     }
 
@@ -79,7 +80,7 @@ export function StudioHeaderActions({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activityOpen, persisted, workflowName]);
+  }, [persisted, workflowName]);
 
   const handleOpenInArgo = useCallback(() => {
     const url = `${ARGO_BASE_URL}/workflow-templates/${namespace}/${workflowName}`;
@@ -103,77 +104,46 @@ export function StudioHeaderActions({
   const notPersistedTip = 'Save the workflow first';
   const totalRuns = stats?.total ?? 0;
 
+  const runsHref = (status?: string) => {
+    const params = new URLSearchParams({ workflowTemplateName: workflowName });
+    if (status) {
+      params.set('status', status);
+    }
+    return `/sessions?${params.toString()}`;
+  };
+
+  const activityStats: {
+    key: string;
+    label: string;
+    value: number;
+    status?: string;
+  }[] = [
+    { key: 'total', label: 'Total', value: stats?.total ?? 0 },
+    {
+      key: 'succeeded',
+      label: 'Succeeded',
+      value: stats?.succeeded ?? 0,
+      status: 'succeeded',
+    },
+    {
+      key: 'running',
+      label: 'Running',
+      value: stats?.running ?? 0,
+      status: 'running',
+    },
+    {
+      key: 'failed',
+      label: 'Failed',
+      value: stats?.failed ?? 0,
+      status: 'failed',
+    },
+  ];
+
   return (
     <TooltipProvider>
       <div
         className="flex items-center gap-2"
         data-testid="studio-header-actions-content">
-        <Popover open={activityOpen} onOpenChange={setActivityOpen}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={!persisted}
-                  data-testid="studio-activity-trigger">
-                  <Activity className="mr-2 h-4 w-4" />
-                  Activity
-                  <Badge
-                    variant="secondary"
-                    className="ml-2"
-                    data-testid="studio-activity-badge">
-                    {totalRuns}
-                  </Badge>
-                </Button>
-              </PopoverTrigger>
-            </TooltipTrigger>
-            {!persisted && <TooltipContent>{notPersistedTip}</TooltipContent>}
-          </Tooltip>
-          <PopoverContent align="end" className="w-64">
-            <div
-              className="flex flex-col gap-3"
-              data-testid="studio-activity-content">
-              <div className="text-sm font-semibold">Last 24 hours</div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="flex flex-col">
-                  <span className="text-muted-foreground">Total</span>
-                  <span
-                    className="text-lg font-semibold"
-                    data-testid="studio-activity-total">
-                    {stats?.total ?? 0}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-muted-foreground">Succeeded</span>
-                  <span
-                    className="text-lg font-semibold"
-                    data-testid="studio-activity-succeeded">
-                    {stats?.succeeded ?? 0}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-muted-foreground">Running</span>
-                  <span
-                    className="text-lg font-semibold"
-                    data-testid="studio-activity-running">
-                    {stats?.running ?? 0}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-muted-foreground">Failed</span>
-                  <span
-                    className="text-lg font-semibold"
-                    data-testid="studio-activity-failed">
-                    {stats?.failed ?? 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -213,6 +183,55 @@ export function StudioHeaderActions({
             </TooltipContent>
           </Tooltip>
         )}
+
+        <Popover open={activityOpen} onOpenChange={setActivityOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!persisted}
+                  data-testid="studio-activity-trigger">
+                  <Activity className="mr-2 h-4 w-4" />
+                  Activity
+                  <Badge
+                    variant="secondary"
+                    className="ml-2"
+                    data-testid="studio-activity-badge">
+                    {totalRuns}
+                  </Badge>
+                </Button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            {!persisted && <TooltipContent>{notPersistedTip}</TooltipContent>}
+          </Tooltip>
+          <PopoverContent align="end" className="w-64">
+            <div
+              className="flex flex-col gap-3"
+              data-testid="studio-activity-content">
+              <div className="text-sm font-semibold">Last 24 hours</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {activityStats.map(stat => (
+                  <NamespacedLink
+                    key={stat.key}
+                    href={runsHref(stat.status)}
+                    onClick={() => setActivityOpen(false)}
+                    className="hover:bg-accent flex flex-col rounded-md p-1 transition-colors"
+                    data-testid={`studio-activity-link-${stat.key}`}>
+                    <span className="text-muted-foreground">{stat.label}</span>
+                    <span
+                      className="text-lg font-semibold"
+                      data-testid={`studio-activity-${stat.key}`}>
+                      {stat.value}
+                    </span>
+                  </NamespacedLink>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <DeleteWorkflowTemplateDialog

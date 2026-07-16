@@ -46,6 +46,7 @@ import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import { parseWorkflowParameters } from '@/lib/utils/parse-workflow-parameters';
 import { validateWorkflowYaml } from '@/lib/utils/validate-workflow-yaml';
+import { renderWorkflowDagSvg } from '@/lib/utils/workflow-dag-svg';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -71,7 +72,6 @@ interface WorkflowStudioProps {
 interface EditMetaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  name: string;
   title: string;
   description: string;
   onSave: (title: string, description: string) => void;
@@ -80,7 +80,6 @@ interface EditMetaDialogProps {
 function EditMetaDialog({
   open,
   onOpenChange,
-  name,
   title,
   description,
   onSave,
@@ -106,19 +105,6 @@ function EditMetaDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="workflow-meta-name">Workflow name</Label>
-            <Input
-              id="workflow-meta-name"
-              data-testid="studio-meta-name"
-              value={name}
-              readOnly
-              disabled
-            />
-            <p className="text-muted-foreground text-sm">
-              You&apos;re not able to rename after creation.
-            </p>
-          </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="workflow-meta-title">Title</Label>
             <Input
@@ -214,63 +200,6 @@ function NameModal({ open, onConfirm, onCancel }: NameModalProps) {
   );
 }
 
-interface SaveAsNewNameDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: (name: string) => void;
-}
-
-function SaveAsNewNameDialog({
-  open,
-  onOpenChange,
-  onConfirm,
-}: SaveAsNewNameDialogProps) {
-  const [name, setName] = useState('');
-  const trimmed = name.trim();
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={next => {
-        if (!next) {
-          setName('');
-        }
-        onOpenChange(next);
-      }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Save as new name</DialogTitle>
-          <DialogDescription>
-            Save a copy of this workflow under a new template name.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="workflow-new-name">Name</Label>
-          <Input
-            id="workflow-new-name"
-            data-testid="workflow-new-name-input"
-            value={name}
-            autoFocus
-            placeholder="my-workflow-copy"
-            onChange={event => setName(event.target.value)}
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!trimmed}
-            onClick={() => onConfirm(trimmed)}
-            data-testid="workflow-new-name-confirm">
-            Save copy
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 interface ViewToggleProps {
   view: WorkflowStudioView;
   onChange: (view: WorkflowStudioView) => void;
@@ -316,6 +245,10 @@ export function WorkflowStudio({
     initialDescription,
   });
   const gate = useAuthorAgentGate();
+  const { namespace, readOnlyMode } = useNamespace();
+  const chatSessionId = studio.workflowName
+    ? `argo-make-${namespace}-${studio.workflowName}`
+    : undefined;
   const chat = useStudioChat({
     draftYaml: studio.draftYaml,
     lastAgentYaml: studio.lastAgentYaml,
@@ -324,26 +257,73 @@ export function WorkflowStudio({
     setBuilding: studio.setBuilding,
     isDirty: studio.isDirty,
     handEdited: studio.handEdited,
+    sessionId: chatSessionId,
+    resumeConversation: studio.mode === 'edit',
   });
-  const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [editMetaOpen, setEditMetaOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
-  const { readOnlyMode } = useNamespace();
+
+  const baseFileName = studio.workflowName || 'workflow';
+
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadYaml = () => {
+    downloadBlob(
+      new Blob([studio.draftYaml], { type: 'text/yaml' }),
+      `${baseFileName}.yaml`,
+    );
+  };
+
+  const downloadDiagram = (): boolean => {
+    const svg = renderWorkflowDagSvg(studio.draftYaml);
+    if (!svg) {
+      toast.error('Unable to export diagram', {
+        description:
+          'Fix the workflow definition before exporting the diagram.',
+      });
+      return false;
+    }
+    downloadBlob(
+      new Blob([svg], { type: 'image/svg+xml' }),
+      `${baseFileName}.svg`,
+    );
+    return true;
+  };
 
   const handleDownloadYaml = () => {
     if (!studio.draftYaml.trim()) {
       return;
     }
-    const blob = new Blob([studio.draftYaml], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${studio.workflowName || 'workflow'}.yaml`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    downloadYaml();
     setDownloadOpen(false);
+  };
+
+  const handleDownloadDiagram = () => {
+    if (!studio.draftYaml.trim()) {
+      return;
+    }
+    if (downloadDiagram()) {
+      setDownloadOpen(false);
+    }
+  };
+
+  const handleDownloadBoth = () => {
+    if (!studio.draftYaml.trim()) {
+      return;
+    }
+    if (downloadDiagram()) {
+      downloadYaml();
+      setDownloadOpen(false);
+    }
   };
 
   const canSave = studio.isDirty && !studio.building && !studio.saving;
@@ -411,25 +391,15 @@ export function WorkflowStudio({
                 Unsaved changes
               </span>
             )}
-            {mode === 'edit' && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setSaveAsOpen(true)}
-                data-testid="studio-save-as">
-                Save as new name
-              </Button>
-            )}
             <Button
               type="button"
-              variant="outline"
+              variant={persisted ? 'outline' : 'default'}
               disabled={!canSave}
               onClick={() => void handleSave()}
               data-testid="studio-save">
-              Save changes
+              {persisted ? 'Save changes' : 'Create'}
             </Button>
-            {persisted ? (
+            {persisted && (
               <RunWorkflowDialog
                 templateName={studio.workflowName}
                 parameters={runParameters}
@@ -444,14 +414,6 @@ export function WorkflowStudio({
                   </Button>
                 }
               />
-            ) : (
-              <Button
-                type="button"
-                disabled={!canSave}
-                onClick={() => void handleSave()}
-                data-testid="studio-create">
-                Create
-              </Button>
             )}
           </div>
         </div>
@@ -483,7 +445,7 @@ export function WorkflowStudio({
             </div>
             {studio.description.trim() && (
               <p
-                className="text-muted-foreground truncate text-sm"
+                className="text-muted-foreground max-w-[600px] truncate text-sm"
                 data-testid="studio-description">
                 {studio.description}
               </p>
@@ -511,6 +473,7 @@ export function WorkflowStudio({
         chat={
           <StudioChatPanel
             chat={chat}
+            loading={gate.loading || chat.historyLoading}
             gated={gate.gated}
             agentMissing={gate.agentMissing}
             agentNotReady={gate.agentNotReady}
@@ -588,7 +551,6 @@ export function WorkflowStudio({
       <EditMetaDialog
         open={editMetaOpen}
         onOpenChange={setEditMetaOpen}
-        name={studio.workflowName}
         title={studio.title}
         description={studio.description}
         onSave={(nextTitle, nextDescription) => {
@@ -616,42 +578,26 @@ export function WorkflowStudio({
               <Download className="mr-2 h-4 w-4" />
               YAML
             </Button>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-start"
-                      disabled
-                      data-testid="studio-download-diagram">
-                      <Download className="mr-2 h-4 w-4" />
-                      Diagram
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Diagram export coming soon</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-start"
-                      disabled
-                      data-testid="studio-download-both">
-                      <Download className="mr-2 h-4 w-4" />
-                      Both
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Diagram export coming soon</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              disabled={!studio.draftYaml.trim()}
+              onClick={handleDownloadDiagram}
+              data-testid="studio-download-diagram">
+              <Download className="mr-2 h-4 w-4" />
+              Diagram
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              disabled={!studio.draftYaml.trim()}
+              onClick={handleDownloadBoth}
+              data-testid="studio-download-both">
+              <Download className="mr-2 h-4 w-4" />
+              Both
+            </Button>
           </div>
           <DialogFooter>
             <Button
@@ -668,15 +614,6 @@ export function WorkflowStudio({
         open={studio.isNameModalOpen}
         onConfirm={studio.commitName}
         onCancel={studio.cancelNameModal}
-      />
-
-      <SaveAsNewNameDialog
-        open={saveAsOpen}
-        onOpenChange={setSaveAsOpen}
-        onConfirm={name => {
-          setSaveAsOpen(false);
-          studio.saveAsNewName(name);
-        }}
       />
 
       <AlertDialog open={studio.overwriteOpen}>

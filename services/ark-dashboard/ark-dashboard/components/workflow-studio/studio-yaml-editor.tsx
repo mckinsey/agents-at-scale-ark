@@ -128,22 +128,6 @@ export function StudioYamlEditor({
 
   return (
     <div className="relative flex h-full w-full flex-col">
-      {error && (
-        <div
-          role="alert"
-          data-testid="studio-yaml-banner"
-          className="border-destructive bg-destructive/10 flex items-start gap-2 border-b px-4 py-3 text-sm">
-          <CircleAlert className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex min-w-0 flex-col">
-            <span className="text-destructive font-medium">
-              Invalid workflow YAML
-            </span>
-            <span className="text-muted-foreground font-mono text-xs break-words">
-              {error.message}
-            </span>
-          </div>
-        </div>
-      )}
       <div className="relative min-h-0 flex-1">
         <pre
           ref={highlightRef}
@@ -177,6 +161,22 @@ export function StudioYamlEditor({
           </div>
         )}
       </div>
+      {error && (
+        <div
+          role="alert"
+          data-testid="studio-yaml-banner"
+          className="border-destructive bg-destructive/10 flex shrink-0 items-start gap-2 border-t px-4 py-3 text-sm">
+          <CircleAlert className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-destructive font-medium">
+              Invalid workflow YAML
+            </span>
+            <span className="text-muted-foreground font-mono text-xs break-words">
+              {error.message}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
