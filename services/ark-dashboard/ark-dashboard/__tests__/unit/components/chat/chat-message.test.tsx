@@ -185,6 +185,7 @@ describe('ChatMessage', () => {
             prompt_tokens: 1200,
             completion_tokens: 340,
             total_tokens: 1540,
+            cached_tokens: 0,
           }}
         />,
       );
@@ -192,6 +193,25 @@ describe('ChatMessage', () => {
       expect(screen.getByText(/1,540 tokens/)).toBeInTheDocument();
       expect(screen.getByText(/1,200 in/)).toBeInTheDocument();
       expect(screen.getByText(/340 out/)).toBeInTheDocument();
+    });
+
+    it('should subtract cached tokens from input and show cached count', () => {
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Answer"
+          tokenUsage={{
+            prompt_tokens: 1200,
+            completion_tokens: 340,
+            total_tokens: 1540,
+            cached_tokens: 1150,
+          }}
+        />,
+      );
+
+      expect(screen.getByText(/50 in/)).toBeInTheDocument();
+      expect(screen.getByText(/340 out/)).toBeInTheDocument();
+      expect(screen.getByText(/1,150 cached/)).toBeInTheDocument();
     });
 
     it('should not display token usage when total is zero', () => {
@@ -203,6 +223,7 @@ describe('ChatMessage', () => {
             prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0,
+            cached_tokens: 0,
           }}
         />,
       );
@@ -219,6 +240,7 @@ describe('ChatMessage', () => {
             prompt_tokens: 10,
             completion_tokens: 5,
             total_tokens: 15,
+            cached_tokens: 0,
           }}
         />,
       );

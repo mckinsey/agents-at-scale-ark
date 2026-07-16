@@ -362,8 +362,6 @@ spec:
                 f"turn.member.name is empty on span '{span['name']}'. "
                 "This indicates the team chat is not recording which member spoke."
             )
-
-    @pytest.mark.skip(reason="Known bug: turn.output always empty due to []Message type assertion failure")
     def test_turn_spans_have_output(self):
         query_name = self._run_team_query("turn-output", "Generate your token")
         trace = find_trace_for_query(query_name, timeout=30)
