@@ -88,6 +88,8 @@ Messages carry a TTL-based expiry: each message is written with an `expires_at` 
 
 Messages are also removed when their originating `Query` is deleted: the controller issues `DELETE /queries/{queryId}/messages`, which hard-deletes every message for that query across all conversations. On the Postgres backend this is a single indexed delete. This complements the TTL above — TTL is time-based, this is triggered by the Query's removal. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
+Operation events are cleaned up the same way, but through a separate path: events aren't part of the [Memory API](/reference/resources/memory#memory-api-specification), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID.
+
 See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
 
 ### Securing the Postgres connection

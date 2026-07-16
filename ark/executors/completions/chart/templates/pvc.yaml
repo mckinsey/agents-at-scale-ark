@@ -3,7 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .name }}
-  namespace: {{ $.Release.Namespace }}
+  namespace: {{ include "ark-completions.namespace" $ }}
 spec:
   accessModes:
     - ReadWriteOnce

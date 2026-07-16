@@ -61,6 +61,13 @@ The controller always dispatches over A2A — it never executes a target in-proc
 
 ## 3. The engine executes the target
 
+The Query controller detects the new Query and:
+1. Resolves the target (agent, team, model, or tool) from the spec or label selector
+2. If the target agent names a custom `executionEngine`, the controller resolves that `ExecutionEngine` resource's address since these agents proxy to external services
+3. Otherwise, the controller dispatches to the **built-in completions engine**. It prefers a namespace-local `ExecutionEngine` named `ark-completions` (a per-tenant completions deployment) when one is present and ready, and falls back to the central completions engine in `ark-system` (the `--completions-addr` default) when it is not
+4. Sends an A2A `SendMessage` to the resolved address with the target and query reference, then waits for the response and writes the result to the Query status
+
+> **One model, two deployment topologies.** Execution engines — including the built-in completions engine — are deployed *per tenant* when isolation is needed (own namespace, ServiceAccount, RBAC, NetworkPolicy, and cloud workload identity), and the central `ark-completions` in `ark-system` remains the shared default for simple or single-tenant installs. Built-in Agents need no `executionEngine` field either way; the controller resolves the right engine by namespace.
 The completions engine receives the message and sets up the run: it reads the `Query` and the target resource from Kubernetes, creates a memory client and loads conversation history, opens an event stream for chunks to `ark-broker`, then executes the target.
 
 **For an agent**, it:

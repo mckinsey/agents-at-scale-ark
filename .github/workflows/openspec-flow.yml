@@ -1,0 +1,40 @@
+# Maintained by openspec-flow. Edit the `uses:` ref to upgrade.
+# Docs: https://github.com/dwmkerr/openspec-flow
+name: openspec-flow
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [labeled, closed]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+# Reusable workflows can only declare permissions UP TO what the caller
+# grants. Without this block the reusable workflow's `contents: write`
+# request is rejected with: "is requesting 'contents: write, issues:
+# write, pull-requests: write', but is only allowed 'contents: read…'".
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  # Required by the OIDC token broker path: the reusable workflow
+  # requests a GitHub-signed OIDC token and exchanges it for an App
+  # installation token at openspec-flow.example.com/api/token. Without
+  # this permission the broker exchange falls through to the legacy
+  # App secret path (or GITHUB_TOKEN, which cannot push workflow
+  # files).
+  id-token: write
+jobs:
+  # Identity: by default openspec-flow runs as github-actions[bot] (via
+  # GITHUB_TOKEN) — fine to try it out, but it cannot push changes under
+  # .github/workflows/. For openspec-flow[bot] identity, install the App
+  # (https://github.com/apps/openspec-flow) and set the
+  # OPENSPEC_FLOW_BROKER_URL variable, or add a `with:` block setting
+  # oidc-broker-url. See the docs for details.
+  flow:
+    uses: dwmkerr/openspec-flow/.github/workflows/openspec-flow.yml@v0.1.5
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENSPEC_FLOW_APP_ID: ${{ secrets.OPENSPEC_FLOW_APP_ID || '' }}
+      OPENSPEC_FLOW_PRIVATE_KEY: ${{ secrets.OPENSPEC_FLOW_PRIVATE_KEY || '' }}
