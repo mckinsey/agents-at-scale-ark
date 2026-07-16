@@ -79,6 +79,35 @@ export class PostgresMessageStream
     return item;
   }
 
+  async appendMany(
+    dataList: MessageData[],
+    ttlSeconds?: number
+  ): Promise<BrokerItem<MessageData>[]> {
+    if (dataList.length === 0) return [];
+    const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
+    const valueRows = dataList.map(
+      (data): postgres.Fragment =>
+        this.db`(
+          ${data.conversationId},
+          ${data.queryId},
+          ${this.db.json(data.message as unknown as postgres.JSONValue)},
+          now() + make_interval(secs => ${effectiveTtl})
+        )`
+    );
+    const rows = await this.db<MessageRow[]>`
+      INSERT INTO messages (conversation_id, query_id, message, expires_at)
+      VALUES ${valueRows.reduce((acc, row) => this.db`${acc}, ${row}`)}
+      RETURNING sequence_number, conversation_id, query_id, message, created_at
+    `;
+    const items = rows
+      .map(rowToBrokerItem)
+      .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+    for (const item of items) {
+      this.emitter.emit('item', item);
+    }
+    return items;
+  }
+
   async delete(predicate?: Predicate<MessageData>): Promise<void> {
     if (!predicate) {
       this.logger.info('deleting all messages');

@@ -25,4 +25,8 @@ export interface MessageStream extends Stream<MessageData> {
   deleteBy(filter: MessageFilter): Promise<void>;
   distinctConversationIds(): Promise<string[]>;
   conversationStats(): Promise<ConversationStats[]>;
+  appendMany(
+    dataList: MessageData[],
+    ttlSeconds?: number
+  ): Promise<BrokerItem<MessageData>[]>;
 }

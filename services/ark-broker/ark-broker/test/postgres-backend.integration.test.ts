@@ -88,6 +88,24 @@ describeIntegration('postgres backend — HTTP integration', () => {
     expect(res.body.items[0].message).toEqual(message);
   });
 
+  it('POST /messages with multiple messages stores and returns them in the same order', async () => {
+    const messages = ['first', 'second', 'third', 'fourth', 'fifth'];
+
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'conv-batch', query_id: 'q-batch', messages})
+      .expect(200);
+
+    const res = await request(app)
+      .get('/messages?conversation_id=conv-batch')
+      .expect(200);
+
+    expect(res.body.items).toHaveLength(messages.length);
+    expect(
+      res.body.items.map((item: {message: string}) => item.message)
+    ).toEqual(messages);
+  });
+
   it('messages survive a stream instance restart against the same database', async () => {
     await request(app)
       .post('/messages')

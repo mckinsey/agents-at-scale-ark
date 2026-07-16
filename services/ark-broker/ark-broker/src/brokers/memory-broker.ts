@@ -35,13 +35,10 @@ export class MemoryBroker {
     messages: Message[],
     ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>[]> {
-    const items: BrokerItem<MessageData>[] = [];
-    for (const message of messages) {
-      items.push(
-        await this.addMessage(conversationId, queryId, message, ttlSeconds)
-      );
-    }
-    return items;
+    return this.stream.appendMany(
+      messages.map((message) => ({conversationId, queryId, message})),
+      ttlSeconds
+    );
   }
 
   async getByConversation(

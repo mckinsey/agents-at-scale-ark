@@ -1,3 +1,4 @@
+import postgres from 'postgres';
 import {createLogger} from '@ark-broker/logging/logger.js';
 import {usePgContainer} from '../../../db/__tests__/testHelpers/pg-testcontainer.js';
 import {PostgresMessageStream} from '../postgres-message-stream.js';
@@ -8,7 +9,7 @@ jest.setTimeout(120_000);
 const silentLogger = createLogger({level: 'silent', pretty: false});
 
 describe('PostgresMessageStream', () => {
-  const {db} = usePgContainer();
+  const {db, connectionUrl} = usePgContainer();
   let stream: PostgresMessageStream;
 
   beforeAll(() => {
@@ -40,6 +41,95 @@ describe('PostgresMessageStream', () => {
       stream.subscribe((item) => received.push(item.sequenceNumber));
       await stream.append(makeMessageData());
       expect(received).toHaveLength(1);
+    });
+  });
+
+  describe('appendMany', () => {
+    it('returns [] and issues no query for an empty array', async () => {
+      const queries: string[] = [];
+      const debugDb = postgres(connectionUrl(), {
+        debug: (_id: number, query: string): void => {
+          queries.push(query);
+        },
+      });
+      const debugStream = new PostgresMessageStream(
+        silentLogger,
+        debugDb,
+        3600
+      );
+
+      const items = await debugStream.appendMany([]);
+
+      expect(items).toEqual([]);
+      expect(queries).toHaveLength(0);
+      await debugDb.end();
+    });
+
+    it('inserts every message in a single round-trip', async () => {
+      const queries: string[] = [];
+      const debugDb = postgres(connectionUrl(), {
+        debug: (_id: number, query: string): void => {
+          queries.push(query);
+        },
+      });
+      // postgres.js runs a one-off type-oid bootstrap query the first time a
+      // fresh connection is used; warm it up so it doesn't skew the count.
+      await debugDb`SELECT 1`;
+      queries.length = 0;
+      const debugStream = new PostgresMessageStream(
+        silentLogger,
+        debugDb,
+        3600
+      );
+
+      await debugStream.appendMany([
+        makeMessageData(),
+        makeMessageData(),
+        makeMessageData(),
+      ]);
+
+      expect(queries).toHaveLength(1);
+      expect(queries[0]).toMatch(/insert into messages/i);
+      await debugDb.end();
+    });
+
+    it('returns items in sequence/input order and emits one item event per row', async () => {
+      const dataList = [
+        makeMessageData(),
+        makeMessageData(),
+        makeMessageData(),
+      ];
+      const received: number[] = [];
+      stream.subscribe((item) => received.push(item.sequenceNumber));
+
+      const items = await stream.appendMany(dataList);
+
+      expect(items.map((item) => item.sequenceNumber)).toEqual([1, 2, 3]);
+      expect(items.map((item) => item.data)).toEqual(dataList);
+      expect(received).toEqual([1, 2, 3]);
+    });
+
+    it('uses ttlSeconds for every row in the batch', async () => {
+      const customTtl = 60;
+      const before = Date.now();
+      const items = await stream.appendMany(
+        [makeMessageData(), makeMessageData()],
+        customTtl
+      );
+      const after = Date.now();
+
+      const pgDb = db();
+      const rows = await pgDb<{expires_at: Date}[]>`
+        SELECT expires_at FROM messages
+        WHERE sequence_number = ANY(${items.map((item) => item.sequenceNumber)})
+      `;
+      for (const row of rows) {
+        const expiresAt = row.expires_at.getTime();
+        expect(expiresAt).toBeGreaterThanOrEqual(
+          before + customTtl * 1000 - 2000
+        );
+        expect(expiresAt).toBeLessThanOrEqual(after + customTtl * 1000 + 2000);
+      }
     });
   });
 

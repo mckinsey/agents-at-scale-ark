@@ -53,6 +53,17 @@ export class InMemoryMessageStream
     return this.delete(this.predicateFor(filter));
   }
 
+  async appendMany(
+    dataList: MessageData[],
+    ttlSeconds?: number
+  ): Promise<BrokerItem<MessageData>[]> {
+    const items: BrokerItem<MessageData>[] = [];
+    for (const data of dataList) {
+      items.push(await this.append(data, ttlSeconds));
+    }
+    return items;
+  }
+
   async distinctConversationIds(): Promise<string[]> {
     const items = await this.all();
     return Array.from(new Set(items.map((item) => item.data.conversationId)));

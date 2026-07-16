@@ -170,6 +170,36 @@ describe('InMemoryMessageStream', () => {
     });
   });
 
+  describe('appendMany', () => {
+    it('returns [] without appending anything for an empty array', async () => {
+      const items = await stream.appendMany([]);
+      expect(items).toEqual([]);
+      expect(await stream.all()).toHaveLength(0);
+    });
+
+    it('appends all messages in order and returns matching items', async () => {
+      const dataList = [
+        makeMessageData(),
+        makeMessageData(),
+        makeMessageData(),
+      ];
+
+      const items = await stream.appendMany(dataList);
+
+      expect(items.map((item) => item.sequenceNumber)).toEqual([1, 2, 3]);
+      expect(items.map((item) => item.data)).toEqual(dataList);
+    });
+
+    it('emits one item event per message', async () => {
+      const received: number[] = [];
+      stream.subscribe((item) => received.push(item.sequenceNumber));
+
+      await stream.appendMany([makeMessageData(), makeMessageData()]);
+
+      expect(received).toEqual([1, 2]);
+    });
+  });
+
   describe('distinctConversationIds', () => {
     it('returns empty array when stream is empty', async () => {
       expect(await stream.distinctConversationIds()).toEqual([]);

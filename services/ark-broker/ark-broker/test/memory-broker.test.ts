@@ -48,6 +48,18 @@ describe('MemoryBroker', () => {
       expect(items[1].sequenceNumber).toBe(2);
       expect(items[2].sequenceNumber).toBe(3);
     });
+
+    test('should return items in the same order as the input messages', async () => {
+      const messages = ['first', 'second', 'third', 'fourth'];
+      const items = await broker.addMessages('conv1', 'query1', messages);
+
+      expect(items.map((item) => item.data.message)).toEqual(messages);
+    });
+
+    test('should return [] for an empty messages array', async () => {
+      const items = await broker.addMessages('conv1', 'query1', []);
+      expect(items).toEqual([]);
+    });
   });
 
   describe('getByConversation', () => {
