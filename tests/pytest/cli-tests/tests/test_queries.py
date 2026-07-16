@@ -165,7 +165,7 @@ spec:
                 assert success, f"Query creation failed: {message}"
                 self.created_queries.append(query_name)
 
-                success, token_usage = self.helper.get_token_usage(query_name)
+                success, token_usage = self.helper.wait_for_token_usage(query_name)
                 assert success, f"Query {query_name} reported no token usage"
 
                 total_tokens = token_usage.get("totalTokens", 0)

@@ -132,6 +132,15 @@ spec:
             return False, None
         return True, token_usage
 
+    def wait_for_token_usage(self, name: str, timeout: int = 30) -> Tuple[bool, Optional[Dict]]:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            success, token_usage = self.get_token_usage(name)
+            if success:
+                return True, token_usage
+            time.sleep(2)
+        return False, None
+
     def list_queries(self) -> Tuple[bool, List[str]]:
         success, stdout, stderr = self._run_cmd(
             ["kubectl", "get", "queries", "-n", self.namespace, "-o", "json"],
