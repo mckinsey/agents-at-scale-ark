@@ -108,9 +108,7 @@ export abstract class PostgresStreamBase<
 
     return {
       items,
-      // total is intentionally left unpopulated here (no COUNT(*)); pagination.ts
-      // makes PaginatedList.total optional in the next commit.
-      total: undefined as unknown as number,
+      // total is intentionally left unpopulated here: no COUNT(*).
       hasMore,
       nextCursor: hasMore && lastItem ? lastItem.sequenceNumber : undefined,
     };

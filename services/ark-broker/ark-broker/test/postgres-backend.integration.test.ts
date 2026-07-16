@@ -1,9 +1,12 @@
-import type {Express} from 'express';
+import {EventEmitter} from 'node:events';
+import type {Express, Request, Response} from 'express';
 import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
 import {createDb} from '../src/db/db.js';
+import {MemoryBroker} from '../src/brokers/memory-broker.js';
+import {handleStreamingMessages} from '../src/http/routes/memory/handlers.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
@@ -16,9 +19,40 @@ const logger = createLogger({level: 'silent', pretty: false});
 const describeIntegration =
   process.env.SKIP_INTEGRATION === 'true' ? describe.skip : describe;
 
+/**
+ * Drives an SSE handler with an in-process fake req/res (an EventEmitter and
+ * a write-capturing stub) instead of a real socket, so the reconnect replay
+ * path can be asserted without the surrounding HTTP transport.
+ */
+async function captureReplay(
+  run: (req: Request, res: Response) => void
+): Promise<Record<string, unknown>[]> {
+  const writes: string[] = [];
+  const reqEmitter = new EventEmitter();
+  const fakeReq = Object.assign(reqEmitter, {
+    log: logger,
+  }) as unknown as Request;
+  const fakeRes = {
+    setHeader: (): void => {},
+    write: (chunk: string): boolean => {
+      writes.push(chunk);
+      return true;
+    },
+  } as unknown as Response;
+
+  run(fakeReq, fakeRes);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  reqEmitter.emit('close');
+
+  return writes
+    .filter((chunk) => chunk.startsWith('data: '))
+    .map((chunk) => JSON.parse(chunk.slice(6, -2)));
+}
+
 describeIntegration('postgres backend — HTTP integration', () => {
   const {db, connectionUrl} = usePgContainer();
   let app: Express;
+  let memory: MemoryBroker;
 
   beforeAll(() => {
     const config = loadConfig({
@@ -26,6 +60,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
       DATABASE_URL: connectionUrl(),
     });
     const stream = createMessageStream(config, logger, db());
+    memory = new MemoryBroker(stream);
     ({app} = buildApp({
       config,
       logger,
@@ -93,6 +128,93 @@ describeIntegration('postgres backend — HTTP integration', () => {
 
   it('GET /readyz returns 200 when the database is reachable', async () => {
     await request(app).get('/readyz').expect(200);
+  });
+
+  it('GET /messages?conversation_id= returns only that conversation when multiple conversations exist', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-scope-a',
+        query_id: 'q-scope-a',
+        messages: ['a1', 'a2'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-scope-b',
+        query_id: 'q-scope-b',
+        messages: ['b1'],
+      })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/messages?conversation_id=conv-scope-a')
+      .expect(200);
+
+    expect(res.body.items).toHaveLength(2);
+    for (const item of res.body.items as {conversation_id: string}[]) {
+      expect(item.conversation_id).toBe('conv-scope-a');
+    }
+  });
+
+  it('watch-mode reconnect with a cursor replays only items after the cursor, scoped to conversation_id', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-replay',
+        query_id: 'q-replay',
+        messages: ['first', 'second'],
+      })
+      .expect(200); // sequence 1, 2
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-other',
+        query_id: 'q-other',
+        messages: ['other'],
+      })
+      .expect(200); // sequence 3, higher than the cursor but a different conversation
+
+    const events = await captureReplay((req, res) =>
+      handleStreamingMessages(req, res, memory, 'conv-replay', 1)
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      conversation_id: 'conv-replay',
+      message: 'second',
+    });
+  });
+
+  it('a scoped read on conversation_id uses messages_conversation_idx, not a sequential scan', async () => {
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'conv-explain',
+          query_id: `q-explain-${i}`,
+          messages: ['m'],
+        })
+        .expect(200);
+    }
+
+    const plan = await db().begin(async (sql) => {
+      await sql`SET LOCAL enable_seqscan = off`;
+      const rows = await sql.unsafe(`
+        EXPLAIN ANALYZE
+        SELECT sequence_number, conversation_id, query_id, message, created_at
+        FROM messages
+        WHERE expires_at > now() AND conversation_id = 'conv-explain'
+        ORDER BY sequence_number ASC
+        LIMIT 101
+      `);
+      return (rows as unknown as {'QUERY PLAN': string}[])
+        .map((row) => row['QUERY PLAN'])
+        .join('\n');
+    });
+
+    expect(plan).toContain('messages_conversation_idx');
   });
 
   it('DELETE /queries/:queryId/messages removes only that query rows', async () => {

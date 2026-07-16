@@ -44,13 +44,18 @@ export class MemoryBroker {
   async getByConversation(
     conversationId: string
   ): Promise<BrokerItem<MessageData>[]> {
-    return this.stream.filter(
-      (item) => item.data.conversationId === conversationId
-    );
+    return this.stream.filterBy({conversationId});
   }
 
   async getByQuery(queryId: string): Promise<BrokerItem<MessageData>[]> {
-    return this.stream.filter((item) => item.data.queryId === queryId);
+    return this.stream.filterBy({queryId});
+  }
+
+  async messagesAfter(
+    cursor: number,
+    conversationId?: string
+  ): Promise<BrokerItem<MessageData>[]> {
+    return this.stream.filterBy({conversationId, afterSequence: cursor});
   }
 
   async getConversationIds(): Promise<string[]> {
@@ -72,17 +77,11 @@ export class MemoryBroker {
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    return this.stream.delete(
-      (item) => item.data.conversationId === conversationId
-    );
+    return this.stream.deleteBy({conversationId});
   }
 
   async deleteQuery(conversationId: string, queryId: string): Promise<void> {
-    return this.stream.delete(
-      (item) =>
-        item.data.conversationId === conversationId &&
-        item.data.queryId === queryId
-    );
+    return this.stream.deleteBy({conversationId, queryId});
   }
 
   async deleteByQuery(queryId: string): Promise<void> {
@@ -108,19 +107,7 @@ export class MemoryBroker {
     params: PaginationParams,
     filters?: {conversationId?: string; queryId?: string}
   ): Promise<PaginatedList<BrokerItem<MessageData>>> {
-    const predicate = filters
-      ? (item: BrokerItem<MessageData>): boolean => {
-          if (
-            filters.conversationId &&
-            item.data.conversationId !== filters.conversationId
-          )
-            return false;
-          if (filters.queryId && item.data.queryId !== filters.queryId)
-            return false;
-          return true;
-        }
-      : undefined;
-    return this.stream.paginate(params, predicate);
+    return this.stream.paginateBy(params, filters);
   }
 
   async getCurrentSequence(): Promise<number> {
