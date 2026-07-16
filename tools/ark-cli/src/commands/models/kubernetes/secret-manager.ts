@@ -32,18 +32,12 @@ export class KubernetesSecretManager implements SecretManager {
     const secretArgs = ['create', 'secret', 'generic', config.secretName];
 
     if (config.type === 'bedrock') {
-      if (config.authMethod === 'api-key') {
-        secretArgs.push(`--from-literal=bedrock-api-key=${config.apiKey}`);
-      } else {
-        secretArgs.push(`--from-literal=access-key-id=${config.accessKeyId}`);
-        secretArgs.push(
-          `--from-literal=secret-access-key=${config.secretAccessKey}`
-        );
-        if (config.sessionToken) {
-          secretArgs.push(
-            `--from-literal=session-token=${config.sessionToken}`
-          );
-        }
+      secretArgs.push(`--from-literal=access-key-id=${config.accessKeyId}`);
+      secretArgs.push(
+        `--from-literal=secret-access-key=${config.secretAccessKey}`
+      );
+      if (config.sessionToken) {
+        secretArgs.push(`--from-literal=session-token=${config.sessionToken}`);
       }
     } else {
       secretArgs.push(`--from-literal=api-key=${config.apiKey}`);
@@ -58,18 +52,12 @@ export class KubernetesSecretManager implements SecretManager {
     const secretArgs = ['create', 'secret', 'generic', config.secretName];
 
     if (config.type === 'bedrock') {
-      if (config.authMethod === 'api-key') {
-        secretArgs.push(`--from-literal=bedrock-api-key=${config.apiKey}`);
-      } else {
-        secretArgs.push(`--from-literal=access-key-id=${config.accessKeyId}`);
-        secretArgs.push(
-          `--from-literal=secret-access-key=${config.secretAccessKey}`
-        );
-        if (config.sessionToken) {
-          secretArgs.push(
-            `--from-literal=session-token=${config.sessionToken}`
-          );
-        }
+      secretArgs.push(`--from-literal=access-key-id=${config.accessKeyId}`);
+      secretArgs.push(
+        `--from-literal=secret-access-key=${config.secretAccessKey}`
+      );
+      if (config.sessionToken) {
+        secretArgs.push(`--from-literal=session-token=${config.sessionToken}`);
       }
     } else {
       secretArgs.push(`--from-literal=api-key=${config.apiKey}`);

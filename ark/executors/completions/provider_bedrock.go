@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"github.com/aws/smithy-go/auth/bearer"
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -22,7 +21,6 @@ type BedrockModel struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
-	APIKey          string
 	ModelArn        string
 	Properties      map[string]string
 	client          *bedrockruntime.Client
@@ -30,7 +28,7 @@ type BedrockModel struct {
 	schemaName      string
 }
 
-func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, apiKey, modelArn string, properties map[string]string) *BedrockModel {
+func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, modelArn string, properties map[string]string) *BedrockModel {
 	return &BedrockModel{
 		Model:           model,
 		Region:          region,
@@ -38,7 +36,6 @@ func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessi
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		SessionToken:    sessionToken,
-		APIKey:          apiKey,
 		ModelArn:        modelArn,
 		Properties:      properties,
 	}
@@ -52,7 +49,7 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 	var cfg aws.Config
 	var err error
 
-	if bm.APIKey == "" && bm.AccessKeyID != "" && bm.SecretAccessKey != "" {
+	if bm.AccessKeyID != "" && bm.SecretAccessKey != "" {
 		creds := credentials.NewStaticCredentialsProvider(bm.AccessKeyID, bm.SecretAccessKey, bm.SessionToken)
 		cfg, err = config.LoadDefaultConfig(ctx, config.WithRegion(bm.Region), config.WithCredentialsProvider(creds))
 	} else {
@@ -67,14 +64,7 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 		cfg.BaseEndpoint = aws.String(bm.BaseURL)
 	}
 
-	if bm.APIKey != "" {
-		bm.client = bedrockruntime.NewFromConfig(cfg, func(o *bedrockruntime.Options) {
-			o.BearerAuthTokenProvider = bearer.StaticTokenProvider{Token: bearer.Token{Value: bm.APIKey}}
-			o.AuthSchemePreference = []string{"httpBearerAuth"}
-		})
-	} else {
-		bm.client = bedrockruntime.NewFromConfig(cfg)
-	}
+	bm.client = bedrockruntime.NewFromConfig(cfg)
 	return nil
 }
 

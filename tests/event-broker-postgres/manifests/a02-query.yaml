@@ -7,4 +7,3 @@ spec:
   target:
     type: agent
     name: events-broker-agent
-  ttl: "1h0m0s"

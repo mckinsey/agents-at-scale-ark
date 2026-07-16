@@ -39,7 +39,6 @@ describe('createModel', () => {
       .mockResolvedValueOnce({modelType: 'bedrock'}) // user selects from list
       .mockResolvedValueOnce({model: 'anthropic.claude-3-sonnet-20240229-v1:0'})
       .mockResolvedValueOnce({region: 'us-east-1'})
-      .mockResolvedValueOnce({authMethod: 'iam'})
       .mockResolvedValueOnce({accessKeyId: 'AKIAIOSFODNN7EXAMPLE'})
       .mockResolvedValueOnce({
         secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',

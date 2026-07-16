@@ -14,7 +14,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry/routing"
 )
@@ -22,12 +21,11 @@ import (
 var log = logf.Log.WithName("eventing.broker")
 
 type Event struct {
-	Timestamp  string                 `json:"timestamp"`
-	EventType  string                 `json:"eventType"`
-	Reason     string                 `json:"reason"`
-	Message    string                 `json:"message"`
-	Data       map[string]interface{} `json:"data"`
-	TtlSeconds *int64                 `json:"ttl_seconds,omitempty"`
+	Timestamp string                 `json:"timestamp"`
+	EventType string                 `json:"eventType"`
+	Reason    string                 `json:"reason"`
+	Message   string                 `json:"message"`
+	Data      map[string]interface{} `json:"data"`
 }
 
 type BrokerEventEmitter struct {
@@ -92,12 +90,11 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 	}
 
 	event := Event{
-		Timestamp:  time.Now().Format(time.RFC3339Nano),
-		EventType:  eventType,
-		Reason:     reason,
-		Message:    message,
-		Data:       eventData,
-		TtlSeconds: common.TtlSecondsFromQuery(query),
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+		EventType: eventType,
+		Reason:    reason,
+		Message:   message,
+		Data:      eventData,
 	}
 
 	if e.sem.TryAcquire(1) {

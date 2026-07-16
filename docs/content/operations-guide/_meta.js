@@ -16,7 +16,6 @@ export default {
   'build-pipelines': 'Build Pipelines',
 
   '---security': { type: 'separator', title: 'Security and assurance' },
-  'audit-trail': 'Audit Trail',
   'data-flow-and-encryption': 'Data Flow and Encryption',
   'model-url-security': 'Model URL Security',
   'penetration-testing-reports': 'Penetration Testing Reports',

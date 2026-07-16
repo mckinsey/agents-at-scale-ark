@@ -1,102 +1,97 @@
-import { render, screen } from '@testing-library/react';
-
-import { auth } from '../../auth';
-import { fetchAccessibleNamespaces } from '../lib/namespaces';
+import { render, screen, waitFor } from '@testing-library/react';
 import LandingPage from '../page';
 
-jest.mock('../../auth', () => ({ auth: jest.fn() }));
-jest.mock('../lib/namespaces', () => ({
-  fetchAccessibleNamespaces: jest.fn(),
-}));
-
-const mockAuth = auth as jest.Mock;
-const mockFetch = fetchAccessibleNamespaces as jest.Mock;
+global.fetch = jest.fn();
 
 describe('LandingPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuth.mockResolvedValue({ accessToken: 'token' });
-    delete process.env.LANDING_PAGE_TITLE;
-    delete process.env.LANDING_PAGE_SUBTITLE;
-    delete process.env.LANDING_PAGE_INFO;
-    delete process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL;
   });
 
-  it('renders the accessible namespaces with display name and description', async () => {
-    mockFetch.mockResolvedValue([
+  it('renders loading state initially', () => {
+    (global.fetch as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    
+    render(<LandingPage />);
+    
+    expect(screen.getByText('Loading demos...')).toBeInTheDocument();
+  });
+
+  it('renders demos when fetch succeeds', async () => {
+    const mockDemos = [
       {
-        name: 'tenant-a',
-        displayName: 'Tenant A',
-        description: 'Workspace A',
-        dashboardUrl: 'https://custom.example.com/tenant-a',
+        name: 'demo1',
+        displayName: 'Demo 1',
+        description: 'Test demo 1',
       },
-      { name: 'tenant-b', displayName: 'Tenant B' },
-    ]);
-
-    render(await LandingPage());
-
-    expect(screen.getByText('Tenant A')).toBeInTheDocument();
-    expect(screen.getByText('Workspace A')).toBeInTheDocument();
-    expect(screen.getByText('Tenant B')).toBeInTheDocument();
-    // tenant-b has no description annotation -> fallback copy
-    expect(
-      screen.getByText('Open the ARK dashboard for this namespace'),
-    ).toBeInTheDocument();
-  });
-
-  it('links to the annotation URL when set, else derives from the namespace', async () => {
-    mockFetch.mockResolvedValue([
       {
-        name: 'tenant-a',
-        displayName: 'Tenant A',
-        dashboardUrl: 'https://custom.example.com/tenant-a',
+        name: 'demo2',
+        displayName: 'Demo 2',
+        description: 'Test demo 2',
       },
-      { name: 'tenant-b', displayName: 'Tenant B' },
-    ]);
+    ];
 
-    render(await LandingPage());
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockDemos,
+    });
 
-    const hrefs = screen
-      .getAllByRole('link')
-      .map((a) => a.getAttribute('href'));
-    expect(hrefs).toContain('https://custom.example.com/tenant-a'); // annotation
-    expect(hrefs).toContain('http://localhost:3000/tenant-b'); // derived default
+    render(<LandingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Demo 1')).toBeInTheDocument();
+      expect(screen.getByText('Demo 2')).toBeInTheDocument();
+      expect(screen.getByText('Test demo 1')).toBeInTheDocument();
+      expect(screen.getByText('Test demo 2')).toBeInTheDocument();
+    });
   });
 
-  it('shows an empty state when the user has no accessible namespaces', async () => {
-    mockFetch.mockResolvedValue([]);
+  it('renders error state when fetch fails', async () => {
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
 
-    render(await LandingPage());
+    render(<LandingPage />);
 
-    expect(
-      screen.getByText("You don't have access to any ARK namespaces yet."),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load demos. Check console for details.')).toBeInTheDocument();
+    });
   });
 
-  it('uses default copy, overridable via env vars', async () => {
-    mockFetch.mockResolvedValue([]);
+  it('renders error when API returns error response', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    });
 
-    const { unmount } = render(await LandingPage());
-    expect(screen.getByText('ARK')).toBeInTheDocument();
-    expect(
-      screen.getByText('Agentic Runtime for Kubernetes'),
-    ).toBeInTheDocument();
-    unmount();
+    render(<LandingPage />);
 
-    process.env.LANDING_PAGE_TITLE = 'Acme Platform';
-    process.env.LANDING_PAGE_SUBTITLE = 'Pick a workspace';
-    render(await LandingPage());
-    expect(screen.getByText('Acme Platform')).toBeInTheDocument();
-    expect(screen.getByText('Pick a workspace')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load demos. Check console for details.')).toBeInTheDocument();
+    });
   });
 
-  it('renders an empty state if discovery throws', async () => {
-    mockFetch.mockRejectedValue(new Error('boom'));
+  it('renders message when no demos available', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
 
-    render(await LandingPage());
+    render(<LandingPage />);
 
-    expect(
-      screen.getByText("You don't have access to any ARK namespaces yet."),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('No demos available at the moment.')).toBeInTheDocument();
+    });
+  });
+
+  it('renders page title and description', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+
+    render(<LandingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('ARK Demos')).toBeInTheDocument();
+      expect(screen.getByText('Explore agentic AI demonstrations')).toBeInTheDocument();
+    });
   });
 });
