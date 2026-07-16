@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -26,7 +26,7 @@ export function CollapsibleCodeBlock({
         type="button"
         onClick={() => setOpen(prev => !prev)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2 text-xs font-medium text-gray-300 hover:text-gray-100">
+        className="focus-visible:ring-ring/50 flex w-full items-center gap-2 px-4 py-2 text-xs font-medium text-gray-300 outline-none hover:text-gray-100 focus-visible:ring-[3px] focus-visible:ring-inset">
         {open ? (
           <ChevronDown className="h-4 w-4" />
         ) : (

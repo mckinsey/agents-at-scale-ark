@@ -35,7 +35,7 @@ export function WorkflowTemplatesNotInstalled() {
         asChild
         className="text-muted-foreground"
         size="sm">
-        <a href={ARGO_WORKFLOWS_DOCS_URL} target="_blank">
+        <a href={ARGO_WORKFLOWS_DOCS_URL} target="_blank" rel="noreferrer">
           Learn how to install Argo Workflows <ArrowUpRightIcon />
         </a>
       </Button>

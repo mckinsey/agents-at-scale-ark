@@ -412,15 +412,17 @@ describe('WorkflowStudio', () => {
         metadata: { name: 'my-workflow' },
       });
 
-      render(
-        <WorkflowStudio
-          mode="new"
-          initialName="my-workflow"
-          initialTitle="My Title"
-          initialDescription="My description"
-        />,
-      );
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
       enterYaml(validYaml);
+
+      fireEvent.click(screen.getByTestId('studio-edit-meta'));
+      fireEvent.change(screen.getByTestId('studio-title-input'), {
+        target: { value: 'My Title' },
+      });
+      fireEvent.change(screen.getByTestId('studio-description-input'), {
+        target: { value: 'My description' },
+      });
+      fireEvent.click(screen.getByTestId('studio-meta-save'));
 
       fireEvent.click(screen.getByTestId('studio-save'));
 
@@ -434,6 +436,35 @@ describe('WorkflowStudio', () => {
       expect(savedYaml).toContain(
         'workflows.argoproj.io/description: My description',
       );
+    });
+
+    it('mirrors title/description from the YAML annotations as it is edited', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+
+      const annotatedYaml = [
+        'apiVersion: argoproj.io/v1alpha1',
+        'kind: WorkflowTemplate',
+        'metadata:',
+        '  name: placeholder',
+        '  annotations:',
+        '    workflows.argoproj.io/title: From YAML',
+        '    workflows.argoproj.io/description: Described in YAML',
+        'spec:',
+        '  entrypoint: main',
+      ].join('\n');
+      enterYaml(annotatedYaml);
+
+      expect(screen.getByTestId('studio-title')).toHaveTextContent('From YAML');
+      expect(screen.getByTestId('studio-description')).toHaveTextContent(
+        'Described in YAML',
+      );
+
+      enterYaml(validYaml);
+
+      expect(screen.getByTestId('studio-title')).toHaveTextContent(
+        'my-workflow',
+      );
+      expect(screen.queryByTestId('studio-description')).toBeNull();
     });
 
     it('edits the title through the details dialog and updates the heading', () => {

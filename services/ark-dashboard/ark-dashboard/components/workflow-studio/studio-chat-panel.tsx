@@ -53,7 +53,7 @@ function StudioChatEmptyState({
               onExample(prompt);
             }}
             data-testid={`studio-chat-suggestion-${index}`}
-            className="bg-secondary text-foreground hover:bg-accent w-full rounded-md border px-3 py-2 text-left text-sm disabled:opacity-50">
+            className="bg-secondary text-foreground hover:bg-accent focus-visible:border-ring focus-visible:ring-ring/50 w-full rounded-md border px-3 py-2 text-left text-sm outline-none focus-visible:ring-[3px] disabled:opacity-50">
             {prompt}
           </button>
         ))}

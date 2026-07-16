@@ -31,17 +31,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function parseMetaFromYaml(yamlText: string): WorkflowMeta {
+function parseMetaFromYaml(yamlText: string): WorkflowMeta | null {
   let parsed: unknown;
   try {
     parsed = yaml.load(yamlText);
   } catch {
-    return { title: '', description: '' };
+    return null;
   }
-  if (!isPlainObject(parsed) || !isPlainObject(parsed.metadata)) {
-    return { title: '', description: '' };
+  if (!isPlainObject(parsed)) {
+    return null;
   }
-  const annotations = parsed.metadata.annotations;
+  const annotations = isPlainObject(parsed.metadata)
+    ? parsed.metadata.annotations
+    : undefined;
   if (!isPlainObject(annotations)) {
     return { title: '', description: '' };
   }
@@ -157,9 +159,6 @@ export function useWorkflowStudio({
         setDraftYaml(fetched);
         setLastSavedYaml(fetched);
         setLastAgentYaml(undefined);
-        const meta = parseMetaFromYaml(fetched);
-        setTitle(meta.title);
-        setDescription(meta.description);
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -178,6 +177,18 @@ export function useWorkflowStudio({
       cancelled = true;
     };
   }, [mode, initialName]);
+
+  useEffect(() => {
+    if (!draftYaml.trim()) {
+      return;
+    }
+    const meta = parseMetaFromYaml(draftYaml);
+    if (!meta) {
+      return;
+    }
+    setTitle(meta.title);
+    setDescription(meta.description);
+  }, [draftYaml]);
 
   const isDirty = draftYaml.trim() !== '' && draftYaml !== lastSavedYaml;
 
