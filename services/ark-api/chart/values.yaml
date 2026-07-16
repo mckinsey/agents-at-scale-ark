@@ -90,6 +90,20 @@ app:
     # ingress. Override with a public https ingress URL for real deployments.
     - name: ARK_API_PUBLIC_CALLBACK_URL
       value: "http://127.0.0.1:34780/v1/mcp/auth/callback"
+    # Optional: base URL of the dashboard, used to redirect the browser back
+    # after a dashboard-initiated MCP auth flow. The redirect target is
+    # <ARK_API_DASHBOARD_URL>/mcp, so this value MUST include any path prefix
+    # under which the dashboard is served (e.g. behind an X-Forwarded-Prefix).
+    # Same scheme rules as ARK_API_PUBLIC_CALLBACK_URL: https, unless the host
+    # is a loopback literal (127.0.0.1, [::1] bracketed, or localhost) which may
+    # use http. Required only for the dashboard redirect-completion path; the
+    # CLI flow is unaffected. When unset, dashboard flows fall back to the HTML
+    # completion page.
+    # The default is the local devspace dashboard host, which resolves to
+    # loopback (so http is permitted). Override with a public https ingress URL
+    # for real deployments.
+    - name: ARK_API_DASHBOARD_URL
+      value: "http://dashboard.default.127.0.0.1.nip.io:8080"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"

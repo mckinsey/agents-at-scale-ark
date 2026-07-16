@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { McpServerCard } from '@/components/cards/mcp-server-card';
@@ -45,6 +45,27 @@ vi.mock('./base-card', () => ({
       {footer}
     </div>
   )),
+}));
+
+const hoisted = vi.hoisted(() => ({
+  startMutate: vi.fn(),
+  logoutMutate: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
+
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  GET_ALL_MCP_SERVERS_QUERY_KEY: 'get-all-mcp-servers',
+  useStartMcpAuth: () => ({ mutate: hoisted.startMutate, isPending: false }),
+  useLogoutMcpAuth: () => ({ mutate: hoisted.logoutMutate, isPending: false }),
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: hoisted.toastError,
+    success: hoisted.toastSuccess,
+    warning: vi.fn(),
+  },
 }));
 
 describe('McpServerCard', () => {
@@ -240,6 +261,123 @@ describe('McpServerCard', () => {
         return element?.textContent === 'Transport: sse';
       })).toBeInTheDocument();
       expect(screen.getByText('Connection timeout')).toBeInTheDocument();
+    });
+  });
+
+  describe('Authorization actions', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    const withState = (state: string, extra = {}): MCPServer => ({
+      ...mockMcpServer,
+      authorization: { state, ...extra },
+    });
+
+    it('renders no auth badge or actions when authorization is absent', () => {
+      render(<McpServerCard mcpServer={mockMcpServer} namespace="team-a" />);
+      expect(screen.queryByRole('button', { name: 'Authenticate' })).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Re-authenticate' }),
+      ).toBeNull();
+    });
+
+    it('Authenticate calls startAuth with force:false and navigates on success', async () => {
+      render(
+        <McpServerCard mcpServer={withState('Required')} namespace="team-a" />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Authenticate' }),
+      );
+      expect(hoisted.startMutate).toHaveBeenCalledWith(
+        { name: 'test-server', options: { namespace: 'team-a', force: false } },
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
+
+      const { onSuccess } = hoisted.startMutate.mock.calls[0][1];
+      const original = window.location;
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { href: '' },
+      });
+      onSuccess({ authorization_url: 'https://idp/authorize?x=1' });
+      expect(window.location.href).toBe('https://idp/authorize?x=1');
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: original,
+      });
+    });
+
+    it('Re-authenticate sends force:true', async () => {
+      render(
+        <McpServerCard mcpServer={withState('Authorized')} namespace="team-a" />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Re-authenticate' }),
+      );
+      expect(hoisted.startMutate).toHaveBeenCalledWith(
+        { name: 'test-server', options: { namespace: 'team-a', force: true } },
+        expect.any(Object),
+      );
+    });
+
+    it('shows an error toast and does not navigate when start fails', async () => {
+      render(
+        <McpServerCard mcpServer={withState('Required')} namespace="team-a" />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Authenticate' }),
+      );
+      const { onError } = hoisted.startMutate.mock.calls[0][1];
+      onError(new Error('boom'));
+      expect(hoisted.toastError).toHaveBeenCalledWith(
+        'Failed to Start Authentication',
+        expect.objectContaining({ description: 'boom' }),
+      );
+    });
+
+    it('DiscoveryFailed shows the badge but no authenticate action', () => {
+      render(
+        <McpServerCard
+          mcpServer={withState('DiscoveryFailed')}
+          namespace="team-a"
+        />,
+      );
+      expect(screen.getByText('Discovery failed')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Authenticate' })).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Re-authenticate' }),
+      ).toBeNull();
+    });
+
+    it('Sign out confirms before calling logout, then toasts and refreshes', async () => {
+      const onAuthChanged = vi.fn();
+      render(
+        <McpServerCard
+          mcpServer={withState('Authorized')}
+          namespace="team-a"
+          onAuthChanged={onAuthChanged}
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      expect(hoisted.logoutMutate).not.toHaveBeenCalled();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Sign Out' }),
+      );
+      expect(hoisted.logoutMutate).toHaveBeenCalledWith(
+        { name: 'test-server', options: { namespace: 'team-a' } },
+        expect.any(Object),
+      );
+
+      const { onSuccess } = hoisted.logoutMutate.mock.calls[0][1];
+      onSuccess();
+      expect(hoisted.toastSuccess).toHaveBeenCalled();
+      expect(onAuthChanged).toHaveBeenCalled();
     });
   });
 

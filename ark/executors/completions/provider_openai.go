@@ -241,9 +241,10 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 
 		if chunk.Usage.TotalTokens > 0 {
 			fullResponse.Usage = openai.CompletionUsage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
+				PromptTokens:        chunk.Usage.PromptTokens,
+				CompletionTokens:    chunk.Usage.CompletionTokens,
+				TotalTokens:         chunk.Usage.TotalTokens,
+				PromptTokensDetails: chunk.Usage.PromptTokensDetails,
 			}
 		}
 	}
