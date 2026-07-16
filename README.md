@@ -75,16 +75,3 @@ To troubleshoot an installation, run `ark status`.
 ## Credits
 
 The initial design and implementation of Ark was led by [Roman Galeev](https://github.com/Roman-Galeev), [Dave Kerr](https://github.com/dwmkerr), and [Chris Madden](https://github.com/cm94242).
-
-<!-- openspec-flow install-start -->
-## openspec-flow
-
-This repo uses [openspec-flow](https://github.com/dwmkerr/openspec-flow) to drive spec-driven development from GitHub issues.
-
-1. Open an issue describing the feature, fix, or task.
-2. Add the `openspec:go` label.
-3. openspec-flow opens a **spec PR** (`openspec:spec`). Review, comment, iterate (add `openspec:go` to the PR to re-run). Merge when happy.
-4. openspec-flow opens an **impl PR** (`openspec:impl`). Review, iterate, merge. The originating issue closes automatically.
-
-Required Actions secret: `ANTHROPIC_API_KEY`.
-<!-- openspec-flow install-end -->
