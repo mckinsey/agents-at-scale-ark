@@ -6,9 +6,77 @@ image:
 port: 80
 targetPort: 9090
 
+# Number of completions engine replicas. Exposed so per-tenant deployments can
+# scale independently of the central install.
+replicaCount: 1
+
+# Override the generated resource name. Defaults to "ark-completions" so the
+# central install keeps a stable Service name (the controller's
+# --completions-addr and the dispatch fallback both expect ark-completions).
+nameOverride: ""
+fullnameOverride: ""
+
+# Namespace the chart's resources are created in. Leave empty to follow the
+# Helm release namespace (-n / --namespace). The central install is deployed
+# with `-n ark-system`; per-tenant installs simply use the tenant namespace.
+# Kept as an explicit override for backward compatibility.
+namespace: ""
+
+# ServiceAccount the completions pod runs as.
+#
+# Default: the chart provisions its own least-privilege SA (bound to the RBAC
+# below) instead of borrowing the operator's broad ark-controller permissions.
+# Add annotations (e.g. Azure Workload Identity client-id) here to give the pod
+# its own cloud identity.
+#
+# Opt-out (legacy): set serviceAccount.create=false (and rbac.create=false) to
+# reuse the shared serviceAccountName below (ark-controller, whose RBAC lives in
+# the ark-controller chart).
+serviceAccount:
+  create: true
+  # Name of the SA to create or use. Defaults to the chart fullname when
+  # creating, or serviceAccountName below when create=false.
+  name: ""
+  annotations: {}
+  # azure.workload.identity/client-id: "<client-id>"
+
+# ServiceAccount name used when serviceAccount.create=false (legacy opt-out).
 serviceAccountName: ark-controller
 
-namespace: ark-system
+# Least-privilege RBAC for the completions pod. The pod resolves
+# Query/Agent/Model/MCPServer config using its SA, so it needs read access to
+# those resources plus the secrets/configmaps/services they reference, and it
+# updates Memory status. Scope follows namespaceScopedDiscovery below: a
+# cluster-scoped Role for the central install (serves all namespaces), a
+# namespaced Role for per-tenant installs. Set create=false to reuse
+# ark-controller's cluster RBAC instead (legacy opt-out).
+rbac:
+  create: true
+
+# Scope broker/OTEL discovery to the pod's own namespace. Broker and target
+# discovery list ConfigMaps/Secrets cluster-wide by default, which a
+# namespaced Role (rbac.create=true) cannot authorize — the list is Forbidden
+# and the pod silently falls back to dropping events/traces. Enable this for
+# per-tenant installs (alongside rbac.create=true) so discovery lists only the
+# tenant's own namespace, where its ark-broker/ark-config-broker live. Off by
+# default so the shared ark-system install keeps its cluster-wide view.
+namespaceScopedDiscovery: false
+
+# Register this deployment as an ExecutionEngine named "ark-completions" in its
+# namespace. The controller's dispatch prefers a namespace-local ExecutionEngine
+# of this name over the central address, so enabling this is what makes a
+# per-tenant completions engine actually receive that tenant's built-in-Agent
+# traffic. Off by default so the central install is unchanged.
+executionEngine:
+  create: false
+  name: ark-completions
+  # Streaming chunks are emitted to the broker, so advertise streaming support.
+  streamingSupported: true
+
+# Pod metadata. podLabels is required to opt a pod into Azure Workload Identity
+# (azure.workload.identity/use: "true") without forking the chart.
+podLabels: {}
+podAnnotations: {}
 
 resources:
   limits:

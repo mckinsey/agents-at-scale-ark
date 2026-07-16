@@ -50,10 +50,22 @@ spec:
                   key: {{ .Values.postgresql.passwordSecretKey }}
             - name: ARK_POSTGRES_SSL_MODE
               value: {{ .Values.postgresql.sslMode | quote }}
+            {{- if .Values.certManager.enabled }}
+            - name: ARK_APISERVER_TLS_CERT_FILE
+              value: /etc/ark/apiserver-tls/tls.crt
+            - name: ARK_APISERVER_TLS_KEY_FILE
+              value: /etc/ark/apiserver-tls/tls.key
+            {{- end }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          {{- if .Values.certManager.enabled }}
+          volumeMounts:
+            - name: apiserver-tls
+              mountPath: /etc/ark/apiserver-tls
+              readOnly: true
+          {{- end }}
           ports:
             - name: https
               containerPort: {{ .Values.apiserver.port }}
@@ -69,3 +81,9 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      {{- if .Values.certManager.enabled }}
+      volumes:
+        - name: apiserver-tls
+          secret:
+            secretName: ark-apiserver-tls
+      {{- end }}
