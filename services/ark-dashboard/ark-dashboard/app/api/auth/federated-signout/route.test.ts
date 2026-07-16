@@ -36,6 +36,22 @@ describe('GET /api/auth/federated-signout', () => {
     process.env.BASE_URL = 'https://dashboard.example.com';
     process.env.AUTH_SECRET = 'test-secret';
     delete process.env.OIDC_CLIENT_ID;
+    delete process.env.AUTH_HUB_URL;
+  });
+
+  it('clears local cookies then redirects to the hub federated-signout when AUTH_HUB_URL is set', async () => {
+    process.env.AUTH_HUB_URL = 'https://hub.example.com/';
+    vi.mocked(getToken).mockResolvedValue({ id_token: 'id-tok' } as never);
+
+    const res = await GET(request());
+
+    expect(res.headers.get('location')).toBe(
+      'https://hub.example.com/api/auth/federated-signout',
+    );
+    // The tenant's own session cookie must be cleared even though logout is
+    // centralized at the hub (separate-origin tenants keep a local cookie).
+    expect(res.cookies.get(SESSION)?.value).toBe('');
+    expect(res.cookies.get(`${SESSION}.0`)?.value).toBe('');
   });
 
   it('clears the session cookie + chunks and redirects to /signout when there is no session', async () => {
@@ -99,5 +115,16 @@ describe('GET /api/auth/federated-signout', () => {
     );
     expect(loc.searchParams.get('client_id')).toBe('client-123');
     expect(res.cookies.get(SESSION)?.value).toBe('');
+  });
+
+  it('preserves the basePath prefix in the /signout redirect (tenant deployment)', async () => {
+    process.env.BASE_URL = 'https://dashboard.example.com/tenant-a';
+    vi.mocked(getToken).mockResolvedValue(null as never);
+
+    const res = await GET(request());
+
+    expect(res.headers.get('location')).toBe(
+      'https://dashboard.example.com/tenant-a/signout',
+    );
   });
 });

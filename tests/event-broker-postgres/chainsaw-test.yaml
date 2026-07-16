@@ -5,7 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: Operation events from a completed query land in the Postgres events table with expires_at set; GET /events/:queryId returns them
+  description: Operation events from a completed query land in the Postgres events table with expires_at set from Query.spec.ttl; GET /events/:queryId returns them
   steps:
   - name: setup-mock-llm
     try:
@@ -33,6 +33,8 @@ spec:
     try:
     - apply:
         file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a00-broker-config.yaml
     - apply:
         file: manifests/a00-memory.yaml
     - wait:
@@ -94,6 +96,28 @@ spec:
     catch:
     - events: {}
 
+  - name: verify-event-ttl-in-postgres
+    try:
+    - script:
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
+          TTL=""
+          for i in $(seq 1 10); do
+            TTL=$(bash ../shared/psql-query.sh \
+              "SELECT EXTRACT(EPOCH FROM (expires_at - created_at))::int FROM events WHERE query_id='${QUERY_UID}' LIMIT 1;" \
+              | tr -d ' \n')
+            [ -n "${TTL}" ] && break
+            sleep 1
+          done
+          echo "DB ttl_seconds: ${TTL}"
+          [ "${TTL}" = "3600" ] || { echo "expected 3600, got '${TTL}'"; exit 1; }
+    catch:
+    - events: {}
+
   - name: verify-events-via-http
     try:
     - script:
@@ -103,9 +127,9 @@ spec:
           value: ($namespace)
         content: |
           QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
-          BROKER_NS=$(kubectl get deployment --all-namespaces \
-            -o jsonpath='{range .items[?(@.metadata.name=="ark-broker")]}{.metadata.namespace}{end}' 2>/dev/null)
-          BROKER_NS=${BROKER_NS:-default}
+          BROKER_DATA=$(kubectl get configmap ark-config-broker -n "$NAMESPACE" -o json | jq -r '.data.serviceRef')
+          BROKER_NS=$(echo "$BROKER_DATA" | grep '^namespace:' | sed 's/^namespace:[[:space:]]*//' | tr -d '"' | tr -d ' ')
+          BROKER_NS=${BROKER_NS:-$NAMESPACE}
           COUNT=$(kubectl exec -n "$BROKER_NS" deployment/ark-broker -- \
             node -e "const h=require('http');h.get('http://localhost:8080/events/${QUERY_UID}',r=>{let d='';r.on('data',c=>{d+=c});r.on('end',()=>{const b=JSON.parse(d);process.stdout.write(String(b.items?b.items.length:0));process.exit(b.items&&b.items.length>=1?0:1)})}).on('error',e=>{process.stderr.write(e.message);process.exit(1)})")
           echo "HTTP events count: ${COUNT}"

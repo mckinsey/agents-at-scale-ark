@@ -191,8 +191,17 @@ export function ChatPanel({
                   <TooltipContent>
                     <div className="space-y-1 text-xs">
                       <div>
-                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
+                        Input (new):{' '}
+                        {Math.max(
+                          0,
+                          tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
+                        ).toLocaleString()}
                       </div>
+                      {tokenUsage.cached_tokens > 0 && (
+                        <div>
+                          Cached: {tokenUsage.cached_tokens.toLocaleString()}
+                        </div>
+                      )}
                       <div>
                         Completion:{' '}
                         {tokenUsage.completion_tokens.toLocaleString()}

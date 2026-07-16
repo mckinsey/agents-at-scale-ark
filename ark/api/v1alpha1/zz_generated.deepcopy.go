@@ -760,6 +760,11 @@ func (in *BedrockModelConfig) DeepCopyInto(out *BedrockModelConfig) {
 		*out = new(ValueSource)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.APIKey != nil {
+		in, out := &in.APIKey, &out.APIKey
+		*out = new(ValueSource)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ModelArn != nil {
 		in, out := &in.ModelArn, &out.ModelArn
 		*out = new(ValueSource)

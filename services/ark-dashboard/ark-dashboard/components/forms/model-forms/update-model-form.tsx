@@ -35,7 +35,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const form = useForm<FormValues>({
-    mode: 'onChange',
+    mode: 'onTouched',
     resolver: zodResolver(schema),
     defaultValues,
   });
@@ -67,6 +67,10 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
         initialAzureAuthMethod:
           defaultValues.provider === 'azure'
             ? defaultValues.azureAuthMethod
+            : undefined,
+        initialBedrockAuthMethod:
+          defaultValues.provider === 'bedrock'
+            ? defaultValues.bedrockAuthMethod
             : undefined,
       }}>
       <div className="shrink-0 space-y-4 md:w-md md:max-w-md">
