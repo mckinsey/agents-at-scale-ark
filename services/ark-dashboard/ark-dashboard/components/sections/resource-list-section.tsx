@@ -1,6 +1,13 @@
 'use client';
 
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from '@/components/ui/sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -65,6 +72,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly renderTable: (
     items: T[],
     onDelete: (id: string) => void,
+    reload: () => void,
   ) => ReactNode;
 }
 
@@ -124,26 +132,26 @@ export function ResourceListSection<T extends ResourceListItem>({
     });
   }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        setItems(await loadItemsRef.current());
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error('Failed to Load Data', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      setItems(await loadItemsRef.current());
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      toast.error('Failed to Load Data', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    load();
-  }, [namespace]);
+  useEffect(() => {
+    reload();
+  }, [namespace, reload]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -289,7 +297,7 @@ export function ResourceListSection<T extends ResourceListItem>({
             <ResourceNoResults icon={icon} message={noResultsMessage} />
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-              {renderTable(filteredItems, handleDelete)}
+              {renderTable(filteredItems, handleDelete, reload)}
             </ScrollArea>
           )}
         </div>

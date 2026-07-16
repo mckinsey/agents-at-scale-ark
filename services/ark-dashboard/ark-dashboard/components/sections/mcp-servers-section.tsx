@@ -26,8 +26,12 @@ export function McpServersSection() {
       }
       loadItems={() => mcpServersService.getAll()}
       deleteItem={id => mcpServersService.delete(id)}
-      renderTable={(servers, onDelete) => (
-        <McpServersTable servers={servers} onDelete={onDelete} />
+      renderTable={(servers, onDelete, reload) => (
+        <McpServersTable
+          servers={servers}
+          onDelete={onDelete}
+          onAuthChanged={reload}
+        />
       )}
     />
   );

@@ -23,3 +23,33 @@ export const useGetMcpServerByName = (name: string) => {
     enabled: !!name,
   });
 };
+
+export const useStartMcpAuth = () => {
+  return useMutation({
+    mutationFn: ({
+      name,
+      options,
+    }: {
+      name: string;
+      options: StartAuthOptions;
+    }) => mcpServersService.startAuth(name, options),
+  });
+};
+
+export const useLogoutMcpAuth = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      name,
+      options,
+    }: {
+      name: string;
+      options: LogoutAuthOptions;
+    }) => mcpServersService.logoutAuth(name, options),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [GET_ALL_MCP_SERVERS_QUERY_KEY],
+      });
+    },
+  });
+};
