@@ -7,6 +7,7 @@ import { useRef } from 'react';
 import { PageHeader } from '@/components/common/page-header';
 import { McpServersSection } from '@/components/sections/mcp-servers-section';
 import { Button } from '@/components/ui/button';
+import { useMcpAuthCompletion } from '@/lib/hooks/use-mcp-auth-completion';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
 
@@ -15,6 +16,8 @@ export default function McpPage() {
   const namespace = searchParams.get('namespace') || 'default';
   const mcpSectionRef = useRef<{ openAddEditor: () => void }>(null);
   const { data: mcpServers } = useGetAllMcpServers();
+
+  useMcpAuthCompletion({ servers: mcpServers });
 
   const pageTitle = mcpServers
     ? `MCP Servers (${mcpServers.length})`

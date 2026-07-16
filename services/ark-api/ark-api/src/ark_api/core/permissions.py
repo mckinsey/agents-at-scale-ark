@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 from kubernetes_asyncio import client
@@ -35,6 +36,15 @@ async def get_ark_permissions(
     namespace: str,
 ) -> PermissionsResponse:
     if impersonation is None:
+        # Open mode performs no authentication, so there is never an identity to
+        # impersonate. That is not an error — it means access is unrestricted.
+        # Report full permissions so the dashboard's access gate renders the app
+        # instead of "Cluster unavailable" when the dashboard runs in sso mode
+        # against an open ark-api. In auth-enabled modes a missing identity is
+        # still treated as "cannot evaluate".
+        auth_mode = os.getenv("AUTH_MODE", "").lower() or "open"
+        if auth_mode == "open":
+            return PermissionsResponse(status="ok", rules={WILDCARD: [WILDCARD]})
         return PermissionsResponse(
             status="unavailable",
             reason="No user identity to evaluate permissions",

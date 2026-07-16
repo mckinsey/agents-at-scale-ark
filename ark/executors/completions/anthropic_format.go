@@ -36,16 +36,32 @@ func extractMessageContent(msg Message) (string, string) {
 	return "", ""
 }
 
+type anthropicCacheControl struct {
+	Type string `json:"type"`
+}
+
+type anthropicSystemBlock struct {
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
+type anthropicMessageContent struct {
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
 type anthropicMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
 }
 
 type anthropicRequest struct {
 	Messages         []anthropicMessage     `json:"messages"`
 	MaxTokens        int                    `json:"max_tokens"`
 	Temperature      float64                `json:"temperature"`
-	SystemPrompt     string                 `json:"system,omitempty"`
+	SystemPrompt     []anthropicSystemBlock `json:"system,omitempty"`
 	AnthropicVersion string                 `json:"anthropic_version,omitempty"`
 	Tools            []anthropicTool        `json:"tools,omitempty"`
 	ToolChoice       map[string]interface{} `json:"tool_choice,omitempty"`
@@ -53,9 +69,10 @@ type anthropicRequest struct {
 }
 
 type anthropicTool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	InputSchema  map[string]interface{} `json:"input_schema"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
 type anthropicResponse struct {
@@ -64,8 +81,10 @@ type anthropicResponse struct {
 	Model      string             `json:"model"`
 	StopReason string             `json:"stop_reason"`
 	Usage      struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens              int `json:"input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	} `json:"usage"`
 }
 
@@ -77,9 +96,14 @@ type anthropicContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
-func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, string) {
-	var result []anthropicMessage
-	var systemPrompt string
+func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
+	type collectedMessage struct {
+		role string
+		text string
+	}
+
+	var collected []collectedMessage
+	var systemBlocks []anthropicSystemBlock
 
 	for _, msg := range messages {
 		content, role := extractMessageContent(msg)
@@ -89,20 +113,44 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, string)
 
 		switch role {
 		case RoleSystem:
-			systemPrompt = content
+			systemBlocks = []anthropicSystemBlock{
+				{
+					Type:         "text",
+					Text:         content,
+					CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+				},
+			}
 		case RoleUser, RoleAssistant, RoleTool:
 			msgRole := role
 			if role == RoleTool {
 				msgRole = RoleUser
 			}
-			result = append(result, anthropicMessage{
-				Role:    msgRole,
-				Content: content,
-			})
+			collected = append(collected, collectedMessage{role: msgRole, text: content})
 		}
 	}
 
-	return result, systemPrompt
+	cacheIndex := -1
+	if len(collected) >= 2 {
+		cacheIndex = len(collected) - 2
+	}
+
+	result := make([]anthropicMessage, len(collected))
+	for i, m := range collected {
+		if i == cacheIndex {
+			block := []anthropicMessageContent{
+				{
+					Type:         "text",
+					Text:         m.text,
+					CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+				},
+			}
+			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(block)}
+		} else {
+			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(m.text)}
+		}
+	}
+
+	return result, systemBlocks
 }
 
 func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion {
@@ -143,6 +191,10 @@ func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion
 		message.ToolCalls = toolCalls
 	}
 
+	promptTokens := int64(response.Usage.InputTokens +
+		response.Usage.CacheCreationInputTokens +
+		response.Usage.CacheReadInputTokens)
+
 	return &openai.ChatCompletion{
 		ID:     response.ID,
 		Object: "chat.completion",
@@ -155,9 +207,12 @@ func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion
 			},
 		},
 		Usage: openai.CompletionUsage{
-			PromptTokens:     int64(response.Usage.InputTokens),
+			PromptTokens:     promptTokens,
 			CompletionTokens: int64(response.Usage.OutputTokens),
-			TotalTokens:      int64(response.Usage.InputTokens + response.Usage.OutputTokens),
+			TotalTokens:      promptTokens + int64(response.Usage.OutputTokens),
+			PromptTokensDetails: openai.CompletionUsagePromptTokensDetails{
+				CachedTokens: int64(response.Usage.CacheReadInputTokens),
+			},
 		},
 	}
 }
@@ -183,10 +238,14 @@ func convertToolsToAnthropic(tools []openai.ChatCompletionToolParam) []anthropic
 		}
 	}
 
+	if len(result) > 0 {
+		result[len(result)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+	}
+
 	return result
 }
 
-func buildAnthropicRequest(messages []anthropicMessage, systemPrompt string, tools []anthropicTool, toolChoice ToolChoice, properties map[string]string) anthropicRequest {
+func buildAnthropicRequest(messages []anthropicMessage, systemPrompt []anthropicSystemBlock, tools []anthropicTool, toolChoice ToolChoice, properties map[string]string) anthropicRequest {
 	temperature := getFloatProperty(properties, "temperature", 1.0)
 	maxTokens := getIntProperty(properties, "max_tokens", 4096)
 
@@ -248,4 +307,12 @@ func mustMarshalJSON(v interface{}) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+func mustMarshalRaw(v interface{}) json.RawMessage {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`""`)
+	}
+	return json.RawMessage(data)
 }

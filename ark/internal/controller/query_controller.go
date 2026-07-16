@@ -59,6 +59,11 @@ const (
 	messageCleanupGracePeriod   = 5 * time.Minute
 	messageCleanupRetryInterval = 15 * time.Second
 
+	// defaultCompletionsEngineName is the well-known name of the per-tenant
+	// completions ExecutionEngine. When a query has no explicitly named engine,
+	// the controller prefers an ExecutionEngine of this name in the query's
+	// namespace (a per-tenant deployment) over the central --completions-addr.
+	defaultCompletionsEngineName = "ark-completions"
 	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
@@ -115,12 +120,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// longer than its TTL. TTL is measured from completion, not creation,
 	// so long-running or queued queries are never reaped mid-flight.
 	// TTL may be nil when using aggregated API server (non-CRD storage).
-	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) {
+	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) && obj.DeletionTimestamp.IsZero() {
 		if err := r.Delete(ctx, &obj); err != nil {
 			log.Error(err, "unable to delete object")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Refetch so handleFinalizer below sees the DeletionTimestamp
+		// and clears the finalizer in this same reconcile (#2828).
+		if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 	}
 
 	if result, err := r.handleFinalizer(ctx, &obj); result != nil {
@@ -422,21 +431,21 @@ func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {
 	if target.Type != targetTypeAgent {
-		return r.CompletionsAddr, nil
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
 	var agentCRD arkv1alpha1.Agent
 	err := r.Get(ctx, types.NamespacedName{Name: target.Name, Namespace: namespace}, &agentCRD)
 	if err != nil {
-		return r.CompletionsAddr, nil
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
 	if agentCRD.Spec.ExecutionEngine == nil {
-		return r.CompletionsAddr, nil
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
 	if agentCRD.Spec.ExecutionEngine.Name == arka2a.ExecutionEngineA2A {
-		return r.CompletionsAddr, nil
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
 	engineName := agentCRD.Spec.ExecutionEngine.Name
@@ -455,6 +464,27 @@ func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target ark
 	}
 
 	return engineCRD.Status.LastResolvedAddress, nil
+}
+
+// resolveDefaultEngineAddress returns the dispatch address for queries with no
+// named engine: a namespace-local "ark-completions" ExecutionEngine if present,
+// else the central --completions-addr.
+func (r *QueryReconciler) resolveDefaultEngineAddress(ctx context.Context, namespace string) string {
+	var engineCRD arkv1prealpha1.ExecutionEngine
+	key := types.NamespacedName{Name: defaultCompletionsEngineName, Namespace: namespace}
+	if err := r.Get(ctx, key, &engineCRD); err != nil {
+		if !errors.IsNotFound(err) {
+			logf.FromContext(ctx).Error(err, "failed to get default completions ExecutionEngine, falling back to central completions address",
+				"engine", defaultCompletionsEngineName, "namespace", namespace)
+		}
+		return r.CompletionsAddr
+	}
+
+	if engineCRD.Status.LastResolvedAddress == "" {
+		return r.CompletionsAddr
+	}
+
+	return engineCRD.Status.LastResolvedAddress
 }
 
 func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
@@ -701,6 +731,9 @@ func extractTokenUsage(arkMap map[string]any, responseMeta *engineResponseMeta) 
 	}
 	if v, ok := tokenData["total_tokens"].(float64); ok {
 		usage.TotalTokens = int64(v)
+	}
+	if v, ok := tokenData["cached_tokens"].(float64); ok {
+		usage.CachedTokens = int64(v)
 	}
 	if usage.TotalTokens > 0 {
 		responseMeta.TokenUsage = usage

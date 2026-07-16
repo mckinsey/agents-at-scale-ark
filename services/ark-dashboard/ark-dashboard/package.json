@@ -45,7 +45,7 @@
     "file-saver": "^2.0.5",
     "git-url-parse": "^16.1.0",
     "jotai": "^2.15.0",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^4.3.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
     "mermaid": "^11.15.0",
@@ -101,6 +101,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
+    "js-yaml": "^4.3.0",
     "tar": "^7.5.11",
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",

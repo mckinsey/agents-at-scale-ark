@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: query-ttl-gc-deletion-role
+rules:
+- apiGroups: ["ark.mckinsey.com"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: query-ttl-gc-deletion-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ($namespace)
+roleRef:
+  kind: Role
+  name: query-ttl-gc-deletion-role
+  apiGroup: rbac.authorization.k8s.io

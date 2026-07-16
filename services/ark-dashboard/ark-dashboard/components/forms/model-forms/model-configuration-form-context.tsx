@@ -17,6 +17,7 @@ interface ModelConfigurationFormContext {
   isSubmitPending: boolean;
   disabledFields?: DisabledFields;
   initialAzureAuthMethod?: 'apiKey' | 'managedIdentity' | 'workloadIdentity';
+  initialBedrockAuthMethod?: 'apiKey' | 'iam';
 }
 
 const ModelConfigurationFormContext = createContext<

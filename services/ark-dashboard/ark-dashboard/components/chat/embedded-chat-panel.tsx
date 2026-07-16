@@ -21,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { apiUrl } from '@/lib/api/config';
 import {
   getAttributeStringValue,
   getSessionDisplayNameFromEntries,
@@ -103,7 +104,9 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
       }
 
       setError(null);
-      let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
+      let url = apiUrl(
+        `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`,
+      );
       if (cursor !== undefined && cursor !== null) {
         url += `&cursor=${cursor}`;
       }
@@ -157,7 +160,9 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
+        let url = apiUrl(
+          `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`,
+        );
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }

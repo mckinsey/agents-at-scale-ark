@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent-general
+  labels:
+    category: general
+    environment: development
+    type: generalist
+spec:
+  modelRef:
+    name: test-model-mock
+  prompt: |
+    You are a general purpose agent.
+    Provide helpful responses on a wide range of topics.
