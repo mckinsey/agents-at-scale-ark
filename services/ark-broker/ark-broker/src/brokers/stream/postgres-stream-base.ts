@@ -1,4 +1,7 @@
 import {EventEmitter} from 'node:events';
+import type postgres from 'postgres';
+import type {Logger} from '@ark-broker/logging/logger.js';
+import type {Db} from '@ark-broker/db/db.js';
 import {BrokerItem} from './broker-item.js';
 import {
   DEFAULT_LIMIT,
@@ -10,10 +13,29 @@ import type {Predicate, Stream} from './stream.js';
 export abstract class PostgresStreamBase<T> implements Stream<T> {
   protected readonly emitter = new EventEmitter();
 
+  protected constructor(
+    protected readonly logger: Logger,
+    protected readonly db: Db,
+    protected readonly ttlSeconds: number
+  ) {}
+
+  protected abstract readonly tableName: string;
+  protected abstract readonly selectColumns: string[];
+  protected abstract rowToItem(row: postgres.Row): BrokerItem<T>;
+
   abstract append(data: T, ttlSeconds?: number): Promise<BrokerItem<T>>;
-  abstract all(): Promise<BrokerItem<T>[]>;
   abstract delete(predicate?: Predicate<T>): Promise<void>;
   abstract getCurrentSequence(): Promise<number>;
+
+  async all(): Promise<BrokerItem<T>[]> {
+    const rows = await this.db`
+      SELECT ${this.db(this.selectColumns)}
+      FROM ${this.db(this.tableName)}
+      WHERE expires_at > now()
+      ORDER BY sequence_number ASC
+    `;
+    return rows.map((row) => this.rowToItem(row));
+  }
 
   async filter(predicate: Predicate<T>): Promise<BrokerItem<T>[]> {
     return (await this.all()).filter(predicate);

@@ -27,12 +27,22 @@ export class PostgresEventStream
   extends PostgresStreamBase<EventData>
   implements EventStream
 {
-  constructor(
-    private readonly logger: Logger,
-    private readonly db: Db,
-    private readonly ttlSeconds: number
-  ) {
-    super();
+  protected readonly tableName = 'events';
+  protected readonly selectColumns = [
+    'sequence_number',
+    'query_id',
+    'session_id',
+    'reason',
+    'event',
+    'created_at',
+  ];
+
+  constructor(logger: Logger, db: Db, ttlSeconds: number) {
+    super(logger, db, ttlSeconds);
+  }
+
+  protected rowToItem(row: postgres.Row): BrokerItem<EventData> {
+    return rowToBrokerItem(row as unknown as EventRow);
   }
 
   async append(
@@ -54,16 +64,6 @@ export class PostgresEventStream
     const item = rowToBrokerItem(rows[0]!);
     this.emitter.emit('item', item);
     return item;
-  }
-
-  async all(): Promise<BrokerItem<EventData>[]> {
-    const rows = await this.db<EventRow[]>`
-      SELECT sequence_number, query_id, session_id, reason, event, created_at
-      FROM events
-      WHERE expires_at > now()
-      ORDER BY sequence_number ASC
-    `;
-    return rows.map(rowToBrokerItem);
   }
 
   async delete(predicate?: Predicate<EventData>): Promise<void> {

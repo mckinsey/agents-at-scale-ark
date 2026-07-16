@@ -31,12 +31,21 @@ export class PostgresMessageStream
   extends PostgresStreamBase<MessageData>
   implements MessageStream
 {
-  constructor(
-    private readonly logger: Logger,
-    private readonly db: Db,
-    private readonly ttlSeconds: number
-  ) {
-    super();
+  protected readonly tableName = 'messages';
+  protected readonly selectColumns = [
+    'sequence_number',
+    'conversation_id',
+    'query_id',
+    'message',
+    'created_at',
+  ];
+
+  constructor(logger: Logger, db: Db, ttlSeconds: number) {
+    super(logger, db, ttlSeconds);
+  }
+
+  protected rowToItem(row: postgres.Row): BrokerItem<MessageData> {
+    return rowToBrokerItem(row as unknown as MessageRow);
   }
 
   async append(
@@ -57,16 +66,6 @@ export class PostgresMessageStream
     const item = rowToBrokerItem(rows[0]!);
     this.emitter.emit('item', item);
     return item;
-  }
-
-  async all(): Promise<BrokerItem<MessageData>[]> {
-    const rows = await this.db<MessageRow[]>`
-      SELECT sequence_number, conversation_id, query_id, message, created_at
-      FROM messages
-      WHERE expires_at > now()
-      ORDER BY sequence_number ASC
-    `;
-    return rows.map(rowToBrokerItem);
   }
 
   async delete(predicate?: Predicate<MessageData>): Promise<void> {
