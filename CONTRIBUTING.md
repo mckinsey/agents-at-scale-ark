@@ -88,6 +88,21 @@ You can help us improve the [documentation](https://mckinsey.github.io/agents-at
 
 In order to preview the docs locally, you can run `make docs` in the root of the project. This will run the documentation site with live-reload, and you can then view the docs at `http://localhost:3000`.
 
+## Local pre-commit hooks
+
+ARK ships a [pre-commit](https://pre-commit.com/) configuration for local formatting, validation, Terraform checks, and Gitleaks secret scanning. Install the hooks in your clone before committing:
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+```
+
+You can run the same hooks across the repository at any time:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Guidelines for contributing developers
 
 Note that any contributions you make will be under the Agents At Scale [license](./LICENSE).

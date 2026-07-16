@@ -4,6 +4,10 @@ metadata:
   name: v1alpha1.ark.mckinsey.com
   labels:
     {{- include "ark-apiserver.labels" . | nindent 4 }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/ark-apiserver-serving-cert
+  {{- end }}
 spec:
   group: ark.mckinsey.com
   version: v1alpha1
@@ -13,7 +17,9 @@ spec:
     port: {{ .Values.apiserver.port }}
   groupPriorityMinimum: 1000
   versionPriority: 15
+  {{- if not .Values.certManager.enabled }}
   insecureSkipTLSVerify: true
+  {{- end }}
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
@@ -21,6 +27,10 @@ metadata:
   name: v1prealpha1.ark.mckinsey.com
   labels:
     {{- include "ark-apiserver.labels" . | nindent 4 }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/ark-apiserver-serving-cert
+  {{- end }}
 spec:
   group: ark.mckinsey.com
   version: v1prealpha1
@@ -30,4 +40,6 @@ spec:
     port: {{ .Values.apiserver.port }}
   groupPriorityMinimum: 1000
   versionPriority: 10
+  {{- if not .Values.certManager.enabled }}
   insecureSkipTLSVerify: true
+  {{- end }}

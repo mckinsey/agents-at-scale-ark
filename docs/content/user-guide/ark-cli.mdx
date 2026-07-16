@@ -168,7 +168,7 @@ Flags: `--type` (`openai`, `azure`, `bedrock`), `--model`, `--base-url`, `--api-
 | --- | --- |
 | `ark generate <kind> [name]` | Scaffold a resource from a template (interactive by default; `--no-interactive` for defaults). See the generators below. |
 | `ark export` | Export resources to a YAML file. `-n` namespace, `-t` types, `-l` label selector, `-o` output path. |
-| `ark import <file>` | Apply resources from a YAML file. |
+| `ark import <file>` | Create resources from a YAML file. Errors if a resource already exists; use `--upsert` to create or update instead. |
 
 `ark generate` (alias `ark g`) scaffolds files on disk:
 
@@ -188,7 +188,8 @@ ark g team research-team           # a team with a chosen strategy
 
 ark export -o backup.yaml                       # everything in the namespace
 ark export -t agents,teams -o agents-teams.yaml # only some types
-ark import backup.yaml
+ark import backup.yaml                           # create; errors on existing resources
+ark import backup.yaml --upsert                  # create or update (kubectl apply)
 ```
 
 <Callout type="warning">

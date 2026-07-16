@@ -23,6 +23,7 @@ interface ChatMessageProps {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    cached_tokens: number;
   };
   approvalRequest?: ToolApprovalRequest;
   namespace?: string;
@@ -306,8 +307,14 @@ export function ChatMessage({
             {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
               <div className="text-muted-foreground text-xs opacity-60">
                 {tokenUsage.total_tokens.toLocaleString()} tokens (
-                {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
-                {tokenUsage.completion_tokens.toLocaleString()} out)
+                {Math.max(
+                  0,
+                  tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
+                ).toLocaleString()}{' '}
+                in, {tokenUsage.completion_tokens.toLocaleString()} out
+                {tokenUsage.cached_tokens > 0 &&
+                  `, ${tokenUsage.cached_tokens.toLocaleString()} cached`}
+                )
               </div>
             )}
           </div>

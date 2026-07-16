@@ -34,6 +34,8 @@ spec:
     - apply:
         file: manifests/a00-rbac.yaml
     - apply:
+        file: manifests/a00-broker-config.yaml
+    - apply:
         file: manifests/a00-memory.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
@@ -125,9 +127,9 @@ spec:
           value: ($namespace)
         content: |
           QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
-          BROKER_NS=$(kubectl get deployment --all-namespaces \
-            -o jsonpath='{range .items[?(@.metadata.name=="ark-broker")]}{.metadata.namespace}{end}' 2>/dev/null)
-          BROKER_NS=${BROKER_NS:-default}
+          BROKER_DATA=$(kubectl get configmap ark-config-broker -n "$NAMESPACE" -o json | jq -r '.data.serviceRef')
+          BROKER_NS=$(echo "$BROKER_DATA" | grep '^namespace:' | sed 's/^namespace:[[:space:]]*//' | tr -d '"' | tr -d ' ')
+          BROKER_NS=${BROKER_NS:-$NAMESPACE}
           COUNT=$(kubectl exec -n "$BROKER_NS" deployment/ark-broker -- \
             node -e "const h=require('http');h.get('http://localhost:8080/events/${QUERY_UID}',r=>{let d='';r.on('data',c=>{d+=c});r.on('end',()=>{const b=JSON.parse(d);process.stdout.write(String(b.items?b.items.length:0));process.exit(b.items&&b.items.length>=1?0:1)})}).on('error',e=>{process.stderr.write(e.message);process.exit(1)})")
           echo "HTTP events count: ${COUNT}"

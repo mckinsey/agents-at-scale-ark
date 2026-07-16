@@ -94,6 +94,20 @@ describeIntegration('postgres event backend — HTTP integration', () => {
     expect(res.body.items.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('DELETE /events/:queryId removes only that query rows', async () => {
+    await request(app).post('/events').send(baseEvent).expect(201);
+    await request(app)
+      .post('/events')
+      .send({...baseEvent, data: {...baseEvent.data, queryId: 'q-other'}})
+      .expect(201);
+
+    await request(app).delete('/events/q-pg-events-1').expect(200);
+
+    const res = await request(app).get('/events').expect(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].data.queryId).toBe('q-other');
+  });
+
   it('expired events are not returned (body ttl_seconds override)', async () => {
     const ttlEvent = {
       ...baseEvent,

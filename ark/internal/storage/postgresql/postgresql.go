@@ -667,13 +667,22 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	var uid string
 	var createdAt time.Time
 	var updated bool
+	// generation bumps on the two transitions upstream Kubernetes bumps on: a
+	// spec change, and the first time deletionTimestamp is set (rest.BeforeDelete).
+	// The CASE reads OLD row values on the RHS (per PostgreSQL SET semantics),
+	// so `deletion_timestamp IS NULL` detects the marking transition; a reconcile
+	// that re-sends an existing timestamp does not bump. jsonb equality is
+	// structural, so re-marshalled specs with reordered keys don't false-bump.
 	err = p.db.QueryRowContext(ctx, `
 		WITH upd AS (
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
 			    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
-			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+			    generation = CASE WHEN spec IS DISTINCT FROM $1::jsonb
+			                       OR ($7::timestamptz IS NOT NULL AND deletion_timestamp IS NULL)
+			                      THEN generation + 1 ELSE generation END,
+			    resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
 			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
