@@ -1535,6 +1535,39 @@ export interface paths {
         patch: operations["cancel_query_v1_queries__query_name__cancel_patch"];
         trace?: never;
     };
+    "/v1/resources/access-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Access Review
+         * @description Check whether the caller may perform a verb on a resource via SelfSubjectAccessReview.
+         *
+         *     Runs under the impersonated identity, so the result reflects the user's RBAC.
+         *     When impersonation is disabled it runs as the service account.
+         *
+         *     Args:
+         *         body: group, resource, and verb to review
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         AccessReviewResponse: {"allowed": <bool>}
+         *
+         *     Examples:
+         *         - POST /v1/resources/access-review
+         */
+        post: operations["create_access_review_v1_resources_access_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log": {
         parameters: {
             query?: never;
@@ -1645,7 +1678,28 @@ export interface paths {
          *         - GET /v1/resources/api/v1/Service/my-service
          */
         get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
-        put?: never;
+        /**
+         * Update Core Resource
+         * @description Update (replace) a core Kubernetes resource by name.
+         *
+         *     Reads the live object to reconcile its resourceVersion onto the submitted
+         *     body, then performs a replace (last-write-wins).
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         resource_name: The name of the resource
+         *         body: The resource definition as JSON
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The updated Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - PUT /v1/resources/api/v1/ConfigMap/my-config
+         *         - PUT /v1/resources/api/v1/Service/my-service
+         */
+        put: operations["update_core_resource_v1_resources_api__version___kind___resource_name__put"];
         post?: never;
         /**
          * Delete Core Resource
@@ -1790,7 +1844,29 @@ export interface paths {
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
          */
         get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
-        put?: never;
+        /**
+         * Update Grouped Resource
+         * @description Update (replace) a grouped Kubernetes resource by name.
+         *
+         *     Reads the live object to reconcile its resourceVersion onto the submitted
+         *     body, then performs a replace (last-write-wins).
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         resource_name: The name of the resource
+         *         body: The resource definition as JSON
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The updated Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/apps/v1/Deployment/my-deployment
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         */
+        put: operations["update_grouped_resource_v1_resources_apis__group___version___kind___resource_name__put"];
         post?: never;
         /**
          * Delete Grouped Resource
@@ -2392,6 +2468,29 @@ export interface components {
             public_key: string;
         };
         /**
+         * AccessReviewRequest
+         * @description Request body for a generic SelfSubjectAccessReview.
+         */
+        AccessReviewRequest: {
+            /**
+             * Group
+             * @default
+             */
+            group: string;
+            /** Resource */
+            resource: string;
+            /** Verb */
+            verb: string;
+        };
+        /**
+         * AccessReviewResponse
+         * @description Result of a SelfSubjectAccessReview.
+         */
+        AccessReviewResponse: {
+            /** Allowed */
+            allowed: boolean;
+        };
+        /**
          * AgentConfigMapKeyRef
          * @description Reference to a key in a ConfigMap.
          */
@@ -2949,6 +3048,7 @@ export interface components {
          */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2961,6 +3061,7 @@ export interface components {
          */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2982,6 +3083,7 @@ export interface components {
          * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
          */
         ChatCompletionContentPartTextParam: {
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /** Text */
             text: string;
             /**
@@ -3248,6 +3350,7 @@ export interface components {
          */
         File: {
             file: components["schemas"]["FileFile"];
+            prompt_cache_breakpoint?: components["schemas"]["FilePromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -3271,6 +3374,19 @@ export interface components {
             filename: string;
             /** Mimetype */
             mimeType?: string | null;
+        };
+        /**
+         * FilePromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        FilePromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * Function
@@ -3957,6 +4073,19 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "unavailable";
+        };
+        /**
+         * PromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        PromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * QueryConfigMapKeyRef
@@ -7647,6 +7776,42 @@ export interface operations {
             };
         };
     };
+    create_access_review_v1_resources_access_review_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_pod_logs_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_get: {
         parameters: {
             query?: {
@@ -7779,6 +7944,48 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_core_resource_v1_resources_api__version___kind___resource_name__put: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7976,6 +8183,49 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_grouped_resource_v1_resources_apis__group___version___kind___resource_name__put: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
