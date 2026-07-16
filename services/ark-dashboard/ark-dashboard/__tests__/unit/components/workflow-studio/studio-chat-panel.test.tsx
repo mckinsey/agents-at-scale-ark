@@ -146,33 +146,33 @@ describe('StudioChatPanel', () => {
   });
 
   describe('empty state', () => {
-    it('renders the describe-your-workflow copy and numbered steps', () => {
+    it('renders the describe-your-workflow copy and suggestion chips', () => {
       renderPanel();
 
       const empty = screen.getByTestId('studio-chat-empty');
       expect(empty).toHaveTextContent('Describe your workflow');
       expect(empty).toHaveTextContent(
-        'The argo-make-author agent drafts an Argo WorkflowTemplate live as you chat.',
+        `The ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent drafts an argo workflow template live as you chat`,
       );
-      expect(empty).toHaveTextContent('Say what to build in plain language');
-      expect(empty).toHaveTextContent('The agent drafts it live');
-      expect(empty).toHaveTextContent(
-        "Edit the YAML, then Save your changes — it's already in your workflows",
+
+      expect(screen.getByTestId('studio-chat-suggestion-0')).toHaveTextContent(
+        'Build a workflow to check HR tickets and categorise them',
+      );
+      expect(screen.getByTestId('studio-chat-suggestion-1')).toHaveTextContent(
+        'Create a KYC customer onboarding workflow with 4 specialized teams',
+      );
+      expect(screen.getByTestId('studio-chat-suggestion-2')).toHaveTextContent(
+        'Build a COBOL Modernization workflow with 3 key steps',
       );
     });
 
-    it('fills the composer with the example prompt when the chip is clicked', () => {
+    it('fills the composer with a suggestion when the chip is clicked', () => {
       renderPanel();
 
-      const chip = screen.getByTestId('studio-chat-example');
-      expect(chip).toHaveTextContent(
-        'e.g. Build a workflow to check HR tickets, categorise them, then send each to the right department',
-      );
-
-      fireEvent.click(chip);
+      fireEvent.click(screen.getByTestId('studio-chat-suggestion-1'));
 
       expect(screen.getByTestId('studio-chat-input')).toHaveValue(
-        'Build a workflow to check HR tickets, categorise them, then send each to the right department',
+        'Create a KYC customer onboarding workflow with 4 specialized teams',
       );
     });
   });

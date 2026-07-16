@@ -9,6 +9,8 @@ import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-acc
 export default function NewWorkflowTemplatePage() {
   const searchParams = useSearchParams();
   const nameParam = searchParams.get('name') ?? undefined;
+  const titleParam = searchParams.get('title') ?? undefined;
+  const descriptionParam = searchParams.get('description') ?? undefined;
   const { canCreate, loading } = useWorkflowTemplateAccess();
 
   if (loading) {
@@ -32,7 +34,12 @@ export default function NewWorkflowTemplatePage() {
 
   return (
     <div className="-m-10 flex min-h-0 flex-1 flex-col">
-      <WorkflowStudio mode="new" initialName={nameParam} />
+      <WorkflowStudio
+        mode="new"
+        initialName={nameParam}
+        initialTitle={titleParam}
+        initialDescription={descriptionParam}
+      />
     </div>
   );
 }

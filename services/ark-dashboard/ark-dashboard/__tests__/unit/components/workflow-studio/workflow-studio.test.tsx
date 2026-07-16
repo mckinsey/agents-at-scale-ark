@@ -9,6 +9,10 @@ const pushMock = vi.fn();
 const replaceMock = vi.fn();
 
 vi.mock('@/lib/services/workflow-templates', () => ({
+  WORKFLOW_TEMPLATE_ANNOTATIONS: {
+    TITLE: 'workflows.argoproj.io/title',
+    DESCRIPTION: 'workflows.argoproj.io/description',
+  },
   workflowTemplatesService: {
     getYaml: vi.fn(),
     save: vi.fn(),
@@ -85,12 +89,16 @@ describe('WorkflowStudio', () => {
   describe('name modal', () => {
     it('shows the name modal on /new without a name', () => {
       render(<WorkflowStudio mode="new" />);
-      expect(screen.getByText('Name your workflow template')).toBeInTheDocument();
+      expect(
+        screen.getByText('Name your workflow template'),
+      ).toBeInTheDocument();
     });
 
     it('hides the name modal on /new when a name is provided', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
-      expect(screen.queryByText('Name your workflow template')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Name your workflow template'),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -205,10 +213,37 @@ describe('WorkflowStudio', () => {
   });
 
   describe('layout', () => {
-    it('renders the studio title and breadcrumb crumb', () => {
+    it('renders the studio breadcrumb and the name as the heading fallback', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
-      expect(screen.getByText('Workflow studio')).toBeInTheDocument();
-      expect(screen.getByText('my-workflow')).toBeInTheDocument();
+      expect(screen.getByText('Workflow Studio')).toBeInTheDocument();
+      expect(screen.getByTestId('studio-title')).toHaveTextContent(
+        'my-workflow',
+      );
+    });
+
+    it('renders title, description and name when a title is set', () => {
+      render(
+        <WorkflowStudio
+          mode="new"
+          initialName="my-workflow"
+          initialTitle="My Title"
+          initialDescription="My description"
+        />,
+      );
+      expect(screen.getByTestId('studio-title')).toHaveTextContent('My Title');
+      expect(screen.getByTestId('studio-description')).toHaveTextContent(
+        'My description',
+      );
+      expect(screen.getByTestId('studio-name')).toHaveTextContent(
+        'my-workflow',
+      );
+    });
+
+    it('hides the description line when there is no description', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(
+        screen.queryByTestId('studio-description'),
+      ).not.toBeInTheDocument();
     });
 
     it('shows a Create primary in new mode and no Run', () => {
@@ -250,6 +285,85 @@ describe('WorkflowStudio', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
       enterYaml('foo: bar');
       expect(screen.getByTestId('studio-yaml-banner')).toBeInTheDocument();
+    });
+  });
+
+  describe('download', () => {
+    it('downloads the draft YAML from the canvas toolbar next to the toggle', () => {
+      const createUrlSpy = vi.fn(() => 'blob:mock');
+      URL.createObjectURL = createUrlSpy;
+      URL.revokeObjectURL = vi.fn();
+      const clickSpy = vi
+        .spyOn(HTMLAnchorElement.prototype, 'click')
+        .mockReturnValue(undefined);
+
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml(validYaml);
+
+      fireEvent.click(screen.getByTestId('studio-download'));
+      fireEvent.click(screen.getByTestId('studio-download-yaml'));
+
+      expect(createUrlSpy).toHaveBeenCalled();
+      expect(clickSpy).toHaveBeenCalled();
+      const anchor = clickSpy.mock.instances[0];
+      expect(anchor).toBeInstanceOf(HTMLAnchorElement);
+      expect((anchor as HTMLAnchorElement).download).toBe('my-workflow.yaml');
+
+      clickSpy.mockRestore();
+    });
+
+    it('disables the download trigger before any YAML exists', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      expect(screen.getByTestId('studio-download')).toBeDisabled();
+    });
+  });
+
+  describe('workflow details', () => {
+    it('stamps title/description as annotations into the saved YAML', async () => {
+      vi.mocked(workflowTemplatesService.nameExists).mockResolvedValue(false);
+      vi.mocked(workflowTemplatesService.save).mockResolvedValue({
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'WorkflowTemplate',
+        metadata: { name: 'my-workflow' },
+      });
+
+      render(
+        <WorkflowStudio
+          mode="new"
+          initialName="my-workflow"
+          initialTitle="My Title"
+          initialDescription="My description"
+        />,
+      );
+      enterYaml(validYaml);
+
+      fireEvent.click(screen.getByTestId('studio-save'));
+
+      await waitFor(() => {
+        expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
+      });
+
+      const [savedYaml] = vi.mocked(workflowTemplatesService.save).mock
+        .calls[0];
+      expect(savedYaml).toContain('workflows.argoproj.io/title: My Title');
+      expect(savedYaml).toContain(
+        'workflows.argoproj.io/description: My description',
+      );
+    });
+
+    it('edits the title through the details dialog and updates the heading', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml(validYaml);
+
+      fireEvent.click(screen.getByTestId('studio-edit-meta'));
+      fireEvent.change(screen.getByTestId('studio-title-input'), {
+        target: { value: 'Renamed Title' },
+      });
+      fireEvent.click(screen.getByTestId('studio-meta-save'));
+
+      expect(screen.getByTestId('studio-title')).toHaveTextContent(
+        'Renamed Title',
+      );
     });
   });
 

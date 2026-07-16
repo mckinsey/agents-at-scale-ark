@@ -4,6 +4,11 @@ import { APIError, apiClient } from '@/lib/api/client';
 import { ARK_LABELS } from '@/lib/constants/labels';
 import { accessReviewService } from '@/lib/services/access-review';
 
+export const WORKFLOW_TEMPLATE_ANNOTATIONS = {
+  TITLE: 'workflows.argoproj.io/title',
+  DESCRIPTION: 'workflows.argoproj.io/description',
+} as const;
+
 export function isArgoNotInstalledError(error: unknown): boolean {
   return (
     error instanceof APIError &&

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
-import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import {
+  WORKFLOW_TEMPLATE_ANNOTATIONS,
+  workflowTemplatesService,
+} from '@/lib/services/workflow-templates';
 import type {
   WorkflowTemplate,
   WorkflowTemplateList,
@@ -45,6 +48,17 @@ describe('workflowTemplatesService', () => {
     vi.clearAllMocks();
   });
 
+  describe('annotation keys', () => {
+    it('exposes the argo title/description annotation keys', () => {
+      expect(WORKFLOW_TEMPLATE_ANNOTATIONS.TITLE).toBe(
+        'workflows.argoproj.io/title',
+      );
+      expect(WORKFLOW_TEMPLATE_ANNOTATIONS.DESCRIPTION).toBe(
+        'workflows.argoproj.io/description',
+      );
+    });
+  });
+
   describe('list', () => {
     it('should fetch all workflow templates and return items array', async () => {
       const mockListResponse: WorkflowTemplateList = {
@@ -65,7 +79,9 @@ describe('workflowTemplatesService', () => {
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
-        { params: { labelSelector: 'ark.mckinsey.com/dashboard-hidden!=true' } },
+        {
+          params: { labelSelector: 'ark.mckinsey.com/dashboard-hidden!=true' },
+        },
       );
       expect(result).toHaveLength(2);
       expect(result[0].metadata.name).toBe('test-template');

@@ -4,7 +4,10 @@ import { Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
-import { NameWorkflowDialog } from '@/components/dialogs/name-workflow-dialog';
+import {
+  NameWorkflowDialog,
+  type NameWorkflowValues,
+} from '@/components/dialogs/name-workflow-dialog';
 import {
   WorkflowTemplatesSection,
   type WorkflowTemplatesSectionHandle,
@@ -25,9 +28,15 @@ export default function WorkflowTemplatesPage() {
 
   const showCreate = canCreate && !readOnlyMode && argoInstalled;
 
-  const handleConfirmName = (name: string) => {
+  const handleConfirmName = ({
+    name,
+    title,
+    description,
+  }: NameWorkflowValues) => {
     setShowNameDialog(false);
-    push(`/workflow-templates/new?name=${encodeURIComponent(name)}`);
+    push(
+      `/workflow-templates/new?name=${encodeURIComponent(name)}${title ? `&title=${encodeURIComponent(title)}` : ''}${description ? `&description=${encodeURIComponent(description)}` : ''}`,
+    );
   };
 
   return (
@@ -58,7 +67,7 @@ export default function WorkflowTemplatesPage() {
       <div className="flex flex-1 flex-col">
         <div className="">
           <h1 className="text-xl">Workflow Templates</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Automate complex processes with agentic orchestration
           </p>
         </div>

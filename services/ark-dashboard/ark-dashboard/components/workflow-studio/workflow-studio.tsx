@@ -1,6 +1,13 @@
 'use client';
 
-import { ChevronLeft, FileCode, Info, Network, Play } from 'lucide-react';
+import {
+  ChevronLeft,
+  Download,
+  FileCode,
+  Network,
+  Pencil,
+  Play,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -28,6 +35,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Tooltip,
   TooltipContent,
@@ -56,6 +64,96 @@ import {
 interface WorkflowStudioProps {
   mode: WorkflowStudioMode;
   initialName?: string;
+  initialTitle?: string;
+  initialDescription?: string;
+}
+
+interface EditMetaDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  name: string;
+  title: string;
+  description: string;
+  onSave: (title: string, description: string) => void;
+}
+
+function EditMetaDialog({
+  open,
+  onOpenChange,
+  name,
+  title,
+  description,
+  onSave,
+}: EditMetaDialogProps) {
+  const [draftTitle, setDraftTitle] = useState(title);
+  const [draftDescription, setDraftDescription] = useState(description);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={next => {
+        if (next) {
+          setDraftTitle(title);
+          setDraftDescription(description);
+        }
+        onOpenChange(next);
+      }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Workflow details</DialogTitle>
+          <DialogDescription>
+            Update the display title and description for this workflow template.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="workflow-meta-name">Workflow name</Label>
+            <Input
+              id="workflow-meta-name"
+              data-testid="studio-meta-name"
+              value={name}
+              readOnly
+              disabled
+            />
+            <p className="text-muted-foreground text-sm">
+              You&apos;re not able to rename after creation.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="workflow-meta-title">Title</Label>
+            <Input
+              id="workflow-meta-title"
+              data-testid="studio-title-input"
+              value={draftTitle}
+              autoFocus
+              placeholder="Adverse media screening"
+              onChange={event => setDraftTitle(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="workflow-meta-description">Description</Label>
+            <Textarea
+              id="workflow-meta-description"
+              data-testid="studio-description-input"
+              value={draftDescription}
+              placeholder="Describe what this workflow does"
+              onChange={event => setDraftDescription(event.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onSave(draftTitle, draftDescription)}
+            data-testid="studio-meta-save">
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 interface NameModalProps {
@@ -205,8 +303,18 @@ function ViewToggle({ view, onChange }: ViewToggleProps) {
   );
 }
 
-export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
-  const studio = useWorkflowStudio({ mode, initialName });
+export function WorkflowStudio({
+  mode,
+  initialName,
+  initialTitle,
+  initialDescription,
+}: WorkflowStudioProps) {
+  const studio = useWorkflowStudio({
+    mode,
+    initialName,
+    initialTitle,
+    initialDescription,
+  });
   const gate = useAuthorAgentGate();
   const chat = useStudioChat({
     draftYaml: studio.draftYaml,
@@ -218,7 +326,25 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
     handEdited: studio.handEdited,
   });
   const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [editMetaOpen, setEditMetaOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const { readOnlyMode } = useNamespace();
+
+  const handleDownloadYaml = () => {
+    if (!studio.draftYaml.trim()) {
+      return;
+    }
+    const blob = new Blob([studio.draftYaml], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${studio.workflowName || 'workflow'}.yaml`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    setDownloadOpen(false);
+  };
 
   const canSave = studio.isDirty && !studio.building && !studio.saving;
 
@@ -273,7 +399,7 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
             </NamespacedLink>
             <span>/</span>
             <span className="text-foreground truncate font-medium">
-              {studio.workflowName || 'New workflow'}
+              Workflow Studio
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -314,7 +440,7 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
                     disabled={!canRun}
                     data-testid="studio-run">
                     <Play className="mr-2 h-4 w-4" />
-                    Run
+                    Run workflow
                   </Button>
                 }
               />
@@ -329,34 +455,52 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
             )}
           </div>
         </div>
-        <div className="flex items-center justify-between gap-4 px-6 pt-2 pb-4">
-          <div className="flex items-center gap-1">
-            <h3 className="text-lg font-semibold">Workflow studio</h3>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="About Workflow studio">
-                    <Info className="text-muted-foreground h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  Describe a workflow in plain language and the argo-make-author
-                  agent drafts an Argo WorkflowTemplate live. Edit the YAML or
-                  diagram, then save.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+        <div className="flex items-start justify-between gap-4 px-6 pt-3 pb-4">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h1
+                className="truncate text-2xl font-semibold"
+                data-testid="studio-title">
+                {studio.title.trim() || studio.workflowName || 'New workflow'}
+              </h1>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      aria-label="Edit workflow details"
+                      onClick={() => setEditMetaOpen(true)}
+                      data-testid="studio-edit-meta">
+                      <Pencil className="text-muted-foreground h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit workflow details</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {studio.description.trim() && (
+              <p
+                className="text-muted-foreground truncate text-sm"
+                data-testid="studio-description">
+                {studio.description}
+              </p>
+            )}
+            {studio.title.trim() && studio.workflowName && (
+              <span
+                className="text-muted-foreground truncate font-mono text-xs"
+                data-testid="studio-name">
+                {studio.workflowName}
+              </span>
+            )}
           </div>
           <div
             className="flex items-center gap-2"
             data-testid="studio-header-actions">
             <StudioHeaderActions
               workflowName={studio.workflowName}
-              draftYaml={studio.draftYaml}
               persisted={persisted}
             />
           </div>
@@ -376,8 +520,26 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
         }
         canvas={
           <>
-            <div className="absolute top-4 right-4 z-10">
+            <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
               <ViewToggle view={studio.view} onChange={studio.setView} />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label="Download workflow"
+                      disabled={!studio.draftYaml.trim()}
+                      onClick={() => setDownloadOpen(true)}
+                      data-testid="studio-download">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Download</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             <div className="relative min-h-0 flex-1">
@@ -422,6 +584,85 @@ export function WorkflowStudio({ mode, initialName }: WorkflowStudioProps) {
           </>
         }
       />
+
+      <EditMetaDialog
+        open={editMetaOpen}
+        onOpenChange={setEditMetaOpen}
+        name={studio.workflowName}
+        title={studio.title}
+        description={studio.description}
+        onSave={(nextTitle, nextDescription) => {
+          studio.updateMeta(nextTitle, nextDescription);
+          setEditMetaOpen(false);
+        }}
+      />
+
+      <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Download workflow</DialogTitle>
+            <DialogDescription>
+              Export the current workflow definition.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              disabled={!studio.draftYaml.trim()}
+              onClick={handleDownloadYaml}
+              data-testid="studio-download-yaml">
+              <Download className="mr-2 h-4 w-4" />
+              YAML
+            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-start"
+                      disabled
+                      data-testid="studio-download-diagram">
+                      <Download className="mr-2 h-4 w-4" />
+                      Diagram
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Diagram export coming soon</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-start"
+                      disabled
+                      data-testid="studio-download-both">
+                      <Download className="mr-2 h-4 w-4" />
+                      Both
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Diagram export coming soon</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDownloadOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <NameModal
         open={studio.isNameModalOpen}

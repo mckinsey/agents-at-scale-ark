@@ -1,6 +1,6 @@
 'use client';
 
-import { RotateCcw, SendHorizontal, Sparkles, Zap } from 'lucide-react';
+import { RotateCcw, SendHorizontal, Sparkles } from 'lucide-react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,11 @@ import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { StudioChatGate } from './studio-chat-gate';
 import { type UseStudioChatReturn } from './use-studio-chat';
 
-const EXAMPLE_PROMPT =
-  'Build a workflow to check HR tickets, categorise them, then send each to the right department';
+const SUGGESTION_PROMPTS = [
+  'Build a workflow to check HR tickets and categorise them',
+  'Create a KYC customer onboarding workflow with 4 specialized teams',
+  'Build a COBOL Modernization workflow with 3 key steps',
+];
 
 interface StudioChatEmptyStateProps {
   onExample: (value: string) => void;
@@ -30,51 +33,31 @@ function StudioChatEmptyState({
       className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       data-testid="studio-chat-empty">
       <Sparkles className="text-muted-foreground h-7 w-7" />
-      <p className="text-foreground text-sm font-medium">
+      <p className="text-foreground text-lg font-semibold">
         Describe your workflow
       </p>
       <p className="text-muted-foreground text-sm">
-        The argo-make-author agent drafts an Argo WorkflowTemplate live as you
-        chat.
+        The {ARGO_MAKE_AUTHOR_AGENT_NAME} agent drafts an argo workflow template
+        live as you chat
       </p>
-      <div className="mt-1 flex max-w-xs flex-col gap-2.5 text-left">
-        <div className="flex items-start gap-2.5">
-          <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
-            1
-          </span>
-          <span className="text-muted-foreground text-sm">
-            Say what to build in plain language
-          </span>
-        </div>
-        <div className="flex items-start gap-2.5">
-          <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
-            2
-          </span>
-          <span className="text-muted-foreground text-sm">
-            The agent drafts it live
-          </span>
-        </div>
-        <div className="flex items-start gap-2.5">
-          <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
-            3
-          </span>
-          <span className="text-muted-foreground text-sm">
-            Edit the <span className="text-foreground">YAML</span>, then{' '}
-            <span className="text-foreground">Save</span> your changes &mdash;
-            it&apos;s already in your workflows
-          </span>
-        </div>
+      <div className="mt-1 flex w-full max-w-sm flex-col gap-2.5">
+        {SUGGESTION_PROMPTS.map((prompt, index) => (
+          <button
+            key={prompt}
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) {
+                return;
+              }
+              onExample(prompt);
+            }}
+            data-testid={`studio-chat-suggestion-${index}`}
+            className="bg-secondary text-foreground hover:bg-accent w-full rounded-md border px-3 py-2 text-left text-sm disabled:opacity-50">
+            {prompt}
+          </button>
+        ))}
       </div>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onExample(EXAMPLE_PROMPT)}
-        data-testid="studio-chat-example"
-        className="bg-secondary text-foreground hover:bg-accent inline-flex items-center gap-2 border px-3 py-2 text-left text-sm disabled:opacity-50">
-        <Zap className="text-muted-foreground h-4 w-4 shrink-0" />
-        e.g. Build a workflow to check HR tickets, categorise them, then send
-        each to the right department
-      </button>
     </div>
   );
 }

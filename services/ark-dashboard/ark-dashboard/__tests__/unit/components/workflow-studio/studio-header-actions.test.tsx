@@ -10,6 +10,10 @@ const replaceMock = vi.fn();
 let readOnlyMode = false;
 
 vi.mock('@/lib/services/workflow-templates', () => ({
+  WORKFLOW_TEMPLATE_ANNOTATIONS: {
+    TITLE: 'workflows.argoproj.io/title',
+    DESCRIPTION: 'workflows.argoproj.io/description',
+  },
   workflowTemplatesService: {
     getYaml: vi.fn(),
     save: vi.fn(),
@@ -97,13 +101,7 @@ describe('StudioHeaderActions', () => {
       failed: 1,
     });
 
-    render(
-      <StudioHeaderActions
-        workflowName="existing-workflow"
-        draftYaml={validYaml}
-        persisted
-      />,
-    );
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
 
     fireEvent.click(screen.getByTestId('studio-activity-trigger'));
 
@@ -130,30 +128,16 @@ describe('StudioHeaderActions', () => {
   });
 
   it('disables activity when not persisted', () => {
-    render(
-      <StudioHeaderActions
-        workflowName="draft"
-        draftYaml={validYaml}
-        persisted={false}
-      />,
-    );
+    render(<StudioHeaderActions workflowName="draft" persisted={false} />);
     expect(screen.getByTestId('studio-activity-trigger')).toBeDisabled();
     expect(screen.getByTestId('studio-open-argo')).toBeDisabled();
     expect(workflowTemplatesService.getStats).not.toHaveBeenCalled();
   });
 
   it('opens Argo with the correct URL', () => {
-    const openSpy = vi
-      .spyOn(window, 'open')
-      .mockReturnValue(null);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
 
-    render(
-      <StudioHeaderActions
-        workflowName="existing-workflow"
-        draftYaml={validYaml}
-        persisted
-      />,
-    );
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
 
     fireEvent.click(screen.getByTestId('studio-open-argo'));
 
@@ -168,13 +152,7 @@ describe('StudioHeaderActions', () => {
   it('deletes and navigates to the templates list on confirm', async () => {
     vi.mocked(workflowTemplatesService.delete).mockResolvedValue(undefined);
 
-    render(
-      <StudioHeaderActions
-        workflowName="existing-workflow"
-        draftYaml={validYaml}
-        persisted
-      />,
-    );
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
 
     fireEvent.click(screen.getByTestId('studio-delete'));
 
@@ -193,45 +171,13 @@ describe('StudioHeaderActions', () => {
 
   it('hides the delete action in read-only mode', () => {
     readOnlyMode = true;
-    render(
-      <StudioHeaderActions
-        workflowName="existing-workflow"
-        draftYaml={validYaml}
-        persisted
-      />,
-    );
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
     expect(screen.queryByTestId('studio-delete')).not.toBeInTheDocument();
   });
 
-  it('downloads the draft YAML with the workflow name as filename', () => {
-    const createUrlSpy = vi.fn(() => 'blob:mock');
-    const revokeUrlSpy = vi.fn();
-    URL.createObjectURL = createUrlSpy;
-    URL.revokeObjectURL = revokeUrlSpy;
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockReturnValue(undefined);
-
-    render(
-      <StudioHeaderActions
-        workflowName="existing-workflow"
-        draftYaml={validYaml}
-        persisted
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('studio-download'));
-    fireEvent.click(screen.getByTestId('studio-download-yaml'));
-
-    expect(createUrlSpy).toHaveBeenCalled();
-    expect(clickSpy).toHaveBeenCalled();
-    const anchor = clickSpy.mock.instances[0];
-    expect(anchor).toBeInstanceOf(HTMLAnchorElement);
-    expect((anchor as HTMLAnchorElement).download).toBe(
-      'existing-workflow.yaml',
-    );
-
-    clickSpy.mockRestore();
+  it('no longer renders the download trigger in the header actions', () => {
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
+    expect(screen.queryByTestId('studio-download')).not.toBeInTheDocument();
   });
 });
 

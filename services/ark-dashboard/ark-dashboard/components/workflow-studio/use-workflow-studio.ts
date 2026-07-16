@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useUnsavedChangesGuard } from '@/lib/hooks/use-navigation-guard';
 import {
+  WORKFLOW_TEMPLATE_ANNOTATIONS,
   type WorkflowTemplateSaveMode,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
@@ -17,11 +18,74 @@ export type WorkflowStudioView = 'diagram' | 'yaml';
 export interface UseWorkflowStudioOptions {
   mode: WorkflowStudioMode;
   initialName?: string;
+  initialTitle?: string;
+  initialDescription?: string;
+}
+
+interface WorkflowMeta {
+  title: string;
+  description: string;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseMetaFromYaml(yamlText: string): WorkflowMeta {
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(yamlText);
+  } catch {
+    return { title: '', description: '' };
+  }
+  if (!isPlainObject(parsed) || !isPlainObject(parsed.metadata)) {
+    return { title: '', description: '' };
+  }
+  const annotations = parsed.metadata.annotations;
+  if (!isPlainObject(annotations)) {
+    return { title: '', description: '' };
+  }
+  const title = annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.TITLE];
+  const description = annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.DESCRIPTION];
+  return {
+    title: typeof title === 'string' ? title : '',
+    description: typeof description === 'string' ? description : '',
+  };
+}
+
+function applyMetaToMetadata(
+  metadata: Record<string, unknown>,
+  meta: WorkflowMeta,
+): Record<string, unknown> {
+  const existingAnnotations = isPlainObject(metadata.annotations)
+    ? metadata.annotations
+    : {};
+  const annotations: Record<string, unknown> = { ...existingAnnotations };
+  if (meta.title.trim()) {
+    annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.TITLE] = meta.title;
+  } else {
+    delete annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.TITLE];
+  }
+  if (meta.description.trim()) {
+    annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.DESCRIPTION] = meta.description;
+  } else {
+    delete annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.DESCRIPTION];
+  }
+  const next: Record<string, unknown> = { ...metadata };
+  if (Object.keys(annotations).length > 0) {
+    next.annotations = annotations;
+  } else {
+    delete next.annotations;
+  }
+  return next;
 }
 
 export interface WorkflowStudioState {
   mode: WorkflowStudioMode;
   workflowName: string;
+  title: string;
+  description: string;
+  updateMeta: (title: string, description: string) => void;
   draftYaml: string;
   setDraftYaml: (value: string) => void;
   lastSavedYaml: string;
@@ -53,10 +117,16 @@ function errorMessage(error: unknown): string {
 export function useWorkflowStudio({
   mode,
   initialName,
+  initialTitle,
+  initialDescription,
 }: UseWorkflowStudioOptions): WorkflowStudioState {
   const { push, replace } = useNamespacedNavigation();
 
   const [workflowName, setWorkflowName] = useState<string>(initialName ?? '');
+  const [title, setTitle] = useState<string>(initialTitle ?? '');
+  const [description, setDescription] = useState<string>(
+    initialDescription ?? '',
+  );
   const [draftYaml, setDraftYaml] = useState<string>('');
   const [lastSavedYaml, setLastSavedYaml] = useState<string>('');
   const [lastAgentYaml, setLastAgentYaml] = useState<string | undefined>(
@@ -88,6 +158,9 @@ export function useWorkflowStudio({
         setDraftYaml(fetched);
         setLastSavedYaml(fetched);
         setLastAgentYaml(undefined);
+        const meta = parseMetaFromYaml(fetched);
+        setTitle(meta.title);
+        setDescription(meta.description);
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -145,14 +218,47 @@ export function useWorkflowStudio({
       const resource: Record<string, unknown> = {
         ...(parsed as Record<string, unknown>),
       };
-      const existingMetadata =
-        resource.metadata &&
-        typeof resource.metadata === 'object' &&
-        !Array.isArray(resource.metadata)
-          ? (resource.metadata as Record<string, unknown>)
-          : {};
-      resource.metadata = { ...existingMetadata, name };
+      const existingMetadata = isPlainObject(resource.metadata)
+        ? resource.metadata
+        : {};
+      resource.metadata = applyMetaToMetadata(
+        { ...existingMetadata, name },
+        { title, description },
+      );
       return yaml.dump(resource);
+    },
+    [draftYaml, title, description],
+  );
+
+  const updateMeta = useCallback(
+    (nextTitle: string, nextDescription: string) => {
+      setTitle(nextTitle);
+      setDescription(nextDescription);
+      if (!draftYaml.trim()) {
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = yaml.load(draftYaml);
+      } catch {
+        return;
+      }
+      if (!isPlainObject(parsed)) {
+        return;
+      }
+      const resource: Record<string, unknown> = { ...parsed };
+      const existingMetadata = isPlainObject(resource.metadata)
+        ? resource.metadata
+        : {};
+      resource.metadata = applyMetaToMetadata(existingMetadata, {
+        title: nextTitle,
+        description: nextDescription,
+      });
+      const next = yaml.dump(resource);
+      if (next !== draftYaml) {
+        setDraftYaml(next);
+        setHandEdited(true);
+      }
     },
     [draftYaml],
   );
@@ -262,6 +368,9 @@ export function useWorkflowStudio({
   return {
     mode,
     workflowName,
+    title,
+    description,
+    updateMeta,
     draftYaml,
     setDraftYaml,
     lastSavedYaml,

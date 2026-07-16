@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ExternalLink, MessageSquareOff } from 'lucide-react';
+import { ExternalLink, Lock } from 'lucide-react';
 
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
@@ -20,29 +20,21 @@ interface StudioChatGateProps {
 
 interface StepCardProps {
   step: number;
-  done: boolean;
   title: string;
   testId: string;
-  children?: React.ReactNode;
+  children: React.ReactNode;
 }
 
-function StepCard({ step, done, title, testId, children }: StepCardProps) {
+function StepCard({ step, title, testId, children }: StepCardProps) {
   return (
     <li
       className="border-border flex flex-col items-center gap-3 border p-5 text-center"
       data-testid={testId}>
-      {done ? (
-        <CheckCircle2
-          className="h-8 w-8 shrink-0 text-green-500"
-          data-testid={`${testId}-done`}
-        />
-      ) : (
-        <span className="bg-muted text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium">
-          {step}
-        </span>
-      )}
+      <span className="bg-muted text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium">
+        {step}
+      </span>
       <p className="text-foreground text-sm font-medium">{title}</p>
-      {!done && children}
+      {children}
     </li>
   );
 }
@@ -81,7 +73,24 @@ function InternalLinkButton({ href, label, testId }: InternalLinkButtonProps) {
   );
 }
 
-function AgentRemediation({
+interface InstalledButtonProps {
+  testId: string;
+}
+
+function InstalledButton({ testId }: InstalledButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled
+      data-testid={testId}>
+      Installed
+    </Button>
+  );
+}
+
+function AgentAction({
   agentMissing,
   agentNotReady,
 }: {
@@ -107,7 +116,9 @@ function AgentRemediation({
       <div
         className="flex flex-col items-center gap-2"
         data-testid="studio-gate-step-agent-not-ready">
-        <p className="text-muted-foreground text-sm">Installed but not ready.</p>
+        <p className="text-muted-foreground text-sm">
+          Installed but not ready.
+        </p>
         <InternalLinkButton
           href={`/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`}
           label="Open agent"
@@ -117,10 +128,10 @@ function AgentRemediation({
     );
   }
 
-  return null;
+  return <InstalledButton testId="studio-gate-item-agent-installed" />;
 }
 
-function McpRemediation({
+function McpAction({
   mcpMissing,
   mcpNotReady,
 }: {
@@ -146,7 +157,9 @@ function McpRemediation({
       <div
         className="flex flex-col items-center gap-2"
         data-testid="studio-gate-step-mcp-not-ready">
-        <p className="text-muted-foreground text-sm">Installed but not ready.</p>
+        <p className="text-muted-foreground text-sm">
+          Installed but not ready.
+        </p>
         <InternalLinkButton
           href="/mcp"
           label="Open MCP server"
@@ -156,7 +169,7 @@ function McpRemediation({
     );
   }
 
-  return null;
+  return <InstalledButton testId="studio-gate-item-mcp-installed" />;
 }
 
 export function StudioChatGate({
@@ -169,32 +182,30 @@ export function StudioChatGate({
     <div
       className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center p-6 backdrop-blur-sm"
       data-testid="studio-chat-gate">
-      <div className="bg-popover flex w-full max-w-xl flex-col items-center gap-4 border p-6 text-center shadow-lg">
-        <MessageSquareOff className="text-muted-foreground h-7 w-7" />
-        <p className="text-foreground text-base font-semibold">
-          Chat with the agent is disabled
+      <div className="flex w-full max-w-xl flex-col items-center gap-4 text-center">
+        <Lock className="text-muted-foreground h-7 w-7" />
+        <p className="text-foreground text-lg font-semibold">
+          Chat not available
         </p>
         <p className="text-muted-foreground text-sm">
-          Complete both steps, then reload the page to start chatting with the
-          builder agent:
+          Follow the steps below to start chatting with the{' '}
+          {ARGO_MAKE_AUTHOR_AGENT_NAME} agent
         </p>
         <ol className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
           <StepCard
             step={1}
-            done={!mcpMissing && !mcpNotReady}
-            title={`Install ${KUBERNETES_MCP_SERVER_NAME}`}
-            testId="studio-gate-item-mcp">
-            <McpRemediation mcpMissing={mcpMissing} mcpNotReady={mcpNotReady} />
-          </StepCard>
-          <StepCard
-            step={2}
-            done={!agentMissing && !agentNotReady}
             title={`Install ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent`}
             testId="studio-gate-item-agent">
-            <AgentRemediation
+            <AgentAction
               agentMissing={agentMissing}
               agentNotReady={agentNotReady}
             />
+          </StepCard>
+          <StepCard
+            step={2}
+            title={`Install ${KUBERNETES_MCP_SERVER_NAME}`}
+            testId="studio-gate-item-mcp">
+            <McpAction mcpMissing={mcpMissing} mcpNotReady={mcpNotReady} />
           </StepCard>
         </ol>
       </div>

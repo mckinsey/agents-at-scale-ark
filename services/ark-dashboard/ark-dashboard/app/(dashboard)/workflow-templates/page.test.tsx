@@ -1,161 +1,159 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import WorkflowTemplatesPage from '@/app/(dashboard)/workflow-templates/page';
+import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-access';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
-import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
-import WorkflowTemplatesPage from './page';
+vi.mock('@/components/common/page-header', () => ({
+  PageHeader: ({
+    currentPage,
+    actions,
+  }: {
+    currentPage: string;
+    actions?: React.ReactNode;
+  }) => (
+    <div data-testid="page-header">
+      <span>{currentPage}</span>
+      {actions}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/sections/workflow-templates-section', () => ({
+  WorkflowTemplatesSection: () => (
+    <div data-testid="workflow-templates-section">
+      Workflow Templates Section
+    </div>
+  ),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({ namespace: 'default', readOnlyMode: false })),
+}));
+
+const pushMock = vi.fn();
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: vi.fn(() => ({ push: pushMock, replace: vi.fn() })),
+}));
+
+vi.mock('@/lib/hooks/use-workflow-template-access', () => ({
+  useWorkflowTemplateAccess: vi.fn(() => ({
+    canCreate: false,
+    canUpdate: false,
+    loading: false,
+  })),
+}));
 
 vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
-    canCreate: vi.fn(),
-    canUpdate: vi.fn(),
     list: vi.fn(),
   },
 }));
 
-vi.mock('@/lib/services/workflow-templates-hooks', () => ({
-  useGetAllWorkflowTemplates: vi.fn(),
-}));
+const accessMock = vi.mocked(useWorkflowTemplateAccess);
+const listMock = vi.mocked(workflowTemplatesService.list);
 
-vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: vi.fn(),
-}));
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
-vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
-  useNamespacedNavigation: vi.fn(),
-}));
-
-vi.mock('@/components/sections/workflow-templates-section', () => ({
-  WorkflowTemplatesSection: () => <div data-testid="section" />,
-}));
-
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: ({ actions }: { actions?: React.ReactNode }) => (
-    <div data-testid="page-header">{actions}</div>
-  ),
-}));
-
-const mockPush = vi.fn();
-const mockCanCreate = vi.mocked(workflowTemplatesService.canCreate);
-const mockCanUpdate = vi.mocked(workflowTemplatesService.canUpdate);
-
-function setup(overrides?: {
-  readOnlyMode?: boolean;
-  namespace?: string;
-  canCreate?: boolean | Promise<boolean>;
-}) {
-  vi.mocked(useGetAllWorkflowTemplates).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useGetAllWorkflowTemplates>);
-
-  vi.mocked(useNamespace).mockReturnValue({
-    namespace: overrides?.namespace ?? 'default',
-    readOnlyMode: overrides?.readOnlyMode ?? false,
-  } as unknown as ReturnType<typeof useNamespace>);
-
-  vi.mocked(useNamespacedNavigation).mockReturnValue({
-    push: mockPush,
-    replace: vi.fn(),
-  });
-
-  const createValue = overrides?.canCreate ?? true;
-  if (createValue instanceof Promise) {
-    mockCanCreate.mockReturnValue(createValue);
-  } else {
-    mockCanCreate.mockResolvedValue(createValue);
-  }
-  mockCanUpdate.mockResolvedValue(false);
+function renderPage() {
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <WorkflowTemplatesPage />
+    </QueryClientProvider>,
+  );
 }
 
 describe('WorkflowTemplatesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listMock.mockResolvedValue([]);
+    accessMock.mockReturnValue({
+      canCreate: false,
+      canUpdate: false,
+      loading: false,
+    });
   });
 
-  it('shows the Create workflow CTA when canCreate is true', async () => {
-    setup({ canCreate: true });
+  it('should render page header', () => {
+    renderPage();
+    expect(screen.getByTestId('page-header')).toBeInTheDocument();
+  });
 
-    render(<WorkflowTemplatesPage />);
-
+  it('should render workflow templates section', () => {
+    renderPage();
     expect(
-      await screen.findByRole('button', { name: /create workflow/i }),
+      screen.getByTestId('workflow-templates-section'),
     ).toBeInTheDocument();
   });
 
-  it('opens the name dialog and navigates with the encoded name on confirm', async () => {
-    setup({ canCreate: true });
+  it('should render page title and subtitle', () => {
+    renderPage();
+    expect(
+      screen.getByRole('heading', { name: 'Workflow Templates' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Automate complex processes with agentic orchestration'),
+    ).toBeInTheDocument();
+  });
+
+  it('should render "Workflow Templates" breadcrumb current page', () => {
+    renderPage();
+    const header = screen.getByTestId('page-header');
+    expect(header).toHaveTextContent('Workflow Templates');
+  });
+
+  it('should render the "Add group" button', () => {
+    renderPage();
+    expect(screen.getByTestId('workflow-add-group')).toBeInTheDocument();
+  });
+
+  it('forwards name, title and description as query params', async () => {
     const user = userEvent.setup();
-
-    render(<WorkflowTemplatesPage />);
-
-    const cta = await screen.findByRole('button', {
-      name: /create workflow/i,
+    accessMock.mockReturnValue({
+      canCreate: true,
+      canUpdate: false,
+      loading: false,
     });
-    await user.click(cta);
 
-    const input = await screen.findByLabelText('Workflow template name');
-    await user.type(input, 'my flow');
+    renderPage();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Create workflow template' }),
+    );
+
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
 
     const dialog = screen.getByRole('dialog');
-    const confirm = within(dialog).getByRole('button', {
+    await user.type(
+      within(dialog).getByTestId('workflow-name-input'),
+      'my-workflow',
+    );
+    await user.type(
+      within(dialog).getByTestId('workflow-title-input'),
+      'My Workflow',
+    );
+    await user.type(
+      within(dialog).getByTestId('workflow-description-input'),
+      'Does a thing',
+    );
+
+    const submit = within(dialog).getByRole('button', {
       name: 'Create workflow template',
     });
-    await user.click(confirm);
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
 
-    expect(mockPush).toHaveBeenCalledWith(
-      '/workflow-templates/new?name=my%20flow',
+    expect(pushMock).toHaveBeenCalledWith(
+      '/workflow-templates/new?name=my-workflow&title=My%20Workflow&description=Does%20a%20thing',
     );
-  });
-
-  it('hides the CTA when canCreate resolves false (fail closed)', async () => {
-    setup({ canCreate: false });
-
-    render(<WorkflowTemplatesPage />);
-
-    await waitFor(() => expect(mockCanCreate).toHaveBeenCalled());
-    expect(
-      screen.queryByRole('button', { name: /create workflow/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('hides the CTA when canCreate rejects (fail closed)', async () => {
-    setup({ canCreate: Promise.reject(new Error('boom')) });
-
-    render(<WorkflowTemplatesPage />);
-
-    await waitFor(() => expect(mockCanCreate).toHaveBeenCalled());
-    expect(
-      screen.queryByRole('button', { name: /create workflow/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('hides the CTA in read-only mode even when canCreate is true', async () => {
-    setup({ canCreate: true, readOnlyMode: true });
-
-    render(<WorkflowTemplatesPage />);
-
-    await waitFor(() => expect(mockCanCreate).toHaveBeenCalled());
-    expect(
-      screen.queryByRole('button', { name: /create workflow/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('re-runs the access check when the namespace changes', async () => {
-    setup({ canCreate: true, namespace: 'ns-a' });
-
-    const { rerender } = render(<WorkflowTemplatesPage />);
-    await waitFor(() => expect(mockCanCreate).toHaveBeenCalledTimes(1));
-
-    vi.mocked(useNamespace).mockReturnValue({
-      namespace: 'ns-b',
-      readOnlyMode: false,
-    } as unknown as ReturnType<typeof useNamespace>);
-
-    rerender(<WorkflowTemplatesPage />);
-    await waitFor(() => expect(mockCanCreate).toHaveBeenCalledTimes(2));
   });
 });

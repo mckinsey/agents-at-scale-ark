@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -13,11 +13,38 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+
+export interface NameWorkflowValues {
+  name: string;
+  title?: string;
+  description?: string;
+}
 
 interface NameWorkflowDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (name: string) => void;
+  onConfirm: (values: NameWorkflowValues) => void;
+}
+
+const RFC_1123_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+
+function getNameError(name: string, existingNames: string[]): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return 'Workflow template name is required.';
+  }
+  if (trimmed.length > 63) {
+    return 'Name must be 63 characters or less.';
+  }
+  if (!RFC_1123_LABEL.test(trimmed)) {
+    return 'Name must be lowercase letters, numbers, and hyphens, and start and end with a letter or number.';
+  }
+  if (existingNames.includes(trimmed)) {
+    return `A workflow template named "${trimmed}" already exists.`;
+  }
+  return null;
 }
 
 export function NameWorkflowDialog({
@@ -26,22 +53,58 @@ export function NameWorkflowDialog({
   onConfirm,
 }: NameWorkflowDialogProps) {
   const [name, setName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [existingNames, setExistingNames] = useState<string[]>([]);
+  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setName('');
-      setError(null);
-    }
-  }, [open]);
-
-  const handleConfirm = () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setError('Workflow template name is required.');
+    if (!open) {
       return;
     }
-    onConfirm(trimmed);
+
+    setName('');
+    setTitle('');
+    setDescription('');
+    setExistingNames([]);
+    setTouched(false);
+
+    let cancelled = false;
+    workflowTemplatesService
+      .list()
+      .then(templates => {
+        if (!cancelled) {
+          setExistingNames(templates.map(template => template.metadata.name));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExistingNames([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const nameError = useMemo(
+    () => getNameError(name, existingNames),
+    [name, existingNames],
+  );
+
+  const handleConfirm = () => {
+    if (nameError) {
+      setTouched(true);
+      return;
+    }
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim();
+    onConfirm({
+      name: name.trim(),
+      title: trimmedTitle || undefined,
+      description: trimmedDescription || undefined,
+    });
   };
 
   return (
@@ -50,32 +113,62 @@ export function NameWorkflowDialog({
         <DialogHeader>
           <DialogTitle>Name your workflow template</DialogTitle>
           <DialogDescription>
-            Give your workflow template a name to get started.
+            You won&apos;t be able to rename it after creation.
           </DialogDescription>
         </DialogHeader>
 
         <form
-          className="space-y-2"
+          className="space-y-4"
           onSubmit={event => {
             event.preventDefault();
             handleConfirm();
           }}>
-          <Label htmlFor="workflow-name">Workflow template name</Label>
-          <Input
-            id="workflow-name"
-            value={name}
-            autoFocus
-            onChange={event => {
-              setName(event.target.value);
-              if (error) {
-                setError(null);
-              }
-            }}
-          />
-          <p className="text-muted-foreground text-sm">
-            You won&apos;t be able to rename it after creation.
-          </p>
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          <div className="space-y-2">
+            <Label htmlFor="workflow-name">
+              Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="workflow-name"
+              data-testid="workflow-name-input"
+              value={name}
+              autoFocus
+              placeholder="e.g. data-ingestion-pipeline"
+              aria-invalid={touched && nameError ? true : undefined}
+              onChange={event => {
+                setName(event.target.value);
+                setTouched(true);
+              }}
+            />
+            {touched && nameError && (
+              <p
+                className="text-destructive text-sm"
+                data-testid="workflow-name-error">
+                {nameError}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="workflow-title">Title</Label>
+            <Input
+              id="workflow-title"
+              data-testid="workflow-title-input"
+              value={title}
+              placeholder="e.g. Data ingestion pipeline"
+              onChange={event => setTitle(event.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="workflow-description">Description</Label>
+            <Textarea
+              id="workflow-description"
+              data-testid="workflow-description-input"
+              value={description}
+              placeholder="e.g. Conduct adverse media screening via web research"
+              onChange={event => setDescription(event.target.value)}
+            />
+          </div>
 
           <DialogFooter className="flex-col-reverse gap-2 pt-2 sm:flex-row sm:gap-2">
             <Button
@@ -85,7 +178,10 @@ export function NameWorkflowDialog({
               className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" className="w-full sm:w-auto">
+            <Button
+              type="submit"
+              disabled={!!nameError}
+              className="w-full sm:w-auto">
               Create workflow template
             </Button>
           </DialogFooter>

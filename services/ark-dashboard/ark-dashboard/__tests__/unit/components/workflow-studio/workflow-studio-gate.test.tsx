@@ -258,7 +258,7 @@ describe('WorkflowStudio YAML validation banner', () => {
 });
 
 describe('StudioChatGate', () => {
-  it('renders the disabled card with heading and lead', () => {
+  it('renders the lock heading and lead without a boxed container', () => {
     render(
       <StudioChatGate
         agentMissing
@@ -269,17 +269,15 @@ describe('StudioChatGate', () => {
     );
 
     expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument();
-    expect(
-      screen.getByText('Chat with the agent is disabled'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Chat not available')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Complete both steps, then reload the page to start chatting with the builder agent:',
+        `Follow the steps below to start chatting with the ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent`,
       ),
     ).toBeInTheDocument();
   });
 
-  it('always renders both checklist items with the MCP server first', () => {
+  it('always renders both checklist items with the agent first', () => {
     render(
       <StudioChatGate
         agentMissing
@@ -289,16 +287,16 @@ describe('StudioChatGate', () => {
       />,
     );
 
-    const mcpItem = screen.getByTestId('studio-gate-item-mcp');
     const agentItem = screen.getByTestId('studio-gate-item-agent');
-    expect(mcpItem).toBeInTheDocument();
+    const mcpItem = screen.getByTestId('studio-gate-item-mcp');
     expect(agentItem).toBeInTheDocument();
-    expect(mcpItem.compareDocumentPosition(agentItem)).toBe(
+    expect(mcpItem).toBeInTheDocument();
+    expect(agentItem.compareDocumentPosition(mcpItem)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
 
-  it('marks a satisfied item done and only shows remediation for the unmet one', () => {
+  it('shows a disabled Installed button for a satisfied item and remediation for the unmet one', () => {
     render(
       <StudioChatGate
         agentMissing
@@ -308,12 +306,32 @@ describe('StudioChatGate', () => {
       />,
     );
 
-    expect(screen.getByTestId('studio-gate-item-mcp-done')).toBeInTheDocument();
-    expect(screen.queryByTestId('studio-gate-item-agent-done')).toBeNull();
+    const installed = screen.getByTestId('studio-gate-item-mcp-installed');
+    expect(installed).toBeInTheDocument();
+    expect(installed).toBeDisabled();
+    expect(screen.queryByTestId('studio-gate-item-agent-installed')).toBeNull();
     expect(
       screen.getByTestId('studio-gate-step-agent-missing'),
     ).toBeInTheDocument();
     expect(screen.queryByTestId('studio-gate-step-mcp-missing')).toBeNull();
+  });
+
+  it('renders each step as its own card with a numbered badge', () => {
+    render(
+      <StudioChatGate
+        agentMissing
+        agentNotReady={false}
+        mcpMissing
+        mcpNotReady={false}
+      />,
+    );
+
+    const agentItem = screen.getByTestId('studio-gate-item-agent');
+    const mcpItem = screen.getByTestId('studio-gate-item-mcp');
+    expect(agentItem.className).toContain('border');
+    expect(mcpItem.className).toContain('border');
+    expect(agentItem).toHaveTextContent('1');
+    expect(mcpItem).toHaveTextContent('2');
   });
 
   it('links to the marketplace when the agent is missing', () => {
