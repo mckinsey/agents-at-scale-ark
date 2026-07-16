@@ -4,7 +4,7 @@ import type {Db} from '@ark-broker/db/db.js';
 import type {MessageData} from '../memory-broker.js';
 import {BrokerItem} from './broker-item.js';
 import type {Predicate} from './stream.js';
-import type {MessageStream} from './message-stream.js';
+import type {MessageFilter, MessageStream} from './message-stream.js';
 import {PostgresStreamBase} from './postgres-stream-base.js';
 
 type MessageRow = {
@@ -28,7 +28,7 @@ function rowToBrokerItem(row: MessageRow): BrokerItem<MessageData> {
 }
 
 export class PostgresMessageStream
-  extends PostgresStreamBase<MessageData>
+  extends PostgresStreamBase<MessageData, MessageFilter>
   implements MessageStream
 {
   protected readonly tableName = 'messages';
@@ -46,6 +46,13 @@ export class PostgresMessageStream
 
   protected rowToItem(row: postgres.Row): BrokerItem<MessageData> {
     return rowToBrokerItem(row as unknown as MessageRow);
+  }
+
+  protected whereFor(filter: MessageFilter): postgres.Fragment {
+    return this.db`
+      ${filter.conversationId ? this.db`AND conversation_id = ${filter.conversationId}` : this.db``}
+      ${filter.queryId ? this.db`AND query_id = ${filter.queryId}` : this.db``}
+    `;
   }
 
   async append(

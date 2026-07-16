@@ -21,8 +21,20 @@ export interface EventData {
   };
 }
 
+export interface EventFilter {
+  queryId?: string;
+  sessionId?: string;
+  afterSequence?: number;
+}
+
 export interface EventStream extends Stream<EventData> {
   deleteByQuery(queryId: string): Promise<void>;
+  paginateBy(
+    params: PaginationParams,
+    filter?: EventFilter
+  ): Promise<PaginatedList<BrokerItem<EventData>>>;
+  filterBy(filter: EventFilter): Promise<BrokerItem<EventData>[]>;
+  deleteBy(filter: EventFilter): Promise<void>;
 }
 
 export class EventBroker {

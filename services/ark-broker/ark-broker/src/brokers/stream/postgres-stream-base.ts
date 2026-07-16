@@ -10,7 +10,10 @@ import {
 } from '../pagination.js';
 import type {Predicate, Stream} from './stream.js';
 
-export abstract class PostgresStreamBase<T> implements Stream<T> {
+export abstract class PostgresStreamBase<
+  T,
+  F extends {afterSequence?: number},
+> implements Stream<T> {
   protected readonly emitter = new EventEmitter();
 
   protected constructor(
@@ -22,6 +25,7 @@ export abstract class PostgresStreamBase<T> implements Stream<T> {
   protected abstract readonly tableName: string;
   protected abstract readonly selectColumns: string[];
   protected abstract rowToItem(row: postgres.Row): BrokerItem<T>;
+  protected abstract whereFor(filter: F): postgres.Fragment;
 
   abstract append(data: T, ttlSeconds?: number): Promise<BrokerItem<T>>;
   abstract delete(predicate?: Predicate<T>): Promise<void>;
@@ -66,6 +70,65 @@ export abstract class PostgresStreamBase<T> implements Stream<T> {
       hasMore,
       nextCursor: hasMore && lastItem ? lastItem.sequenceNumber : undefined,
     };
+  }
+
+  async filterBy(filter: F): Promise<BrokerItem<T>[]> {
+    const afterSequence = filter.afterSequence;
+    const rows = await this.db`
+      SELECT ${this.db(this.selectColumns)}
+      FROM ${this.db(this.tableName)}
+      WHERE expires_at > now()
+      ${this.whereFor(filter)}
+      ${afterSequence === undefined ? this.db`` : this.db`AND sequence_number > ${afterSequence}`}
+      ORDER BY sequence_number ASC
+    `;
+    return rows.map((row) => this.rowToItem(row));
+  }
+
+  async paginateBy(
+    params: PaginationParams,
+    filter?: F
+  ): Promise<PaginatedList<BrokerItem<T>>> {
+    const limit = params.limit ?? DEFAULT_LIMIT;
+    const cursor = params.cursor;
+
+    const rows = await this.db`
+      SELECT ${this.db(this.selectColumns)}
+      FROM ${this.db(this.tableName)}
+      WHERE expires_at > now()
+      ${filter ? this.whereFor(filter) : this.db``}
+      ${cursor === undefined ? this.db`` : this.db`AND sequence_number > ${cursor}`}
+      ORDER BY sequence_number ASC
+      LIMIT ${limit + 1}
+    `;
+
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit).map((row) => this.rowToItem(row));
+    const lastItem = items.at(-1);
+
+    return {
+      items,
+      // total is intentionally left unpopulated here (no COUNT(*)); pagination.ts
+      // makes PaginatedList.total optional in the next commit.
+      total: undefined as unknown as number,
+      hasMore,
+      nextCursor: hasMore && lastItem ? lastItem.sequenceNumber : undefined,
+    };
+  }
+
+  async deleteBy(filter: F): Promise<void> {
+    const hasScopingField = Object.entries(
+      filter as Record<string, unknown>
+    ).some(([key, value]) => key !== 'afterSequence' && value !== undefined);
+    if (!hasScopingField) {
+      throw new Error('deleteBy requires at least one filter field');
+    }
+    this.logger.info({filter}, 'deleting by filter');
+    await this.db`
+      DELETE FROM ${this.db(this.tableName)}
+      WHERE true
+      ${this.whereFor(filter)}
+    `;
   }
 
   async save(): Promise<void> {

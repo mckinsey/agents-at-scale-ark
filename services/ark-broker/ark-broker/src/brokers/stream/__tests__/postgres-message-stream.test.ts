@@ -139,6 +139,188 @@ describe('PostgresMessageStream', () => {
     });
   });
 
+  describe('filterBy', () => {
+    it('returns only items matching conversationId, in sequence order', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      const a = await stream.append(makeMessageData({conversationId}));
+      const b = await stream.append(makeMessageData({conversationId}));
+      await stream.append(makeMessageData());
+
+      const result = await stream.filterBy({conversationId});
+
+      expect(result.map((item) => item.sequenceNumber)).toEqual([
+        a.sequenceNumber,
+        b.sequenceNumber,
+      ]);
+    });
+
+    it('returns only items matching queryId', async () => {
+      const queryId = 'q-' + Math.random().toString(36).slice(2);
+      const a = await stream.append(makeMessageData({queryId}));
+      await stream.append(makeMessageData());
+
+      const result = await stream.filterBy({queryId});
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.sequenceNumber).toBe(a.sequenceNumber);
+    });
+
+    it('combines conversationId and queryId as AND', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      const queryId = 'q-' + Math.random().toString(36).slice(2);
+      const match = await stream.append(
+        makeMessageData({conversationId, queryId})
+      );
+      await stream.append(makeMessageData({conversationId}));
+      await stream.append(makeMessageData({queryId}));
+
+      const result = await stream.filterBy({conversationId, queryId});
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.sequenceNumber).toBe(match.sequenceNumber);
+    });
+
+    it('returns empty array when nothing matches', async () => {
+      await stream.append(makeMessageData());
+      const result = await stream.filterBy({
+        conversationId: 'nonexistent-conversation-id',
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it('applies afterSequence as a keyset cursor', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      const a = await stream.append(makeMessageData({conversationId}));
+      const b = await stream.append(makeMessageData({conversationId}));
+      const c = await stream.append(makeMessageData({conversationId}));
+
+      const result = await stream.filterBy({
+        conversationId,
+        afterSequence: a.sequenceNumber,
+      });
+
+      expect(result.map((item) => item.sequenceNumber)).toEqual([
+        b.sequenceNumber,
+        c.sequenceNumber,
+      ]);
+    });
+  });
+
+  describe('paginateBy', () => {
+    it('returns only items matching the filter', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      await stream.append(makeMessageData({conversationId}));
+      await stream.append(makeMessageData({conversationId}));
+      await stream.append(makeMessageData());
+
+      const result = await stream.paginateBy({limit: 10}, {conversationId});
+
+      expect(result.items).toHaveLength(2);
+      expect(
+        result.items.every(
+          (item) => item.data.conversationId === conversationId
+        )
+      ).toBe(true);
+    });
+
+    it('paginates a filtered subset across multiple keyset pages', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      const appended = [];
+      for (let i = 0; i < 5; i++) {
+        appended.push(await stream.append(makeMessageData({conversationId})));
+      }
+      await stream.append(makeMessageData());
+
+      const page1 = await stream.paginateBy({limit: 2}, {conversationId});
+      expect(page1.items).toHaveLength(2);
+      expect(page1.hasMore).toBe(true);
+      expect(page1.items.map((item) => item.sequenceNumber)).toEqual([
+        appended[0]!.sequenceNumber,
+        appended[1]!.sequenceNumber,
+      ]);
+      expect(page1.nextCursor).toBe(appended[1]!.sequenceNumber);
+
+      const page2 = await stream.paginateBy(
+        {limit: 2, cursor: page1.nextCursor},
+        {conversationId}
+      );
+      expect(page2.items.map((item) => item.sequenceNumber)).toEqual([
+        appended[2]!.sequenceNumber,
+        appended[3]!.sequenceNumber,
+      ]);
+      expect(page2.hasMore).toBe(true);
+
+      const page3 = await stream.paginateBy(
+        {limit: 2, cursor: page2.nextCursor},
+        {conversationId}
+      );
+      expect(page3.items.map((item) => item.sequenceNumber)).toEqual([
+        appended[4]!.sequenceNumber,
+      ]);
+      expect(page3.hasMore).toBe(false);
+      expect(page3.nextCursor).toBeUndefined();
+    });
+
+    it('works without a filter, mirroring paginate', async () => {
+      for (let i = 0; i < 3; i++) {
+        await stream.append(makeMessageData());
+      }
+      const result = await stream.paginateBy({limit: 10});
+      expect(result.items).toHaveLength(3);
+    });
+  });
+
+  describe('deleteBy', () => {
+    it('removes only rows matching conversationId, leaving others intact', async () => {
+      const convA = 'conv-a-' + Math.random().toString(36).slice(2);
+      const convB = 'conv-b-' + Math.random().toString(36).slice(2);
+      await stream.append(makeMessageData({conversationId: convA}));
+      await stream.append(makeMessageData({conversationId: convA}));
+      const survivor = await stream.append(
+        makeMessageData({conversationId: convB})
+      );
+
+      await stream.deleteBy({conversationId: convA});
+
+      const all = await stream.all();
+      expect(all).toHaveLength(1);
+      expect(all[0]!.sequenceNumber).toBe(survivor.sequenceNumber);
+    });
+
+    it('removes only rows matching queryId, leaving others intact', async () => {
+      const queryA = 'q-a-' + Math.random().toString(36).slice(2);
+      const queryB = 'q-b-' + Math.random().toString(36).slice(2);
+      await stream.append(makeMessageData({queryId: queryA}));
+      const survivor = await stream.append(makeMessageData({queryId: queryB}));
+
+      await stream.deleteBy({queryId: queryA});
+
+      const all = await stream.all();
+      expect(all).toHaveLength(1);
+      expect(all[0]!.sequenceNumber).toBe(survivor.sequenceNumber);
+    });
+
+    it('removes rows regardless of expiry (ignores TTL)', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      const item = await stream.append(makeMessageData({conversationId}), 1);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      await stream.deleteBy({conversationId});
+
+      const pgDb = db();
+      const rows = await pgDb`
+        SELECT sequence_number FROM messages WHERE sequence_number = ${item.sequenceNumber}
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('rejects an empty filter without deleting anything', async () => {
+      await stream.append(makeMessageData());
+      await expect(stream.deleteBy({})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
+  });
+
   describe('deleteByQuery', () => {
     it('removes only rows with the given query_id', async () => {
       const qA = 'qa-' + Math.random().toString(36).slice(2);

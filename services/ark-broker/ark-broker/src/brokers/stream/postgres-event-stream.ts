@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
-import type {EventData, EventStream} from '../event-broker.js';
+import type {EventData, EventFilter, EventStream} from '../event-broker.js';
 import {BrokerItem} from './broker-item.js';
 import type {Predicate} from './stream.js';
 import {PostgresStreamBase} from './postgres-stream-base.js';
@@ -24,7 +24,7 @@ function rowToBrokerItem(row: EventRow): BrokerItem<EventData> {
 }
 
 export class PostgresEventStream
-  extends PostgresStreamBase<EventData>
+  extends PostgresStreamBase<EventData, EventFilter>
   implements EventStream
 {
   protected readonly tableName = 'events';
@@ -43,6 +43,13 @@ export class PostgresEventStream
 
   protected rowToItem(row: postgres.Row): BrokerItem<EventData> {
     return rowToBrokerItem(row as unknown as EventRow);
+  }
+
+  protected whereFor(filter: EventFilter): postgres.Fragment {
+    return this.db`
+      ${filter.queryId ? this.db`AND query_id = ${filter.queryId}` : this.db``}
+      ${filter.sessionId ? this.db`AND session_id = ${filter.sessionId}` : this.db``}
+    `;
   }
 
   async append(
