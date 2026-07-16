@@ -38,6 +38,12 @@ export const envSchema = z
       .int()
       .positive()
       .default(2592000),
+    EVENT_BACKEND: z.enum(['memory', 'postgres']).default('memory'),
+    EVENT_VISIBILITY_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2592000),
     DATABASE_DEBUG_QUERIES: z
       .string()
       .default('false')
@@ -57,10 +63,15 @@ export const envSchema = z
       .transform((v) => v === 'true'),
   })
   .superRefine((data, ctx) => {
-    if (data.MESSAGE_BACKEND === 'postgres' && !data.DATABASE_URL) {
+    if (
+      (data.MESSAGE_BACKEND === 'postgres' ||
+        data.EVENT_BACKEND === 'postgres') &&
+      !data.DATABASE_URL
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'DATABASE_URL is required when MESSAGE_BACKEND=postgres',
+        message:
+          'DATABASE_URL is required when MESSAGE_BACKEND=postgres or EVENT_BACKEND=postgres',
         path: ['DATABASE_URL'],
       });
     }

@@ -1,9 +1,11 @@
 # ARK Broker chart values
 
 # Message backend: memory (default) or postgres
+# Event backend: memory (default) or postgres
 # Chunk backend: memory (default) or redis
 backends:
   message: memory
+  event: memory
   chunk: memory
 
 # PostgreSQL connection — required when backends.message=postgres
@@ -35,7 +37,8 @@ database:
   poolMax: 10
   connectTimeoutMs: 10000
   statementTimeoutMs: 30000
-  visibilityTtlSeconds: 2592000
+  messageVisibilityTtlSeconds: 2592000
+  eventVisibilityTtlSeconds: 2592000
   debugQueries: false
 
 # Redis connection — required when backends.chunk=redis

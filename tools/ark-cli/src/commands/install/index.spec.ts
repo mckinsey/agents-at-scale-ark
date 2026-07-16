@@ -1425,7 +1425,7 @@ describe('install command', () => {
       const command = createInstallCommand(pgConfig);
       await command.parseAsync(['node', 'test', 'ark-apiserver']);
 
-      expect(mockRunReadinessChecks).toHaveBeenCalledWith(120);
+      expect(mockRunReadinessChecks).toHaveBeenCalledWith(120, 'postgresql');
     });
 
     it('exits with error if ark-apiserver readiness check fails', async () => {
@@ -1566,7 +1566,7 @@ describe('install command', () => {
       const command = createInstallCommand(pgConfig);
       await command.parseAsync(['node', 'test']);
 
-      expect(mockRunReadinessChecks).toHaveBeenCalledWith(120);
+      expect(mockRunReadinessChecks).toHaveBeenCalledWith(120, 'postgresql');
     });
   });
 

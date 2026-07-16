@@ -97,7 +97,7 @@ Security is considered from the earliest design stage rather than bolted on at r
 
 ## Error checking procedures
 
-Errors are caught at three boundaries: local pre-push, pre-commit hooks, and CI. Only the CI boundary runs error-detection mechanically for every change (the main-branch ruleset is a *merge* gate, not an error-detection one). The pre-push policy depends on the developer following project guidance; the pre-commit hooks ship in the repository but Ark does not currently document or automate `pre-commit install`, so they only run for contributors who set them up themselves.
+Errors are caught at three boundaries: local pre-push, pre-commit hooks, and CI. Only the CI boundary runs error-detection mechanically for every change (the main-branch ruleset is a *merge* gate, not an error-detection one). The pre-push policy depends on the developer following project guidance; the pre-commit hooks ship in the repository and contributors enable them by running `pre-commit install` as documented in `CONTRIBUTING.md`.
 
 **Pre-push (developer machine).** Project policy in `CLAUDE.md` is that `make lint` and `make test` should pass in every directory a change touches before pushing. There is no harness that blocks the push itself — CI re-runs the same checks and reviewers see the results. Specific tooling per stack:
 
@@ -112,9 +112,9 @@ Errors are caught at three boundaries: local pre-push, pre-commit hooks, and CI.
 - [`gitleaks`](https://github.com/gitleaks/gitleaks) secret scanning.
 - Terraform `fmt`, `validate`, `tflint`, and `terraform-docs`.
 
-These hooks only run if the contributor has installed the [`pre-commit`](https://pre-commit.com/) tool and run `pre-commit install` in their clone. Ark does not currently document this step in `CONTRIBUTING.md`, the root `README.md`, or in `make` targets, so it is a contributor practice rather than a project-defined gate. None of these hooks have a CI-side equivalent today, so a contributor who has not installed pre-commit gets no local linting from this file and no secret-scanning step from the project pipeline.
+These hooks only run if the contributor has installed the [`pre-commit`](https://pre-commit.com/) tool and run `pre-commit install` in their clone. Gitleaks also has a CI-side equivalent in `.github/workflows/gitleaks.yaml`, so committed secrets are checked server-side even when a contributor has not installed the local hooks. The other hooks remain local developer checks unless their corresponding lint or test command is also covered by CI.
 
-**CI.** The [CI/CD workflow](/operations-guide/build-pipelines) runs lint and tests for every stack and runs the SonarQube quality gate (`.github/workflows/sonar_scan.yaml`) and JFrog Xray scan. These workflows fail and surface red on the PR when an issue is found; the merge gate is CODEOWNERS approval rather than the status check itself (see [Enforcement model](#enforcement-model)).
+**CI.** The [CI/CD workflow](/operations-guide/build-pipelines) runs lint and tests for every stack and runs the SonarQube quality gate (`.github/workflows/sonar_scan.yaml`) and JFrog Xray scan. The Gitleaks workflow (`.github/workflows/gitleaks.yaml`) scans the commits introduced by pull requests, the commit range pushed to `main`, and full repository history on manual dispatches and a weekly schedule. These workflows fail and surface red on the PR when an issue is found; the merge gate is CODEOWNERS approval rather than the status check itself (see [Enforcement model](#enforcement-model)).
 
 Hook bypass (`--no-verify`, `--no-gpg-sign`) is documented as out-of-policy in `CLAUDE.md` unless explicitly requested by a maintainer. It cannot be technically prevented at push time, but the same lint and test processes run again in CI.
 
@@ -140,7 +140,7 @@ The full release flow is documented in [Build Pipelines → Release Management](
 
 Risk is assessed continuously through CI-side scanning, periodic external assessment, and a documented CVE-handling workflow. The dedicated treatment — including the full list of scanning tools, the baseline/whitelist prioritisation model, the action plan and reporting outputs, asset grouping, intelligence sources, and known process gaps — is in [Vulnerability Management](/reference/vulnerability-management); this section is the lifecycle-level summary.
 
-**CI-side scanning** runs on every PR and main build: JFrog Xray (build + container), SonarQube, and Go linters with some security-relevant rules (`gocritic`, `bodyclose`, `errcheck`). Results surface on the PR but are not required status checks — see the [Enforcement model](#enforcement-model) above for how that gates merges. Gitleaks is configured as a pre-commit hook only and is not run in CI; the contributor-side install gap is described in [Error checking procedures](#error-checking-procedures) above.
+**CI-side scanning** runs on every PR and main build: JFrog Xray (build + container), SonarQube, Gitleaks, and Go linters with some security-relevant rules (`gocritic`, `bodyclose`, `errcheck`). Results surface on the PR but are not required status checks — see the [Enforcement model](#enforcement-model) above for how that gates merges. Gitleaks also remains available as a local pre-commit hook for earlier feedback before a contributor opens a PR.
 
 **Periodic external assessment** is published in the dated security-assurance report pages:
 

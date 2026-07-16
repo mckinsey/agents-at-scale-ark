@@ -1,15 +1,52 @@
+---
+title: Resources
+description: Ark custom resources (CRDs) — the building blocks of the platform
+---
+
 # Resources
 
-Reference documentation for Ark custom resources.
+Ark extends Kubernetes with custom resources (CRDs) in the `ark.mckinsey.com` API group. Each resource is reconciled by the Ark controller, so you create and manage them with standard tools — `kubectl`, GitOps, the [Ark API](/reference/ark-apis), or the dashboard. This section is the field-by-field reference for every CRD; for task-oriented guides see the [User Guide](/user-guide/agents).
 
-| Resource | Description |
-|----------|-------------|
-| [Agents](./agent) | AI agents that execute queries |
-| [Models](./models) | LLM configurations and credentials |
-| [Queries](./query) | User requests submitted to agents |
-| [Teams](./team) | Agent orchestration and routing |
-| [Tools](./tools) | Capabilities available to agents |
-| [MCPServers](./mcpserver) | Model Context Protocol servers |
-| [Memories](./memory) | Conversation history and context |
-| [A2AServers](./a2aserver) | Agent-to-Agent protocol servers |
-| [A2ATask](./a2atask) | Agent-to-Agent protocol tasks |
+## Resource reference
+
+| Resource | Kind | API version | Description |
+| --- | --- | --- | --- |
+| [Agents](./agent) | `Agent` | `v1alpha1` | Execution units that process input with a model and tools. |
+| [Models](./models) | `Model` | `v1alpha1` | LLM provider configuration and credentials. |
+| [Queries](./query) | `Query` | `v1alpha1` | A request to run work against an agent, team, model, or tool. |
+| [Teams](./team) | `Team` | `v1alpha1` | Multi-agent coordination via an execution strategy. |
+| [Tools](./tools) | `Tool` | `v1alpha1` | Capabilities agents can call (HTTP, MCP, agent, team, built-in). |
+| [MCPServers](./mcpserver) | `MCPServer` | `v1alpha1` | Model Context Protocol servers that expose tools. |
+| [Memories](./memory) | `Memory` | `v1alpha1` | Backing store for conversation history. |
+| [A2AServers](./a2aserver) | `A2AServer` | `v1prealpha1` | Remote Agent-to-Agent servers; discovered agents become `Agent` resources. |
+| [A2ATask](./a2atask) | `A2ATask` | `v1alpha1` | Tracks an async task dispatched to an A2A agent. |
+| [ExecutionEngine](./executionengine) | `ExecutionEngine` | `v1prealpha1` | Pluggable external runtime that executes agents via the A2A protocol. |
+| ArkConfig | `ArkConfig` | `v1alpha1` | Cluster-scoped configuration singleton (e.g. default query TTL). |
+
+Every resource is namespaced except `ArkConfig`, which is cluster-scoped. `A2AServer` and `ExecutionEngine` are served under `ark.mckinsey.com/v1prealpha1`; the rest under `v1alpha1`.
+
+## Working with resources
+
+All Ark CRDs behave like native Kubernetes objects:
+
+```bash
+kubectl get agents                 # list, with resource-specific print columns
+kubectl describe agent my-agent    # spec, status, and events
+kubectl get query my-query -o yaml # full spec + status
+kubectl apply -f agent.yaml        # create or update
+```
+
+Each resource page documents its `spec` fields, `status` fields, and the print columns `kubectl get` renders.
+
+## Resource relationships
+
+Ark resources compose into common patterns:
+
+- **Agent + Model + Tools** — an agent with a model and capabilities.
+- **Team + Agents** — multi-agent collaboration under a strategy.
+- **Query + target** — a request routed to an agent, team, model, or tool.
+- **MCPServer + Tools** — standardized tool integration; discovered tools become `Tool` resources.
+- **Memory + Query** — conversation history threaded by `conversationId`.
+- **A2AServer + Agent** — remote agents surfaced as local `Agent` resources.
+
+See [Resource Relationships](/reference/relationships) for the full dependency map.

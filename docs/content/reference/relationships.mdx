@@ -1,302 +1,124 @@
 ---
 title: Resource Relationships
-description: How ARK resources work together to create powerful agentic workflows
+description: How Ark resources reference each other, what the controller creates automatically, and the namespace and validation limits
 ---
 
 # Resource Relationships
 
-Understanding how ARK resources relate to and interact with each other is crucial for designing effective agentic workflows. This section explains the relationships between different resource types and common patterns for combining them.
+Ark resources are Kubernetes objects that reference each other by name. The controller resolves those references during reconciliation and rejects invalid ones through admission webhooks. This page maps the references between resource types, the resources Ark creates for you, and the namespace and validation limits that constrain them.
 
-## Core Resource Dependencies
+For how a request actually runs, see [Query Execution Flow](/reference/query-execution). For each resource's fields, see [Resources](/reference/resources).
 
-### Agent Dependencies
-An Agent requires several supporting resources to function:
-
-```mermaid
-graph TD
-    A[Agent] --> M[Model]
-    A --> T[Tools]
-    A --> MEM[Memory]
-    A --> EE[Execution Engine]
-    M --> S[Secrets]
-    T --> MCP[MCP Server]
-```
-
-**Required:**
-- **Model**: Defines the AI model provider and configuration
-- **Execution Engine**: Runtime environment for the agent
-
-**Optional:**
-- **Tools**: External capabilities and functions
-- **Memory**: Persistent context storage
-- **MCP Servers**: Standardized tool integrations
-
-### Team Dependencies
-Teams orchestrate multiple agents and their dependencies:
+## Dependency map
 
 ```mermaid
-graph TD
-    TEAM[Team] --> A1[Agent 1]
-    TEAM --> A2[Agent 2]
-    TEAM --> A3[Agent 3]
-    TEAM --> SMEM[Shared Memory]
-    TEAM --> A2A[A2A Server]
-    A1 --> M1[Model 1]
-    A2 --> M2[Model 2]
-    A3 --> M3[Model 3]
+flowchart TD
+    Query -->|"target / selector"| Agent
+    Query -->|"target / selector"| Team
+    Query -->|"target / selector"| Model
+    Query -->|"target / selector"| Tool
+    Query -->|"memory"| Memory
+
+    Agent -->|"modelRef"| Model
+    Agent -->|"tools[]"| Tool
+    Agent -.->|"executionEngine"| ExecutionEngine
+
+    Team -->|"members[] (agent)"| Agent
+    Team -->|"members[] (team)"| Team
+
+    Tool -.->|"type: mcp"| MCPServer
+    Tool -.->|"type: agent"| Agent
+    Tool -.->|"type: team"| Team
+
+    Model -->|"credentials"| Secret
+
+    MCPServer ==>|"creates"| Tool
+    A2AServer ==>|"creates"| Agent
+    A2ATask -.->|"queryRef / a2aServerRef / agentRef"| A2AServer
 ```
 
-**Components:**
-- **Multiple Agents**: Team members with specific roles
-- **Shared Memory**: Optional shared context
-- **A2A Server**: Agent-to-agent communication
-- **Workflow Definition**: Coordination patterns
+Solid arrows are references you author; `==>` marks resources the controller **creates automatically**; dotted arrows are optional or conditional references.
 
-## Common Patterns
+## References by resource
 
-### Single Agent Pattern
-The simplest pattern with one agent handling specific tasks:
+| Resource | References | Referenced by |
+| --- | --- | --- |
+| **Query** | `target` or `selector` → Agent / Team / Model / Tool; `memory` → Memory | — (created by users, the API, or the dashboard) |
+| **Agent** | `modelRef` → Model; `tools[]` → Tool; `executionEngine` → ExecutionEngine | Query (`target`), Team (`members`), Tool (`type: agent`) |
+| **Team** | `members[]` → Agent or Team; `selector.agent` → Agent | Query (`target`), Team (nested `members`), Tool (`type: team`) |
+| **Model** | credentials via Secret / ConfigMap (`valueFrom`) | Agent (`modelRef`), Query (`target`) |
+| **Tool** | `mcp` → MCPServer; `agent` → Agent; `team` → Team (per `type`) | Agent (`tools[]`), Query (`target`) |
+| **MCPServer** | address + credentials via Secret / ConfigMap | Tool (`type: mcp`) — created for each discovered tool |
+| **Memory** | address (the backing store, e.g. the broker) | Query (`memory`) |
+| **A2AServer** | address of a remote A2A server | A2ATask (`a2aServerRef`) |
+| **A2ATask** | `queryRef` → Query; `a2aServerRef` → A2AServer; `agentRef` → Agent | — (created by the controller) |
+| **ExecutionEngine** | address of the engine (A2A) | Agent (`executionEngine`) |
 
-```yaml
-# Model
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Model
-metadata:
-  name: gpt-4-model
-spec:
-  provider: openai
-  type: openai
-  model:
-    value: gpt-4
+Note that an **Agent does not reference Memory** — conversation history is attached to the **Query** (`spec.memory`) and resolved by the execution engine at run time.
 
----
-# Agent
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: weather-agent
-spec:
-  model: gpt-4-model
-  systemPrompt: "You are a helpful weather assistant"
-  tools:
-    - weather-tool
-```
+## Resources Ark creates for you
 
-### Multi-Agent Team Pattern
-Multiple agents collaborating on complex tasks:
+Two controllers create resources from a discovered upstream, and own them so they are garbage-collected when the parent is deleted:
 
-```yaml
-# Team with multiple specialized agents
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Team
-metadata:
-  name: research-team
-spec:
-  agents:
-    - name: researcher
-      agent: research-agent
-      role: "Primary researcher"
-    - name: analyst
-      agent: analysis-agent
-      role: "Data analyst"
-    - name: writer
-      agent: writing-agent
-      role: "Report writer"
-  workflow:
-    type: sequential
-  memory:
-    enabled: true
-    shared: true
-```
+- **MCPServer → Tools.** When an `MCPServer` becomes reachable, its controller discovers the server's tools and creates a `Tool` (`type: mcp`) for each, labelled with the server name and owned by the `MCPServer`. Delete the server and its tools go with it.
+- **A2AServer → Agents.** When an `A2AServer` is reachable, its controller discovers the remote agents it advertises and creates a local `Agent` for each, with `executionEngine.name: a2a` so queries dispatch to the remote server. The agents are owned by the `A2AServer`.
+- **Query → A2ATask.** When a query runs against an A2A-backed agent, an `A2ATask` tracks the asynchronous task — it references the originating `Query`, the `A2AServer` to poll, and the `Agent`. See [A2ATask](/reference/resources/a2atask).
 
-### Tool-Enhanced Agent Pattern
-Agents with external capabilities through tools:
+## Namespace scope
 
-```yaml
-# Tool definition
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Tool
-metadata:
-  name: weather-tool
-spec:
-  type: function
-  function:
-    name: get_weather
-    description: "Get current weather"
-    implementation:
-      type: http
-      http:
-        url: "https://api.weather.com/v1/current"
+References resolve within a single namespace unless the reference type carries its own `namespace` field:
 
----
-# Agent using the tool
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: weather-agent
-spec:
-  model: gpt-4-model
-  tools:
-    - weather-tool
-```
+| Reference | Cross-namespace? |
+| --- | --- |
+| `Agent.spec.modelRef` | Yes — honours `modelRef.namespace` (defaults to the agent's namespace). |
+| `Agent.spec.executionEngine` | Yes — honours `executionEngine.namespace` (except the built-in `a2a` engine, which needs no resource). |
+| `Query.spec.memory` | Yes — honours `memory.namespace` (resolved by the execution engine). |
+| `Query.spec.target` / `spec.selector` | **No** — resolved in the query's namespace. There is no namespace field on a target. |
+| `Team.spec.members[]` | **No** — members must live in the team's namespace. |
 
+Because every resource is namespaced, a namespace acts as a tenant boundary. See [Tenant and Namespace Management](/operations-guide/tenant-namespace-management).
 
-## Query Execution Flow
+## Limitations and constraints
 
-Understanding how queries flow through the system:
+The admission webhooks reject relationships that can't work, so most problems surface at `kubectl apply` time rather than at run time:
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant Q as Query
-    participant A as Agent
-    participant M as Model
-    participant T as Tool
-    participant MEM as Memory
-
-    U->>Q: Submit query
-    Q->>A: Route to agent
-    A->>MEM: Load context
-    A->>M: Generate response
-    M->>A: Model response
-    A->>T: Execute tools (if needed)
-    T->>A: Tool results
-    A->>MEM: Save context
-    A->>Q: Final response
-    Q->>U: Return result
-```
-
-### Query Lifecycle
-1. **Submission**: User submits query via CLI or API
-2. **Routing**: Query routed to target agent or team
-3. **Context Loading**: Agent loads relevant memory/context
-4. **Processing**: Model generates response
-5. **Tool Execution**: External tools called if needed
-6. **Context Saving**: Updated context saved to memory
-7. **Response**: Final response returned to user
-
-## Resource Lifecycle Management
-
-### Creation Order
-When creating related resources, follow this order:
-
-1. **Secrets** (API keys, credentials)
-2. **Models** (AI model configurations)
-3. **Memory** (if using persistent context)
-4. **Tools** (external capabilities)
-5. **MCP Servers** (if using MCP tools)
-6. **Execution Engines** (runtime environments)
-7. **Agents** (individual AI agents)
-8. **Teams** (multi-agent orchestration)
-9. **A2A Servers** (agent communication)
-
-### Dependency Validation
-ARK validates dependencies automatically:
+- **Query targets exactly one thing.** Set either `spec.target` or `spec.selector`, not both and not neither. A `selector` resolves to the **first** matching resource (checked Agent → Team → Model → Tool) — it is not a fan-out across matches.
+- **Query targets are same-namespace.** The named target (or selector match) must exist in the query's namespace.
+- **Teams can't mix execution engines.** All agent members must be either internal (no `executionEngine`, or the built-in `a2a` engine) or external (a named engine) — a team can't contain both.
+- **Teams can't reference themselves.** A member can't share the team's own name; nested teams (`members[].type: team`) are allowed otherwise.
+- **Deprecated team strategies are migrated.** `round-robin` and standalone `graph` are accepted but rewritten by the mutating webhook (`round-robin` → `sequential` with loops; `graph` → `sequential`, with the graph edges discarded). Author new teams with `sequential` or `selector`. See [Teams](/reference/resources/team).
+- **Missing dependencies block readiness.** If a referenced Model, Tool, or engine doesn't exist, the dependent resource's `Available` condition stays `False` with a reason such as `ModelNotFound`, and flips to `True` automatically once the dependency appears.
 
 ```yaml
 status:
   conditions:
-  - type: Ready
-    status: "False"
-    reason: ModelNotFound
-    message: "Referenced model 'gpt-4-model' not found"
+    - type: Available
+      status: "False"
+      reason: ModelNotFound
+      message: "Model 'gpt-4o' is not available"
 ```
 
-### Cleanup and Deletion
-When deleting resources, consider dependencies:
+## Creating and deleting related resources
+
+You don't have to create resources in a strict order — a dependent resource simply stays `Available: False` until its dependencies exist, then reconciles automatically. A natural order that avoids transient warnings:
+
+1. **Secrets** — API keys and credentials.
+2. **Models** — reference their secrets.
+3. **Memory**, **Tools**, **MCPServers**, **ExecutionEngines** — supporting resources.
+4. **Agents** — reference models, tools, and engines.
+5. **Teams** — reference agents (and nested teams).
+6. **A2AServers** — discovered agents appear as new `Agent` resources.
+
+For deletion, controller-created resources (Tools from an MCPServer, Agents from an A2AServer) are removed automatically with their parent via owner references. Deleting a `Query` triggers a finalizer that also removes the messages it wrote to its `Memory` backend — see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
 ```bash
-# Safe deletion order (reverse of creation)
-kubectl delete teams --all
-kubectl delete agents --all
-kubectl delete tools --all
-kubectl delete models --all
-kubectl delete secrets --all
+kubectl describe agent weather-agent   # spec, status conditions, and events
+kubectl get models                     # AVAILABLE column reflects health probes
+ark teams                              # list teams via the CLI
 ```
 
-## Advanced Patterns
+## Related
 
-### Multi-Model Agent
-Agent that can use different models for different tasks:
-
-```yaml
-# Future pattern - model selection based on context
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: adaptive-agent
-spec:
-  modelSelector:
-    default: gpt-4-model
-    rules:
-    - condition: "query.type == 'code'"
-      model: code-specialized-model
-    - condition: "query.complexity == 'simple'"
-      model: gpt-3.5-model
-```
-
-### Hierarchical Teams
-Teams containing other teams:
-
-```yaml
-# Parent team
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Team
-metadata:
-  name: organization
-spec:
-  teams:
-    - research-team
-    - development-team
-    - qa-team
-  workflow:
-    type: parallel
-```
-
-### Cross-Namespace Resources
-Resources spanning multiple namespaces:
-
-```yaml
-# Agent in one namespace using model from another
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: app-agent
-  namespace: application
-spec:
-  model: shared-models/gpt-4-model  # Cross-namespace reference
-```
-
-## Monitoring Relationships
-
-### Resource Status
-Monitor the health of resource relationships:
-
-```bash
-# Check agent dependencies
-kubectl describe agent weather-agent
-
-# Verify model connectivity
-ark check models
-
-# Monitor team coordination
-ark describe team research-team
-```
-
-### Troubleshooting Dependencies
-Common dependency issues and solutions:
-
-```bash
-# Model not ready
-kubectl get models
-# Solution: Check API keys and connectivity
-
-# Tool not available
-kubectl get tools
-# Solution: Verify tool implementation and MCP servers
-
-# Memory not accessible
-kubectl get memory
-# Solution: Check database connectivity and credentials
-```
-
+- [Query Execution Flow](/reference/query-execution) — how a query runs end to end.
+- [Resources](/reference/resources) — every CRD, field by field.
+- [Core Architecture](/reference/core-architecture) — the services behind these resources.

@@ -3,7 +3,7 @@ version: v2beta1
 
 pipelines:
   deploy: |-
-    if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ]; then
+    if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ] || [ "${BROKER_EVENT_BACKEND}" == "postgres" ]; then
       create_deployments ark-storage-dev
       kubectl rollout status deployment/ark-storage-dev -n default --timeout=120s
     fi
@@ -14,7 +14,7 @@ pipelines:
     build_images --all
     create_deployments --all
   dev: |-
-    if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ]; then
+    if [ "${BROKER_MESSAGE_BACKEND}" == "postgres" ] || [ "${BROKER_EVENT_BACKEND}" == "postgres" ]; then
       create_deployments ark-storage-dev
       kubectl rollout status deployment/ark-storage-dev -n default --timeout=120s
     fi
@@ -29,9 +29,9 @@ pipelines:
     kubectl wait --for=condition=complete job -l app.kubernetes.io/component=restart-hook -n ${DEVSPACE_NAMESPACE:-default} --timeout=120s 2>/dev/null || true
 
     # Patch deployment to add PVC for node modules.
-    # Skip in postgres mode: the PVC shadows the image's node_modules before the dev
-    # container swap, causing a transient crash. The dev container runs npm install anyway.
-    if [ "${BROKER_MESSAGE_BACKEND}" != "postgres" ]; then
+    # Skip when any postgres backend is active: the PVC shadows the image's node_modules
+    # before the dev container swap, causing a transient crash.
+    if [ "${BROKER_MESSAGE_BACKEND}" != "postgres" ] && [ "${BROKER_EVENT_BACKEND}" != "postgres" ]; then
       kubectl patch deployment ark-broker -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
         '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-broker-node-modules"}}],"containers":[{"name":"ark-broker","volumeMounts":[{"name":"node-modules","mountPath":"/app/node_modules"}]}]}}}}' || true
     fi
@@ -45,6 +45,9 @@ vars:
   BROKER_REDIS_PASSWORD:
     source: env
     default: arkredisdev123
+  BROKER_EVENT_BACKEND:
+    source: env
+    default: memory
 
 images:
   ark-broker:
@@ -90,6 +93,7 @@ deployments:
               - DAC_OVERRIDE
         backends:
           message: memory
+          event: memory
           chunk: memory
         memory:
           setAsDefault: true
@@ -124,10 +128,12 @@ dev:
       enabled: true
 
 profiles:
-  - name: broker-postgres
+  - name: postgres-infra
     activation:
       - vars:
           BROKER_MESSAGE_BACKEND: postgres
+      - vars:
+          BROKER_EVENT_BACKEND: postgres
     patches:
       - op: add
         path: images.ark-broker-migrate
@@ -145,9 +151,6 @@ profiles:
             chart:
               path: ../../charts/ark-storage-dev
             releaseName: ark-storage-dev
-      - op: replace
-        path: deployments.ark-broker.helm.values.backends.message
-        value: postgres
       - op: add
         path: deployments.ark-broker.helm.values.database
         value:
@@ -158,6 +161,22 @@ profiles:
           image:
             repository: ${runtime.images.ark-broker-migrate.image}
             tag: ${runtime.images.ark-broker-migrate.tag}
+  - name: broker-postgres
+    activation:
+      - vars:
+          BROKER_MESSAGE_BACKEND: postgres
+    patches:
+      - op: replace
+        path: deployments.ark-broker.helm.values.backends.message
+        value: postgres
+  - name: broker-events-postgres
+    activation:
+      - vars:
+          BROKER_EVENT_BACKEND: postgres
+    patches:
+      - op: replace
+        path: deployments.ark-broker.helm.values.backends.event
+        value: postgres
   - name: broker-redis
     activation:
       - vars:

@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	DefaultTimeoutSeconds    = 30 // Default timeout in seconds
-	ContentTypeJSON          = "application/json"
-	MessagesEndpoint         = "/messages"
-	ConversationsEndpoint    = "/conversations"
-	CompletionEndpoint       = "/stream/%s/complete"
-	MaxRetries               = 3
-	RetryDelay               = 100 * time.Millisecond
-	UserAgent                = "ark-memory-client/1.0"
+	DefaultTimeoutSeconds = 30 // Default timeout in seconds
+	ContentTypeJSON       = "application/json"
+	MessagesEndpoint      = "/messages"
+	ConversationsEndpoint = "/conversations"
+	CompletionEndpoint    = "/stream/%s/complete"
+	MaxRetries            = 3
+	RetryDelay            = 100 * time.Millisecond
+	UserAgent             = "ark-memory-client/1.0"
 )
 
 // getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
@@ -81,14 +81,6 @@ func DefaultConfig() Config {
 		MaxRetries: MaxRetries,
 		RetryDelay: RetryDelay,
 	}
-}
-
-func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
-	if query.Spec.TTL == nil {
-		return nil
-	}
-	secs := int64(query.Spec.TTL.Seconds())
-	return &secs
 }
 
 func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {

@@ -7,6 +7,15 @@ const mockParseTarget = vi.fn() as any;
 vi.mock('../../lib/executeQuery.js', () => ({
   executeQuery: mockExecuteQuery,
   parseTarget: mockParseTarget,
+  // Real parseParameters is unit-tested in executeQuery.spec.ts; stub its contract here.
+  parseParameters: (params: string[]) =>
+    params.map((p) => {
+      const i = p.indexOf('=');
+      if (i === -1) {
+        throw new Error(`parameter must be in name=value format, got: ${p}`);
+      }
+      return {name: p.slice(0, i).trim(), value: p.slice(i + 1).trim()};
+    }),
 }));
 
 const mockOutput = {
@@ -59,6 +68,7 @@ describe('createQueryCommand', () => {
       targetName: 'default',
       message: 'Hello world',
       outputFormat: undefined,
+      parameters: [],
     });
   });
 
@@ -87,6 +97,7 @@ describe('createQueryCommand', () => {
       targetName: 'default',
       message: 'Hello world',
       outputFormat: 'json',
+      parameters: [],
     });
   });
 
@@ -115,6 +126,7 @@ describe('createQueryCommand', () => {
       targetName: 'test-agent',
       message: 'Hello world',
       outputFormat: undefined,
+      parameters: [],
       sessionId: 'my-session-123',
     });
   });
@@ -144,6 +156,7 @@ describe('createQueryCommand', () => {
       targetName: 'test-agent',
       message: 'Hello world',
       outputFormat: undefined,
+      parameters: [],
       conversationId: 'my-conversation-456',
     });
   });
@@ -174,9 +187,65 @@ describe('createQueryCommand', () => {
       targetName: 'test-agent',
       message: 'Hello world',
       outputFormat: undefined,
+      parameters: [],
       sessionId: 'my-session-123',
       conversationId: 'my-conversation-456',
     });
+  });
+
+  it('should pass parameters to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'param-test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/param-test-agent',
+      'Hello world',
+      '-p',
+      'weather=BANANA',
+      '--parameter',
+      'unit=celsius',
+    ]);
+
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'param-test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      parameters: [
+        {name: 'weather', value: 'BANANA'},
+        {name: 'unit', value: 'celsius'},
+      ],
+    });
+  });
+
+  it('should exit on malformed parameter', async () => {
+    mockParseTarget.mockReturnValue({type: 'agent', name: 'a'});
+
+    const command = createQueryCommand({} as any);
+
+    await expect(
+      command.parseAsync([
+        'node',
+        'test',
+        'agent/a',
+        'Hello',
+        '-p',
+        'noequals',
+      ])
+    ).rejects.toThrow('process.exit called');
+
+    expect(mockExecuteQuery).not.toHaveBeenCalled();
+    expect(mockConsoleError).toHaveBeenCalledWith(
+      expect.stringContaining('name=value')
+    );
   });
 
   it('should error on invalid target format', async () => {

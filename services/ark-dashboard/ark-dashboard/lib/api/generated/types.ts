@@ -58,6 +58,9 @@ export interface paths {
          * @description Verifies that the ARK API service is ready to handle requests by testing
          *     connectivity to the Kubernetes API.
          *
+         *     Returns HTTP 200 when ready and HTTP 503 when the Kubernetes API is
+         *     unreachable, so a Kubernetes readiness probe can gate traffic correctly.
+         *
          *     Returns: ReadinessResponse: Readiness status with Kubernetes connectivity check
          */
         get: operations["readiness_check_ready_get"];
@@ -186,6 +189,30 @@ export interface paths {
          *         task_name: The name of the A2A task
          */
         delete: operations["delete_a2a_task_v1_a2a_tasks__task_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/a2a-tasks/{task_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit A2A Task Approval
+         * @description Submit an approval decision for a HITL A2ATask.
+         *
+         *     The task must be in the 'input-required' phase. The decision is written to
+         *     spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+         *     controller picks it up and transitions the task to completed or failed.
+         */
+        post: operations["submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2106,7 +2133,7 @@ export interface components {
          * @description Detailed A2ATask response model.
          */
         A2ATaskDetailResponse: {
-            a2aServerRef: components["schemas"]["A2AServerRef"];
+            a2aServerRef?: components["schemas"]["A2AServerRef"] | null;
             agentRef: components["schemas"]["AgentRef"];
             /** Contextid */
             contextId?: string | null;
@@ -2630,6 +2657,32 @@ export interface components {
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
+         * ApprovalDecision
+         * @description Approval decision for a HITL tool call.
+         * @enum {string}
+         */
+        ApprovalDecision: "approved" | "rejected";
+        /**
+         * ApprovalSubmissionRequest
+         * @description Request body to approve or reject an A2ATask's pending tool calls.
+         */
+        ApprovalSubmissionRequest: {
+            decision: components["schemas"]["ApprovalDecision"];
+        };
+        /**
+         * ApprovalSubmissionResponse
+         * @description Response after submitting an approval decision.
+         */
+        ApprovalSubmissionResponse: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
+        };
+        /**
          * ArkConfigResponse
          * @description Cluster-wide Ark defaults. Singleton resource named 'default'.
          */
@@ -2745,6 +2798,12 @@ export interface components {
              */
             force?: boolean | null;
             /**
+             * Redirect On Complete
+             * @description When true (used by the dashboard), the callback redirects the browser back to the dashboard instead of rendering the HTML completion page. Defaults to false, preserving the CLI's HTML-completion behaviour.
+             * @default false
+             */
+            redirect_on_complete: boolean;
+            /**
              * Scopes
              * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
              */
@@ -2843,6 +2902,10 @@ export interface components {
         BedrockConfig: {
             /** Accesskeyid */
             accessKeyId?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Apikey */
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Baseurl */
+            baseUrl?: string | components["schemas"]["ModelValueSource"] | null;
             /** Maxtokens */
             maxTokens?: number | null;
             /** Modelarn */
@@ -2895,6 +2958,7 @@ export interface components {
          */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2907,6 +2971,7 @@ export interface components {
          */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2928,6 +2993,7 @@ export interface components {
          * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
          */
         ChatCompletionContentPartTextParam: {
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /** Text */
             text: string;
             /**
@@ -3194,6 +3260,7 @@ export interface components {
          */
         File: {
             file: components["schemas"]["FileFile"];
+            prompt_cache_breakpoint?: components["schemas"]["FilePromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -3217,6 +3284,19 @@ export interface components {
             filename: string;
             /** Mimetype */
             mimeType?: string | null;
+        };
+        /**
+         * FilePromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        FilePromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * Function
@@ -3357,6 +3437,25 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /**
+         * MCPServerAuthorization
+         * @description Authorization state of an MCPServer, for rendering state and expiry.
+         *
+         *     Sourced from status.authorization and the mcp-auth-authorized-* annotations.
+         *     Never carries token or Secret material.
+         */
+        MCPServerAuthorization: {
+            /** Authorizedat */
+            authorizedAt?: string | null;
+            /** Authorizedby */
+            authorizedBy?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Resourcename */
+            resourceName?: string | null;
+            /** State */
+            state: string;
+        };
         /** MCPServerConfigMapKeyRef */
         MCPServerConfigMapKeyRef: {
             /** Key */
@@ -3390,6 +3489,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
@@ -3440,6 +3540,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Name */
             name: string;
@@ -3905,6 +4006,19 @@ export interface components {
             status: "ok" | "unavailable";
         };
         /**
+         * PromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        PromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
+        };
+        /**
          * QueryConfigMapKeyRef
          * @description Reference to a key in a ConfigMap.
          */
@@ -4200,6 +4314,11 @@ export interface components {
             } | null;
             /** Id */
             id: string;
+            /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
             /** Name */
             name: string;
             /** Secret Length */
@@ -4549,6 +4668,15 @@ export interface operations {
                     "application/json": components["schemas"]["ReadinessResponse"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
         };
     };
     list_a2a_servers_v1_a2a_servers_get: {
@@ -4735,6 +4863,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalSubmissionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

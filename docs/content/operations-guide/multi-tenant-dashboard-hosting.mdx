@@ -102,6 +102,13 @@ kind: Ingress
 metadata:
   name: ark-multi-tenant
   namespace: ingress-shared
+  annotations:
+    # Required for SSO dashboards. After login the dashboard emits a large
+    # response header (the chunked NextAuth session Set-Cookie); nginx-ingress's
+    # default proxy buffer (4k/8k) is too small and the tenant returns 502
+    # "upstream sent too big header" on the post-login request. 16k is enough
+    # for a chunked session cookie.
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
 spec:
   ingressClassName: nginx
   rules:
@@ -185,6 +192,8 @@ In **unauthenticated** (`AUTH_MODE=open`) mode, the equivalent `curl` calls retu
 
 - **Assets 404 with paths like `/_next/static/...` instead of `/<ns>/_next/static/...`** — the dashboard pod started before `ARK_DASHBOARD_BASE_PATH` was set, or the sentinel substitution was skipped. Check the entrypoint log for the line `entrypoint: ARK_DASHBOARD_BASE_PATH=...` and re-roll the pod.
 - **Sign-in loops back to `/api/auth/signin`** — `BASE_URL` or `AUTH_URL` is missing the prefix, or the OIDC provider's registered redirect URI does not include the prefix. Both must match the tenant prefix exactly.
+- **Login hub redirects back to the hub (or root) instead of the tenant after sign-in** — when a separate `ark-landing-page` hub signs users in on behalf of tenant dashboards on a different origin, set `AUTH_ALLOWED_CALLBACK_ORIGINS` on the hub to the comma-separated list of tenant origins (e.g. `https://tenant-a.example.com,https://tenant-b.example.com`). Auth.js only honours same-origin callback URLs; unlisted origins silently fall back to the hub's own `BASE_URL`, so the post-login redirect to the tenant is dropped.
+- **Tenant returns 502 right after login (works for `curl` but not the browser)** — nginx logs `upstream sent too big header while reading response header from upstream`. The post-login request carries the session cookie and the dashboard responds with the large chunked NextAuth `Set-Cookie`, which overflows nginx-ingress's default proxy buffer. Add `nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"` to the Ingress (already included in the example above and in `values-multi-tenant.example.yaml`).
 - **API calls 404 at the dashboard** — `app.config.arkApiService.host` does not resolve, or it points at a Service in a different namespace. The dashboard proxy fetches `<protocol>://<host>:<port>/v1/...` and the failure surfaces as 404 (or 502) at the dashboard. Verify `kubectl get svc -n <tenant>` shows the expected `ark-api` Service.
 - **`/<ns>/api/v1/*` requests bypass the dashboard** — only relevant if you added the optional direct-API Ingress rule. Check the rewrite target strips `/<ns>` so ark-api sees `/v1/...`, not `/<ns>/api/v1/...`.
 - **Dashboard renders but namespace switcher is empty** — ark-api is reachable but the user has no RBAC for any namespace. Check the per-tenant `Role` / `RoleBinding` installed by the ark-api chart.

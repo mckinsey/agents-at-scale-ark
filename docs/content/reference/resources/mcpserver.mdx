@@ -1,14 +1,13 @@
 ---
-title: MCP
-description: Model Context Protocol servers for standardized tool integration
+title: MCPServer
+description: MCPServer CRD reference — address, transport, tool discovery, and OAuth authorization
 ---
-# MCP Servers
 
-MCP (Model Context Protocol) Servers provide external integrations and capabilities for agents through a standardized protocol. They enable agents to interact with external systems, APIs, and services in a consistent way.
+# MCPServer
 
-MCP Servers act as bridges between agents and external systems, providing tools and resources that agents can use during their execution. They follow the Model Context Protocol specification for consistent integration.
+An `MCPServer` connects Ark to an external [Model Context Protocol](https://modelcontextprotocol.io) server, so the tools it exposes become available to agents. The controller resolves the server's `address`, discovers its tools on a poll loop, and — for OAuth-protected servers — detects the authorization requirement and surfaces the discovered OAuth metadata in status. Agents don't reference an MCPServer directly: it is wired in as **MCPServer → [Tool](/reference/resources/tools) → [Agent](/reference/resources/agent)**.
 
-## Example YAML
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -17,25 +16,85 @@ metadata:
   name: github-mcp
   namespace: default
 spec:
-  address:
+  # --- Required ----------------------------------------------------------
+  address:                                    # where the MCP server lives (ValueSource)
     valueFrom:
       serviceRef:
         name: github-mcp-server
         namespace: default
         port: http
         path: mcp
-  transport: http
+
+  # --- Common optional fields --------------------------------------------
+  transport: http                             # http | sse (default 'http')
   description: "GitHub repository operations via MCP protocol"
+  timeout: 30s                                # max duration for tool calls (default '30s')
+  pollInterval: 1m                            # tool re-discovery interval (default '1m')
+  headers:                                    # extra HTTP headers sent to the server
+    - name: X-Api-Key
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: github-mcp-credentials
+            key: api-key
+
+  # --- OAuth-protected servers (RFC 9728) --------------------------------
+  authorization:
+    tokenSecretRef:
+      name: notion-mcp-oauth                  # Secret holding OAuth tokens (same namespace)
 ```
 
-## Usage with Agents
+## Fields
 
-MCP servers are accessed through Tool resources, which agents then reference:
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.address` | `ValueSource` | yes | Where the MCP server is reachable. Supports a direct `value`, or `valueFrom` with `serviceRef` (in-cluster service), `secretKeyRef`, `configMapKeyRef`, or `queryParameterRef`. Resolved value is published to `status.resolvedAddress`. |
+| `spec.transport` | enum (`http`, `sse`) | yes | Transport protocol. Defaults to `http`. |
+| `spec.description` | string | no | Human-readable description of the server. |
+| `spec.timeout` | duration | no | Maximum duration for MCP tool calls to this server (`30s`, `5m`, `10m`). Defaults to `30s`. Raise it for long-running operations. |
+| `spec.pollInterval` | duration | no | How often the controller re-discovers tools from the server. Defaults to `1m`. |
+| `spec.headers[]` | list | no | HTTP headers added to requests to the server. Each entry has a `name` and a `value` (either a literal `value` or `valueFrom` — `secretKeyRef`, `configMapKeyRef`, `queryParameterRef`). |
+| `spec.authorization` | object | no | OAuth configuration for servers protected per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728). When unset, the controller does not attempt to inject `Authorization` headers. |
+| `spec.authorization.tokenSecretRef` | object | yes (within `authorization`) | References the Secret holding OAuth tokens and client credentials. The Secret **must** exist in the same namespace as the MCPServer. |
+| `spec.authorization.tokenSecretRef.name` | string | yes | Name of the Secret. |
+| `spec.authorization.tokenSecretRef.accessTokenKey` | string | no | Secret key holding the access token. Defaults to `access_token`. |
+| `spec.authorization.tokenSecretRef.refreshTokenKey` | string | no | Secret key holding the refresh token. Defaults to `refresh_token`. |
+| `spec.authorization.tokenSecretRef.expiresAtKey` | string | no | Secret key holding the token expiry. Defaults to `expires_at`. |
+| `spec.authorization.tokenSecretRef.clientIDKey` | string | no | Secret key holding the OAuth client ID. Defaults to `client_id`. |
+| `spec.authorization.tokenSecretRef.clientSecretKey` | string | no | Secret key holding the OAuth client secret. Defaults to `client_secret`. |
 
-**MCPServer** → **Tool** → **Agent**
+## Address
+
+`spec.address` is a `ValueSource`, so the server location can come from a literal string or be resolved at reconcile time. The most common form is a `serviceRef` pointing at an in-cluster MCP service:
 
 ```yaml
-# Agent references MCP tools
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: github-mcp-server
+        namespace: default
+        port: http          # port name; falls back to the service's only/first port
+        path: mcp           # path component — typically 'mcp' or 'sse'
+  transport: http
+```
+
+For a remote server, use a direct value:
+
+```yaml
+spec:
+  address:
+    value: https://mcp.notion.com/mcp
+  transport: http
+```
+
+The resolved endpoint is written to `status.resolvedAddress`.
+
+## Using MCP servers with agents
+
+Agents never reference an MCPServer directly. A [Tool](/reference/resources/tools) of `type: mcp` binds a specific tool exposed by the server, and the agent references that Tool:
+
+```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
@@ -46,24 +105,24 @@ spec:
     name: gpt-4-model
   tools:
     - type: mcp
-      name: github-get-repo  # References Tool that connects to MCP server
+      name: github-get-repo   # References a Tool that connects to this MCP server
 ```
 
-See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
+The controller discovers tools from the server every `spec.pollInterval` and publishes the count to `status.toolCount`. See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
 
-## OAuth-Protected Servers
+## OAuth-protected servers
 
 Remote MCP servers that require OAuth (e.g. `https://mcp.notion.com/mcp`, GitHub Copilot MCP) respond to unauthenticated requests with `HTTP 401` and a `WWW-Authenticate: Bearer` challenge per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and the [MCP 2025-06-18 authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
 When Ark detects this, it performs OAuth metadata discovery and populates `status.authorization`:
 
-```yaml
+```bash
 kubectl get mcpserver notion -o yaml
 ```
 ```yaml
 status:
   authorization:
-    state: Required                    # Required | DiscoveryFailed
+    state: Required                    # Required | DiscoveryFailed | Authorized
     resource: https://mcp.notion.com/mcp
     resourceName: Notion MCP (Beta)
     authorizationServers: [https://mcp.notion.com]
@@ -72,10 +131,10 @@ status:
     registrationEndpoint: https://mcp.notion.com/register
     grantTypesSupported: [authorization_code, refresh_token]
   conditions:
-  - type: Available
-    status: "False"
-    reason: AuthorizationRequired
-    message: "OAuth authorization required for Notion MCP (Beta)..."
+    - type: Available
+      status: "False"
+      reason: AuthorizationRequired
+      message: "OAuth authorization required for Notion MCP (Beta)..."
 ```
 
 `kubectl get mcpservers` shows the state in the `AUTH` column:
@@ -88,10 +147,10 @@ shell    True        1
 ```
 
 | `state` value | Meaning |
-|---------------|---------|
-| _(empty)_     | Server does not require OAuth. |
-| `Required`    | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. |
-| `Authorized`  | A token was successfully written to the referenced Secret by ark-api. |
+| --- | --- |
+| _(empty)_ | Server does not require OAuth. |
+| `Required` | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. A 401 from an authorized server (expiry, revocation, refresh failure) also collapses back to `Required` and emits a `TokenRejected` event. |
+| `Authorized` | The controller successfully listed tools using a Bearer token resolved from `spec.authorization.tokenSecretRef`. |
 | `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. The CLI cannot drive an OAuth flow against this server. |
 
 ### Prerequisites
@@ -120,23 +179,60 @@ metadata:
 
 `authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
 
-## Key Features
+## Status
 
-- Standardized Model Context Protocol implementation
-- HTTP and stdio transport support
-- Service reference integration with Kubernetes
-- Secure credential management
-- Tool and resource discovery
-- OAuth authorization state detection (RFC 9728)
+```yaml
+status:
+  resolvedAddress: http://github-mcp-server.default.svc:8080/mcp
+  toolCount: 12
+  authorization:
+    state: Authorized
+    resource: https://mcp.notion.com/mcp
+    resourceName: Notion MCP (Beta)
+    resourceMetadataURL: https://mcp.notion.com/.well-known/oauth-protected-resource
+    authorizationServers: [https://mcp.notion.com]
+    scopesSupported: [read, write]
+    grantTypesSupported: [authorization_code, refresh_token]
+    registrationEndpoint: https://mcp.notion.com/register
+    authorizationEndpoint: https://mcp.notion.com/authorize
+    tokenEndpoint: https://mcp.notion.com/token
+    lastDiscovered: 2026-05-19T14:30:00Z
+    expiresAt: 2026-05-19T15:32:11Z
+  conditions:
+    - type: Available
+      status: "True"
+      reason: ToolsDiscovered
+      message: Discovered 12 tools
+```
 
-## Sample Resources
+### Status fields
 
-See the [samples/mcp](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/mcp) directory for additional examples including:
-- GitHub MCP server integration
-- Local MCP server setup
-- External MCP server configuration
-- MCP server with authentication
+| Field | Description |
+| --- | --- |
+| `status.resolvedAddress` | The actual address the controller resolved from `spec.address`. |
+| `status.toolCount` | Number of tools discovered from this MCP server. Shown in the `TOOLS` print column. |
+| `status.authorization` | OAuth 2.1 / RFC 9728 discovery metadata. Populated only when the server responds with `HTTP 401`; absent otherwise. |
+| `status.authorization.state` | One of `Required`, `DiscoveryFailed`, `Authorized`. Shown in the `AUTH` print column. Empty means authorization is not required. |
+| `status.authorization.resource` | Canonical URI of the protected MCP resource (RFC 9728 `resource`). |
+| `status.authorization.resourceMetadataURL` | `resource_metadata` URL parsed from the server's `WWW-Authenticate` header (RFC 9728 §5.1). |
+| `status.authorization.resourceName` | Human-readable name of the protected resource (RFC 9728 `resource_name`). |
+| `status.authorization.authorizationServers` | Authorization server issuers the resource trusts (RFC 9728 `authorization_servers`). |
+| `status.authorization.scopesSupported` | OAuth scopes advertised by the authorization server (RFC 8414 `scopes_supported`). |
+| `status.authorization.grantTypesSupported` | OAuth grant types the authorization server supports (RFC 8414 `grant_types_supported`). |
+| `status.authorization.registrationEndpoint` | RFC 7591 dynamic client registration endpoint, when supported. |
+| `status.authorization.authorizationEndpoint` | OAuth 2.1 authorization endpoint (RFC 8414 `authorization_endpoint`). |
+| `status.authorization.tokenEndpoint` | OAuth 2.1 token endpoint (RFC 8414 `token_endpoint`). |
+| `status.authorization.lastDiscovered` | Timestamp of the most recent successful discovery probe. |
+| `status.authorization.expiresAt` | Absolute expiry time of the current access token, published for consumers that can `get` mcpservers but not secrets. |
+| `status.conditions[]` | Standard Kubernetes conditions. `Available` reflects readiness; `Discovering` reflects tool-discovery progress. |
 
----
+### Print columns
 
-**Next**: Learn about [Tools](../tools) for creating custom agent capabilities.
+`kubectl get mcpservers` prints `NAME`, `AVAILABLE` (`Available` condition status), `DISCOVERING` (`Discovering` condition status), `TOOLS` (`.status.toolCount`), `AUTH` (`.status.authorization.state`), and `AGE`.
+
+## Related
+
+- [Tools](/reference/resources/tools) — the `type: mcp` Tool that binds a server's tool to an agent.
+- [Agents](/reference/resources/agent) — reference MCP tools via `spec.tools`.
+- [Query](/reference/resources/query) — runs work against agents that use MCP tools.
+- [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) — operator-side callback URL configuration for the authorize flow.

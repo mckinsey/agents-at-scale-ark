@@ -5,9 +5,9 @@ from importlib.metadata import version, PackageNotFoundError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from kubernetes_asyncio import client
 from ark_sdk.k8s import create_api_client
 from ark_sdk.client import set_default_user_agent
 from dotenv import load_dotenv
@@ -28,6 +28,17 @@ from .middleware import ReadOnlyMiddleware
 from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
+
+# Fix multi-group impersonation: emit one Impersonate-Group header per group so
+# group-based RBAC works for users in more than one group. The canonical fix now
+# lives in ark_sdk (ark_sdk.impersonation_patch, auto-applied when ark_sdk.k8s is
+# imported); prefer it, and fall back to the bundled shim for older ark_sdk
+# releases that predate it. Both are idempotent, so applying both is harmless.
+try:
+    from ark_sdk.impersonation_patch import apply as _apply_group_impersonation_patch
+except ImportError:
+    from .impersonation_groups_patch import apply as _apply_group_impersonation_patch
+_apply_group_impersonation_patch()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -231,17 +242,9 @@ async def session_aware_middleware(request: Request, call_next):
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle validation errors with detailed logging."""
-    # Log the full error details
-    logger.error(f"Validation error for {request.method} {request.url}")
-    logger.error(f"Request body: {await request.body()}")
-    logger.error(f"Validation errors: {exc.errors()}")
-    
-    # Return a detailed error response
+    """Return 422s without logging or echoing the request body, which may hold secrets."""
+    logger.error(f"Validation error: {request.method} {request.url.path}")
     return JSONResponse(
         status_code=422,
-        content={
-            "detail": exc.errors(),
-            "body": exc.body
-        }
+        content={"detail": jsonable_encoder(exc.errors())},
     )

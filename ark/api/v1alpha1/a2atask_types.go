@@ -32,9 +32,9 @@ type AgentRef struct {
 // Used to identify which A2A server to poll for task status updates.
 type A2AServerRef struct {
 	// Name of the A2AServer resource.
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 	// Namespace where the A2AServer resource is located.
 	// If empty, defaults to the same namespace as the A2ATask.
 	// +kubebuilder:validation:Optional
@@ -111,8 +111,9 @@ type A2ATaskSpec struct {
 	// +kubebuilder:validation:Required
 	QueryRef QueryRef `json:"queryRef"`
 	// A2AServerRef references the A2AServer to poll for task status updates.
-	// +kubebuilder:validation:Required
-	A2AServerRef A2AServerRef `json:"a2aServerRef"`
+	// Optional for tasks created directly by the executor (e.g., approval tasks).
+	// +kubebuilder:validation:Optional
+	A2AServerRef *A2AServerRef `json:"a2aServerRef,omitempty"`
 	// AgentRef references the agent executing this task.
 	// +kubebuilder:validation:Required
 	AgentRef AgentRef `json:"agentRef"`
