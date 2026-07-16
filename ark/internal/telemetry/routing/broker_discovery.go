@@ -28,6 +28,13 @@ type BrokerConfig struct {
 type ServiceRef struct {
 	Name string
 	Port string
+	// Namespace overrides the namespace the Service is looked up in. When
+	// empty, the Service is assumed to live in the same namespace as the
+	// ark-config-broker ConfigMap that declared it — the common case for a
+	// per-tenant broker announcing itself. Set it to point a namespace's
+	// ConfigMap at a broker Service that lives elsewhere (e.g. a shared
+	// cluster-wide broker in another namespace).
+	Namespace string
 }
 
 func DiscoverBrokerEndpoints(ctx context.Context, k8sClient client.Client) ([]BrokerEndpoint, error) {
@@ -72,6 +79,27 @@ func DiscoverBrokerEndpoints(ctx context.Context, k8sClient client.Client) ([]Br
 	}
 
 	return endpoints, nil
+}
+
+// ResolveBrokerEndpoint returns the broker endpoint for namespace, or "" when
+// namespace has no enabled ark-config-broker ConfigMap of its own. This is a
+// deliberate exact match with no cross-namespace fallback — matching how
+// messages (Memory), chunks (ark-config-streaming), and OTEL trace routing
+// already resolve a broker: a namespace either declares its broker
+// explicitly or gets none, never another tenant's by accident. A namespace
+// that wants to point at a broker living elsewhere sets ServiceRef.Namespace
+// in its own ConfigMap rather than relying on discovery to guess.
+func ResolveBrokerEndpoint(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
+	endpoints, err := DiscoverBrokerEndpoints(ctx, k8sClient)
+	if err != nil {
+		return "", err
+	}
+	for _, ep := range endpoints {
+		if ep.Namespace == namespace {
+			return ep.Endpoint, nil
+		}
+	}
+	return "", nil
 }
 
 func GetBrokerConfig(ctx context.Context, k8sClient client.Client, namespace string) (*BrokerConfig, error) {
@@ -135,6 +163,8 @@ func parseServiceRef(data string) (ServiceRef, error) {
 			ref.Name = value
 		case "port":
 			ref.Port = value
+		case "namespace":
+			ref.Namespace = value
 		}
 	}
 
@@ -145,9 +175,17 @@ func parseServiceRef(data string) (ServiceRef, error) {
 	return ref, nil
 }
 
-func buildEndpoint(namespace string, serviceRef ServiceRef) (string, error) {
+// buildEndpoint builds the Service DNS endpoint for serviceRef. The Service
+// is looked up in configMapNamespace (the namespace of the ark-config-broker
+// ConfigMap that declared serviceRef) unless serviceRef.Namespace overrides it.
+func buildEndpoint(configMapNamespace string, serviceRef ServiceRef) (string, error) {
 	if serviceRef.Name == "" {
 		return "", fmt.Errorf("serviceRef.name is empty")
+	}
+
+	namespace := configMapNamespace
+	if serviceRef.Namespace != "" {
+		namespace = serviceRef.Namespace
 	}
 
 	port := serviceRef.Port
