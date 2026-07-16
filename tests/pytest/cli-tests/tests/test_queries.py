@@ -144,6 +144,55 @@ spec:
         assert success, "Failed to verify query status"
         assert status in ["Completed", "Failed", "InProgress"]
 
+    def test_token_usage_stays_bounded_across_questions(self):
+        per_query_token_ceiling = 1000
+        batch_size = 5
+        max_questions = 25
+
+        cumulative_total_tokens = 0
+        tracked_queries = 0
+
+        for batch_start in range(0, max_questions, batch_size):
+            for index in range(batch_start, batch_start + batch_size):
+                query_name = f"test-query-cli-tokens-{index}"
+                success, message = self.helper.create_query(
+                    name=query_name,
+                    agent_name=self.agent_name,
+                    input_text=f"Question {index}: what is {index} plus one? "
+                               "Reply in one sentence.",
+                    timeout=60
+                )
+                assert success, f"Query creation failed: {message}"
+                self.created_queries.append(query_name)
+
+                success, token_usage = self.helper.get_token_usage(query_name)
+                assert success, f"Query {query_name} reported no token usage"
+
+                total_tokens = token_usage.get("totalTokens", 0)
+                prompt_tokens = token_usage.get("promptTokens", 0)
+                assert total_tokens > 0, \
+                    f"Query {query_name} tracked zero tokens: {token_usage}"
+                assert prompt_tokens < per_query_token_ceiling, \
+                    f"Query {query_name} used {prompt_tokens} prompt tokens, " \
+                    f"expected < {per_query_token_ceiling} (#2606)"
+                assert total_tokens < per_query_token_ceiling, \
+                    f"Query {query_name} used {total_tokens} total tokens, " \
+                    f"expected < {per_query_token_ceiling} (#2606)"
+
+                cumulative_total_tokens += total_tokens
+                tracked_queries += 1
+
+            questions_asked = batch_start + batch_size
+            assert cumulative_total_tokens < questions_asked * per_query_token_ceiling, \
+                f"After {questions_asked} questions cumulative token usage was " \
+                f"{cumulative_total_tokens}, exceeding the per-query bound (#2606)"
+
+        assert tracked_queries == max_questions, \
+            f"Expected token usage for {max_questions} questions, " \
+            f"tracked {tracked_queries}"
+        assert cumulative_total_tokens > 0, \
+            "No token usage was accumulated across the questions"
+
     def test_delete_query(self):
         query_name = "test-query-cli-delete"
         success, message = self.helper.create_query(

@@ -123,6 +123,15 @@ spec:
             return True, f"Phase: {phase}"
         return False, None
     
+    def get_token_usage(self, name: str) -> Tuple[bool, Optional[Dict]]:
+        success, query_data = self.get_query(name)
+        if not success or not query_data:
+            return False, None
+        token_usage = query_data.get("status", {}).get("tokenUsage")
+        if not token_usage:
+            return False, None
+        return True, token_usage
+
     def list_queries(self) -> Tuple[bool, List[str]]:
         success, stdout, stderr = self._run_cmd(
             ["kubectl", "get", "queries", "-n", self.namespace, "-o", "json"],
