@@ -137,7 +137,9 @@ export function ModelConfiguratorForm() {
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={disabledFields?.provider}>
-                  <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
+                  <SelectTrigger
+                    aria-label="Provider"
+                    className={cn(GHOST_TRIGGER, 'w-full')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-fill-onsurface-ui-2">
@@ -344,7 +346,9 @@ function AzureSpecificFields({
               items={AZURE_AUTH_METHOD_DISPLAY_NAMES}
               onValueChange={field.onChange}
               value={field.value ?? 'apiKey'}>
-              <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
+              <SelectTrigger
+                aria-label="Authentication"
+                className={cn(GHOST_TRIGGER, 'w-full')}>
                 <SelectValue placeholder="Select auth method" />
               </SelectTrigger>
               <SelectContent className="bg-fill-onsurface-ui-2">
