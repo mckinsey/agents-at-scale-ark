@@ -71,10 +71,11 @@ const AUTH_STATUS_CONFIG: Record<
 
 const COL = {
   name: 'w-[260px]',
+  address: 'w-[320px]',
   transport: 'w-[160px]',
   tools: 'w-[100px]',
   expires: 'w-[200px]',
-  status: 'w-[120px]',
+  status: 'w-[180px]',
   action: 'w-[72px]',
 };
 
@@ -165,7 +166,7 @@ function McpServerTableRow({
       { name: server.name, options: { namespace, force } },
       {
         onSuccess: response => {
-          window.location.href = response.authorization_url;
+          globalThis.location.href = response.authorization_url;
         },
         onError: error => {
           toast.error('Failed to Start Authentication', {
@@ -257,12 +258,21 @@ function McpServerTableRow({
           </NamespacedLink>
         </TableCell>
         <OriginCell origin={server.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <TableCell size="small">
-          <span
-            className="text-fg-primary block truncate"
-            title={server.address ?? ''}>
-            {server.address ?? '—'}
-          </span>
+        <TableCell size="small" className={cn(COL.address, 'relative z-10')}>
+          {server.address ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-fg-primary block truncate">
+                  {server.address}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[420px] break-all">
+                {server.address}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="text-fg-primary">—</span>
+          )}
         </TableCell>
         <TableCell size="small" className={COL.transport}>
           <span
@@ -350,7 +360,9 @@ export function McpServersTable({
             Name
           </TableHead>
           <OriginColumnHeader tooltip="Where the MCP server was first created" />
-          <TableHead size="small">Address</TableHead>
+          <TableHead size="small" className={COL.address}>
+            Address
+          </TableHead>
           <TableHead size="small" className={COL.transport}>
             Transport
           </TableHead>
