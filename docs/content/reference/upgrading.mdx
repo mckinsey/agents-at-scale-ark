@@ -73,8 +73,16 @@ ark install -y --ark-version 0.1.65
 ark import ark-export.yaml
 ```
 
+By default `ark import` uses `kubectl create`, which errors for any resource that already exists on the destination — so a re-run after a partial import, or an import onto a cluster that already has some of these resources, fails. Pass `--upsert` to create-or-update instead (`kubectl apply`):
+
+```bash
+ark import ark-export.yaml --upsert
+```
+
+`--upsert` is opt-in on purpose: the default keeps erroring on conflicts so a stray import can't silently overwrite resources on a shared cluster. On completion it prints a summary of how many resources were created, configured, and unchanged.
+
 <Callout type="warning">
-`ark import` uses `kubectl create`, which fails for any resource that already exists on the destination. Run it against a clean install, or delete conflicting instances first with `kubectl delete -f ark-export.yaml`.
+`--upsert` re-applies the exported YAML as-is. `ark export` captures live objects verbatim (including `metadata.resourceVersion`), so if a resource has changed on the destination since the file was written — Ark controllers bump `resourceVersion` on every status update — `kubectl apply` can reject it with a `Conflict`. Re-export immediately before importing to minimise drift. A cleaner, portable export is tracked in [#2794](https://github.com/mckinsey/agents-at-scale-ark/issues/2794).
 </Callout>
 
 ## v0.1.63

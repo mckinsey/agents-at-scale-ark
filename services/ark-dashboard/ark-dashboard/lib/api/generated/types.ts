@@ -58,6 +58,9 @@ export interface paths {
          * @description Verifies that the ARK API service is ready to handle requests by testing
          *     connectivity to the Kubernetes API.
          *
+         *     Returns HTTP 200 when ready and HTTP 503 when the Kubernetes API is
+         *     unreachable, so a Kubernetes readiness probe can gate traffic correctly.
+         *
          *     Returns: ReadinessResponse: Readiness status with Kubernetes connectivity check
          */
         get: operations["readiness_check_ready_get"];
@@ -4658,6 +4661,15 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
