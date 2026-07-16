@@ -100,7 +100,9 @@ spec:
               strategy:
                 enum:
                 - sequential
+                - round-robin
                 - selector
+                - graph
                 type: string
             required:
             - members

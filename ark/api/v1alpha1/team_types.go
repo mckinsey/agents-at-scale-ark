@@ -30,7 +30,7 @@ type TeamGraphSpec struct {
 
 type TeamSpec struct {
 	Members []TeamMember `json:"members"`
-	// +kubebuilder:validation:Enum=sequential;selector
+	// +kubebuilder:validation:Enum=sequential;round-robin;selector;graph
 	Strategy    string `json:"strategy"`
 	Description string `json:"description,omitempty"`
 	// +kubebuilder:default=false
