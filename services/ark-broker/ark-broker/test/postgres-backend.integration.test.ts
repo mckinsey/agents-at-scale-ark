@@ -187,7 +187,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
     });
   });
 
-  it('a scoped read on conversation_id uses messages_conversation_idx, not a sequential scan', async () => {
+  it('a scoped read on conversation_id uses a conversation_id-leading index, not a sequential scan', async () => {
     for (let i = 0; i < 5; i++) {
       await request(app)
         .post('/messages')
@@ -214,7 +214,66 @@ describeIntegration('postgres backend — HTTP integration', () => {
         .join('\n');
     });
 
-    expect(plan).toContain('messages_conversation_idx');
+    // messages_conversation_query_idx (added for conversationStats) also
+    // starts with conversation_id, so the planner may pick either index
+    // over a sequential scan.
+    expect(plan).toMatch(/messages_conversation_(idx|query_idx)/);
+  });
+
+  it('the conversationStats aggregate uses messages_conversation_query_idx once the planner has fresh stats', async () => {
+    // A handful of rows isn't representative: the planner needs a
+    // realistically sized table (and fresh stats, mirroring what autovacuum
+    // provides in production) before it prefers this index over a full
+    // expires_at scan + explicit sort.
+    const pgDb = db();
+    const conversationCount = 40;
+    const messagesPerConversation = 150;
+    const rows: {
+      conversation_id: string;
+      query_id: string;
+      message: string;
+      expires_at: Date;
+    }[] = [];
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+    for (let c = 0; c < conversationCount; c++) {
+      for (let m = 0; m < messagesPerConversation; m++) {
+        rows.push({
+          conversation_id: `conv-stats-explain-${c}`,
+          query_id: `q-stats-explain-${c}-${m % 10}`,
+          message: JSON.stringify({role: 'user', content: `m${m}`}),
+          expires_at: expiresAt,
+        });
+      }
+    }
+    const batchSize = 1000;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      await pgDb`
+        INSERT INTO messages ${pgDb(
+          rows.slice(i, i + batchSize),
+          'conversation_id',
+          'query_id',
+          'message',
+          'expires_at'
+        )}
+      `;
+    }
+    await pgDb.unsafe('ANALYZE messages');
+
+    const rowsExplain = await pgDb.unsafe(`
+      EXPLAIN ANALYZE
+      SELECT
+        conversation_id,
+        count(*)::int AS message_count,
+        count(DISTINCT query_id)::int AS query_count
+      FROM messages
+      WHERE expires_at > now()
+      GROUP BY conversation_id
+    `);
+    const plan = (rowsExplain as unknown as {'QUERY PLAN': string}[])
+      .map((row) => row['QUERY PLAN'])
+      .join('\n');
+
+    expect(plan).toContain('messages_conversation_query_idx');
   });
 
   it('DELETE /queries/:queryId/messages removes only that query rows', async () => {
