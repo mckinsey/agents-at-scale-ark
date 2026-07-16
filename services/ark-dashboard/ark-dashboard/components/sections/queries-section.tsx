@@ -67,10 +67,13 @@ function getInputDisplayText(
 
 function formatTokenUsage(query: QueryResponse): string {
   const usage = (query.status as { tokenUsage?: unknown })?.tokenUsage as
-    | { promptTokens?: number; completionTokens?: number }
+    | { promptTokens?: number; completionTokens?: number; cachedTokens?: number }
     | undefined;
   if (!usage) return '—';
-  return `${usage.promptTokens || 0} / ${usage.completionTokens || 0}`;
+  const cached = usage.cachedTokens || 0;
+  const newInput = Math.max(0, (usage.promptTokens || 0) - cached);
+  const base = `${newInput} / ${usage.completionTokens || 0}`;
+  return cached > 0 ? `${base} (${cached} cached)` : base;
 }
 
 function getTargetDisplay(query: QueryResponse): string {
@@ -311,7 +314,7 @@ export function QueriesSection({
             <TableHead size="small" className="w-[140px]">
               <span className="inline-flex items-center gap-1">
                 Token usage
-                <HeaderInfo tooltip="Prompt / completion" />
+                <HeaderInfo tooltip="Input / completion" />
               </span>
             </TableHead>
             <TableHead size="small" className="w-[120px]">

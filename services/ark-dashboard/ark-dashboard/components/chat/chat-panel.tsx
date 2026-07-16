@@ -253,7 +253,6 @@ export function ChatPanel({
                       </div>
                       <div className="border-t pt-1 font-medium">
                         Total: {tokenUsage.total_tokens.toLocaleString()}
-                        Total: {tokenUsage.total_tokens.toLocaleString()}
                       </div>
                     </div>
                   </TooltipContent>
