@@ -1,12 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ark-completions
-  namespace: {{ .Values.namespace }}
+  name: {{ include "ark-completions.fullname" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
   labels:
     app: ark-completions
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: ark-completions
@@ -14,8 +14,15 @@ spec:
     metadata:
       labels:
         app: ark-completions
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
-      serviceAccountName: {{ .Values.serviceAccountName }} # NOSONAR - RBAC defined in ark-controller chart
+      serviceAccountName: {{ include "ark-completions.serviceAccountName" . }}
       automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
@@ -33,6 +40,16 @@ spec:
             value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"
+          {{- if .Values.namespaceScopedDiscovery }}
+          # Per-tenant pods are authorized by a namespaced Role, which cannot
+          # satisfy the cluster-wide List that broker/target discovery does by
+          # default. Scope discovery to this pod's own namespace, where its
+          # ark-broker/ark-config-broker live.
+          - name: ARK_DISCOVERY_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- end }}
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"

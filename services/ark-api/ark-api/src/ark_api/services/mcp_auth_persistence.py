@@ -10,6 +10,7 @@ from typing import Optional
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.k8s import create_api_client
+from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ ANNOTATION_AUTHORIZED_BY = "ark.mckinsey.com/mcp-auth-authorized-by"
 ANNOTATION_AUTHORIZED_AT = "ark.mckinsey.com/mcp-auth-authorized-at"
 
 TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 30
+MCPSERVER_UPDATE_MAX_RETRIES = 3
 
 DEFAULT_ACCESS_TOKEN_KEY = "access_token"
 DEFAULT_REFRESH_TOKEN_KEY = "refresh_token"
@@ -36,6 +38,7 @@ FLOW_CALLER_IDENTITY_KEY = "_flow_caller_identity"
 FLOW_TOKEN_EXPIRES_AT_KEY = "_flow_token_expires_at"
 FLOW_SERVER_NAME_KEY = "_flow_server_name"
 FLOW_NAMESPACE_KEY = "_flow_namespace"
+FLOW_REDIRECT_ON_COMPLETE_KEY = "_flow_redirect_on_complete"
 
 FLOW_KEYS = [
     FLOW_AUTH_ID_KEY,
@@ -48,6 +51,7 @@ FLOW_KEYS = [
     FLOW_TOKEN_EXPIRES_AT_KEY,
     FLOW_SERVER_NAME_KEY,
     FLOW_NAMESPACE_KEY,
+    FLOW_REDIRECT_ON_COMPLETE_KEY,
 ]
 
 
@@ -118,6 +122,7 @@ class FlowState:
     client_id: str
     client_secret: str
     secret_name: str = ""
+    redirect_on_complete: bool = False
 
     @property
     def is_expired(self) -> bool:
@@ -177,6 +182,7 @@ async def write_flow_state(
     client_id: str,
     client_secret: str,
     keys: SecretKeys,
+    redirect_on_complete: bool = False,
 ) -> None:
     string_data = {
         FLOW_AUTH_ID_KEY: auth_id,
@@ -189,6 +195,7 @@ async def write_flow_state(
         FLOW_TOKEN_EXPIRES_AT_KEY: "",
         FLOW_SERVER_NAME_KEY: server_name,
         FLOW_NAMESPACE_KEY: namespace,
+        FLOW_REDIRECT_ON_COMPLETE_KEY: "true" if redirect_on_complete else "false",
         keys.client_id: client_id,
         keys.client_secret: client_secret,
     }
@@ -286,6 +293,7 @@ def _extract_flow_state(secret) -> Optional[FlowState]:
         namespace=_decode_b64_or_empty(data.get(FLOW_NAMESPACE_KEY)),
         client_id=_decode_b64_or_empty(data.get(keys.client_id)),
         client_secret=_decode_b64_or_empty(data.get(keys.client_secret)),
+        redirect_on_complete=_decode_b64_or_empty(data.get(FLOW_REDIRECT_ON_COMPLETE_KEY)) == "true",
     )
 
 
@@ -444,40 +452,84 @@ def flow_deadline_rfc3339(ttl_seconds: int) -> str:
     return datetime.fromtimestamp(deadline, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+async def _update_mcpserver_with_retry(ark_client, name: str, mutate) -> None:
+    """Read-modify-write an MCPServer, retrying on 409 Conflict.
+
+    ``mutate`` receives the MCPServer's dict form and mutates it in place,
+    returning True when a write is needed or False to skip it. The object is
+    re-read on each attempt so a retry always operates on the latest
+    resourceVersion. This tolerates concurrent writes from the reconcile loop
+    or overlapping auth flows, which would otherwise surface as a transient,
+    retryable failure to the caller.
+    """
+    last_conflict: Optional[ApiException] = None
+    for _ in range(MCPSERVER_UPDATE_MAX_RETRIES):
+        mcp = await ark_client.mcpservers.a_get(name)
+        obj = mcp.to_dict()
+        if not mutate(obj):
+            return
+        updated = MCPServerV1alpha1(**obj)
+        try:
+            await ark_client.mcpservers.a_update(updated)
+            return
+        except ApiException as e:
+            if e.status != 409:
+                raise
+            last_conflict = e
+    if last_conflict is not None:
+        raise last_conflict
+
+
 async def annotate_mcpserver_authorized(
     ark_client, name: str, authorized_by: str
 ) -> None:
-    mcp = await ark_client.mcpservers.a_get(name)
-    obj = mcp.to_dict()
-    metadata = obj.setdefault("metadata", {})
-    annotations = dict(metadata.get("annotations") or {})
-    annotations[ANNOTATION_AUTHORIZED_BY] = authorized_by
-    annotations[ANNOTATION_AUTHORIZED_AT] = now_rfc3339()
-    metadata["annotations"] = annotations
-    obj["metadata"] = metadata
+    def mutate(obj: dict) -> bool:
+        metadata = obj.setdefault("metadata", {})
+        annotations = dict(metadata.get("annotations") or {})
+        annotations[ANNOTATION_AUTHORIZED_BY] = authorized_by
+        annotations[ANNOTATION_AUTHORIZED_AT] = now_rfc3339()
+        metadata["annotations"] = annotations
+        obj["metadata"] = metadata
+        return True
 
-    from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
+    await _update_mcpserver_with_retry(ark_client, name, mutate)
 
-    updated = MCPServerV1alpha1(**obj)
-    await ark_client.mcpservers.a_update(updated)
+
+async def ensure_mcpserver_token_secret_ref(ark_client, name: str) -> str:
+    secret_name = f"{name}-oauth"
+
+    def mutate(obj: dict) -> bool:
+        nonlocal secret_name
+        spec = obj.setdefault("spec", {})
+        authorization = dict(spec.get("authorization") or {})
+        token_ref = dict(authorization.get("tokenSecretRef") or {})
+        existing = token_ref.get("name")
+        if existing:
+            secret_name = existing
+            return False
+        token_ref["name"] = secret_name
+        authorization["tokenSecretRef"] = token_ref
+        spec["authorization"] = authorization
+        obj["spec"] = spec
+        return True
+
+    await _update_mcpserver_with_retry(ark_client, name, mutate)
+    return secret_name
 
 
 async def strip_mcpserver_auth_annotations(ark_client, name: str) -> None:
-    mcp = await ark_client.mcpservers.a_get(name)
-    obj = mcp.to_dict()
-    metadata = obj.setdefault("metadata", {})
-    annotations = dict(metadata.get("annotations") or {})
-    changed = False
-    for key in (ANNOTATION_AUTHORIZED_BY, ANNOTATION_AUTHORIZED_AT):
-        if key in annotations:
-            annotations.pop(key, None)
-            changed = True
-    if not changed:
-        return
-    metadata["annotations"] = annotations
-    obj["metadata"] = metadata
+    def mutate(obj: dict) -> bool:
+        metadata = obj.setdefault("metadata", {})
+        annotations = dict(metadata.get("annotations") or {})
+        changed = False
+        for key in (ANNOTATION_AUTHORIZED_BY, ANNOTATION_AUTHORIZED_AT):
+            if key in annotations:
+                annotations.pop(key, None)
+                changed = True
+        if not changed:
+            return False
+        metadata["annotations"] = annotations
+        obj["metadata"] = metadata
+        return True
 
-    from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
-
-    updated = MCPServerV1alpha1(**obj)
-    await ark_client.mcpservers.a_update(updated)
+    await _update_mcpserver_with_retry(ark_client, name, mutate)

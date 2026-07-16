@@ -5,6 +5,7 @@ import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
 import {
   sendValidationError,
   sendInternalError,
+  sendMissingQueryIdError,
 } from '@ark-broker/http/routes/errors.js';
 import {
   postMessagesBodySchema,
@@ -318,13 +319,7 @@ export function createMemoryRouter(
       }
 
       if (!queryId) {
-        res.status(400).json({
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'Query ID is required',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendMissingQueryIdError(res, req.id);
         return;
       }
 
@@ -365,13 +360,7 @@ export function createMemoryRouter(
       const {queryId} = req.params;
 
       if (!queryId) {
-        res.status(400).json({
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'Query ID is required',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendMissingQueryIdError(res, req.id);
         return;
       }
 
