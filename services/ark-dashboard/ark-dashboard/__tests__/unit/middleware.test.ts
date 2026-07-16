@@ -173,6 +173,7 @@ describe('middleware (auth gate)', () => {
       '/api/auth/providers',
       '/api/auth/session',
       '/signout',
+      '/healthz',
       '/_next/static/chunk.js',
       '/_next/image',
       '/favicon.ico',
@@ -200,6 +201,7 @@ describe('middleware (auth gate)', () => {
       '/nstenant/api/auth/signin',
       '/nstenant/api/auth/session',
       '/nstenant/signout',
+      '/nstenant/healthz',
       '/nstenant/_next/static/chunk.js',
       '/nstenant/favicon.ico',
     ])('passes through prefixed public path %s', async pathname => {

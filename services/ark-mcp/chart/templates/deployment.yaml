@@ -37,11 +37,25 @@ spec:
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          readinessProbe:
-            tcpSocket:
+          startupProbe:
+            httpGet:
+              path: /health
               port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 2
+            failureThreshold: 30
             periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.targetPort }}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.targetPort }}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           env:
             # Always set default namespace to the deployment namespace
             - name: ARK_MCP_DEFAULT_NAMESPACE
