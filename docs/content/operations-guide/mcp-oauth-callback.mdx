@@ -17,6 +17,7 @@ The redirect target is a single externally reachable URL that ark-api must own. 
 | `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries stored in the Secret. After this window a late callback returns "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
+| `ARK_API_DASHBOARD_URL` | _unset_ | Base URL of the dashboard, used to redirect the browser back after a dashboard-initiated flow. The redirect target is `<ARK_API_DASHBOARD_URL>/mcp`, so the value MUST include any path prefix under which the dashboard is served (e.g. `https://ark.example.com/dashboard` behind an `X-Forwarded-Prefix`). Same scheme rules as `ARK_API_PUBLIC_CALLBACK_URL` (HTTPS unless the host is a loopback literal). Validated at startup. Required only for the dashboard redirect-completion path — the CLI flow is unaffected. When unset, dashboard flows fall back to the HTML completion page. |
 
 ark-api refuses to start if `ARK_API_PUBLIC_CALLBACK_URL` is set to a non-HTTPS public host. Unbracketed IPv6 literals are also rejected. It also logs a warning when the host is a non-literal that merely resolves to loopback (e.g. a `nip.io` name): such a value is accepted by ark-api but rejected by RFC 8252-strict IdPs (Notion, Google) as a redirect URI — prefer a loopback literal or a public HTTPS URL.
 
@@ -38,7 +39,7 @@ Clusters without public ingress run the flow through `kubectl port-forward`. The
 
 **CLI flow.** `ark mcp auth login` does this automatically: it already port-forwards ark-api to `127.0.0.1:34780`, which is exactly the host and port of the chart default callback URL. No manual port-forward is needed for the CLI flow.
 
-**Dashboard flow.** The dashboard does not port-forward. On a local install, either run a manual port-forward matching the callback URL, or override `ARK_API_PUBLIC_CALLBACK_URL` with a public HTTPS ingress.
+**Dashboard flow.** Under `devspace dev` the callback port is forwarded automatically (`services/ark-api/devspace.yaml` forwards `34780:8000`), so the dashboard flow completes with no manual step on a local install. For any other deployment the dashboard does not port-forward: run a manual port-forward matching the callback URL, or override `ARK_API_PUBLIC_CALLBACK_URL` with a public HTTPS ingress.
 
 ```bash
 kubectl port-forward --address 127.0.0.1,::1 svc/ark-api 34780:80
@@ -72,6 +73,18 @@ env:
 
 Register the chosen URL with the IdP as a redirect URI before running the flow.
 
+## Authenticate an MCP server from the dashboard
+
+The dashboard MCP servers page (`/mcp`) drives the same ark-api OAuth flow as the CLI, so a user who sees a server in the `Required` state can authorize it without dropping to a terminal. Each card surfaces the server's authorization state as a badge (`Auth required`, `Authorized`, `Discovery failed`) and exposes the relevant actions.
+
+- **Authenticate** (state `Required`) — starts the flow and full-page-navigates the browser to the IdP. After login/consent the IdP redirects to ark-api's callback, which redirects the browser back to the dashboard. If the server has no `spec.authorization.tokenSecretRef.name`, ark-api provisions it as `<name>-oauth` automatically — no manual `kubectl` edit is needed.
+- **Re-authenticate** (state `Authorized`) — same as Authenticate but forces a fresh flow against an already-authorized server (last login wins). The action is emphasised when the authorization is near expiry; the card shows an expiry indication derived from `status.authorization.expiresAt`.
+- **Sign out** (state `Authorized`) — opens a confirmation dialog and, on confirm, revokes the authorization (clears the tokens, keeps the Secret) so the card returns to `Required`.
+
+**Completion confirmation.** On return from the IdP, ark-api redirects to `<ARK_API_DASHBOARD_URL>/mcp` with the flow's `auth_id` (success) or an `auth_error` (failure / expired flow). The dashboard then polls the same `auth/status` endpoint the CLI uses until the controller reconciles the MCPServer to `Authorized`, showing a success, failure, or expired toast. No token material reaches the browser — the redirect carries only the server name, namespace, an opaque `auth_id`, and (on failure) an error code and a length-capped description.
+
+**Configuration.** The dashboard flow requires `ARK_API_DASHBOARD_URL` (see [Env vars](#env-vars)) so ark-api knows where to redirect the browser. The value MUST include any path prefix under which the dashboard is served. When it is unset, dashboard-initiated flows fall back to ark-api's HTML completion page (the CLI flow is unaffected either way). As with the CLI, the IdP redirect still lands on `ARK_API_PUBLIC_CALLBACK_URL`, which must be reachable from the browser. Under `devspace dev` this is handled automatically by the ark-api callback port-forward; other deployments use a public HTTPS ingress or a manual loopback port-forward.
+
 ## RBAC
 
 ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/update` on `mcpservers` (for reading `status.authorization` and stamping auth annotations). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
@@ -95,11 +108,13 @@ kubectl get mcpserver notion-mcp -o jsonpath='{.metadata.annotations}'
 }
 ```
 
+`authorized-by` records who triggered the flow: `cli` for CLI logins (and any unauthenticated in-cluster caller), or the authenticated user's resolved identity for dashboard-initiated flows (captured from ark-api's impersonation middleware at `auth/start` time).
+
 The referenced Secret holds the token material; ark-api never logs token bodies, refresh tokens, client secrets, or PKCE verifiers.
 
 ## External executor header-resolution workaround
 
-When an agent targets an external `ExecutionEngine` (claude-agent-sdk, LangChain, or any marketplace executor) **and** uses `ark mcp auth login` against an MCPServer that is configured solely via `spec.authorization.tokenSecretRef`, the SDK's `_resolve_mcp_server()` will not inject the Bearer token on tool calls.
+When an agent targets an external `ExecutionEngine` (claude-agent-sdk, LangChain, or any marketplace executor) **and** authorizes an MCPServer that is configured solely via `spec.authorization.tokenSecretRef` — whether via `ark mcp auth login` or the dashboard **Authenticate** action, which drive the same flow — the SDK's `_resolve_mcp_server()` will not inject the Bearer token on tool calls.
 
 **Why this happens:** the controller already reads `spec.authorization.tokenSecretRef` for tool *discovery* and injects the token on each MCP call. External executors build their `MCPServerConfig` at query *dispatch* time and read only `spec.headers[]` — they do not read `spec.authorization`. So the MCPServer discovers tools correctly, but the executor's tool calls will 401.
 

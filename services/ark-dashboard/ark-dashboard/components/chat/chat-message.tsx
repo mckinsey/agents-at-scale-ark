@@ -32,6 +32,7 @@ interface ChatMessageProps {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    cached_tokens: number;
   };
   approvalRequest?: ToolApprovalRequest;
   namespace?: string;
@@ -301,6 +302,22 @@ function MessageBubbleContent({
   };
 
   return (
+    <div
+      className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`}>
+      {hasContent && (
+        <div
+          className={`${needsExpansion ? '' : 'max-w-[80%]'} rounded-lg px-3 py-2 ${
+            isUser
+              ? 'bg-primary text-primary-foreground'
+              : isFailed
+                ? 'bg-destructive/10 text-destructive'
+                : 'bg-muted'
+          }`}
+          style={
+            needsExpansion && expandedWidth
+              ? { minWidth: `${expandedWidth}px` }
+              : undefined
+          }>
     <div className="flex flex-col gap-2">
       {sender && !isUser && (
         <div className="text-fg-tertiary text-xs font-medium">{sender}</div>
@@ -331,6 +348,14 @@ function MessageBubbleContent({
           {tokenUsage.total_tokens.toLocaleString()} tokens (
           {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
           {tokenUsage.completion_tokens.toLocaleString()} out)
+          {Math.max(
+                  0,
+                  tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
+                ).toLocaleString()}{' '}
+                in, {tokenUsage.completion_tokens.toLocaleString()} out
+                {tokenUsage.cached_tokens > 0 &&
+                  `, ${tokenUsage.cached_tokens.toLocaleString()} cached`}
+                )
         </div>
       )}
     </div>

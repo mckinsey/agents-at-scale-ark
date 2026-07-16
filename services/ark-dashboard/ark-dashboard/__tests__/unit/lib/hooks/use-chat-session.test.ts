@@ -53,11 +53,13 @@ function createArkFinalChunk(opts: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cachedTokens?: number;
   };
   openaiUsage?: {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: { cached_tokens: number };
   };
   phase?: string;
   raw?: string;
@@ -170,6 +172,7 @@ describe('useChatSession', () => {
               promptTokens: 100,
               completionTokens: 50,
               totalTokens: 150,
+              cachedTokens: 30,
             },
           }),
         ]),
@@ -189,6 +192,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 30,
         });
       });
     });
@@ -211,6 +215,7 @@ describe('useChatSession', () => {
               prompt_tokens: 200,
               completion_tokens: 80,
               total_tokens: 280,
+              prompt_tokens_details: { cached_tokens: 60 },
             },
           },
         ]),
@@ -230,6 +235,7 @@ describe('useChatSession', () => {
           prompt_tokens: 200,
           completion_tokens: 80,
           total_tokens: 280,
+          cached_tokens: 60,
         });
       });
     });
@@ -268,6 +274,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 0,
         });
       });
     });
@@ -350,6 +357,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 0,
         });
       });
 
@@ -362,6 +370,7 @@ describe('useChatSession', () => {
           prompt_tokens: 300,
           completion_tokens: 150,
           total_tokens: 450,
+          cached_tokens: 0,
         });
       });
     });
@@ -398,6 +407,7 @@ describe('useChatSession', () => {
           prompt_tokens: 50,
           completion_tokens: 25,
           total_tokens: 75,
+          cached_tokens: 0,
         });
       });
     });
@@ -441,6 +451,7 @@ describe('useChatSession', () => {
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
+          cached_tokens: 0,
         });
         expect(result.current.messageTokenUsage).toEqual({});
         expect(result.current.messages).toEqual([]);

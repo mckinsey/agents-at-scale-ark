@@ -16,9 +16,9 @@ pipelines:
   dev: |-
     create_deployments --all
 
-    # Patch deployment to add PVC for node modules
+    # Patch deployment to add PVCs for node modules and the npm cache
     kubectl patch deployment ark-dashboard -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
-      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-dashboard-node-modules"}}],"containers":[{"name":"ark-dashboard","volumeMounts":[{"name":"node-modules","mountPath":"/app/ark-dashboard/node_modules"}]}]}}}}' || true
+      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-dashboard-node-modules"}},{"name":"npm-cache","persistentVolumeClaim":{"claimName":"ark-dashboard-npm-cache"}}],"containers":[{"name":"ark-dashboard","volumeMounts":[{"name":"node-modules","mountPath":"/app/ark-dashboard/node_modules"},{"name":"npm-cache","mountPath":"/npm-cache"}]}]}}}}' || true
 
     start_dev --all
 
@@ -62,6 +62,8 @@ deployments:
         extraPVCs:
           - name: ark-dashboard-node-modules
             size: 2Gi
+          - name: ark-dashboard-npm-cache
+            size: 2Gi
 
 dev:
   ark-dashboard:
@@ -70,11 +72,13 @@ dev:
     env:
       - name: NODE_ENV
         value: development
+      - name: npm_config_cache
+        value: /npm-cache
     command:
       [
         "sh",
         "-c",
-        "cd /app/ark-dashboard && npm install && npm run dev 2>&1",
+        "cd /app/ark-dashboard && npm install --prefer-offline --no-audit --no-fund && npm run dev 2>&1",
       ]
     namespace: default
     # Stream logs instead of terminal
