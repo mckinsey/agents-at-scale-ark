@@ -169,4 +169,57 @@ describe('InMemoryMessageStream', () => {
       expect(await stream.all()).toHaveLength(1);
     });
   });
+
+  describe('distinctConversationIds', () => {
+    it('returns empty array when stream is empty', async () => {
+      expect(await stream.distinctConversationIds()).toEqual([]);
+    });
+
+    it('returns each conversation id once', async () => {
+      await stream.append(makeMessageData({conversationId: 'conv-a'}));
+      await stream.append(makeMessageData({conversationId: 'conv-a'}));
+      await stream.append(makeMessageData({conversationId: 'conv-b'}));
+
+      const ids = await stream.distinctConversationIds();
+
+      expect(ids.sort()).toEqual(['conv-a', 'conv-b']);
+    });
+  });
+
+  describe('conversationStats', () => {
+    it('returns empty array when stream is empty', async () => {
+      expect(await stream.conversationStats()).toEqual([]);
+    });
+
+    it('counts messages and distinct queries per conversation', async () => {
+      await stream.append(
+        makeMessageData({conversationId: 'conv-a', queryId: 'query-a1'})
+      );
+      await stream.append(
+        makeMessageData({conversationId: 'conv-a', queryId: 'query-a1'})
+      );
+      await stream.append(
+        makeMessageData({conversationId: 'conv-a', queryId: 'query-a2'})
+      );
+      await stream.append(
+        makeMessageData({conversationId: 'conv-b', queryId: 'query-b1'})
+      );
+
+      const stats = await stream.conversationStats();
+      const byConversation = new Map(
+        stats.map((stat) => [stat.conversationId, stat])
+      );
+
+      expect(byConversation.get('conv-a')).toEqual({
+        conversationId: 'conv-a',
+        messageCount: 3,
+        queryCount: 2,
+      });
+      expect(byConversation.get('conv-b')).toEqual({
+        conversationId: 'conv-b',
+        messageCount: 1,
+        queryCount: 1,
+      });
+    });
+  });
 });

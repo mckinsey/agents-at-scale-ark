@@ -4,7 +4,11 @@ import type {Db} from '@ark-broker/db/db.js';
 import type {MessageData} from '../memory-broker.js';
 import {BrokerItem} from './broker-item.js';
 import type {Predicate} from './stream.js';
-import type {MessageFilter, MessageStream} from './message-stream.js';
+import type {
+  ConversationStats,
+  MessageFilter,
+  MessageStream,
+} from './message-stream.js';
 import {PostgresStreamBase} from './postgres-stream-base.js';
 
 type MessageRow = {
@@ -98,5 +102,31 @@ export class PostgresMessageStream
       SELECT MAX(sequence_number) as seq FROM messages WHERE expires_at > now()
     `;
     return seq === null ? 0 : Number(seq);
+  }
+
+  async distinctConversationIds(): Promise<string[]> {
+    const rows = await this.db<{conversation_id: string}[]>`
+      SELECT DISTINCT conversation_id FROM messages WHERE expires_at > now()
+    `;
+    return rows.map((row) => row.conversation_id);
+  }
+
+  async conversationStats(): Promise<ConversationStats[]> {
+    const rows = await this.db<
+      {conversation_id: string; message_count: number; query_count: number}[]
+    >`
+      SELECT
+        conversation_id,
+        count(*)::int AS message_count,
+        count(DISTINCT query_id)::int AS query_count
+      FROM messages
+      WHERE expires_at > now()
+      GROUP BY conversation_id
+    `;
+    return rows.map((row) => ({
+      conversationId: row.conversation_id,
+      messageCount: row.message_count,
+      queryCount: row.query_count,
+    }));
   }
 }

@@ -97,6 +97,35 @@ describe('MemoryBroker', () => {
     });
   });
 
+  describe('getConversationStats', () => {
+    test('should return message and query counts per conversation', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv1', 'query1', 'message2');
+      await broker.addMessage('conv1', 'query2', 'message3');
+      await broker.addMessage('conv2', 'query3', 'message4');
+
+      const stats = await broker.getConversationStats();
+      const byConversation = new Map(
+        stats.map((stat) => [stat.conversationId, stat])
+      );
+
+      expect(byConversation.get('conv1')).toEqual({
+        conversationId: 'conv1',
+        messageCount: 3,
+        queryCount: 2,
+      });
+      expect(byConversation.get('conv2')).toEqual({
+        conversationId: 'conv2',
+        messageCount: 1,
+        queryCount: 1,
+      });
+    });
+
+    test('should return empty array when there are no messages', async () => {
+      expect(await broker.getConversationStats()).toEqual([]);
+    });
+  });
+
   describe('all', () => {
     test('should return all messages', async () => {
       await broker.addMessage('conv1', 'query1', 'message1');

@@ -3,7 +3,11 @@ import type {MessageData} from '../memory-broker.js';
 import type {PaginatedList, PaginationParams} from '../pagination.js';
 import type {BrokerItem} from './broker-item.js';
 import {InMemoryQueryDeletableStream} from './in-memory-query-deletable-stream.js';
-import type {MessageFilter, MessageStream} from './message-stream.js';
+import type {
+  ConversationStats,
+  MessageFilter,
+  MessageStream,
+} from './message-stream.js';
 import type {Predicate} from './stream.js';
 
 export class InMemoryMessageStream
@@ -47,5 +51,36 @@ export class InMemoryMessageStream
       throw new Error('deleteBy requires at least one filter field');
     }
     return this.delete(this.predicateFor(filter));
+  }
+
+  async distinctConversationIds(): Promise<string[]> {
+    const items = await this.all();
+    return Array.from(new Set(items.map((item) => item.data.conversationId)));
+  }
+
+  async conversationStats(): Promise<ConversationStats[]> {
+    const items = await this.all();
+    const statsByConversation = new Map<
+      string,
+      {messageCount: number; queryIds: Set<string>}
+    >();
+
+    for (const item of items) {
+      const entry = statsByConversation.get(item.data.conversationId) ?? {
+        messageCount: 0,
+        queryIds: new Set<string>(),
+      };
+      entry.messageCount += 1;
+      entry.queryIds.add(item.data.queryId);
+      statsByConversation.set(item.data.conversationId, entry);
+    }
+
+    return Array.from(statsByConversation.entries()).map(
+      ([conversationId, entry]) => ({
+        conversationId,
+        messageCount: entry.messageCount,
+        queryCount: entry.queryIds.size,
+      })
+    );
   }
 }

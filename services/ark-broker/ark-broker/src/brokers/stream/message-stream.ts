@@ -9,6 +9,12 @@ export interface MessageFilter {
   afterSequence?: number;
 }
 
+export interface ConversationStats {
+  conversationId: string;
+  messageCount: number;
+  queryCount: number;
+}
+
 export interface MessageStream extends Stream<MessageData> {
   deleteByQuery(queryId: string): Promise<void>;
   paginateBy(
@@ -17,4 +23,6 @@ export interface MessageStream extends Stream<MessageData> {
   ): Promise<PaginatedList<BrokerItem<MessageData>>>;
   filterBy(filter: MessageFilter): Promise<BrokerItem<MessageData>[]>;
   deleteBy(filter: MessageFilter): Promise<void>;
+  distinctConversationIds(): Promise<string[]>;
+  conversationStats(): Promise<ConversationStats[]>;
 }

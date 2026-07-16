@@ -1,5 +1,8 @@
 import {BrokerItem} from './stream/broker-item.js';
-import type {MessageStream} from './stream/message-stream.js';
+import type {
+  ConversationStats,
+  MessageStream,
+} from './stream/message-stream.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 export type Message = unknown;
@@ -59,9 +62,11 @@ export class MemoryBroker {
   }
 
   async getConversationIds(): Promise<string[]> {
-    const all = await this.stream.all();
-    const ids = new Set(all.map((item) => item.data.conversationId));
-    return Array.from(ids);
+    return this.stream.distinctConversationIds();
+  }
+
+  async getConversationStats(): Promise<ConversationStats[]> {
+    return this.stream.conversationStats();
   }
 
   all(): Promise<BrokerItem<MessageData>[]> {

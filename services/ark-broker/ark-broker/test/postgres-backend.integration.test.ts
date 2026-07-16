@@ -242,6 +242,46 @@ describeIntegration('postgres backend — HTTP integration', () => {
     expect(res.body.items[0].query_id).toBe('keep-q');
   });
 
+  it('GET /memory-status aggregates per-conversation counts via a single query', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'status-conv-1',
+        query_id: 'status-q1',
+        messages: ['one', 'two'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'status-conv-1',
+        query_id: 'status-q2',
+        messages: ['three'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'status-conv-2',
+        query_id: 'status-q3',
+        messages: ['four'],
+      })
+      .expect(200);
+
+    const res = await request(app).get('/memory-status').expect(200);
+
+    expect(res.body.total_conversations).toBe(2);
+    expect(res.body.total_messages).toBe(4);
+    expect(res.body.conversations['status-conv-1']).toEqual({
+      message_count: 3,
+      query_count: 2,
+    });
+    expect(res.body.conversations['status-conv-2']).toEqual({
+      message_count: 1,
+      query_count: 1,
+    });
+  });
+
   it('expired messages are not returned by GET /messages', async () => {
     await request(app)
       .post('/messages')

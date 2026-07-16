@@ -343,6 +343,75 @@ describe('PostgresMessageStream', () => {
     });
   });
 
+  describe('distinctConversationIds', () => {
+    it('returns empty array when stream is empty', async () => {
+      expect(await stream.distinctConversationIds()).toEqual([]);
+    });
+
+    it('returns each conversation id once', async () => {
+      const convA = 'conv-a-' + Math.random().toString(36).slice(2);
+      const convB = 'conv-b-' + Math.random().toString(36).slice(2);
+      await stream.append(makeMessageData({conversationId: convA}));
+      await stream.append(makeMessageData({conversationId: convA}));
+      await stream.append(makeMessageData({conversationId: convB}));
+
+      const ids = await stream.distinctConversationIds();
+
+      expect(ids.sort()).toEqual([convA, convB].sort());
+    });
+  });
+
+  describe('conversationStats', () => {
+    it('returns empty array when stream is empty', async () => {
+      expect(await stream.conversationStats()).toEqual([]);
+    });
+
+    it('counts messages and distinct queries per conversation', async () => {
+      const convA = 'conv-a-' + Math.random().toString(36).slice(2);
+      const convB = 'conv-b-' + Math.random().toString(36).slice(2);
+      const queryA1 = 'q-a1-' + Math.random().toString(36).slice(2);
+      const queryA2 = 'q-a2-' + Math.random().toString(36).slice(2);
+      const queryB1 = 'q-b1-' + Math.random().toString(36).slice(2);
+
+      await stream.append(
+        makeMessageData({conversationId: convA, queryId: queryA1})
+      );
+      await stream.append(
+        makeMessageData({conversationId: convA, queryId: queryA1})
+      );
+      await stream.append(
+        makeMessageData({conversationId: convA, queryId: queryA2})
+      );
+      await stream.append(
+        makeMessageData({conversationId: convB, queryId: queryB1})
+      );
+
+      const stats = await stream.conversationStats();
+      const byConversation = new Map(
+        stats.map((stat) => [stat.conversationId, stat])
+      );
+
+      expect(byConversation.get(convA)).toEqual({
+        conversationId: convA,
+        messageCount: 3,
+        queryCount: 2,
+      });
+      expect(byConversation.get(convB)).toEqual({
+        conversationId: convB,
+        messageCount: 1,
+        queryCount: 1,
+      });
+    });
+
+    it('excludes expired messages', async () => {
+      const conversationId = 'conv-' + Math.random().toString(36).slice(2);
+      await stream.append(makeMessageData({conversationId}), 1);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      expect(await stream.conversationStats()).toEqual([]);
+    });
+  });
+
   describe('getCurrentSequence', () => {
     it('returns 0 when stream is empty', async () => {
       expect(await stream.getCurrentSequence()).toBe(0);
