@@ -17,7 +17,7 @@ import {
   Dashboard,
   Database,
   Earthquake,
-  Handyman,
+  Build,
   Help,
   InsertDriveFile,
   KeyboardDoubleArrowLeft,
@@ -361,7 +361,7 @@ export function AppSidebar() {
                   onClick={() => navigateToSection('tools')}
                   isActive={getCurrentSection() === 'tools'}
                   tooltip="Tools">
-                  <Handyman />
+                  <Build />
                   <span>Tools</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

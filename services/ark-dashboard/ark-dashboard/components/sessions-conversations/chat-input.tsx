@@ -5,14 +5,18 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { NumericBadge } from '@/components/ui/badge';
-import { Info, Send, SingleTool } from '@/components/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Autorenew, Build, Info, Send } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import { toast } from '@/components/ui/sonner';
 import { useAgentQueryParameters } from '@/lib/hooks/use-agent-query-parameters';
+import { cn } from '@/lib/utils';
 
 const FALLBACK_PARTICIPANT_NAME = 'participant';
 
@@ -51,7 +55,6 @@ export function ChatInput({
     conversation?.name ||
     FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType;
-  const toolCallCount = conversation?.toolCallCount || 0;
 
   const {
     variant: parameterVariant,
@@ -132,9 +135,9 @@ export function ChatInput({
   };
 
   return (
-    <div className="pb-8 bg-surface-bg-base border-r border-t border-b border-stroke-divider flex flex-col justify-start items-start overflow-hidden shrink-0">
+    <div className="bg-surface-bg-primary border-x border-t border-stroke-divider flex flex-col gap-2 px-4 py-3 shrink-0">
       {hasParameters && (
-        <div className="px-8 pt-4">
+        <div>
           {parameterVariant === 'team' ? (
             <ChatParameterFields
               variant="team"
@@ -163,68 +166,85 @@ export function ChatInput({
           )}
         </div>
       )}
-      <div className="self-stretch px-4 pt-3 flex flex-col justify-start items-start gap-4">
-        <div className="w-full h-16 p-3 bg-surface-bg-primary flex justify-start items-center gap-2">
-          <Input
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${participantName}`}
-            className="flex-1 h-4 border-0 bg-transparent shadow-none p-0 focus-visible:ring-0 focus-visible:bg-transparent hover:bg-transparent disabled:bg-transparent disabled:hover:bg-transparent text-sm font-normal placeholder:text-fg-tertiary"
-            disabled={isDisabled}
-          />
 
-          <Button
-            onClick={handleSend}
-            disabled={!message.trim() || isDisabled || hasUnsuppliedParameters}
-            variant="ghost"
-            size="icon"
-            aria-label="Send message"
-            className="size-8 bg-surface-bg-tertiary hover:bg-surface-bg-tertiary/80 flex justify-center items-center"
-          >
-            <IconShell size="sm" className="opacity-100">
-              <Send />
-            </IconShell>
-          </Button>
+      <Input
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={`Message ${participantName}`}
+        className="h-auto w-full border-0 bg-transparent px-0 py-1 shadow-none focus-visible:ring-0 focus-visible:bg-transparent hover:bg-transparent disabled:bg-transparent disabled:hover:bg-transparent text-sm font-normal placeholder:text-fg-tertiary"
+        disabled={isDisabled}
+      />
+
+      {hasUnsuppliedParameters && (
+        <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 self-stretch rounded-full px-4 py-2">
+          <IconShell className="text-status-information shrink-0">
+            <Info />
+          </IconShell>
+          <span className="text-sm">
+            This {participantType === 'team' ? 'team' : 'agent'} needs a value
+            definition before you can send a message. Please add it above.
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Clear chat"
+                disabled={!message.trim() || isPending}
+                onClick={() => setMessage('')}>
+                <IconShell size="sm" variant="secondary">
+                  <Autorenew />
+                </IconShell>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Clear chat</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-pressed={showToolCalls}
+                aria-label={
+                  showToolCalls ? 'Disable tool calls' : 'Activate tool calls'
+                }
+                onClick={() => onShowToolCallsChange(!showToolCalls)}
+                className="relative">
+                <IconShell size="sm" variant="secondary">
+                  <Build />
+                </IconShell>
+                <span
+                  className={cn(
+                    'absolute -right-0.5 -top-0.5 size-2 rounded-full',
+                    showToolCalls ? 'bg-status-success' : 'bg-status-error',
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {showToolCalls ? 'Disable tool calls' : 'Activate tool calls'}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
-        {hasUnsuppliedParameters && (
-          <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 self-stretch rounded-full px-4 py-2">
-            <IconShell className="text-status-information shrink-0">
-              <Info />
-            </IconShell>
-            <span className="text-sm">
-              This {participantType === 'team' ? 'team' : 'agent'} needs a value
-              definition before you can send a message. Please add it above.
-            </span>
-          </div>
-        )}
-
-        <div className="self-stretch flex justify-between items-center pb-2">
-          <div className="flex justify-start items-center gap-5">
-            <div className="relative">
-              <IconShell size="sm" variant="secondary">
-                <SingleTool />
-              </IconShell>
-              {toolCallCount > 0 && (
-                <div className="absolute -right-2 -top-2">
-                  <NumericBadge size="sm">
-                    {toolCallCount}
-                  </NumericBadge>
-                </div>
-              )}
-            </div>
-            <Switch
-              checked={showToolCalls}
-              onCheckedChange={onShowToolCallsChange}
-              className="scale-75"
-              aria-label="Toggle tool call visibility"
-            />
-            <span className="text-xs font-normal leading-4 tracking-tight text-fg-secondary">
-              Show tool calls
-            </span>
-          </div>
-        </div>
+        <Button
+          onClick={handleSend}
+          disabled={!message.trim() || isDisabled || hasUnsuppliedParameters}
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Send message"
+          className="bg-fill-active text-fg-primary-inverse hover:bg-fill-active/90 disabled:bg-surface-bg-tertiary disabled:text-fg-tertiary">
+          <IconShell size="sm">
+            <Send />
+          </IconShell>
+        </Button>
       </div>
     </div>
   );

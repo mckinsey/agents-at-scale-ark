@@ -1,4 +1,4 @@
-import { SmartToy, Group, Handyman } from '@/components/icons';
+import { SmartToy, Group, Build } from '@/components/icons';
 import type { ParticipantType } from '@/lib/services/conversations';
 
 interface GetParticipantIconOptions {
@@ -18,7 +18,7 @@ interface GetParticipantIconOptions {
  *
  * @param participantType - The type of participant (agent, team, or tool)
  * @param options - Optional configuration for icon size and name-based fallback
- * @returns A QBDS icon component (SmartToy for agents, Group for teams, Handyman for tools)
+ * @returns A QBDS icon component (SmartToy for agents, Group for teams, Build for tools)
  *
  * @example
  * ```tsx
@@ -42,13 +42,13 @@ export function getParticipantIcon(
 
   // Primary type-based check
   if (participantType === 'team') return <Group className={className} />;
-  if (participantType === 'tool') return <Handyman className={className} />;
+  if (participantType === 'tool') return <Build className={className} />;
   if (participantType === 'agent') return <SmartToy className={className} />;
 
   // Fallback to name-based detection (if name provided and type is undefined)
   if (name) {
     if (name.includes('team')) return <Group className={className} />;
-    if (name.includes('tool')) return <Handyman className={className} />;
+    if (name.includes('tool')) return <Build className={className} />;
   }
 
   // Default fallback
