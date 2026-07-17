@@ -20,6 +20,7 @@ import { SIGNIN_PATH } from './lib/constants/auth';
 const PUBLIC_PREFIXES = [
   '/api/auth',
   '/signout',
+  '/healthz',
   '/_next/static',
   '/_next/image',
 ];

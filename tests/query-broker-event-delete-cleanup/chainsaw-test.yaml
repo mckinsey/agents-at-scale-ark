@@ -1,0 +1,140 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-broker-event-delete-cleanup
+  labels:
+    postgresql: "true"
+spec:
+  description: Deleting a Query removes its operation events from the broker's Postgres backend via DELETE /events/:queryId
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a00-broker-config.yaml
+    - apply:
+        file: manifests/a00-memory.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: event-delete-cleanup-query
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: event-delete-cleanup-query
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: event-delete-cleanup-query
+
+  - name: delete-query-and-verify-events-removed
+    try:
+    - script:
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          QUERY_UID=$(kubectl get query event-delete-cleanup-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
+          if [ -z "$QUERY_UID" ]; then
+            echo "ERROR: could not resolve Query UID" >&2
+            exit 1
+          fi
+          COUNT=0
+          for i in $(seq 1 10); do
+            COUNT=$(bash ../shared/psql-query.sh \
+              "SELECT count(*) FROM events WHERE query_id='${QUERY_UID}';" \
+              | tr -d ' \n')
+            [ "${COUNT}" -ge 1 ] && break
+            sleep 1
+          done
+          echo "events in Postgres before delete: ${COUNT}"
+          [ "${COUNT}" -ge 1 ] || { echo "expected at least 1 event before delete, got ${COUNT}"; exit 1; }
+          printf '%s' "$QUERY_UID"
+        outputs:
+        - name: queryUid
+          value: ($stdout)
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: event-delete-cleanup-query
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: event-delete-cleanup-query
+        timeout: 2m
+        for:
+          deletion: {}
+    - script:
+        timeout: 30s
+        env:
+        - name: QUERY_UID
+          value: ($queryUid)
+        content: |
+          COUNT=$(bash ../shared/psql-query.sh \
+            "SELECT count(*) FROM events WHERE query_id='${QUERY_UID}';" \
+            | tr -d ' \n')
+          echo "events in Postgres after delete: ${COUNT}"
+          [ "${COUNT}" = "0" ] || { echo "expected 0 events in broker, got ${COUNT}"; exit 1; }
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: event-delete-cleanup-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
