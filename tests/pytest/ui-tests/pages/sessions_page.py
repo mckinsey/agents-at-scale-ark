@@ -3,6 +3,7 @@ import re
 import time
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -145,6 +146,7 @@ class SessionsPage(BasePage):
         initial_count = self.get_user_message_count()
         textarea = self.page.locator(self.CHAT_TEXTAREA).first
         textarea.wait_for(state="visible", timeout=10000)
+        expect(textarea).to_be_enabled(timeout=30000)
         textarea.click()
         textarea.fill(message)
         textarea.press("Enter")
