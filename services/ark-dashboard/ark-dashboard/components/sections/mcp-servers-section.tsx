@@ -9,10 +9,11 @@ export function McpServersSection() {
   return (
     <ResourceListSection
       icon={<PlugConnect />}
-      title="MCPs"
+      title="MCP servers"
+      showCount
       subtitle="Add and manage all your MCPs"
       createHref="/mcp/new"
-      createLabel="Add MCP Server"
+      createLabel="Add MCP"
       learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/"
       entityLabel="MCP Server"
       entityPluralLabel="MCP servers"
@@ -25,8 +26,12 @@ export function McpServersSection() {
       }
       loadItems={() => mcpServersService.getAll()}
       deleteItem={id => mcpServersService.delete(id)}
-      renderTable={(servers, onDelete) => (
-        <McpServersTable servers={servers} onDelete={onDelete} />
+      renderTable={(servers, onDelete, reload) => (
+        <McpServersTable
+          servers={servers}
+          onDelete={onDelete}
+          onAuthChanged={reload}
+        />
       )}
     />
   );
