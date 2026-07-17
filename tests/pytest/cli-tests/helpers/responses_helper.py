@@ -194,7 +194,7 @@ def clear_sessions() -> None:
 # Kubernetes helpers
 # ---------------------------------------------------------------------------
 
-def kubectl_run(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
+def run_command(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
     try:
         r = subprocess.run(
             cmd,
@@ -204,9 +204,7 @@ def kubectl_run(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
             timeout=timeout,
         )
         return r.returncode == 0, r.stdout, r.stderr
-    except subprocess.TimeoutExpired as e:
-        return False, "", str(e)
-    except OSError as e:
+    except (subprocess.TimeoutExpired, OSError) as e:
         return False, "", str(e)
 
 
@@ -214,7 +212,7 @@ def kubectl_run(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
 def wait_for_webhook_ready(namespace: str = "ark-system",
                            retries: int = 20, delay: float = 10.0) -> None:
     for _ in range(retries):
-        ok, stdout, _ = kubectl_run([
+        ok, stdout, _ = run_command([
             "kubectl", "get", "endpoints", "ark-webhook-service",
             "-n", namespace, "-o", "json",
         ])
@@ -233,10 +231,9 @@ def wait_for_webhook_ready(namespace: str = "ark-system",
     )
 
 
-def kubectl_apply(yaml_str: str, namespace: str = "default",
-                  retries: int = 3, timeout: int = 120) -> None:
+def kubectl_apply(yaml_str: str, retries: int = 3, timeout: int = 120) -> None:
     for attempt in range(retries):
-        ok, _, err = kubectl_run(
+        ok, _, err = run_command(
             ["kubectl", "apply", "-f", "-"], stdin_text=yaml_str, timeout=timeout,
         )
         if ok:
@@ -248,7 +245,7 @@ def kubectl_apply(yaml_str: str, namespace: str = "default",
 
 
 def check_executor_ready(namespace: str = "default") -> None:
-    ok, _, _ = kubectl_run([
+    ok, _, _ = run_command([
         "kubectl", "get", "executionengine", "executor-openai-responses",
         "-n", namespace, "-o", "jsonpath={.status.phase}",
     ])
@@ -353,16 +350,11 @@ metadata:
 def submit_query(name: str, input_text: str, agent_name: str,
                  namespace: str, created_queries: list,
                  annotations: Optional[dict] = None) -> bool:
-    ok, _, _ = kubectl_run(
-        ["kubectl", "apply", "-f", "-"],
-        stdin_text=build_query_manifest(
-            name, namespace, agent_name, input_text, annotations
-        ),
-        timeout=120,
+    kubectl_apply(
+        build_query_manifest(name, namespace, agent_name, input_text, annotations),
     )
-    if ok:
-        created_queries.append(name)
-    return ok
+    created_queries.append(name)
+    return True
 
 
 def poll_query(name: str, namespace: str,
@@ -414,8 +406,7 @@ def poll_query(name: str, namespace: str,
 def run_query(name: str, input_text: str, agent_name: str,
               namespace: str, created_queries: list,
               annotations: Optional[dict] = None) -> tuple:
-    if not submit_query(name, input_text, agent_name, namespace, created_queries, annotations):
-        return False, None, "submit_failed"
+    submit_query(name, input_text, agent_name, namespace, created_queries, annotations)
     return poll_query(name, namespace)
 
 
