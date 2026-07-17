@@ -46,7 +46,7 @@
     "@eslint/js": "^9.17.0",
     "@faker-js/faker": "^10.4.0",
     "@testcontainers/postgresql": "^12.0.4",
-    "@testcontainers/redis": "^12.0.3",
+    "@testcontainers/redis": "^12.0.4",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
@@ -66,7 +66,7 @@
     "testcontainers": "^12.0.1",
     "tmp": "^0.2.7",
     "ts-jest": "^29.4.11",
-    "tsc-alias": "^1.8.10",
+    "tsc-alias": "^1.9.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
