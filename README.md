@@ -1,7 +1,3 @@
-<!-- openspec-flow badge-start -->
-[![openspec-flow](https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/openspec-flow.yml/badge.svg)](https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/openspec-flow.yml)
-<!-- openspec-flow badge-end -->
-
 <div align="center">
   <h1 align="center"><code>⚒️ ark</code></h1>
   <h4 align="center">Agentic Runtime for Kubernetes</h4>
@@ -18,8 +14,6 @@
   </p>
   <p align="center">
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/cicd.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/cicd.yaml/badge.svg" alt="CI/CD"></a>
-    <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy.yml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy.yml/badge.svg" alt="Deploy"></a>
-    <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy_gcp.yml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy_gcp.yml/badge.svg" alt="Deploy GCP"></a>
     <a href="https://codecov.io/gh/mckinsey/agents-at-scale-ark"><img src="https://codecov.io/gh/mckinsey/agents-at-scale-ark/branch/main/graph/badge.svg" alt="Coverage"></a>
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/sonar_scan.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/sonar_scan.yaml/badge.svg" alt="SonarQube Scan"></a>
     <a href="https://www.npmjs.com/package/@agents-at-scale/ark"><img src="https://img.shields.io/npm/v/@agents-at-scale/ark.svg" alt="npm version"></a>
@@ -81,16 +75,3 @@ To troubleshoot an installation, run `ark status`.
 ## Credits
 
 The initial design and implementation of Ark was led by [Roman Galeev](https://github.com/Roman-Galeev), [Dave Kerr](https://github.com/dwmkerr), and [Chris Madden](https://github.com/cm94242).
-
-<!-- openspec-flow install-start -->
-## openspec-flow
-
-This repo uses [openspec-flow](https://github.com/dwmkerr/openspec-flow) to drive spec-driven development from GitHub issues.
-
-1. Open an issue describing the feature, fix, or task.
-2. Add the `openspec:go` label.
-3. openspec-flow opens a **spec PR** (`openspec:spec`). Review, comment, iterate (add `openspec:go` to the PR to re-run). Merge when happy.
-4. openspec-flow opens an **impl PR** (`openspec:impl`). Review, iterate, merge. The originating issue closes automatically.
-
-Required Actions secret: `ANTHROPIC_API_KEY`.
-<!-- openspec-flow install-end -->
