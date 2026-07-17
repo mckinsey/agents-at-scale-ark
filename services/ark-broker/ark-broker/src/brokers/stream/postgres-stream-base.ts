@@ -8,7 +8,7 @@ import {
   type PaginatedList,
   type PaginationParams,
 } from '../pagination.js';
-import type {Predicate, Stream} from './stream.js';
+import {hasScopingField, type Predicate, type Stream} from './stream.js';
 
 export abstract class PostgresStreamBase<
   T,
@@ -115,10 +115,7 @@ export abstract class PostgresStreamBase<
   }
 
   async deleteBy(filter: F): Promise<void> {
-    const hasScopingField = Object.entries(
-      filter as Record<string, unknown>
-    ).some(([key, value]) => key !== 'afterSequence' && value !== undefined);
-    if (!hasScopingField) {
+    if (!hasScopingField(filter as Record<string, unknown>)) {
       throw new Error('deleteBy requires at least one filter field');
     }
     this.logger.info({filter}, 'deleting by filter');

@@ -8,7 +8,7 @@ import type {
   MessageFilter,
   MessageStream,
 } from './message-stream.js';
-import type {Predicate} from './stream.js';
+import {hasScopingField, type Predicate} from './stream.js';
 
 export class InMemoryMessageStream
   extends InMemoryQueryDeletableStream<MessageData>
@@ -44,10 +44,7 @@ export class InMemoryMessageStream
   }
 
   async deleteBy(filter: MessageFilter): Promise<void> {
-    const hasScopingField = Object.entries(
-      filter as Record<string, unknown>
-    ).some(([key, value]) => key !== 'afterSequence' && value !== undefined);
-    if (!hasScopingField) {
+    if (!hasScopingField(filter as Record<string, unknown>)) {
       throw new Error('deleteBy requires at least one filter field');
     }
     return this.delete(this.predicateFor(filter));

@@ -3,7 +3,7 @@ import type {EventData, EventFilter, EventStream} from '../event-broker.js';
 import type {PaginatedList, PaginationParams} from '../pagination.js';
 import type {BrokerItem} from './broker-item.js';
 import {InMemoryQueryDeletableStream} from './in-memory-query-deletable-stream.js';
-import type {Predicate} from './stream.js';
+import {hasScopingField, type Predicate} from './stream.js';
 
 export class InMemoryEventStream
   extends InMemoryQueryDeletableStream<EventData>
@@ -40,10 +40,7 @@ export class InMemoryEventStream
   }
 
   async deleteBy(filter: EventFilter): Promise<void> {
-    const hasScopingField = Object.entries(
-      filter as Record<string, unknown>
-    ).some(([key, value]) => key !== 'afterSequence' && value !== undefined);
-    if (!hasScopingField) {
+    if (!hasScopingField(filter as Record<string, unknown>)) {
       throw new Error('deleteBy requires at least one filter field');
     }
     return this.delete(this.predicateFor(filter));
