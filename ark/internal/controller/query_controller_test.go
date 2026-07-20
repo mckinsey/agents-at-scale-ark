@@ -328,7 +328,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			// Pre-register an operation so handleRunningPhase treats it as in-flight.
 			_, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			r.operations.Store(req.NamespacedName, context.CancelFunc(cancel))
+			r.operations.Store(req.NamespacedName, cancel)
 
 			query := arkv1alpha1.Query{
 				ObjectMeta: metav1.ObjectMeta{
