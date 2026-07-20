@@ -8,7 +8,7 @@ import {
   Pencil,
   Play,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
@@ -87,16 +87,15 @@ function EditMetaDialog({
   const [draftTitle, setDraftTitle] = useState(title);
   const [draftDescription, setDraftDescription] = useState(description);
 
+  useEffect(() => {
+    if (open) {
+      setDraftTitle(title);
+      setDraftDescription(description);
+    }
+  }, [open, title, description]);
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={next => {
-        if (next) {
-          setDraftTitle(title);
-          setDraftDescription(description);
-        }
-        onOpenChange(next);
-      }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Workflow details</DialogTitle>
