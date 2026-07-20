@@ -17,6 +17,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.40.0
 	github.com/openai/openai-go v1.5.0
+	github.com/redis/go-redis/v9 v9.10.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
@@ -28,6 +29,7 @@ require (
 	k8s.io/client-go v0.34.0
 	sigs.k8s.io/controller-runtime v0.22.0
 	trpc.group/trpc-go/trpc-a2a-go v0.2.5
+	trpc.group/trpc-go/trpc-a2a-go/taskmanager/redis v0.0.0-20260618025420-44ec2fa59573
 )
 
 require (
@@ -39,6 +41,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/signin v1.2.2 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
