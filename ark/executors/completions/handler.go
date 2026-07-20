@@ -28,6 +28,25 @@ type Handler struct {
 	k8sClient client.Client
 	telemetry telemetry.Provider
 	eventing  eventing.Provider
+
+	// withShutdown links a request context to the server lifetime, returning a context that is
+	// cancelled when either the request ends or the server begins finalizing shutdown — so
+	// long-running executions (streams) stop and run their finalize path instead of being
+	// severed on process exit. Injected by NewServer (capturing the server context); when nil
+	// (e.g. a bare Handler in tests) the request context is used unchanged.
+	withShutdown func(context.Context) (context.Context, context.CancelFunc)
+}
+
+// mergeShutdown returns a child of reqCtx that is also cancelled when serverCtx is done,
+// so an in-flight execution reacts to server shutdown as well as client disconnect. The
+// returned cancel must be called to release resources.
+func mergeShutdown(reqCtx, serverCtx context.Context) (context.Context, context.CancelFunc) {
+	if serverCtx == nil {
+		return context.WithCancel(reqCtx)
+	}
+	ctx, cancel := context.WithCancel(reqCtx)
+	stop := context.AfterFunc(serverCtx, cancel)
+	return ctx, func() { stop(); cancel() }
 }
 
 type arkMetadata struct {
@@ -59,6 +78,7 @@ type executionState struct {
 	eventStream    EventStreamInterface
 	querySpan      telemetry.Span
 	targetSpan     telemetry.Span
+	isResumption   bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -98,6 +118,17 @@ func (h *Handler) ProcessMessage(
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
+	// Link the request to the server lifetime so a shutdown finalizes in-flight work. Fall
+	// back to a plain cancellable context when no linker is injected (bare Handler in tests).
+	merge := h.withShutdown
+	if merge == nil {
+		merge = func(reqCtx context.Context) (context.Context, context.CancelFunc) {
+			return mergeShutdown(reqCtx, nil)
+		}
+	}
+	ctx, cancel := merge(ctx)
+	defer cancel()
+
 	query, target, err := h.resolveQueryAndTarget(ctx, message)
 	if err != nil {
 		return nil, err
@@ -120,6 +151,7 @@ func (h *Handler) ProcessMessage(
 	// Check if this is a resumption from HITL approval or rejection
 	//nolint:nestif // TODO: Refactor to reduce nesting complexity
 	if isResumption, a2aTask := h.checkResumption(ctx, query); isResumption {
+		state.isResumption = true
 		decision := "approved"
 		if a2aTask.Status.Phase == arka2a.PhaseFailed {
 			decision = "rejected"
@@ -509,6 +541,7 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			"prompt_tokens":     tokenSummary.PromptTokens,
 			"completion_tokens": tokenSummary.CompletionTokens,
 			"total_tokens":      tokenSummary.TotalTokens,
+			"cached_tokens":     tokenSummary.CachedTokens,
 		}
 	}
 	if state.conversationId != "" {
@@ -913,7 +946,7 @@ func resolveResumptionAgent(state *executionState, a2aTask *arkv1alpha1.A2ATask)
 
 // saveInputMessagesToMemory saves input messages to memory before first approval
 func (h *Handler) saveInputMessagesToMemory(ctx context.Context, state *executionState) {
-	if state.memory == nil || len(state.inputMessages) == 0 || len(state.memoryMessages) != 0 {
+	if state.memory == nil || len(state.inputMessages) == 0 {
 		return
 	}
 
@@ -950,9 +983,8 @@ func (h *Handler) saveFinalMessagesToMemory(ctx context.Context, state *executio
 
 	log := logf.FromContext(ctx)
 	var messagesToSave []Message
-	isResumption := len(state.memoryMessages) > 0
 
-	if isResumption {
+	if state.isResumption {
 		messagesToSave = responseMessages
 		log.Info("Saving final messages (resumption)", "messageCount", len(messagesToSave), "queryName", state.query.Name)
 	} else {

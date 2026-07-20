@@ -177,19 +177,123 @@ port: "4318"`,
 	}
 }
 
+func TestResolveBrokerEndpoint(t *testing.T) {
+	tests := []struct {
+		name       string
+		namespace  string
+		configMaps []client.Object
+		want       string
+	}{
+		{
+			name:      "nil client returns empty",
+			namespace: "default",
+			want:      "",
+		},
+		{
+			name:       "missing configmap returns empty",
+			namespace:  "default",
+			configMaps: []client.Object{},
+			want:       "",
+		},
+		{
+			name:      "disabled broker returns empty",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data: map[string]string{
+						"enabled":    "false",
+						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name:      "enabled broker returns built endpoint",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data: map[string]string{
+						"enabled":    "true",
+						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "http://ark-broker.tenant-a.svc.cluster.local:80",
+		},
+		{
+			name:      "no fallback: other namespaces' brokers are ignored when this namespace has none",
+			namespace: "team-namespace",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "default"},
+					Data: map[string]string{
+						"enabled":    "true",
+						"serviceRef": `name: "ark-broker"` + "\n" + `port: "80"`,
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name:      "explicit serviceRef.namespace points at a broker in another namespace",
+			namespace: "team-namespace",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "team-namespace"},
+					Data: map[string]string{
+						"enabled": "true",
+						"serviceRef": `name: "ark-broker"` + "\n" +
+							`namespace: "default"` + "\n" +
+							`port: "80"`,
+					},
+				},
+			},
+			want: "http://ark-broker.default.svc.cluster.local:80",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var k8sClient client.Client
+			if tt.configMaps != nil {
+				k8sClient = fake.NewClientBuilder().WithObjects(tt.configMaps...).Build()
+			}
+
+			got, err := ResolveBrokerEndpoint(context.Background(), k8sClient, tt.namespace)
+			if err != nil {
+				t.Fatalf("ResolveBrokerEndpoint() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseServiceRef(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantName string
-		wantPort string
-		wantErr  bool
+		name          string
+		input         string
+		wantName      string
+		wantPort      string
+		wantNamespace string
+		wantErr       bool
 	}{
 		{
 			name:     "parses name and port",
 			input:    "name: \"collector\"\nport: \"4318\"",
 			wantName: "collector",
 			wantPort: "4318",
+		},
+		{
+			name:          "parses namespace override",
+			input:         "name: collector\nnamespace: default\nport: 4318",
+			wantName:      "collector",
+			wantPort:      "4318",
+			wantNamespace: "default",
 		},
 		{
 			name:     "parses without quotes",
@@ -234,6 +338,9 @@ func TestParseServiceRef(t *testing.T) {
 			if ref.Port != tt.wantPort {
 				t.Errorf("Port = %s, want %s", ref.Port, tt.wantPort)
 			}
+			if ref.Namespace != tt.wantNamespace {
+				t.Errorf("Namespace = %s, want %s", ref.Namespace, tt.wantNamespace)
+			}
 		})
 	}
 }
@@ -275,6 +382,12 @@ func TestBuildEndpoint(t *testing.T) {
 			namespace:  "tenant-a",
 			serviceRef: ServiceRef{Name: "", Port: "4318"},
 			wantErr:    true,
+		},
+		{
+			name:       "serviceRef.Namespace overrides the configmap namespace",
+			namespace:  "tenant-a",
+			serviceRef: ServiceRef{Name: "collector", Port: "4318", Namespace: "shared"},
+			want:       "http://collector.shared.svc.cluster.local:4318",
 		},
 	}
 

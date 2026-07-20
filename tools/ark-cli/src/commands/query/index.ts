@@ -17,7 +17,7 @@ export function createQueryCommand(config: ArkConfig): Command {
     .argument('<message>', 'Message to send')
     .option(
       '-o, --output <format>',
-      'Output format: yaml, json, name or events (shows structured event data)'
+      'Output format: yaml, json, name, events (structured event data), or events-pretty (events with color-coded reasons and expanded key/value detail)'
     )
     .option('--timeout <timeout>', 'Query timeout (e.g., 30s, 5m, 1h)')
     .option(

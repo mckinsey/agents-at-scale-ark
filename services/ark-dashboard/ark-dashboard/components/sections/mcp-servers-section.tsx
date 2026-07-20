@@ -2,7 +2,13 @@
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
 import type React from 'react';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { McpServerCard } from '@/components/cards';
@@ -41,27 +47,27 @@ export const McpServersSection = forwardRef<
     openAddEditor: () => setMcpEditorOpen(true),
   }));
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const data = await mcpServersService.getAll();
-        setMcpServers(data);
-      } catch (error) {
-        console.error('Failed to load MCP servers:', error);
-        toast.error('Failed to Load MCP Servers', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await mcpServersService.getAll();
+      setMcpServers(data);
+    } catch (error) {
+      console.error('Failed to load MCP servers:', error);
+      toast.error('Failed to Load MCP Servers', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
     loadData();
-  }, [namespace]);
+  }, [namespace, loadData]);
 
   const handleDelete = async (identifier: string) => {
     try {
@@ -187,6 +193,7 @@ export const McpServersSection = forwardRef<
               onInfo={handleInfo}
               onUpdate={handleSave}
               namespace={namespace}
+              onAuthChanged={loadData}
             />
           ))}
         </div>

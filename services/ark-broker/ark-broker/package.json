@@ -1,6 +1,6 @@
 {
   "name": "ark-broker",
-  "version": "0.1.66-rc",
+  "version": "0.1.67-rc",
   "description": "Ark broker for memory, telemetry streaming, and observability",
   "main": "dist/index.js",
   "type": "module",
@@ -46,7 +46,7 @@
     "@eslint/js": "^9.17.0",
     "@faker-js/faker": "^10.4.0",
     "@testcontainers/postgresql": "^12.0.4",
-    "@testcontainers/redis": "^12.0.3",
+    "@testcontainers/redis": "^12.0.4",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
@@ -66,7 +66,7 @@
     "testcontainers": "^12.0.1",
     "tmp": "^0.2.7",
     "ts-jest": "^29.4.11",
-    "tsc-alias": "^1.8.10",
+    "tsc-alias": "^1.9.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
@@ -74,6 +74,10 @@
     "node": ">=22.0.0"
   },
   "overrides": {
+    "js-yaml": "^4.3.0",
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^3.15.0"
+    },
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
     "qs": "^6.15.2",
