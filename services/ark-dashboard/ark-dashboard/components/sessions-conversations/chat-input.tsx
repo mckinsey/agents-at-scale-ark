@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Tooltip,
   TooltipContent,
@@ -167,12 +167,15 @@ export function ChatInput({
         </div>
       )}
 
-      <Input
+      <Textarea
+        rows={1}
+        autoResize
+        maxRows={17}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={`Message ${participantName}`}
-        className="h-auto w-full border-0 bg-transparent px-0 py-1 shadow-none focus-visible:ring-0 focus-visible:bg-transparent hover:bg-transparent disabled:bg-transparent disabled:hover:bg-transparent text-sm font-normal placeholder:text-fg-tertiary"
+        className="min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm font-normal leading-5 shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent placeholder:text-fg-tertiary"
         disabled={isDisabled}
       />
 

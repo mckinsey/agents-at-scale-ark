@@ -7,8 +7,8 @@ import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Tooltip,
   TooltipContent,
@@ -68,7 +68,7 @@ export function ChatPanel({
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -161,16 +161,19 @@ export function ChatPanel({
           </div>
         )}
         <div className="flex flex-col gap-2 px-4 py-3">
-          <Input
+          <Textarea
             ref={inputRef}
+            rows={1}
+            autoResize
+            maxRows={17}
             placeholder={
               isProcessing ? 'Processing...' : 'Type your message...'
             }
             value={currentMessage}
             onChange={e => setCurrentMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             disabled={isProcessing}
-            className="h-auto w-full border-0 bg-transparent px-0 py-1 shadow-none focus-visible:ring-0 focus-visible:bg-transparent hover:bg-transparent disabled:bg-transparent disabled:hover:bg-transparent text-sm font-normal placeholder:text-fg-tertiary"
+            className="min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm font-normal leading-5 shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent placeholder:text-fg-tertiary"
           />
 
           <TooltipProvider>
