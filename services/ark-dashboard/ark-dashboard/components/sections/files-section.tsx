@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { FilePreviewDialog } from '@/components/file-preview/file-preview-dialog';
+import { MultiTabPreviewDialog } from '@/components/file-preview/multi-tab-preview-dialog';
 import {
   Add,
   Autorenew,
@@ -45,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useFilePreview } from '@/hooks/use-file-preview';
+import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
 import { filesService } from '@/lib/services/files';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 import {
@@ -106,10 +106,15 @@ export function FilesSection() {
   // Use the multi-file preview hook
   const {
     previewOpen,
-    file: previewFile,
+    tabs,
+    activeTab,
+    activeTabKey,
     handlePreview,
-    close: closePreview,
-  } = useFilePreview();
+    closeTab,
+    closeAllTabs,
+    setActiveTabKey,
+    setPreviewOpen,
+  } = useMultiFilePreview();
 
   const {
     data: listFilesData,
@@ -654,12 +659,15 @@ export function FilesSection() {
         variant="destructive"
       />
 
-      <FilePreviewDialog
+      <MultiTabPreviewDialog
         open={previewOpen}
-        onOpenChange={isOpen => {
-          if (!isOpen) closePreview();
-        }}
-        file={previewFile}
+        onOpenChange={setPreviewOpen}
+        tabs={tabs}
+        activeTab={activeTab}
+        activeTabKey={activeTabKey}
+        onTabClick={setActiveTabKey}
+        onTabClose={closeTab}
+        onCloseAll={closeAllTabs}
       />
     </div>
   );

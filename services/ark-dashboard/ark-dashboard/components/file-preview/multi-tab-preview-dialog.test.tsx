@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PreviewFile } from '@/hooks/use-file-preview';
+import type { PreviewTab } from '@/hooks/use-multi-file-preview';
 
-import { FilePreviewDialog } from './file-preview-dialog';
+import { MultiTabPreviewDialog } from './multi-tab-preview-dialog';
 
 vi.mock('@/lib/api/files-client', () => ({
   FILES_API_BASE_URL: 'http://localhost:3000/api',
@@ -18,7 +18,7 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-function makeFile(overrides: Partial<PreviewFile> = {}): PreviewFile {
+function makeTab(overrides: Partial<PreviewTab> = {}): PreviewTab {
   return {
     key: 'scores.md',
     fileName: 'scores.md',
@@ -38,13 +38,52 @@ function makeFile(overrides: Partial<PreviewFile> = {}): PreviewFile {
   };
 }
 
-function renderDialog(file: PreviewFile | null) {
+function renderDialog(
+  activeTab: PreviewTab | null,
+  overrides: {
+    tabs?: PreviewTab[];
+    onTabClick?: (key: string) => void;
+    onTabClose?: (key: string) => void;
+  } = {},
+) {
+  const tabs = overrides.tabs ?? (activeTab ? [activeTab] : []);
   return render(
-    <FilePreviewDialog open={true} onOpenChange={() => {}} file={file} />,
+    <MultiTabPreviewDialog
+      open={true}
+      onOpenChange={() => {}}
+      tabs={tabs}
+      activeTab={activeTab}
+      activeTabKey={activeTab?.key ?? null}
+      onTabClick={overrides.onTabClick ?? (() => {})}
+      onTabClose={overrides.onTabClose ?? (() => {})}
+      onCloseAll={() => {}}
+    />,
   );
 }
 
-describe('FilePreviewDialog', () => {
+describe('MultiTabPreviewDialog', () => {
+  it('renders a tab per open file', () => {
+    const a = makeTab({ key: 'a.txt', fileName: 'a.txt' });
+    const b = makeTab({ key: 'b.txt', fileName: 'b.txt' });
+
+    renderDialog(a, { tabs: [a, b] });
+
+    expect(screen.getByRole('tab', { name: 'a.txt' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'b.txt' })).toBeDefined();
+  });
+
+  it('calls onTabClose when a tab close button is clicked', async () => {
+    const user = userEvent.setup();
+    const onTabClose = vi.fn();
+    const a = makeTab({ key: 'a.txt', fileName: 'a.txt' });
+
+    renderDialog(a, { tabs: [a], onTabClose });
+
+    await user.click(screen.getByRole('button', { name: 'Close a.txt' }));
+
+    expect(onTabClose).toHaveBeenCalledWith('a.txt');
+  });
+
   it('renders markdown tables when isMarkdown is true', () => {
     const tableMarkdown = [
       '| Name | Score |',
@@ -54,7 +93,7 @@ describe('FilePreviewDialog', () => {
     ].join('\n');
 
     renderDialog(
-      makeFile({
+      makeTab({
         content: tableMarkdown,
         isMarkdown: true,
         language: 'markdown',
@@ -73,7 +112,7 @@ describe('FilePreviewDialog', () => {
     const tableMarkdown = '| A | B |\n|---|---|\n| 1 | 2 |';
 
     renderDialog(
-      makeFile({
+      makeTab({
         content: tableMarkdown,
         isMarkdown: true,
         language: 'markdown',
@@ -94,7 +133,7 @@ describe('FilePreviewDialog', () => {
     const tableMarkdown = '| A | B |\n|---|---|\n| 1 | 2 |';
 
     renderDialog(
-      makeFile({
+      makeTab({
         content: tableMarkdown,
         isMarkdown: true,
         language: 'markdown',
@@ -112,9 +151,9 @@ describe('FilePreviewDialog', () => {
     expect(pre!.className).toMatch(/whitespace-pre(\s|$)/);
   });
 
-  it('does not render the toggle for non-markdown files (mdx regression)', () => {
+  it('does not render the view toggle for non-markdown files (mdx regression)', () => {
     renderDialog(
-      makeFile({
+      makeTab({
         key: 'readme.mdx',
         fileName: 'readme.mdx',
         content: '# Hello\n\n| A | B |\n|---|---|\n| 1 | 2 |',
@@ -130,7 +169,7 @@ describe('FilePreviewDialog', () => {
 
   it('shows loading state', () => {
     renderDialog(
-      makeFile({
+      makeTab({
         loading: true,
       }),
     );

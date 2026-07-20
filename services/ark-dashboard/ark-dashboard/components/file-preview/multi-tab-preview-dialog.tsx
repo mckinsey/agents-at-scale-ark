@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { PreviewFile } from '@/hooks/use-file-preview';
+import type { PreviewTab } from '@/hooks/use-multi-file-preview';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { cn } from '@/lib/utils';
 
@@ -20,30 +20,62 @@ import { ZipTree } from './zip-tree';
 
 type ViewMode = 'rendered' | 'source';
 
-interface FilePreviewDialogProps {
+interface MultiTabPreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  file: PreviewFile | null;
+  tabs: PreviewTab[];
+  activeTab: PreviewTab | null;
+  activeTabKey: string | null;
+  onTabClick: (key: string) => void;
+  onTabClose: (key: string) => void;
+  onCloseAll: () => void;
 }
 
-export function FilePreviewDialog({
+export function MultiTabPreviewDialog({
   open,
   onOpenChange,
-  file,
-}: FilePreviewDialogProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('rendered');
+  tabs,
+  activeTab,
+  activeTabKey,
+  onTabClick,
+  onTabClose,
+  onCloseAll,
+}: Readonly<MultiTabPreviewDialogProps>) {
+  const [viewModes, setViewModes] = useState<Record<string, ViewMode>>({});
 
   useEffect(() => {
-    setViewMode('rendered');
-  }, [file?.key]);
+    setViewModes(prev => {
+      const next: Record<string, ViewMode> = {};
+      for (const tab of tabs) {
+        if (prev[tab.key]) {
+          next[tab.key] = prev[tab.key];
+        }
+      }
+      return next;
+    });
+  }, [tabs]);
+
+  const activeViewMode: ViewMode =
+    (activeTabKey && viewModes[activeTabKey]) || 'rendered';
 
   const handleViewModeChange = (value: string) => {
+    if (!activeTabKey) return;
     if (value !== 'rendered' && value !== 'source') return;
-    setViewMode(value);
+    setViewModes(prev => ({ ...prev, [activeTabKey]: value }));
+  };
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      onCloseAll();
+    }
+    onOpenChange(isOpen);
   };
 
   return (
-    <SheetPrimitive.Root open={open} onOpenChange={onOpenChange} modal={false}>
+    <SheetPrimitive.Root
+      open={open}
+      onOpenChange={handleOpenChange}
+      modal={false}>
       <SheetPrimitive.Portal>
         <SheetPrimitive.Content
           className={cn(
@@ -57,9 +89,9 @@ export function FilePreviewDialog({
               File details
             </SheetTitle>
             <div className="flex items-center gap-2">
-              {file?.isMarkdown && (
+              {activeTab?.isMarkdown && (
                 <Tabs
-                  value={viewMode}
+                  value={activeViewMode}
                   onValueChange={handleViewModeChange}
                   size="sm"
                   className="w-auto flex-shrink-0">
@@ -77,8 +109,40 @@ export function FilePreviewDialog({
             </div>
           </SheetHeader>
 
+          {tabs.length > 0 && (
+            <Tabs
+              value={activeTabKey ?? undefined}
+              onValueChange={onTabClick}
+              size="sm"
+              className="w-full min-w-0">
+              <TabsList className="w-full justify-start overflow-x-auto">
+                {tabs.map(tab => (
+                  <div key={tab.key} className="group flex items-center">
+                    <TabsTrigger value={tab.key} className="max-w-[180px]">
+                      <span className="truncate" title={tab.fileName}>
+                        {tab.fileName}
+                      </span>
+                    </TabsTrigger>
+                    <button
+                      type="button"
+                      aria-label={`Close ${tab.fileName}`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onTabClose(tab.key);
+                      }}
+                      className="hover:bg-stateslayer-overlay-hover ml-0.5 rounded-sm p-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100">
+                      <IconShell size="sm" variant="secondary">
+                        <Close />
+                      </IconShell>
+                    </button>
+                  </div>
+                ))}
+              </TabsList>
+            </Tabs>
+          )}
+
           <div className="flex min-h-0 w-full flex-1 flex-col gap-3">
-            {file && (
+            {activeTab && (
               <>
                 <div className="flex items-center gap-2">
                   <IconShell size="sm" variant="secondary">
@@ -86,8 +150,8 @@ export function FilePreviewDialog({
                   </IconShell>
                   <span
                     className="text-fg-primary min-w-0 truncate text-sm"
-                    title={file.fileName}>
-                    {file.fileName}
+                    title={activeTab.fileName}>
+                    {activeTab.fileName}
                   </span>
                 </div>
                 <div className="border-stroke-tertiary w-full border-b" />
@@ -95,50 +159,50 @@ export function FilePreviewDialog({
             )}
 
             <div className="w-full flex-1 overflow-y-auto">
-              {file ? (
-                file.loading ? (
+              {activeTab ? (
+                activeTab.loading ? (
                   <div className="flex items-center justify-center py-8">
                     <p className="text-muted-foreground">
                       Loading file content...
                     </p>
                   </div>
-                ) : file.isImage && file.imageUrl ? (
+                ) : activeTab.isImage && activeTab.imageUrl ? (
                   <div className="flex items-center justify-center">
                     <img
-                      src={file.imageUrl}
-                      alt={file.fileName}
+                      src={activeTab.imageUrl}
+                      alt={activeTab.fileName}
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
-                ) : file.isSpreadsheet && file.spreadsheetData ? (
-                  <SpreadsheetViewer data={file.spreadsheetData} />
-                ) : file.isZip &&
-                  file.zipEntries &&
-                  file.zipEntries.length > 0 ? (
-                  <ZipTree entries={file.zipEntries} />
-                ) : file.isJson && file.jsonData !== null ? (
-                  <JsonTree data={file.jsonData} />
-                ) : file.isMarkdown && viewMode === 'rendered' ? (
-                  <div className="px-4">{renderMarkdown(file.content)}</div>
-                ) : file.isMarkdown ? (
+                ) : activeTab.isSpreadsheet && activeTab.spreadsheetData ? (
+                  <SpreadsheetViewer data={activeTab.spreadsheetData} />
+                ) : activeTab.isZip &&
+                  activeTab.zipEntries &&
+                  activeTab.zipEntries.length > 0 ? (
+                  <ZipTree entries={activeTab.zipEntries} />
+                ) : activeTab.isJson && activeTab.jsonData !== null ? (
+                  <JsonTree data={activeTab.jsonData} />
+                ) : activeTab.isMarkdown && activeViewMode === 'rendered' ? (
+                  <div className="px-4">{renderMarkdown(activeTab.content)}</div>
+                ) : activeTab.isMarkdown ? (
                   <pre className="overflow-x-auto px-4 font-mono text-sm whitespace-pre">
-                    {file.content}
+                    {activeTab.content}
                   </pre>
-                ) : file.language ? (
+                ) : activeTab.language ? (
                   <div className="overflow-hidden rounded-md">
                     <SyntaxHighlighter
-                      language={file.language}
+                      language={activeTab.language}
                       style={vscDarkPlus}
                       customStyle={{
                         margin: 0,
                         borderRadius: '0.375rem',
                       }}>
-                      {file.content}
+                      {activeTab.content}
                     </SyntaxHighlighter>
                   </div>
                 ) : (
                   <pre className="pl-4 font-mono text-sm break-words whitespace-pre-wrap">
-                    {file.content}
+                    {activeTab.content}
                   </pre>
                 )
               ) : (
