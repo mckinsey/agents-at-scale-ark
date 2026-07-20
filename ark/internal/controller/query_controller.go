@@ -69,12 +69,9 @@ const (
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
 	queryCapacityRequeueDelay = 250 * time.Millisecond
-	// queryRunningSafetyRequeue re-reconciles a provisioning/running Query on a
-	// bounded timer so one whose execution goroutine dies (e.g. a terminal
-	// status write that fails past its retries, a controller restart, a panic)
-	// converges to a terminal phase instead of stranding in running until the
-	// informer's ~10h resync. It is a delayed requeue, not an immediate one, so
-	// it does not create the hot loop seen in #2198/#2362 for in-flight queries.
+	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
+	// goroutine died so it converges to a terminal phase instead of stranding.
+	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
 	queryRunningSafetyRequeue = 30 * time.Second
 )
 
