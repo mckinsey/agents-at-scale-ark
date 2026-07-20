@@ -434,12 +434,14 @@ func (h *HTTPEventStream) startStream(ctx context.Context) error {
 	// Construct the streaming URL with proper escaping
 	streamURL := fmt.Sprintf("%s/stream/%s", h.baseURL, url.QueryEscape(h.queryName))
 
-	// CRITICAL: Use context.Background() instead of the query context for the streaming HTTP request.
+	// CRITICAL: Detach from the query context's cancellation for the streaming HTTP request.
 	// This allows the HTTP POST to complete gracefully when NotifyCompletion is called.
 	// The streaming lifecycle is managed by closing the pipe writer in NotifyCompletion,
 	// which causes the HTTP request to finish sending all data and complete normally.
-	// Using the query context would cause "context canceled" errors when the query completes.
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, streamURL, pipeReader)
+	// Inheriting the query context's cancellation would cause "context canceled" errors when
+	// the query completes; context.WithoutCancel drops its cancellation/deadline while keeping
+	// its values (logger/trace). No timeout is applied — the stream runs until the pipe closes.
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), http.MethodPost, streamURL, pipeReader)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming request: %w", err)
 	}
@@ -490,9 +492,15 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 		h.streamWriter = nil
 	}
 
-	// Send completion signal
+	// Send completion signal. Detach from the request context's cancellation via
+	// context.WithoutCancel: on the drain-deadline path ctx is already cancelled (server
+	// shutdown), which would fail this POST even though the broker still needs the explicit
+	// terminal completion signal. WithoutCancel keeps ctx's values (logger/trace) while
+	// dropping its cancellation and deadline; the WithTimeout below still bounds this request.
+	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
 	completeURL := fmt.Sprintf("%s/stream/%s/complete", h.baseURL, url.QueryEscape(h.queryName))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
+	req, err := http.NewRequestWithContext(completeCtx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return fmt.Errorf("failed to create completion request: %w", err)
 	}

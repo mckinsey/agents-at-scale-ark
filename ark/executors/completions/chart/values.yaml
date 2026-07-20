@@ -6,9 +6,14 @@ image:
 port: 80
 targetPort: 9090
 
-# Number of completions engine replicas. Exposed so per-tenant deployments can
-# scale independently of the central install.
-replicaCount: 1
+# Service routing. sessionAffinity: ClientIP makes an external A2A client's follow-up
+# requests (tasks/get, tasks/resubscribe) stick to the same replica. Best-effort only —
+# it breaks under shared egress IPs (NAT) and pod restarts. With taskManager.backend=redis
+# task state is shared across pods, so affinity becomes a latency optimization, not a
+# correctness requirement.
+service:
+  sessionAffinity: None            # or ClientIP
+  sessionAffinityTimeoutSeconds: 10800
 
 # Override the generated resource name. Defaults to "ark-completions" so the
 # central install keeps a stable Service name (the controller's
@@ -77,6 +82,95 @@ executionEngine:
 # (azure.workload.identity/use: "true") without forking the chart.
 podLabels: {}
 podAnnotations: {}
+
+# Static replica count, exposed so per-tenant deployments can scale independently of the
+# central install. Ignored when autoscaling.enabled is true (the HPA owns the count).
+replicaCount: 1
+
+# HorizontalPodAutoscaler. When enabled, the Deployment omits its replicas field so the
+# HPA manages scaling. Safe for the controller's blocking dispatch path: each Query is a
+# single request-response handled start-to-finish by one pod, and conversation history is
+# stored externally (Memory service), so requests may land on any replica.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  # CPU scaling target. This is an I/O-bound proxy that reserves only requests.cpu: 10m, so a
+  # percentage-of-request (Utilization) target would trip on the first query — 80% of 10m is
+  # ~8m, which any active TLS+SSE-stream query blows past instantly, pinning to maxReplicas.
+  # Default to an ABSOLUTE per-pod CPU target instead (independent of the scheduling request):
+  # ~200m ≈ 40% of the 500m limit, a meaningful "sustained busy" threshold with headroom.
+  targetCPUAverageValue: 200m
+  # Alternative: percentage-of-request scaling. Only meaningful if you raise requests.cpu to
+  # reflect real per-pod usage. Leave empty to use targetCPUAverageValue (which wins if both set).
+  targetCPUUtilizationPercentage: ""
+  # targetMemoryUtilizationPercentage: 80   # optional, off by default
+
+# PodDisruptionBudget. Keeps at least minAvailable replicas Ready during voluntary
+# disruptions (e.g. node drains). Only meaningful with more than one replica.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Bounded drain window on shutdown. Queries can run up to ~5m, but scale-downs/drains are
+# not blocked that long: in-flight queries exceeding the window are cut and fail
+# TERMINALLY — the controller records them as errored and does NOT re-dispatch them, so the
+# client must resubmit. If in-flight queries must survive a drain, size the values below for
+# your real max query duration rather than relying on retries.
+#
+# terminationGracePeriodSeconds must budget the full shutdown sequence, since it covers both
+# the preStop hook and post-SIGTERM handling:
+#   terminationGracePeriodSeconds >= preStopSleepSeconds + shutdownTimeoutSeconds + ~2s finalize + buffer
+# Defaults: 5 + 50 + 2 = 57s, leaving 13s headroom under 70s before SIGKILL.
+terminationGracePeriodSeconds: 70
+gracefulShutdown:
+  # preStop sleep so kube-proxy removes the pod from Service endpoints before the server
+  # starts refusing — stops new requests landing on a terminating pod.
+  preStopSleepSeconds: 5
+  # Max time http.Server.Shutdown drains in-flight requests after SIGTERM (the binary's
+  # --shutdown-timeout). Exposed here so it can't silently drift past
+  # terminationGracePeriodSeconds and get cut by SIGKILL; keep the budget above satisfied.
+  shutdownTimeoutSeconds: 50
+
+# A2A task-state store. "memory" keeps task state per-pod (correct for single-pod installs
+# and the controller's blocking dispatch path). "redis" uses a shared Redis-backed task
+# manager so task state (status/history/artifacts) is visible across replicas — required
+# when external A2A clients use tasks/get, tasks/resubscribe, or stream re-attach under
+# multi-pod/HPA scaling.
+taskManager:
+  backend: memory                  # memory | redis
+
+# Redis connection, used only when taskManager.backend is "redis". Mirrors ark-broker:
+# provide a plain url for dev, or a Secret reference for production. Use a dedicated Redis
+# logical DB (e.g. redis://host:6379/2) to isolate keys from other Ark services.
+#
+# TLS: use a rediss:// url. Unlike ark-broker (Node/ioredis ignores the OS trust store),
+# the Go client verifies against the pod's system trust store, so rediss:// works out of the
+# box for Redis served by a public/system-trusted CA — no extra config. For a private/
+# self-signed Redis CA, enable redis.tls below (it mounts the CA and appends it to a clone of
+# the system pool for the Redis connection only). Do NOT reach for customCACert/SSL_CERT_FILE
+# to trust a private Redis CA: SSL_CERT_FILE replaces the whole system bundle and can knock out
+# the public roots the executor needs for outbound HTTPS (LLM providers).
+redis:
+  url: ""                          # e.g. redis://:pass@ark-redis-dev:6379/0
+  urlSecretRef:
+    name: ""
+    key: "redis-url"
+  passwordSecretRef:
+    name: ""
+    key: "redis-password"
+  # Task/conversation key TTL in seconds (0 = library default).
+  taskExpirySeconds: 0
+  # Private/self-signed CA trust for a rediss:// endpoint. When enabled, the CA from the named
+  # Secret is mounted and passed to the Redis client as REDIS_TLS_CA_CERT_PATH; the executor
+  # appends it to a clone of the system trust store and applies it to the Redis connection ONLY
+  # — outbound LLM HTTPS keeps the unmodified system roots. Not needed for public-CA Redis.
+  # Requires taskManager.backend=redis (the CA has no consumer otherwise; the chart fails render).
+  tls:
+    enabled: false
+    secretName: ""                 # Secret containing the CA cert (required when enabled)
+    key: "ca.crt"                  # key within the Secret
+    mountPath: /etc/ssl/certs/redis-ca
 
 resources:
   limits:
