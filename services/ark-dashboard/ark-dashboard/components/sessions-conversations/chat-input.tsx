@@ -55,6 +55,7 @@ export function ChatInput({
     conversation?.name ||
     FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType;
+  const toolCallCount = conversation?.toolCallCount || 0;
 
   const {
     variant: parameterVariant,
@@ -235,6 +236,13 @@ export function ChatInput({
               {showToolCalls ? 'Disable tool calls' : 'Activate tool calls'}
             </TooltipContent>
           </Tooltip>
+
+          {toolCallCount > 0 && (
+            <span className="text-fg-tertiary ml-1 font-mono text-xs">
+              {toolCallCount.toLocaleString()} tool{' '}
+              {toolCallCount === 1 ? 'call' : 'calls'}
+            </span>
+          )}
         </div>
 
         <Button

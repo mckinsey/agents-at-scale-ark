@@ -70,6 +70,12 @@ export function ChatPanel({
   const [debugMode, setDebugMode] = useState(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const toolCallCount = messages.reduce(
+    (total, msg) =>
+      total + ('tool_calls' in msg && msg.tool_calls ? msg.tool_calls.length : 0),
+    0,
+  );
+
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
@@ -234,6 +240,13 @@ export function ChatPanel({
                     {debugMode ? 'Disable tool calls' : 'Activate tool calls'}
                   </TooltipContent>
                 </Tooltip>
+
+                {toolCallCount > 0 && (
+                  <span className="text-fg-tertiary ml-1 font-mono text-xs">
+                    {toolCallCount.toLocaleString()} tool{' '}
+                    {toolCallCount === 1 ? 'call' : 'calls'}
+                  </span>
+                )}
 
                 {tokenUsage && tokenUsage.total_tokens > 0 && (
                   <Tooltip>

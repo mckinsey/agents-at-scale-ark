@@ -189,7 +189,7 @@ function Textarea({
   maxRows,
   ref,
   ...props
-}: TextareaProps) {
+}: Readonly<TextareaProps>) {
   const context = React.useContext(TextareaContext);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [isOverflowing, setIsOverflowing] = React.useState(false);
@@ -213,12 +213,12 @@ function Textarea({
 
     el.style.height = 'auto';
 
-    const styles = window.getComputedStyle(el);
-    const lineHeight = parseFloat(styles.lineHeight) || 20;
-    const paddingTop = parseFloat(styles.paddingTop) || 0;
-    const paddingBottom = parseFloat(styles.paddingBottom) || 0;
-    const borderTop = parseFloat(styles.borderTopWidth) || 0;
-    const borderBottom = parseFloat(styles.borderBottomWidth) || 0;
+    const styles = globalThis.getComputedStyle(el);
+    const lineHeight = Number.parseFloat(styles.lineHeight) || 20;
+    const paddingTop = Number.parseFloat(styles.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(styles.paddingBottom) || 0;
+    const borderTop = Number.parseFloat(styles.borderTopWidth) || 0;
+    const borderBottom = Number.parseFloat(styles.borderBottomWidth) || 0;
     const verticalExtra = paddingTop + paddingBottom + borderTop + borderBottom;
 
     // scrollHeight includes padding but not border under border-box.
