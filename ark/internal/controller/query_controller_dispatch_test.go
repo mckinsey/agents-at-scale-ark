@@ -141,6 +141,91 @@ func TestResolveDispatchAddress(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, completionsAddr, addr)
 	})
+
+	const tenantEngineAddr = "http://ark-completions.tenant-a:80"
+
+	tenantEngine := func(namespace, addr string) *arkv1prealpha1.ExecutionEngine {
+		return &arkv1prealpha1.ExecutionEngine{
+			ObjectMeta: metav1.ObjectMeta{Name: defaultCompletionsEngineName, Namespace: namespace},
+			Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: addr},
+		}
+	}
+
+	t.Run("agent without engine prefers namespace-local ark-completions engine", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "tenant-a"},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "my-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, tenantEngineAddr, addr)
+	})
+
+	t.Run("non-agent target prefers namespace-local ark-completions engine", func(t *testing.T) {
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeTeam, Name: "my-team"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, tenantEngineAddr, addr)
+	})
+
+	t.Run("a2a agent prefers namespace-local ark-completions engine", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a2a-agent", Namespace: "tenant-a"},
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: arka2a.ExecutionEngineA2A},
+			},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "a2a-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, tenantEngineAddr, addr)
+	})
+
+	t.Run("namespace-local engine with empty address falls back to central", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "tenant-a"},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", "")).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "my-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, completionsAddr, addr)
+	})
+
+	t.Run("no namespace-local engine falls back to central", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "tenant-b"},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		// Agent is in tenant-b; the only ark-completions engine is in tenant-a.
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "my-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-b")
+		require.NoError(t, err)
+		assert.Equal(t, completionsAddr, addr)
+	})
 }
 
 func TestExtractA2AMeta(t *testing.T) {

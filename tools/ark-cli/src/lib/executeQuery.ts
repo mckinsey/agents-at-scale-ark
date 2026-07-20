@@ -195,6 +195,11 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
       return;
     }
 
+    if (options.outputFormat === 'events-pretty') {
+      await watchEventsLive(queryName, true);
+      return;
+    }
+
     const timeoutSeconds = 300;
     await execa(
       'kubectl',
@@ -222,7 +227,7 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     } else {
       console.error(
         chalk.red(
-          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, or events`
+          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, events, or events-pretty`
         )
       );
       process.exit(ExitCodes.CliError);

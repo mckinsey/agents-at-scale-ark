@@ -4,6 +4,7 @@ import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
 import {
   sendValidationError,
   sendInternalError,
+  sendMissingQueryIdError,
 } from '@ark-broker/http/routes/errors.js';
 import {
   getEventsQuerySchema,
@@ -108,6 +109,27 @@ export function createEventsRouter(
       res.json({status: 'success', message: 'Event data purged'});
     } catch (error) {
       req.log.error({err: error}, 'event purge failed');
+      sendInternalError(res, req.id);
+    }
+  });
+
+  router.delete<{query_id: string}>('/:query_id', async (req, res) => {
+    const {query_id: queryId} = req.params;
+
+    if (!queryId) {
+      sendMissingQueryIdError(res, req.id);
+      return;
+    }
+
+    try {
+      req.log.info({queryId}, 'deleting events for query');
+      await events.deleteByQuery(queryId);
+      res.json({
+        status: 'success',
+        message: `Query ${queryId} events deleted`,
+      });
+    } catch (error) {
+      req.log.error({err: error}, 'failed to delete query events');
       sendInternalError(res, req.id);
     }
   });

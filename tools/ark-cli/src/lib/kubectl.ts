@@ -2,6 +2,7 @@ import {execa} from 'execa';
 import chalk from 'chalk';
 import type {K8sListResource} from './types.js';
 import {EVENT_ANNOTATIONS} from './constants.js';
+import {formatEvent} from './formatEvent.js';
 
 interface K8sResource {
   metadata: {
@@ -104,7 +105,10 @@ export async function replaceResource<T extends K8sResource>(
   return JSON.parse(result.stdout) as T;
 }
 
-export async function watchEventsLive(queryName: string): Promise<void> {
+export async function watchEventsLive(
+  queryName: string,
+  pretty = false
+): Promise<void> {
   const seenEvents = new Set<string>();
 
   const pollEvents = async () => {
@@ -129,21 +133,28 @@ export async function watchEventsLive(queryName: string): Promise<void> {
           const eventData = annotations[EVENT_ANNOTATIONS.EVENT_DATA];
 
           if (eventData) {
-            const now = new Date();
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const seconds = now.getSeconds().toString().padStart(2, '0');
-            const millis = now.getMilliseconds().toString().padStart(3, '0');
-            const timestamp = `${hours}:${minutes}:${seconds}.${millis}`;
+            if (pretty) {
+              const line = formatEvent(event);
+              if (line !== null) {
+                console.log(line);
+              }
+            } else {
+              const now = new Date();
+              const hours = now.getHours().toString().padStart(2, '0');
+              const minutes = now.getMinutes().toString().padStart(2, '0');
+              const seconds = now.getSeconds().toString().padStart(2, '0');
+              const millis = now.getMilliseconds().toString().padStart(3, '0');
+              const timestamp = `${hours}:${minutes}:${seconds}.${millis}`;
 
-            const reason = event.reason || 'Unknown';
-            const eventType = event.type || 'Normal';
+              const reason = event.reason || 'Unknown';
+              const eventType = event.type || 'Normal';
 
-            const colorCode =
-              eventType === 'Normal' ? 32 : eventType === 'Warning' ? 33 : 31;
-            console.log(
-              `${timestamp} \x1b[${colorCode}m${reason}\x1b[0m ${eventData}`
-            );
+              const colorCode =
+                eventType === 'Normal' ? 32 : eventType === 'Warning' ? 33 : 31;
+              console.log(
+                `${timestamp} \x1b[${colorCode}m${reason}\x1b[0m ${eventData}`
+              );
+            }
           }
         }
       }

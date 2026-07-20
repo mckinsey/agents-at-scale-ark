@@ -682,6 +682,85 @@ func TestGenericStorage_ConvertToTable_List(t *testing.T) {
 	}
 }
 
+func TestGenericStorage_ConvertToTable_ListWithoutContinueToken(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
+	// A list without a continue token must yield an empty token (not a panic
+	// or stale value), so single-page results are not mislabeled as truncated.
+	list := &arkv1alpha1.AgentList{
+		Items: []arkv1alpha1.Agent{
+			{ObjectMeta: metav1.ObjectMeta{Name: "agent-1", CreationTimestamp: metav1.Now()}},
+		},
+	}
+
+	table, err := gs.ConvertToTable(ctx, list, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
+	if table.Continue != "" {
+		t.Errorf("expected empty continue for un-paginated list, got %q", table.Continue)
+	}
+	if table.RemainingItemCount != nil {
+		t.Errorf("expected nil remainingItemCount, got %v", *table.RemainingItemCount)
+	}
+}
+
+func TestGenericStorage_ConvertToTable_PropagatesListMeta(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
+	remaining := int64(42)
+	list := &arkv1alpha1.AgentList{
+		ListMeta: metav1.ListMeta{
+			ResourceVersion:    "123",
+			Continue:           "next-token",
+			RemainingItemCount: &remaining,
+		},
+		Items: []arkv1alpha1.Agent{
+			{ObjectMeta: metav1.ObjectMeta{Name: "agent-1", CreationTimestamp: metav1.Now()}},
+		},
+	}
+
+	table, err := gs.ConvertToTable(ctx, list, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
+	if table.Continue != "next-token" {
+		t.Errorf("expected continue 'next-token', got %q", table.Continue)
+	}
+	if table.ResourceVersion != "123" {
+		t.Errorf("expected resourceVersion '123', got %q", table.ResourceVersion)
+	}
+	if table.RemainingItemCount == nil || *table.RemainingItemCount != remaining {
+		t.Errorf("expected remainingItemCount %d, got %v", remaining, table.RemainingItemCount)
+	}
+}
+
+func TestGenericStorage_ConvertToTable_SinglePropagatesResourceVersion(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.ResourceVersion = "777"
+	agent.CreationTimestamp = metav1.Now()
+
+	table, err := gs.ConvertToTable(ctx, agent, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
+	if table.ResourceVersion != "777" {
+		t.Errorf("expected resourceVersion '777', got %q", table.ResourceVersion)
+	}
+}
+
 func TestGenericStorage_Destroy(t *testing.T) {
 	t.Parallel()
 	gs, _ := newTestStorage()

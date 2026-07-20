@@ -48,41 +48,53 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  set -e
+                  set -euo pipefail
+                  umask 077
+
                   CLIENT_ID=$(cat /etc/aigw/client-id)
                   CLIENT_SECRET=$(cat /etc/aigw/client-secret)
                   INSTANCE_ID=$(cat /etc/aigw/instance-id)
 
-                  RESPONSE=$(curl -sf \
-                    -H "Authorization: Bearer ${CLIENT_ID}:${CLIENT_SECRET}" \
-                    -H "X-Instance-Id: ${INSTANCE_ID}" \
-                    "{{ .Values.aigwTokenRefresh.saEndpoint }}")
+                  printf 'header = "Authorization: Bearer %s:%s"\nheader = "X-Instance-Id: %s"\n' \
+                    "$CLIENT_ID" "$CLIENT_SECRET" "$INSTANCE_ID" > /scratch/curl.cfg
 
-                  NEW_ID=$(echo "$RESPONSE" | sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')
-                  NEW_SECRET=$(echo "$RESPONSE" | sed -n 's/.*"client_secret":"\([^"]*\)".*/\1/p')
+                  RESPONSE=$(curl -sf -K /scratch/curl.cfg "{{ .Values.aigwTokenRefresh.saEndpoint }}")
+
+                  NEW_ID=$(printf '%s' "$RESPONSE" | sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')
+                  NEW_SECRET=$(printf '%s' "$RESPONSE" | sed -n 's/.*"client_secret":"\([^"]*\)".*/\1/p')
 
                   if [ -z "$NEW_ID" ] || [ -z "$NEW_SECRET" ]; then
                     echo "ERROR: failed to fetch credentials"
                     exit 1
                   fi
 
-                  kubectl create secret generic {{ .Values.aigwTokenRefresh.aigwSecret }} \
-                    --from-literal=api-key="${NEW_ID}:${NEW_SECRET}" \
-                    --dry-run=client -o yaml | kubectl apply -f -
+                  printf '%s' "$NEW_ID" > /scratch/client-id
+                  printf '%s' "$NEW_SECRET" > /scratch/client-secret
+                  printf '%s' "$INSTANCE_ID" > /scratch/instance-id
+                  printf '%s:%s' "$NEW_ID" "$NEW_SECRET" > /scratch/api-key
 
                   if [ "$NEW_ID" != "$CLIENT_ID" ] || [ "$NEW_SECRET" != "$CLIENT_SECRET" ]; then
                     kubectl create secret generic {{ .Values.aigwTokenRefresh.saCredentialsSecret }} \
-                      --from-literal=client-id="$NEW_ID" \
-                      --from-literal=client-secret="$NEW_SECRET" \
-                      --from-literal=instance-id="$INSTANCE_ID" \
+                      --from-file=client-id=/scratch/client-id \
+                      --from-file=client-secret=/scratch/client-secret \
+                      --from-file=instance-id=/scratch/instance-id \
                       --dry-run=client -o yaml | kubectl apply -f -
                   fi
+
+                  kubectl create secret generic {{ .Values.aigwTokenRefresh.aigwSecret }} \
+                    --from-file=api-key=/scratch/api-key \
+                    --dry-run=client -o yaml | kubectl apply -f -
               volumeMounts:
                 - name: aigw
                   mountPath: /etc/aigw
                   readOnly: true
+                - name: scratch
+                  mountPath: /scratch
           volumes:
             - name: aigw
               secret:
                 secretName: {{ .Values.aigwTokenRefresh.saCredentialsSecret }}
+            - name: scratch
+              emptyDir:
+                medium: Memory
 {{- end }}

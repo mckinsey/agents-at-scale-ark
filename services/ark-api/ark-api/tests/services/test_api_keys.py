@@ -271,6 +271,10 @@ class TestAPIKeyServiceIntegration(unittest.IsolatedAsyncioTestCase):
         
         # Verify last used timestamp was updated
         mock_api_instance.patch_namespaced_secret.assert_called_once()
+        patched_secret = mock_api_instance.patch_namespaced_secret.call_args[1]["body"]
+        annotation_data = json.loads(patched_secret.metadata.annotations[API_KEY_ANNOTATION])
+        self.assertIn("lastUsedAt", annotation_data)
+        self.assertIsNotNone(self.service._parse_datetime(annotation_data["lastUsedAt"]))
     
     @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
@@ -296,12 +300,14 @@ class TestAPIKeyServiceIntegration(unittest.IsolatedAsyncioTestCase):
         
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+        mock_api_instance.patch_namespaced_secret = AsyncMock()
         
         # Test verification with wrong secret
         result = await self.service.verify_api_key("pk-ark-test", "sk-ark-wrong-secret")
         
         # Verify result
         self.assertIsNone(result)
+        mock_api_instance.patch_namespaced_secret.assert_not_called()
 
 
 class TestAPIKeyNamespaceScoping(unittest.IsolatedAsyncioTestCase):
