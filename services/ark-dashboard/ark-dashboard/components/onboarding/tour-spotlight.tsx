@@ -9,8 +9,8 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from '@/components/ui/popover';
+import type { TourStep } from '@/lib/constants/tour-steps';
 import { cn } from '@/lib/utils';
-import type { TourStep } from './tour-steps';
 
 interface TourSpotlightProps {
   steps: TourStep[];
@@ -56,62 +56,70 @@ export function TourSpotlight({
     return () => observer.disconnect();
   }, [currentStep]);
 
-  if (!currentStep || !rect) return null;
+  if (!currentStep) return null;
 
   const isLastStep = activeStep === steps.length - 1;
   const { action, actionHref } = currentStep;
 
+  const anchorStyle = rect
+    ? {
+        left: rect.left - PADDING,
+        top: rect.top - PADDING,
+        width: rect.width + PADDING * 2,
+        height: rect.height + PADDING * 2,
+      }
+    : { left: '50%', top: '50%', width: 0, height: 0 };
+
   return (
     <div className="pointer-events-none fixed inset-0 z-[60]">
-      <svg className="pointer-events-auto absolute inset-0 h-full w-full">
-        <defs>
-          <mask id="tour-spotlight-mask">
-            <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            <rect
-              x={rect.left - PADDING}
-              y={rect.top - PADDING}
-              width={rect.width + PADDING * 2}
-              height={rect.height + PADDING * 2}
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          fill="rgba(0,0,0,0.7)"
-          mask="url(#tour-spotlight-mask)"
+      {rect ? (
+        <svg className="pointer-events-auto absolute inset-0 h-full w-full">
+          <defs>
+            <mask id="tour-spotlight-mask">
+              <rect x="0" y="0" width="100%" height="100%" fill="white" />
+              <rect
+                x={rect.left - PADDING}
+                y={rect.top - PADDING}
+                width={rect.width + PADDING * 2}
+                height={rect.height + PADDING * 2}
+                fill="black"
+              />
+            </mask>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            fill="rgba(0,0,0,0.7)"
+            mask="url(#tour-spotlight-mask)"
+          />
+          <rect
+            x={rect.left - PADDING}
+            y={rect.top - PADDING}
+            width={rect.width + PADDING * 2}
+            height={rect.height + PADDING * 2}
+            fill="none"
+            strokeWidth="2"
+            className="animate-pulse"
+            style={{ stroke: 'var(--brand-accents-qb-accent)' }}
+          />
+        </svg>
+      ) : (
+        <div
+          className="pointer-events-auto absolute inset-0"
+          style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
         />
-        <rect
-          x={rect.left - PADDING}
-          y={rect.top - PADDING}
-          width={rect.width + PADDING * 2}
-          height={rect.height + PADDING * 2}
-          fill="none"
-          strokeWidth="2"
-          className="animate-pulse"
-          style={{ stroke: 'var(--brand-accents-qb-accent)' }}
-        />
-      </svg>
+      )}
 
       <Popover open>
         <PopoverAnchor asChild>
-          <div
-            className="pointer-events-none fixed"
-            style={{
-              left: rect.left - PADDING,
-              top: rect.top - PADDING,
-              width: rect.width + PADDING * 2,
-              height: rect.height + PADDING * 2,
-            }}
-          />
+          <div className="pointer-events-none fixed" style={anchorStyle} />
         </PopoverAnchor>
         <PopoverContent
-          side="right"
-          align="start"
-          sideOffset={16}
+          side={rect ? 'right' : 'bottom'}
+          align={rect ? 'start' : 'center'}
+          sideOffset={rect ? 16 : 0}
           collisionPadding={16}
           onOpenAutoFocus={e => e.preventDefault()}
           className="pointer-events-auto z-[70] w-[320px] border-0 p-6 shadow-elevation-2">

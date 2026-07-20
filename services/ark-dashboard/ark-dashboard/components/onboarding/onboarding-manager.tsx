@@ -9,11 +9,11 @@ import {
   onboardingPhaseAtom,
   tourStepAtom,
 } from '@/atoms/onboarding';
+import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { FloatingTourButton } from './floating-tour-button';
 import { PostTourDialog } from './post-tour-dialog';
 import { TourSpotlight } from './tour-spotlight';
-import { TOUR_STEPS } from './tour-steps';
 import { WelcomeDialog } from './welcome-dialog';
 
 export function OnboardingManager() {

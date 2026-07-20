@@ -1,7 +1,7 @@
 import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 
-import { TOUR_STEPS } from '@/components/onboarding/tour-steps';
+import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 
 export const ONBOARDING_COMPLETED_KEY = 'onboarding-completed';
 export const storedOnboardingCompletedAtom = atomWithStorage<boolean>(

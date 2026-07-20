@@ -1,7 +1,7 @@
 import { createStore } from 'jotai';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { TOUR_STEPS } from '@/components/onboarding/tour-steps';
+import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 import {
   completeOnboardingAtom,
   onboardingCompletedAtom,
@@ -51,6 +51,9 @@ describe('onboarding atoms', () => {
 
     store.set(onboardingPhaseAtom, 'tour');
     expect(store.get(tourActiveSectionAtom)).toBe(TOUR_STEPS[1].targetId);
+
+    store.set(tourStepAtom, TOUR_STEPS.length + 5);
+    expect(store.get(tourActiveSectionAtom)).toBeNull();
   });
 
   it('persists completion through completeOnboardingAtom', () => {

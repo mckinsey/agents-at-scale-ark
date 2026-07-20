@@ -3,8 +3,8 @@
 import { ChevronRight, Rocket } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { DialogDescription } from '@/components/ui/dialog';
+import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 import { OnboardingDialog } from './onboarding-dialog';
-import { TOUR_STEPS } from './tour-steps';
 
 interface WelcomeDialogProps {
   open: boolean;
