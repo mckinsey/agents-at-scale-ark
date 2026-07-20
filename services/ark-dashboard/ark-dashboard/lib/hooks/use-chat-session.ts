@@ -162,6 +162,11 @@ export function useChatSession({
   const conversationId = (chatSession as { conversationId?: string })
     .conversationId;
 
+  const conversationIdRef = useRef<string | undefined>(conversationId);
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
       const sessionIdToUse =
@@ -227,8 +232,11 @@ export function useChatSession({
     [chatKey, setChatHistory],
   );
 
+  const lastQueryName = useRef('');
+
   const updateConversationId = useCallback(
     (newConversationId: string) => {
+      conversationIdRef.current = newConversationId;
       setChatHistory(prev => {
         const safePrev = prev || {};
         const currentSession = safePrev[chatKey];
@@ -241,6 +249,23 @@ export function useChatSession({
     },
     [chatKey, setChatHistory],
   );
+
+  const ensureConversationId = useCallback(async () => {
+    if (conversationIdRef.current) return;
+    const queryName = lastQueryName.current;
+    if (!queryName) return;
+    try {
+      const fullQuery = await chatService.getQuery(queryName);
+      const fallbackConversationId = (
+        fullQuery?.status as { conversationId?: string } | undefined
+      )?.conversationId;
+      if (fallbackConversationId) {
+        updateConversationId(fallbackConversationId);
+      }
+    } catch (err) {
+      console.error('Failed to fetch conversationId fallback:', err);
+    }
+  }, [updateConversationId]);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
@@ -291,7 +316,6 @@ export function useChatSession({
     [],
   );
 
-  const lastQueryName = useRef('');
   const pendingApprovalQueryRef = useRef<{
     queryName: string;
     messageIndex: number;
@@ -951,6 +975,7 @@ export function useChatSession({
       try {
         if (isChatStreamingEnabled) {
           await handleStreamChatResponse(userMessage, apiParameters);
+          await ensureConversationId();
         } else {
           await handlePollChatResponse(userMessage, apiParameters);
         }
@@ -987,6 +1012,7 @@ export function useChatSession({
       }
     },
     [
+      ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
