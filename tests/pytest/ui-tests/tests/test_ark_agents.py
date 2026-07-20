@@ -1,4 +1,7 @@
+import json
 import logging
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import Page, expect
 from pages.agents_page import AgentsPage
@@ -141,8 +144,12 @@ class TestArkAgents:
         tools = ToolsPage(page)
 
         tool_result = tools.create_tool_for_test("get-coordinates")
-        assert tool_result["popup_visible"], "Tool creation popup should be visible"
-        assert tool_result["in_table"], "Tool should be visible in table"
+        try:
+            assert tool_result["popup_visible"], "Tool creation popup should be visible"
+            assert tool_result["in_table"], "Tool should be visible in table"
+        except AssertionError:
+            _dump_tool_creation_diagnostics(page, tool_result)
+            raise
         agent_test_resources["tools"][prefix] = tool_result['name']
 
         agent_result = agents.create_agent_for_test(prefix, MOCK_LLM_MODEL_NAME, "with_tools", [tool_result['name']])
@@ -179,3 +186,61 @@ class TestArkAgents:
         tool_result = tools.delete_tool_with_verification(tool_name)
         if tool_result["delete_available"]:
             logger.info(f"Tool deleted: {tool_name}")
+
+
+def _dump_tool_creation_diagnostics(page: Page, tool_result: dict) -> None:
+    """On tool-creation popup failure, capture URL, tool_result flags, dialog
+    state, console errors, and the current /api/v1/tools list. Written to
+    the screenshots dir so it rides along with the ui-test-screenshots artifact."""
+    screenshots_dir = getattr(page, "_screenshots_dir", Path("screenshots"))
+    path = Path(screenshots_dir) / "test_create_agent_with_tools.diagnostics.txt"
+
+    lines = [
+        f"URL: {page.url}",
+        f"tool_result: {tool_result}",
+        "",
+    ]
+
+    console_messages = getattr(page, "_test_console_messages", []) or []
+    lines.append(f"Console messages ({len(console_messages)}, last 30):")
+    for m in console_messages[-30:]:
+        lines.append(f"  [{m.get('type')}] {m.get('text', '')[:500]}")
+    lines.append("")
+
+    try:
+        dialog = page.locator("[role='dialog'], [data-slot='dialog-content']").first
+        if dialog.count() > 0 and dialog.is_visible(timeout=1000):
+            lines.append("Dialog still open at failure time.")
+            lines.append("--- dialog innerText (truncated to 4kB) ---")
+            lines.append(dialog.inner_text()[:4000])
+            errs = page.locator("[role='dialog'] [role='alert'], [role='dialog'] .text-destructive").all_inner_texts()
+            if errs:
+                lines.append(f"Field validation errors: {errs}")
+        else:
+            lines.append("Dialog not present in DOM at failure time (closed or never opened).")
+    except Exception as e:
+        lines.append(f"dialog probe failed: {e}")
+    lines.append("")
+
+    try:
+        result = page.evaluate(
+            """async () => {
+                const r = await fetch('/api/v1/tools');
+                return { status: r.status, body: await r.text() };
+            }"""
+        )
+        body = result.get("body", "")
+        try:
+            body = json.dumps(json.loads(body), indent=2)
+        except Exception:
+            pass
+        lines.append(f"GET /api/v1/tools -> {result.get('status')}")
+        lines.append(body[:8000])
+    except Exception as e:
+        lines.append(f"tools list fetch failed: {e}")
+
+    try:
+        path.write_text("\n".join(lines))
+        logger.info("tool creation diagnostics saved: %s", path)
+    except Exception as e:
+        logger.error("failed to write tool creation diagnostics: %s", e)
