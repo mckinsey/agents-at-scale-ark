@@ -1,6 +1,7 @@
 'use client';
 
-import { RotateCcw, SendHorizontal, Sparkles } from 'lucide-react';
+import { Maximize2, RotateCcw, SendHorizontal, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 
+import { PromptEditorDialog } from './prompt-editor-dialog';
 import { StudioChatGate } from './studio-chat-gate';
 import { type UseStudioChatReturn } from './use-studio-chat';
 
@@ -81,6 +83,7 @@ export function StudioChatPanel({
   mcpMissing,
   mcpNotReady,
 }: StudioChatPanelProps) {
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const composerDisabled = chat.composerDisabled || gated;
   const inputDisabled = chat.inputDisabled || gated;
 
@@ -161,7 +164,7 @@ export function StudioChatPanel({
             {chat.lockReason}
           </div>
         )}
-        <div className="bg-card flex items-center gap-2 border p-2">
+        <div className="bg-card flex items-end gap-2 border p-2">
           <Textarea
             data-testid="studio-chat-input"
             value={chat.input}
@@ -172,6 +175,16 @@ export function StudioChatPanel({
             placeholder="Message workflow builder agent"
             className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0"
           />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={() => setPromptEditorOpen(true)}
+            disabled={inputDisabled}
+            aria-label="Open prompt editor"
+            data-testid="studio-chat-expand">
+            <Maximize2 className="h-4 w-4" />
+          </Button>
           <Button
             type="button"
             size="icon"
@@ -206,6 +219,14 @@ export function StudioChatPanel({
           </Button>
         </div>
       </div>
+
+      <PromptEditorDialog
+        open={promptEditorOpen}
+        onOpenChange={setPromptEditorOpen}
+        value={chat.input}
+        onChange={chat.setInput}
+        disabled={inputDisabled}
+      />
     </div>
   );
 }

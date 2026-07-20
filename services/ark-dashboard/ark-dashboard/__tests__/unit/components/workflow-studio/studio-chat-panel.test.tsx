@@ -32,6 +32,24 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
+vi.mock('@/components/ui/markdown-editor', () => ({
+  MarkdownEditor: ({
+    value,
+    onChange,
+    'data-testid': dataTestId,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    'data-testid'?: string;
+  }) => (
+    <textarea
+      data-testid={dataTestId}
+      value={value}
+      onChange={event => onChange(event.target.value)}
+    />
+  ),
+}));
+
 const validYaml = [
   'apiVersion: argoproj.io/v1alpha1',
   'kind: WorkflowTemplate',
@@ -442,6 +460,44 @@ describe('StudioChatPanel', () => {
       const call = vi.mocked(chatService.startStreamChatResponse).mock.calls[0];
       expect(call[3]).toBe('argo-make-default-my-workflow');
       expect(call[4]).toBe('conv-prev');
+    });
+  });
+
+  describe('prompt editor', () => {
+    it('opens the modal editor prefilled with the composer text', () => {
+      renderPanel();
+
+      fireEvent.change(screen.getByTestId('studio-chat-input'), {
+        target: { value: 'draft prompt' },
+      });
+      fireEvent.click(screen.getByTestId('studio-chat-expand'));
+
+      expect(screen.getByTestId('prompt-editor-dialog')).toBeInTheDocument();
+      expect(screen.getByTestId('prompt-editor-input')).toHaveValue(
+        'draft prompt',
+      );
+    });
+
+    it('mirrors edits into the composer and keeps them after closing', async () => {
+      renderPanel();
+
+      fireEvent.click(screen.getByTestId('studio-chat-expand'));
+
+      fireEvent.change(screen.getByTestId('prompt-editor-input'), {
+        target: { value: 'a much longer prompt written in the modal' },
+      });
+      expect(screen.getByTestId('studio-chat-input')).toHaveValue(
+        'a much longer prompt written in the modal',
+      );
+
+      fireEvent.click(screen.getByTestId('prompt-editor-done'));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId('prompt-editor-dialog')).toBeNull(),
+      );
+      expect(screen.getByTestId('studio-chat-input')).toHaveValue(
+        'a much longer prompt written in the modal',
+      );
     });
   });
 

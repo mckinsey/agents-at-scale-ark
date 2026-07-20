@@ -353,3 +353,8 @@
 .yaml-tok-punc { color: var(--muted-foreground); }
 .yaml-tok-val { color: var(--foreground); }
 .yaml-err-line { display: inline-block; min-width: 100%; background: color-mix(in srgb, var(--destructive) 18%, transparent); text-decoration: underline wavy var(--destructive); text-underline-offset: 3px; }
+
+.md-tok-heading { color: #b794f6; }
+.md-tok-code { color: #7ee787; }
+.md-tok-link { color: #6cb6ff; }
+.md-tok-punc { color: var(--muted-foreground); }
