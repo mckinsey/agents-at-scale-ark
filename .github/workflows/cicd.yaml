@@ -1219,7 +1219,7 @@ jobs:
         if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
         run: |
           MSG=$(git log -1 --format=%s)
-          if [[ "$MSG" == release:* ]]; then
+          if [[ "$MSG" =~ ^release:\ v[0-9]+\.[0-9]+\.[0-9]+([[:space:]].*)?$ ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Custom release merge detected ('$MSG'); release-please skipped (release-on-merge.yaml handles it)."
           else

@@ -24,8 +24,9 @@ CURRENT="$(tr -d '[:space:]' < version.txt)"
 
 if [ "$CURRENT" != "$TARGET" ]; then
   # Fixed-string find, then a \Q..\E (quoted) replace across every tracked file
-  # holding the current version (except the mdx, handled separately below).
-  git grep -lF "$CURRENT" -- . ":(exclude)${MDX}" | while IFS= read -r f; do
+  # holding the current version (except the mdx, handled separately below, and
+  # the changelog, whose historical version headers are owned by release-please).
+  git grep -lF "$CURRENT" -- . ":(exclude)${MDX}" ":(exclude).github/CHANGELOG.md" | while IFS= read -r f; do
     CUR="$CURRENT" TGT="$TARGET" perl -i -pe 's/\Q$ENV{CUR}\E/$ENV{TGT}/g' "$f"
   done
 fi
