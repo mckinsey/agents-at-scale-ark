@@ -16,6 +16,9 @@ function JsonValue({ value }: { readonly value: unknown }) {
   if (value === null) {
     return <span className="text-fg-tertiary">null</span>;
   }
+  if (typeof value === 'object') {
+    return <span className="text-fg-primary">{JSON.stringify(value)}</span>;
+  }
   return <span className="text-fg-primary">{String(value)}</span>;
 }
 
@@ -52,9 +55,8 @@ function JsonTreeNode({
     ? (data as unknown[]).map((value, index) => [String(index), value])
     : Object.entries(data as Record<string, unknown>);
   const count = entries.length;
-  const summary = isArray
-    ? `[${count}]`
-    : `{ ${count} ${count === 1 ? 'key' : 'keys'} }`;
+  const keyLabel = count === 1 ? 'key' : 'keys';
+  const summary = isArray ? `[${count}]` : `{ ${count} ${keyLabel} }`;
   const isExpanded = expandedPaths.has(path);
 
   return (

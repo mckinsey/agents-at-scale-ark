@@ -130,7 +130,7 @@ export function FilesSection() {
 
   const { data: filesCount } = useGetFilesCount();
   const pageTitle =
-    filesCount !== undefined ? `Files (${filesCount})` : 'Files';
+    filesCount === undefined ? 'Files' : `Files (${filesCount})`;
 
   useEffect(() => {
     if (listFilesData && !listFilesError) {
@@ -473,21 +473,21 @@ export function FilesSection() {
                   —
                 </TableCell>
                 <TableCell size="small" className="relative z-10">
-                  <div
-                    className="flex items-center justify-center"
-                    onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label="More actions">
+                          aria-label="More actions"
+                          onClick={e => e.stopPropagation()}>
                           <MoreVert className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="end"
-                        className={MENU_CONTENT_CLASS}>
+                        className={MENU_CONTENT_CLASS}
+                        onClick={e => e.stopPropagation()}>
                         <DropdownMenuItem
                           className={MENU_ITEM_CLASS}
                           onClick={() => {
@@ -539,21 +539,21 @@ export function FilesSection() {
                   {formatDate(file.last_modified)}
                 </TableCell>
                 <TableCell size="small" className="relative z-10">
-                  <div
-                    className="flex items-center justify-center"
-                    onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label="More actions">
+                          aria-label="More actions"
+                          onClick={e => e.stopPropagation()}>
                           <MoreVert className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="end"
-                        className={MENU_CONTENT_CLASS}>
+                        className={MENU_CONTENT_CLASS}
+                        onClick={e => e.stopPropagation()}>
                         <DropdownMenuItem
                           className={MENU_ITEM_CLASS}
                           onClick={() => {

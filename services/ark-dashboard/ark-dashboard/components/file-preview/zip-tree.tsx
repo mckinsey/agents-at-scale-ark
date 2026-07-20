@@ -97,36 +97,51 @@ function TreeNodeComponent({
     }
   };
 
+  const rowContent = (
+    <>
+      {node.isDirectory ? (
+        <>
+          <IconShell size="sm">
+            {expanded ? <ChevronDown /> : <ChevronRight />}
+          </IconShell>
+          <IconShell size="sm" variant="secondary">
+            <Folder />
+          </IconShell>
+        </>
+      ) : (
+        <>
+          <div className="w-4" />
+          <IconShell size="sm" variant="secondary">
+            <InsertDriveFile />
+          </IconShell>
+        </>
+      )}
+      <span className="text-sm">{node.name}</span>
+      {!node.isDirectory && node.entry && (
+        <span className="text-fg-secondary mr-4 ml-auto text-xs">
+          {formatFileSize(node.entry.size)}
+        </span>
+      )}
+    </>
+  );
+
   return (
     <div>
-      <div
-        className="hover:bg-fill-muted flex cursor-pointer items-center gap-2 py-1"
-        style={{ paddingLeft: `${level * 20}px` }}
-        onClick={handleToggle}>
-        {node.isDirectory ? (
-          <>
-            <IconShell size="sm">
-              {expanded ? <ChevronDown /> : <ChevronRight />}
-            </IconShell>
-            <IconShell size="sm" variant="secondary">
-              <Folder />
-            </IconShell>
-          </>
-        ) : (
-          <>
-            <div className="w-4" />
-            <IconShell size="sm" variant="secondary">
-              <InsertDriveFile />
-            </IconShell>
-          </>
-        )}
-        <span className="text-sm">{node.name}</span>
-        {!node.isDirectory && node.entry && (
-          <span className="text-fg-secondary mr-4 ml-auto text-xs">
-            {formatFileSize(node.entry.size)}
-          </span>
-        )}
-      </div>
+      {node.isDirectory ? (
+        <button
+          type="button"
+          className="hover:bg-fill-muted flex w-full cursor-pointer items-center gap-2 py-1 text-left"
+          style={{ paddingLeft: `${level * 20}px` }}
+          onClick={handleToggle}>
+          {rowContent}
+        </button>
+      ) : (
+        <div
+          className="flex items-center gap-2 py-1"
+          style={{ paddingLeft: `${level * 20}px` }}>
+          {rowContent}
+        </div>
+      )}
       {node.isDirectory && expanded && (
         <div>
           {node.children.map((child, index) => (
