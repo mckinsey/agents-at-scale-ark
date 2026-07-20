@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +63,9 @@ func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts sto
 	if m.err != nil {
 		return nil, "", m.err
 	}
+	if opts.FieldSelector != "" {
+		return nil, "", fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
+	}
 	var result []runtime.Object
 	prefix := kind + "/"
 	if namespace != "" {
@@ -104,6 +108,9 @@ func (m *mockBackend) Delete(ctx context.Context, kind, namespace, name string) 
 }
 
 func (m *mockBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
+	if opts.FieldSelector != "" {
+		return nil, fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
+	}
 	return &mockWatcher{ch: make(chan watch.Event)}, nil
 }
 

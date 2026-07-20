@@ -94,6 +94,7 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 		PromptTokens:     response.Usage.PromptTokens,
 		CompletionTokens: response.Usage.CompletionTokens,
 		TotalTokens:      response.Usage.TotalTokens,
+		CachedTokens:     response.Usage.PromptTokensDetails.CachedTokens,
 	})
 
 	return response, nil

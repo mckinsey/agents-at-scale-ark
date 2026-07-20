@@ -1,5 +1,6 @@
+import json
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -126,3 +127,59 @@ def get_turn_spans(trace: dict) -> list[dict]:
 
 def get_tool_spans(trace: dict) -> list[dict]:
     return [s for s in trace.get("spans", []) if s["name"] == "tool.execution"]
+
+
+def message_role(item: dict) -> str:
+    """Role of a broker message item ({queryId, message:{role, content}})."""
+    message = item.get("message", item)
+    return message.get("role", "") if isinstance(message, dict) else ""
+
+
+def message_content(item: dict) -> str:
+    message = item.get("message", item)
+    content = message.get("content", "") if isinstance(message, dict) else ""
+    return content if isinstance(content, str) else ""
+
+
+def stream_messages_for_query(
+    query_id: str,
+    on_connected: Optional[Callable[[], None]] = None,
+    memory: str = "default",
+    timeout: int = 90,
+) -> list[dict]:
+    """Consume the broker SSE message stream for a query and return the items seen.
+
+    The ``messages`` watch is pub/sub (new items only), so ``on_connected`` is
+    invoked once the SSE connection is established — submit the query there so
+    its messages are published into the open stream. Returns as soon as an
+    assistant message with content arrives, or when ``timeout`` elapses.
+    """
+    url = f"{get_api_url()}/v1/broker/messages"
+    params = {"watch": "true", "query_id": query_id, "memory": memory}
+    collected: list[dict] = []
+    deadline = time.monotonic() + timeout
+
+    with requests.get(url, params=params, stream=True, timeout=(10, timeout)) as resp:
+        resp.raise_for_status()
+        if on_connected is not None:
+            on_connected()
+        try:
+            for raw in resp.iter_lines(decode_unicode=True):
+                if time.monotonic() > deadline:
+                    break
+                if not raw or not raw.startswith("data:"):
+                    continue
+                payload = raw[len("data:"):].strip()
+                if not payload:
+                    continue
+                try:
+                    item = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                collected.append(item)
+                if message_role(item) == "assistant" and message_content(item):
+                    break
+        except requests.exceptions.ReadTimeout:
+            pass
+
+    return collected

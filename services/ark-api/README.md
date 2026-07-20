@@ -177,6 +177,7 @@ server.
 | `ARK_API_MCP_AUTH_CACHE_TTL_SECONDS` | `600` | TTL of in-flight flow entries. After this window the cache reaps the entry; in-flight callbacks will fail with "unknown state". |
 | `ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS` | `15` | HTTP timeout for the RFC 7591 registration POST. |
 | `ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS` | `15` | HTTP timeout for the token-exchange POST. |
+| `ARK_API_DASHBOARD_URL` | _unset_ | Base URL of the dashboard, used to redirect the browser back after a dashboard-initiated flow. The redirect target is `<ARK_API_DASHBOARD_URL>/mcp`, so the value MUST include any path prefix under which the dashboard is served (e.g. `https://ark.example.com/dashboard` behind an `X-Forwarded-Prefix`). Same scheme rules as `ARK_API_PUBLIC_CALLBACK_URL` (HTTPS unless the host is a loopback literal). Required only for the dashboard redirect-completion path; the CLI flow is unaffected. When unset, dashboard flows fall back to the HTML completion page. |
 
 Air-gapped clusters can run the flow through `kubectl port-forward` by
 setting `ARK_API_PUBLIC_CALLBACK_URL=http://127.0.0.1:8080/v1/mcp/auth/callback`

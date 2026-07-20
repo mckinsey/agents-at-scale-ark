@@ -1,5 +1,6 @@
 import {KubernetesModelManifestBuilder} from './manifest-builder.js';
 import type {AzureConfig} from '../providers/azure.js';
+import type {BedrockConfig} from '../providers/bedrock.js';
 
 describe('KubernetesModelManifestBuilder', () => {
   const modelName = 'test-model';
@@ -125,6 +126,61 @@ describe('KubernetesModelManifestBuilder', () => {
           },
         },
       });
+    });
+  });
+
+  describe('Bedrock config', () => {
+    it('builds manifest with IAM credentials', () => {
+      const builder = new KubernetesModelManifestBuilder(modelName);
+      const config: BedrockConfig = {
+        type: 'bedrock',
+        modelValue: 'anthropic.claude-v2',
+        secretName: 'my-bedrock-secret',
+        region: 'us-east-1',
+        authMethod: 'iam',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secret',
+      };
+      const manifest = builder.build(config);
+      const bedrock = (manifest.spec as any).config.bedrock;
+      expect(bedrock).toMatchObject({
+        region: {value: 'us-east-1'},
+        accessKeyId: {
+          valueFrom: {
+            secretKeyRef: {name: 'my-bedrock-secret', key: 'access-key-id'},
+          },
+        },
+        secretAccessKey: {
+          valueFrom: {
+            secretKeyRef: {name: 'my-bedrock-secret', key: 'secret-access-key'},
+          },
+        },
+      });
+      expect(bedrock.apiKey).toBeUndefined();
+    });
+
+    it('builds manifest with API key', () => {
+      const builder = new KubernetesModelManifestBuilder(modelName);
+      const config: BedrockConfig = {
+        type: 'bedrock',
+        modelValue: 'anthropic.claude-v2',
+        secretName: 'my-bedrock-secret',
+        region: 'us-east-1',
+        authMethod: 'api-key',
+        apiKey: 'bedrock-key',
+      };
+      const manifest = builder.build(config);
+      const bedrock = (manifest.spec as any).config.bedrock;
+      expect(bedrock).toMatchObject({
+        region: {value: 'us-east-1'},
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {name: 'my-bedrock-secret', key: 'bedrock-api-key'},
+          },
+        },
+      });
+      expect(bedrock.accessKeyId).toBeUndefined();
+      expect(bedrock.secretAccessKey).toBeUndefined();
     });
   });
 });

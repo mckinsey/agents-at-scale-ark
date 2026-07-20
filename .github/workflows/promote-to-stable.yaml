@@ -75,6 +75,21 @@ jobs:
           mv tmp.json .github/release-please-config.json
           echo "Added release-as: $STABLE to stable config"
 
+          # Anchor changelog generation to the previous stable tag so notes cover only
+          # this cycle's delta instead of the entire commit history (issue #2655).
+          # Pick the highest non-rc tag strictly lower than v$STABLE.
+          PREV_STABLE_TAG=$( { git tag --list 'v*' | grep -vE -- '-rc' | grep -v "^v${STABLE}$"; echo "v${STABLE}"; } \
+            | sort -V \
+            | awk -v t="v${STABLE}" '$0==t{print prev; exit} {prev=$0}' )
+          if [ -n "$PREV_STABLE_TAG" ]; then
+            PREV_STABLE_SHA=$(git rev-list -n 1 "$PREV_STABLE_TAG")
+            jq --arg sha "$PREV_STABLE_SHA" '. + {"last-release-sha": $sha}' .github/release-please-config.json > tmp.json
+            mv tmp.json .github/release-please-config.json
+            echo "Added last-release-sha: $PREV_STABLE_SHA ($PREV_STABLE_TAG) to stable config"
+          else
+            echo "No previous stable tag found; skipping last-release-sha anchor"
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$MANIFEST" .github/release-please-config.json
@@ -96,6 +111,7 @@ jobs:
           ### What this PR does
           - Updates the release-please manifest from \`${{ steps.version.outputs.current }}\` to \`${{ steps.version.outputs.stable }}\`
           - Adds \`release-as\` to stable config (required because release-please ignores action input in manifest mode)
+          - Adds \`last-release-sha\` to stable config so release notes cover only this cycle's delta (issue #2655)
 
           ### What happens when merged
           - CI/CD pipeline runs on main

@@ -4,6 +4,8 @@ import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
+import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
+import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
 
 class MemorySink extends Writable {
   public readonly lines: string[] = [];
@@ -23,6 +25,8 @@ describe('request-id middleware', () => {
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
+      chunkStream: createChunkStream(config, logger),
+      eventStream: createEventStream(config, logger),
     });
 
     const res = await request(app)
@@ -41,6 +45,8 @@ describe('request-id middleware', () => {
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
+      chunkStream: createChunkStream(config, logger),
+      eventStream: createEventStream(config, logger),
     });
 
     const res = await request(app).get('/health');
@@ -60,6 +66,8 @@ describe('request-id middleware', () => {
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
+      chunkStream: createChunkStream(config, logger),
+      eventStream: createEventStream(config, logger),
     });
 
     await request(app).get('/health').set('X-Request-ID', 'log-correlation-1');

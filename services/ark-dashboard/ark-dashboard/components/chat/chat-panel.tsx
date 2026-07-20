@@ -42,6 +42,7 @@ export function ChatPanel({
     messages,
     isProcessing,
     processingPhase,
+    isWaitingForApprovalResponse,
     error,
     sendMessage,
     clearChat,
@@ -49,6 +50,7 @@ export function ChatPanel({
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
+    pollAfterApproval,
     requiredParameters,
     parameterValues,
     setParameterValue,
@@ -98,10 +100,12 @@ export function ChatPanel({
             debugMode={debugMode}
             isProcessing={isProcessing}
             processingPhase={processingPhase}
+            isWaitingForApprovalResponse={isWaitingForApprovalResponse}
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
             messageTokenUsage={messageTokenUsage}
+            pollAfterApproval={pollAfterApproval}
           />
         </div>
       </div>
@@ -187,8 +191,17 @@ export function ChatPanel({
                   <TooltipContent>
                     <div className="space-y-1 text-xs">
                       <div>
-                        Prompt: {tokenUsage.prompt_tokens.toLocaleString()}
+                        Input (new):{' '}
+                        {Math.max(
+                          0,
+                          tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
+                        ).toLocaleString()}
                       </div>
+                      {tokenUsage.cached_tokens > 0 && (
+                        <div>
+                          Cached: {tokenUsage.cached_tokens.toLocaleString()}
+                        </div>
+                      )}
                       <div>
                         Completion:{' '}
                         {tokenUsage.completion_tokens.toLocaleString()}

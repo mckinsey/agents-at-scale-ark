@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ark-query
+  labels:
+    ark.mckinsey.com/dashboard-hidden: "true"
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+    workflows.argoproj.io/title: "Ark Query"
+    workflows.argoproj.io/description: |
+      Reusable building block that submits an Ark Query and returns its
+      structured outputs. Reference from a workflow step or task with
+      templateRef: {name: ark-query, template: query}.
+spec:
+  templates:
+    - name: query
+      inputs:
+        parameters:
+          - name: target
+          - name: input
+          - name: timeout
+            value: "5m"
+          - name: ttl
+            value: ""
+          - name: parameters
+            value: "[]"
+          - name: session-id
+            value: ""
+          - name: memory
+            value: ""
+          - name: query-name
+            value: ""
+          - name: service-account
+            value: ""
+      outputs:
+        parameters:
+          - name: response
+            valueFrom:
+              path: /tmp/response.txt
+          - name: query-json
+            valueFrom:
+              path: /tmp/query.json
+          - name: phase
+            valueFrom:
+              path: /tmp/phase.txt
+          - name: conversation-id
+            valueFrom:
+              path: /tmp/conversation-id.txt
+      script:
+        image: alpine/k8s:1.28.13
+        command: [python3]
+        env:
+          - name: ARK_TARGET
+            value: {{ "{{inputs.parameters.target}}" | quote }}
+          - name: ARK_INPUT
+            value: {{ "{{inputs.parameters.input}}" | quote }}
+          - name: ARK_TIMEOUT
+            value: {{ "{{inputs.parameters.timeout}}" | quote }}
+          - name: ARK_TTL
+            value: {{ "{{inputs.parameters.ttl}}" | quote }}
+          - name: ARK_PARAMETERS
+            value: {{ "{{inputs.parameters.parameters}}" | quote }}
+          - name: ARK_SESSION_ID
+            value: {{ "{{inputs.parameters.session-id}}" | quote }}
+          - name: ARK_MEMORY
+            value: {{ "{{inputs.parameters.memory}}" | quote }}
+          - name: ARK_QUERY_NAME
+            value: {{ "{{inputs.parameters.query-name}}" | quote }}
+          - name: ARK_SERVICE_ACCOUNT
+            value: {{ "{{inputs.parameters.service-account}}" | quote }}
+          - name: ARK_WORKFLOW_NAME
+            value: {{ "{{workflow.name}}" | quote }}
+          - name: ARK_POD_NAME
+            value: {{ "{{pod.name}}" | quote }}
+        source: |
+{{ .Files.Get "files/ark-query.py" | indent 10 }}

@@ -18,6 +18,41 @@ app:
       port: "80"
       protocol: "http"
 
+  # Environment variables. Rendered by the deployment template (value or
+  # valueFrom). When AUTH_MODE=sso the landing page acts as the login hub, so the
+  # OIDC_* / AUTH_* values must be supplied (typically via valueFrom secretRef).
+  env:
+    - name: AUTH_MODE
+      value: "open"
+    - name: BASE_URL
+      value: ""
+    - name: AUTH_URL
+      value: ""
+    - name: AUTH_SECRET
+      value: ""
+    - name: OIDC_ISSUER_URL
+      value: ""
+    - name: OIDC_CLIENT_ID
+      value: ""
+    - name: OIDC_CLIENT_SECRET
+      value: ""
+    - name: OIDC_PROVIDER_NAME
+      value: ""
+    - name: OIDC_PROVIDER_ID
+      value: ""
+    # REQUIRED for the login-hub topology. The hub signs a user in on behalf of a
+    # tenant dashboard served from a DIFFERENT origin, and Auth.js only honours
+    # same-origin callback URLs unless the target origin is listed here
+    # (comma-separated). If unset it silently falls back to the hub's own origin,
+    # so post-login redirects to tenants are dropped. Example:
+    #   "https://tenant-a.example.com,https://tenant-b.example.com"
+    - name: AUTH_ALLOWED_CALLBACK_ORIGINS
+      value: ""
+    # Base origin used to derive per-tenant dashboard links when a namespace has
+    # no ark.mckinsey.com/dashboard-url annotation (e.g. "https://mydomain.com").
+    - name: NEXT_PUBLIC_ARK_DASHBOARD_URL
+      value: ""
+
   resources:
     requests:
       memory: "128Mi"
@@ -56,6 +91,16 @@ rbac:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["agents", "teams", "models"]
     verbs: ["get", "list"]
+  # Impersonate the signed-in user + run SelfSubjectAccessReview so the landing
+  # page can list only the namespaces that user (and their groups) may access.
+  # Without these the SSAR in canListAgents() 403s and every user sees an empty
+  # namespace list.
+  - apiGroups: [""]
+    resources: ["users", "groups"]
+    verbs: ["impersonate"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["selfsubjectaccessreviews"]
+    verbs: ["create"]
 
 service:
   name: ark-landing-page

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 )
@@ -222,18 +223,38 @@ func (b *kindBroadcaster) fanout(row *changeRow) {
 
 // matchesWatcher reproduces the old per-watcher SQL filters in memory: exact
 // namespace (or all-namespace when w.ns == "") plus equality label matching.
+// matchesWatcher reproduces, in memory, the SQL filters a watcher's own relist
+// would apply — namespace, label selector, and field predicates — so the shared
+// per-kind relist can fan a single row out only to the watchers it belongs to.
 func matchesWatcher(w *postgresWatcher, row *changeRow) bool {
 	if w.ns != "" && w.ns != row.ns {
 		return false
 	}
-	if len(w.labelFilter) > 0 {
-		acc, err := meta.Accessor(row.obj)
-		if err != nil {
-			return false
+	if w.labelSel == nil && len(w.fieldPreds) == 0 {
+		return true
+	}
+	acc, err := meta.Accessor(row.obj)
+	if err != nil {
+		return false
+	}
+	if w.labelSel != nil && !w.labelSel.Matches(k8slabels.Set(acc.GetLabels())) {
+		return false
+	}
+	for _, p := range w.fieldPreds {
+		var v string
+		switch p.column { // only "name"/"namespace" per supportedFieldColumns
+		case "name":
+			v = acc.GetName()
+		case "namespace":
+			v = acc.GetNamespace()
 		}
-		labels := acc.GetLabels()
-		for k, v := range w.labelFilter {
-			if labels[k] != v {
+		switch p.op { // only "=" / "<>" per supportedFieldOps
+		case "=":
+			if v != p.value {
+				return false
+			}
+		case "<>":
+			if v == p.value {
 				return false
 			}
 		}

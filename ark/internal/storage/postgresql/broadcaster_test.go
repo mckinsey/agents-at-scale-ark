@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,14 +30,20 @@ func newObj(name, uid string, labels map[string]string) *unstructured.Unstructur
 }
 
 func newFanoutWatcher(ns string, lf map[string]string, inputBuf, outBuf int) *postgresWatcher {
+	var sel k8slabels.Selector
+	if len(lf) > 0 {
+		// SelectorFromSet yields equality requirements, matching the old
+		// equality-map semantics these fan-out tests were written against.
+		sel = k8slabels.SelectorFromSet(lf)
+	}
 	return &postgresWatcher{
-		outCh:       make(chan watch.Event, outBuf),
-		inputCh:     make(chan *changeRow, inputBuf),
-		ns:          ns,
-		labelFilter: lf,
-		ctx:         context.Background(),
-		done:        make(chan struct{}),
-		seenRVs:     make(map[string]int64),
+		outCh:    make(chan watch.Event, outBuf),
+		inputCh:  make(chan *changeRow, inputBuf),
+		ns:       ns,
+		labelSel: sel,
+		ctx:      context.Background(),
+		done:     make(chan struct{}),
+		seenRVs:  make(map[string]int64),
 	}
 }
 
@@ -99,6 +106,61 @@ func TestMatchesWatcher_AccessorErrorExcludes(t *testing.T) {
 	row := &changeRow{ns: "default", obj: &noMetaObj{}}
 	if matchesWatcher(w, row) {
 		t.Error("label-filtered watcher must not match an object whose labels cannot be read")
+	}
+}
+
+func TestMatchesWatcher_SetBasedLabels(t *testing.T) {
+	t.Parallel()
+	sel, err := k8slabels.Parse("tier in (frontend, backend), env != prod")
+	if err != nil {
+		t.Fatalf("parse selector: %v", err)
+	}
+	w := newFanoutWatcher("default", nil, 1, 1)
+	w.labelSel = sel
+
+	tests := []struct {
+		name   string
+		labels map[string]string
+		want   bool
+	}{
+		{"in-set and env not prod matches", map[string]string{"tier": "frontend", "env": "dev"}, true},
+		{"in-set but env prod excluded", map[string]string{"tier": "backend", "env": "prod"}, false},
+		{"tier not in set excluded", map[string]string{"tier": "db", "env": "dev"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			row := &changeRow{ns: "default", obj: newObj("a", "u1", tc.labels)}
+			if got := matchesWatcher(w, row); got != tc.want {
+				t.Errorf("matchesWatcher = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMatchesWatcher_Fields(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		preds  []fieldPredicate
+		object *unstructured.Unstructured
+		want   bool
+	}{
+		{"name equals match", []fieldPredicate{{column: "name", op: "=", value: "a"}}, newObj("a", "u1", nil), true},
+		{"name equals mismatch", []fieldPredicate{{column: "name", op: "=", value: "a"}}, newObj("b", "u1", nil), false},
+		{"name not-equals excludes match", []fieldPredicate{{column: "name", op: "<>", value: "a"}}, newObj("a", "u1", nil), false},
+		{"name not-equals allows other", []fieldPredicate{{column: "name", op: "<>", value: "a"}}, newObj("b", "u1", nil), true},
+		{"namespace equals match", []fieldPredicate{{column: "namespace", op: "=", value: "default"}}, newObj("a", "u1", nil), true},
+		{"namespace equals mismatch", []fieldPredicate{{column: "namespace", op: "=", value: "other"}}, newObj("a", "u1", nil), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newFanoutWatcher("", nil, 1, 1)
+			w.fieldPreds = tc.preds
+			row := &changeRow{ns: tc.object.GetNamespace(), obj: tc.object}
+			if got := matchesWatcher(w, row); got != tc.want {
+				t.Errorf("matchesWatcher = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

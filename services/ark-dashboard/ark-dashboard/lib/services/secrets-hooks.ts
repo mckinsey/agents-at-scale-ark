@@ -7,6 +7,7 @@ import { secretsService } from './secrets';
 import type { Secret, SecretDetailResponse } from './secrets';
 
 export const GET_ALL_SECRETS_QUERY_KEY = 'get-all-secrets';
+export const GET_SECRET_QUERY_KEY = 'get-secret';
 export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
@@ -15,6 +16,14 @@ export const useGetAllSecrets = () => {
   return useQuery({
     queryKey: [GET_ALL_SECRETS_QUERY_KEY],
     queryFn: secretsService.getAll,
+  });
+};
+
+export const useGetSecret = (name: string | undefined) => {
+  return useQuery({
+    queryKey: [GET_SECRET_QUERY_KEY, name],
+    queryFn: () => secretsService.get(name ?? ''),
+    enabled: Boolean(name),
   });
 };
 

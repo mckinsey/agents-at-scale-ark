@@ -1,5 +1,4 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {InMemoryStream} from './stream/in-memory-stream.js';
 import type {Stream} from './stream/stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
@@ -22,20 +21,22 @@ export interface EventData {
   };
 }
 
-export class EventBroker {
-  private readonly stream: Stream<EventData>;
+export interface EventStream extends Stream<EventData> {
+  deleteByQuery(queryId: string): Promise<void>;
+}
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new InMemoryStream<EventData>(
-      logger,
-      'Event',
-      path,
-      maxItems
-    );
+export class EventBroker {
+  private readonly stream: EventStream;
+
+  constructor(stream: EventStream, _logger?: Logger) {
+    this.stream = stream;
   }
 
-  async addEvent(event: EventData): Promise<BrokerItem<EventData>> {
-    return this.stream.append(event);
+  async addEvent(
+    event: EventData,
+    ttlSeconds?: number
+  ): Promise<BrokerItem<EventData>> {
+    return this.stream.append(event, ttlSeconds);
   }
 
   async getByQuery(queryId: string): Promise<BrokerItem<EventData>[]> {
@@ -56,6 +57,10 @@ export class EventBroker {
 
   async delete(): Promise<void> {
     return this.stream.delete();
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    return this.stream.deleteByQuery(queryId);
   }
 
   subscribe(callback: (item: BrokerItem<EventData>) => void): () => void {

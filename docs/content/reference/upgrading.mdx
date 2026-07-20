@@ -21,7 +21,7 @@ Two scenarios are covered here: upgrading an existing Ark installation in place,
 To move an existing cluster to a new Ark version, reinstall with `--ark-version`:
 
 ```bash
-ark install -y --ark-version 0.2.0
+ark install -y --ark-version 0.1.65
 ```
 
 Useful flags:
@@ -34,7 +34,7 @@ Your CRD instances (agents, models, teams, tools, mcpservers, a2aservers, querie
 
 <Callout type="info">
 What is not preserved:
-- **Broker state** — `ark-broker` is an in-memory event bus by default; messages, chunks, traces, events, sessions, and any conversation history held there are wiped when the broker pod restarts. Exception: if the Postgres message backend is enabled (`backends.message: postgres`), **messages** persist across restarts — the other stores are still wiped.
+- **Broker state** — `ark-broker` is an in-memory event bus by default; messages, chunks, traces, events, sessions, and any conversation history held there are wiped when the broker pod restarts. Exceptions: if the Postgres message backend is enabled (`backends.message: postgres`), **messages** persist across restarts; if the Redis chunks backend is enabled (`backends.chunk: redis`), in-flight **chunks** survive a restart within their TTL and can be replayed by clients reconnecting from the beginning of the stream. The other stores are still wiped.
 - **In-flight query execution** — the `Query` CRD record survives, but the executor pod processing it is gone. Such queries are typically stuck and need to be cleaned up manually.
 
 Also review the version-specific sections below for manual migration steps that apply to the version you upgraded to.
@@ -64,7 +64,7 @@ Not included in the default export: `queries`, `memories`, `executionengines`, `
 #### 2. Install Ark on the destination cluster
 
 ```bash
-ark install -y --ark-version 0.2.0
+ark install -y --ark-version 0.1.65
 ```
 
 #### 3. Import the exported resources
@@ -73,21 +73,19 @@ ark install -y --ark-version 0.2.0
 ark import ark-export.yaml
 ```
 
+By default `ark import` uses `kubectl create`, which errors for any resource that already exists on the destination — so a re-run after a partial import, or an import onto a cluster that already has some of these resources, fails. Pass `--upsert` to create-or-update instead (`kubectl apply`):
+
+```bash
+ark import ark-export.yaml --upsert
+```
+
+`--upsert` is opt-in on purpose: the default keeps erroring on conflicts so a stray import can't silently overwrite resources on a shared cluster. On completion it prints a summary of how many resources were created, configured, and unchanged.
+
 <Callout type="warning">
-`ark import` uses `kubectl create`, which fails for any resource that already exists on the destination. Run it against a clean install, or delete conflicting instances first with `kubectl delete -f ark-export.yaml`.
+`--upsert` re-applies the exported YAML as-is. `ark export` captures live objects verbatim (including `metadata.resourceVersion`), so if a resource has changed on the destination since the file was written — Ark controllers bump `resourceVersion` on every status update — `kubectl apply` can reject it with a `Conflict`. Re-export immediately before importing to minimise drift. A cleaner, portable export is tracked in [#2794](https://github.com/mckinsey/agents-at-scale-ark/issues/2794).
 </Callout>
 
-## Unreleased
-
-### OpenAI-Compatible Endpoints Removed
-
-The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been removed from the ark-api service. Use the Query API (`/v1/queries/`) instead.
-
-**Migration:**
-- Replace `POST /openai/v1/chat/completions` with `POST /v1/queries/` using `type: "user"` and string `input`
-- Replace `GET /openai/v1/models` with `GET /v1/agents/`, `GET /v1/models/`, etc.
-- For streaming, create a query with the `ark.mckinsey.com/streaming-enabled: "true"` annotation and consume SSE from `/v1/broker/chunks?watch=true&query-id={name}`
-- OpenAI SDK wrappers (Python/JS) are no longer supported; use direct HTTP calls to the query API
+## v0.1.63
 
 ### Query Type "messages" Removed
 
@@ -98,21 +96,17 @@ The `type: "messages"` input mode has been removed from the Query CRD. Queries n
 - The memory service manages conversation history; the executor retrieves it via `conversationId`
 - During the deprecation period, a mutating webhook automatically converts `type: "messages"` queries to `type: "user"` with a warning
 
-## v0.2.0
+## v0.1.56
 
-### Evaluations Moved to Marketplace
+### OpenAI-Compatible Endpoints Removed
 
-`Evaluation` and `Evaluator` CRDs, controllers, webhooks, API endpoints, CLI commands, and dashboard pages have been removed from Ark core. Evaluations are now maintained as a standalone module in the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace). See [marketplace issue #129](https://github.com/mckinsey/agents-at-scale-marketplace/issues/129) for migration status.
+The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been removed from the ark-api service. Use the Query API (`/v1/queries/`) instead.
 
-**If you are using evaluations**, install the evaluator module from the marketplace after upgrading. Existing `Evaluation` and `Evaluator` resources in your cluster will remain but are no longer reconciled until the marketplace module is installed. To clean up orphaned resources instead:
-
-```bash
-kubectl delete evaluations --all -A
-kubectl delete evaluators --all -A
-kubectl delete crd evaluations.ark.mckinsey.com evaluators.ark.mckinsey.com
-```
-
-**If you are not using evaluations**, no action is needed.
+**Migration:**
+- Replace `POST /openai/v1/chat/completions` with `POST /v1/queries/` using `type: "user"` and string `input`
+- Replace `GET /openai/v1/models` with `GET /v1/agents/`, `GET /v1/models/`, etc.
+- For streaming, create a query with the `ark.mckinsey.com/streaming-enabled: "true"` annotation and consume SSE from `/v1/broker/chunks?watch=true&query-id={name}`
+- OpenAI SDK wrappers (Python/JS) are no longer supported; use direct HTTP calls to the query API
 
 ## v0.1.51
 
