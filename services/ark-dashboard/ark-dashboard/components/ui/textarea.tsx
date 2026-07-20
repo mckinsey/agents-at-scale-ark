@@ -172,7 +172,11 @@ function TextareaCounter({
 interface TextareaProps
   extends
     React.ComponentProps<'textarea'>,
-    VariantProps<typeof textareaVariants> {}
+    VariantProps<typeof textareaVariants> {
+  autoResize?: boolean;
+  maxRows?: number;
+  ref?: React.Ref<HTMLTextAreaElement>;
+}
 
 function Textarea({
   className,
@@ -181,10 +185,61 @@ function Textarea({
   value,
   defaultValue,
   onChange,
+  autoResize = false,
+  maxRows,
+  ref,
   ...props
-}: TextareaProps) {
+}: Readonly<TextareaProps>) {
   const context = React.useContext(TextareaContext);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [isOverflowing, setIsOverflowing] = React.useState(false);
+
+  const setRefs = React.useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      textareaRef.current = node;
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current =
+          node;
+      }
+    },
+    [ref],
+  );
+
+  const resize = React.useCallback(() => {
+    const el = textareaRef.current;
+    if (!el || !autoResize) return;
+
+    el.style.height = 'auto';
+
+    const styles = globalThis.getComputedStyle(el);
+    const lineHeight = Number.parseFloat(styles.lineHeight) || 20;
+    const paddingTop = Number.parseFloat(styles.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(styles.paddingBottom) || 0;
+    const borderTop = Number.parseFloat(styles.borderTopWidth) || 0;
+    const borderBottom = Number.parseFloat(styles.borderBottomWidth) || 0;
+    const verticalExtra = paddingTop + paddingBottom + borderTop + borderBottom;
+
+    // scrollHeight includes padding but not border under border-box.
+    const fullHeight = el.scrollHeight + borderTop + borderBottom;
+
+    if (maxRows) {
+      const maxHeight = lineHeight * maxRows + verticalExtra;
+      const overflow = fullHeight > maxHeight + 1;
+      el.style.height = `${Math.min(fullHeight, maxHeight)}px`;
+      el.style.overflowY = overflow ? 'auto' : 'hidden';
+      setIsOverflowing(overflow);
+    } else {
+      el.style.height = `${fullHeight}px`;
+      el.style.overflowY = 'hidden';
+      setIsOverflowing(false);
+    }
+  }, [autoResize, maxRows]);
+
+  React.useLayoutEffect(() => {
+    resize();
+  }, [resize, value]);
 
   React.useEffect(() => {
     if (context.hasRoot && textareaRef.current) {
@@ -194,6 +249,7 @@ function Textarea({
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange?.(e);
+    resize();
   };
 
   const hasCharacterLimitError =
@@ -204,11 +260,15 @@ function Textarea({
   const formInvalidProp = context.formProps?.['aria-invalid'];
   const isInvalid = formInvalidProp || hasCharacterLimitError || undefined;
 
-  return (
+  const textarea = (
     <textarea
-      ref={textareaRef}
+      ref={setRefs}
       data-slot="textarea"
-      className={cn(textareaVariants({ variant, size }), className)}
+      className={cn(
+        textareaVariants({ variant, size }),
+        autoResize && 'resize-none',
+        className,
+      )}
       value={value}
       defaultValue={defaultValue}
       onChange={handleChange}
@@ -217,6 +277,22 @@ function Textarea({
       id={context.formProps?.id}
       {...props}
     />
+  );
+
+  if (!autoResize) {
+    return textarea;
+  }
+
+  return (
+    <div className="relative w-full">
+      {textarea}
+      {isOverflowing && (
+        <div
+          aria-hidden="true"
+          className="from-surface-bg-primary pointer-events-none absolute inset-x-0 bottom-0 h-4 bg-gradient-to-t to-transparent"
+        />
+      )}
+    </div>
   );
 }
 

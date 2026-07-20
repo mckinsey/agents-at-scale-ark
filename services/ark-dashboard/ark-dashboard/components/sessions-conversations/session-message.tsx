@@ -5,7 +5,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { IconShell } from '@/components/ui/icon-shell';
 import { ChevronRight, ErrorIcon } from '@/components/icons';
 import { SmartToy } from '@/components/icons/smart-toy';
-import { Handyman } from '@/components/icons/handyman';
+import { Build } from '@/components/icons/build';
 import { type ToolCallData } from '@/components/chat/tool-call';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +46,7 @@ function ToolCallTreeItem({ toolCall }: Readonly<{ toolCall: ToolCallData }>) {
         <div className="w-8 h-5 border-l border-b border-stroke-divider -ml-3" />
         <div className="flex items-center gap-2 mt-2 -ml-3">
           <IconShell size="sm" className={cn('size-6', toolColor)}>
-            <Handyman className="size-4" />
+            <Build className="size-4" />
           </IconShell>
           <span className="text-fg-primary text-sm leading-5">{toolName}</span>
         </div>

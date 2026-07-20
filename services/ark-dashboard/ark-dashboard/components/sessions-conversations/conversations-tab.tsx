@@ -43,7 +43,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   }, []);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
-  const [showToolCalls, setShowToolCalls] = useState(false);
+  const [showToolCalls, setShowToolCalls] = useState(true);
 
   // Skip API call for new sessions before first message is sent
   const isNewSession = !!initialParticipant && !(hasSentMessage ?? false);

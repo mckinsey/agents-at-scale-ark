@@ -21,7 +21,7 @@ class SessionsPage(BasePage):
     HISTORY_TAB = "[role='tab']:has-text('History')"
     CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
     CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
-    CHAT_TEXTAREA = "input[placeholder*='Message']"
+    CHAT_TEXTAREA = "textarea[placeholder*='Message']"
     USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
     ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
