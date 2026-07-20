@@ -1,4 +1,7 @@
+import json
 import logging
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import Page
 from pages.agents_page import AgentsPage
@@ -370,7 +373,11 @@ class TestSessionsAndConversations:
 
         for i, msg in enumerate(messages):
             initial_count = sessions.get_assistant_message_count()
-            sessions.send_message_in_conversation(msg)
+            try:
+                sessions.send_message_in_conversation(msg)
+            except Exception:
+                _dump_multi_message_diagnostics(page, session_id, msg_index=i)
+                raise
             assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
                 f"Agent should respond to message {i + 1} within timeout"
 
@@ -449,3 +456,50 @@ class TestSessionsAndConversations:
                 result = agents.delete_agent_with_verification(agent_name)
                 if result["delete_available"]:
                     logger.info("Deleted agent: %s", agent_name)
+
+
+def _dump_multi_message_diagnostics(page: Page, session_id: str, msg_index: int) -> None:
+    """On composer-visibility failure in test_multi_message_conversation, capture
+    the broker's view of the session (participants field is the primary suspect)
+    and whether the textarea is actually in the DOM. Written to the screenshots
+    dir so it rides along with the ui-test-screenshots artifact in CI."""
+    screenshots_dir = getattr(page, "_screenshots_dir", Path("screenshots"))
+    path = Path(screenshots_dir) / f"test_multi_message_conversation.diagnostics.txt"
+
+    lines = [
+        f"send_message_in_conversation failed on msg index {msg_index}",
+        f"URL: {page.url}",
+        f"session_id: {session_id}",
+        "",
+    ]
+
+    try:
+        composer_count = page.locator("textarea[placeholder*='Message']").count()
+        lines.append(f"textarea[placeholder*='Message'] count in DOM: {composer_count}")
+    except Exception as e:
+        lines.append(f"composer count probe failed: {e}")
+    lines.append("")
+
+    try:
+        result = page.evaluate(
+            """async (id) => {
+                const r = await fetch(`/api/v1/broker/sessions/${id}`);
+                return { status: r.status, body: await r.text() };
+            }""",
+            session_id,
+        )
+        body = result.get("body", "")
+        try:
+            body = json.dumps(json.loads(body), indent=2)
+        except Exception:
+            pass
+        lines.append(f"GET /api/v1/broker/sessions/{session_id} -> {result.get('status')}")
+        lines.append(body[:16000])
+    except Exception as e:
+        lines.append(f"broker session fetch failed: {e}")
+
+    try:
+        path.write_text("\n".join(lines))
+        logger.info("multi-message diagnostics saved: %s", path)
+    except Exception as e:
+        logger.error("failed to write multi-message diagnostics: %s", e)
