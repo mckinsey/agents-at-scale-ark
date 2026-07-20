@@ -29,7 +29,6 @@ function findFencedBlocks(message: string): FencedBlock[] {
 function parseMapping(text: string): {
   valid: boolean;
   error?: string;
-  value?: Record<string, unknown>;
 } {
   let parsed: unknown;
   try {
@@ -43,7 +42,7 @@ function parseMapping(text: string): {
     return { valid: false, error: 'YAML content is not a mapping' };
   }
 
-  return { valid: true, value: parsed as Record<string, unknown> };
+  return { valid: true };
 }
 
 export function extractWorkflowYaml(message: string): ExtractResult {
@@ -60,29 +59,18 @@ export function extractWorkflowYaml(message: string): ExtractResult {
     block => block.lang === 'yaml' || block.lang === 'yml',
   );
 
-  if (yamlBlocks.length > 0) {
-    const block = yamlBlocks[yamlBlocks.length - 1];
-    const result = parseMapping(block.content);
-    if (!result.valid) {
-      return {
-        ok: false,
-        reason: 'invalid',
-        error: result.error ?? 'Invalid YAML',
-      };
-    }
-    return { ok: true, yaml: block.content };
-  }
-
-  const genericBlocks = blocks.filter(block => block.lang === '');
-  if (genericBlocks.length === 0) {
+  if (yamlBlocks.length === 0) {
     return { ok: false, reason: 'none' };
   }
 
-  const lastBlock = genericBlocks[genericBlocks.length - 1];
-  const result = parseMapping(lastBlock.content);
-  if (result.valid && result.value && 'kind' in result.value) {
-    return { ok: true, yaml: lastBlock.content };
+  const block = yamlBlocks[yamlBlocks.length - 1];
+  const result = parseMapping(block.content);
+  if (!result.valid) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      error: result.error ?? 'Invalid YAML',
+    };
   }
-
-  return { ok: false, reason: 'none' };
+  return { ok: true, yaml: block.content };
 }

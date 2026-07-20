@@ -93,7 +93,7 @@ describe('extractWorkflowYaml', () => {
     }
   });
 
-  it('should fall back to a generic fence that parses as a mapping with kind', () => {
+  it('should return none for a generic fence even when it parses as a mapping with kind', () => {
     const message = [
       'No language tag here:',
       '```',
@@ -105,14 +105,28 @@ describe('extractWorkflowYaml', () => {
 
     const result = extractWorkflowYaml(message);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.yaml).toContain('name: generic');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('none');
     }
   });
 
   it('should return none for a generic fence without a kind mapping', () => {
     const message = ['```', 'just some text', 'no kind here', '```'].join('\n');
+
+    const result = extractWorkflowYaml(message);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('none');
+    }
+  });
+
+  it('should return none when a reply quotes prose only, leaving the template untouched', () => {
+    const message = [
+      'I looked at the current template and it already does what you asked,',
+      'so I am not changing anything.',
+    ].join('\n');
 
     const result = extractWorkflowYaml(message);
 

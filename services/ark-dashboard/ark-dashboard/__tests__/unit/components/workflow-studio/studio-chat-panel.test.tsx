@@ -333,6 +333,23 @@ describe('StudioChatPanel', () => {
       expect(commitSpy).not.toHaveBeenCalled();
     });
 
+    it('does not commit when the reply quotes the template in an untagged fence', async () => {
+      mockStream(() => [
+        contentChunk('The template already covers this:\n\n```\n'),
+        contentChunk(`${validYaml}\n\`\`\`\n\nNo changes needed.`),
+        finalChunk(),
+      ]);
+      const { commitSpy } = renderPanel({
+        draft: validYaml,
+        lastAgent: validYaml,
+      });
+
+      typeAndSend('does this already validate input?');
+
+      await waitForTurnComplete();
+      expect(commitSpy).not.toHaveBeenCalled();
+    });
+
     it('surfaces an error and keeps the draft when yaml is invalid', async () => {
       mockStream(() => [
         contentChunk('```yaml\nfoo: bar: baz\n```\n'),
