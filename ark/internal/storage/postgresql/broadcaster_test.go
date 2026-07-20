@@ -15,11 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-func newObj(ns, name, uid string, labels map[string]string) *unstructured.Unstructured {
+func newObj(name, uid string, labels map[string]string) *unstructured.Unstructured {
 	o := &unstructured.Unstructured{}
 	o.SetAPIVersion("ark.mckinsey.com/v1alpha1")
 	o.SetKind("Agent")
-	o.SetNamespace(ns)
+	o.SetNamespace("default")
 	o.SetName(name)
 	o.SetUID(types.UID(uid))
 	if labels != nil {
@@ -43,11 +43,11 @@ func newFanoutWatcher(ns string, lf map[string]string, inputBuf, outBuf int) *po
 type noMetaObj struct{}
 
 func (n *noMetaObj) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
-func (n *noMetaObj) DeepCopyObject() runtime.Object    { return &noMetaObj{} }
+func (n *noMetaObj) DeepCopyObject() runtime.Object   { return &noMetaObj{} }
 
 func TestMatchesWatcher_Namespace(t *testing.T) {
 	t.Parallel()
-	row := &changeRow{ns: "default", obj: newObj("default", "a", "u1", nil)}
+	row := &changeRow{ns: "default", obj: newObj("a", "u1", nil)}
 
 	tests := []struct {
 		name    string
@@ -85,7 +85,7 @@ func TestMatchesWatcher_Labels(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newFanoutWatcher("default", tc.filter, 1, 1)
-			row := &changeRow{ns: "default", obj: newObj("default", "a", "u1", tc.labels)}
+			row := &changeRow{ns: "default", obj: newObj("a", "u1", tc.labels)}
 			if got := matchesWatcher(w, row); got != tc.want {
 				t.Errorf("matchesWatcher = %v, want %v", got, tc.want)
 			}
@@ -112,19 +112,19 @@ func TestForwardRow_EventTypes(t *testing.T) {
 	}{
 		{
 			name:     "first sighting of uid -> Added",
-			row:      &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("default", "a", "u1", nil)},
+			row:      &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("a", "u1", nil)},
 			wantType: watch.Added,
 		},
 		{
 			name:     "already-seen uid -> Modified",
 			preseed:  map[string]int64{"u1": 5},
-			row:      &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("default", "a", "u1", nil)},
+			row:      &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("a", "u1", nil)},
 			wantType: watch.Modified,
 		},
 		{
 			name:     "deletion -> Deleted",
 			preseed:  map[string]int64{"u1": 5},
-			row:      &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("default", "a", "u1", nil), deleted: true},
+			row:      &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("a", "u1", nil), deleted: true},
 			wantType: watch.Deleted,
 		},
 	}
@@ -157,7 +157,7 @@ func TestForwardRow_DedupSkipsAlreadyEmitted(t *testing.T) {
 	w := newFanoutWatcher("default", nil, 1, 1)
 	w.seenRVs["u1"] = 10
 
-	if !w.forwardRow(&changeRow{rv: 10, uid: "u1", obj: newObj("default", "a", "u1", nil)}) {
+	if !w.forwardRow(&changeRow{rv: 10, uid: "u1", obj: newObj("a", "u1", nil)}) {
 		t.Fatal("forwardRow should return true for a deduped row")
 	}
 	select {
@@ -170,7 +170,7 @@ func TestForwardRow_DedupSkipsAlreadyEmitted(t *testing.T) {
 func TestForwardRow_DeepCopiesSharedObject(t *testing.T) {
 	t.Parallel()
 	w := newFanoutWatcher("default", nil, 1, 1)
-	shared := newObj("default", "a", "u1", map[string]string{"app": "foo"})
+	shared := newObj("a", "u1", map[string]string{"app": "foo"})
 
 	if !w.forwardRow(&changeRow{rv: 10, uid: "u1", ns: "default", obj: shared}) {
 		t.Fatal("forwardRow returned false unexpectedly")
@@ -195,7 +195,7 @@ func TestForwardRow_ReturnsFalseWhenShuttingDown(t *testing.T) {
 	}
 	close(w.done)
 
-	if w.forwardRow(&changeRow{rv: 1, uid: "u1", obj: newObj("default", "a", "u1", nil)}) {
+	if w.forwardRow(&changeRow{rv: 1, uid: "u1", obj: newObj("a", "u1", nil)}) {
 		t.Error("forwardRow should return false when the watcher is shutting down")
 	}
 }
@@ -212,7 +212,7 @@ func TestForwardRow_ReturnsFalseWhenContextCancelled(t *testing.T) {
 		done:    make(chan struct{}),
 		seenRVs: make(map[string]int64),
 	}
-	if w.forwardRow(&changeRow{rv: 1, uid: "u1", obj: newObj("default", "a", "u1", nil)}) {
+	if w.forwardRow(&changeRow{rv: 1, uid: "u1", obj: newObj("a", "u1", nil)}) {
 		t.Error("forwardRow should return false when the watcher context is cancelled")
 	}
 }
@@ -230,7 +230,7 @@ func TestFanout_RoutesOnlyToMatchingSubscribers(t *testing.T) {
 		b.subscribe(w)
 	}
 
-	b.fanout(&changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("default", "a", "u1", map[string]string{"app": "bar"})})
+	b.fanout(&changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("a", "u1", map[string]string{"app": "bar"})})
 
 	assertGotRow := func(name string, w *postgresWatcher, want bool) {
 		select {
@@ -258,8 +258,8 @@ func TestFanout_FullBufferMarksBehindAndDrops(t *testing.T) {
 	w := newFanoutWatcher("default", nil, 1, 1)
 	b.subscribe(w)
 
-	first := &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("default", "a", "u1", nil)}
-	second := &changeRow{rv: 11, uid: "u2", ns: "default", obj: newObj("default", "b", "u2", nil)}
+	first := &changeRow{rv: 10, uid: "u1", ns: "default", obj: newObj("a", "u1", nil)}
+	second := &changeRow{rv: 11, uid: "u2", ns: "default", obj: newObj("b", "u2", nil)}
 
 	b.fanout(first)
 	if w.behind.Load() {
