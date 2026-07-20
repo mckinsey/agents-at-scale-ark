@@ -206,6 +206,7 @@ GET    /events
 GET    /events/{queryId}
 POST   /events
 DELETE /events
+DELETE /events/{queryId}
 ```
 
 | Parameter | Description |
@@ -264,6 +265,6 @@ curl "http://localhost:8080/sessions?limit=10&status=active"
 | Conversations | `GET`/`POST`/`DELETE` `/conversations`, `GET`/`DELETE` `/conversations/{id}`, `DELETE /queries/{queryId}/messages`, `DELETE /conversations/{id}/queries/{queryId}/messages` |
 | Chunks | `GET`/`DELETE` `/stream`, `GET /stream/{query_name}`, `POST /stream/{query_id}`, `POST /stream/{query_id}/complete` |
 | Traces | `POST /v1/traces` (OTLP), `GET`/`DELETE` `/traces`, `GET /traces/{traceId}` |
-| Events | `GET`/`POST`/`DELETE` `/events`, `GET /events/{queryId}` |
+| Events | `GET`/`POST`/`DELETE` `/events`, `GET`/`DELETE` `/events/{queryId}` |
 | Sessions | `GET`/`POST`/`DELETE` `/sessions`, `GET /sessions/{sessionId}` |
 | Health | `GET /health` (liveness), `GET /readyz` (readiness) |

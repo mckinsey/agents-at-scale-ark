@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/sonner';
 
-import { Handyman } from '@/components/icons';
+import { Build } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
   ResourceEmptyState,
@@ -160,7 +160,7 @@ export function ToolsSection() {
   } else if (isEmpty) {
     body = (
       <ResourceEmptyState
-        icon={<Handyman className="size-full" />}
+        icon={<Build className="size-full" />}
         title="No tools yet"
         description={
           <>
@@ -207,7 +207,7 @@ export function ToolsSection() {
 
         {filteredTools.length === 0 ? (
           <ResourceNoResults
-            icon={<Handyman className="size-full" />}
+            icon={<Build className="size-full" />}
             message="No tools match your search."
           />
         ) : (
@@ -229,7 +229,7 @@ export function ToolsSection() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1">
             <IconShell size="default" variant="primary">
-              <Handyman className="size-full" />
+              <Build className="size-full" />
             </IconShell>
             <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
               Tools

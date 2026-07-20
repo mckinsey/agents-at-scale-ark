@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import {
   ChevronRight,
   ErrorIcon,
-  Handyman,
+  Build,
   Trash,
 } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -180,7 +180,7 @@ export function ToolSelectionSection({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <IconShell size="sm" variant="secondary">
-          <Handyman />
+          <Build />
         </IconShell>
         <h3 className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
           Tools

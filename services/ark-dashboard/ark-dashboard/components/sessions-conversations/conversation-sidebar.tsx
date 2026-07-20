@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { ChatBubble, Handyman, Schedule } from '@/components/icons';
+import { ChatBubble, Build, Schedule } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { Conversation } from '@/lib/services/conversations';
@@ -93,7 +93,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
                 </span>
                 <span className="flex justify-start items-center gap-1">
                   <IconShell size="sm" variant="secondary">
-                    <Handyman />
+                    <Build />
                   </IconShell>
                   <span className="text-xs font-normal leading-4 text-fg-primary line-clamp-1">
                     {conv.toolCallCount}

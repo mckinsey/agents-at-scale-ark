@@ -379,7 +379,7 @@ describe('BedrockConfigCollector', () => {
     it('collects full API-key configuration through interactive prompts', async () => {
       mockInquirer.prompt.mockResolvedValueOnce({region: 'eu-west-1'});
       mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'api-key'});
-      mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'bedrock-key-123'});
+      mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'bedrock-key-123'}); // gitleaks:allow
       mockInquirer.prompt.mockResolvedValueOnce({modelArn: ''});
 
       const options = {
@@ -394,7 +394,7 @@ describe('BedrockConfigCollector', () => {
         secretName: '',
         region: 'eu-west-1',
         authMethod: 'api-key',
-        apiKey: 'bedrock-key-123',
+        apiKey: 'bedrock-key-123', // gitleaks:allow
         accessKeyId: undefined,
         secretAccessKey: undefined,
         sessionToken: undefined,

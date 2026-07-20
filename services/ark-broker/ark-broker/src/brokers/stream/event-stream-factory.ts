@@ -1,8 +1,8 @@
 import type {AppConfig} from '@ark-broker/config/index.js';
 import type {Db} from '@ark-broker/db/db.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
-import type {EventData, EventStream} from '../event-broker.js';
-import {InMemoryStream} from './in-memory-stream.js';
+import type {EventStream} from '../event-broker.js';
+import {InMemoryEventStream} from './in-memory-event-stream.js';
 import {PostgresEventStream} from './postgres-event-stream.js';
 
 export function createEventStream(
@@ -17,7 +17,7 @@ export function createEventStream(
       config.backends.eventVisibilityTtlSeconds
     );
   }
-  return new InMemoryStream<EventData>(
+  return new InMemoryEventStream(
     logger.child({broker: 'memory-events'}),
     'Event',
     config.persistence.eventFilePath,

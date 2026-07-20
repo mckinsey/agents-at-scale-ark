@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { ChevronDown, ChevronRight, Handyman } from '@/components/icons';
+import { ChevronDown, ChevronRight, Build } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { cn } from '@/lib/utils';
 
@@ -96,7 +96,7 @@ function TreeVariant({
       <div className={cn('absolute left-0 top-[18px] h-px w-4', lineColor)}></div>
       <div className="flex items-center gap-2 py-1.5 pl-2">
         <IconShell size="sm" className="text-viz-categorical-08">
-          <Handyman />
+          <Build />
         </IconShell>
         <span className="text-fg-primary font-medium">
           {toolCall.function.name}
@@ -161,7 +161,7 @@ function CardVariant({
       )}>
       <div className="flex items-center gap-2 px-2 py-1.5">
         <IconShell size="sm" className="text-viz-categorical-08">
-          <Handyman />
+          <Build />
         </IconShell>
         <span className="text-fg-primary font-medium">
           {toolCall.function.name}

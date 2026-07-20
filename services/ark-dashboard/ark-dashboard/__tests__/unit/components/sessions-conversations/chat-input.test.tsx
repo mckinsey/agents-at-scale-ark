@@ -51,68 +51,34 @@ describe('ChatInput', () => {
   });
 
   describe('Workflow conversations with tool calls', () => {
-    it('should render tool toggle UI when workflow has tool calls', () => {
-      const workflowConversation: Conversation = {
-        conversationId: 'conv-1',
-        name: 'Multi-agent workflow',
-        participants: ['agent-1', 'agent-2'], // Multiple participants = workflow
-        messageCount: 10,
-        toolCallCount: 5, // Has tool calls
-        duration: '5m',
-        startTime: '2024-01-01T00:00:00Z',
-        participantType: 'agent',
-        errorCount: 0,
-      };
+    const workflowConversation: Conversation = {
+      conversationId: 'conv-1',
+      name: 'Multi-agent workflow',
+      participants: ['agent-1', 'agent-2'], // Multiple participants = workflow
+      messageCount: 10,
+      toolCallCount: 5,
+      duration: '5m',
+      startTime: '2024-01-01T00:00:00Z',
+      participantType: 'agent',
+      errorCount: 0,
+    };
 
+    it('should render the tool-calls toggle and a disabled input for workflows', () => {
       render(<ChatInput {...baseProps} conversation={workflowConversation} />);
 
-      // Should render tool toggle switch
-      expect(screen.getByRole('switch')).toBeInTheDocument();
+      // Tool-calls toggle button (replaces the old switch + "Show tool calls" label)
+      expect(
+        screen.getByRole('button', { name: /tool calls/i }),
+      ).toBeInTheDocument();
 
-      // Should show tool call count badge
-      expect(screen.getByText('5')).toBeInTheDocument();
-
-      // Should show "Show tool calls" label
-      expect(screen.getByText('Show tool calls')).toBeInTheDocument();
-
-      // Chat input should render but be disabled for workflow conversations
+      // Chat input renders but is disabled for workflow conversations
       const input = screen.getByRole('textbox');
       expect(input).toBeInTheDocument();
       expect(input).toBeDisabled();
       expect(screen.getByPlaceholderText('Message agent-1')).toBeDisabled();
     });
 
-    it('should render tool toggle with correct count for different toolCallCount values', () => {
-      const workflowConversation: Conversation = {
-        conversationId: 'conv-1',
-        name: 'Workflow',
-        participants: ['agent-1', 'agent-2'],
-        messageCount: 10,
-        toolCallCount: 42,
-        duration: '5m',
-        startTime: '2024-01-01T00:00:00Z',
-        participantType: 'agent',
-        errorCount: 0,
-      };
-
-      render(<ChatInput {...baseProps} conversation={workflowConversation} />);
-
-      expect(screen.getByText('42')).toBeInTheDocument();
-    });
-
-    it('should pass showToolCalls prop to Switch component', () => {
-      const workflowConversation: Conversation = {
-        conversationId: 'conv-1',
-        name: 'Workflow',
-        participants: ['agent-1', 'agent-2'],
-        messageCount: 10,
-        toolCallCount: 3,
-        duration: '5m',
-        startTime: '2024-01-01T00:00:00Z',
-        participantType: 'agent',
-        errorCount: 0,
-      };
-
+    it('should reflect the showToolCalls state on the toggle', () => {
       const { rerender } = render(
         <ChatInput
           {...baseProps}
@@ -121,8 +87,9 @@ describe('ChatInput', () => {
         />,
       );
 
-      const switchElement = screen.getByRole('switch');
-      expect(switchElement).not.toBeChecked();
+      expect(
+        screen.getByRole('button', { name: 'Activate tool calls' }),
+      ).toHaveAttribute('aria-pressed', 'false');
 
       rerender(
         <ChatInput
@@ -132,22 +99,13 @@ describe('ChatInput', () => {
         />,
       );
 
-      expect(switchElement).toBeChecked();
+      expect(
+        screen.getByRole('button', { name: 'Disable tool calls' }),
+      ).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('should call onShowToolCallsChange when switch is toggled', async () => {
+    it('should call onShowToolCallsChange when the toggle is clicked', async () => {
       const user = userEvent.setup();
-      const workflowConversation: Conversation = {
-        conversationId: 'conv-1',
-        name: 'Workflow',
-        participants: ['agent-1', 'agent-2'],
-        messageCount: 10,
-        toolCallCount: 5,
-        duration: '5m',
-        startTime: '2024-01-01T00:00:00Z',
-        participantType: 'agent',
-        errorCount: 0,
-      };
 
       render(
         <ChatInput
@@ -157,8 +115,9 @@ describe('ChatInput', () => {
         />,
       );
 
-      const switchElement = screen.getByRole('switch');
-      await user.click(switchElement);
+      await user.click(
+        screen.getByRole('button', { name: 'Activate tool calls' }),
+      );
 
       expect(mockOnShowToolCallsChange).toHaveBeenCalledWith(true);
     });
@@ -186,7 +145,7 @@ describe('ChatInput', () => {
       expect(container.firstChild).not.toBeNull();
 
       // Tool toggle should still be present (allows toggling even with no tools)
-      expect(screen.getByRole('switch')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /tool calls/i })).toBeInTheDocument();
 
       // Chat input should be disabled for workflow conversations
       const input = screen.getByRole('textbox');
@@ -221,7 +180,7 @@ describe('ChatInput', () => {
       expect(screen.getByRole('textbox')).toBeDisabled();
 
       // Tool toggle should be present
-      expect(screen.getByRole('switch')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /tool calls/i })).toBeInTheDocument();
     });
   });
 
@@ -251,11 +210,10 @@ describe('ChatInput', () => {
       const sendButton = screen.getByRole('button', { name: 'Send message' });
       expect(sendButton).toBeInTheDocument();
 
-      // Should render tool toggle
-      expect(screen.getByText('Show tool calls')).toBeInTheDocument();
-
-      // Should not render tool count badge when toolCallCount is 0
-      expect(screen.queryByText('0')).not.toBeInTheDocument();
+      // Should render the tool-calls toggle
+      expect(
+        screen.getByRole('button', { name: /tool calls/i }),
+      ).toBeInTheDocument();
     });
 
     it('should render regular chat input even if conversation has tool calls (non-workflow)', () => {
@@ -276,9 +234,10 @@ describe('ChatInput', () => {
       // Should render regular chat input
       expect(screen.getByRole('textbox')).toBeInTheDocument();
 
-      // Should also render tool toggle at bottom (existing feature for regular conversations)
-      expect(screen.getByText('Show tool calls')).toBeInTheDocument();
-      expect(screen.getByText('10')).toBeInTheDocument();
+      // Should also render the tool-calls toggle
+      expect(
+        screen.getByRole('button', { name: /tool calls/i }),
+      ).toBeInTheDocument();
     });
 
     it('should handle null conversation gracefully', () => {

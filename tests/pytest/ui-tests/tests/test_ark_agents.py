@@ -75,7 +75,7 @@ class TestArkAgents:
         agents.open_agent_chat(agent_name)
 
         chat_window = page.locator(agents.CHAT_WINDOW)
-        chat_input = chat_window.locator("input")
+        chat_input = chat_window.locator("textarea")
         chat_input.fill(message)
         chat_input.press("Enter")
         # Use the input placeholder text to determine when the agent response is done processing

@@ -50,7 +50,7 @@ func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
 				namespaces = append(namespaces, ep.Namespace)
 			}
 			log.Info("broker endpoints discovered, using broker for operation events", "count", len(endpoints), "namespaces", namespaces)
-			operationEmitter = brokereventing.NewBrokerEventEmitter(endpoints)
+			operationEmitter = brokereventing.NewBrokerEventEmitter(k8sClient)
 		default:
 			log.Info("no broker endpoints found, using Kubernetes events for operations")
 		}
@@ -84,7 +84,7 @@ func NewProviderWithClient(ctx context.Context, k8sClient client.Client) *Provid
 				namespaces = append(namespaces, ep.Namespace)
 			}
 			log.Info("broker endpoints discovered, using broker for operation events", "count", len(endpoints), "namespaces", namespaces)
-			operationEmitter = brokereventing.NewBrokerEventEmitter(endpoints)
+			operationEmitter = brokereventing.NewBrokerEventEmitter(k8sClient)
 		default:
 			log.Info("no broker endpoints found, using noop emitter for operations")
 		}

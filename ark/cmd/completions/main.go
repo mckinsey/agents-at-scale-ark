@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Required for cloud provider auth plugins
 
@@ -37,11 +39,32 @@ func init() {
 	utilruntime.Must(arkv1prealpha1.AddToScheme(scheme))
 }
 
+// serverConfigFromEnv assembles the completions ServerConfig from environment variables.
+// Extracted from main so the Redis wiring and task-expiry parsing are unit-testable.
+func serverConfigFromEnv(addr string) completions.ServerConfig {
+	var taskExpiry time.Duration
+	if raw := os.Getenv("REDIS_TASK_EXPIRY_SECONDS"); raw != "" {
+		if secs, parseErr := strconv.Atoi(raw); parseErr == nil && secs > 0 {
+			taskExpiry = time.Duration(secs) * time.Second
+		}
+	}
+	return completions.ServerConfig{
+		Addr:            addr,
+		RedisURL:        os.Getenv("REDIS_URL"),
+		RedisPassword:   os.Getenv("REDIS_PASSWORD"),
+		RedisCACertPath: os.Getenv("REDIS_TLS_CA_CERT_PATH"),
+		TaskExpiry:      taskExpiry,
+	}
+}
+
 func main() {
 	var addr string
 	var showVersion bool
+	var shutdownTimeout time.Duration
 	flag.StringVar(&addr, "addr", ":9090", "Address to listen on")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 55*time.Second,
+		"Max time to drain in-flight requests on shutdown; keep below the pod's terminationGracePeriodSeconds")
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -67,7 +90,7 @@ func main() {
 	telemetryProvider := telemetryconfig.NewProvider(ctx, k8sClient)
 	eventingProvider := eventingconfig.NewProviderWithClient(ctx, k8sClient)
 
-	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, addr)
+	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, serverConfigFromEnv(addr))
 	if err != nil {
 		log.Error(err, "failed to create completions engine server")
 		if shutdownErr := telemetryProvider.Shutdown(); shutdownErr != nil {
@@ -97,8 +120,12 @@ func main() {
 			cancel()
 		}
 	case <-ctx.Done():
-		log.Info("shutting down")
-		if err := srv.Stop(context.Background()); err != nil {
+		log.Info("shutting down", "timeout", shutdownTimeout)
+		// Fail readiness immediately so the pod leaves Service endpoints before draining.
+		srv.SetNotReady()
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancelShutdown()
+		if err := srv.Stop(shutdownCtx); err != nil {
 			log.Error(err, "shutdown error")
 		}
 	}

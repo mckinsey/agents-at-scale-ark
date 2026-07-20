@@ -3,6 +3,7 @@ import re
 import time
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -20,7 +21,7 @@ class SessionsPage(BasePage):
     HISTORY_TAB = "[role='tab']:has-text('History')"
     CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
     CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
-    CHAT_TEXTAREA = "input[placeholder*='Message']"
+    CHAT_TEXTAREA = "textarea[placeholder*='Message']"
     USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
     ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
@@ -145,6 +146,7 @@ class SessionsPage(BasePage):
         initial_count = self.get_user_message_count()
         textarea = self.page.locator(self.CHAT_TEXTAREA).first
         textarea.wait_for(state="visible", timeout=10000)
+        expect(textarea).to_be_enabled(timeout=120000)
         textarea.click()
         textarea.fill(message)
         textarea.press("Enter")
@@ -161,6 +163,12 @@ class SessionsPage(BasePage):
                 count = self.page.locator(self.ASSISTANT_MESSAGE).count()
                 if count > initial_count:
                     self.page.wait_for_timeout(500)
+                    remaining_ms = max(1000, int((timeout_s - (time.time() - start)) * 1000))
+                    textarea = self.page.locator(self.CHAT_TEXTAREA).first
+                    try:
+                        expect(textarea).to_be_enabled(timeout=remaining_ms)
+                    except (AssertionError, PlaywrightTimeoutError):
+                        pass
                     return True
             except Exception:
                 pass

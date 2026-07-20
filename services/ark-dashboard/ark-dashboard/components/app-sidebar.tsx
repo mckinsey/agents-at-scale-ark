@@ -1,7 +1,6 @@
 'use client';
 
 import { useAtomValue, useSetAtom } from 'jotai';
-import { ChevronDown, ChevronRight, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -14,15 +13,18 @@ import {
 import {
   AccountTree,
   Bedtime,
+  ChevronDown,
+  ChevronRight,
   Dashboard,
   Database,
   Earthquake,
-  Handyman,
+  Build,
   Help,
   InsertDriveFile,
   KeyboardDoubleArrowLeft,
   KeyboardDoubleArrowRight,
   LightMode,
+  Logout,
   Memory,
   PlaylistAddCheck,
   PlugConnect,
@@ -361,7 +363,7 @@ export function AppSidebar() {
                   onClick={() => navigateToSection('tools')}
                   isActive={getCurrentSection() === 'tools'}
                   tooltip="Tools">
-                  <Handyman />
+                  <Build />
                   <span>Tools</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -558,7 +560,7 @@ export function AppSidebar() {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={signout}>
-                      <LogOut />
+                      <Logout className="size-4" />
                       <span>Sign out</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>

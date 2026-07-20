@@ -1,11 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Trash } from '@/components/icons';
+import {
+  Autorenew,
+  Logout,
+  MoreVert,
+  Trash,
+  Warning,
+} from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
-import { IconActionButton } from '@/components/ui/icon-action-button';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { IconShell } from '@/components/ui/icon-shell';
+import { toast } from '@/components/ui/sonner';
 import {
   Table,
   TableBody,
@@ -14,9 +28,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useMcpAuthCompletion } from '@/lib/hooks/use-mcp-auth-completion';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServer } from '@/lib/services/mcp-servers';
+import {
+  useLogoutMcpAuth,
+  useStartMcpAuth,
+} from '@/lib/services/mcp-servers-hooks';
 import { cn } from '@/lib/utils';
+import { formatExpiry, isNearExpiry } from '@/lib/utils/mcp-auth';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { OriginCell, OriginColumnHeader } from './origin-column';
@@ -24,30 +49,44 @@ import { OriginCell, OriginColumnHeader } from './origin-column';
 interface McpServersTableProps {
   readonly servers: readonly MCPServer[];
   readonly onDelete: (id: string) => void;
+  readonly onAuthChanged?: () => void;
 }
 
-const STATUS_CONFIG = {
+// Fallback status for servers without an MCP authorization block (non-OAuth).
+const AVAILABILITY_CONFIG = {
   True: { label: 'Active', dotClass: 'bg-status-success' },
   False: { label: 'Error', dotClass: 'bg-status-error' },
   Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
 } as const;
 
+// Maps backend MCP authorization.state to the Status column labels + dot colors.
+const AUTH_STATUS_CONFIG: Record<
+  string,
+  { label: string; dotClass: string }
+> = {
+  Authorized: { label: 'Authorized', dotClass: 'bg-status-success' },
+  Required: { label: 'Unauthenticated', dotClass: 'bg-status-error' },
+  DiscoveryFailed: { label: 'Error', dotClass: 'bg-status-error' },
+};
+
 const COL = {
   name: 'w-[260px]',
+  address: 'w-[320px]',
   transport: 'w-[160px]',
   tools: 'w-[100px]',
-  status: 'w-[120px]',
+  expires: 'w-[200px]',
+  status: 'w-[180px]',
   action: 'w-[72px]',
 };
 
 const rowHoverOverlayClass =
   'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
-function McpServerStatus({
-  status,
-}: Readonly<{ status?: MCPServer['available'] | null }>) {
-  const value = status ?? 'Unknown';
-  const config = STATUS_CONFIG[value];
+function McpServerStatus({ server }: Readonly<{ server: MCPServer }>) {
+  const authState = server.authorization?.state;
+  const authConfig = authState ? AUTH_STATUS_CONFIG[authState] : undefined;
+  const config =
+    authConfig ?? AVAILABILITY_CONFIG[server.available ?? 'Unknown'];
   return (
     <span className="inline-flex items-center gap-2">
       <span className={cn('size-2 rounded-full', config.dotClass)} />
@@ -58,17 +97,153 @@ function McpServerStatus({
   );
 }
 
+function McpServerExpires({ server }: Readonly<{ server: MCPServer }>) {
+  const authorization = server.authorization;
+  if (authorization?.state !== 'Authorized' || !authorization.expiresAt) {
+    return <span className="text-fg-primary">—</span>;
+  }
+  const nearExpiry = isNearExpiry(authorization.expiresAt);
+  return (
+    <span className="text-fg-primary inline-flex items-center gap-1.5">
+      {nearExpiry && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Warning className="text-status-warning size-4 shrink-0" />
+          </TooltipTrigger>
+          <TooltipContent>Expiring soon</TooltipContent>
+        </Tooltip>
+      )}
+      <span className="truncate">{formatExpiry(authorization.expiresAt)}</span>
+    </span>
+  );
+}
+
+// Disabled Re-authenticate / Sign out for servers where MCP auth is not
+// applicable (no authorization block, or discovery failed).
+function DisabledAuthMenuItem({
+  icon,
+  label,
+}: Readonly<{ icon: ReactNode; label: string }>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="block">
+          <DropdownMenuItem disabled>
+            {icon}
+            {label}
+          </DropdownMenuItem>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        Authentication isn&apos;t required for this MCP
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 interface McpServerTableRowProps {
   readonly server: MCPServer;
   readonly onDelete: (id: string) => void;
+  readonly onAuthChanged?: () => void;
 }
 
 function McpServerTableRow({
   server,
   onDelete,
+  onAuthChanged,
 }: Readonly<McpServerTableRowProps>) {
-  const { readOnlyMode } = useNamespace();
+  const { namespace, readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+
+  const startAuth = useStartMcpAuth();
+  const logoutAuth = useLogoutMcpAuth();
+
+  const authState = server.authorization?.state;
+
+  const handleAuthenticate = (force: boolean) => {
+    startAuth.mutate(
+      { name: server.name, options: { namespace, force } },
+      {
+        onSuccess: response => {
+          globalThis.location.href = response.authorization_url;
+        },
+        onError: error => {
+          toast.error('Failed to Start Authentication', {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'An unexpected error occurred',
+          });
+        },
+      },
+    );
+  };
+
+  const handleSignOut = () => {
+    logoutAuth.mutate(
+      { name: server.name, options: { namespace } },
+      {
+        onSuccess: () => {
+          toast.success('Signed Out', {
+            description: `Revoked authorization for ${server.name}`,
+          });
+          onAuthChanged?.();
+        },
+        onError: error => {
+          toast.error('Failed to Sign Out', {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'An unexpected error occurred',
+          });
+        },
+      },
+    );
+  };
+
+  const renderAuthMenuItems = () => {
+    if (authState === 'Required') {
+      return (
+        <DropdownMenuItem
+          disabled={startAuth.isPending}
+          onSelect={() => handleAuthenticate(false)}>
+          <Autorenew className="size-4" />
+          Authenticate
+        </DropdownMenuItem>
+      );
+    }
+    if (authState === 'Authorized') {
+      return (
+        <>
+          <DropdownMenuItem
+            disabled={startAuth.isPending}
+            onSelect={() => handleAuthenticate(true)}>
+            <Autorenew className="size-4" />
+            Re-authenticate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={logoutAuth.isPending}
+            onSelect={() => setSignOutConfirmOpen(true)}>
+            <Logout className="size-4" />
+            Sign out
+          </DropdownMenuItem>
+        </>
+      );
+    }
+    return (
+      <>
+        <DisabledAuthMenuItem
+          icon={<Autorenew className="size-4" />}
+          label="Re-authenticate"
+        />
+        <DisabledAuthMenuItem
+          icon={<Logout className="size-4" />}
+          label="Sign out"
+        />
+      </>
+    );
+  };
 
   return (
     <>
@@ -83,12 +258,21 @@ function McpServerTableRow({
           </NamespacedLink>
         </TableCell>
         <OriginCell origin={server.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
-        <TableCell size="small">
-          <span
-            className="text-fg-primary block truncate"
-            title={server.address ?? ''}>
-            {server.address ?? '—'}
-          </span>
+        <TableCell size="small" className={cn(COL.address, 'relative z-10')}>
+          {server.address ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-fg-primary block truncate">
+                  {server.address}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[420px] break-all">
+                {server.address}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="text-fg-primary">—</span>
+          )}
         </TableCell>
         <TableCell size="small" className={COL.transport}>
           <span
@@ -102,19 +286,36 @@ function McpServerTableRow({
             {server.tool_count ?? '—'}
           </span>
         </TableCell>
+        <TableCell size="small" className={COL.expires}>
+          <McpServerExpires server={server} />
+        </TableCell>
         <TableCell size="small">
-          <McpServerStatus status={server.available} />
+          <McpServerStatus server={server} />
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <div className="flex items-center justify-center">
-            <IconActionButton
-              label="Delete MCP server"
-              disabled={readOnlyMode}
-              onClick={() => {
-                if (!readOnlyMode) setDeleteConfirmOpen(true);
-              }}>
-              <Trash />
-            </IconActionButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="MCP server actions"
+                  disabled={readOnlyMode}>
+                  <IconShell size="sm" variant="secondary">
+                    <MoreVert />
+                  </IconShell>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setDeleteConfirmOpen(true)}>
+                  <Trash className="size-4" />
+                  Delete
+                </DropdownMenuItem>
+                {renderAuthMenuItems()}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </TableCell>
       </TableRow>
@@ -128,6 +329,16 @@ function McpServerTableRow({
         onConfirm={() => onDelete(server.id)}
         variant="destructive"
       />
+      <ConfirmationDialog
+        open={signOutConfirmOpen}
+        onOpenChange={setSignOutConfirmOpen}
+        title="Sign Out"
+        description={`Do you want to revoke authorization for "${server.name}"? You will need to authenticate again to use it.`}
+        confirmText="Sign out"
+        cancelText="Cancel"
+        onConfirm={handleSignOut}
+        variant="destructive"
+      />
     </>
   );
 }
@@ -135,7 +346,10 @@ function McpServerTableRow({
 export function McpServersTable({
   servers,
   onDelete,
+  onAuthChanged,
 }: Readonly<McpServersTableProps>) {
+  useMcpAuthCompletion({ servers: [...servers], onCompleted: onAuthChanged });
+
   return (
     <Table
       aria-label="MCP Servers"
@@ -146,12 +360,17 @@ export function McpServersTable({
             Name
           </TableHead>
           <OriginColumnHeader tooltip="Where the MCP server was first created" />
-          <TableHead size="small">Address</TableHead>
+          <TableHead size="small" className={COL.address}>
+            Address
+          </TableHead>
           <TableHead size="small" className={COL.transport}>
             Transport
           </TableHead>
           <TableHead size="small" className={COL.tools}>
             Tools
+          </TableHead>
+          <TableHead size="small" className={COL.expires}>
+            Expires
           </TableHead>
           <TableHead size="small" className={COL.status}>
             Status
@@ -167,6 +386,7 @@ export function McpServersTable({
             key={server.id}
             server={server}
             onDelete={onDelete}
+            onAuthChanged={onAuthChanged}
           />
         ))}
       </TableBody>

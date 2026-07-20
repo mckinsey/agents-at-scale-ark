@@ -436,7 +436,7 @@ var _ = Describe("Agent Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "error"
+			engine.Status.Phase = statusError
 			engine.Status.Message = "Failed to resolve address"
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 			defer func() {
@@ -509,7 +509,7 @@ var _ = Describe("Agent Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "ready"
+			engine.Status.Phase = statusReady
 			engine.Status.LastResolvedAddress = "http://localhost:9090"
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 			defer func() {
