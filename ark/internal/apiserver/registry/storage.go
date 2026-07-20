@@ -307,6 +307,21 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
+	if options != nil && options.Preconditions != nil {
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		pc := options.Preconditions
+		if pc.UID != nil && *pc.UID != accessor.GetUID() {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(gr, name,
+				fmt.Errorf("the UID in the precondition (%v) does not match the UID in record (%v)", *pc.UID, accessor.GetUID()))
+		}
+		if pc.ResourceVersion != nil && *pc.ResourceVersion != accessor.GetResourceVersion() {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(gr, name,
+				fmt.Errorf("the ResourceVersion in the precondition (%v) does not match the ResourceVersion in record (%v)", *pc.ResourceVersion, accessor.GetResourceVersion()))
+		}
+	}
+
 	// Graceful deletion: an object with finalizers is not removed yet. Mark it by
 	// setting deletionTimestamp so controllers can run their finalizers; the actual
 	// removal happens in Update once the last finalizer is gone. This mirrors the
