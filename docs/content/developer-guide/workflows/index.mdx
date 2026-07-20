@@ -79,6 +79,23 @@ devspace dev
 kubectl get tenant   # check Minio tenant status
 ```
 
+### Adding the `ark-query` template to an existing Argo installation
+
+The Ark `argo-workflows` chart ships a reusable `ark-query` `WorkflowTemplate`, a canonical building block that submits an Ark `Query` and returns its structured outputs, referenced from a step with `templateRef: {name: ark-query, template: query}`. The chart installs it automatically, so the steps above already give you everything. If you run your **own** Argo Workflows (installed separately from the Ark chart), add just this template by rendering it from the chart and applying it into the namespace where your workflows run:
+
+```bash
+helm template argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows \
+  --show-only templates/ark-query-template.yaml \
+  --namespace <your-argo-namespace> \
+  | kubectl apply -n <your-argo-namespace> -f -
+
+# Verify the template is present.
+kubectl get workflowtemplate ark-query -n <your-argo-namespace>
+```
+
+`WorkflowTemplate`s are namespace-scoped, so `ark-query` must live in the same namespace as the workflows that reference it. Re-run the command to pick up template updates when you upgrade Ark.
+
 ## How a step calls Ark
 
 Every Ark interaction inside a workflow is one of two patterns:
