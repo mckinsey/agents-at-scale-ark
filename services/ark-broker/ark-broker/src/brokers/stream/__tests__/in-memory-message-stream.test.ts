@@ -168,6 +168,18 @@ describe('InMemoryMessageStream', () => {
       await expect(stream.deleteBy({})).rejects.toThrow();
       expect(await stream.all()).toHaveLength(1);
     });
+
+    it('rejects an empty-string conversationId without deleting anything', async () => {
+      await stream.append(makeMessageData());
+      await expect(stream.deleteBy({conversationId: ''})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
+
+    it('rejects an empty-string queryId without deleting anything', async () => {
+      await stream.append(makeMessageData());
+      await expect(stream.deleteBy({queryId: ''})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
   });
 
   describe('appendMany', () => {

@@ -356,6 +356,18 @@ describe('PostgresEventStream', () => {
       await expect(stream.deleteBy({})).rejects.toThrow();
       expect(await stream.all()).toHaveLength(1);
     });
+
+    it('rejects an empty-string queryId without deleting anything', async () => {
+      await stream.append(makeEventData());
+      await expect(stream.deleteBy({queryId: ''})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
+
+    it('rejects an empty-string sessionId without deleting anything', async () => {
+      await stream.append(makeEventData());
+      await expect(stream.deleteBy({sessionId: ''})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
   });
 
   describe('deleteByQuery', () => {
