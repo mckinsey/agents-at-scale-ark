@@ -1,1 +1,1 @@
-DROP INDEX IF EXISTS messages_conversation_query_idx;
+DROP INDEX CONCURRENTLY IF EXISTS messages_conversation_query_idx;
