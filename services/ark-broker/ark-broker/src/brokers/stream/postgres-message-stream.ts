@@ -85,24 +85,18 @@ export class PostgresMessageStream
   ): Promise<BrokerItem<MessageData>[]> {
     if (dataList.length === 0) return [];
     const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
-    const valueRows = dataList.map(
-      (data): postgres.Fragment =>
-        this.db`(
-          ${data.conversationId},
-          ${data.queryId},
-          ${this.db.json(data.message as postgres.JSONValue)},
-          now() + make_interval(secs => ${effectiveTtl})
-        )`
-    );
-    const values = valueRows
-      .slice(1)
-      .reduce((acc, row) => this.db`${acc}, ${row}`, valueRows[0]);
-    const rows = await this.db<MessageRow[]>`
+    const valueRows = dataList.map((data) => [
+      data.conversationId,
+      data.queryId,
+      JSON.stringify(data.message),
+    ]);
+    const inserted = await this.db<MessageRow[]>`
       INSERT INTO messages (conversation_id, query_id, message, expires_at)
-      VALUES ${values}
+      SELECT v.conversation_id, v.query_id, v.message::jsonb, now() + make_interval(secs => ${effectiveTtl})
+      FROM (VALUES ${this.db(valueRows)}) AS v(conversation_id, query_id, message)
       RETURNING sequence_number, conversation_id, query_id, message, created_at
     `;
-    const items = rows
+    const items = inserted
       .map(rowToBrokerItem)
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
     for (const item of items) {

@@ -131,6 +131,15 @@ describe('PostgresMessageStream', () => {
         expect(expiresAt).toBeLessThanOrEqual(after + customTtl * 1000 + 2000);
       }
     });
+
+    it('inserts a large batch without exceeding the call stack', async () => {
+      const dataList = Array.from({length: 5000}, () => makeMessageData());
+
+      const items = await stream.appendMany(dataList);
+
+      expect(items).toHaveLength(5000);
+      expect(await stream.getCurrentSequence()).toBe(5000);
+    });
   });
 
   describe('all', () => {
@@ -407,6 +416,18 @@ describe('PostgresMessageStream', () => {
     it('rejects an empty filter without deleting anything', async () => {
       await stream.append(makeMessageData());
       await expect(stream.deleteBy({})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
+
+    it('rejects an empty-string conversationId without deleting anything', async () => {
+      await stream.append(makeMessageData());
+      await expect(stream.deleteBy({conversationId: ''})).rejects.toThrow();
+      expect(await stream.all()).toHaveLength(1);
+    });
+
+    it('rejects an empty-string queryId without deleting anything', async () => {
+      await stream.append(makeMessageData());
+      await expect(stream.deleteBy({queryId: ''})).rejects.toThrow();
       expect(await stream.all()).toHaveLength(1);
     });
   });
