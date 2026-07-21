@@ -12,18 +12,32 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
-func newTestBackendWithWatchers(watchers map[string][]*postgresWatcher) *PostgreSQLBackend {
+// newTestBackendWithBroadcasters builds a backend pre-populated with one
+// (un-started) broadcaster per kind. The broadcasters expose nudgeCh so tests can
+// assert WAL-driven nudging without a database or running run() loop — mirroring
+// how the real WAL consumer wakes a per-kind broadcaster.
+func newTestBackendWithBroadcasters(kinds ...string) (*PostgreSQLBackend, map[string]*kindBroadcaster) {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &PostgreSQLBackend{
-		watchers: watchers,
-		ctx:      ctx,
-		cancel:   cancel,
+	b := &PostgreSQLBackend{
+		broadcasters: make(map[string]*kindBroadcaster),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
+	m := make(map[string]*kindBroadcaster, len(kinds))
+	for _, k := range kinds {
+		bc := newKindBroadcaster(b, k)
+		b.broadcasters[k] = bc
+		m[k] = bc
+	}
+	return b, m
 }
 
-func newTestWatcher() *postgresWatcher {
-	return &postgresWatcher{
-		nudgeCh: make(chan struct{}, 1),
+func nudged(bc *kindBroadcaster) bool {
+	select {
+	case <-bc.nudgeCh:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -85,104 +99,73 @@ func TestSlotNameIsStable(t *testing.T) {
 }
 
 func TestNudgeAllWatchers(t *testing.T) {
-	w1 := newTestWatcher()
-	w2 := newTestWatcher()
-	w3 := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default":     {w1},
-		"Model/production":  {w2},
-		"MCPServer/default": {w3},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent", "Model", "MCPServer")
 
 	backend.nudgeAllWatchers()
 
-	for _, w := range []*postgresWatcher{w1, w2, w3} {
-		select {
-		case <-w.nudgeCh:
-		default:
-			t.Error("watcher was not nudged")
+	for kind, bc := range bcs {
+		if !nudged(bc) {
+			t.Errorf("broadcaster %q was not nudged", kind)
 		}
 	}
 }
 
 func TestNudgeAllWatchersEmpty(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	backend.nudgeAllWatchers()
 }
 
 func TestNudgeAllWatchersFullChannel(t *testing.T) {
-	w := newTestWatcher()
-	w.nudgeCh <- struct{}{}
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
+	bc := bcs["Agent"]
+	bc.nudge() // pre-fill the coalescing buffer
 
 	backend.nudgeAllWatchers()
 
-	select {
-	case <-w.nudgeCh:
-	default:
+	if !nudged(bc) {
 		t.Error("channel should still have one message")
 	}
 }
 
 func TestNudgeWatchersByKindNamespace(t *testing.T) {
-	exact := newTestWatcher()
-	allNs := newTestWatcher()
-	other := newTestWatcher()
-
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/production": {exact},
-		"Agent/":           {allNs},
-		"Model/production": {other},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent", "Model")
 
 	backend.nudgeWatchersByKindNamespace("Agent", "production")
 
-	select {
-	case <-exact.nudgeCh:
-	default:
-		t.Error("exact match watcher not nudged")
+	if !nudged(bcs["Agent"]) {
+		t.Error("Agent broadcaster not nudged")
 	}
-	select {
-	case <-allNs.nudgeCh:
-	default:
-		t.Error("all-namespace watcher not nudged")
-	}
-	select {
-	case <-other.nudgeCh:
-		t.Error("unrelated watcher should not be nudged")
-	default:
+	if nudged(bcs["Model"]) {
+		t.Error("unrelated kind should not be nudged")
 	}
 }
 
 func TestNudgeWatchersByKindEmptyNamespace(t *testing.T) {
-	allNs := newTestWatcher()
-	specific := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/":           {allNs},
-		"Agent/production": {specific},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent", "Model")
 
 	backend.nudgeWatchersByKindNamespace("Agent", "")
 
-	select {
-	case <-allNs.nudgeCh:
-	default:
-		t.Error("all-namespace watcher should be nudged via exact key match on empty namespace")
+	if !nudged(bcs["Agent"]) {
+		t.Error("Agent broadcaster should be nudged for empty namespace")
 	}
-	select {
-	case <-specific.nudgeCh:
-		t.Error("namespace-specific watcher should not be nudged for empty namespace")
-	default:
+	if nudged(bcs["Model"]) {
+		t.Error("unrelated kind should not be nudged")
+	}
+}
+
+func TestNudgeWatchersByKindNamespaceUnknownKind(t *testing.T) {
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
+
+	// No broadcaster for "Model"; must be a no-op (not panic).
+	backend.nudgeWatchersByKindNamespace("Model", "production")
+
+	if nudged(bcs["Agent"]) {
+		t.Error("Agent broadcaster should not be nudged for a different kind")
 	}
 }
 
 func TestNudgeFromTuple(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/production": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		1: makeRelation(1, "id", "kind", "namespace", "name"),
@@ -191,15 +174,13 @@ func TestNudgeFromTuple(t *testing.T) {
 
 	backend.nudgeFromTuple(relations, 1, tuple)
 
-	select {
-	case <-w.nudgeCh:
-	default:
-		t.Error("watcher not nudged after INSERT")
+	if !nudged(bcs["Agent"]) {
+		t.Error("broadcaster not nudged after INSERT")
 	}
 }
 
 func TestNudgeFromTupleNilTuple(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		1: makeRelation(1, "kind", "namespace"),
 	}
@@ -207,27 +188,19 @@ func TestNudgeFromTupleNilTuple(t *testing.T) {
 }
 
 func TestNudgeFromTupleUnknownRelation(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 	relations := map[uint32]*pglogrepl.RelationMessage{}
 	tuple := makeTuple("Agent", "default")
 
 	backend.nudgeFromTuple(relations, 999, tuple)
 
-	select {
-	case <-w.nudgeCh:
+	if nudged(bcs["Agent"]) {
 		t.Error("should not nudge with unknown relation")
-	default:
 	}
 }
 
 func TestNudgeFromTupleNoKindColumn(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		1: makeRelation(1, "id", "namespace", "name"),
@@ -236,18 +209,13 @@ func TestNudgeFromTupleNoKindColumn(t *testing.T) {
 
 	backend.nudgeFromTuple(relations, 1, tuple)
 
-	select {
-	case <-w.nudgeCh:
+	if nudged(bcs["Agent"]) {
 		t.Error("should not nudge without kind column")
-	default:
 	}
 }
 
 func TestNudgeFromTupleNullDataType(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		1: makeRelation(1, "kind", "namespace"),
@@ -262,15 +230,13 @@ func TestNudgeFromTupleNullDataType(t *testing.T) {
 
 	backend.nudgeFromTuple(relations, 1, tuple)
 
-	select {
-	case <-w.nudgeCh:
+	if nudged(bcs["Agent"]) {
 		t.Error("should not nudge when kind is NULL")
-	default:
 	}
 }
 
 func TestProcessWALDataRelationMessage(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	relations := make(map[uint32]*pglogrepl.RelationMessage)
 
 	rel := &pglogrepl.RelationMessage{
@@ -293,10 +259,7 @@ func TestProcessWALDataRelationMessage(t *testing.T) {
 }
 
 func TestProcessWALDataInsertMessage(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		1: makeRelation(1, "kind", "namespace", "name"),
@@ -306,18 +269,13 @@ func TestProcessWALDataInsertMessage(t *testing.T) {
 
 	backend.processWALData(insert, relations)
 
-	select {
-	case <-w.nudgeCh:
-	default:
-		t.Error("watcher not nudged on INSERT")
+	if !nudged(bcs["Agent"]) {
+		t.Error("broadcaster not nudged on INSERT")
 	}
 }
 
 func TestProcessWALDataUpdateMessage(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Model/prod": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Model")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		2: makeRelation(2, "kind", "namespace"),
@@ -327,18 +285,13 @@ func TestProcessWALDataUpdateMessage(t *testing.T) {
 
 	backend.processWALData(update, relations)
 
-	select {
-	case <-w.nudgeCh:
-	default:
-		t.Error("watcher not nudged on UPDATE")
+	if !nudged(bcs["Model"]) {
+		t.Error("broadcaster not nudged on UPDATE")
 	}
 }
 
 func TestProcessWALDataDeleteMessage(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
 		3: makeRelation(3, "kind", "namespace"),
@@ -347,21 +300,19 @@ func TestProcessWALDataDeleteMessage(t *testing.T) {
 	del := encodeDeleteMessage(3)
 	backend.processWALData(del, relations)
 
-	select {
-	case <-w.nudgeCh:
-		t.Error("DELETE should not nudge watchers")
-	default:
+	if nudged(bcs["Agent"]) {
+		t.Error("DELETE should not nudge broadcasters")
 	}
 }
 
 func TestProcessWALDataInvalidBytes(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	relations := make(map[uint32]*pglogrepl.RelationMessage)
 	backend.processWALData([]byte{0xff, 0x00}, relations)
 }
 
 func TestHandleWALMessageErrorResponse(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	errMsg := &pgproto3.ErrorResponse{Code: "XX000", Message: "test error"}
@@ -376,7 +327,7 @@ func TestHandleWALMessageErrorResponse(t *testing.T) {
 }
 
 func TestHandleWALMessageNonCopyData(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	err := backend.handleWALMessage(nil, &pgproto3.NoticeResponse{}, state)
@@ -386,7 +337,7 @@ func TestHandleWALMessageNonCopyData(t *testing.T) {
 }
 
 func TestHandleWALMessageKeepaliveNoReply(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	keepalive := encodePrimaryKeepalive(0, false)
@@ -399,10 +350,7 @@ func TestHandleWALMessageKeepaliveNoReply(t *testing.T) {
 }
 
 func TestHandleWALMessageXLogDataInsert(t *testing.T) {
-	w := newTestWatcher()
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/default": {w},
-	})
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
 	state := &walStreamState{
 		relations: map[uint32]*pglogrepl.RelationMessage{
@@ -419,10 +367,8 @@ func TestHandleWALMessageXLogDataInsert(t *testing.T) {
 		t.Errorf("xlog insert should not error: %v", err)
 	}
 
-	select {
-	case <-w.nudgeCh:
-	default:
-		t.Error("watcher not nudged via XLogData INSERT")
+	if !nudged(bcs["Agent"]) {
+		t.Error("broadcaster not nudged via XLogData INSERT")
 	}
 
 	if state.lastWriteLSN == 0 {
@@ -431,7 +377,7 @@ func TestHandleWALMessageXLogDataInsert(t *testing.T) {
 }
 
 func TestHandleWALMessageXLogDataRelation(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{
 		relations: make(map[uint32]*pglogrepl.RelationMessage),
 	}
@@ -461,7 +407,7 @@ func TestHandleWALMessageXLogDataRelation(t *testing.T) {
 }
 
 func TestHandleWALMessageInvalidKeepalive(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	msg := &pgproto3.CopyData{Data: []byte{pglogrepl.PrimaryKeepaliveMessageByteID, 0x01}}
@@ -472,7 +418,7 @@ func TestHandleWALMessageInvalidKeepalive(t *testing.T) {
 }
 
 func TestHandleWALMessageInvalidXLogData(t *testing.T) {
-	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{})
+	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	msg := &pgproto3.CopyData{Data: []byte{pglogrepl.XLogDataByteID, 0x01}}
@@ -483,12 +429,11 @@ func TestHandleWALMessageInvalidXLogData(t *testing.T) {
 }
 
 func TestNudgeWatchersConcurrent(t *testing.T) {
-	watchers := make(map[string][]*postgresWatcher)
+	kinds := make([]string, 0, 10)
 	for i := 0; i < 10; i++ {
-		key := "Agent/" + string(rune('a'+i))
-		watchers[key] = []*postgresWatcher{newTestWatcher()}
+		kinds = append(kinds, "Agent"+string(rune('a'+i)))
 	}
-	backend := newTestBackendWithWatchers(watchers)
+	backend, _ := newTestBackendWithBroadcasters(kinds...)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -499,6 +444,33 @@ func TestNudgeWatchersConcurrent(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestWriteNudgesOneBroadcasterPerKind is the amplification regression guard: a
+// single write of a kind must wake exactly ONE broadcaster, regardless of how many
+// watchers are subscribed — proving the per-watcher relist fan-out is gone (one
+// relist per kind, not one per watcher).
+func TestWriteNudgesOneBroadcasterPerKind(t *testing.T) {
+	backend, bcs := newTestBackendWithBroadcasters("Agent")
+	bc := bcs["Agent"]
+
+	// 50 subscribers on the one broadcaster.
+	for i := 0; i < 50; i++ {
+		bc.subscribers[&postgresWatcher{}] = struct{}{}
+	}
+
+	relations := map[uint32]*pglogrepl.RelationMessage{
+		1: makeRelation(1, "kind", "namespace", "name"),
+	}
+	backend.processWALData(encodeInsertMessage(1, makeTuple("Agent", "default", "a")), relations)
+
+	if !nudged(bc) {
+		t.Fatal("broadcaster not nudged on write")
+	}
+	// Coalesced: exactly one pending relist, not one-per-subscriber.
+	if nudged(bc) {
+		t.Fatal("expected a single coalesced nudge, found more than one")
+	}
 }
 
 func encodeRelationMessage(rel *pglogrepl.RelationMessage) []byte {
