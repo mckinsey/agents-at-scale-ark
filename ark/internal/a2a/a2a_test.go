@@ -225,6 +225,77 @@ func TestExtractTextFromTask(t *testing.T) {
 			expected:    "Part 1 Part 2",
 			expectError: false,
 		},
+		{
+			name: "completed task with result only in text artifact",
+			task: &protocol.Task{
+				ID: "task-artifact",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				Artifacts: []protocol.Artifact{
+					{
+						ArtifactID: "artifact-1",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from artifact"},
+						},
+					},
+				},
+			},
+			expected:    "Answer from artifact",
+			expectError: false,
+		},
+		{
+			name: "completed task prefers history over artifacts",
+			task: &protocol.Task{
+				ID: "task-history-and-artifact",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				History: []protocol.Message{
+					{
+						Role: protocol.MessageRoleAgent,
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from history"},
+						},
+					},
+				},
+				Artifacts: []protocol.Artifact{
+					{
+						ArtifactID: "artifact-1",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from artifact"},
+						},
+					},
+				},
+			},
+			expected:    "Answer from history",
+			expectError: false,
+		},
+		{
+			name: "completed task with multiple text artifacts",
+			task: &protocol.Task{
+				ID: "task-multi-artifact",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				Artifacts: []protocol.Artifact{
+					{
+						ArtifactID: "artifact-1",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "First artifact"},
+						},
+					},
+					{
+						ArtifactID: "artifact-2",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Second artifact"},
+						},
+					},
+				},
+			},
+			expected:    "First artifact\nSecond artifact",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -239,6 +310,91 @@ func TestExtractTextFromTask(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestExtractTextFromArtifacts(t *testing.T) {
+	tests := []struct {
+		name      string
+		artifacts []protocol.Artifact
+		expected  string
+	}{
+		{
+			name:      "nil artifacts",
+			artifacts: nil,
+			expected:  "",
+		},
+		{
+			name:      "empty artifacts",
+			artifacts: []protocol.Artifact{},
+			expected:  "",
+		},
+		{
+			name: "single artifact with text",
+			artifacts: []protocol.Artifact{
+				{
+					ArtifactID: "artifact-1",
+					Parts: []protocol.Part{
+						protocol.TextPart{Text: "Hello"},
+					},
+				},
+			},
+			expected: "Hello",
+		},
+		{
+			name: "artifact with multiple parts",
+			artifacts: []protocol.Artifact{
+				{
+					ArtifactID: "artifact-1",
+					Parts: []protocol.Part{
+						protocol.TextPart{Text: "Part 1 "},
+						protocol.TextPart{Text: "Part 2"},
+					},
+				},
+			},
+			expected: "Part 1 Part 2",
+		},
+		{
+			name: "multiple artifacts joined with newline",
+			artifacts: []protocol.Artifact{
+				{
+					ArtifactID: "artifact-1",
+					Parts: []protocol.Part{
+						protocol.TextPart{Text: "First"},
+					},
+				},
+				{
+					ArtifactID: "artifact-2",
+					Parts: []protocol.Part{
+						protocol.TextPart{Text: "Second"},
+					},
+				},
+			},
+			expected: "First\nSecond",
+		},
+		{
+			name: "empty artifact skipped when joining",
+			artifacts: []protocol.Artifact{
+				{
+					ArtifactID: "artifact-1",
+					Parts:      []protocol.Part{},
+				},
+				{
+					ArtifactID: "artifact-2",
+					Parts: []protocol.Part{
+						protocol.TextPart{Text: "Only content"},
+					},
+				},
+			},
+			expected: "Only content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractTextFromArtifacts(tt.artifacts)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

@@ -308,7 +308,7 @@ func extractTextFromTaskStatus(task *protocol.Task) string {
 			}
 		}
 	}
-	return ""
+	return arka2a.ExtractTextFromArtifacts(task.Artifacts)
 }
 
 func maybeCreateA2ATask(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {

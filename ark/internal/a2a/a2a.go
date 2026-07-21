@@ -248,7 +248,10 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 
 	switch task.Status.State {
 	case TaskStateCompleted:
-		return extractAgentTextFromHistory(task.History), nil
+		if text := extractAgentTextFromHistory(task.History); text != "" {
+			return text, nil
+		}
+		return ExtractTextFromArtifacts(task.Artifacts), nil
 
 	case TaskStateFailed:
 		errorMsg := "task failed"
@@ -273,6 +276,20 @@ func extractAgentTextFromHistory(history []protocol.Message) string {
 				}
 				text.WriteString(msgText)
 			}
+		}
+	}
+	return text.String()
+}
+
+func ExtractTextFromArtifacts(artifacts []protocol.Artifact) string {
+	var text strings.Builder
+	for _, artifact := range artifacts {
+		artifactText := ExtractTextFromParts(artifact.Parts)
+		if artifactText != "" {
+			if text.Len() > 0 {
+				text.WriteString("\n")
+			}
+			text.WriteString(artifactText)
 		}
 	}
 	return text.String()

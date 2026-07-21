@@ -245,6 +245,39 @@ func TestExtractTextFromTaskStatus(t *testing.T) {
 		assert.Equal(t, "from history", extractTextFromTaskStatus(task))
 	})
 
+	t.Run("from artifacts fallback", func(t *testing.T) {
+		task := &protocol.Task{
+			Status: protocol.TaskStatus{
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
+			},
+			Artifacts: []protocol.Artifact{
+				{
+					ArtifactID: "artifact-1",
+					Parts:      []protocol.Part{protocol.NewTextPart("from artifact")},
+				},
+			},
+		}
+		assert.Equal(t, "from artifact", extractTextFromTaskStatus(task))
+	})
+
+	t.Run("status message preferred over artifacts", func(t *testing.T) {
+		task := &protocol.Task{
+			Status: protocol.TaskStatus{
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
+				Message: &protocol.Message{
+					Parts: []protocol.Part{protocol.NewTextPart("from status")},
+				},
+			},
+			Artifacts: []protocol.Artifact{
+				{
+					ArtifactID: "artifact-1",
+					Parts:      []protocol.Part{protocol.NewTextPart("from artifact")},
+				},
+			},
+		}
+		assert.Equal(t, "from status", extractTextFromTaskStatus(task))
+	})
+
 	t.Run("empty task", func(t *testing.T) {
 		task := &protocol.Task{
 			Status: protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateWorking)},
