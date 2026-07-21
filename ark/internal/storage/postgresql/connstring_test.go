@@ -17,19 +17,29 @@ func TestBuildConnString(t *testing.T) {
 		{
 			name:     "mode only",
 			cfg:      Config{Host: "db", Port: 5432, User: "ark", Password: "pw", Database: "ark", SSLMode: "require"},
-			contains: []string{"host=db", "port=5432", "sslmode=require"},
+			contains: []string{"host='db'", "port=5432", "sslmode='require'"},
 			absent:   []string{"sslrootcert=", "sslcert=", "sslkey="},
 		},
 		{
 			name:     "verify-full with ca bundle",
 			cfg:      Config{SSLMode: "verify-full", SSLRootCert: "/etc/ark/postgres-tls/ca.crt"},
-			contains: []string{"sslmode=verify-full", "sslrootcert=/etc/ark/postgres-tls/ca.crt"},
+			contains: []string{"sslmode='verify-full'", "sslrootcert='/etc/ark/postgres-tls/ca.crt'"},
 			absent:   []string{"sslcert=", "sslkey="},
 		},
 		{
 			name:     "mutual tls",
 			cfg:      Config{SSLMode: "verify-full", SSLRootCert: "/c/ca.crt", SSLCert: "/c/tls.crt", SSLKey: "/c/tls.key"},
-			contains: []string{"sslrootcert=/c/ca.crt", "sslcert=/c/tls.crt", "sslkey=/c/tls.key"},
+			contains: []string{"sslrootcert='/c/ca.crt'", "sslcert='/c/tls.crt'", "sslkey='/c/tls.key'"},
+		},
+		{
+			name:     "password with space is quoted",
+			cfg:      Config{Host: "db", Password: "pass word", SSLMode: "require"},
+			contains: []string{"password='pass word'"},
+		},
+		{
+			name:     "password with quote and backslash is escaped",
+			cfg:      Config{Password: `a'b\c`, SSLMode: "require"},
+			contains: []string{`password='a\'b\\c'`},
 		},
 	}
 

@@ -26,8 +26,10 @@ postgresql:
   sslRootCertKey: ""
   sslClientCertKey: ""
   sslClientKeyKey: ""
-  # GID the container runs as; mounted cert files are group-owned by it so the
-  # non-root process can read them. Matches the image USER (distroless nonroot).
+  # Fallback GID for the mounted cert files when containerSecurityContext.runAsGroup
+  # is unset; the files are group-owned by it so the non-root process can read them.
+  # 65532 matches the image USER (distroless nonroot). If you set
+  # containerSecurityContext.runAsGroup, fsGroup follows that value instead.
   sslFsGroup: 65532
 
 resources:

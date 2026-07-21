@@ -15,12 +15,16 @@ spec:
       labels:
         {{- include "ark-apiserver.labels" . | nindent 8 }}
     spec:
+      {{- $ssl := .Values.postgresql }}
+      {{- if or (and $ssl.sslClientCertKey (not $ssl.sslClientKeyKey)) (and $ssl.sslClientKeyKey (not $ssl.sslClientCertKey)) }}
+      {{- fail "postgresql.sslClientCertKey and postgresql.sslClientKeyKey must be set together for mutual TLS" }}
+      {{- end }}
       serviceAccountName: {{ .Values.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
         {{- if .Values.postgresql.sslSecretName }}
-        fsGroup: {{ .Values.postgresql.sslFsGroup }}
+        fsGroup: {{ .Values.containerSecurityContext.runAsGroup | default .Values.postgresql.sslFsGroup }}
         {{- end }}
       containers:
         - name: manager

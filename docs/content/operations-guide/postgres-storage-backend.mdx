@@ -110,7 +110,7 @@ storage:
 
 `sslMode` accepts the standard libpq values: `disable`, `require`, `verify-ca`, `verify-full`. The default is `require`, so the controller→database connection is encrypted out of the box; set `disable` explicitly for a non-TLS database (e.g. local dev).
 
-`require` encrypts the connection but does not verify the server's identity. `verify-ca` and `verify-full` additionally validate the server certificate. Against a publicly-trusted managed database (RDS, Cloud SQL) they work with no extra configuration because the controller image trusts the system CA bundle. For a private CA, self-signed certificate, or mutual TLS, mount the PEM files via a Secret on the apiserver chart:
+`require` encrypts the connection but does not verify the server's identity, so it only protects against a passive eavesdropper on the wire. An active attacker who can present any TLS certificate — a rogue pod, DNS misroute, or MITM — can still impersonate the database. For production, use `verify-full`, which validates the server certificate and hostname; `verify-ca` validates the certificate but not the hostname. Against a publicly-trusted managed database (RDS, Cloud SQL) they work with no extra configuration because the controller image trusts the system CA bundle. For a private CA, self-signed certificate, or mutual TLS, mount the PEM files via a Secret on the apiserver chart:
 
 ```bash
 kubectl create secret generic ark-pg-tls \

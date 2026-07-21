@@ -179,21 +179,31 @@ type PostgreSQLBackend struct {
 	cachedRV  atomic.Int64
 }
 
+var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+
+func quoteConnValue(v string) string {
+	return "'" + connValueEscaper.Replace(v) + "'"
+}
+
 func buildConnString(cfg Config) string {
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
+	parts := []string{
+		"host=" + quoteConnValue(cfg.Host),
+		"port=" + strconv.Itoa(cfg.Port),
+		"user=" + quoteConnValue(cfg.User),
+		"password=" + quoteConnValue(cfg.Password),
+		"dbname=" + quoteConnValue(cfg.Database),
+		"sslmode=" + quoteConnValue(cfg.SSLMode),
+	}
 	if cfg.SSLRootCert != "" {
-		connStr += fmt.Sprintf(" sslrootcert=%s", cfg.SSLRootCert)
+		parts = append(parts, "sslrootcert="+quoteConnValue(cfg.SSLRootCert))
 	}
 	if cfg.SSLCert != "" {
-		connStr += fmt.Sprintf(" sslcert=%s", cfg.SSLCert)
+		parts = append(parts, "sslcert="+quoteConnValue(cfg.SSLCert))
 	}
 	if cfg.SSLKey != "" {
-		connStr += fmt.Sprintf(" sslkey=%s", cfg.SSLKey)
+		parts = append(parts, "sslkey="+quoteConnValue(cfg.SSLKey))
 	}
-	return connStr
+	return strings.Join(parts, " ")
 }
 
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
