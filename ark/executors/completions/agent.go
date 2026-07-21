@@ -65,7 +65,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	})
 
 	operationData := map[string]string{
-		"agent": a.FullName(),
+		"agent": a.Name,
 	}
 	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
