@@ -372,27 +372,23 @@ func setupWebhooks(mgr ctrl.Manager) {
 	}
 }
 
-func setupEmbeddedApiserver(mgr ctrl.Manager) {
-	backend := os.Getenv("ARK_STORAGE_BACKEND")
-	if backend != "postgresql" {
-		setupLog.Error(fmt.Errorf("--role=apiserver requires ARK_STORAGE_BACKEND=postgresql (got %q)", backend), "invalid configuration")
-		os.Exit(1)
-	}
-
+func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg := apiserver.Config{}
 
 	if portStr := os.Getenv("ARK_APISERVER_PORT"); portStr != "" {
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
-			setupLog.Error(err, "invalid ARK_APISERVER_PORT")
-			os.Exit(1)
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_PORT %q: %w", portStr, err)
 		}
 		cfg.BindPort = port
 	}
 
 	cfg.PostgresHost = os.Getenv("ARK_POSTGRES_HOST")
 	if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
-		port, _ := strconv.Atoi(portStr)
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_POSTGRES_PORT %q: %w", portStr, err)
+		}
 		cfg.PostgresPort = port
 	}
 	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
@@ -408,6 +404,21 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	cfg.PostgresSSLRoot = os.Getenv("ARK_POSTGRES_SSL_ROOT_CERT")
 	cfg.PostgresSSLCert = os.Getenv("ARK_POSTGRES_SSL_CERT")
 	cfg.PostgresSSLKey = os.Getenv("ARK_POSTGRES_SSL_KEY")
+	return cfg, nil
+}
+
+func setupEmbeddedApiserver(mgr ctrl.Manager) {
+	backend := os.Getenv("ARK_STORAGE_BACKEND")
+	if backend != "postgresql" {
+		setupLog.Error(fmt.Errorf("--role=apiserver requires ARK_STORAGE_BACKEND=postgresql (got %q)", backend), "invalid configuration")
+		os.Exit(1)
+	}
+
+	cfg, err := apiserverConfigFromEnv()
+	if err != nil {
+		setupLog.Error(err, "invalid apiserver configuration")
+		os.Exit(1)
+	}
 	cfg.K8sClient = mgr.GetClient()
 
 	server := apiserver.New(cfg)

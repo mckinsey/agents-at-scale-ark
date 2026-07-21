@@ -3,9 +3,27 @@
 package postgresql
 
 import (
+	"net"
 	"strings"
 	"testing"
 )
+
+func TestNew_UnreachableDatabase(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	_, err = New(Config{Host: "127.0.0.1", Port: port, Database: "ark", User: "ark", Password: "secret"}, nil)
+	if err == nil {
+		t.Fatal("expected error for unreachable database")
+	}
+	if !strings.Contains(err.Error(), "failed to connect") {
+		t.Errorf("error = %q, want connect failure", err.Error())
+	}
+}
 
 func TestBuildConnString(t *testing.T) {
 	tests := []struct {
