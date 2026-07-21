@@ -35,7 +35,18 @@ var (
 	broadcasterEventsDropped = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "ark_apiserver_watch_broadcaster_events_dropped_total",
-			Help: "Number of watch events dropped to a subscriber whose buffer was full (recovered via per-watcher catch-up relist)",
+			Help: "Number of watch events dropped to a subscriber whose buffer was full; the subscriber attempts a catch-up relist to recover, which is not guaranteed if that relist errors (see ark_apiserver_watch_watcher_relist_failures_total)",
+		},
+		[]string{"kind"},
+	)
+
+	// watcherRelistFailures counts failures of a watcher's own relist — the
+	// initial population and the catch-up relist that recovers dropped events.
+	// A rising counter means dropped events may not have been recovered.
+	watcherRelistFailures = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ark_apiserver_watch_watcher_relist_failures_total",
+			Help: "Number of failed per-watcher relist queries (initial population or dropped-event catch-up)",
 		},
 		[]string{"kind"},
 	)
@@ -54,5 +65,6 @@ func init() {
 	prometheus.MustRegister(broadcasterRelistFailures)
 	prometheus.MustRegister(broadcasterEventsDispatched)
 	prometheus.MustRegister(broadcasterEventsDropped)
+	prometheus.MustRegister(watcherRelistFailures)
 	prometheus.MustRegister(broadcasterActiveWatchers)
 }

@@ -3,6 +3,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 	"sync"
 	"sync/atomic"
@@ -131,6 +132,12 @@ func (b *kindBroadcaster) run() {
 // once per kind rather than once per watcher.
 func (b *kindBroadcaster) relist() {
 	const lookback int64 = 500
+	// relistQueryTimeout bounds a single relist query. run() calls relist()
+	// inline on one goroutine, so an unbounded query would stall fan-out to
+	// every subscriber of this kind; the deadline caps that blast radius.
+	// Generous relative to the 120s safety-net tick, so it only trips a query
+	// that is genuinely hung rather than merely large.
+	const relistQueryTimeout = 30 * time.Second
 	from := b.lastSeenRV.Load() - lookback
 	if from < 0 {
 		from = 0
@@ -143,7 +150,9 @@ func (b *kindBroadcaster) relist() {
 		ORDER BY resource_version ASC`
 
 	broadcasterRelistTotal.WithLabelValues(b.kind).Inc()
-	rows, err := b.backend.db.QueryContext(b.backend.ctx, query, b.kind, from)
+	ctx, cancel := context.WithTimeout(b.backend.ctx, relistQueryTimeout)
+	defer cancel()
+	rows, err := b.backend.db.QueryContext(ctx, query, b.kind, from)
 	if err != nil {
 		b.onRelistFailure(err)
 		return

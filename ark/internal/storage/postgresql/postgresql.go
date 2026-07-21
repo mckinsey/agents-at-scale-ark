@@ -1006,7 +1006,12 @@ func (w *postgresWatcher) run() {
 	defer close(w.outCh)
 	defer w.Stop()
 
-	w.relist() // initial population: full current state via this watcher's filters
+	// Initial population: full current state via this watcher's filters. On
+	// failure, arm `behind` so the bookmark tick retries — otherwise the watcher
+	// would start permanently empty until the first fanned-out change.
+	if err := w.relist(); err != nil {
+		w.behind.Store(true)
+	}
 	w.sendBookmark()
 
 	bookmarkTicker := time.NewTicker(30 * time.Second)
@@ -1019,6 +1024,9 @@ func (w *postgresWatcher) run() {
 		case <-w.ctx.Done():
 			return
 		case <-bookmarkTicker.C:
+			// Also retry any catch-up that failed on a previous tick/row, so
+			// recovery doesn't stall on a quiescent kind (no new inputCh rows).
+			w.recoverIfBehind()
 			w.sendBookmark()
 		case row := <-w.inputCh:
 			if !w.forwardRow(row) {
@@ -1027,9 +1035,20 @@ func (w *postgresWatcher) run() {
 			// If the broadcaster dropped rows into a full inputCh, recover them
 			// with a private filtered relist (runs in this goroutine, so it
 			// respects outCh backpressure and never blocks other watchers).
-			if w.behind.Swap(false) {
-				w.relist()
-			}
+			w.recoverIfBehind()
+		}
+	}
+}
+
+// recoverIfBehind drains a pending "behind" flag by running a private catch-up
+// relist. `behind` is cleared first so a drop concurrent with the relist re-arms
+// it; on relist error it is re-armed so the next row/tick retries. This is the
+// only recovery path — the broadcaster's seenRVs suppress re-fanning a row it
+// already dropped, so a dropped event is lost if this never succeeds.
+func (w *postgresWatcher) recoverIfBehind() {
+	if w.behind.Swap(false) {
+		if err := w.relist(); err != nil {
+			w.behind.Store(true)
 		}
 	}
 }
@@ -1196,7 +1215,12 @@ func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, sp
 	}
 }
 
-func (w *postgresWatcher) relist() {
+// relist re-queries this watcher's slice and emits any rows it hasn't seen. It
+// returns an error if the query itself failed, so callers recovering dropped
+// events (run()) can tell a real failure from a clean pass and re-arm. A nil
+// return where the loop stopped early because the watcher is shutting down is
+// intentional: there is nothing left to recover.
+func (w *postgresWatcher) relist() error {
 	// FIX: BIGSERIAL resource_versions are assigned at INSERT statement time, but row
 	// visibility depends on COMMIT time. Two concurrent INSERTs can commit in the
 	// opposite order from rv assignment, so a strict `rv > lastSeenRV` cursor can skip
@@ -1205,7 +1229,8 @@ func (w *postgresWatcher) relist() {
 	query, args := w.buildRelistQuery()
 	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
 	if err != nil {
-		return
+		watcherRelistFailures.WithLabelValues(w.kind).Inc()
+		return err
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -1217,11 +1242,19 @@ func (w *postgresWatcher) relist() {
 		var deletedAt, deletionTimestamp sql.NullTime
 
 		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
-			return
+			// Partial read: do NOT advance/prune, so the next relist re-reads
+			// the same window and nothing is permanently skipped.
+			watcherRelistFailures.WithLabelValues(w.kind).Inc()
+			return err
 		}
 		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
-			return
+			return nil // watcher shutting down, not a relist failure
 		}
 	}
+	if err := rows.Err(); err != nil {
+		watcherRelistFailures.WithLabelValues(w.kind).Inc()
+		return err
+	}
 	w.pruneSeen()
+	return nil
 }
