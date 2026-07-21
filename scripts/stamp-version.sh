@@ -7,7 +7,7 @@
 # Usage: scripts/stamp-version.sh <target-version>   e.g. 0.1.67
 #
 # It replaces the CURRENT version (read from version.txt, which holds the RC
-# version during a cycle, e.g. 0.1.67-rc.2) with <target-version> across all
+# version during a cycle, e.g. 0.1.67.2) with <target-version> across all
 # tracked files that contain it, then handles the two files that do not:
 #   - docs/content/operations-guide/build-pipelines.mdx  (stable-only extra-file;
 #     holds the PREVIOUS stable version, stamped via its "current:" marker line)
