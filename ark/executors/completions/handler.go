@@ -79,6 +79,9 @@ type executionState struct {
 	querySpan      telemetry.Span
 	targetSpan     telemetry.Span
 	isResumption   bool
+	// memoryUnavailable is true when the query carried a conversationId but no
+	// Memory backend was reachable, so history was silently dropped.
+	memoryUnavailable bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -296,6 +299,9 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		conversationId = httpMemory.GetConversationID()
 	}
 
+	_, isNoop := memory.(*NoopMemory)
+	memoryUnavailable := isNoop && conversationId != ""
+
 	memoryMessages, err := memory.GetMessages(ctx)
 	if err != nil {
 		log.Error(err, "failed to load memory messages, continuing without history")
@@ -324,6 +330,8 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		eventStream:    eventStream,
 		querySpan:      querySpan,
 		targetSpan:     targetSpan,
+
+		memoryUnavailable: memoryUnavailable,
 	}
 
 	return ctx, state, nil
@@ -546,6 +554,9 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 	}
 	if state.conversationId != "" {
 		responseMeta["conversationId"] = state.conversationId
+	}
+	if state.memoryUnavailable {
+		responseMeta["memoryUnavailable"] = true
 	}
 	if execResult != nil && execResult.A2AResponse != nil {
 		a2aMeta := map[string]string{}
