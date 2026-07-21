@@ -1,6 +1,6 @@
 {
   "name": "ark-broker",
-  "version": "0.1.67-rc",
+  "version": "0.1.67",
   "description": "Ark broker for memory, telemetry streaming, and observability",
   "main": "dist/index.js",
   "type": "module",
@@ -91,6 +91,9 @@
     "esbuild": "^0.28.1",
     "ws": "^8.21.0",
     "form-data": "^4.0.6",
-    "undici": "^7.28.0"
+    "undici": "^7.28.0",
+    "dockerode": {
+      "protobufjs": "^7.6.5"
+    }
   }
 }
