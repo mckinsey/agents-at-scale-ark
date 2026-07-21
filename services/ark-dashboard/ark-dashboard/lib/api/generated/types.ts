@@ -227,13 +227,14 @@ export interface paths {
         };
         /**
          * List Agents
-         * @description List all Agent CRs in a namespace.
+         * @description List a page of Agent CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list agents from (defaults to current context)
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         AgentListResponse: List of all agents in the namespace
+         *         AgentListResponse: One page of agents plus the continuation token
          */
         get: operations["list_agents_v1_agents_get"];
         put?: never;
@@ -2511,10 +2512,14 @@ export interface components {
          * @description List of agents response model.
          */
         AgentListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["AgentResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * AgentOverride
@@ -4918,6 +4923,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;

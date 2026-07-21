@@ -43,7 +43,9 @@ describe('agentsService', () => {
 
       const result = await agentsService.getAll()
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, {
+        params: { limit: 100 },
+      })
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent1`)
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent2`)
       
