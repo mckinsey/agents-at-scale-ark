@@ -1211,9 +1211,24 @@ jobs:
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
 
+      # The custom release flow (prepare-release.yaml -> release-on-merge.yaml)
+      # merges a "release: vX.Y.Z" commit and handles the stable release itself.
+      # Skip release-please on that commit so it does not race / double-release.
+      - name: Detect custom release merge
+        id: guard
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        run: |
+          MSG=$(git log -1 --format=%s)
+          if [[ "$MSG" =~ ^release:\ v[0-9]+\.[0-9]+\.[0-9]+([[:space:]].*)?$ ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Custom release merge detected ('$MSG'); release-please skipped (release-on-merge.yaml handles it)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Determine release type
         id: release-type
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' && steps.guard.outputs.skip != 'true' }}
         run: |
           VERSION=$(jq -r '."."' .github/release-please-manifest.json)
 
@@ -1245,7 +1260,7 @@ jobs:
           fi
 
       - name: Create Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' && steps.guard.outputs.skip != 'true' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
