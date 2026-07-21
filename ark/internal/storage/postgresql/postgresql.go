@@ -811,7 +811,11 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		seenRVs:    make(map[string]int64),
 	}
 
-	b := p.getOrCreateBroadcasterAndSubscribe(kind, w)
+	// The broadcaster is a shared per-kind singleton that outlives any single
+	// Watch request; its relist deliberately uses the backend lifetime context
+	// (cancelled on Close), not this request ctx — inheriting ctx would let one
+	// watcher's disconnect break relists for every other watcher of the kind.
+	b := p.getOrCreateBroadcasterAndSubscribe(kind, w) //nolint:contextcheck // broadcaster owns its lifetime via backend.ctx, not the request ctx
 	w.bc = b
 
 	go w.run()
