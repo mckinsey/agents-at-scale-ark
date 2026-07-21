@@ -2,7 +2,7 @@ import logging
 import random
 import pytest
 from datetime import datetime
-from playwright.sync_api import expect, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import expect, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
