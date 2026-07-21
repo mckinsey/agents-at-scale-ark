@@ -140,10 +140,6 @@ class ToolsPage(BasePage):
         
         url_input.scroll_into_view_if_needed()
         url_input.fill(url)
-        # Blur so the FormField's touched-state re-render happens before the
-        # Create click, matching the pattern used for name_input above and
-        # documented in tests/CLAUDE.md (Playwright UI Testing).
-        url_input.blur()
 
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
@@ -158,7 +154,7 @@ class ToolsPage(BasePage):
                 lambda r: r.request.method == "POST" and "/api/v1/tools" in r.url,
                 timeout=5000,
             ) as post_info:
-                save_button.click(force=True)
+                save_button.click()
             logger.info("Create POST -> %d", post_info.value.status)
         except PlaywrightTimeoutError:
             logger.error("Create click did not fire POST /api/v1/tools (stale-DOM race)")
