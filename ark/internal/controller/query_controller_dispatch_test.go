@@ -338,6 +338,22 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		require.NotNil(t, meta.TokenUsage)
 		assert.Equal(t, int64(30), meta.TokenUsage.TotalTokens)
 		assert.NotEmpty(t, meta.MessagesRaw)
+		assert.False(t, meta.MemoryUnavailable)
+	})
+
+	t.Run("extracts memoryUnavailable flag", func(t *testing.T) {
+		msg := &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("response")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId":    "conv-1",
+					"memoryUnavailable": true,
+				},
+			},
+		}
+		meta := extractEngineResponseMeta(&protocol.MessageResult{Result: msg})
+		assert.True(t, meta.MemoryUnavailable)
 	})
 
 	t.Run("extracts native A2A contextId and taskId from message", func(t *testing.T) {
@@ -385,6 +401,38 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		result := &protocol.MessageResult{Result: task}
 		meta := extractEngineResponseMeta(result)
 		assert.Empty(t, meta.ConversationId)
+	})
+}
+
+func TestSetConditionMemoryUnavailable(t *testing.T) {
+	r := &QueryReconciler{}
+	condType := string(arkv1alpha1.QueryMemoryUnavailable)
+
+	t.Run("sets True with NoMemoryBackend reason when unavailable", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, true)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, "NoMemoryBackend", cond.Reason)
+	})
+
+	t.Run("sets False when memory reachable", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, "MemoryReachable", cond.Reason)
+	})
+
+	t.Run("clears a prior True to False on re-run", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, true)
+		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	})
 }
 

@@ -664,11 +664,12 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 }
 
 type engineResponseMeta struct {
-	TokenUsage     *arkv1alpha1.TokenUsage
-	ConversationId string
-	MessagesRaw    string
-	A2AContextID   string
-	A2ATaskID      string
+	TokenUsage        *arkv1alpha1.TokenUsage
+	ConversationId    string
+	MessagesRaw       string
+	A2AContextID      string
+	A2ATaskID         string
+	MemoryUnavailable bool
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -705,6 +706,10 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
 		responseMeta.ConversationId = convId
+	}
+
+	if memoryUnavailable, ok := arkMap["memoryUnavailable"].(bool); ok {
+		responseMeta.MemoryUnavailable = memoryUnavailable
 	}
 
 	if messagesRaw, ok := arkMap["messages"]; ok {
@@ -865,6 +870,25 @@ func queryCompletedAt(obj *arkv1alpha1.Query) *time.Time {
 func (r *QueryReconciler) setConditionCompleted(query *arkv1alpha1.Query, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
 		Type:               string(arkv1alpha1.QueryCompleted),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: query.Generation,
+	})
+}
+
+func (r *QueryReconciler) setConditionMemoryUnavailable(query *arkv1alpha1.Query, unavailable bool) {
+	status := metav1.ConditionFalse
+	reason := "MemoryReachable"
+	message := "Conversation history was available for this query"
+	if unavailable {
+		status = metav1.ConditionTrue
+		reason = "NoMemoryBackend"
+		message = "conversationId was set but no Memory backend was reachable; conversation history was disabled for this query"
+	}
+	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
+		Type:               string(arkv1alpha1.QueryMemoryUnavailable),
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -1389,6 +1413,8 @@ func (r *QueryReconciler) handleQueryDispatch(
 	} else if engineMeta.A2AContextID != "" {
 		obj.Status.ConversationId = engineMeta.A2AContextID
 	}
+
+	r.setConditionMemoryUnavailable(obj, engineMeta.MemoryUnavailable)
 
 	queryStatus := r.determineQueryStatus(response)
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
