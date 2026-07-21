@@ -16,6 +16,9 @@ type QueryConditionType string
 const (
 	// QueryCompleted indicates that the query has finished (regardless of outcome)
 	QueryCompleted QueryConditionType = "Completed"
+	// QueryMemoryUnavailable indicates that the query carried a conversationId
+	// but no Memory backend was reachable, so conversation history was dropped.
+	QueryMemoryUnavailable QueryConditionType = "MemoryUnavailable"
 )
 
 const (
