@@ -2,7 +2,7 @@ import logging
 import random
 import pytest
 from datetime import datetime
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -146,8 +146,18 @@ class ToolsPage(BasePage):
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
         save_button.scroll_into_view_if_needed()
-        save_button.click(force=True)
-        
+
+        # A missing POST after a "successful" click is the stale-DOM re-render
+        # race signature (click event lands on a detached node).
+        try:
+            with self.page.expect_response(
+                lambda r: r.request.method == "POST" and "/api/v1/tools" in r.url,
+                timeout=5000,
+            ):
+                save_button.click()
+        except PlaywrightTimeoutError:
+            logger.error("Create click did not fire POST /api/v1/tools (stale-DOM race)")
+
         popup_visible = self._check_toast_popup()
         logger.info(f"Toast visible: {popup_visible}")
         
