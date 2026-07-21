@@ -86,6 +86,32 @@ function formatDate(timestamp: string): string {
   return new Date(timestamp).toLocaleDateString('en-GB');
 }
 
+function RowActionsMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <TableCell size="small" className="relative z-10">
+      <div className="flex items-center justify-center">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="More actions"
+              onClick={e => e.stopPropagation()}>
+              <MoreVert className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className={MENU_CONTENT_CLASS}
+            onClick={e => e.stopPropagation()}>
+            {children}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </TableCell>
+  );
+}
+
 export function FilesSection() {
   const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
   const [uploading, setUploading] = useState(false);
@@ -472,48 +498,30 @@ export function FilesSection() {
                 <TableCell size="small" className="text-fg-secondary">
                   —
                 </TableCell>
-                <TableCell size="small" className="relative z-10">
-                  <div className="flex items-center justify-center">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="More actions"
-                          onClick={e => e.stopPropagation()}>
-                          <MoreVert className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className={MENU_CONTENT_CLASS}
-                        onClick={e => e.stopPropagation()}>
-                        <DropdownMenuItem
-                          className={MENU_ITEM_CLASS}
-                          onClick={() => {
-                            copy(dir.prefix);
-                            handleCopySuccess(dir.prefix);
-                          }}>
-                          <ContentCopy />
-                          Copy path
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className={MENU_ITEM_CLASS}
-                          onClick={() =>
-                            handleDelete(
-                              'directory',
-                              dir.prefix,
-                              dir.prefix.split('/').filter(Boolean).pop() ||
-                                dir.prefix,
-                            )
-                          }>
-                          <Trash className="size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </TableCell>
+                <RowActionsMenu>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => {
+                      copy(dir.prefix);
+                      handleCopySuccess(dir.prefix);
+                    }}>
+                    <ContentCopy />
+                    Copy path
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() =>
+                      handleDelete(
+                        'directory',
+                        dir.prefix,
+                        dir.prefix.split('/').filter(Boolean).pop() ||
+                          dir.prefix,
+                      )
+                    }>
+                    <Trash className="size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </RowActionsMenu>
               </TableRow>
             ))}
             {allFiles.map(file => (
@@ -538,53 +546,35 @@ export function FilesSection() {
                 <TableCell size="small" className="text-fg-secondary">
                   {formatDate(file.last_modified)}
                 </TableCell>
-                <TableCell size="small" className="relative z-10">
-                  <div className="flex items-center justify-center">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="More actions"
-                          onClick={e => e.stopPropagation()}>
-                          <MoreVert className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className={MENU_CONTENT_CLASS}
-                        onClick={e => e.stopPropagation()}>
-                        <DropdownMenuItem
-                          className={MENU_ITEM_CLASS}
-                          onClick={() => {
-                            copy(file.key);
-                            handleCopySuccess(file.key);
-                          }}>
-                          <ContentCopy />
-                          Copy path
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className={MENU_ITEM_CLASS}
-                          onClick={() => handleDownload(file.key)}>
-                          <SaveAlt />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className={MENU_ITEM_CLASS}
-                          onClick={() =>
-                            handleDelete(
-                              'file',
-                              file.key,
-                              file.key.split('/').pop() || file.key,
-                            )
-                          }>
-                          <Trash className="size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </TableCell>
+                <RowActionsMenu>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => {
+                      copy(file.key);
+                      handleCopySuccess(file.key);
+                    }}>
+                    <ContentCopy />
+                    Copy path
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => handleDownload(file.key)}>
+                    <SaveAlt />
+                    Download
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() =>
+                      handleDelete(
+                        'file',
+                        file.key,
+                        file.key.split('/').pop() || file.key,
+                      )
+                    }>
+                    <Trash className="size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </RowActionsMenu>
               </TableRow>
             ))}
           </TableBody>
