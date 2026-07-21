@@ -69,6 +69,10 @@ const (
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
 	queryCapacityRequeueDelay = 250 * time.Millisecond
+	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
+	// goroutine died so it converges to a terminal phase instead of stranding.
+	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
+	queryRunningSafetyRequeue = 30 * time.Second
 )
 
 type QueryReconciler struct {
@@ -239,8 +243,10 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	log := logf.FromContext(ctx)
 
 	if _, exists := r.operations.Load(req.NamespacedName); exists {
-		log.Info("Exists")
-		return ctrl.Result{}, nil
+		// Genuinely in-flight: don't spawn a second goroutine. Re-arm the safety
+		// net so that if this goroutine dies without reaching a terminal phase,
+		// a later reconcile finds no tracked op and recovers it.
+		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
 	if r.sem != nil && !r.sem.TryAcquire(1) {
@@ -255,7 +261,10 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
-	return ctrl.Result{}, nil
+	// Arm the safety net. On success the goroutine writes a terminal phase and
+	// the resulting watch event reconciles ahead of this timer; if it dies, this
+	// requeue is what brings the Query back for recovery.
+	return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 }
 
 func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *arkv1alpha1.Query) (ctrl.Result, error) {
@@ -914,7 +923,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	return retry.OnError(retry.DefaultBackoff, isRetriableStatusUpdateErr, func() error {
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -935,12 +944,26 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			if errors.IsNotFound(err) {
 				return nil
 			}
-			if !errors.IsConflict(err) {
+			if !isRetriableStatusUpdateErr(err) {
 				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 			}
 		}
 		return err
 	})
+}
+
+// isRetriableStatusUpdateErr reports whether a status write should be retried.
+// Beyond optimistic-lock conflicts, it covers the transient API-server errors
+// that arise under load (rolling upgrades, etcd leader election, API Priority &
+// Fairness throttling) — exactly when a dropped terminal write would silently
+// lose a query result.
+func isRetriableStatusUpdateErr(err error) bool {
+	return errors.IsConflict(err) ||
+		errors.IsServerTimeout(err) ||
+		errors.IsTimeout(err) ||
+		errors.IsTooManyRequests(err) ||
+		errors.IsInternalError(err) ||
+		errors.IsServiceUnavailable(err)
 }
 
 func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {
@@ -1376,8 +1399,15 @@ func (r *QueryReconciler) handleQueryDispatch(
 	operationData := buildOperationData(target, queryInput)
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 
-	// Update status with duration
-	_ = r.updateStatusWithDuration(opCtx, obj, queryStatus, duration)
+	// Persist the terminal result. This is the only place .status.response,
+	// .status.tokenUsage and .status.duration are written, so a dropped error
+	// here silently loses the result. We surface it (the write itself already
+	// retries transient failures); we must not return it, or executeQueryAsync
+	// would flip this successful query to error.
+	if err := r.updateStatusWithDuration(opCtx, obj, queryStatus, duration); err != nil {
+		log.Error(err, "failed to persist terminal query status; query will be re-reconciled",
+			"query", obj.Name, "status", queryStatus)
+	}
 
 	return nil
 }
