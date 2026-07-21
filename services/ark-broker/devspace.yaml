@@ -108,8 +108,6 @@ deployments:
         extraPVCs:
           - name: ark-broker-node-modules
             size: 1Gi
-        restartController:
-          enabled: false
 
 dev:
   ark-broker:
