@@ -7,7 +7,7 @@ import { Callout } from 'nextra/components'
 
 # Workflows
 
-> **Workflows in Ark are [Argo Workflows](https://argoproj.github.io/workflows/).** Ark does **not** ship its own workflow engine — there's no native "Ark workflow" CRD and no drag-and-drop workflow builder. You author Argo `WorkflowTemplate` / `Workflow` YAML, and each step calls Ark by creating a `Query` resource (or running the `fark` CLI) against an agent, team, model, or tool. Ark provides Helm charts and a pre-built `ark-tools` image to make those calls easy.
+> **Workflows in Ark are [Argo Workflows](https://argoproj.github.io/workflows/).** Ark does **not** ship its own workflow engine — there's no native "Ark workflow" CRD and no drag-and-drop workflow builder. You author Argo `WorkflowTemplate` / `Workflow` YAML, and each step calls Ark by submitting a `Query` against an agent, team, model, or tool — usually by referencing the chart-provided `ark-query` template. Ark provides Helm charts and this reusable template to make those calls easy.
 
 ## Why Argo?
 
@@ -98,103 +98,90 @@ kubectl get workflowtemplate ark-query -n <your-argo-namespace>
 
 ## How a step calls Ark
 
-Every Ark interaction inside a workflow is one of two patterns:
+The chart-provided `ark-query` `WorkflowTemplate` is the recommended way to call Ark from a step. Reference it with `templateRef` — it submits an Ark `Query`, waits for completion, and exposes the result as step outputs, so you don't hand-write any `kubectl` or CLI plumbing:
 
-1. **A `Query` resource** — `kubectl apply` a `Query` CR, `kubectl wait --for=condition=Completed`, then read `.status.response.content`. This is what the bundled samples use; it works anywhere and gives you labels, TTL, timeout, parameters, and session/conversation IDs.
-2. **The `fark` CLI** — run the pre-built [`ark-tools`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/images/ark-tools/README.md) image and call `fark <agent|team|model|tool> <name> "<message>"`. Shorter for one-shot calls.
+- **Inputs** — `target` (required, `type/name` where type is `agent`, `team`, `model`, or `tool`, e.g. `agent/weather-agent`) and `input` (required, the message). Optional: `timeout` (default `5m`), `ttl`, `parameters` (JSON array of `{name,value}`), `session-id`, `memory`, `query-name`, `service-account`.
+- **Outputs** — `response` (`.status.response.content`), `query-json` (the full Query object), `phase` (`done`/`error`), and `conversation-id`.
 
-<Callout type="warning">
-Use **`fark`**, not `ark`, inside a workflow pod. `fark` talks to the Kubernetes API directly (in-cluster config), so it works with the workflow's ServiceAccount. The `ark` CLI port-forwards to the `ark-api` service, which requires `pods/portforward` permission the `argo-workflow` ServiceAccount doesn't have — `ark query …` will fail in a workflow step with *"cannot create resource pods/portforward"*. Keep `ark query` for local/interactive use.
-</Callout>
-
-Both patterns need a ServiceAccount with RBAC to talk to the cluster — the samples set `serviceAccountName: argo-workflow`, which the chart provisions. The examples below are Argo `template` snippets — drop them into a `WorkflowTemplate`'s `templates:` list.
+Steps need a ServiceAccount with RBAC to create Queries — the samples set `serviceAccountName: argo-workflow`, which the chart provisions. The `ark-query` template is namespace-scoped and must exist in the same namespace as your workflow; the chart installs it automatically (see [Adding the `ark-query` template](#adding-the-ark-query-template-to-an-existing-argo-installation) for standalone Argo installs). The examples below are Argo `step` snippets — drop them into a `WorkflowTemplate`'s `steps:` list.
 
 ### Invoke an agent
 
 ```yaml
 - name: ask-agent
-  script:
-    image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
-    command: [bash]
-    source: |
-      fark agent weather-agent "What's the forecast for London?" --quiet > /tmp/out.txt
-  outputs:
+  templateRef:
+    name: ark-query
+    template: query
+  arguments:
     parameters:
-      - name: response
-        valueFrom:
-          path: /tmp/out.txt
+      - name: target
+        value: "agent/weather-agent"
+      - name: input
+        value: "What's the forecast for London?"
 ```
+
+Read the reply from `{{steps.ask-agent.outputs.parameters.response}}`.
 
 ### Invoke a team
 
-Same shape — use the `team` subcommand:
+Same shape — use a `team/` target:
 
 ```yaml
 - name: ask-team
-  script:
-    image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
-    command: [bash]
-    source: |
-      fark team research-team "Summarise the latest on EV battery chemistries." --quiet > /tmp/out.txt
-  outputs:
+  templateRef:
+    name: ark-query
+    template: query
+  arguments:
     parameters:
-      - name: response
-        valueFrom:
-          path: /tmp/out.txt
+      - name: target
+        value: "team/research-team"
+      - name: input
+        value: "Summarise the latest on EV battery chemistries."
 ```
 
 ### Invoke a tool
 
-Tools take a JSON object matching their `inputSchema`:
+Tools take a JSON object matching their `inputSchema`, passed as the `input`:
 
 ```yaml
 - name: call-tool
-  script:
-    image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
-    command: [bash]
-    source: |
-      fark tool get-coordinates '{"city":"Paris"}' --quiet > /tmp/out.txt
-  outputs:
+  templateRef:
+    name: ark-query
+    template: query
+  arguments:
     parameters:
-      - name: result
-        valueFrom:
-          path: /tmp/out.txt
+      - name: target
+        value: "tool/get-coordinates"
+      - name: input
+        value: '{"city":"Paris"}'
 ```
 
-### Add session and conversation IDs
+### Add session IDs and shared memory
 
-To thread several steps into one conversation (shared memory) and group them under a session for telemetry, set `conversationId` and `sessionId`. With the `Query` CR pattern, set them in the spec — the workflow name makes a convenient stable ID across steps:
+To group several steps under one session for telemetry, set `session-id`. To let steps share history, point them at the same `memory` (a `Memory` resource) — the workflow name makes a convenient stable ID across steps:
 
 ```yaml
 - name: ask-with-context
-  script:
-    image: alpine/k8s:1.28.13
-    command: [sh]
-    source: |
-      QUERY_NAME="step-{{workflow.name}}-$(date +%s%N)"
-      cat <<EOF | kubectl apply -f -
-      apiVersion: ark.mckinsey.com/v1alpha1
-      kind: Query
-      metadata:
-        name: $QUERY_NAME
-        labels:
-          workflow: "{{workflow.name}}"
-      spec:
-        input: "What's my name?"
-        conversationId: "{{workflow.name}}"   # shared across steps → same memory thread
-        sessionId: "{{workflow.name}}"         # groups the steps for telemetry
-        target:
-          type: agent
-          name: assistant
-        serviceAccount: argo-workflow
-        timeout: 5m
-        ttl: 24h
-      EOF
-      kubectl wait --for=condition=Completed --timeout=5m query/$QUERY_NAME || true
-      kubectl get query $QUERY_NAME -o jsonpath='{.status.response.content}'
+  templateRef:
+    name: ark-query
+    template: query
+  arguments:
+    parameters:
+      - name: target
+        value: "agent/assistant"
+      - name: input
+        value: "What's my name?"
+      - name: session-id
+        value: "{{workflow.name}}"   # groups the steps for telemetry
+      - name: memory
+        value: "shared-memory"       # shared history across steps
 ```
 
-A later step that reuses the same `conversationId` sees the earlier exchange. See [Run queries → Multi-turn conversations](/user-guide/queries#multi-turn-conversations) for the underlying behaviour.
+See [Run queries → Multi-turn conversations](/user-guide/queries#multi-turn-conversations) for the underlying behaviour.
+
+<Callout type="info">
+When you need control the template doesn't expose (e.g. an explicit `conversationId` or extra labels), submit a raw `Query` from a step instead: `kubectl apply` a `Query` CR, `kubectl wait --for=condition=Completed`, then read `.status.response.content`. The legacy [`fark`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/images/ark-tools/README.md) CLI (`fark <agent|team|model|tool> <name> "<message>"` in the `ark-tools` image) also still works for quick one-shot calls. Use **`fark`**, not `ark`, inside a workflow pod — the `ark` CLI port-forwards to `ark-api`, which the `argo-workflow` ServiceAccount can't do.
+</Callout>
 
 ## Example: agents, teams, and deterministic steps together
 
@@ -221,25 +208,25 @@ spec:
       steps:
         # Step 1 — an AGENT gathers raw material.
         - - name: research
-            template: query-ark
+            templateRef:
+              name: ark-query
+              template: query
             arguments:
               parameters:
-                - name: kind
-                  value: "agent"
-                - name: name
-                  value: "research-agent"
+                - name: target
+                  value: "agent/research-agent"
                 - name: input
                   value: "Research: {{workflow.parameters.topic}}"
 
         # Step 2 — a TEAM reviews and refines, seeing step 1's output.
         - - name: review
-            template: query-ark
+            templateRef:
+              name: ark-query
+              template: query
             arguments:
               parameters:
-                - name: kind
-                  value: "team"
-                - name: name
-                  value: "review-team"
+                - name: target
+                  value: "team/review-team"
                 - name: input
                   value: "Critique and tighten this research:\n{{steps.research.outputs.parameters.response}}"
 
@@ -250,24 +237,6 @@ spec:
               parameters:
                 - name: body
                   value: "{{steps.review.outputs.parameters.response}}"
-
-    # Reusable Ark query step — works for agent, team, model, or tool kinds.
-    - name: query-ark
-      inputs:
-        parameters:
-          - name: kind
-          - name: name
-          - name: input
-      script:
-        image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
-        command: [bash]
-        source: |
-          fark {{inputs.parameters.kind}} {{inputs.parameters.name}} "{{inputs.parameters.input}}" --quiet > /tmp/response.txt
-      outputs:
-        parameters:
-          - name: response
-            valueFrom:
-              path: /tmp/response.txt
 
     # A plain container step — pure data transformation, no Ark call.
     - name: format-report
