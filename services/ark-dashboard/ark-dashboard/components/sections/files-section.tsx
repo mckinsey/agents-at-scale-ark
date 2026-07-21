@@ -86,7 +86,7 @@ function formatDate(timestamp: string): string {
   return new Date(timestamp).toLocaleDateString('en-GB');
 }
 
-function RowActionsMenu({ children }: { children: React.ReactNode }) {
+function RowActionsMenu({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <TableCell size="small" className="relative z-10">
       <div className="flex items-center justify-center">

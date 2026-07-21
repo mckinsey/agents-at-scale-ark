@@ -19,7 +19,10 @@ function JsonValue({ value }: { readonly value: unknown }) {
   if (typeof value === 'object') {
     return <span className="text-fg-primary">{JSON.stringify(value)}</span>;
   }
-  return <span className="text-fg-primary">{String(value)}</span>;
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return <span className="text-fg-primary">{value.toString()}</span>;
+  }
+  return <span className="text-fg-tertiary">undefined</span>;
 }
 
 interface JsonTreeNodeProps {
