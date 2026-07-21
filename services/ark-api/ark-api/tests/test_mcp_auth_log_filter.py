@@ -29,6 +29,18 @@ class TestRedactString(unittest.TestCase):
         result = _redact_string("code_verifier=abcdef")
         self.assertNotIn("abcdef", result)
 
+    def test_redacts_scheme_prefixed_bearer_token(self):
+        # The token after the scheme must be redacted, not just "Bearer".
+        result = _redact_string("authorization: Bearer eyJhbGci.token.sig")
+        self.assertNotIn("eyJhbGci.token.sig", result)
+        self.assertIn("[REDACTED]", result)
+
+    def test_redaction_stops_at_delimiter(self):
+        # Redaction must not swallow adjacent structured fields.
+        result = _redact_string("access_token=abc123, request_id=r-42")
+        self.assertNotIn("abc123", result)
+        self.assertIn("request_id=r-42", result)
+
 
 class TestSensitiveDataFilter(unittest.TestCase):
     def test_filter_redacts_msg(self):
