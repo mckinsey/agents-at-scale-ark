@@ -4,10 +4,10 @@ from __future__ import annotations
 import html
 import logging
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ark_sdk.client import with_ark_client
 
@@ -26,6 +26,7 @@ from ...services.mcp_auth_persistence import (
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
+    ensure_mcpserver_token_secret_ref,
     flow_deadline_rfc3339,
     mark_flow_authorized,
     mark_flow_failed,
@@ -54,6 +55,21 @@ router = APIRouter(tags=["mcp-auth"])
 
 VERSION = "v1alpha1"
 DEFAULT_AUTHORIZED_BY = "cli"
+MAX_AUTH_ERROR_DESC = 200
+TOKEN_EXCHANGE_FAILED_CODE = "token_exchange_failed"
+INVALID_REQUEST_CODE = "invalid_request"
+
+
+def _resolve_caller_identity(request: Request) -> str:
+    """Resolve the caller's identity from the impersonation middleware.
+
+    Returns the authenticated user's resolved identity when present, else the
+    literal string ``cli`` (in-cluster Service path, or impersonation disabled).
+    """
+    identity = getattr(request.state, "user_identity", None)
+    if identity is not None and getattr(identity, "username", None):
+        return identity.username
+    return DEFAULT_AUTHORIZED_BY
 
 
 def _get_config_or_503():
@@ -124,6 +140,7 @@ def _build_authorization_url(
 )
 @handle_k8s_errors(operation="start auth", resource_type="mcp_server")
 async def start_mcp_auth(
+    request: Request,
     mcp_server_name: str,
     body: AuthStartRequest,
     namespace: Optional[str] = Query(
@@ -133,6 +150,7 @@ async def start_mcp_auth(
     cfg = _get_config_or_503()
     redirect_uri = cfg.public_callback_url
     force = bool(body.force)
+    caller_identity = _resolve_caller_identity(request)
 
     async with with_ark_client(namespace, VERSION) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
@@ -177,11 +195,15 @@ async def start_mcp_auth(
 
         token_ref = _read_token_secret_ref(mcp_server)
         if not token_ref or not token_ref.name:
+            await ensure_mcpserver_token_secret_ref(ark_client, mcp_server_name)
+            mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
+            token_ref = _read_token_secret_ref(mcp_server)
+        if not token_ref or not token_ref.name:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"set spec.authorization.tokenSecretRef.name on the MCPServer "
-                    f"(e.g. {mcp_server_name}-oauth) and re-run auth login"
+                    f"could not provision spec.authorization.tokenSecretRef.name "
+                    f"on MCPServer {mcp_server_name!r}"
                 ),
             )
         secret_name = token_ref.name
@@ -237,11 +259,12 @@ async def start_mcp_auth(
             state_param=state_random,
             verifier=verifier,
             expires_at=flow_expires,
-            caller_identity=DEFAULT_AUTHORIZED_BY,
+            caller_identity=caller_identity,
             server_name=mcp_server_name,
             client_id=client_id,
             client_secret=client_secret,
             keys=keys,
+            redirect_on_complete=bool(body.redirect_on_complete),
         )
 
         authorization_url = _build_authorization_url(
@@ -273,6 +296,45 @@ def _html_response(*, title: str, body: str, status_code: int = 200) -> HTMLResp
     return HTMLResponse(content=page, status_code=status_code)
 
 
+def _dashboard_redirect(cfg, params: list[tuple[str, str]]) -> RedirectResponse:
+    """Build a 302 to the dashboard /mcp page.
+
+    The host and path come solely from ARK_API_DASHBOARD_URL; only the query
+    params (built from trusted cache values) vary, so this is not an
+    open-redirect vector. Values are URL-encoded with %20 for spaces.
+    """
+    base = cfg.dashboard_mcp_url()
+    location = f"{base}?{urlencode(params, quote_via=quote)}"
+    return RedirectResponse(url=location, status_code=302)
+
+
+def _dashboard_success_redirect(cfg, *, name: str, namespace: str, auth_id: str) -> RedirectResponse:
+    return _dashboard_redirect(
+        cfg,
+        [("authorized", name), ("namespace", namespace), ("auth_id", auth_id)],
+    )
+
+
+def _dashboard_error_redirect(
+    cfg, *, name: str, namespace: str, code: str, desc: Optional[str]
+) -> RedirectResponse:
+    params = [("authorized", name), ("namespace", namespace), ("auth_error", code)]
+    if desc:
+        params.append(("auth_error_desc", desc[:MAX_AUTH_ERROR_DESC]))
+    return _dashboard_redirect(cfg, params)
+
+
+def _cache_miss_response(cfg) -> Response:
+    """Response when the flow's client is unknown (missing/expired/replayed state)."""
+    if cfg.is_dashboard_url_set:
+        return _dashboard_redirect(cfg, [("auth_error", "expired")])
+    return _html_response(
+        title="Authorization failed",
+        body="Unknown or expired state",
+        status_code=400,
+    )
+
+
 @router.get("/mcp/auth/callback")
 async def mcp_auth_callback(
     request: Request,
@@ -280,7 +342,7 @@ async def mcp_auth_callback(
     code: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     error_description: Optional[str] = Query(None),
-) -> HTMLResponse:
+) -> Response:
     cfg = _get_config_or_503()
 
     if not state:
@@ -292,28 +354,27 @@ async def mcp_auth_callback(
 
     dot = state.find(".")
     if dot < 1:
-        return _html_response(
-            title="Authorization failed",
-            body="Unknown or expired state",
-            status_code=400,
-        )
+        return _cache_miss_response(cfg)
     cb_namespace = state[:dot]
     state_random = state[dot + 1:]
 
     flow = await read_flow_state_by_state_param(cb_namespace, state_random)
     if flow is None or flow.is_expired or not flow.secret_name:
-        return _html_response(
-            title="Authorization failed",
-            body="Unknown or expired state",
-            status_code=400,
-        )
+        return _cache_miss_response(cfg)
 
     secret_ns = flow.namespace
     secret_name_for_flow = flow.secret_name
+    use_redirect = flow.redirect_on_complete and cfg.is_dashboard_url_set
+    name = flow.server_name
+    ns = flow.namespace
 
     if error:
         message = f"{error}: {error_description}" if error_description else error
         await mark_flow_failed(secret_ns, secret_name_for_flow, message)
+        if use_redirect:
+            return _dashboard_error_redirect(
+                cfg, name=name, namespace=ns, code=error, desc=error_description
+            )
         return _html_response(
             title="Authorization failed",
             body=message,
@@ -322,6 +383,14 @@ async def mcp_auth_callback(
 
     if not code:
         await mark_flow_failed(secret_ns, secret_name_for_flow, "missing authorization code")
+        if use_redirect:
+            return _dashboard_error_redirect(
+                cfg,
+                name=name,
+                namespace=ns,
+                code=INVALID_REQUEST_CODE,
+                desc="Missing authorization code",
+            )
         return _html_response(
             title="Authorization failed",
             body="Missing authorization code",
@@ -341,6 +410,14 @@ async def mcp_auth_callback(
             or not token_ref.name
         ):
             await mark_flow_failed(secret_ns, secret_name_for_flow, "MCPServer authorization metadata went missing")
+            if use_redirect:
+                return _dashboard_error_redirect(
+                    cfg,
+                    name=name,
+                    namespace=ns,
+                    code=INVALID_REQUEST_CODE,
+                    desc="MCPServer authorization metadata went missing",
+                )
             return _html_response(
                 title="Authorization failed",
                 body="MCPServer authorization metadata went missing",
@@ -362,6 +439,14 @@ async def mcp_auth_callback(
             )
         except TokenExchangeError as exc:
             await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
+            if use_redirect:
+                return _dashboard_error_redirect(
+                    cfg,
+                    name=name,
+                    namespace=ns,
+                    code=TOKEN_EXCHANGE_FAILED_CODE,
+                    desc=str(exc),
+                )
             return _html_response(
                 title="Authorization failed",
                 body=str(exc),
@@ -386,6 +471,10 @@ async def mcp_auth_callback(
         )
         await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
 
+    if use_redirect:
+        return _dashboard_success_redirect(
+            cfg, name=name, namespace=ns, auth_id=flow.auth_id
+        )
     return _html_response(
         title="Authorization complete",
         body=f"Authorization for {flow.server_name} succeeded.",

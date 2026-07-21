@@ -68,7 +68,7 @@ class TestHealthEndpoints(unittest.TestCase):
         response = self.client.get("/ready")
 
         # Assert response
-        self.assertEqual(response.status_code, 200)  # Endpoint still returns 200
+        self.assertEqual(response.status_code, 503)  # Not ready -> 503 so probes fail
         data = response.json()
         self.assertEqual(data["status"], "not ready")
         self.assertEqual(data["service"], "ark-api")
@@ -90,7 +90,7 @@ class TestHealthEndpoints(unittest.TestCase):
         response = self.client.get("/ready")
 
         # Assert response
-        self.assertEqual(response.status_code, 200)  # Endpoint still returns 200
+        self.assertEqual(response.status_code, 503)  # Not ready -> 503 so probes fail
         data = response.json()
         self.assertEqual(data["status"], "not ready")
         self.assertEqual(data["service"], "ark-api")

@@ -28,7 +28,10 @@ let mockSendMessage = vi.fn();
 
 const mockChatClient = vi.fn() as MockedClass<typeof ChatClient>;
 
-let mockArkApiProxyInstance: {start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>} = {
+let mockArkApiProxyInstance: {
+  start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+} = {
   start: vi.fn(),
   stop: vi.fn(),
 };
@@ -41,6 +44,11 @@ vi.mock('./arkApiProxy.js', () => ({
 
 vi.mock('./chatClient.js', () => ({
   ChatClient: mockChatClient,
+}));
+
+const mockWatchEventsLive = vi.fn();
+vi.mock('./kubectl.js', () => ({
+  watchEventsLive: mockWatchEventsLive,
 }));
 
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
@@ -56,9 +64,8 @@ const mockStdoutWrite = vi
   .spyOn(process.stdout, 'write')
   .mockImplementation(() => true);
 
-const {executeQuery, parseTarget, parseParameters} = await import(
-  './executeQuery.js'
-);
+const {executeQuery, parseTarget, parseParameters} =
+  await import('./executeQuery.js');
 const {ExitCodes} = await import('./errors.js');
 
 describe('executeQuery', () => {
@@ -373,7 +380,9 @@ describe('executeQuery', () => {
 
     it('should handle errors and exit with CliError', async () => {
       mockSpinner.isSpinning = true;
-      const startMock = vi.fn().mockRejectedValue(new Error('Connection failed'));
+      const startMock = vi
+        .fn()
+        .mockRejectedValue(new Error('Connection failed'));
       mockArkApiProxyInstance.start = startMock;
 
       await expect(
@@ -421,6 +430,41 @@ describe('executeQuery', () => {
   });
 
   describe('executeQuery with output format', () => {
+    it('routes the events format to the live watcher (backward-compatible, non-pretty)', async () => {
+      mockExeca.mockResolvedValue({stdout: '', stderr: '', exitCode: 0});
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events',
+      });
+
+      expect(mockWatchEventsLive).toHaveBeenCalledTimes(1);
+      expect(mockWatchEventsLive).toHaveBeenCalledWith(
+        expect.stringMatching(/cli-query-\d+/)
+      );
+      // Default events path must NOT enable pretty mode.
+      expect(mockWatchEventsLive.mock.calls[0]).toHaveLength(1);
+    });
+
+    it('routes the events-pretty format to the live watcher with pretty enabled', async () => {
+      mockExeca.mockResolvedValue({stdout: '', stderr: '', exitCode: 0});
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events-pretty',
+      });
+
+      expect(mockWatchEventsLive).toHaveBeenCalledTimes(1);
+      expect(mockWatchEventsLive).toHaveBeenCalledWith(
+        expect.stringMatching(/cli-query-\d+/),
+        true
+      );
+    });
+
     it('should create query and output name format', async () => {
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {

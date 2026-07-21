@@ -62,8 +62,11 @@ export function AgentsAPIDialog({
   const [isInternalEndpoint, setIsInternalEndpoint] = useState(false);
 
   const apiPath = '/api/v1/queries/';
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   const externalBaseUrl =
-    typeof window !== 'undefined' ? window.location.origin : '';
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${basePath}`
+      : '';
   const internalBaseUrl = 'http://ark-api.<namespace>.svc.cluster.local';
   const fullEndpoint = isInternalEndpoint
     ? `${internalBaseUrl}${apiPath}`
