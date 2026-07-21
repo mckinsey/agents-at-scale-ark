@@ -36,7 +36,7 @@
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "postgres": "^3.4.9",
-    "protobufjs": "^8.6.1",
+    "protobufjs": "^8.6.6",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.0",
