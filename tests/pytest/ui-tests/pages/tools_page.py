@@ -140,7 +140,11 @@ class ToolsPage(BasePage):
         
         url_input.scroll_into_view_if_needed()
         url_input.fill(url)
-        
+        # Blur so the FormField's touched-state re-render happens before the
+        # Create click, matching the pattern used for name_input above and
+        # documented in tests/CLAUDE.md (Playwright UI Testing).
+        url_input.blur()
+
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
