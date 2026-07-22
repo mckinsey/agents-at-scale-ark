@@ -5,6 +5,7 @@ package postgresql
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -124,6 +125,62 @@ func TestDropReplicationArtifacts_PublicationError(t *testing.T) {
 	}
 }
 
+func TestDropReplicationArtifacts_VerifyError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectExec("pg_terminate_backend").WithArgs(walSlotName).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("pg_drop_replication_slot").WithArgs(walSlotName).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("count").WithArgs(walSlotName).WillReturnError(errors.New("boom"))
+
+	err = dropReplicationArtifacts(context.Background(), db)
+	if err == nil || !strings.Contains(err.Error(), "verify slot dropped") {
+		t.Fatalf("expected verify error, got %v", err)
+	}
+}
+
+func TestDropReplicationArtifacts_RetriesOnDropError(t *testing.T) {
+	withFastRetry(t)
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// First pass: drop fails while a consumer still holds the slot.
+	mock.ExpectExec("pg_terminate_backend").WithArgs(walSlotName).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("pg_drop_replication_slot").WithArgs(walSlotName).WillReturnError(errors.New("slot is active"))
+	// Second pass: gone.
+	mock.ExpectExec("pg_terminate_backend").WithArgs(walSlotName).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("pg_drop_replication_slot").WithArgs(walSlotName).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("count").WithArgs(walSlotName).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectExec("DROP PUBLICATION").WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := dropReplicationArtifacts(context.Background(), db); err != nil {
+		t.Fatalf("expected success after retry, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestDropReplicationArtifacts_UnreachableDatabase(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	err = DropReplicationArtifacts(context.Background(), Config{Host: "127.0.0.1", Port: port, Database: "ark", User: "ark", Password: "pw", SSLMode: "disable"})
+	if err == nil || !strings.Contains(err.Error(), "terminate slot consumer") {
+		t.Fatalf("expected connection failure from terminate step, got %v", err)
+	}
+}
+
 func TestDropReplicationArtifacts_DeadlineExceeded(t *testing.T) {
 	withFastRetry(t)
 	db, mock, err := sqlmock.New()
@@ -143,8 +200,11 @@ func TestDropReplicationArtifacts_DeadlineExceeded(t *testing.T) {
 	defer cancel()
 
 	err = dropReplicationArtifacts(ctx, db)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	if err == nil {
+		t.Fatal("expected error after deadline, got nil")
+	}
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("loop ended before deadline: %v", err)
 	}
 }
 
