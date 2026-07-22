@@ -1,9 +1,12 @@
-import { Cog, Search, Zap } from 'lucide-react';
+import { Cog, Search, Store, Zap } from 'lucide-react';
 
 export type SettingPage =
   | 'queries'
   | 'experimental-features'
-  | 'execution-engines';
+  | 'execution-engines'
+  | 'manage-marketplace';
+
+export const MANAGE_MARKETPLACE_KEY = 'manage-marketplace' as const;
 
 export type SettingMenuItem = {
   key: SettingPage;
@@ -37,6 +40,12 @@ export const settingsSections: SettingsSection[] = [
         key: 'execution-engines',
         label: 'Execution Engines',
         icon: Cog,
+        experimental: true,
+      },
+      {
+        key: 'manage-marketplace',
+        label: 'Manage marketplace',
+        icon: Store,
         experimental: true,
       },
     ],

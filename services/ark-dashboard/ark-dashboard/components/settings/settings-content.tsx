@@ -2,11 +2,11 @@
 
 import { Suspense, useMemo } from 'react';
 
-import type { SettingPage } from './settings-types';
-
 import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
+import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 import { QueriesSettings } from './queries-settings';
+import type { SettingPage } from './settings-types';
 
 type SettingsContentProps = {
   activePage: SettingPage;
@@ -31,6 +31,10 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       'execution-engines': {
         title: 'Execution Engines',
         component: <ExecutionEnginesSettings />,
+      },
+      'manage-marketplace': {
+        title: 'Manage marketplace',
+        component: <ManageMarketplaceSettings />,
       },
     }),
     [],
