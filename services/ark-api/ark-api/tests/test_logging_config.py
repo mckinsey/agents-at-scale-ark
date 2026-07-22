@@ -12,7 +12,7 @@ from ark_api.core.config import (
     _resolve_level,
     setup_logging,
 )
-from ark_api.services.mcp_auth_log_filter import SensitiveDataFilter
+from ark_api.services.sensitive_data_filter import SensitiveDataFilter
 
 
 def _has_redaction(handler: logging.Handler) -> bool:

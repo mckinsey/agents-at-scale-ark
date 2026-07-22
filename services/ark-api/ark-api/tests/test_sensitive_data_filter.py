@@ -1,10 +1,10 @@
-"""Tests for the MCP auth sensitive data logging filter."""
+"""Tests for the sensitive data logging filter."""
 from __future__ import annotations
 
 import logging
 import unittest
 
-from ark_api.services.mcp_auth_log_filter import SensitiveDataFilter, _redact_string
+from ark_api.services.sensitive_data_filter import SensitiveDataFilter, _redact_string
 
 
 class TestRedactString(unittest.TestCase):

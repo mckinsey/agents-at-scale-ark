@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Optional
 
-from ..services.mcp_auth_log_filter import SensitiveDataFilter
+from ..services.sensitive_data_filter import SensitiveDataFilter
 
 # Loggers whose handlers should also carry the redaction filter. uvicorn
 # configures its own logging (with handlers on these loggers) before importing
@@ -38,12 +38,9 @@ def _install_redaction_filter() -> None:
 def setup_logging(logger_name: Optional[str] = None) -> logging.Logger:
     level = _resolve_level()
     logging.basicConfig(
-        level=level,
         format="%(levelname)s\t%(asctime)s:\t%(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
-    # basicConfig is a no-op if the root already has handlers, so set the level
-    # explicitly to guarantee LOG_LEVEL is honored regardless of prior config.
     logging.getLogger().setLevel(level)
 
     # Quiet noisy helm command logging from pyhelm3

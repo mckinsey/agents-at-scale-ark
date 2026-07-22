@@ -120,7 +120,7 @@ class ARKAgentExecutor(AgentExecutor):
             user_message = self._extract_message_text(context.message)
             # Raw prompt content is verbose-only; default level keeps IDs/metadata (see logging contract).
             logger.info(f"Task {task_id} Context {context_id} - Processing query")
-            logger.debug(f"Task {task_id} Context {context_id} - Processing query: {user_message}")
+            logger.debug(f"Task {task_id} Context {context_id} - Query content: {user_message}")
             logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
 
             # Send starting status

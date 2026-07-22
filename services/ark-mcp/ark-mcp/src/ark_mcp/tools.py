@@ -208,7 +208,7 @@ def register_tools(mcp: FastMCP):
 
         # Raw query input is verbose-only; default level names the agent (see logging contract).
         logger.info(f"Querying agent '{agent}'")
-        logger.debug(f"Querying agent '{agent}' with input: {input}")
+        logger.debug(f"Agent '{agent}' query input: {input}")
         await create_query_sdk(query_data)
 
         # Wait for completion with default timeout (5 minutes)

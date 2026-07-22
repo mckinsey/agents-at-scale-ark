@@ -13,8 +13,7 @@ def _resolve_level(default: int = logging.INFO) -> int:
     name = os.getenv("LOG_LEVEL", "").strip().upper()
     if not name:
         return default
-    level = getattr(logging, name, None)
-    return level if isinstance(level, int) else default
+    return logging.getLevelNamesMapping().get(name, default)
 
 
 def setup_logging():
