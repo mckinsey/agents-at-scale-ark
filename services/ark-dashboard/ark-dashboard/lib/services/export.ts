@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import {
@@ -9,6 +10,7 @@ import {
 } from '@/lib/services/export-utils';
 
 // Resource types from the API
+export type AgentResponse = components['schemas']['AgentResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type ModelListResponse = components['schemas']['ModelListResponse'];
 export type TeamListResponse = components['schemas']['TeamListResponse'];
@@ -86,7 +88,7 @@ export const exportService = {
   // Fetch all resources for export selection
   async fetchAllResources(): Promise<ResourceExportData> {
     const results = await Promise.allSettled([
-      apiClient.get<AgentListResponse>('/api/v1/agents'),
+      fetchAllPages<AgentResponse>('/api/v1/agents').then(items => ({ items })),
       apiClient.get<TeamListResponse>('/api/v1/teams'),
       apiClient.get<ModelListResponse>('/api/v1/models'),
       apiClient.get<QueryListResponse>('/api/v1/queries'),

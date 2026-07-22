@@ -4,8 +4,9 @@
  */
 
 import { serverApiClient } from '@/lib/api/server-client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type {
-  AgentListResponse,
+  AgentResponse,
   ModelListResponse,
   TeamListResponse,
   QueryListResponse,
@@ -26,7 +27,9 @@ export const exportServiceServer = {
     console.log(`Server-side export service: fetching resources directly from backend at ${backendUrl}`);
 
     const results = await Promise.allSettled([
-      serverApiClient.get<AgentListResponse>('/v1/agents'),
+      fetchAllPages<AgentResponse>('/v1/agents', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
       serverApiClient.get<TeamListResponse>('/v1/teams'),
       serverApiClient.get<ModelListResponse>('/v1/models'),
       serverApiClient.get<QueryListResponse>('/v1/queries'),
