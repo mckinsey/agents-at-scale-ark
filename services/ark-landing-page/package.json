@@ -14,7 +14,7 @@
   "dependencies": {
     "@kubernetes/client-node": "^1.4.0",
     "lucide-react": "^0.563.0",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "next-auth": "^5.0.0-beta.29",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
@@ -50,7 +50,7 @@
     "@tootallnate/once": "^3.0.1",
     "http-proxy-agent": "^7.0.0",
     "jsdom": "^25.0.0",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.18",
     "ws": "^8.21.0",
     "sharp": "^0.35.0"
   }
