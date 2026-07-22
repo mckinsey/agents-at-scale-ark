@@ -311,9 +311,40 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			result, err := r.handleRunningPhase(context.Background(), req, query)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero(), "must not requeue with capacity delay when enforcement is disabled")
+			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "spawn path arms the safety-net requeue, not the capacity delay")
 			_, exists := r.operations.Load(req.NamespacedName)
 			Expect(exists).To(BeTrue(), "should register the operation, proving execution branch was taken despite no semaphore")
+		})
+	})
+
+	Context("safety-net requeue", func() {
+		It("arms a bounded requeue for an in-flight op without spawning a duplicate", func() {
+			r := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "inflight-query", Namespace: "default"}}
+
+			// Pre-register an operation so handleRunningPhase treats it as in-flight.
+			_, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			r.operations.Store(req.NamespacedName, cancel)
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              req.Name,
+					Namespace:         req.Namespace,
+					CreationTimestamp: metav1.Time{Time: time.Now()},
+				},
+			}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "in-flight op must re-arm the safety net so a dead goroutine is recovered")
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "in-flight branch returns before any spawn, leaving the tracked op intact")
 		})
 	})
 
