@@ -17,7 +17,20 @@ postgresql:
   user: ""
   passwordSecretName: ""
   passwordSecretKey: "password"
-  sslMode: "disable"
+  # sslMode: disable | require | verify-ca | verify-full
+  sslMode: "require"
+  # Optional Secret holding PEM files for TLS verification and/or client auth.
+  # When set it is mounted read-only at /etc/ark/postgres-tls; name the keys that exist in it.
+  # sslRootCertKey enables verify-ca/verify-full against a custom/private CA.
+  sslSecretName: ""
+  sslRootCertKey: ""
+  sslClientCertKey: ""
+  sslClientKeyKey: ""
+  # Fallback GID for the mounted cert files when containerSecurityContext.runAsGroup
+  # is unset; the files are group-owned by it so the non-root process can read them.
+  # 65532 matches the image USER (distroless nonroot). If you set
+  # containerSecurityContext.runAsGroup, fsGroup follows that value instead.
+  sslFsGroup: 65532
 
 resources:
   limits:
