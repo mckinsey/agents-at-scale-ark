@@ -3527,10 +3527,14 @@ export interface components {
         };
         /** MCPServerListResponse */
         MCPServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MCPServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** MCPServerQueryParameterRef */
         MCPServerQueryParameterRef: {
@@ -3889,10 +3893,14 @@ export interface components {
          * @description List of models response model.
          */
         ModelListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["ModelResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * ModelRef
@@ -4487,10 +4495,14 @@ export interface components {
          * @description List of teams response model.
          */
         TeamListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["TeamResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * TeamMember
@@ -6195,6 +6207,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6726,6 +6742,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -8311,6 +8331,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;

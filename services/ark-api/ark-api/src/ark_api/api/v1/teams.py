@@ -19,6 +19,7 @@ from ...models.teams import (
 )
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
+from .pagination import PaginationParams, pagination_params
 
 logger = logging.getLogger(__name__)
 
@@ -82,26 +83,29 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
 
 @router.get("", response_model=TeamListResponse)
 @handle_k8s_errors(operation="list", resource_type="team")
-async def list_teams(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
+async def list_teams(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
     """
-    List all Team CRs in a namespace.
-    
+    List a page of Team CRs in a namespace.
+
     Args:
         namespace: The namespace to list teams from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        TeamListResponse: List of all teams in the namespace
+        TeamListResponse: One page of teams plus the continuation token
     """
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        teams = await ark_client.teams.a_list()
-        
-        team_list = []
-        for team in teams:
-            team_list.append(team_to_response(team.to_dict()))
-        
+        page = await ark_client.teams.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        team_list = [team_to_response(team.to_dict()) for team in page.items]
+
         return TeamListResponse(
             items=team_list,
-            count=len(team_list)
+            count=len(team_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
