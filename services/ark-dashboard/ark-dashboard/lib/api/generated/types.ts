@@ -903,13 +903,14 @@ export interface paths {
         };
         /**
          * List Mcp Servers
-         * @description List all MCPServer CRs in a namespace.
+         * @description List a page of MCPServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list MCP servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         MCPServerListResponse: List of all MCP servers in the namespace
+         *         MCPServerListResponse: One page of MCP servers plus the continuation token
          */
         get: operations["list_mcp_servers_v1_mcp_servers_get"];
         put?: never;
@@ -1135,13 +1136,14 @@ export interface paths {
         };
         /**
          * List Models
-         * @description List all Model CRs in a namespace.
+         * @description List a page of Model CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list models from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ModelListResponse: List of all models in the namespace
+         *         ModelListResponse: One page of models plus the continuation token
          */
         get: operations["list_models_v1_models_get"];
         put?: never;
@@ -1899,13 +1901,14 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description List all Team CRs in a namespace.
+         * @description List a page of Team CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list teams from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         TeamListResponse: List of all teams in the namespace
+         *         TeamListResponse: One page of teams plus the continuation token
          */
         get: operations["list_teams_v1_teams_get"];
         put?: never;
