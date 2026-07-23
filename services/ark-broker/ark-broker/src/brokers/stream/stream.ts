@@ -6,6 +6,12 @@ import type {
 
 export type Predicate<T> = (item: BrokerItem<T>) => boolean;
 
+export function hasScopingField(filter: Record<string, unknown>): boolean {
+  return Object.entries(filter).some(
+    ([key, value]) => key !== 'afterSequence' && Boolean(value)
+  );
+}
+
 export interface Stream<T> {
   append(data: T, ttlSeconds?: number): Promise<BrokerItem<T>>;
   all(): Promise<BrokerItem<T>[]>;
