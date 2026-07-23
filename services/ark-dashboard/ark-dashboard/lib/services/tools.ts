@@ -126,24 +126,4 @@ export const toolsService = {
       },
     });
   },
-
-  // Update an existing tool
-  async update(
-    name: string,
-    tool: ToolSpecInput & { annotations?: Record<string, string> },
-  ): Promise<void> {
-    const payload = {
-      annotations: tool.annotations,
-      spec: buildToolSpec(tool),
-    };
-    await apiClient.put(`/api/v1/tools/${name}`, payload);
-
-    trackEvent({
-      name: 'tool_updated',
-      properties: {
-        toolName: name,
-        toolType: tool.type,
-      },
-    });
-  },
 };

@@ -52,8 +52,8 @@ export function useToolForm({
   onSuccess,
 }: UseToolFormOptions): ToolFormContextValue {
   const { namespace } = useNamespace();
-  const isEditing = mode === ToolFormMode.EDIT;
-  const [loading, setLoading] = useState(isEditing);
+  const isViewing = mode === ToolFormMode.VIEW;
+  const [loading, setLoading] = useState(isViewing);
   const [saving, setSaving] = useState(false);
   const [tool, setTool] = useState<ToolDetail | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -78,7 +78,7 @@ export function useToolForm({
   const { reset } = form;
 
   useEffect(() => {
-    if (!isEditing || !toolName) return;
+    if (!isViewing || !toolName) return;
     let cancelled = false;
     const loadTool = async () => {
       setLoading(true);
@@ -99,7 +99,7 @@ export function useToolForm({
     return () => {
       cancelled = true;
     };
-  }, [isEditing, toolName, namespace, reset]);
+  }, [isViewing, toolName, namespace, reset]);
 
   const selectedType = useWatch({ control: form.control, name: 'type' });
 
@@ -183,19 +183,14 @@ export function useToolForm({
 
     setSaving(true);
     try {
-      if (isEditing && toolName) {
-        await toolsService.update(toolName, specFields);
-        reset(values);
-      } else {
-        await toolsService.create({
-          name: values.name.trim(),
-          ...specFields,
-          namespace,
-        });
-      }
+      await toolsService.create({
+        name: values.name.trim(),
+        ...specFields,
+        namespace,
+      });
       onSuccess?.();
     } catch (error) {
-      toast.error(isEditing ? 'Failed to Update Tool' : 'Failed to Create Tool', {
+      toast.error('Failed to Create Tool', {
         description:
           error instanceof Error
             ? error.message

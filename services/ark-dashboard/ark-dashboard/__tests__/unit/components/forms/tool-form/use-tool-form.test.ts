@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/services', () => ({
   toolsService: {
     create: vi.fn(),
-    update: vi.fn(),
     getDetail: vi.fn(),
   },
   agentsService: {
@@ -68,7 +67,6 @@ beforeEach(() => {
   mockAgentsService.getAll.mockResolvedValue([]);
   mockTeamsService.getAll.mockResolvedValue([]);
   mockToolsService.create.mockResolvedValue(undefined);
-  mockToolsService.update.mockResolvedValue(undefined);
 });
 
 describe('useToolForm', () => {
@@ -217,7 +215,7 @@ describe('useToolForm', () => {
   });
 });
 
-describe('useToolForm — edit mode', () => {
+describe('useToolForm — view mode', () => {
   const detail = {
     name: 'my-tool',
     namespace: 'default',
@@ -236,7 +234,7 @@ describe('useToolForm — edit mode', () => {
 
   it('fetches the tool and prefills the form', async () => {
     const { result } = renderHook(() =>
-      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'my-tool' }),
+      useToolForm({ mode: ToolFormMode.VIEW, toolName: 'my-tool' }),
     );
 
     await waitFor(() => {
@@ -253,56 +251,5 @@ describe('useToolForm — edit mode', () => {
     expect(result.current.form.getValues('httpUrl')).toBe('https://x.dev');
     expect(result.current.form.getValues('inputSchema')).toContain('"a": 1');
     expect(result.current.form.getValues('annotations')).toContain('"note"');
-  });
-
-  it('updates the tool (not create) and calls onSuccess on submit', async () => {
-    const onSuccess = vi.fn();
-    const { result } = renderHook(() =>
-      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'my-tool', onSuccess }),
-    );
-
-    await waitFor(() => {
-      expect(result.current.state.loading).toBe(false);
-    });
-
-    await act(async () => {
-      await result.current.actions.onSubmit(
-        values({ type: 'http', httpUrl: 'https://y.dev' }),
-      );
-    });
-
-    expect(mockToolsService.update).toHaveBeenCalledWith(
-      'my-tool',
-      expect.objectContaining({
-        type: 'http',
-        description: 'desc',
-        inputSchema: { a: 1 },
-        url: 'https://y.dev',
-      }),
-    );
-    expect(mockToolsService.create).not.toHaveBeenCalled();
-    expect(onSuccess).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows an error toast when update fails', async () => {
-    mockToolsService.update.mockRejectedValue(new Error('Boom'));
-    const onSuccess = vi.fn();
-    const { result } = renderHook(() =>
-      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'my-tool', onSuccess }),
-    );
-
-    await waitFor(() => {
-      expect(result.current.state.loading).toBe(false);
-    });
-
-    await act(async () => {
-      await result.current.actions.onSubmit(values());
-    });
-
-    expect(mockToast.error).toHaveBeenCalledWith(
-      'Failed to Update Tool',
-      expect.objectContaining({ description: 'Boom' }),
-    );
-    expect(onSuccess).not.toHaveBeenCalled();
   });
 });
