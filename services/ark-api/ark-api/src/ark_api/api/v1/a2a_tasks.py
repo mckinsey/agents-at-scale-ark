@@ -25,6 +25,7 @@ from ...models.a2a_tasks import (
     ApprovalSubmissionResponse,
 )
 from .exceptions import handle_k8s_errors
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 from .pagination import PaginationParams, pagination_params
 
 logger = logging.getLogger(__name__)
@@ -145,7 +146,7 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
 
 @router.get("", response_model=A2ATaskListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a task")
-async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
+async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
     """
     List a page of A2ATask CRs in a namespace.
 
@@ -173,7 +174,7 @@ async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None
 
 @router.get("/{task_name}", response_model=A2ATaskDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="a2a task")
-async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskDetailResponse:
+async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskDetailResponse:
     """
     Get a specific A2ATask CR by name.
 
@@ -192,7 +193,7 @@ async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str
 
 @router.delete("/{task_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="a2a task")
-async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete an A2ATask CR by name.
 
@@ -209,7 +210,7 @@ async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[
 async def submit_a2a_task_approval(
     task_name: str,
     body: ApprovalSubmissionRequest,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> ApprovalSubmissionResponse:
     """
