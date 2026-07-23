@@ -103,7 +103,7 @@ export default function SessionDetailPage() {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <button
-          onClick={() => router.push('/session-history')}
+          onClick={() => router.push('/sessions')}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
           <ChevronLeft className="size-4" />
@@ -143,7 +143,7 @@ export default function SessionDetailPage() {
   return (
     <div className="flex flex-col space-y-6 overflow-y-auto p-8">
       <button
-        onClick={() => router.push('/session-history')}
+        onClick={() => router.push('/sessions')}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       >
         <ChevronLeft className="size-4" />

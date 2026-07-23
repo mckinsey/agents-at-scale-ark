@@ -35,7 +35,7 @@ function getSessionsUrl(templateName: string, status?: string) {
   if (status) {
     params.set('status', status);
   }
-  return `/sessions?${params}`;
+  return `/workflow-runs?${params}`;
 }
 
 function StatLink({

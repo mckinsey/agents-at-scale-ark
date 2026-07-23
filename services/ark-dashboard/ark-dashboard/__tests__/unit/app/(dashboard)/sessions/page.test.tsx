@@ -2,30 +2,33 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import SessionsPage from '@/app/(dashboard)/sessions/page';
+import SessionHistoryPage from '@/app/(dashboard)/sessions/page';
 
-const mockUseSearchParams = vi.fn();
+const mockPush = vi.fn();
 
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => mockUseSearchParams(),
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: () => ({ push: mockPush }),
 }));
 
 vi.mock('@/components/common/page-header', () => ({
   PageHeader: () => <div data-testid="page-header">Page Header</div>,
 }));
 
-vi.mock('@/components/sections/sessions-section', () => ({
-  SessionsSection: () => <div data-testid="sessions-section">Sessions Section</div>,
-}));
-
-const mockUseWorkflows = vi.fn();
-
-vi.mock('@/lib/services/workflows-hooks', () => ({
-  useWorkflows: (namespace: string) => mockUseWorkflows(namespace),
-}));
-
-vi.mock('@/lib/services/workflow-mapper', () => ({
-  mapArgoWorkflowsToSessions: (workflows: unknown[]) => workflows,
+vi.mock('@/components/sessions-conversations/sessions-table', () => ({
+  SessionsTable: ({
+    onSelectSession,
+  }: {
+    onSelectSession: (id: string) => void;
+  }) => (
+    <div data-testid="sessions-table">
+      <button
+        data-testid="select-session-btn"
+        onClick={() => onSelectSession('test-session-123')}
+      >
+        Select Session
+      </button>
+    </div>
+  ),
 }));
 
 const queryClient = new QueryClient({
@@ -36,52 +39,42 @@ const queryClient = new QueryClient({
   },
 });
 
-describe('SessionsPage', () => {
+describe('SessionHistoryPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseWorkflows.mockReturnValue({ workflows: [] });
   });
 
-  it('should use namespace from URL search params', () => {
-    mockUseSearchParams.mockReturnValue({
-      get: (key: string) => (key === 'namespace' ? 'test-namespace' : null),
-    });
-
+  it('should render page header and sessions table', () => {
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionsPage />
-      </QueryClientProvider>,
-    );
-
-    expect(mockUseWorkflows).toHaveBeenCalledWith('test-namespace');
-  });
-
-  it('should use default namespace when not provided in URL', () => {
-    mockUseSearchParams.mockReturnValue({
-      get: () => null,
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <SessionsPage />
-      </QueryClientProvider>,
-    );
-
-    expect(mockUseWorkflows).toHaveBeenCalledWith('default');
-  });
-
-  it('should render page header and sessions section', () => {
-    mockUseSearchParams.mockReturnValue({
-      get: () => null,
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <SessionsPage />
+        <SessionHistoryPage />
       </QueryClientProvider>,
     );
 
     expect(screen.getByTestId('page-header')).toBeInTheDocument();
-    expect(screen.getByTestId('sessions-section')).toBeInTheDocument();
+    expect(screen.getByTestId('sessions-table')).toBeInTheDocument();
+  });
+
+  it('should use namespaced navigation when selecting a session', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SessionHistoryPage />
+      </QueryClientProvider>,
+    );
+
+    const selectButton = screen.getByTestId('select-session-btn');
+    selectButton.click();
+
+    expect(mockPush).toHaveBeenCalledWith('/sessions/test-session-123');
+  });
+
+  it('should render the page title', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SessionHistoryPage />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Sessions')).toBeInTheDocument();
   });
 });

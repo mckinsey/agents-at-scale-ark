@@ -89,8 +89,8 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
   },
 
   // Monitoring
-  sessions: {
-    key: 'sessions',
+  'workflow-runs': {
+    key: 'workflow-runs',
     title: 'Workflow Runs',
     icon: Play,
     group: 'monitoring',
@@ -108,8 +108,8 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
   },
-  'session-history': {
-    key: 'session-history',
+  sessions: {
+    key: 'sessions',
     title: 'Sessions',
     icon: MessageSquare,
     group: 'monitoring',

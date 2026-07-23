@@ -1,33 +1,37 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
-
+import { Activity } from 'lucide-react';
 import { PageHeader } from '@/components/common/page-header';
-import { SessionsSection } from '@/components/sections/sessions-section';
+import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
-import { mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
-import { useWorkflows } from '@/lib/services/workflows-hooks';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
-export default function SessionsPage() {
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get('namespace') || 'default';
-  const { workflows } = useWorkflows(namespace);
-
-  const allSessions = mapArgoWorkflowsToSessions(workflows);
-
-  const pageTitle = allSessions
-    ? `Workflow Runs (${allSessions.length})`
-    : 'Workflow Runs';
+export default function SessionsConversationsPage() {
+  const { push } = useNamespacedNavigation();
 
   return (
-    <>
-      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Workflow Runs" />
-      <div className="flex flex-1 flex-col">
-        <div>
-          <h1 className="text-xl">{pageTitle}</h1>
+    <div className="flex h-full flex-col space-y-6 p-8">
+      <PageHeader
+        breadcrumbs={BASE_BREADCRUMBS}
+        currentPage="Sessions"
+      />
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Activity className="size-5" />
+          <h1 className="text-2xl font-semibold">Sessions</h1>
         </div>
-        <SessionsSection />
+        <p className="text-sm text-muted-foreground">
+          Monitor all sessions across agents, teams and tools
+        </p>
       </div>
-    </>
+
+      <div className="flex-1">
+        <SessionsTable
+          onSelectSession={(sessionId) => push(`/sessions/${sessionId}`)}
+          selectedSessionId={null}
+        />
+      </div>
+    </div>
   );
 }
