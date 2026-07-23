@@ -103,7 +103,7 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     });
   });
 
-  it('should show A2A in Other group', async () => {
+  it('should show A2A tasks and A2A servers in Other group', async () => {
     const user = userEvent.setup();
 
     renderSidebar();
@@ -112,11 +112,12 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     await user.click(otherButton);
 
     await waitFor(() => {
-      expect(screen.getByText('A2A')).toBeInTheDocument();
+      expect(screen.getByText('A2A tasks')).toBeInTheDocument();
     });
+    expect(screen.getByText('A2A servers')).toBeInTheDocument();
   });
 
-  it('should navigate to /a2a when A2A is clicked', async () => {
+  it('should navigate to /tasks when A2A tasks is clicked', async () => {
     const user = userEvent.setup();
 
     renderSidebar();
@@ -125,11 +126,29 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     await user.click(otherButton);
 
     await waitFor(() => {
-      expect(screen.getByText('A2A')).toBeInTheDocument();
+      expect(screen.getByText('A2A tasks')).toBeInTheDocument();
     });
 
-    const a2aButton = screen.getByRole('button', { name: /a2a/i });
-    await user.click(a2aButton);
+    const tasksButton = screen.getByRole('button', { name: /a2a tasks/i });
+    await user.click(tasksButton);
+
+    expect(mockPush).toHaveBeenCalledWith('/tasks');
+  });
+
+  it('should navigate to /a2a when A2A servers is clicked', async () => {
+    const user = userEvent.setup();
+
+    renderSidebar();
+
+    const otherButton = await screen.findByRole('button', { name: /other/i });
+    await user.click(otherButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('A2A servers')).toBeInTheDocument();
+    });
+
+    const serversButton = screen.getByRole('button', { name: /a2a servers/i });
+    await user.click(serversButton);
 
     expect(mockPush).toHaveBeenCalledWith('/a2a');
   });
