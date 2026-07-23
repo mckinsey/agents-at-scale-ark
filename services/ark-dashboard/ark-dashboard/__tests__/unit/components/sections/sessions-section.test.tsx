@@ -835,6 +835,18 @@ describe('SessionsSection', () => {
         expect(lastCall[0]).not.toContain('workflowName');
       });
     });
+
+    it('should not replace URL when it already matches current filters', async () => {
+      currentSearch = 'workflowName=test';
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('test')).toBeInTheDocument();
+      });
+
+      expect(mockRouter.replace).not.toHaveBeenCalled();
+    });
   });
 
   describe('Session Detail View', () => {
