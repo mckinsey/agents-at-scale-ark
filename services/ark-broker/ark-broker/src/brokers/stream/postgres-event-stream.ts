@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
-import type {EventData} from '../event-broker.js';
+import type {EventData, EventFilter, EventStream} from '../event-broker.js';
 import {BrokerItem} from './broker-item.js';
 import type {Predicate} from './stream.js';
 import {PostgresStreamBase} from './postgres-stream-base.js';
@@ -23,13 +23,33 @@ function rowToBrokerItem(row: EventRow): BrokerItem<EventData> {
   };
 }
 
-export class PostgresEventStream extends PostgresStreamBase<EventData> {
-  constructor(
-    private readonly logger: Logger,
-    private readonly db: Db,
-    private readonly ttlSeconds: number
-  ) {
-    super();
+export class PostgresEventStream
+  extends PostgresStreamBase<EventData, EventFilter>
+  implements EventStream
+{
+  protected readonly tableName = 'events';
+  protected readonly selectColumns = [
+    'sequence_number',
+    'query_id',
+    'session_id',
+    'reason',
+    'event',
+    'created_at',
+  ];
+
+  constructor(logger: Logger, db: Db, ttlSeconds: number) {
+    super(logger, db, ttlSeconds);
+  }
+
+  protected rowToItem(row: postgres.Row): BrokerItem<EventData> {
+    return rowToBrokerItem(row as unknown as EventRow);
+  }
+
+  protected whereFor(filter: EventFilter): postgres.Fragment {
+    return this.db`
+      ${filter.queryId ? this.db`AND query_id = ${filter.queryId}` : this.db``}
+      ${filter.sessionId ? this.db`AND session_id = ${filter.sessionId}` : this.db``}
+    `;
   }
 
   async append(
@@ -53,16 +73,6 @@ export class PostgresEventStream extends PostgresStreamBase<EventData> {
     return item;
   }
 
-  async all(): Promise<BrokerItem<EventData>[]> {
-    const rows = await this.db<EventRow[]>`
-      SELECT sequence_number, query_id, session_id, reason, event, created_at
-      FROM events
-      WHERE expires_at > now()
-      ORDER BY sequence_number ASC
-    `;
-    return rows.map(rowToBrokerItem);
-  }
-
   async delete(predicate?: Predicate<EventData>): Promise<void> {
     if (!predicate) {
       this.logger.info('deleting all events');
@@ -73,6 +83,11 @@ export class PostgresEventStream extends PostgresStreamBase<EventData> {
     const toDelete = items.filter(predicate).map((item) => item.sequenceNumber);
     if (toDelete.length === 0) return;
     await this.db`DELETE FROM events WHERE sequence_number = ANY(${toDelete})`;
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    this.logger.info({queryId}, 'deleting events by query');
+    await this.db`DELETE FROM events WHERE query_id = ${queryId}`;
   }
 
   async getCurrentSequence(): Promise<number> {

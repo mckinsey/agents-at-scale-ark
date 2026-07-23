@@ -723,3 +723,159 @@ func decodeCursorForTest(token string) (int64, error) {
 	}
 	return payload.Cursor, nil
 }
+
+func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testKind := "TestResource"
+	testNS := "integration-test-generation"
+	testName := "generation-test-resource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+	}()
+
+	generation := func() int64 {
+		var g int64
+		if err := backend.db.QueryRowContext(ctx,
+			"SELECT generation FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+			testKind, testNS, testName).Scan(&g); err != nil {
+			t.Fatalf("read generation: %v", err)
+		}
+		return g
+	}
+	currentObj := func() *integrationTestObject {
+		got, gerr := backend.Get(ctx, testKind, testNS, testName)
+		if gerr != nil {
+			t.Fatalf("Get failed: %v", gerr)
+		}
+		return got.(*integrationTestObject)
+	}
+
+	// Start with a two-key spec so we can test reordered-keys without needing
+	// an intermediate spec change first.
+	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	obj.Metadata.Name = testName
+	obj.Metadata.Namespace = testNS
+	obj.Metadata.UID = "gen-test-uid"
+	obj.Metadata.Labels = map[string]string{"tier": "a"}
+	obj.Spec = map[string]interface{}{"a": "1", "b": "2"}
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Fatalf("after Create: generation = %d, want 1", g)
+	}
+
+	// Metadata-only (label change): no bump.
+	step := currentObj()
+	step.Metadata.Labels = map[string]string{"tier": "b"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("label-only Update failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Errorf("after label-only update: generation = %d, want 1", g)
+	}
+
+	// Reordered spec keys: same content, no bump (jsonb structural equality).
+	step = currentObj()
+	step.Spec = map[string]interface{}{"b": "2", "a": "1"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("reordered-key Update failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Errorf("after reordered-key update: generation = %d, want 1 (jsonb equality is order-independent)", g)
+	}
+
+	// Actual spec change: bump.
+	step = currentObj()
+	step.Spec["a"] = "changed"
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("spec Update failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after spec change: generation = %d, want 2", g)
+	}
+
+	// UpdateStatus: no bump.
+	step = currentObj()
+	step.Status = map[string]interface{}{"phase": "Ready"}
+	if err := backend.UpdateStatus(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("UpdateStatus failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after status update: generation = %d, want 2", g)
+	}
+
+	// Status + label via Update (whole-object round-trip, no spec change): no bump.
+	step = currentObj()
+	step.Metadata.Labels["extra"] = "value"
+	step.Status["phase"] = "Running"
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("status+label Update failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after status+label update: generation = %d, want 2", g)
+	}
+
+	// First graceful-deletion marking (DT null → non-null) bumps generation,
+	// matching upstream rest.BeforeDelete.
+	step = currentObj()
+	ts := "2026-01-02T15:04:05Z"
+	mark := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	mark.Metadata.Name = testName
+	mark.Metadata.Namespace = testNS
+	mark.Metadata.UID = step.Metadata.UID
+	mark.Metadata.ResourceVersion = step.Metadata.ResourceVersion
+	mark.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	mark.Metadata.DeletionTimestamp = &ts
+	mark.Spec = step.Spec
+	if err := backend.Update(ctx, testKind, testNS, testName, mark); err != nil {
+		t.Fatalf("deletion-marking Update failed: %v", err)
+	}
+	if g := generation(); g != 3 {
+		t.Errorf("after first deletion mark: generation = %d, want 3", g)
+	}
+
+	// Re-sending the timestamp on an already-marked row (same spec) does not bump.
+	var rv string
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT resource_version FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+		testKind, testNS, testName).Scan(&rv); err != nil {
+		t.Fatalf("read rv after mark: %v", err)
+	}
+	resend := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	resend.Metadata.Name = testName
+	resend.Metadata.Namespace = testNS
+	resend.Metadata.UID = step.Metadata.UID
+	resend.Metadata.ResourceVersion = rv
+	resend.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	resend.Metadata.DeletionTimestamp = &ts
+	resend.Spec = step.Spec
+	if err := backend.Update(ctx, testKind, testNS, testName, resend); err != nil {
+		t.Fatalf("resend-DT Update failed: %v", err)
+	}
+	if g := generation(); g != 3 {
+		t.Errorf("after re-sending existing DT: generation = %d, want 3 (no bump)", g)
+	}
+}

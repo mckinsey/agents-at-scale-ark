@@ -459,7 +459,7 @@ class TestAnnotateMcpServerAuthorized(unittest.TestCase):
         ark_client = _ark_client_with_mcp(mcp_dict)
 
         with patch(
-            "ark_sdk.models.mcp_server_v1alpha1.MCPServerV1alpha1",
+            "ark_api.services.mcp_auth_persistence.MCPServerV1alpha1",
             new=lambda **kw: kw,
         ):
             asyncio.run(annotate_mcpserver_authorized(ark_client, "notion", "cli"))
@@ -487,7 +487,7 @@ class TestStripMcpServerAuthAnnotations(unittest.TestCase):
         ark_client = _ark_client_with_mcp(mcp_dict)
 
         with patch(
-            "ark_sdk.models.mcp_server_v1alpha1.MCPServerV1alpha1",
+            "ark_api.services.mcp_auth_persistence.MCPServerV1alpha1",
             new=lambda **kw: kw,
         ):
             asyncio.run(strip_mcpserver_auth_annotations(ark_client, "notion"))

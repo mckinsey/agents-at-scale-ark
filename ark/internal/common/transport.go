@@ -14,7 +14,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const QueryMessagesEndpointFmt = "/queries/%s/messages"
+const (
+	QueryMessagesEndpointFmt = "/queries/%s/messages"
+	QueryEventsEndpointFmt   = "/events/%s"
+)
 
 // LoggingTransport wraps an http.RoundTripper to provide optional HTTP request/response logging.
 type LoggingTransport struct {

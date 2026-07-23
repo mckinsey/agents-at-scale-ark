@@ -15,10 +15,17 @@ spec:
       labels:
         {{- include "ark-apiserver.labels" . | nindent 8 }}
     spec:
+      {{- $ssl := .Values.postgresql }}
+      {{- if or (and $ssl.sslClientCertKey (not $ssl.sslClientKeyKey)) (and $ssl.sslClientKeyKey (not $ssl.sslClientCertKey)) }}
+      {{- fail "postgresql.sslClientCertKey and postgresql.sslClientKeyKey must be set together for mutual TLS" }}
+      {{- end }}
       serviceAccountName: {{ .Values.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
+        {{- if .Values.postgresql.sslSecretName }}
+        fsGroup: {{ .Values.containerSecurityContext.runAsGroup | default .Values.postgresql.sslFsGroup }}
+        {{- end }}
       containers:
         - name: manager
           image: {{ include "ark-apiserver.image" . }}
@@ -35,25 +42,30 @@ spec:
               value: postgresql
             - name: ARK_APISERVER_PORT
               value: {{ .Values.apiserver.port | quote }}
-            - name: ARK_POSTGRES_HOST
-              value: {{ required "postgresql.host is required" .Values.postgresql.host | quote }}
-            - name: ARK_POSTGRES_PORT
-              value: {{ .Values.postgresql.port | quote }}
-            - name: ARK_POSTGRES_DATABASE
-              value: {{ .Values.postgresql.database | quote }}
-            - name: ARK_POSTGRES_USER
-              value: {{ required "postgresql.user is required" .Values.postgresql.user | quote }}
-            - name: ARK_POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ required "postgresql.passwordSecretName is required" .Values.postgresql.passwordSecretName }}
-                  key: {{ .Values.postgresql.passwordSecretKey }}
-            - name: ARK_POSTGRES_SSL_MODE
-              value: {{ .Values.postgresql.sslMode | quote }}
+            {{- include "ark-apiserver.postgresEnv" . | nindent 12 }}
+            {{- if .Values.certManager.enabled }}
+            - name: ARK_APISERVER_TLS_CERT_FILE
+              value: /etc/ark/apiserver-tls/tls.crt
+            - name: ARK_APISERVER_TLS_KEY_FILE
+              value: /etc/ark/apiserver-tls/tls.key
+            {{- end }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          {{- if or .Values.certManager.enabled .Values.postgresql.sslSecretName }}
+          volumeMounts:
+            {{- if .Values.certManager.enabled }}
+            - name: apiserver-tls
+              mountPath: /etc/ark/apiserver-tls
+              readOnly: true
+            {{- end }}
+            {{- if .Values.postgresql.sslSecretName }}
+            - name: postgres-tls
+              mountPath: /etc/ark/postgres-tls
+              readOnly: true
+            {{- end }}
+          {{- end }}
           ports:
             - name: https
               containerPort: {{ .Values.apiserver.port }}
@@ -69,3 +81,17 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      {{- if or .Values.certManager.enabled .Values.postgresql.sslSecretName }}
+      volumes:
+        {{- if .Values.certManager.enabled }}
+        - name: apiserver-tls
+          secret:
+            secretName: ark-apiserver-tls
+        {{- end }}
+        {{- if .Values.postgresql.sslSecretName }}
+        - name: postgres-tls
+          secret:
+            secretName: {{ .Values.postgresql.sslSecretName }}
+            defaultMode: 0640
+        {{- end }}
+      {{- end }}

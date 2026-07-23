@@ -141,6 +141,91 @@ func TestResolveDispatchAddress(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, completionsAddr, addr)
 	})
+
+	const tenantEngineAddr = "http://ark-completions.tenant-a:80"
+
+	tenantEngine := func(namespace, addr string) *arkv1prealpha1.ExecutionEngine {
+		return &arkv1prealpha1.ExecutionEngine{
+			ObjectMeta: metav1.ObjectMeta{Name: defaultCompletionsEngineName, Namespace: namespace},
+			Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: addr},
+		}
+	}
+
+	t.Run("agent without engine prefers namespace-local ark-completions engine", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "tenant-a"},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "my-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, tenantEngineAddr, addr)
+	})
+
+	t.Run("non-agent target prefers namespace-local ark-completions engine", func(t *testing.T) {
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeTeam, Name: "my-team"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, tenantEngineAddr, addr)
+	})
+
+	t.Run("a2a agent prefers namespace-local ark-completions engine", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a2a-agent", Namespace: "tenant-a"},
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: arka2a.ExecutionEngineA2A},
+			},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "a2a-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, tenantEngineAddr, addr)
+	})
+
+	t.Run("namespace-local engine with empty address falls back to central", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "tenant-a"},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", "")).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "my-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-a")
+		require.NoError(t, err)
+		assert.Equal(t, completionsAddr, addr)
+	})
+
+	t.Run("no namespace-local engine falls back to central", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-agent", Namespace: "tenant-b"},
+		}
+		r := &QueryReconciler{
+			Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+				WithObjects(agent, tenantEngine("tenant-a", tenantEngineAddr)).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		// Agent is in tenant-b; the only ark-completions engine is in tenant-a.
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "my-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "tenant-b")
+		require.NoError(t, err)
+		assert.Equal(t, completionsAddr, addr)
+	})
 }
 
 func TestExtractA2AMeta(t *testing.T) {
@@ -253,6 +338,22 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		require.NotNil(t, meta.TokenUsage)
 		assert.Equal(t, int64(30), meta.TokenUsage.TotalTokens)
 		assert.NotEmpty(t, meta.MessagesRaw)
+		assert.False(t, meta.MemoryUnavailable)
+	})
+
+	t.Run("extracts memoryUnavailable flag", func(t *testing.T) {
+		msg := &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("response")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId":    "conv-1",
+					"memoryUnavailable": true,
+				},
+			},
+		}
+		meta := extractEngineResponseMeta(&protocol.MessageResult{Result: msg})
+		assert.True(t, meta.MemoryUnavailable)
 	})
 
 	t.Run("extracts native A2A contextId and taskId from message", func(t *testing.T) {
@@ -300,6 +401,38 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		result := &protocol.MessageResult{Result: task}
 		meta := extractEngineResponseMeta(result)
 		assert.Empty(t, meta.ConversationId)
+	})
+}
+
+func TestSetConditionMemoryUnavailable(t *testing.T) {
+	r := &QueryReconciler{}
+	condType := string(arkv1alpha1.QueryMemoryUnavailable)
+
+	t.Run("sets True with NoMemoryBackend reason when unavailable", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, true)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, "NoMemoryBackend", cond.Reason)
+	})
+
+	t.Run("sets False when memory reachable", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, "MemoryReachable", cond.Reason)
+	})
+
+	t.Run("clears a prior True to False on re-run", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, true)
+		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	})
 }
 
