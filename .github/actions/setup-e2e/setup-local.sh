@@ -217,7 +217,10 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     --set image.pullPolicy=IfNotPresent \
     --set postgresql.host=ark-storage-dev \
     --set postgresql.user=postgres \
-    --set postgresql.passwordSecretName=ark-storage-dev-password
+    --set postgresql.passwordSecretName=ark-storage-dev-password \
+    --set postgresql.sslMode=verify-full \
+    --set postgresql.sslSecretName=ark-storage-dev-tls \
+    --set postgresql.sslRootCertKey=ca.crt
 fi
 
 echo "=== Installing ARK Completions (background) ==="

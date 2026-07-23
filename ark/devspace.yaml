@@ -125,6 +125,7 @@ deployments:
           host: ark-storage-dev
           user: postgres
           passwordSecretName: ark-storage-dev-password
+          sslMode: disable
 
 dev:
   ark-controller:
