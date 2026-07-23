@@ -23,6 +23,7 @@ from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams, pagination_params
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
 
 @router.get("", response_model=AgentListResponse)
 @handle_k8s_errors(operation="list", resource_type="agent")
-async def list_agents(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
+async def list_agents(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
     """
     List a page of Agent CRs in a namespace.
 
@@ -134,7 +135,7 @@ async def list_agents(request: Request, namespace: Optional[str] = Query(None, d
 
 @router.post("", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="agent")
-async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
     """
     Create a new Agent CR.
     
@@ -184,7 +185,7 @@ async def create_agent(request: Request, body: AgentCreateRequest, namespace: Op
 
 @router.get("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="agent")
-async def get_agent(request: Request, agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def get_agent(request: Request, agent_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
     """
     Get a specific Agent CR by name.
     
@@ -203,7 +204,7 @@ async def get_agent(request: Request, agent_name: str, namespace: Optional[str] 
 
 @router.put("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="agent")
-async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
     """
     Update an Agent CR by name.
     
@@ -257,7 +258,7 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
 
 @router.delete("/{agent_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="agent")
-async def delete_agent(request: Request, agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_agent(request: Request, agent_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete an Agent CR by name.
     

@@ -20,6 +20,7 @@ from ...models.teams import (
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams, pagination_params
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
 
 @router.get("", response_model=TeamListResponse)
 @handle_k8s_errors(operation="list", resource_type="team")
-async def list_teams(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
+async def list_teams(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
     """
     List a page of Team CRs in a namespace.
 
@@ -111,7 +112,7 @@ async def list_teams(request: Request, namespace: Optional[str] = Query(None, de
 
 @router.post("", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="team")
-async def create_team(request: Request, body: TeamCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
+async def create_team(request: Request, body: TeamCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
     """
     Create a new Team CR.
     
@@ -164,7 +165,7 @@ async def create_team(request: Request, body: TeamCreateRequest, namespace: Opti
 
 @router.get("/{team_name}", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="team")
-async def get_team(request: Request, team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
+async def get_team(request: Request, team_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
     """
     Get a specific Team CR by name.
     
@@ -183,7 +184,7 @@ async def get_team(request: Request, team_name: str, namespace: Optional[str] = 
 
 @router.put("/{team_name}", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="team")
-async def update_team(request: Request, team_name: str, body: TeamUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
+async def update_team(request: Request, team_name: str, body: TeamUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamDetailResponse:
     """
     Update a Team CR by name.
     
@@ -247,7 +248,7 @@ async def update_team(request: Request, team_name: str, body: TeamUpdateRequest,
 
 @router.delete("/{team_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="team")
-async def delete_team(request: Request, team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_team(request: Request, team_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Team CR by name.
     

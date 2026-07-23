@@ -29,6 +29,7 @@ from ...models.models import (
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams, pagination_params
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
+async def list_models(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
     """
     List a page of Model CRs in a namespace.
 
@@ -142,7 +143,7 @@ async def list_models(request: Request, namespace: Optional[str] = Query(None, d
 
 @router.post("", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="model")
-async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
+async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Create a new Model CR.
 
@@ -236,7 +237,7 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
 
 @router.get("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="model")
-async def get_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
+async def get_model(model_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Get a specific Model CR by name.
     
@@ -318,7 +319,7 @@ def _build_config_dict_from_body(body_config, provider: str) -> dict:
 
 @router.put("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="model")
-async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
+async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Update a Model CR by name.
 
@@ -360,7 +361,7 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
 
 @router.delete("/{model_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="model")
-async def delete_model(request: Request, model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_model(request: Request, model_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Model CR by name.
     

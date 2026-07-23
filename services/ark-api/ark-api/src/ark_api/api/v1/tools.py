@@ -20,6 +20,7 @@ from ...models.tools import (
 )
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams, pagination_params
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def tool_to_detail_response(tool: dict) -> ToolDetailResponse:
 
 @router.get("", response_model=ToolListResponse)
 @handle_k8s_errors(operation="list", resource_type="tool")
-async def list_tools(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
+async def list_tools(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
     """
     List a page of Tool CRs in a namespace.
 
@@ -91,7 +92,7 @@ async def list_tools(request: Request, namespace: Optional[str] = Query(None, de
 
 @router.post("", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="tool")
-async def create_tool(request: Request, body: ToolCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
+async def create_tool(request: Request, body: ToolCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
     """
     Create a new Tool CR.
     
@@ -124,7 +125,7 @@ async def create_tool(request: Request, body: ToolCreateRequest, namespace: Opti
 
 @router.get("/{tool_name}", response_model=ToolDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="tool")
-async def get_tool(request: Request, tool_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
+async def get_tool(request: Request, tool_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
     """
     Get a specific Tool CR by name.
     
@@ -143,7 +144,7 @@ async def get_tool(request: Request, tool_name: str, namespace: Optional[str] = 
 
 @router.put("/{tool_name}", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="tool")
-async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
+async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
     """
     Update a Tool CR by name.
     
@@ -180,7 +181,7 @@ async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest,
 
 @router.delete("/{tool_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="tool")
-async def delete_tool(request: Request, tool_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_tool(request: Request, tool_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Tool CR by name.
     
