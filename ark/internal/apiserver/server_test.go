@@ -59,6 +59,35 @@ func TestWALConsumer_StopsWhenBackendNeverReady(t *testing.T) {
 	}
 }
 
+func TestWALConsumer_StartsWhenBackendReady(t *testing.T) {
+	t.Parallel()
+
+	ready := make(chan struct{})
+	started := make(chan struct{})
+	w := &walConsumer{ready: ready, start: func() { close(started) }}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Start(ctx) }()
+
+	close(ready)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("StartWALConsumer was not called after backend became ready")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Start() = %v, want nil", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WAL consumer runnable did not stop after context cancellation")
+	}
+}
+
 func TestServer_Start_InvalidAuthMode(t *testing.T) {
 	t.Parallel()
 

@@ -138,17 +138,18 @@ func New(cfg Config) *Server {
 // leader lease. The replication slot is single-consumer: without this gate,
 // extra replicas error-loop trying to acquire the slot.
 type walConsumer struct {
-	server *Server
+	ready <-chan struct{}
+	start func()
 }
 
 func (w *walConsumer) Start(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case <-w.server.backendReady:
+	case <-w.ready:
 	}
 	klog.Info("Leader lease acquired; starting WAL consumer")
-	w.server.backend.StartWALConsumer()
+	w.start()
 	<-ctx.Done()
 	return nil
 }
@@ -158,7 +159,10 @@ func (w *walConsumer) NeedLeaderElection() bool {
 }
 
 func (s *Server) WALConsumer() *walConsumer {
-	return &walConsumer{server: s}
+	return &walConsumer{
+		ready: s.backendReady,
+		start: func() { s.backend.StartWALConsumer() },
+	}
 }
 
 func (s *Server) Start(ctx context.Context) error {
