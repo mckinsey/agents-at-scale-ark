@@ -12,7 +12,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var cleanupRetryInterval = 3 * time.Second
+var (
+	cleanupRetryInterval = 3 * time.Second
+
+	walDropPublicationSQL = "DROP PUBLICATION IF EXISTS " + pq.QuoteIdentifier(walPublicationName)
+)
 
 func cleanupConnString(cfg Config) string {
 	if cfg.SSLMode == "" {
@@ -77,7 +81,7 @@ func dropReplicationArtifacts(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	if _, err := db.ExecContext(ctx, "DROP PUBLICATION IF EXISTS "+pq.QuoteIdentifier(walPublicationName)); err != nil {
+	if _, err := db.ExecContext(ctx, walDropPublicationSQL); err != nil {
 		return fmt.Errorf("drop publication: %w", err)
 	}
 
