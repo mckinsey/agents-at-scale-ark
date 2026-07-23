@@ -99,13 +99,17 @@ spec:
           RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-agent.json | head -1)
           QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-agent.json | head -1)
           CONVERSATION_ID=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="conversation-id") | .value' /tmp/wf-agent.json | head -1)
+          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-agent.json | head -1)
+          SESSION_ID=$(echo "$QUERY_JSON" | jq -r '.spec.sessionId')
 
           echo "response: $RESPONSE"
           echo "query phase: $QUERY_PHASE"
           echo "conversation-id: $CONVERSATION_ID"
+          echo "sessionId: $SESSION_ID"
 
           [ "$QUERY_PHASE" = "done" ] || { echo "expected query phase done"; exit 1; }
           echo "$RESPONSE" | grep -q "WEATHER:" || { echo "missing WEATHER: in response"; exit 1; }
+          [ "$SESSION_ID" = "wf-ark-query-agent" ] || { echo "expected sessionId wf-ark-query-agent"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)

@@ -19,6 +19,7 @@ func TestValidateRole(t *testing.T) {
 	}{
 		{"apiserver", ""},
 		{"controller", ""},
+		{"postgres-cleanup", ""},
 		{"", "is required"},
 		{"combined", "is invalid"},
 		{"APISERVER", "is invalid"},
@@ -231,6 +232,48 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPostgresCleanupConfig(t *testing.T) {
+	for _, k := range []string{
+		"ARK_POSTGRES_HOST", "ARK_POSTGRES_DATABASE", "ARK_POSTGRES_USER",
+		"ARK_POSTGRES_PASSWORD", "ARK_POSTGRES_SSL_MODE", "ARK_POSTGRES_PORT",
+		"ARK_POSTGRES_SSL_ROOT_CERT", "ARK_POSTGRES_SSL_CERT", "ARK_POSTGRES_SSL_KEY",
+	} {
+		t.Setenv(k, "")
+	}
+
+	t.Run("reads env", func(t *testing.T) {
+		t.Setenv("ARK_POSTGRES_HOST", "db")
+		t.Setenv("ARK_POSTGRES_DATABASE", "ark")
+		t.Setenv("ARK_POSTGRES_USER", "ark")
+		t.Setenv("ARK_POSTGRES_PASSWORD", "pw")
+		t.Setenv("ARK_POSTGRES_SSL_MODE", "verify-full")
+		t.Setenv("ARK_POSTGRES_PORT", "6000")
+		t.Setenv("ARK_POSTGRES_SSL_ROOT_CERT", "/etc/ark/postgres-tls/ca.crt")
+		t.Setenv("ARK_POSTGRES_SSL_CERT", "/etc/ark/postgres-tls/tls.crt")
+		t.Setenv("ARK_POSTGRES_SSL_KEY", "/etc/ark/postgres-tls/tls.key")
+
+		cfg := postgresCleanupConfig()
+		if cfg.Host != "db" || cfg.Database != "ark" || cfg.User != "ark" ||
+			cfg.Password != "pw" || cfg.SSLMode != "verify-full" || cfg.Port != 6000 ||
+			cfg.SSLRootCert != "/etc/ark/postgres-tls/ca.crt" ||
+			cfg.SSLCert != "/etc/ark/postgres-tls/tls.crt" ||
+			cfg.SSLKey != "/etc/ark/postgres-tls/tls.key" {
+			t.Errorf("unexpected config: %+v", cfg)
+		}
+	})
+
+	t.Run("port left zero when unset or invalid", func(t *testing.T) {
+		t.Setenv("ARK_POSTGRES_PORT", "")
+		if cfg := postgresCleanupConfig(); cfg.Port != 0 {
+			t.Errorf("Port = %d, want 0 (defaulted downstream)", cfg.Port)
+		}
+		t.Setenv("ARK_POSTGRES_PORT", "not-a-number")
+		if cfg := postgresCleanupConfig(); cfg.Port != 0 {
+			t.Errorf("Port = %d, want 0 for invalid input", cfg.Port)
+		}
+	})
 }
 
 func TestLeaderElectionID(t *testing.T) {
