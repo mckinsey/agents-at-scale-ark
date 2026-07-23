@@ -4,6 +4,7 @@ package apiserver
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
 
@@ -37,6 +38,35 @@ func TestServer_Start_InvalidAuthMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "auth mode") {
 		t.Errorf("error = %q, want mention of auth mode", err.Error())
+	}
+}
+
+func TestServer_Start_PostgresUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	s := New(Config{
+		PostgresHost:    "127.0.0.1",
+		PostgresPort:    port,
+		PostgresDB:      "ark",
+		PostgresUser:    "ark",
+		PostgresPass:    "secret",
+		PostgresSSLRoot: "/etc/ark/postgres-tls/ca.crt",
+		PostgresSSLCert: "/etc/ark/postgres-tls/tls.crt",
+		PostgresSSLKey:  "/etc/ark/postgres-tls/tls.key",
+	})
+	err = s.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unreachable postgres")
+	}
+	if !strings.Contains(err.Error(), "PostgreSQL backend") {
+		t.Errorf("error = %q, want PostgreSQL backend failure", err.Error())
 	}
 }
 
