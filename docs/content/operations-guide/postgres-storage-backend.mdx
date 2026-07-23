@@ -230,9 +230,9 @@ Treat the `resources` table like any other application table:
 
 ## Uninstall and cleanup
 
-`helm uninstall` removes the apiserver Deployment and APIService but does **not** drop the publication or the replication slot. An orphaned slot will pin WAL retention and can fill the disk.
+`helm uninstall` runs a `post-delete` hook Job that drops the `ark_cdc` replication slot and publication. Without this cleanup, an orphaned slot would pin WAL retention and can fill the disk. The Job connects with the same credentials as the apiserver, so the password secret must still exist when you uninstall.
 
-After uninstalling, drop the slot manually:
+If the hook Job could not run (for example the database was unreachable, or you removed the release with `--no-hooks`), drop the slot manually:
 
 ```sql
 SELECT pg_drop_replication_slot('ark_cdc');
