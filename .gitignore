@@ -167,3 +167,4 @@ vibe_artifacts/
 .playwright-mcp/
 scratch/
 xray-scan-*.json
+oidc-scratch/
