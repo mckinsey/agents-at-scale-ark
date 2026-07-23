@@ -87,8 +87,7 @@ def main(): # NOSONAR - main function of a script.
 
     if os.environ["ARK_TTL"]:
         spec["ttl"] = os.environ["ARK_TTL"]
-    if os.environ["ARK_SESSION_ID"]:
-        spec["sessionId"] = os.environ["ARK_SESSION_ID"]
+    spec["sessionId"] = os.environ["ARK_SESSION_ID"] or "wf-" + workflow
     if os.environ["ARK_MEMORY"]:
         spec["memory"] = {"name": os.environ["ARK_MEMORY"]}
     if os.environ["ARK_SERVICE_ACCOUNT"]:

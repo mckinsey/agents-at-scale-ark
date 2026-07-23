@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"mckinsey.com/ark/internal/apiserver"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -18,6 +19,7 @@ func TestValidateRole(t *testing.T) {
 	}{
 		{"apiserver", ""},
 		{"controller", ""},
+		{"postgres-cleanup", ""},
 		{"", "is required"},
 		{"combined", "is invalid"},
 		{"APISERVER", "is invalid"},
@@ -135,6 +137,143 @@ func TestParseFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApiserverConfigFromEnv(t *testing.T) {
+	envKeys := []string{
+		"ARK_APISERVER_PORT",
+		"ARK_POSTGRES_HOST",
+		"ARK_POSTGRES_PORT",
+		"ARK_POSTGRES_DATABASE",
+		"ARK_POSTGRES_USER",
+		"ARK_POSTGRES_PASSWORD",
+		"ARK_POSTGRES_SSL_MODE",
+		"ARK_APISERVER_AUTH_MODE",
+		"ARK_APISERVER_TLS_CERT_FILE",
+		"ARK_APISERVER_TLS_KEY_FILE",
+		"ARK_POSTGRES_SSL_ROOT_CERT",
+		"ARK_POSTGRES_SSL_CERT",
+		"ARK_POSTGRES_SSL_KEY",
+	}
+
+	cases := []struct {
+		name    string
+		env     map[string]string
+		want    apiserver.Config
+		wantErr string
+	}{
+		{
+			name: "defaults when env unset",
+			env:  map[string]string{},
+			want: apiserver.Config{PostgresSSL: "require"},
+		},
+		{
+			name: "every variable set",
+			env: map[string]string{
+				"ARK_APISERVER_PORT":          "8443",
+				"ARK_POSTGRES_HOST":           "db.example.com",
+				"ARK_POSTGRES_PORT":           "5433",
+				"ARK_POSTGRES_DATABASE":       "ark",
+				"ARK_POSTGRES_USER":           "ark",
+				"ARK_POSTGRES_PASSWORD":       "secret",
+				"ARK_POSTGRES_SSL_MODE":       "verify-full",
+				"ARK_APISERVER_AUTH_MODE":     "delegated",
+				"ARK_APISERVER_TLS_CERT_FILE": "/certs/tls.crt",
+				"ARK_APISERVER_TLS_KEY_FILE":  "/certs/tls.key",
+				"ARK_POSTGRES_SSL_ROOT_CERT":  "/etc/ark/postgres-tls/ca.crt",
+				"ARK_POSTGRES_SSL_CERT":       "/etc/ark/postgres-tls/tls.crt",
+				"ARK_POSTGRES_SSL_KEY":        "/etc/ark/postgres-tls/tls.key",
+			},
+			want: apiserver.Config{
+				BindPort:        8443,
+				PostgresHost:    "db.example.com",
+				PostgresPort:    5433,
+				PostgresDB:      "ark",
+				PostgresUser:    "ark",
+				PostgresPass:    "secret",
+				PostgresSSL:     "verify-full",
+				AuthMode:        "delegated",
+				TLSCertFile:     "/certs/tls.crt",
+				TLSKeyFile:      "/certs/tls.key",
+				PostgresSSLRoot: "/etc/ark/postgres-tls/ca.crt",
+				PostgresSSLCert: "/etc/ark/postgres-tls/tls.crt",
+				PostgresSSLKey:  "/etc/ark/postgres-tls/tls.key",
+			},
+		},
+		{
+			name:    "invalid apiserver port",
+			env:     map[string]string{"ARK_APISERVER_PORT": "not-a-port"},
+			wantErr: "ARK_APISERVER_PORT",
+		},
+		{
+			name:    "invalid postgres port",
+			env:     map[string]string{"ARK_POSTGRES_PORT": "5432a"},
+			wantErr: "ARK_POSTGRES_PORT",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			for _, key := range envKeys {
+				t.Setenv(key, c.env[key])
+			}
+			got, err := apiserverConfigFromEnv()
+			if c.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+					t.Fatalf("error = %v, want mention of %q", err, c.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != c.want {
+				t.Errorf("config mismatch\n got: %+v\nwant: %+v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestPostgresCleanupConfig(t *testing.T) {
+	for _, k := range []string{
+		"ARK_POSTGRES_HOST", "ARK_POSTGRES_DATABASE", "ARK_POSTGRES_USER",
+		"ARK_POSTGRES_PASSWORD", "ARK_POSTGRES_SSL_MODE", "ARK_POSTGRES_PORT",
+		"ARK_POSTGRES_SSL_ROOT_CERT", "ARK_POSTGRES_SSL_CERT", "ARK_POSTGRES_SSL_KEY",
+	} {
+		t.Setenv(k, "")
+	}
+
+	t.Run("reads env", func(t *testing.T) {
+		t.Setenv("ARK_POSTGRES_HOST", "db")
+		t.Setenv("ARK_POSTGRES_DATABASE", "ark")
+		t.Setenv("ARK_POSTGRES_USER", "ark")
+		t.Setenv("ARK_POSTGRES_PASSWORD", "pw")
+		t.Setenv("ARK_POSTGRES_SSL_MODE", "verify-full")
+		t.Setenv("ARK_POSTGRES_PORT", "6000")
+		t.Setenv("ARK_POSTGRES_SSL_ROOT_CERT", "/etc/ark/postgres-tls/ca.crt")
+		t.Setenv("ARK_POSTGRES_SSL_CERT", "/etc/ark/postgres-tls/tls.crt")
+		t.Setenv("ARK_POSTGRES_SSL_KEY", "/etc/ark/postgres-tls/tls.key")
+
+		cfg := postgresCleanupConfig()
+		if cfg.Host != "db" || cfg.Database != "ark" || cfg.User != "ark" ||
+			cfg.Password != "pw" || cfg.SSLMode != "verify-full" || cfg.Port != 6000 ||
+			cfg.SSLRootCert != "/etc/ark/postgres-tls/ca.crt" ||
+			cfg.SSLCert != "/etc/ark/postgres-tls/tls.crt" ||
+			cfg.SSLKey != "/etc/ark/postgres-tls/tls.key" {
+			t.Errorf("unexpected config: %+v", cfg)
+		}
+	})
+
+	t.Run("port left zero when unset or invalid", func(t *testing.T) {
+		t.Setenv("ARK_POSTGRES_PORT", "")
+		if cfg := postgresCleanupConfig(); cfg.Port != 0 {
+			t.Errorf("Port = %d, want 0 (defaulted downstream)", cfg.Port)
+		}
+		t.Setenv("ARK_POSTGRES_PORT", "not-a-number")
+		if cfg := postgresCleanupConfig(); cfg.Port != 0 {
+			t.Errorf("Port = %d, want 0 for invalid input", cfg.Port)
+		}
+	})
 }
 
 func TestLeaderElectionID(t *testing.T) {

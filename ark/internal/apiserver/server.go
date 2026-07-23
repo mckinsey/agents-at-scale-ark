@@ -61,7 +61,8 @@ func init() {
 	// as the internal representation (no conversion needed).
 	// Without this, kubectl patch fails with "no kind X is registered for internal version".
 	internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
-	Scheme.AddKnownTypes(internalGV,
+	Scheme.AddKnownTypes(
+		internalGV,
 		&arkv1alpha1.Agent{},
 		&arkv1alpha1.AgentList{},
 		&arkv1alpha1.Team{},
@@ -81,7 +82,8 @@ func init() {
 		&arkv1alpha1.ArkConfig{},
 		&arkv1alpha1.ArkConfigList{},
 	)
-	Scheme.AddKnownTypes(internalGV,
+	Scheme.AddKnownTypes(
+		internalGV,
 		&arkv1prealpha1.A2AServer{},
 		&arkv1prealpha1.A2AServerList{},
 		&arkv1prealpha1.ExecutionEngine{},
@@ -95,17 +97,20 @@ const (
 )
 
 type Config struct {
-	PostgresHost string
-	PostgresPort int
-	PostgresDB   string
-	PostgresUser string
-	PostgresPass string
-	PostgresSSL  string
-	BindPort     int
-	AuthMode     string
-	TLSCertFile  string
-	TLSKeyFile   string
-	K8sClient    client.Client
+	PostgresHost    string
+	PostgresPort    int
+	PostgresDB      string
+	PostgresUser    string
+	PostgresPass    string
+	PostgresSSL     string
+	PostgresSSLRoot string
+	PostgresSSLCert string
+	PostgresSSLKey  string
+	BindPort        int
+	AuthMode        string
+	TLSCertFile     string
+	TLSKeyFile      string
+	K8sClient       client.Client
 }
 
 type Server struct {
@@ -138,12 +143,15 @@ func (s *Server) Start(ctx context.Context) error {
 	var err error
 
 	cfg := postgresql.Config{
-		Host:     s.config.PostgresHost,
-		Port:     s.config.PostgresPort,
-		Database: s.config.PostgresDB,
-		User:     s.config.PostgresUser,
-		Password: s.config.PostgresPass,
-		SSLMode:  s.config.PostgresSSL,
+		Host:        s.config.PostgresHost,
+		Port:        s.config.PostgresPort,
+		Database:    s.config.PostgresDB,
+		User:        s.config.PostgresUser,
+		Password:    s.config.PostgresPass,
+		SSLMode:     s.config.PostgresSSL,
+		SSLRootCert: s.config.PostgresSSLRoot,
+		SSLCert:     s.config.PostgresSSLCert,
+		SSLKey:      s.config.PostgresSSLKey,
 	}
 	s.backend, err = postgresql.New(cfg, converter)
 	if err != nil {

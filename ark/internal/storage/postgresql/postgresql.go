@@ -161,6 +161,9 @@ type Config struct {
 	User         string
 	Password     string
 	SSLMode      string
+	SSLRootCert  string
+	SSLCert      string
+	SSLKey       string
 	MaxOpenConns int
 	MaxIdleConns int
 }
@@ -179,18 +182,42 @@ type PostgreSQLBackend struct {
 	cachedRV     atomic.Int64
 }
 
+var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+
+func quoteConnValue(v string) string {
+	return "'" + connValueEscaper.Replace(v) + "'"
+}
+
+func buildConnString(cfg Config) string {
+	parts := []string{
+		"host=" + quoteConnValue(cfg.Host),
+		"port=" + strconv.Itoa(cfg.Port),
+		"user=" + quoteConnValue(cfg.User),
+		"password=" + quoteConnValue(cfg.Password),
+		"dbname=" + quoteConnValue(cfg.Database),
+		"sslmode=" + quoteConnValue(cfg.SSLMode),
+	}
+	if cfg.SSLRootCert != "" {
+		parts = append(parts, "sslrootcert="+quoteConnValue(cfg.SSLRootCert))
+	}
+	if cfg.SSLCert != "" {
+		parts = append(parts, "sslcert="+quoteConnValue(cfg.SSLCert))
+	}
+	if cfg.SSLKey != "" {
+		parts = append(parts, "sslkey="+quoteConnValue(cfg.SSLKey))
+	}
+	return strings.Join(parts, " ")
+}
+
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
 	if cfg.SSLMode == "" {
-		cfg.SSLMode = "disable"
+		cfg.SSLMode = "require"
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 5432
 	}
 
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
+	connStr := buildConnString(cfg)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
