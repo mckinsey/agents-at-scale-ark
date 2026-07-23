@@ -19,6 +19,7 @@ from ...models.tools import (
     ToolDetailResponse
 )
 from .exceptions import handle_k8s_errors
+from .pagination import PaginationParams, pagination_params
 
 logger = logging.getLogger(__name__)
 
@@ -62,26 +63,29 @@ def tool_to_detail_response(tool: dict) -> ToolDetailResponse:
 
 @router.get("", response_model=ToolListResponse)
 @handle_k8s_errors(operation="list", resource_type="tool")
-async def list_tools(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
+async def list_tools(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
     """
-    List all Tool CRs in a namespace.
-    
+    List a page of Tool CRs in a namespace.
+
     Args:
         namespace: The namespace to list tools from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        ToolListResponse: List of all tools in the namespace
+        ToolListResponse: One page of tools plus the continuation token
     """
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        tools = await ark_client.tools.a_list()
-        
-        tool_list = []
-        for tool in tools:
-            tool_list.append(tool_to_response(tool.to_dict()))
-        
+        page = await ark_client.tools.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        tool_list = [tool_to_response(tool.to_dict()) for tool in page.items]
+
         return ToolListResponse(
             items=tool_list,
-            total=len(tool_list)
+            count=len(tool_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 

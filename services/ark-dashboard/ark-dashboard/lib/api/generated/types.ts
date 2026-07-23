@@ -81,13 +81,14 @@ export interface paths {
         };
         /**
          * List A2A Servers
-         * @description List all A2AServer CRs in a namespace.
+         * @description List a page of A2AServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list A2A servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         A2AServerListResponse: List of all A2A servers in the namespace
+         *         A2AServerListResponse: One page of A2A servers plus the continuation token
          */
         get: operations["list_a2a_servers_v1_a2a_servers_get"];
         put?: never;
@@ -142,13 +143,14 @@ export interface paths {
         };
         /**
          * List A2A Tasks
-         * @description List all A2ATask CRs in a namespace.
+         * @description List a page of A2ATask CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list A2A tasks from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         A2ATaskListResponse: List of all A2A tasks in the namespace
+         *         A2ATaskListResponse: One page of A2A tasks plus the continuation token
          */
         get: operations["list_a2a_tasks_v1_a2a_tasks_get"];
         put?: never;
@@ -1043,7 +1045,7 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description List all memories in a namespace.
+         * @description List a page of memories in a namespace.
          */
         get: operations["list_memories_v1_memories_get"];
         put?: never;
@@ -1988,13 +1990,14 @@ export interface paths {
         };
         /**
          * List Tools
-         * @description List all Tool CRs in a namespace.
+         * @description List a page of Tool CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list tools from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ToolListResponse: List of all tools in the namespace
+         *         ToolListResponse: One page of tools plus the continuation token
          */
         get: operations["list_tools_v1_tools_get"];
         put?: never;
@@ -2071,10 +2074,14 @@ export interface components {
         };
         /** A2AServerListResponse */
         A2AServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["A2AServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * A2AServerRef
@@ -2170,10 +2177,14 @@ export interface components {
          * @description List of A2ATasks response model.
          */
         A2ATaskListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["A2ATaskResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * A2ATaskMessage
@@ -3761,8 +3772,14 @@ export interface components {
          * @description Response model for memory list.
          */
         MemoryListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MemoryResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * MemoryMessageListResponse
@@ -4567,10 +4584,14 @@ export interface components {
         };
         /** ToolListResponse */
         ToolListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["ToolResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** ToolResponse */
         ToolResponse: {
@@ -4689,6 +4710,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -4787,6 +4812,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6475,6 +6504,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -8483,6 +8516,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
