@@ -3,6 +3,8 @@ import {
   ERROR_REASON_SUFFIX,
   EventReasons,
   QueryPhases,
+  type ConversationSummary,
+  type Participant,
   type ParticipantType,
   type QueryEntry,
   type QueryPhase,
@@ -124,12 +126,97 @@ export function updateExistingQuery(
   }
 }
 
-function calculateDuration(start: string, end?: string): string {
+export function calculateDuration(start: string, end?: string): string {
   if (!end) return 'ongoing';
   const diff = new Date(end).getTime() - new Date(start).getTime();
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(seconds / 60);
   return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+export function isActivePhase(phase: QueryPhase): boolean {
+  return phase === QueryPhases.Running || phase === QueryPhases.Pending;
+}
+
+/**
+ * Incremental counterpart to recalculateConversations/Participants below,
+ * for PostgresSessionsStorage: patches (or appends) the one conversation
+ * entry a single query's write touches, instead of rebuilding the whole
+ * array from every query in the session. `isNewlyAssigned` must be true
+ * only the first time this query is attributed to `entry.conversationId`
+ * (conversationId never changes once set - see updateExistingQuery) so
+ * messageCount counts queries, not events.
+ */
+export function patchConversationForQuery(
+  conversations: ConversationSummary[],
+  entry: QueryEntry,
+  options: {isNewlyAssigned: boolean; errorDelta: number}
+): ConversationSummary[] {
+  if (!entry.conversationId) return conversations;
+
+  const index = conversations.findIndex(
+    (c) => c.conversationId === entry.conversationId
+  );
+
+  if (index === -1) {
+    const participantType: ParticipantType =
+      entry.targetType === 'team'
+        ? 'team'
+        : entry.targetType === 'tool'
+          ? 'tool'
+          : 'agent';
+    const participantName =
+      entry.team || entry.agent || entry.tool || entry.conversationId;
+
+    return [
+      ...conversations,
+      {
+        conversationId: entry.conversationId,
+        name: participantName,
+        participants: [participantName],
+        messageCount: 1,
+        duration: calculateDuration(entry.createdAt, entry.completedAt),
+        startTime: entry.createdAt,
+        participantType,
+        errorCount: entry.phase === QueryPhases.Error ? 1 : 0,
+      },
+    ];
+  }
+
+  const existing = conversations[index]!;
+  const updated: ConversationSummary = {
+    ...existing,
+    messageCount: existing.messageCount + (options.isNewlyAssigned ? 1 : 0),
+    errorCount: existing.errorCount + options.errorDelta,
+    duration: entry.completedAt
+      ? calculateDuration(existing.startTime, entry.completedAt)
+      : existing.duration,
+  };
+  const next = conversations.slice();
+  next[index] = updated;
+  return next;
+}
+
+/**
+ * Incremental counterpart to recalculateParticipants below: re-derives the
+ * full participants list from the (small, already-patched) conversations
+ * array. Cheap to run on every write since conversations is bounded by the
+ * number of distinct conversations in a session, not by query count.
+ */
+export function deriveParticipants(
+  conversations: ConversationSummary[]
+): Participant[] {
+  const seen = new Map<string, Participant>();
+  for (const conv of conversations) {
+    if (!seen.has(conv.name)) {
+      seen.set(conv.name, {
+        id: conv.name,
+        name: conv.name,
+        type: conv.participantType,
+      });
+    }
+  }
+  return Array.from(seen.values());
 }
 
 function recalculateConversations(session: SessionEntry): void {
