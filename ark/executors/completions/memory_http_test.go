@@ -770,6 +770,24 @@ func TestNewMemoryForQueryTtl(t *testing.T) {
 	})
 }
 
+func TestNewMemoryForQueryNoopFallback(t *testing.T) {
+	fakeClient := setupMemoryTestClient(nil)
+
+	t.Run("falls back to noop memory when no default memory exists", func(t *testing.T) {
+		mem, err := NewMemoryForQuery(context.Background(), fakeClient, nil, "tenant-no-memory", "conv-1", "q-1", nil, &noOpMemoryRecorder{})
+		require.NoError(t, err)
+		_, ok := mem.(*NoopMemory)
+		require.True(t, ok)
+	})
+
+	t.Run("falls back to noop memory without a conversationId", func(t *testing.T) {
+		mem, err := NewMemoryForQuery(context.Background(), fakeClient, nil, "tenant-no-memory", "", "q-2", nil, &noOpMemoryRecorder{})
+		require.NoError(t, err)
+		_, ok := mem.(*NoopMemory)
+		require.True(t, ok)
+	})
+}
+
 func TestHTTPMemoryDeleteQuery(t *testing.T) {
 	t.Run("sends DELETE to /queries/:queryId/messages", func(t *testing.T) {
 		var capturedMethod, capturedPath string

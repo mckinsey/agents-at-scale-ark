@@ -9,12 +9,10 @@ import type { FormValues } from '@/components/forms/model-forms/schema';
 import {
   useCreateSecret,
   useGetAllSecrets,
-  useGetSecret,
 } from '@/lib/services/secrets-hooks';
 
 vi.mock('@/lib/services/secrets-hooks', () => ({
   useGetAllSecrets: vi.fn(),
-  useGetSecret: vi.fn(),
   useCreateSecret: vi.fn(),
 }));
 
@@ -29,10 +27,10 @@ const bedrockDefaults = (overrides: Partial<FormValues> = {}): FormValues =>
     name: 'my-bedrock',
     provider: 'bedrock',
     model: 'anthropic.claude-v2',
-    bedrockAccessKeyIdSecretName: 'aws-credentials',
-    bedrockAccessKeyIdSecretKey: '',
-    bedrockSecretAccessKeySecretName: 'aws-credentials',
-    bedrockSecretAccessKeySecretKey: '',
+    bedrockAuthMethod: 'iam',
+    bedrockApiKeySecretName: '',
+    bedrockAccessKeyIdSecretName: 'aws-access-key-id',
+    bedrockSecretAccessKeySecretName: 'aws-secret-access-key',
     region: '',
     modelARN: '',
     ...overrides,
@@ -49,6 +47,10 @@ function Harness({ defaultValues }: { defaultValues: FormValues }) {
         onSubmit: vi.fn(),
         isSubmitPending: false,
         disabledFields: {},
+        initialBedrockAuthMethod:
+          defaultValues.provider === 'bedrock'
+            ? defaultValues.bedrockAuthMethod
+            : undefined,
       }}>
       <ModelConfiguratorForm />
     </ModelConfigurationFormContext.Provider>
@@ -73,7 +75,10 @@ describe('ModelConfiguratorForm - AWS Bedrock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useGetAllSecrets).mockReturnValue({
-      data: [{ id: 'aws-credentials', name: 'aws-credentials' }],
+      data: [
+        { id: 'aws-access-key-id', name: 'aws-access-key-id' },
+        { id: 'aws-secret-access-key', name: 'aws-secret-access-key' },
+      ],
       isPending: false,
       error: null,
     } as never);
@@ -81,33 +86,24 @@ describe('ModelConfiguratorForm - AWS Bedrock', () => {
       mutate: vi.fn(),
       isPending: false,
     } as never);
-    vi.mocked(useGetSecret).mockReturnValue({
-      data: { keys: ['accessKeyId', 'secretAccessKey'] },
-      isPending: false,
-    } as never);
   });
 
-  it('renders per-credential secret and key selectors for bedrock', () => {
+  it('renders a secret selector per IAM credential, without key selectors', () => {
     renderForm(bedrockDefaults());
 
     expect(screen.getByText('Access Key ID Secret')).toBeInTheDocument();
-    expect(screen.getByText('Access Key ID Secret Key')).toBeInTheDocument();
     expect(screen.getByText('Secret Access Key Secret')).toBeInTheDocument();
-    expect(screen.getByText('Secret Access Key Secret Key')).toBeInTheDocument();
-    expect(useGetSecret).toHaveBeenCalledWith('aws-credentials');
+    // The redundant "…Secret Key" selectors were removed (key is always token).
+    expect(screen.queryByText('Access Key ID Secret Key')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Secret Access Key Secret Key'),
+    ).not.toBeInTheDocument();
   });
 
-  it('disables the key selector and queries no secret when none is selected', () => {
-    renderForm(
-      bedrockDefaults({
-        bedrockAccessKeyIdSecretName: '',
-        bedrockSecretAccessKeySecretName: '',
-      }),
-    );
+  it('renders a single secret selector on the API key path', () => {
+    renderForm(bedrockDefaults({ bedrockAuthMethod: 'apiKey' }));
 
-    expect(useGetSecret).toHaveBeenCalledWith(undefined);
-    expect(screen.getAllByText('Select a secret first').length).toBeGreaterThan(
-      0,
-    );
+    expect(screen.getByText('API Key Secret')).toBeInTheDocument();
+    expect(screen.queryByText('API Key Secret Key')).not.toBeInTheDocument();
   });
 });

@@ -1,0 +1,237 @@
+name: Release on merge
+
+# Fires when a "release: vX.Y.Z" PR (opened by prepare-release.yaml) is merged.
+# Performs the custom stable release WITHOUT release-please:
+#   1. tag v<stable> at main HEAD (workflows match main -> GITHUB_TOKEN, no PAT)
+#      and create the GitHub Release with consolidated notes
+#   2. build the RC's code as the stable version (checkout the RC commit, stamp
+#      the stable version) for wheels, ark-cli, Helm charts, and fark; attach to
+#      the release
+#   3. trigger deploy.yml to build/publish containers (from the RC commit) and
+#      push charts/npm/PyPI/pages + run installation verification
+#
+# The shipped artifacts are built from the tested RC commit; main's drift never
+# ships. Every git ref stays at main HEAD.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  packages: write
+  actions: write
+
+jobs:
+  tag-and-release:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.title, 'release:')
+    runs-on: ubuntu-24.04
+    outputs:
+      stable: ${{ steps.v.outputs.stable }}
+      tag: ${{ steps.v.outputs.tag }}
+      rc_sha: ${{ steps.v.outputs.rc_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Read release inputs
+        id: v
+        run: |
+          set -euo pipefail
+          [ -f .releasing ] || { echo ".releasing not found on main"; exit 1; }
+          RC_TAG=$(grep '^rc_tag=' .releasing | cut -d= -f2-)
+          RC_SHA=$(grep '^rc_sha=' .releasing | cut -d= -f2-)
+          STABLE=$(tr -d '[:space:]' < version.txt)
+          TAG="v${STABLE}"
+          git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1 && { echo "${TAG} already exists"; exit 1; }
+          PREV_STABLE=$( { git tag --list 'v*' | grep -vE -- '-rc' | grep -v "^${TAG}$"; echo "${TAG}"; } \
+            | sort -V | awk -v t="${TAG}" '$0==t{print prev; exit} {prev=$0}' )
+          echo "stable=${STABLE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "rc_sha=${RC_SHA}" >> "$GITHUB_OUTPUT"
+          echo "prev_stable=${PREV_STABLE}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${TAG} from ${RC_TAG} (${RC_SHA}); notes since ${PREV_STABLE:-<none>}"
+
+      - name: Create tag at main HEAD + GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.v.outputs.tag }}" -m "Release ${{ steps.v.outputs.tag }}"
+          git push origin "${{ steps.v.outputs.tag }}"
+          NOTES=()
+          [ -n "${{ steps.v.outputs.prev_stable }}" ] && NOTES=(--notes-start-tag "${{ steps.v.outputs.prev_stable }}")
+          gh release create "${{ steps.v.outputs.tag }}" \
+            --title "${{ steps.v.outputs.tag }}" \
+            --generate-notes "${NOTES[@]}"
+
+  # ---- Build stable artifacts FROM THE RC COMMIT (stamped as the stable version) ----
+
+  release-libs:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
+      - name: Stamp stable version
+        run: |
+          # The RC commit predates the release tooling, so fetch the stamp
+          # script from main before running it against the RC checkout.
+          git fetch origin main --depth 1
+          git checkout origin/main -- scripts/stamp-version.sh
+          bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Build libraries
+        run: make libs-build-all
+      - name: Attach wheels to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          find . -name "*.whl" -type f | while read -r whl; do
+            gh release upload "${{ needs.tag-and-release.outputs.tag }}" "$whl" --clobber
+          done
+
+  release-charts:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        chart:
+          - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-apiserver, path: ark/dist/chart-apiserver }
+          - { name: ark-completions, path: ark/executors/completions/chart }
+          - { name: ark-api, path: services/ark-api/chart }
+          - { name: ark-dashboard, path: services/ark-dashboard/chart }
+          - { name: ark-mcp, path: services/ark-mcp/chart }
+          - { name: ark-broker, path: services/ark-broker/chart }
+          - { name: localhost-gateway, path: services/localhost-gateway/chart }
+          - { name: ark-tenant, path: charts/ark-tenant }
+          - { name: argo-workflows, path: services/argo-workflows/chart }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: "3.14.0"
+      - name: Stamp stable version
+        run: |
+          # The RC commit predates the release tooling, so fetch the stamp
+          # script from main before running it against the RC checkout.
+          git fetch origin main --depth 1
+          git checkout origin/main -- scripts/stamp-version.sh
+          bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Package ${{ matrix.chart.name }}
+        run: |
+          cd ${{ matrix.chart.path }}
+          helm dependency update
+          helm lint .
+          helm package .
+      - name: Attach ${{ matrix.chart.name }} to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.tag-and-release.outputs.tag }}" ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz --clobber
+
+  release-ark-cli:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Stamp stable version
+        run: |
+          # The RC commit predates the release tooling, so fetch the stamp
+          # script from main before running it against the RC checkout.
+          git fetch origin main --depth 1
+          git checkout origin/main -- scripts/stamp-version.sh
+          bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Build + pack ark-cli
+        run: |
+          cd tools/ark-cli
+          npm ci
+          npm run build
+          npm pack
+          mkdir -p ../../out
+          mv agents-at-scale-ark-*.tgz ../../out/ark-cli.tgz
+      - name: Attach ark-cli to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.tag-and-release.outputs.tag }}" out/ark-cli.tgz --clobber
+
+  release-fark:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache-dependency-path: tools/fark/go.sum
+      - name: Stamp stable version
+        run: |
+          # The RC commit predates the release tooling, so fetch the stamp
+          # script from main before running it against the RC checkout.
+          git fetch origin main --depth 1
+          git checkout origin/main -- scripts/stamp-version.sh
+          bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --skip=publish
+          workdir: ./tools/fark
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.tag-and-release.outputs.tag }}
+      - name: Attach fark binaries to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          find ./tools/fark/dist -name "*.tar.gz" -o -name "*.zip" | while read -r a; do
+            gh release upload "${{ needs.tag-and-release.outputs.tag }}" "$a" --clobber
+          done
+          [ -f ./tools/fark/dist/checksums.txt ] && gh release upload "${{ needs.tag-and-release.outputs.tag }}" ./tools/fark/dist/checksums.txt --clobber || true
+
+  # ---- Publish via the existing deploy pipeline, building images from the RC commit ----
+
+  trigger-deploy:
+    needs: [tag-and-release, release-libs, release-charts, release-ark-cli]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Trigger Deploy (build from RC commit, publish as stable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run deploy.yml \
+            --field ark_version="${{ needs.tag-and-release.outputs.tag }}" \
+            --field source_ref="${{ needs.tag-and-release.outputs.rc_sha }}" \
+            --field deploy_containers=true \
+            --field deploy_containers_to_latest=true \
+            --field deploy_helm_chart=true \
+            --field deploy_to_npm=true \
+            --field deploy_to_pypi=true \
+            --field deploy_to_pages=true

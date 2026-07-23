@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 ARK_API_GROUP = "ark.mckinsey.com"
 WILDCARD = "*"
 
+# Resources the dashboard access gate requires the user to be able to list.
+# Kept in sync with ESSENTIAL_RESOURCES in ark-dashboard's lib/permissions.ts.
+# Used only for the access-review fallback below, so the fallback returns
+# exactly what the gate needs to render the app or "Access denied".
+ESSENTIAL_RESOURCES = ("agents", "models", "queries", "teams", "tools")
+ESSENTIAL_VERB = "list"
+
 # Returned to the client when permissions cannot be determined. The underlying
 # cause (exception text, evaluation errors) is logged server-side rather than
 # echoed back, so internal details are not exposed to callers.
@@ -63,22 +70,51 @@ async def get_ark_permissions(
                     spec=client.V1SelfSubjectRulesReviewSpec(namespace=namespace)
                 )
             )
+            status = review.status
+            if status is not None and not (
+                status.incomplete or status.evaluation_error
+            ):
+                return PermissionsResponse(
+                    status="ok",
+                    rules=build_ark_rules(status.resource_rules),
+                )
+
+            # The authorizer could not enumerate a complete rule set. This is
+            # expected on clusters whose authorization chain includes a webhook
+            # authorizer (e.g. EKS), which answers concrete access decisions but
+            # not rule enumeration. Fall back to explicit access reviews, which
+            # every authorizer can answer, instead of reporting the whole
+            # authorization service as unavailable.
+            logger.info(
+                "SelfSubjectRulesReview incomplete (%s); falling back to access reviews",
+                None if status is None else status.evaluation_error,
+            )
+            rules = await _access_review_rules(authz, namespace)
+            return PermissionsResponse(status="ok", rules=rules)
     except Exception as e:
-        logger.warning("SelfSubjectRulesReview failed: %s", e)
+        logger.warning("Permission evaluation failed: %s", e)
         return PermissionsResponse(status="unavailable", reason=UNAVAILABLE_REASON)
 
-    status = review.status
-    if status is None:
-        logger.warning("SelfSubjectRulesReview returned no status")
-        return PermissionsResponse(status="unavailable", reason=UNAVAILABLE_REASON)
 
-    if status.incomplete or status.evaluation_error:
-        logger.warning(
-            "SelfSubjectRulesReview incomplete: %s", status.evaluation_error
+async def _access_review_rules(authz, namespace: str) -> dict[str, list[str]]:
+    rules: dict[str, list[str]] = {}
+    for resource in ESSENTIAL_RESOURCES:
+        if await _can_i(authz, namespace, resource, ESSENTIAL_VERB):
+            rules[resource] = [ESSENTIAL_VERB]
+    return rules
+
+
+async def _can_i(authz, namespace: str, resource: str, verb: str) -> bool:
+    review = await authz.create_self_subject_access_review(
+        client.V1SelfSubjectAccessReview(
+            spec=client.V1SelfSubjectAccessReviewSpec(
+                resource_attributes=client.V1ResourceAttributes(
+                    namespace=namespace,
+                    group=ARK_API_GROUP,
+                    resource=resource,
+                    verb=verb,
+                )
+            )
         )
-        return PermissionsResponse(status="unavailable", reason=UNAVAILABLE_REASON)
-
-    return PermissionsResponse(
-        status="ok",
-        rules=build_ark_rules(status.resource_rules),
     )
+    return bool(review.status and review.status.allowed)

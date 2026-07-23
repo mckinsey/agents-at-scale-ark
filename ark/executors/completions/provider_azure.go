@@ -147,9 +147,10 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		// Accumulate usage if present in chunk
 		if chunk.Usage.TotalTokens > 0 {
 			fullResponse.Usage = openai.CompletionUsage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
+				PromptTokens:        chunk.Usage.PromptTokens,
+				CompletionTokens:    chunk.Usage.CompletionTokens,
+				TotalTokens:         chunk.Usage.TotalTokens,
+				PromptTokensDetails: chunk.Usage.PromptTokensDetails,
 			}
 		}
 	}

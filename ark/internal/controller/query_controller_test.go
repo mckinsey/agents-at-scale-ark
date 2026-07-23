@@ -311,9 +311,40 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			result, err := r.handleRunningPhase(context.Background(), req, query)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero(), "must not requeue with capacity delay when enforcement is disabled")
+			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "spawn path arms the safety-net requeue, not the capacity delay")
 			_, exists := r.operations.Load(req.NamespacedName)
 			Expect(exists).To(BeTrue(), "should register the operation, proving execution branch was taken despite no semaphore")
+		})
+	})
+
+	Context("safety-net requeue", func() {
+		It("arms a bounded requeue for an in-flight op without spawning a duplicate", func() {
+			r := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "inflight-query", Namespace: "default"}}
+
+			// Pre-register an operation so handleRunningPhase treats it as in-flight.
+			_, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			r.operations.Store(req.NamespacedName, cancel)
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              req.Name,
+					Namespace:         req.Namespace,
+					CreationTimestamp: metav1.Time{Time: time.Now()},
+				},
+			}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "in-flight op must re-arm the safety net so a dead goroutine is recovered")
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "in-flight branch returns before any spawn, leaving the tracked op intact")
 		})
 	})
 
@@ -532,6 +563,10 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 	ctx := context.Background()
 
 	It("deletes a terminal-phase Query whose TTL has elapsed since completion", func() {
+		// Also covers #2828: with the finalizer present, r.Delete only
+		// marks the Query Terminating, so Reconcile must reach
+		// handleFinalizer in the same pass to clear the finalizer.
+		// Without it the Query stays Terminating forever.
 		name := "ttl-elapsed-terminal-query"
 		key := types.NamespacedName{Name: name, Namespace: "default"}
 
@@ -544,6 +579,10 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		}
 		Expect(query.Spec.SetInputString("hello")).To(Succeed())
 		Expect(k8sClient.Create(ctx, query)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
+		controllerutil.AddFinalizer(query, finalizer)
+		Expect(k8sClient.Update(ctx, query)).To(Succeed())
 
 		Expect(k8sClient.Get(ctx, key, query)).To(Succeed())
 		query.Status.Phase = statusDone
@@ -561,7 +600,7 @@ var _ = Describe("Query Controller Reconcile TTL GC guard", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		err = k8sClient.Get(ctx, key, &arkv1alpha1.Query{})
-		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be deleted when terminal phase + TTL elapsed since completion")
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "Query should be fully reaped when terminal phase + TTL elapsed, not stuck Terminating with finalizer")
 	})
 
 	It("does NOT delete a non-terminal Query even when its TTL has elapsed since creation", func() {

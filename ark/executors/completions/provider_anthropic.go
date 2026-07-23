@@ -93,6 +93,12 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 		return nil, fmt.Errorf("failed to unmarshal Anthropic response: %w", err)
 	}
 
+	logf.FromContext(ctx).Info("anthropic token usage",
+		"input", response.Usage.InputTokens,
+		"cacheCreation", response.Usage.CacheCreationInputTokens,
+		"cacheRead", response.Usage.CacheReadInputTokens,
+		"output", response.Usage.OutputTokens)
+
 	return convertAnthropicResponse(response), nil
 }
 

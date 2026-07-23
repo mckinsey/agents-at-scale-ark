@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.66-rc",
+  "version": "0.1.67",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -19,19 +19,19 @@
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",
     "cheerio": "^1.2.0",
-    "next": "16.2.9",
+    "next": "16.2.11",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.5",
-    "sharp": "^0.34.2"
+    "sharp": "^0.35.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.5",
     "http-server": "^14.1.1",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.0",
     "jsdom": "^29.1.1",
     "linkinator": "^7.6.1",
     "pagefind": "^1.5.2",
@@ -42,7 +42,7 @@
     "@napi-rs/simple-git-linux-arm64-gnu": "^0.1.19",
     "@napi-rs/simple-git-linux-arm64-musl": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-gnu": "^0.1.19",
-    "@napi-rs/simple-git-linux-x64-musl": "^0.1.19"
+    "@napi-rs/simple-git-linux-x64-musl": "^1.1.0"
   },
   "overrides": {
     "brace-expansion": ">=5.0.7",
@@ -50,7 +50,7 @@
     "rollup": "4.59.0",
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.18",
     "@xmldom/xmldom": "0.9.10",
     "speech-rule-engine": "4.1.4",
     "uuid": "^14.0.0",
@@ -59,6 +59,7 @@
     "urlobj": "0.0.11",
     "ws": "^8.21.0",
     "form-data": "^4.0.6",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "sharp": "^0.35.0"
   }
 }

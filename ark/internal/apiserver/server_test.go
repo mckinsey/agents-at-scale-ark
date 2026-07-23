@@ -3,6 +3,9 @@
 package apiserver
 
 import (
+	"context"
+	"net"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,6 +15,60 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
+
+func TestNew_Defaults(t *testing.T) {
+	t.Parallel()
+
+	s := New(Config{})
+	if s.config.BindPort != 6443 {
+		t.Errorf("BindPort = %d, want 6443", s.config.BindPort)
+	}
+	if s.config.AuthMode != AuthModeDelegated {
+		t.Errorf("AuthMode = %q, want %q", s.config.AuthMode, AuthModeDelegated)
+	}
+}
+
+func TestServer_Start_InvalidAuthMode(t *testing.T) {
+	t.Parallel()
+
+	s := New(Config{AuthMode: "bogus"})
+	err := s.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error for invalid auth mode")
+	}
+	if !strings.Contains(err.Error(), "auth mode") {
+		t.Errorf("error = %q, want mention of auth mode", err.Error())
+	}
+}
+
+func TestServer_Start_PostgresUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	s := New(Config{
+		PostgresHost:    "127.0.0.1",
+		PostgresPort:    port,
+		PostgresDB:      "ark",
+		PostgresUser:    "ark",
+		PostgresPass:    "secret",
+		PostgresSSLRoot: "/etc/ark/postgres-tls/ca.crt",
+		PostgresSSLCert: "/etc/ark/postgres-tls/tls.crt",
+		PostgresSSLKey:  "/etc/ark/postgres-tls/tls.key",
+	})
+	err = s.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unreachable postgres")
+	}
+	if !strings.Contains(err.Error(), "PostgreSQL backend") {
+		t.Errorf("error = %q, want PostgreSQL backend failure", err.Error())
+	}
+}
 
 func TestScheme_InternalVersionsRegistered(t *testing.T) {
 	t.Parallel()
