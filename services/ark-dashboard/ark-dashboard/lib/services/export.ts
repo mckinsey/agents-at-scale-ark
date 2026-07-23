@@ -11,6 +11,9 @@ import {
 
 // Resource types from the API
 export type AgentResponse = components['schemas']['AgentResponse'];
+export type ModelResponse = components['schemas']['ModelResponse'];
+export type TeamResponse = components['schemas']['TeamResponse'];
+export type MCPServerResponse = components['schemas']['MCPServerResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type ModelListResponse = components['schemas']['ModelListResponse'];
 export type TeamListResponse = components['schemas']['TeamListResponse'];
@@ -89,11 +92,13 @@ export const exportService = {
   async fetchAllResources(): Promise<ResourceExportData> {
     const results = await Promise.allSettled([
       fetchAllPages<AgentResponse>('/api/v1/agents').then(items => ({ items })),
-      apiClient.get<TeamListResponse>('/api/v1/teams'),
-      apiClient.get<ModelListResponse>('/api/v1/models'),
+      fetchAllPages<TeamResponse>('/api/v1/teams').then(items => ({ items })),
+      fetchAllPages<ModelResponse>('/api/v1/models').then(items => ({ items })),
       apiClient.get<QueryListResponse>('/api/v1/queries'),
       apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers'),
-      apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
+      fetchAllPages<MCPServerResponse>('/api/v1/mcp-servers').then(items => ({
+        items,
+      })),
       workflowTemplatesService.list(),
     ]);
 

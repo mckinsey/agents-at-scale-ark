@@ -7,10 +7,10 @@ import { serverApiClient } from '@/lib/api/server-client';
 import { fetchAllPages } from '@/lib/api/pagination';
 import type {
   AgentResponse,
-  ModelListResponse,
-  TeamListResponse,
+  ModelResponse,
+  TeamResponse,
+  MCPServerResponse,
   QueryListResponse,
-  MCPServerListResponse,
   A2AServerListResponse,
   ResourceExportData,
 } from '@/lib/services/export';
@@ -30,11 +30,17 @@ export const exportServiceServer = {
       fetchAllPages<AgentResponse>('/v1/agents', {}, serverApiClient).then(
         items => ({ items }),
       ),
-      serverApiClient.get<TeamListResponse>('/v1/teams'),
-      serverApiClient.get<ModelListResponse>('/v1/models'),
+      fetchAllPages<TeamResponse>('/v1/teams', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
+      fetchAllPages<ModelResponse>('/v1/models', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
       serverApiClient.get<QueryListResponse>('/v1/queries'),
       serverApiClient.get<A2AServerListResponse>('/v1/a2a-servers'),
-      serverApiClient.get<MCPServerListResponse>('/v1/mcp-servers'),
+      fetchAllPages<MCPServerResponse>('/v1/mcp-servers', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
       null, // Placeholder for workflow templates to match the array structure
     ]);
 

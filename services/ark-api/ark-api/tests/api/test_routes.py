@@ -988,7 +988,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
-        self.assertEqual(data["items"][1]["model_ref"], "default")
+        self.assertIsNone(data["items"][1]["model_ref"])
         self.assertEqual(data["items"][1]["available"], "False")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
@@ -1270,7 +1270,7 @@ class TestModelsEndpoint(unittest.TestCase):
         }
 
         # Mock the API response
-        mock_client.models.a_list = AsyncMock(return_value=[mock_model1, mock_model2])
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([mock_model1, mock_model2]))
 
         # Make the request
         response = self.client.get("/v1/models?namespace=default")
@@ -1303,7 +1303,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
         # Mock empty response
-        mock_client.models.a_list = AsyncMock(return_value=[])
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([]))
 
         # Make the request
         response = self.client.get("/v1/models?namespace=test-namespace")
@@ -2092,7 +2092,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         }
 
         # Mock the API response
-        mock_client.teams.a_list = AsyncMock(return_value=[mock_team1, mock_team2])
+        mock_client.teams.a_list_page = AsyncMock(return_value=_page([mock_team1, mock_team2]))
 
         # Make the request
         response = self.client.get("/v1/teams?namespace=default")
@@ -2124,7 +2124,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
         # Mock empty response
-        mock_client.teams.a_list = AsyncMock(return_value=[])
+        mock_client.teams.a_list_page = AsyncMock(return_value=_page([]))
 
         # Make the request
         response = self.client.get("/v1/teams?namespace=test-namespace")
