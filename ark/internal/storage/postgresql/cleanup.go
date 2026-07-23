@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"k8s.io/klog/v2"
 )
 
@@ -76,7 +77,7 @@ func dropReplicationArtifacts(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	if _, err := db.ExecContext(ctx, "DROP PUBLICATION IF EXISTS "+walPublicationName); err != nil {
+	if _, err := db.ExecContext(ctx, "DROP PUBLICATION IF EXISTS "+pq.QuoteIdentifier(walPublicationName)); err != nil {
 		return fmt.Errorf("drop publication: %w", err)
 	}
 
