@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Dashboard,
   Database,
+  Dns,
   Earthquake,
   Build,
   Help,
@@ -431,11 +432,21 @@ export function AppSidebar() {
 
               <SidebarMenuItem>
                 <SidebarMenuButton
+                  onClick={() => navigateToSection('tasks')}
+                  isActive={getCurrentSection() === 'tasks'}
+                  tooltip="A2A tasks">
+                  <PlaylistAddCheck />
+                  <span>A2A tasks</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
                   onClick={() => navigateToSection('a2a')}
                   isActive={getCurrentSection() === 'a2a'}
-                  tooltip="A2A">
-                  <PlaylistAddCheck />
-                  <span>A2A</span>
+                  tooltip="A2A servers">
+                  <Dns />
+                  <span>A2A servers</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
