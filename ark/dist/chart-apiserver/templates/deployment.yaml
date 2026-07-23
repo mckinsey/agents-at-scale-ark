@@ -42,38 +42,12 @@ spec:
               value: postgresql
             - name: ARK_APISERVER_PORT
               value: {{ .Values.apiserver.port | quote }}
-            - name: ARK_POSTGRES_HOST
-              value: {{ required "postgresql.host is required" .Values.postgresql.host | quote }}
-            - name: ARK_POSTGRES_PORT
-              value: {{ .Values.postgresql.port | quote }}
-            - name: ARK_POSTGRES_DATABASE
-              value: {{ .Values.postgresql.database | quote }}
-            - name: ARK_POSTGRES_USER
-              value: {{ required "postgresql.user is required" .Values.postgresql.user | quote }}
-            - name: ARK_POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ required "postgresql.passwordSecretName is required" .Values.postgresql.passwordSecretName }}
-                  key: {{ .Values.postgresql.passwordSecretKey }}
-            - name: ARK_POSTGRES_SSL_MODE
-              value: {{ .Values.postgresql.sslMode | quote }}
+            {{- include "ark-apiserver.postgresEnv" . | nindent 12 }}
             {{- if .Values.certManager.enabled }}
             - name: ARK_APISERVER_TLS_CERT_FILE
               value: /etc/ark/apiserver-tls/tls.crt
             - name: ARK_APISERVER_TLS_KEY_FILE
               value: /etc/ark/apiserver-tls/tls.key
-            {{- end }}
-            {{- if and .Values.postgresql.sslSecretName .Values.postgresql.sslRootCertKey }}
-            - name: ARK_POSTGRES_SSL_ROOT_CERT
-              value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslRootCertKey }}
-            {{- end }}
-            {{- if and .Values.postgresql.sslSecretName .Values.postgresql.sslClientCertKey }}
-            - name: ARK_POSTGRES_SSL_CERT
-              value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslClientCertKey }}
-            {{- end }}
-            {{- if and .Values.postgresql.sslSecretName .Values.postgresql.sslClientKeyKey }}
-            - name: ARK_POSTGRES_SSL_KEY
-              value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslClientKeyKey }}
             {{- end }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
