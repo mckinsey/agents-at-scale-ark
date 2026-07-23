@@ -903,13 +903,14 @@ export interface paths {
         };
         /**
          * List Mcp Servers
-         * @description List all MCPServer CRs in a namespace.
+         * @description List a page of MCPServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list MCP servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         MCPServerListResponse: List of all MCP servers in the namespace
+         *         MCPServerListResponse: One page of MCP servers plus the continuation token
          */
         get: operations["list_mcp_servers_v1_mcp_servers_get"];
         put?: never;
@@ -1135,13 +1136,14 @@ export interface paths {
         };
         /**
          * List Models
-         * @description List all Model CRs in a namespace.
+         * @description List a page of Model CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list models from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ModelListResponse: List of all models in the namespace
+         *         ModelListResponse: One page of models plus the continuation token
          */
         get: operations["list_models_v1_models_get"];
         put?: never;
@@ -1899,13 +1901,14 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description List all Team CRs in a namespace.
+         * @description List a page of Team CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list teams from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         TeamListResponse: List of all teams in the namespace
+         *         TeamListResponse: One page of teams plus the continuation token
          */
         get: operations["list_teams_v1_teams_get"];
         put?: never;
@@ -3527,10 +3530,14 @@ export interface components {
         };
         /** MCPServerListResponse */
         MCPServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MCPServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** MCPServerQueryParameterRef */
         MCPServerQueryParameterRef: {
@@ -3889,10 +3896,14 @@ export interface components {
          * @description List of models response model.
          */
         ModelListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["ModelResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * ModelRef
@@ -4487,10 +4498,14 @@ export interface components {
          * @description List of teams response model.
          */
         TeamListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["TeamResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * TeamMember
@@ -6195,6 +6210,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6726,6 +6745,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -8311,6 +8334,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;

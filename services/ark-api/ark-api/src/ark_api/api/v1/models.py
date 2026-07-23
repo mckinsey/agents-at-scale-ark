@@ -28,6 +28,7 @@ from ...models.models import (
 )
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
+from .pagination import PaginationParams, pagination_params
 
 logger = logging.getLogger(__name__)
 
@@ -113,26 +114,29 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
+async def list_models(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
     """
-    List all Model CRs in a namespace.
-    
+    List a page of Model CRs in a namespace.
+
     Args:
         namespace: The namespace to list models from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        ModelListResponse: List of all models in the namespace
+        ModelListResponse: One page of models plus the continuation token
     """
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        models = await ark_client.models.a_list()
-        
-        model_list = []
-        for model in models:
-            model_list.append(model_to_response(model.to_dict()))
-        
+        page = await ark_client.models.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        model_list = [model_to_response(model.to_dict()) for model in page.items]
+
         return ModelListResponse(
             items=model_list,
-            count=len(model_list)
+            count=len(model_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
