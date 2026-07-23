@@ -30,10 +30,12 @@ const main = async (): Promise<void> => {
   logger.info({backend: config.backends.message}, 'message backend');
   logger.info({backend: config.backends.chunk}, 'chunk backend');
   logger.info({backend: config.backends.event}, 'event backend');
+  logger.info({backend: config.backends.sessions}, 'sessions backend');
 
   const needsDb =
     config.backends.message === 'postgres' ||
-    config.backends.event === 'postgres';
+    config.backends.event === 'postgres' ||
+    config.backends.sessions === 'postgres';
   const db = needsDb ? createDb(config, logger) : undefined;
 
   const redis =
