@@ -24,6 +24,7 @@ from ...utils.memory_client import (
     get_all_memory_resources
 )
 from .exceptions import handle_k8s_errors
+from .pagination import PaginationParams, pagination_params
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +78,20 @@ def memory_to_detail_response(memory) -> MemoryDetailResponse:
 
 @router.get("", response_model=MemoryListResponse)
 @handle_k8s_errors(operation="list", resource_type="memory")
-async def list_memories(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryListResponse:
-    """List all memories in a namespace."""
+async def list_memories(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryListResponse:
+    """List a page of memories in a namespace."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
-        memories = await client.memories.a_list()
-        
-        memory_responses = [memory_to_response(memory.to_dict()) for memory in memories]
-        return MemoryListResponse(items=memory_responses)
+        page = await client.memories.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        memory_responses = [memory_to_response(memory.to_dict()) for memory in page.items]
+        return MemoryListResponse(
+            items=memory_responses,
+            count=len(memory_responses),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
+        )
 
 
 @router.get("/{name}", response_model=MemoryDetailResponse)
