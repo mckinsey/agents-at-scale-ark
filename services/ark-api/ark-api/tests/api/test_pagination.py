@@ -238,5 +238,73 @@ class TestMCPServersPagination(PaginationTestBase):
         self.assertEqual(r.status_code, 422)
 
 
+class _EndpointPaginationMixin:
+    """Reusable checks for an endpoint wired to a_list_page.
+
+    Subclasses set ``module``, ``attr``, ``path`` and optionally override
+    ``_page_items`` to supply endpoint-specific CR payloads.
+    """
+
+    module = ""
+    attr = ""
+    path = ""
+
+    def _page_items(self):
+        return [_item("x1")]
+
+    def test_default_limit_forwarded(self):
+        list_page = self._patch(self.module, self.attr, _page(self._page_items()))
+        r = self.client.get(f"{self.path}?namespace=default")
+        self.assertEqual(r.status_code, 200)
+        _, kwargs = list_page.call_args
+        self.assertEqual(kwargs["limit"], DEFAULT_PAGE_LIMIT)
+        self.assertIsNone(kwargs["continue_token"])
+
+    def test_continue_token_roundtrip(self):
+        self._patch(
+            self.module, self.attr,
+            _page(self._page_items(), continue_token="next", remaining_item_count=3),
+        )
+        r = self.client.get(f"{self.path}?namespace=default&continue=tok")
+        body = r.json()
+        self.assertEqual(body["count"], len(self._page_items()))
+        self.assertEqual(body["continue_token"], "next")
+        self.assertEqual(body["remaining_item_count"], 3)
+
+    def test_limit_over_max_rejected(self):
+        self._patch(self.module, self.attr, _page([]))
+        r = self.client.get(f"{self.path}?namespace=default&limit={MAX_PAGE_LIMIT + 1}")
+        self.assertEqual(r.status_code, 422)
+
+
+class TestMemoriesPagination(_EndpointPaginationMixin, PaginationTestBase):
+    module, attr, path = "memories", "memories", "/v1/memories"
+
+
+class TestToolsPagination(_EndpointPaginationMixin, PaginationTestBase):
+    module, attr, path = "tools", "tools", "/v1/tools"
+
+
+class TestA2AServersPagination(_EndpointPaginationMixin, PaginationTestBase):
+    module, attr, path = "a2a_servers", "a2aservers", "/v1/a2a-servers"
+
+
+class TestA2ATasksPagination(_EndpointPaginationMixin, PaginationTestBase):
+    module, attr, path = "a2a_tasks", "a2atasks", "/v1/a2a-tasks"
+
+    def _page_items(self):
+        obj = Mock()
+        obj.to_dict.return_value = {
+            "metadata": {"name": "t1", "namespace": "default"},
+            "spec": {
+                "taskId": "tid-1",
+                "agentRef": {"name": "agent-1"},
+                "queryRef": {"name": "query-1"},
+            },
+            "status": {"phase": "Completed"},
+        }
+        return [obj]
+
+
 if __name__ == "__main__":
     unittest.main()
