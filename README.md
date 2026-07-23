@@ -76,3 +76,7 @@ To troubleshoot an installation, run `ark status`.
 ## Credits
 
 The initial design and implementation of Ark was led by [Roman Galeev](https://github.com/Roman-Galeev), [Dave Kerr](https://github.com/dwmkerr), and [Chris Madden](https://github.com/cm94242).
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE). Copyright McKinsey & Company.
