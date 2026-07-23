@@ -155,18 +155,17 @@ func labelSelectorSQL(sel k8slabels.Selector, args *[]interface{}) string {
 }
 
 type Config struct {
-	Host             string
-	Port             int
-	Database         string
-	User             string
-	Password         string
-	SSLMode          string
-	SSLRootCert      string
-	SSLCert          string
-	SSLKey           string
-	MaxOpenConns     int
-	MaxIdleConns     int
-	DeferWALConsumer bool
+	Host         string
+	Port         int
+	Database     string
+	User         string
+	Password     string
+	SSLMode      string
+	SSLRootCert  string
+	SSLCert      string
+	SSLKey       string
+	MaxOpenConns int
+	MaxIdleConns int
 }
 
 type PostgreSQLBackend struct {
@@ -259,9 +258,6 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	}
 
 	backend.warmPool()
-	if !cfg.DeferWALConsumer {
-		backend.StartWALConsumer()
-	}
 	go backend.refreshBookmarkLoop()
 	go backend.cleanupLoop()
 
@@ -269,8 +265,9 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 }
 
 // StartWALConsumer starts the logical-replication consumer that drives the
-// watch stream. The slot is single-consumer, so with DeferWALConsumer a caller
-// gates this behind leader election; repeated calls are no-ops.
+// watch stream. New never starts it: the slot is single-consumer, so the caller
+// decides when this replica may take it (the apiserver gates it behind leader
+// election). Repeated calls are no-ops.
 func (p *PostgreSQLBackend) StartWALConsumer() {
 	p.walOnce.Do(func() {
 		go p.startWALConsumer()
@@ -298,6 +295,9 @@ func (p *PostgreSQLBackend) warmPool() {
 // not atomic against a simultaneous creator (IF NOT EXISTS only helps if the object
 // already exists at check time), so multiple replicas starting against a fresh
 // database race on the resources row-type. The advisory lock makes them serialize.
+// The value is an arbitrary application-chosen constant: pg_advisory_xact_lock keys
+// are raw int64s with no registry, so it only has to be stable and not collide with
+// other advisory-lock users of the same database.
 const schemaInitLockKey int64 = 8626421043
 
 func (p *PostgreSQLBackend) initSchema() error {

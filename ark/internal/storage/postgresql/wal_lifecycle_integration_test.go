@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func TestDeferWALConsumer_Integration(t *testing.T) {
+func TestWALConsumerManualStart_Integration(t *testing.T) {
 	host := os.Getenv("POSTGRES_HOST")
 	if host == "" {
 		t.Skip("POSTGRES_HOST not set, skipping integration test")
@@ -26,13 +26,12 @@ func TestDeferWALConsumer_Integration(t *testing.T) {
 	}
 
 	cfg := Config{
-		Host:             host,
-		Port:             port,
-		Database:         "ark",
-		User:             "ark",
-		Password:         os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:          "disable",
-		DeferWALConsumer: true,
+		Host:     host,
+		Port:     port,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
 	}
 
 	checker, err := sql.Open("postgres", fmt.Sprintf(
@@ -68,7 +67,7 @@ func TestDeferWALConsumer_Integration(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 	if n := slotCount(); n != 0 {
-		t.Fatalf("DeferWALConsumer backend created a replication slot: count %d", n)
+		t.Fatalf("backend created a replication slot before StartWALConsumer: count %d", n)
 	}
 
 	backend.StartWALConsumer()

@@ -172,16 +172,15 @@ func (s *Server) Start(ctx context.Context) error {
 	var err error
 
 	cfg := postgresql.Config{
-		Host:             s.config.PostgresHost,
-		Port:             s.config.PostgresPort,
-		Database:         s.config.PostgresDB,
-		User:             s.config.PostgresUser,
-		Password:         s.config.PostgresPass,
-		SSLMode:          s.config.PostgresSSL,
-		SSLRootCert:      s.config.PostgresSSLRoot,
-		SSLCert:          s.config.PostgresSSLCert,
-		SSLKey:           s.config.PostgresSSLKey,
-		DeferWALConsumer: true,
+		Host:        s.config.PostgresHost,
+		Port:        s.config.PostgresPort,
+		Database:    s.config.PostgresDB,
+		User:        s.config.PostgresUser,
+		Password:    s.config.PostgresPass,
+		SSLMode:     s.config.PostgresSSL,
+		SSLRootCert: s.config.PostgresSSLRoot,
+		SSLCert:     s.config.PostgresSSLCert,
+		SSLKey:      s.config.PostgresSSLKey,
 	}
 	s.backend, err = postgresql.New(cfg, converter)
 	if err != nil {
