@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import unittest
 
 from ark_api.services.sensitive_data_filter import SensitiveDataFilter, _redact_string
@@ -54,13 +55,84 @@ class TestSensitiveDataFilter(unittest.TestCase):
         self.assertNotIn("secret123", record.msg)
 
     def test_filter_redacts_dict_args(self):
+        # %(key)s dict-style args: scrubbed by key before the record is rendered.
         f = SensitiveDataFilter()
         record = logging.makeLogRecord({
             "msg": "Token exchange result: %(access_token)s",
             "args": {"access_token": "DO-NOT-LEAK"},
         })
         f.filter(record)
-        self.assertEqual(record.args["access_token"], "[REDACTED]")
+        self.assertNotIn("DO-NOT-LEAK", record.getMessage())
+        self.assertIn("[REDACTED]", record.getMessage())
+
+    def test_positional_arg_with_adjacent_key_is_redacted(self):
+        # Case 2a: rendering first avoids the old TypeError-at-emit (which dumped
+        # the raw token to stderr) and redacts the value.
+        f = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="svc", level=logging.INFO, pathname="", lineno=0,
+            msg="access_token=%s", args=("LEAKVALUE",), exc_info=None,
+        )
+        f.filter(record)
+        rendered = record.getMessage()  # must not raise
+        self.assertNotIn("LEAKVALUE", rendered)
+        self.assertIn("[REDACTED]", rendered)
+
+    def test_bare_positional_value_is_not_redacted_documented_limitation(self):
+        # Case 2b: a lone value with no adjacent key can't be recognised. Pins the
+        # documented boundary; if ever fixed, update the Logging Contract.
+        f = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="svc", level=logging.INFO, pathname="", lineno=0,
+            msg="token exchange done for %s", args=("BARE-VALUE",), exc_info=None,
+        )
+        f.filter(record)
+        self.assertIn("BARE-VALUE", record.getMessage())
+
+    def test_nested_dict_args_are_redacted(self):
+        # Case 4: credentials embedded in nested structures must still be scrubbed.
+        f = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="svc", level=logging.INFO, pathname="", lineno=0,
+            msg="params: %s",
+            args=({"outer": {"access_token": "NESTED-LEAK"}},),
+            exc_info=None,
+        )
+        f.filter(record)
+        self.assertNotIn("NESTED-LEAK", record.getMessage())
+        self.assertIn("[REDACTED]", record.getMessage())
+
+    def test_exception_traceback_is_redacted(self):
+        # Case 6: creds in an exception message / traceback must be redacted too.
+        f = SensitiveDataFilter()
+        try:
+            raise ValueError("token exchange failed: access_token=EXC-LEAK")
+        except ValueError:
+            record = logging.LogRecord(
+                name="svc", level=logging.ERROR, pathname="", lineno=0,
+                msg="request failed", args=None, exc_info=sys.exc_info(),
+            )
+        f.filter(record)
+        self.assertIsNotNone(record.exc_text)
+        self.assertNotIn("EXC-LEAK", record.exc_text)
+        self.assertIn("[REDACTED]", record.exc_text)
+
+    def test_uvicorn_access_record_keeps_tuple_and_redacts_query_string(self):
+        # Case 7: the args tuple must survive (unpacked positionally) while the
+        # query-string credential in the URL is scrubbed.
+        f = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="uvicorn.access", level=logging.INFO, pathname="", lineno=0,
+            msg='%s - "%s %s HTTP/%s" %d',
+            args=("1.2.3.4", "GET", "/cb?access_token=URL-LEAK", "1.1", 200),
+            exc_info=None,
+        )
+        f.filter(record)
+        self.assertIsInstance(record.args, tuple)
+        self.assertEqual(len(record.args), 5)
+        self.assertEqual(record.args[4], 200)
+        self.assertNotIn("URL-LEAK", record.getMessage())
+        self.assertIn("[REDACTED]", record.getMessage())
 
     def test_sentinel_tokens_never_appear_in_log_output(self):
         f = SensitiveDataFilter()

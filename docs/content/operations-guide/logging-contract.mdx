@@ -51,7 +51,9 @@ text and structured fields, not arbitrary secrets embedded in free text.
 - **ark-api** — a `SensitiveDataFilter` redacts `access_token`, `refresh_token`,
   `client_secret`, `code_verifier`, and `authorization` values. The filter is
   attached to the **root log handler and the uvicorn access/error loggers**, so it applies to
-  **all** ark-api logs (including request-line query strings).
+  **all** ark-api logs (including request-line query strings). It scrubs the log message, its
+  arguments (including credentials nested inside dict/list structures), and the **exception
+  message and traceback** attached to a record.
 - **ark-broker** — the Pino logger auto-redacts the `authorization`, `cookie`, `x-api-key`,
   `x-auth-token`, `x-csrf-token`, `set-cookie`, and `proxy-authorization` headers and the
   `password`, `token`, `secret`, and `apiKey` fields.

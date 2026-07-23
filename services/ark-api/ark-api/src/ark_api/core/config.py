@@ -27,8 +27,17 @@ def _install_redaction_filter() -> None:
     logged it. All ark-api module loggers propagate to the root handler; uvicorn
     keeps its own handlers, so we cover those too (request-line query strings).
     """
-    loggers = [logging.getLogger()] + [logging.getLogger(name) for name in _UVICORN_LOGGERS]
-    for lg in loggers:
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if not any(isinstance(f, SensitiveDataFilter) for f in handler.filters):
+            handler.addFilter(SensitiveDataFilter())
+
+    # Attach at the *logger* level too: uvicorn wires its access/error handlers
+    # on its own schedule, and logger-level filters run regardless of that timing.
+    for name in _UVICORN_LOGGERS:
+        lg = logging.getLogger(name)
+        if not any(isinstance(f, SensitiveDataFilter) for f in lg.filters):
+            lg.addFilter(SensitiveDataFilter())
         for handler in lg.handlers:
             if not any(isinstance(f, SensitiveDataFilter) for f in handler.filters):
                 handler.addFilter(SensitiveDataFilter())
