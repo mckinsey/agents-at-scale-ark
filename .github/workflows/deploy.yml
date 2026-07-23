@@ -149,7 +149,7 @@ jobs:
 
 
       - name: Login to Docker Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           # Default registry: ghcr.io/mckinsey/agents-at-scale-ark (includes repo name for GHCR access control)
           registry: ${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
@@ -197,7 +197,7 @@ jobs:
       - uses: actions/checkout@v6
       
       - name: Install Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5
         with:
           version: '3.14.0'
 
@@ -260,7 +260,7 @@ jobs:
       - uses: actions/checkout@v6
       
       - name: Install Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5
         with:
           version: '3.14.0'
           
@@ -308,13 +308,13 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
           
       - name: Upload Site Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa  # v3
         with:
           path: docs/out
           
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5
 
   deploy-to-npm:
     needs: [resolve_version, deploy]
