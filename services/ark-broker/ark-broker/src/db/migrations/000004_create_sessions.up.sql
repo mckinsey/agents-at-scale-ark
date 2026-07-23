@@ -3,6 +3,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   name          TEXT        NOT NULL,
   status        TEXT        NOT NULL DEFAULT 'idle',
   error_count   INTEGER     NOT NULL DEFAULT 0,
+  -- Count of queries currently in a running/pending phase. Maintained
+  -- incrementally (+1/-1 on each phase transition) so `status` can be
+  -- derived without rescanning session_queries: status is 'active' if
+  -- active_count > 0, otherwise it follows the phase of whichever query
+  -- was just written (which is always the most recently active one, by
+  -- construction - a write always sets that query's last_activity to
+  -- the current time).
+  active_count  INTEGER     NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_activity TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at    TIMESTAMPTZ NOT NULL,
