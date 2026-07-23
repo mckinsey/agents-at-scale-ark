@@ -1,0 +1,376 @@
+import {createLogger} from '@ark-broker/logging/logger.js';
+import {InMemorySessionsStorage} from '../in-memory-sessions-storage.js';
+
+describe('InMemorySessionsStorage', () => {
+  let storage: InMemorySessionsStorage;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    storage = new InMemorySessionsStorage(
+      createLogger({level: 'silent', pretty: false})
+    );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  describe('applyEvent', () => {
+    test('creates session and query on first event', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        queryNamespace: 'default',
+      });
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(1);
+
+      const session = store.sessions['sess-1'];
+      expect(session).toBeDefined();
+      expect(session.sessionId).toBe('sess-1');
+      expect(Object.keys(session.queries)).toHaveLength(1);
+
+      const query = session.queries['query-1'];
+      expect(query.name).toBe('query-1');
+      expect(query.namespace).toBe('default');
+      expect(query.phase).toBe('running');
+      expect(query.targetType).toBe('agent');
+    });
+
+    test('updates query phase on completion event', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('done');
+      expect(query.completedAt).toBeDefined();
+    });
+
+    test('sets agent from event data', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        agent: 'my-agent',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.agent).toBe('my-agent');
+    });
+
+    test('sets error on error events', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+        error: 'something broke',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('error');
+      expect(query.error).toBe('something broke');
+      expect(query.completedAt).toBeDefined();
+    });
+
+    test('sets error phase on reason containing Error', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'AgentExecutionError',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('error');
+    });
+
+    test('sets canceled phase on cancellation event', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionCanceled',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('canceled');
+      expect(query.completedAt).toBeDefined();
+      expect(query.error).toBeUndefined();
+    });
+
+    test('sets canceled phase on reason containing Canceled', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'AgentExecutionCanceled',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('canceled');
+    });
+
+    test('does not regress error phase to canceled', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+        error: 'something broke',
+      });
+
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionCanceled',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('error');
+      expect(query.error).toBe('something broke');
+    });
+
+    test('clears error phase when query later completes (HITL approval)', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'AgentExecutionError',
+        error: 'approval required for 1 tool call(s)',
+      });
+
+      let session = (await storage.getSession('sess-1'))!;
+      expect(session.queries['query-1'].phase).toBe('error');
+      expect(session.errorCount).toBe(1);
+
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      session = (await storage.getSession('sess-1'))!;
+      expect(session.queries['query-1'].phase).toBe('done');
+      expect(session.queries['query-1'].error).toBeUndefined();
+      expect(session.errorCount).toBe(0);
+      expect(session.status).toBe('idle');
+    });
+
+    test('ignores events without sessionId', async () => {
+      await storage.applyEvent({
+        queryName: 'query-1',
+      });
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(0);
+    });
+
+    test('ignores events without queryName', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+      });
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(0);
+    });
+
+    test('does not overwrite agent once set', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        agent: 'first-agent',
+      });
+
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        agent: 'second-agent',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.agent).toBe('first-agent');
+    });
+
+    test('does not regress done phase to error on subsequent error-reason event', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.phase).toBe('done');
+    });
+
+    test('strips session- prefix for display name', async () => {
+      await storage.applyEvent({
+        sessionId: 'session-abc123',
+        queryName: 'q1',
+      });
+
+      const session = (await storage.getSession('session-abc123'))!;
+      expect(session.name).toBe('abc123');
+    });
+
+    test('keeps name as-is when no session- prefix', async () => {
+      await storage.applyEvent({
+        sessionId: 'custom-id',
+        queryName: 'q1',
+      });
+
+      const session = (await storage.getSession('custom-id'))!;
+      expect(session.name).toBe('custom-id');
+    });
+  });
+
+  describe('applyMessage', () => {
+    test('sets conversationId on matching query', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      await storage.applyMessage('conv-abc', 'query-1');
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.conversationId).toBe('conv-abc');
+    });
+
+    test('does not overwrite existing conversationId', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        conversationId: 'original',
+      });
+
+      await storage.applyMessage('new-conv', 'query-1');
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.conversationId).toBe('original');
+    });
+
+    test('does nothing if query not found', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+      });
+
+      await storage.applyMessage('conv-abc', 'nonexistent-query');
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1'];
+      expect(query.conversationId).toBeUndefined();
+    });
+  });
+
+  describe('getAll', () => {
+    test('returns empty store initially', async () => {
+      const store = await storage.getAll();
+      expect(store).toEqual({sessions: {}});
+    });
+
+    test('returns populated store after events', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'q2'});
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(2);
+      expect(store.sessions['s1']).toBeDefined();
+      expect(store.sessions['s2']).toBeDefined();
+    });
+  });
+
+  describe('getSession', () => {
+    test('returns session by id', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+
+      const session = await storage.getSession('sess-1');
+      expect(session).toBeDefined();
+      expect(session!.sessionId).toBe('sess-1');
+    });
+
+    test('returns undefined for unknown session', async () => {
+      const session = await storage.getSession('nonexistent');
+      expect(session).toBeUndefined();
+    });
+  });
+
+  describe('getQueryByConversationId', () => {
+    test('returns query with sessionId for matching conversationId', async () => {
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        conversationId: 'conv-xyz',
+      });
+
+      const result = await storage.getQueryByConversationId('conv-xyz');
+      expect(result).toBeDefined();
+      expect(result!.sessionId).toBe('sess-1');
+      expect(result!.name).toBe('query-1');
+    });
+
+    test('returns undefined when no query matches', async () => {
+      const result = await storage.getQueryByConversationId('nonexistent');
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('delete', () => {
+    test('clears all sessions', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'q2'});
+
+      await storage.delete();
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(0);
+    });
+  });
+
+  describe('subscribe', () => {
+    test('emits on applyEvent', async () => {
+      const received: Array<{sessionId: string; queryName: string}> = [];
+      storage.subscribe((data) => received.push(data));
+
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toEqual({sessionId: 'sess-1', queryName: 'query-1'});
+    });
+
+    test('cleanup unsubscribes', async () => {
+      const received: Array<{sessionId: string; queryName: string}> = [];
+      const unsub = storage.subscribe((data) => received.push(data));
+
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      expect(received).toHaveLength(1);
+
+      unsub();
+
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'q2'});
+      expect(received).toHaveLength(1);
+    });
+
+    test('does not emit for ignored events', async () => {
+      const received: Array<{sessionId: string; queryName: string}> = [];
+      storage.subscribe((data) => received.push(data));
+
+      await storage.applyEvent({queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's1'});
+
+      expect(received).toHaveLength(0);
+    });
+  });
+});

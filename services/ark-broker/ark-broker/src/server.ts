@@ -19,6 +19,7 @@ import type {ChunkStream} from './brokers/stream/chunk-stream.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
 import {SessionsBroker} from './brokers/sessions-broker.js';
+import {InMemorySessionsStorage} from './brokers/sessions/in-memory-sessions-storage.js';
 import {createMemoryRouter} from './http/routes/memory/index.js';
 import {createStreamRouter} from './http/routes/stream/index.js';
 import {createTracesRouter} from './http/routes/traces/index.js';
@@ -71,8 +72,10 @@ export function buildApp(deps: {
   );
   const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(
-    logger.child({broker: 'sessions'}),
-    config.persistence.sessionsFilePath
+    new InMemorySessionsStorage(
+      logger.child({broker: 'sessions'}),
+      config.persistence.sessionsFilePath
+    )
   );
 
   logger.info('brokers initialized');

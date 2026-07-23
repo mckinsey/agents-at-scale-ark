@@ -65,14 +65,14 @@ const main = async (): Promise<void> => {
 
   const gracefulShutdown = async (): Promise<void> => {
     logger.info('shutting down gracefully');
-    sessions.save();
     const results = await Promise.allSettled([
       memory.save(),
       chunks.save(),
       traces.save(),
       events.save(),
+      sessions.save(),
     ]);
-    const brokerNames = ['memory', 'chunks', 'traces', 'events'];
+    const brokerNames = ['memory', 'chunks', 'traces', 'events', 'sessions'];
     results.forEach((result, idx) => {
       if (result.status === 'rejected') {
         logger.error(

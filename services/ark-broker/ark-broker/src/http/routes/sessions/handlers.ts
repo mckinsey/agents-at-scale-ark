@@ -19,33 +19,32 @@ export function handleStreamingSessions(
     subscribe: (callback) =>
       sessionsBroker.subscribe(({sessionId}) => {
         if (filterSessionId && sessionId !== filterSessionId) return;
-        const updated = sessionsBroker.getSession(sessionId);
-        if (updated) callback({sessionId, session: updated});
+        void sessionsBroker.getSession(sessionId).then((updated) => {
+          if (updated) callback({sessionId, session: updated});
+        });
       }),
-    getReplay: (): Promise<unknown[]> => {
-      const store = sessionsBroker.getAll();
+    getReplay: async (): Promise<unknown[]> => {
+      const store = await sessionsBroker.getAll();
       let initialSessions = store.sessions;
       if (filterSessionId) {
         initialSessions = store.sessions[filterSessionId]
           ? {[filterSessionId]: store.sessions[filterSessionId]}
           : {};
       }
-      return Promise.resolve(
-        Object.entries(initialSessions).map(([sid, session]) => ({
-          sessionId: sid,
-          session,
-        }))
-      );
+      return Object.entries(initialSessions).map(([sid, session]) => ({
+        sessionId: sid,
+        session,
+      }));
     },
   });
 }
 
-export function handlePaginatedSessions(
+export async function handlePaginatedSessions(
   req: Request,
   res: Response,
   sessionsBroker: SessionsBroker,
   query: GetSessionsQuery
-): void {
+): Promise<void> {
   const params = parsePaginationParams(req.query as Record<string, unknown>);
 
   const filters = {
@@ -62,6 +61,6 @@ export function handlePaginatedSessions(
       }
     : undefined;
 
-  const result = sessionsBroker.paginate(params, filters, sort);
+  const result = await sessionsBroker.paginate(params, filters, sort);
   res.json(result);
 }
