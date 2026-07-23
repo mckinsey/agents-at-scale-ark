@@ -275,6 +275,26 @@ describe('chatService', () => {
       });
     });
 
+    it('should return non-terminal status for queued query', async () => {
+      const mockQuery: QueryDetailResponse = {
+        name: 'test-query',
+        input: 'Test',
+        status: {
+          phase: 'queued',
+        },
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
+
+      const result = await chatService.getQueryResult('test-query');
+
+      expect(result).toEqual({
+        status: 'queued',
+        terminal: false,
+        response: 'No response',
+      });
+    });
+
     it('should handle unknown phase', async () => {
       const mockQuery: QueryDetailResponse = {
         name: 'test-query',
