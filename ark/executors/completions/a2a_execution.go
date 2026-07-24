@@ -93,25 +93,46 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, err
 	}
 
-	responseMessage := NewAssistantMessage(a2aResponse.Content)
+	responseMessages := buildMessagesFromA2AResponse(a2aResponse)
 
 	if eventStream != nil {
-		completionID := getQueryID(ctx)
-		chunk := NewContentChunk(completionID, modelID, a2aResponse.Content)
-		chunk.Choices[0].Delta.Role = RoleAssistant
-		chunk.Choices[0].FinishReason = "stop"
-		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
-		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
-			log.Error(err, "failed to send A2A response chunk to event stream")
-		}
+		streamBlockingA2AResponse(ctx, eventStream, a2aResponse, modelID)
 	}
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
 	return &ExecutionResult{
-		Messages:    []Message{responseMessage},
+		Messages:    responseMessages,
 		A2AResponse: a2aResponse,
 	}, nil
+}
+
+func streamBlockingA2AResponse(ctx context.Context, eventStream EventStreamInterface, resp *arka2a.A2AResponse, modelID string) {
+	completionID := getQueryID(ctx)
+	texts := resp.Messages
+	if len(texts) == 0 {
+		texts = []string{resp.Content}
+	}
+	for _, text := range texts {
+		chunk := NewContentChunk(completionID, modelID, text)
+		chunk.Choices[0].Delta.Role = RoleAssistant
+		chunk.Choices[0].FinishReason = finishReasonStop
+		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
+		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to send A2A response chunk to event stream")
+		}
+	}
+}
+
+func buildMessagesFromA2AResponse(resp *arka2a.A2AResponse) []Message {
+	if len(resp.Messages) == 0 {
+		return []Message{NewAssistantMessage(resp.Content)}
+	}
+	messages := make([]Message, 0, len(resp.Messages))
+	for _, text := range resp.Messages {
+		messages = append(messages, NewAssistantMessage(text))
+	}
+	return messages
 }
 
 func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID, modelID string, eventStream EventStreamInterface, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
@@ -147,15 +168,44 @@ func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address strin
 	return consumeA2AStreamEvents(ctx, e.client, events, eventStream, modelID, completionID, agentName, namespace, queryName, a2aServer)
 }
 
+const bareMessageStreamID = "__bare_message__"
+
+type a2aArtifact struct {
+	id     string
+	name   string
+	text   *strings.Builder
+	isText bool
+}
+
 type a2aStreamContext struct {
-	content      *strings.Builder
-	response     *arka2a.A2AResponse
-	eventStream  EventStreamInterface
-	completionID string
-	modelID      string
-	agentName    string
-	namespace    string
-	queryName    string
+	artifacts      map[string]*a2aArtifact
+	artifactOrder  []string
+	finalMsg       *strings.Builder
+	bareMsg        *strings.Builder
+	response       *arka2a.A2AResponse
+	eventStream    EventStreamInterface
+	completionID   string
+	modelID        string
+	agentName      string
+	namespace      string
+	queryName      string
+	liveArtifactID string
+	liveStarted    bool
+}
+
+func newA2AStreamContext(response *arka2a.A2AResponse, eventStream EventStreamInterface, completionID, modelID, agentName, namespace, queryName string) *a2aStreamContext {
+	return &a2aStreamContext{
+		artifacts:    make(map[string]*a2aArtifact),
+		finalMsg:     &strings.Builder{},
+		bareMsg:      &strings.Builder{},
+		response:     response,
+		eventStream:  eventStream,
+		completionID: completionID,
+		modelID:      modelID,
+		agentName:    agentName,
+		namespace:    namespace,
+		queryName:    queryName,
+	}
 }
 
 var defaultA2AStreamIdleTimeout = 8 * time.Minute
@@ -170,20 +220,10 @@ func effectiveIdleTimeout(a2aServer *arkv1prealpha1.A2AServer) time.Duration {
 }
 
 func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
-	var content strings.Builder
 	var response arka2a.A2AResponse
 	received := false
 
-	sc := &a2aStreamContext{
-		content:      &content,
-		response:     &response,
-		eventStream:  eventStream,
-		completionID: completionID,
-		modelID:      modelID,
-		agentName:    agentName,
-		namespace:    namespace,
-		queryName:    queryName,
-	}
+	sc := newA2AStreamContext(&response, eventStream, completionID, modelID, agentName, namespace, queryName)
 
 	idleTimeout := effectiveIdleTimeout(a2aServer)
 	idleTimer := time.NewTimer(idleTimeout)
@@ -200,7 +240,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				if !received {
 					return nil, fmt.Errorf("a2a streaming returned no events")
 				}
-				return buildA2AStreamResult(&content, &response), nil
+				return buildA2AStreamResult(sc), nil
 			}
 			idleTimer.Reset(idleTimeout)
 			received = true
@@ -214,7 +254,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				consumeA2ATaskEvent(ctx, k8sClient, result, sc, a2aServer)
 			case *protocol.TaskStatusUpdateEvent:
 				if consumeA2AStatusUpdateEvent(ctx, result, sc) {
-					return buildA2AStreamResult(&content, &response), nil
+					return buildA2AStreamResult(sc), nil
 				}
 			case *protocol.TaskArtifactUpdateEvent:
 				consumeA2AArtifactUpdateEvent(ctx, result, sc)
@@ -226,24 +266,29 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 func consumeA2AMessageEvent(ctx context.Context, msg *protocol.Message, sc *a2aStreamContext) {
 	text := arka2a.ExtractTextFromParts(msg.Parts)
 	if text != "" {
-		sc.content.WriteString(text)
+		sc.bareMsg.WriteString(text)
 	}
 	if msg.ContextID != nil && *msg.ContextID != "" {
 		sc.response.ContextID = *msg.ContextID
 	}
-	streamContentChunk(ctx, sc.eventStream, sc.completionID, sc.modelID, text)
+	if text != "" {
+		sc.streamLiveText(ctx, bareMessageStreamID, text)
+	}
 }
 
 func consumeA2ATaskEvent(ctx context.Context, k8sClient client.Client, task *protocol.Task, sc *a2aStreamContext, a2aServer *arkv1prealpha1.A2AServer) {
 	sc.response.TaskID = task.ID
 	sc.response.ContextID = task.ContextID
-	text := extractTextFromTaskStatus(task)
-	if text != "" {
-		sc.content.Reset()
-		sc.content.WriteString(text)
+	for i := range task.Artifacts {
+		sc.mergeArtifact(task.Artifacts[i])
+	}
+	if len(arka2a.ArtifactTexts(task.Artifacts)) == 0 {
+		if texts := arka2a.TaskReplyTexts(task); len(texts) > 0 {
+			sc.finalMsg.Reset()
+			sc.finalMsg.WriteString(strings.Join(texts, "\n"))
+		}
 	}
 	maybeCreateA2ATask(ctx, k8sClient, task, sc.agentName, sc.namespace, sc.queryName, a2aServer)
-	streamContentChunk(ctx, sc.eventStream, sc.completionID, sc.modelID, text)
 }
 
 func consumeA2AStatusUpdateEvent(ctx context.Context, event *protocol.TaskStatusUpdateEvent, sc *a2aStreamContext) bool {
@@ -257,29 +302,123 @@ func consumeA2AStatusUpdateEvent(ctx context.Context, event *protocol.TaskStatus
 	if event.Status.Message != nil {
 		text = arka2a.ExtractTextFromParts(event.Status.Message.Parts)
 	}
-	if event.Final && text != "" && sc.content.Len() == 0 {
-		sc.content.WriteString(text)
+	if event.Final {
+		if text != "" {
+			sc.finalMsg.Reset()
+			sc.finalMsg.WriteString(text)
+		}
+		return true
 	}
-	streamContentChunk(ctx, sc.eventStream, sc.completionID, sc.modelID, text)
-	return event.Final
+	StreamA2AStatus(ctx, sc.eventStream, event.TaskID, string(event.Status.State), text, sc.agentName)
+	return false
 }
 
 func consumeA2AArtifactUpdateEvent(ctx context.Context, event *protocol.TaskArtifactUpdateEvent, sc *a2aStreamContext) {
 	if sc.response.TaskID == "" {
 		sc.response.TaskID = event.TaskID
 	}
-	text := arka2a.ExtractTextFromParts(event.Artifact.Parts)
-	if text != "" {
-		sc.content.WriteString(text)
+	id := event.Artifact.ArtifactID
+	art := sc.getOrCreateArtifact(id)
+	if event.Artifact.Name != nil && *event.Artifact.Name != "" {
+		art.name = *event.Artifact.Name
 	}
+	text := arka2a.ExtractTextFromParts(event.Artifact.Parts)
+	appendChunk := event.Append != nil && *event.Append
+	if appendChunk {
+		art.text.WriteString(text)
+	} else {
+		art.text.Reset()
+		art.text.WriteString(text)
+	}
+	if art.text.Len() > 0 {
+		art.isText = true
+	}
+	if text != "" {
+		sc.streamLiveText(ctx, id, text)
+	}
+}
+
+func (sc *a2aStreamContext) getOrCreateArtifact(id string) *a2aArtifact {
+	art, exists := sc.artifacts[id]
+	if !exists {
+		art = &a2aArtifact{id: id, text: &strings.Builder{}}
+		sc.artifacts[id] = art
+		sc.artifactOrder = append(sc.artifactOrder, id)
+	}
+	return art
+}
+
+func (sc *a2aStreamContext) mergeArtifact(artifact protocol.Artifact) {
+	text := arka2a.ExtractTextFromParts(artifact.Parts)
+	if text == "" {
+		return
+	}
+	art := sc.getOrCreateArtifact(artifact.ArtifactID)
+	if artifact.Name != nil && *artifact.Name != "" {
+		art.name = *artifact.Name
+	}
+	art.text.Reset()
+	art.text.WriteString(text)
+	art.isText = true
+}
+
+func (sc *a2aStreamContext) streamLiveText(ctx context.Context, streamID, text string) {
+	if sc.eventStream == nil {
+		return
+	}
+	if sc.liveStarted && sc.liveArtifactID != streamID {
+		StreamContentBoundary(ctx, sc.eventStream, sc.completionID, sc.modelID)
+	}
+	sc.liveArtifactID = streamID
+	sc.liveStarted = true
 	streamContentChunk(ctx, sc.eventStream, sc.completionID, sc.modelID, text)
 }
 
-func buildA2AStreamResult(content *strings.Builder, response *arka2a.A2AResponse) *ExecutionResult {
-	response.Content = content.String()
+func (sc *a2aStreamContext) artifactReplyTexts() []string {
+	artifacts := make([]protocol.Artifact, 0, len(sc.artifactOrder))
+	for _, id := range sc.artifactOrder {
+		art := sc.artifacts[id]
+		if art == nil || !art.isText {
+			continue
+		}
+		var namePtr *string
+		if art.name != "" {
+			name := art.name
+			namePtr = &name
+		}
+		artifacts = append(artifacts, protocol.Artifact{
+			ArtifactID: art.id,
+			Name:       namePtr,
+			Parts:      []protocol.Part{protocol.NewTextPart(art.text.String())},
+		})
+	}
+	return arka2a.ArtifactTexts(artifacts)
+}
+
+func buildA2AStreamResult(sc *a2aStreamContext) *ExecutionResult {
+	texts := sc.artifactReplyTexts()
+	if len(texts) == 0 {
+		if sc.finalMsg.Len() > 0 {
+			texts = []string{sc.finalMsg.String()}
+		} else if sc.bareMsg.Len() > 0 {
+			texts = []string{sc.bareMsg.String()}
+		}
+	}
+
+	sc.response.Content = strings.Join(texts, "\n")
+	sc.response.Messages = texts
+
+	messages := make([]Message, 0, len(texts))
+	for _, text := range texts {
+		messages = append(messages, NewAssistantMessage(text))
+	}
+	if len(messages) == 0 {
+		messages = []Message{NewAssistantMessage("")}
+	}
+
 	return &ExecutionResult{
-		Messages:    []Message{NewAssistantMessage(response.Content)},
-		A2AResponse: response,
+		Messages:    messages,
+		A2AResponse: sc.response,
 	}
 }
 
@@ -292,23 +431,6 @@ func streamContentChunk(ctx context.Context, eventStream EventStreamInterface, c
 	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to send A2A streaming chunk")
 	}
-}
-
-func extractTextFromTaskStatus(task *protocol.Task) string {
-	if task.Status.Message != nil {
-		if text := arka2a.ExtractTextFromParts(task.Status.Message.Parts); text != "" {
-			return text
-		}
-	}
-	for i := len(task.History) - 1; i >= 0; i-- {
-		msg := task.History[i]
-		if msg.Role == protocol.MessageRoleAgent && len(msg.Parts) > 0 {
-			if text := arka2a.ExtractTextFromParts(msg.Parts); text != "" {
-				return text
-			}
-		}
-	}
-	return arka2a.ExtractTextFromArtifacts(task.Artifacts)
 }
 
 func maybeCreateA2ATask(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {

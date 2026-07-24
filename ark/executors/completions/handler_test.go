@@ -183,6 +183,22 @@ func TestSerializeResponseMessages(t *testing.T) {
 	}
 }
 
+func TestA2AMultiArtifactSerializationDivergence(t *testing.T) {
+	resp := &arka2a.A2AResponse{
+		Content:  "first\nsecond",
+		Messages: []string{"first", "second"},
+	}
+	messages := buildMessagesFromA2AResponse(resp)
+	require.Len(t, messages, 2)
+
+	raw := serializeResponseMessages(messages)
+	var arr []json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(raw), &arr))
+	assert.Len(t, arr, 2, "raw carries one object per artifact message")
+
+	assert.Equal(t, "second", extractAssistantText(messages), "content collapses to the last assistant message")
+}
+
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = arkv1alpha1.AddToScheme(scheme)
