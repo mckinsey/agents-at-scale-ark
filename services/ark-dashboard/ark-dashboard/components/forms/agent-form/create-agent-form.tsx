@@ -1,6 +1,12 @@
 'use client';
 
-import { ChevronLeft } from '@/components/icons';
+import { useState } from 'react';
+
+import {
+  ChevronLeft,
+  CollapseContent,
+  ExpandContent,
+} from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +16,7 @@ import {
   FieldTitle,
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import { PromptEditor } from '@/components/ui/prompt-editor';
@@ -61,6 +68,7 @@ export function CreateAgentForm({
   const isDisabled = form.formState.isSubmitting;
   const hasUnavailableTools = unavailableTools.length > 0;
   const cancelHref = onCancel ? undefined : '/agents';
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
 
   return (
     <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
@@ -202,9 +210,26 @@ export function CreateAgentForm({
               name="prompt"
               render={({ field, fieldState }) => (
                 <FieldSet className="gap-2">
-                  <FieldTitle>
-                    Prompt <RequiredMarker />
-                  </FieldTitle>
+                  <div className="flex items-center justify-between">
+                    <FieldTitle>
+                      Prompt <RequiredMarker />
+                    </FieldTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                      className="h-8 gap-1 px-2">
+                      <IconShell size="sm" variant="secondary">
+                        {isPromptExpanded ? (
+                          <CollapseContent />
+                        ) : (
+                          <ExpandContent />
+                        )}
+                      </IconShell>
+                      {isPromptExpanded ? 'Collapse' : 'Expand'}
+                    </Button>
+                  </div>
                   <PromptEditor
                     variant="compact"
                     showSublabel={false}
@@ -215,7 +240,8 @@ export function CreateAgentForm({
                     disabled={isDisabled}
                     parameters={parameters}
                     className={cn(
-                      'border-stroke-divider focus-within:border-stroke-status-focus min-h-[248px] border bg-transparent pb-3 transition-colors',
+                      'border-stroke-divider focus-within:border-stroke-status-focus border bg-transparent pb-3 transition-all duration-200',
+                      isPromptExpanded ? 'min-h-[560px]' : 'min-h-[248px]',
                       fieldState.error && 'border-status-error',
                     )}
                   />
