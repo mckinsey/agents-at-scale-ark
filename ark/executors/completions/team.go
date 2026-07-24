@@ -70,12 +70,10 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 
 	var execFunc func(context.Context, Message, []Message) ([]Message, error)
 	switch t.Strategy {
-	case "sequential", "round-robin":
+	case "sequential":
 		execFunc = t.executeSequential
 	case "selector":
 		execFunc = t.executeSelector
-	case "graph":
-		execFunc = t.executeGraph
 	default:
 		return nil, fmt.Errorf("unsupported strategy %s for team %s", t.Strategy, t.FullName())
 	}
@@ -85,7 +83,7 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	loops := t.Loops || t.Strategy == "round-robin"
+	loops := t.Loops
 
 	if loops {
 		return t.executeSequentialWithLoops(ctx, userInput, history)
