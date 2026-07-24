@@ -167,6 +167,35 @@ describe('QueriesSection', () => {
     expect(screen.getByText('q-2')).toBeInTheDocument();
   });
 
+  it('renders queued queries with the amber Queued badge', () => {
+    const { container } = renderSection({
+      queryResult: {
+        data: {
+          items: [
+            {
+              name: 'q-queued',
+              namespace: 'default',
+              input: 'waiting for a slot',
+              creationTimestamp: '2026-01-03T00:00:00Z',
+              status: { phase: 'queued' },
+            },
+          ],
+          count: 1,
+          total: 1,
+          page: 1,
+          page_size: 25,
+        },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        refetch: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('q-queued')).toBeInTheDocument();
+    expect(container.querySelector('.bg-amber-300')).not.toBeNull();
+  });
+
   it('navigates to query detail when a row is clicked', async () => {
     renderSection({
       queryResult: {
