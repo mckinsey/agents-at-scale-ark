@@ -4,6 +4,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -112,6 +113,8 @@ type Config struct {
 	TLSKeyFile      string
 	K8sClient       client.Client
 }
+
+const readyzPingTimeout = 2 * time.Second
 
 type Server struct {
 	config       Config
@@ -307,4 +310,19 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 
 func (s *Server) NeedLeaderElection() bool {
 	return false
+}
+
+func (s *Server) Readyz(_ *http.Request) error {
+	return storageReady(s.backendReady, func(ctx context.Context) error { return s.backend.Ping(ctx) })
+}
+
+func storageReady(ready <-chan struct{}, ping func(context.Context) error) error {
+	select {
+	case <-ready:
+	default:
+		return errors.New("storage backend not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), readyzPingTimeout)
+	defer cancel()
+	return ping(ctx)
 }
