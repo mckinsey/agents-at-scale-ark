@@ -129,16 +129,16 @@ export function ToolForm({
         <nav
           aria-label="Breadcrumb"
           className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-          <ChevronLeft className="size-4 text-white/30" />
+          <ChevronLeft className="size-4 text-fg-disabled" />
           <NamespacedLink
             href="/tools"
-            className="text-white/30 transition-colors hover:text-white/60">
+            className="text-fg-disabled transition-colors hover:text-fg-secondary">
             Tools
           </NamespacedLink>
-          <span aria-hidden="true" className="text-white/60">
+          <span aria-hidden="true" className="text-fg-secondary">
             /
           </span>
-          <span aria-current="page" className="text-white/60">
+          <span aria-current="page" className="text-fg-secondary">
             Create tool
           </span>
         </nav>
@@ -181,7 +181,7 @@ export function ToolForm({
               render={({ field, fieldState }) => (
                 <FieldSet className="gap-2">
                   <FieldTitle>
-                    Name <RequiredMarker />
+                    Name {!isViewing && <RequiredMarker />}
                   </FieldTitle>
                   <Input
                     variant="inline"
@@ -201,7 +201,7 @@ export function ToolForm({
               render={({ field, fieldState }) => (
                 <FieldSet className="gap-2">
                   <FieldTitle>
-                    Type <RequiredMarker />
+                    Type {!isViewing && <RequiredMarker />}
                   </FieldTitle>
                   <Select
                     items={TOOL_TYPE_OPTIONS}
@@ -232,7 +232,7 @@ export function ToolForm({
               render={({ field, fieldState }) => (
                 <FieldSet className="gap-2">
                   <FieldTitle>
-                    Description <RequiredMarker />
+                    Description {!isViewing && <RequiredMarker />}
                   </FieldTitle>
                   <Input
                     variant="inline"
@@ -253,7 +253,7 @@ export function ToolForm({
                 render={({ field, fieldState }) => (
                   <FieldSet className="gap-2">
                     <FieldTitle>
-                      URL <RequiredMarker />
+                      URL {!isViewing && <RequiredMarker />}
                     </FieldTitle>
                     <Input
                       variant="inline"
@@ -280,7 +280,7 @@ export function ToolForm({
                   return (
                     <FieldSet className="gap-2">
                       <FieldTitle>
-                        Agent <RequiredMarker />
+                        Agent {!isViewing && <RequiredMarker />}
                       </FieldTitle>
                       <Select
                         items={agentItems}
@@ -325,7 +325,7 @@ export function ToolForm({
                   return (
                     <FieldSet className="gap-2">
                       <FieldTitle>
-                        Team <RequiredMarker />
+                        Team {!isViewing && <RequiredMarker />}
                       </FieldTitle>
                       <Select
                         items={teamItems}
@@ -365,7 +365,7 @@ export function ToolForm({
                 <FieldSet className="gap-2">
                   <div className="flex items-center justify-between">
                     <FieldTitle>
-                      Input Schema (JSON) <RequiredMarker />
+                      Input Schema (JSON) {!isViewing && <RequiredMarker />}
                     </FieldTitle>
                     <Button
                       type="button"

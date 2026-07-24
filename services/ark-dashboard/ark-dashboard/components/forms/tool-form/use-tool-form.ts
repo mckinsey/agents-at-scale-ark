@@ -207,7 +207,6 @@ export function useToolForm({
       loading,
       saving,
       tool,
-      hasChanges: form.formState.isDirty,
       agents,
       teams,
       agentsLoading,

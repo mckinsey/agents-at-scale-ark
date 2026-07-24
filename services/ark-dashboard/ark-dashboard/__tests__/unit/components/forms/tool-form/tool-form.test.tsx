@@ -51,7 +51,6 @@ function buildHook(stateOverrides: Record<string, unknown> = {}) {
       loading: false,
       saving: false,
       tool: null,
-      hasChanges: false,
       agents: [],
       teams: [],
       agentsLoading: false,

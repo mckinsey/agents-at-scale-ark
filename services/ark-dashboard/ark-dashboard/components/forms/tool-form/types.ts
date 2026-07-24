@@ -71,7 +71,6 @@ export interface ToolFormState {
   loading: boolean;
   saving: boolean;
   tool: ToolDetail | null;
-  hasChanges: boolean;
   agents: Agent[];
   teams: Team[];
   agentsLoading: boolean;
