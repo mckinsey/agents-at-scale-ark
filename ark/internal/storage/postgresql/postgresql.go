@@ -180,6 +180,7 @@ type PostgreSQLBackend struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	cachedRV     atomic.Int64
+	walOnce      sync.Once
 }
 
 var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
@@ -257,11 +258,20 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	}
 
 	backend.warmPool()
-	go backend.startWALConsumer()
 	go backend.refreshBookmarkLoop()
 	go backend.cleanupLoop()
 
 	return backend, nil
+}
+
+// StartWALConsumer starts the logical-replication consumer that drives the
+// watch stream. New never starts it: the slot is single-consumer, so the caller
+// decides when this replica may take it (the apiserver gates it behind leader
+// election). Repeated calls are no-ops.
+func (p *PostgreSQLBackend) StartWALConsumer() {
+	p.walOnce.Do(func() {
+		go p.startWALConsumer()
+	})
 }
 
 func (p *PostgreSQLBackend) warmPool() {
@@ -280,6 +290,15 @@ func (p *PostgreSQLBackend) warmPool() {
 	}
 	wg.Wait()
 }
+
+// schemaInitLockKey serializes concurrent schema initialization. Postgres DDL is
+// not atomic against a simultaneous creator (IF NOT EXISTS only helps if the object
+// already exists at check time), so multiple replicas starting against a fresh
+// database race on the resources row-type. The advisory lock makes them serialize.
+// The value is an arbitrary application-chosen constant: pg_advisory_xact_lock keys
+// are raw int64s with no registry, so it only has to be stable and not collide with
+// other advisory-lock users of the same database.
+const schemaInitLockKey int64 = 8626421043
 
 func (p *PostgreSQLBackend) initSchema() error {
 	schema := `
@@ -322,8 +341,19 @@ func (p *PostgreSQLBackend) initSchema() error {
 		END IF;
 	END $$;
 	`
-	_, err := p.db.Exec(schema)
-	return err
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("SELECT pg_advisory_xact_lock($1)", schemaInitLockKey); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(schema); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // startWALConsumer and runWALConsumer are in wal_consumer.go
