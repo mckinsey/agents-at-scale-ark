@@ -103,11 +103,18 @@ spec:
   - name: verify-session-in-postgres
     try:
     - script:
-        timeout: 30s
+        timeout: 60s
         content: |
           SESSION_ID="e2e-sessions-broker-postgres"
           QUERY_COUNT=""
-          for i in $(seq 1 10); do
+          # Two queries share one session, so their events serialize on the
+          # same header row (by design - see PostgresSessionsStorage). Under
+          # a busy CI runner, with the shared postgresql-matrix Postgres
+          # instance also taking writes from every other postgresql-labelled
+          # test running concurrently, draining that backlog can take longer
+          # than a quick local run ever does - give it real margin rather
+          # than a tight retry budget tuned against an idle cluster.
+          for i in $(seq 1 40); do
             QUERY_COUNT=$(bash ../shared/psql-query.sh \
               "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
               | tr -d ' \n')
