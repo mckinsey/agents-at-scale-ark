@@ -44,6 +44,7 @@ const STATUS_CONFIG: Record<string, { label: string; dotClass: string }> = {
   failed: { label: 'Error', dotClass: 'bg-status-error' },
   running: { label: 'Running', dotClass: 'bg-status-information' },
   provisioning: { label: 'Provisioning', dotClass: 'bg-status-warning' },
+  queued: { label: 'Queued', dotClass: 'bg-status-warning' },
   canceled: { label: 'Canceled', dotClass: 'bg-fg-tertiary' },
 };
 
@@ -252,34 +253,6 @@ export function QueriesSection({
           err instanceof Error ? err.message : 'An unexpected error occurred',
       });
     }
-  };
-
-  const getConditionMessage = (query: QueryResponse): string | undefined => {
-    const conditions = (query.status as { conditions?: Array<{ type?: string; message?: string }> })?.conditions;
-    if (!conditions) return undefined;
-    const completed = conditions.find(c => c.type === 'Completed');
-    return completed?.message || undefined;
-  };
-
-  const getStatusBadge = (status: string | undefined, queryName: string, query: QueryResponse) => {
-    const normalizedStatus = status as
-      | 'done'
-      | 'error'
-      | 'running'
-      | 'provisioning'
-      | 'queued'
-      | 'canceled'
-      | 'default';
-    const variant = ['done', 'error', 'running', 'provisioning', 'queued', 'canceled'].includes(status || '')
-      ? normalizedStatus
-      : 'default';
-    return (
-      <StatusDot
-        variant={variant}
-        onCancel={status === 'running' ? () => handleCancel(queryName) : undefined}
-        conditionMessage={status === 'provisioning' ? getConditionMessage(query) : undefined}
-      />
-    );
   };
 
   if (isLoading) {
