@@ -108,6 +108,8 @@ function buildCascadingApprovalMessage(
   } as ExtendedChatMessage;
 }
 
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 100;
+
 interface UseChatSessionParams {
   name: string;
   type: ChatType;
@@ -124,6 +126,8 @@ interface UseChatSessionReturn {
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
+  handleScroll: () => void;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
@@ -252,6 +256,8 @@ export function useChatSession({
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
@@ -263,7 +269,16 @@ export function useChatSession({
   } = useAgentQueryParameters(name, type);
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!shouldAutoScrollRef.current) return;
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldAutoScrollRef.current =
+      distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
   }, []);
 
   useEffect(() => {
@@ -918,6 +933,7 @@ export function useChatSession({
   const sendMessage = useCallback(
     async (userMessage: string) => {
       setError(null);
+      shouldAutoScrollRef.current = true;
 
       if (missingParameters.length > 0) {
         const plural = missingParameters.length > 1;
@@ -1167,6 +1183,8 @@ export function useChatSession({
     sendMessage,
     clearChat,
     messagesEndRef,
+    scrollContainerRef,
+    handleScroll,
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,

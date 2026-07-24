@@ -47,6 +47,8 @@ export function ChatPanel({
     sendMessage,
     clearChat,
     messagesEndRef,
+    scrollContainerRef,
+    handleScroll,
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
@@ -89,7 +91,11 @@ export function ChatPanel({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4"
+        style={{ minHeight: 0 }}>
         <div className="space-y-4">
           <ChatMessageList
             messages={messages}

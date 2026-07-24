@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +23,7 @@ import { SessionMessage } from './session-message';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 100;
 
 type ToolCall = NonNullable<ChatMessage['tool_calls']>[number];
 type EnhancedToolCall = ToolCall & { result?: string };
@@ -132,6 +133,7 @@ interface MessageContentProps {
   readonly isWaitingForNextMessage?: boolean;
   readonly onApprove?: () => Promise<void>;
   readonly onReject?: () => Promise<void>;
+  readonly endRef: RefObject<HTMLDivElement | null>;
 }
 
 const MessageContent = memo(function MessageContent({
@@ -148,13 +150,8 @@ const MessageContent = memo(function MessageContent({
   isWaitingForNextMessage = false,
   onApprove,
   onReject,
+  endRef,
 }: MessageContentProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingMessages]);
-
   const processedMessages =
     messages && messages.length > 0
       ? enhanceMessagesWithToolResults(messages)
@@ -265,7 +262,7 @@ const MessageContent = memo(function MessageContent({
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} />
       </>
     );
   }
@@ -296,6 +293,9 @@ export function MessageDisplay({
     sessionId,
     conversationId,
   );
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
@@ -502,6 +502,23 @@ export function MessageDisplay({
     needsApproval,
   ]);
 
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldAutoScrollRef.current =
+      distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+  };
+
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages, pendingMessages, isProcessing, isWaitingForNextMessage]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+  }, [conversationId]);
+
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;
   }
@@ -519,7 +536,10 @@ export function MessageDisplay({
           </Badge>
         </div>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 space-y-4 overflow-y-auto p-4">
         <MessageContent
           isTemporary={isTemporary}
           messages={messages}
@@ -536,6 +556,7 @@ export function MessageDisplay({
           isWaitingForNextMessage={isWaitingForNextMessage}
           onApprove={handleApprove}
           onReject={handleReject}
+          endRef={messagesEndRef}
         />
       </div>
     </div>
