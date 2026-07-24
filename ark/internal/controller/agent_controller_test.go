@@ -152,6 +152,107 @@ var _ = Describe("Agent Controller", func() {
 			Expect(k8sClient.Delete(ctx, a2aAgent)).To(Succeed())
 		})
 
+		It("should mark agent unavailable when it has no model and uses the default executor", func() {
+			const modellessAgentName = "test-modelless-agent"
+			modellessAgentNamespacedName := types.NamespacedName{
+				Name:      modellessAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an agent with no model, no execution engine, and no A2A annotation")
+			modellessAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      modellessAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: nil,
+					Prompt:   "test prompt for modelless agent",
+				},
+			}
+			Expect(k8sClient.Create(ctx, modellessAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, modellessAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: modellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: modellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the agent is unavailable because no model is configured")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, modellessAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotConfigured"))
+		})
+
+		It("should keep an A2A agent available when it has no model", func() {
+			const a2aModellessAgentName = "test-a2a-modelless-agent"
+			a2aModellessAgentNamespacedName := types.NamespacedName{
+				Name:      a2aModellessAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an A2A agent with no model and no execution engine")
+			a2aModellessAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aModellessAgentName,
+					Namespace: "default",
+					Annotations: map[string]string{
+						"ark.mckinsey.com/a2a-server-name": "test-a2a-server",
+					},
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: nil,
+					Prompt:   "test prompt for A2A modelless agent",
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aModellessAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, a2aModellessAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aModellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aModellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the A2A agent is available despite having no model")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, a2aModellessAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).NotTo(Equal("ModelNotConfigured"))
+		})
+
 		It("should handle agents with partial tool dependencies", func() {
 			const partialToolAgentName = "test-partial-tool-agent"
 			partialToolAgentTypeNamespacedName := types.NamespacedName{
@@ -227,6 +328,22 @@ var _ = Describe("Agent Controller", func() {
 				Namespace: "default",
 			}
 
+			By("seeding an available model so the tool check is the failing dependency")
+			const missingToolModelName = "tool-test-model"
+			missingToolModel := newAvailableModel(missingToolModelName, "default")
+			Expect(k8sClient.Create(ctx, missingToolModel)).To(Succeed())
+			missingToolModel.Status.Conditions = []metav1.Condition{{
+				Type:               ModelAvailable,
+				Status:             metav1.ConditionTrue,
+				Reason:             "Available",
+				Message:            "model is available",
+				LastTransitionTime: metav1.Now(),
+			}}
+			Expect(k8sClient.Status().Update(ctx, missingToolModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, missingToolModel)).To(Succeed())
+			}()
+
 			By("creating an agent with partial tool referencing non-existent CRD")
 			missingToolAgent := &arkv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
@@ -234,7 +351,8 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					Prompt: "test prompt for missing tool agent",
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: missingToolModelName},
+					Prompt:   "test prompt for missing tool agent",
 					Tools: []arkv1alpha1.AgentTool{
 						{
 							Type: "custom",
@@ -333,6 +451,88 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Message).To(ContainSubstring("ExecutionEngine 'non-existent-engine' not found"))
 		})
 
+		It("should mark an A2A agent available without an ExecutionEngine resource", func() {
+			const a2aServerName = "test-a2a-server-ready"
+			const a2aEngineAgentName = "test-a2a-engine-agent"
+			a2aEngineAgentNamespacedName := types.NamespacedName{
+				Name:      a2aEngineAgentName,
+				Namespace: "default",
+			}
+
+			By("creating a Ready A2AServer that owns the agent")
+			a2aServer := &arkv1prealpha1.A2AServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aServerName,
+					Namespace: "default",
+				},
+				Spec: arkv1prealpha1.A2AServerSpec{
+					Address: arkv1prealpha1.ValueSource{
+						Value: "http://test-a2a-server:80",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aServer)).To(Succeed())
+			a2aServer.Status.Conditions = []metav1.Condition{{
+				Type:               "Ready",
+				Status:             metav1.ConditionTrue,
+				Reason:             "Ready",
+				Message:            "A2AServer is ready",
+				LastTransitionTime: metav1.Now(),
+			}}
+			Expect(k8sClient.Status().Update(ctx, a2aServer)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, a2aServer)).To(Succeed())
+			}()
+
+			By("creating an A2A agent (executionEngine 'a2a') with no ExecutionEngine resource present")
+			a2aEngineAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aEngineAgentName,
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "ark.mckinsey.com/v1prealpha1",
+						Kind:       "A2AServer",
+						Name:       a2aServerName,
+						UID:        a2aServer.UID,
+					}},
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Prompt: "test prompt",
+					ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{
+						Name: "a2a",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aEngineAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, a2aEngineAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aEngineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aEngineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the agent is Available even though no 'a2a' ExecutionEngine resource exists")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, a2aEngineAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		})
+
 		It("should mark agent unavailable when execution engine is not ready", func() {
 			const notReadyEngineAgentName = "test-not-ready-engine-agent"
 			const notReadyEngineName = "not-ready-engine"
@@ -354,7 +554,7 @@ var _ = Describe("Agent Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "error"
+			engine.Status.Phase = statusError
 			engine.Status.Message = "Failed to resolve address"
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 			defer func() {
@@ -427,7 +627,7 @@ var _ = Describe("Agent Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "ready"
+			engine.Status.Phase = statusReady
 			engine.Status.LastResolvedAddress = "http://localhost:9090"
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 			defer func() {
@@ -517,3 +717,22 @@ var _ = Describe("Agent Controller", func() {
 		})
 	})
 })
+
+func newAvailableModel(name, namespace string) *arkv1alpha1.Model {
+	return &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+			Provider: "openai",
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
+					APIKey:  arkv1alpha1.ValueSource{Value: "sk-test-key"},
+				},
+			},
+		},
+	}
+}

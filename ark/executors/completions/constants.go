@@ -46,6 +46,7 @@ const (
 	RoleAssistant = "assistant"
 	RoleSystem    = "system"
 	RoleTool      = "tool"
+	RoleUnknown   = "unknown"
 )
 
 // Tool type constants

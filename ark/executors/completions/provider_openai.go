@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -21,6 +22,10 @@ type OpenAIProvider struct {
 	Properties   map[string]string
 	outputSchema *runtime.RawExtension
 	schemaName   string
+
+	initOnce    sync.Once
+	httpClient  *http.Client
+	probeClient *http.Client
 }
 
 func (op *OpenAIProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
@@ -236,9 +241,10 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 
 		if chunk.Usage.TotalTokens > 0 {
 			fullResponse.Usage = openai.CompletionUsage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
+				PromptTokens:        chunk.Usage.PromptTokens,
+				CompletionTokens:    chunk.Usage.CompletionTokens,
+				TotalTokens:         chunk.Usage.TotalTokens,
+				PromptTokensDetails: chunk.Usage.PromptTokensDetails,
 			}
 		}
 	}
@@ -260,12 +266,19 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 	return fullResponse, nil
 }
 
+func (op *OpenAIProvider) initClients() {
+	registerKeepaliveTolerantSSEDecoder()
+	op.httpClient = &http.Client{Transport: common.NewLoggingTransport(common.NewSharedTransport())}
+	op.probeClient = common.NewHTTPClientWithoutTracing()
+}
+
 func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
+	op.initOnce.Do(op.initClients)
 	var httpClient *http.Client
 	if IsProbeContext(ctx) {
-		httpClient = common.NewHTTPClientWithoutTracing()
+		httpClient = op.probeClient
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = op.httpClient
 	}
 
 	options := []option.RequestOption{

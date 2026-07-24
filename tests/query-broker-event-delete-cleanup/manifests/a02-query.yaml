@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: event-delete-cleanup-query
+spec:
+  input: What is 2+2?
+  target:
+    type: agent
+    name: event-delete-cleanup-agent
+  ttl: "1h0m0s"

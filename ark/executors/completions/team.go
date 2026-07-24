@@ -48,6 +48,17 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
+func (t *Team) Close() {
+	for _, member := range t.Members {
+		switch m := member.(type) {
+		case *Agent:
+			m.Close()
+		case *Team:
+			m.Close()
+		}
+	}
+}
+
 func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
@@ -100,7 +111,7 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {
@@ -154,7 +165,7 @@ func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message
 		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {

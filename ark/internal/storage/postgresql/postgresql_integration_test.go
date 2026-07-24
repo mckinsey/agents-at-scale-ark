@@ -7,8 +7,12 @@ package postgresql
 
 import (
 	"context"
+	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -422,4 +426,456 @@ func TestWatchAddedForFirstSeenUID_Integration(t *testing.T) {
 	}
 
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+}
+
+type gracefulDeleteTestObject struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name              string   `json:"name"`
+		Namespace         string   `json:"namespace"`
+		UID               string   `json:"uid"`
+		ResourceVersion   string   `json:"resourceVersion,omitempty"`
+		Finalizers        []string `json:"finalizers,omitempty"`
+		DeletionTimestamp *string  `json:"deletionTimestamp,omitempty"`
+	} `json:"metadata"`
+	Spec map[string]interface{} `json:"spec,omitempty"`
+}
+
+func (t *gracefulDeleteTestObject) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
+
+func (t *gracefulDeleteTestObject) DeepCopyObject() runtime.Object {
+	data, _ := json.Marshal(t)
+	c := &gracefulDeleteTestObject{}
+	_ = json.Unmarshal(data, c)
+	return c
+}
+
+func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testName := "graceful-delete-resource"
+	testNS := "integration-test"
+	testKind := "TestResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+
+	obj := &integrationTestObject{
+		APIVersion: "ark.mckinsey.com/v1alpha1",
+		Kind:       testKind,
+		Metadata: struct {
+			Name            string            `json:"name"`
+			Namespace       string            `json:"namespace"`
+			UID             string            `json:"uid"`
+			ResourceVersion string            `json:"resourceVersion,omitempty"`
+			Labels          map[string]string `json:"labels,omitempty"`
+		}{
+			Name:      testName,
+			Namespace: testNS,
+			UID:       "test-uid-graceful",
+		},
+		Spec: map[string]interface{}{"k": "v"},
+	}
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	deletionTimestamp := func() *string {
+		var ts sql.NullTime
+		_ = backend.db.QueryRowContext(ctx,
+			"SELECT deletion_timestamp FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+			testKind, testNS, testName).Scan(&ts)
+		if !ts.Valid {
+			return nil
+		}
+		formatted := ts.Time.UTC().Format(time.RFC3339)
+		return &formatted
+	}
+	currentRV := func() string {
+		got, getErr := backend.Get(ctx, testKind, testNS, testName)
+		if getErr != nil {
+			t.Fatalf("Get failed: %v", getErr)
+		}
+		return got.(*integrationTestObject).Metadata.ResourceVersion
+	}
+
+	if dt := deletionTimestamp(); dt != nil {
+		t.Fatalf("expected no deletion_timestamp on fresh resource, got %v", *dt)
+	}
+
+	// Mark for deletion: set deletionTimestamp while a finalizer is present.
+	ts := "2026-01-02T15:04:05Z"
+	markObj := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	markObj.Metadata.Name = testName
+	markObj.Metadata.Namespace = testNS
+	markObj.Metadata.UID = "test-uid-graceful"
+	markObj.Metadata.ResourceVersion = currentRV()
+	markObj.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	markObj.Metadata.DeletionTimestamp = &ts
+	if err := backend.Update(ctx, testKind, testNS, testName, markObj); err != nil {
+		t.Fatalf("Update marking deletion failed: %v", err)
+	}
+
+	if dt := deletionTimestamp(); dt == nil {
+		t.Fatal("expected deletion_timestamp to be persisted after marking deletion")
+	}
+
+	// Remove the finalizer without resending deletionTimestamp: COALESCE must keep it.
+	clearObj := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	clearObj.Metadata.Name = testName
+	clearObj.Metadata.Namespace = testNS
+	clearObj.Metadata.UID = "test-uid-graceful"
+	clearObj.Metadata.ResourceVersion = currentRV()
+	clearObj.Metadata.Finalizers = nil
+	clearObj.Metadata.DeletionTimestamp = nil
+	if err := backend.Update(ctx, testKind, testNS, testName, clearObj); err != nil {
+		t.Fatalf("Update clearing finalizer failed: %v", err)
+	}
+
+	if dt := deletionTimestamp(); dt == nil {
+		t.Error("expected deletion_timestamp to be preserved by COALESCE after an update that omitted it")
+	}
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+}
+
+// TestList_PaginationSnapshotConsistency_Integration reproduces the BIGSERIAL
+// commit-order race by holding an INSERT in-flight across page 1 and asserting
+// its row does not leak below the cursor once it commits.
+func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testKind := "PaginationTestResource"
+	testNS := "pagination-integration"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	newObj := func(name string, idx int) *integrationTestObject {
+		obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+		obj.Metadata.Name = name
+		obj.Metadata.Namespace = testNS
+		obj.Metadata.UID = "uid-" + name
+		obj.Spec = map[string]interface{}{"idx": idx}
+		return obj
+	}
+
+	for i := 1; i <= 10; i++ {
+		name := fmt.Sprintf("seed-%02d", i)
+		if err := backend.Create(ctx, testKind, testNS, name, newObj(name, i)); err != nil {
+			t.Fatalf("seed Create %s failed: %v", name, err)
+		}
+	}
+
+	tx, err := backend.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTx failed: %v", err)
+	}
+	txCommitted := false
+	defer func() {
+		if !txCommitted {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var inflightRV int64
+	if err := tx.QueryRowContext(ctx, `
+		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
+		RETURNING resource_version
+	`, testKind, testNS, "in-flight-model", "uid-in-flight",
+		`{"idx":11}`, `{}`, `{}`, `{}`, `[]`, `[]`).Scan(&inflightRV); err != nil {
+		t.Fatalf("in-flight INSERT failed: %v", err)
+	}
+
+	// Push page 1's cursor above inflightRV so cursor-only pagination would
+	// leak the row into a later page once it commits.
+	for i := 1; i <= 20; i++ {
+		name := fmt.Sprintf("post-%02d", i)
+		if err := backend.Create(ctx, testKind, testNS, name, newObj(name, 100+i)); err != nil {
+			t.Fatalf("post Create %s failed: %v", name, err)
+		}
+	}
+
+	objs, contToken, err := backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5})
+	if err != nil {
+		t.Fatalf("page 1 List failed: %v", err)
+	}
+	if len(objs) != 5 {
+		t.Fatalf("page 1: got %d rows, want 5", len(objs))
+	}
+	if contToken == "" {
+		t.Fatalf("page 1: expected continue token, got empty")
+	}
+	cursor, err := decodeCursorForTest(contToken)
+	if err != nil {
+		t.Fatalf("decode continue token %q: %v", contToken, err)
+	}
+	if cursor <= inflightRV {
+		t.Fatalf("page 1 cursor %d must be > inflightRV %d to reproduce the race", cursor, inflightRV)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("in-flight Commit failed: %v", err)
+	}
+	txCommitted = true
+
+	seen := map[string]bool{}
+	for _, o := range objs {
+		seen[o.(*integrationTestObject).Metadata.Name] = true
+	}
+	for contToken != "" {
+		var page []runtime.Object
+		page, contToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: contToken})
+		if err != nil {
+			t.Fatalf("subsequent List failed: %v", err)
+		}
+		for _, o := range page {
+			seen[o.(*integrationTestObject).Metadata.Name] = true
+		}
+	}
+
+	if seen["in-flight-model"] {
+		t.Errorf("pagination returned in-flight-model (rv=%d) even though it committed after page 1 — snapshot-consistent pagination must exclude it", inflightRV)
+	}
+	if len(seen) != 30 {
+		t.Errorf("expected 30 rows across all pages (10 seed + 20 post), got %d: %v", len(seen), seen)
+	}
+
+	// A fresh LIST captures a new snapshot that now sees the committed row —
+	// pinning to page 1's snapshot must not permanently hide it.
+	reListSeen := map[string]bool{}
+	var reListToken string
+	for {
+		var page []runtime.Object
+		page, reListToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: reListToken})
+		if err != nil {
+			t.Fatalf("re-List failed: %v", err)
+		}
+		for _, o := range page {
+			reListSeen[o.(*integrationTestObject).Metadata.Name] = true
+		}
+		if reListToken == "" {
+			break
+		}
+	}
+	if !reListSeen["in-flight-model"] {
+		t.Errorf("re-List after commit did not return in-flight-model (rv=%d) — pinned snapshot must not persist across calls", inflightRV)
+	}
+	if len(reListSeen) != 31 {
+		t.Errorf("re-List: expected 31 rows (10 seed + 20 post + in-flight), got %d: %v", len(reListSeen), reListSeen)
+	}
+}
+
+func decodeCursorForTest(token string) (int64, error) {
+	if n, err := strconv.ParseInt(token, 10, 64); err == nil {
+		return n, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return 0, fmt.Errorf("token is neither int nor base64: %w", err)
+	}
+	var payload struct {
+		Cursor int64 `json:"c"`
+	}
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return 0, fmt.Errorf("decoded token %q not JSON: %w", string(decoded), err)
+	}
+	return payload.Cursor, nil
+}
+
+func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	testKind := "TestResource"
+	testNS := "integration-test-generation"
+	testName := "generation-test-resource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3", testKind, testNS, testName)
+	}()
+
+	generation := func() int64 {
+		var g int64
+		if err := backend.db.QueryRowContext(ctx,
+			"SELECT generation FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+			testKind, testNS, testName).Scan(&g); err != nil {
+			t.Fatalf("read generation: %v", err)
+		}
+		return g
+	}
+	currentObj := func() *integrationTestObject {
+		got, gerr := backend.Get(ctx, testKind, testNS, testName)
+		if gerr != nil {
+			t.Fatalf("Get failed: %v", gerr)
+		}
+		return got.(*integrationTestObject)
+	}
+
+	// Start with a two-key spec so we can test reordered-keys without needing
+	// an intermediate spec change first.
+	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	obj.Metadata.Name = testName
+	obj.Metadata.Namespace = testNS
+	obj.Metadata.UID = "gen-test-uid"
+	obj.Metadata.Labels = map[string]string{"tier": "a"}
+	obj.Spec = map[string]interface{}{"a": "1", "b": "2"}
+	if err := backend.Create(ctx, testKind, testNS, testName, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Fatalf("after Create: generation = %d, want 1", g)
+	}
+
+	// Metadata-only (label change): no bump.
+	step := currentObj()
+	step.Metadata.Labels = map[string]string{"tier": "b"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("label-only Update failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Errorf("after label-only update: generation = %d, want 1", g)
+	}
+
+	// Reordered spec keys: same content, no bump (jsonb structural equality).
+	step = currentObj()
+	step.Spec = map[string]interface{}{"b": "2", "a": "1"}
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("reordered-key Update failed: %v", err)
+	}
+	if g := generation(); g != 1 {
+		t.Errorf("after reordered-key update: generation = %d, want 1 (jsonb equality is order-independent)", g)
+	}
+
+	// Actual spec change: bump.
+	step = currentObj()
+	step.Spec["a"] = "changed"
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("spec Update failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after spec change: generation = %d, want 2", g)
+	}
+
+	// UpdateStatus: no bump.
+	step = currentObj()
+	step.Status = map[string]interface{}{"phase": "Ready"}
+	if err := backend.UpdateStatus(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("UpdateStatus failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after status update: generation = %d, want 2", g)
+	}
+
+	// Status + label via Update (whole-object round-trip, no spec change): no bump.
+	step = currentObj()
+	step.Metadata.Labels["extra"] = "value"
+	step.Status["phase"] = "Running"
+	if err := backend.Update(ctx, testKind, testNS, testName, step); err != nil {
+		t.Fatalf("status+label Update failed: %v", err)
+	}
+	if g := generation(); g != 2 {
+		t.Errorf("after status+label update: generation = %d, want 2", g)
+	}
+
+	// First graceful-deletion marking (DT null → non-null) bumps generation,
+	// matching upstream rest.BeforeDelete.
+	step = currentObj()
+	ts := "2026-01-02T15:04:05Z"
+	mark := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	mark.Metadata.Name = testName
+	mark.Metadata.Namespace = testNS
+	mark.Metadata.UID = step.Metadata.UID
+	mark.Metadata.ResourceVersion = step.Metadata.ResourceVersion
+	mark.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	mark.Metadata.DeletionTimestamp = &ts
+	mark.Spec = step.Spec
+	if err := backend.Update(ctx, testKind, testNS, testName, mark); err != nil {
+		t.Fatalf("deletion-marking Update failed: %v", err)
+	}
+	if g := generation(); g != 3 {
+		t.Errorf("after first deletion mark: generation = %d, want 3", g)
+	}
+
+	// Re-sending the timestamp on an already-marked row (same spec) does not bump.
+	var rv string
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT resource_version FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL",
+		testKind, testNS, testName).Scan(&rv); err != nil {
+		t.Fatalf("read rv after mark: %v", err)
+	}
+	resend := &gracefulDeleteTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	resend.Metadata.Name = testName
+	resend.Metadata.Namespace = testNS
+	resend.Metadata.UID = step.Metadata.UID
+	resend.Metadata.ResourceVersion = rv
+	resend.Metadata.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	resend.Metadata.DeletionTimestamp = &ts
+	resend.Spec = step.Spec
+	if err := backend.Update(ctx, testKind, testNS, testName, resend); err != nil {
+		t.Fatalf("resend-DT Update failed: %v", err)
+	}
+	if g := generation(); g != 3 {
+		t.Errorf("after re-sending existing DT: generation = %d, want 3 (no bump)", g)
+	}
 }

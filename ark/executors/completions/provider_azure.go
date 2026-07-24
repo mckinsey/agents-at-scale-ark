@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -35,6 +36,10 @@ type AzureProvider struct {
 	Properties       map[string]string
 	outputSchema     *runtime.RawExtension
 	schemaName       string
+
+	initOnce    sync.Once
+	httpClient  *http.Client
+	probeClient *http.Client
 }
 
 func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
@@ -142,9 +147,10 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		// Accumulate usage if present in chunk
 		if chunk.Usage.TotalTokens > 0 {
 			fullResponse.Usage = openai.CompletionUsage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
+				PromptTokens:        chunk.Usage.PromptTokens,
+				CompletionTokens:    chunk.Usage.CompletionTokens,
+				TotalTokens:         chunk.Usage.TotalTokens,
+				PromptTokensDetails: chunk.Usage.PromptTokensDetails,
 			}
 		}
 	}
@@ -202,12 +208,18 @@ func (ap *AzureProvider) ensureUsageData(fullResponse *openai.ChatCompletion) {
 	}
 }
 
+func (ap *AzureProvider) initClients() {
+	ap.httpClient = &http.Client{Transport: common.NewLoggingTransport(common.NewSharedTransport())}
+	ap.probeClient = common.NewHTTPClientWithoutTracing()
+}
+
 func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error) {
+	ap.initOnce.Do(ap.initClients)
 	var httpClient *http.Client
 	if IsProbeContext(ctx) {
-		httpClient = common.NewHTTPClientWithoutTracing()
+		httpClient = ap.probeClient
 	} else {
-		httpClient = common.NewHTTPClientWithLogging(ctx)
+		httpClient = ap.httpClient
 	}
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)

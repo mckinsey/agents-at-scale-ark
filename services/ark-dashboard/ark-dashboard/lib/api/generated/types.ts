@@ -58,6 +58,9 @@ export interface paths {
          * @description Verifies that the ARK API service is ready to handle requests by testing
          *     connectivity to the Kubernetes API.
          *
+         *     Returns HTTP 200 when ready and HTTP 503 when the Kubernetes API is
+         *     unreachable, so a Kubernetes readiness probe can gate traffic correctly.
+         *
          *     Returns: ReadinessResponse: Readiness status with Kubernetes connectivity check
          */
         get: operations["readiness_check_ready_get"];
@@ -186,6 +189,30 @@ export interface paths {
          *         task_name: The name of the A2A task
          */
         delete: operations["delete_a2a_task_v1_a2a_tasks__task_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/a2a-tasks/{task_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit A2A Task Approval
+         * @description Submit an approval decision for a HITL A2ATask.
+         *
+         *     The task must be in the 'input-required' phase. The decision is written to
+         *     spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+         *     controller picks it up and transitions the task to completed or failed.
+         */
+        post: operations["submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1216,6 +1243,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/namespaces/{namespace}/marketplace-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Items
+         * @description Aggregate marketplace items across the namespace's sources. Always HTTP 200.
+         */
+        get: operations["list_marketplace_items_v1_namespaces__namespace__marketplace_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Sources
+         * @description List marketplace sources for a namespace. Missing ConfigMap returns [].
+         */
+        get: operations["list_marketplace_sources_v1_namespaces__namespace__marketplace_sources_get"];
+        put?: never;
+        /**
+         * Create Marketplace Source
+         * @description Create a source via server-side apply. With a credential: validate it, store it
+         *     in a per-source Secret, and write only ``{scheme, secretRef}`` to the ConfigMap.
+         */
+        post: operations["create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketplace Source Permissions
+         * @description Probe edit permission via SSAR. Fail-closed: canEdit=False on any error.
+         */
+        get: operations["get_marketplace_source_permissions_v1_namespaces__namespace__marketplace_sources_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/marketplace-sources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketplace Source
+         * @description Get a single marketplace source by name.
+         */
+        get: operations["get_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Marketplace Source
+         * @description Delete a source: remove its ConfigMap key and its credential Secret.
+         */
+        delete: operations["delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Marketplace Source
+         * @description Update a source via server-side apply. Omitting ``auth`` makes it anonymous and
+         *     deletes the credential Secret; changing the URL or scheme requires re-supplying the
+         *     credential (the existing Secret is never carried to a new URL).
+         */
+        patch: operations["update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch"];
+        trace?: never;
+    };
     "/v1/proxy/services": {
         parameters: {
             query?: never;
@@ -2011,7 +2133,7 @@ export interface components {
          * @description Detailed A2ATask response model.
          */
         A2ATaskDetailResponse: {
-            a2aServerRef: components["schemas"]["A2AServerRef"];
+            a2aServerRef?: components["schemas"]["A2AServerRef"] | null;
             agentRef: components["schemas"]["AgentRef"];
             /** Contextid */
             contextId?: string | null;
@@ -2535,6 +2657,32 @@ export interface components {
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
+         * ApprovalDecision
+         * @description Approval decision for a HITL tool call.
+         * @enum {string}
+         */
+        ApprovalDecision: "approved" | "rejected";
+        /**
+         * ApprovalSubmissionRequest
+         * @description Request body to approve or reject an A2ATask's pending tool calls.
+         */
+        ApprovalSubmissionRequest: {
+            decision: components["schemas"]["ApprovalDecision"];
+        };
+        /**
+         * ApprovalSubmissionResponse
+         * @description Response after submitting an approval decision.
+         */
+        ApprovalSubmissionResponse: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
+        };
+        /**
          * ArkConfigResponse
          * @description Cluster-wide Ark defaults. Singleton resource named 'default'.
          */
@@ -2650,6 +2798,12 @@ export interface components {
              */
             force?: boolean | null;
             /**
+             * Redirect On Complete
+             * @description When true (used by the dashboard), the callback redirects the browser back to the dashboard instead of rendering the HTML completion page. Defaults to false, preserving the CLI's HTML-completion behaviour.
+             * @default false
+             */
+            redirect_on_complete: boolean;
+            /**
              * Scopes
              * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
              */
@@ -2748,6 +2902,10 @@ export interface components {
         BedrockConfig: {
             /** Accesskeyid */
             accessKeyId?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Apikey */
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Baseurl */
+            baseUrl?: string | components["schemas"]["ModelValueSource"] | null;
             /** Maxtokens */
             maxTokens?: number | null;
             /** Modelarn */
@@ -2800,6 +2958,7 @@ export interface components {
          */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2812,6 +2971,7 @@ export interface components {
          */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2833,6 +2993,7 @@ export interface components {
          * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
          */
         ChatCompletionContentPartTextParam: {
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /** Text */
             text: string;
             /**
@@ -2949,6 +3110,7 @@ export interface components {
             cluster: string | null;
             /** Namespace */
             namespace: string;
+            permissions?: components["schemas"]["PermissionsResponse"] | null;
             /** Read Only Mode */
             read_only_mode: boolean;
         };
@@ -3098,6 +3260,7 @@ export interface components {
          */
         File: {
             file: components["schemas"]["FileFile"];
+            prompt_cache_breakpoint?: components["schemas"]["FilePromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -3121,6 +3284,19 @@ export interface components {
             filename: string;
             /** Mimetype */
             mimeType?: string | null;
+        };
+        /**
+         * FilePromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        FilePromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * Function
@@ -3261,6 +3437,25 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /**
+         * MCPServerAuthorization
+         * @description Authorization state of an MCPServer, for rendering state and expiry.
+         *
+         *     Sourced from status.authorization and the mcp-auth-authorized-* annotations.
+         *     Never carries token or Secret material.
+         */
+        MCPServerAuthorization: {
+            /** Authorizedat */
+            authorizedAt?: string | null;
+            /** Authorizedby */
+            authorizedBy?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Resourcename */
+            resourceName?: string | null;
+            /** State */
+            state: string;
+        };
         /** MCPServerConfigMapKeyRef */
         MCPServerConfigMapKeyRef: {
             /** Key */
@@ -3294,6 +3489,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
@@ -3344,6 +3540,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Name */
             name: string;
@@ -3406,6 +3603,109 @@ export interface components {
         };
         "MCPServerValueSource-Output": {
             [key: string]: unknown;
+        };
+        /**
+         * MarketplaceItemError
+         * @description Per-source failure detail returned by the aggregator.
+         */
+        MarketplaceItemError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * MarketplaceItemsSourceResult
+         * @description Aggregator result for one source: items on success, error on failure.
+         */
+        MarketplaceItemsSourceResult: {
+            /** Displayname */
+            displayName: string;
+            error?: components["schemas"]["MarketplaceItemError"] | null;
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Source */
+            source: string;
+        };
+        /**
+         * MarketplacePermissionsResponse
+         * @description Response of the permission probe endpoint.
+         */
+        MarketplacePermissionsResponse: {
+            /** Canedit */
+            canEdit: boolean;
+        };
+        /**
+         * MarketplaceSourceAuthInfo
+         * @description Non-secret auth metadata returned to clients (never the credential).
+         */
+        MarketplaceSourceAuthInfo: {
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
+         * MarketplaceSourceAuthInput
+         * @description Auth config supplied on create/update.
+         *
+         *     ``credential`` is write-only (stored in a Secret, never returned). It has no
+         *     length constraint on purpose: a failed constraint would echo the token into the
+         *     422 body. Emptiness is checked in the endpoint, returning a clean 400.
+         */
+        MarketplaceSourceAuthInput: {
+            /** Credential */
+            credential?: string | null;
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "bearer" | "basic";
+        };
+        /**
+         * MarketplaceSourceCreate
+         * @description Request body for creating a marketplace source.
+         */
+        MarketplaceSourceCreate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
+            /** Displayname */
+            displayName?: string | null;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MarketplaceSourceResponse
+         * @description A single marketplace source entry. Never carries the credential value.
+         */
+        MarketplaceSourceResponse: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInfo"] | null;
+            /** Displayname */
+            displayName?: string | null;
+            /**
+             * Hascredential
+             * @default false
+             */
+            hasCredential: boolean;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MarketplaceSourceUpdate
+         * @description Request body for updating a marketplace source.
+         */
+        MarketplaceSourceUpdate: {
+            auth?: components["schemas"]["MarketplaceSourceAuthInput"] | null;
+            /** Displayname */
+            displayName?: string | null;
+            /** Url */
+            url: string;
         };
         /**
          * Memory
@@ -3687,6 +3987,36 @@ export interface components {
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
             headers?: components["schemas"]["AgentHeader"][] | null;
+        };
+        /** PermissionsResponse */
+        PermissionsResponse: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Rules
+             * @default {}
+             */
+            rules: {
+                [key: string]: string[];
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /**
+         * PromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        PromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * QueryConfigMapKeyRef
@@ -3984,6 +4314,11 @@ export interface components {
             } | null;
             /** Id */
             id: string;
+            /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
             /** Name */
             name: string;
             /** Secret Length */
@@ -4333,6 +4668,15 @@ export interface operations {
                     "application/json": components["schemas"]["ReadinessResponse"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
         };
     };
     list_a2a_servers_v1_a2a_servers_get: {
@@ -4519,6 +4863,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalSubmissionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -6542,6 +6924,232 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NamespaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_items_v1_namespaces__namespace__marketplace_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceItemsSourceResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_sources_v1_namespaces__namespace__marketplace_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_marketplace_source_v1_namespaces__namespace__marketplace_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceSourceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_source_permissions_v1_namespaces__namespace__marketplace_sources_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplacePermissionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_marketplace_source_v1_namespaces__namespace__marketplace_sources__name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceSourceResponse"];
                 };
             };
             /** @description Validation Error */

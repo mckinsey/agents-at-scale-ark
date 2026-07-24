@@ -10,18 +10,6 @@ export function handleStreamingSessions(
   sessionsBroker: SessionsBroker,
   filterSessionId: string | undefined
 ): void {
-  const store = sessionsBroker.getAll();
-  let initialSessions = store.sessions;
-  if (filterSessionId) {
-    initialSessions = store.sessions[filterSessionId]
-      ? {[filterSessionId]: store.sessions[filterSessionId]}
-      : {};
-  }
-  const replayItems = Object.entries(initialSessions).map(([sid, session]) => ({
-    sessionId: sid,
-    session,
-  }));
-
   streamSSE({
     res,
     req,
@@ -34,7 +22,21 @@ export function handleStreamingSessions(
         const updated = sessionsBroker.getSession(sessionId);
         if (updated) callback({sessionId, session: updated});
       }),
-    replayItems,
+    getReplay: (): Promise<unknown[]> => {
+      const store = sessionsBroker.getAll();
+      let initialSessions = store.sessions;
+      if (filterSessionId) {
+        initialSessions = store.sessions[filterSessionId]
+          ? {[filterSessionId]: store.sessions[filterSessionId]}
+          : {};
+      }
+      return Promise.resolve(
+        Object.entries(initialSessions).map(([sid, session]) => ({
+          sessionId: sid,
+          session,
+        }))
+      );
+    },
   });
 }
 

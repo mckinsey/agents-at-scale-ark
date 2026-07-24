@@ -1,7 +1,7 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { ReactNode } from 'react';
 import React from 'react';
-import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -27,21 +27,36 @@ const mockStreamQueryStatus = vi.fn();
 const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
 const mockCancelQuery = vi.fn();
+const mockGetByName = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: (...args: unknown[]) => mockStreamChatResponse(...args),
-    startStreamChatResponse: (...args: unknown[]) => mockStartStreamChatResponse(...args),
+    startStreamChatResponse: (...args: unknown[]) =>
+      mockStartStreamChatResponse(...args),
     streamQueryStatus: (...args: unknown[]) => mockStreamQueryStatus(...args),
     submitChatQuery: (...args: unknown[]) => mockSubmitChatQuery(...args),
     getQueryResult: (...args: unknown[]) => mockGetQueryResult(...args),
     cancelQuery: (...args: unknown[]) => mockCancelQuery(...args),
   },
+  agentsService: {
+    getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
 }));
 
 function createArkFinalChunk(opts: {
-  arkTokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-  openaiUsage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  arkTokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cachedTokens?: number;
+  };
+  openaiUsage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    prompt_tokens_details?: { cached_tokens: number };
+  };
   phase?: string;
   raw?: string;
 }) {
@@ -96,6 +111,7 @@ describe('useChatSession', () => {
     store.set(storedIsChatStreamingEnabledAtom, true);
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
+    mockGetByName.mockResolvedValue({ parameters: [] });
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -147,7 +163,12 @@ describe('useChatSession', () => {
           createContentChunk('Hello'),
           createStopChunk(),
           createArkFinalChunk({
-            arkTokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+            arkTokenUsage: {
+              promptTokens: 100,
+              completionTokens: 50,
+              totalTokens: 150,
+              cachedTokens: 30,
+            },
           }),
         ]),
       );
@@ -166,6 +187,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 30,
         });
       });
     });
@@ -184,7 +206,12 @@ describe('useChatSession', () => {
                 status: { phase: 'done' },
               },
             },
-            usage: { prompt_tokens: 200, completion_tokens: 80, total_tokens: 280 },
+            usage: {
+              prompt_tokens: 200,
+              completion_tokens: 80,
+              total_tokens: 280,
+              prompt_tokens_details: { cached_tokens: 60 },
+            },
           },
         ]),
       );
@@ -203,6 +230,7 @@ describe('useChatSession', () => {
           prompt_tokens: 200,
           completion_tokens: 80,
           total_tokens: 280,
+          cached_tokens: 60,
         });
       });
     });
@@ -213,8 +241,16 @@ describe('useChatSession', () => {
           createContentChunk('Hello'),
           createStopChunk(),
           createArkFinalChunk({
-            arkTokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-            openaiUsage: { prompt_tokens: 999, completion_tokens: 999, total_tokens: 1998 },
+            arkTokenUsage: {
+              promptTokens: 100,
+              completionTokens: 50,
+              totalTokens: 150,
+            },
+            openaiUsage: {
+              prompt_tokens: 999,
+              completion_tokens: 999,
+              total_tokens: 1998,
+            },
           }),
         ]),
       );
@@ -233,6 +269,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 0,
         });
       });
     });
@@ -279,7 +316,11 @@ describe('useChatSession', () => {
             createContentChunk('First'),
             createStopChunk(),
             createArkFinalChunk({
-              arkTokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+              arkTokenUsage: {
+                promptTokens: 100,
+                completionTokens: 50,
+                totalTokens: 150,
+              },
             }),
           ]),
         )
@@ -288,7 +329,11 @@ describe('useChatSession', () => {
             createContentChunk('Second'),
             createStopChunk(),
             createArkFinalChunk({
-              arkTokenUsage: { promptTokens: 200, completionTokens: 100, totalTokens: 300 },
+              arkTokenUsage: {
+                promptTokens: 200,
+                completionTokens: 100,
+                totalTokens: 300,
+              },
             }),
           ]),
         );
@@ -307,6 +352,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 0,
         });
       });
 
@@ -319,6 +365,7 @@ describe('useChatSession', () => {
           prompt_tokens: 300,
           completion_tokens: 150,
           total_tokens: 450,
+          cached_tokens: 0,
         });
       });
     });
@@ -329,7 +376,11 @@ describe('useChatSession', () => {
           createContentChunk('Hello'),
           createStopChunk(),
           createArkFinalChunk({
-            arkTokenUsage: { promptTokens: 50, completionTokens: 25, totalTokens: 75 },
+            arkTokenUsage: {
+              promptTokens: 50,
+              completionTokens: 25,
+              totalTokens: 75,
+            },
           }),
         ]),
       );
@@ -351,6 +402,7 @@ describe('useChatSession', () => {
           prompt_tokens: 50,
           completion_tokens: 25,
           total_tokens: 75,
+          cached_tokens: 0,
         });
       });
     });
@@ -363,7 +415,11 @@ describe('useChatSession', () => {
           createContentChunk('Hello'),
           createStopChunk(),
           createArkFinalChunk({
-            arkTokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+            arkTokenUsage: {
+              promptTokens: 100,
+              completionTokens: 50,
+              totalTokens: 150,
+            },
           }),
         ]),
       );
@@ -390,6 +446,7 @@ describe('useChatSession', () => {
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
+          cached_tokens: 0,
         });
         expect(result.current.messageTokenUsage).toEqual({});
         expect(result.current.messages).toEqual([]);
@@ -421,7 +478,8 @@ describe('useChatSession', () => {
 
       await waitFor(() => {
         expect(result.current.isProcessing).toBe(false);
-        const lastMessage = result.current.messages[result.current.messages.length - 1];
+        const lastMessage =
+          result.current.messages[result.current.messages.length - 1];
         expect(lastMessage.content).toBe('Something went wrong');
       });
     });
@@ -456,7 +514,8 @@ describe('useChatSession', () => {
 
       await waitFor(() => {
         expect(result.current.isProcessing).toBe(false);
-        const lastMessage = result.current.messages[result.current.messages.length - 1];
+        const lastMessage =
+          result.current.messages[result.current.messages.length - 1];
         expect(lastMessage.content).toBe('Query execution failed');
       });
     });
@@ -556,7 +615,8 @@ describe('useChatSession', () => {
           m => m.role === 'assistant',
         );
         expect(assistantMsg).toBeDefined();
-        const toolCalls = (assistantMsg as { tool_calls?: unknown[] }).tool_calls;
+        const toolCalls = (assistantMsg as { tool_calls?: unknown[] })
+          .tool_calls;
         expect(toolCalls).toBeDefined();
         expect(toolCalls!.length).toBe(1);
         const tc = toolCalls![0] as {
@@ -649,7 +709,11 @@ describe('useChatSession', () => {
         const systemMessages = result.current.messages.filter(
           m => m.role === 'system',
         );
-        expect(systemMessages.some(m => m.content === 'Conversation stopped by user')).toBe(true);
+        expect(
+          systemMessages.some(
+            m => m.content === 'Conversation stopped by user',
+          ),
+        ).toBe(true);
         expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
       });
     });
@@ -692,7 +756,11 @@ describe('useChatSession', () => {
         const systemMessages = result.current.messages.filter(
           m => m.role === 'system',
         );
-        expect(systemMessages.some(m => m.content === 'Conversation stopped by user')).toBe(true);
+        expect(
+          systemMessages.some(
+            m => m.content === 'Conversation stopped by user',
+          ),
+        ).toBe(true);
         expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
       });
     });
@@ -700,9 +768,7 @@ describe('useChatSession', () => {
     it('should stop a polling conversation', async () => {
       store.set(storedIsChatStreamingEnabledAtom, false);
       mockCancelQuery.mockResolvedValue({});
-      mockGetQueryResult.mockImplementation(
-        () => new Promise(() => {}),
-      );
+      mockGetQueryResult.mockImplementation(() => new Promise(() => {}));
 
       const { result } = renderHook(
         () => useChatSession({ name: 'test-agent', type: 'agent' }),
@@ -726,7 +792,11 @@ describe('useChatSession', () => {
         const systemMessages = result.current.messages.filter(
           m => m.role === 'system',
         );
-        expect(systemMessages.some(m => m.content === 'Conversation stopped by user')).toBe(true);
+        expect(
+          systemMessages.some(
+            m => m.content === 'Conversation stopped by user',
+          ),
+        ).toBe(true);
         expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
       });
     });
@@ -752,6 +822,71 @@ describe('useChatSession', () => {
         expect(result.current.isProcessing).toBe(false);
         expect(result.current.error).toBeNull();
       });
+    });
+  });
+
+  describe('query parameters', () => {
+    const agentWithQueryParam = {
+      parameters: [
+        {
+          name: 'queryWord',
+          valueFrom: { queryParameterRef: { name: 'muting' } },
+        },
+      ],
+    };
+
+    it('blocks sending and sets an error when a required parameter is missing', async () => {
+      mockGetByName.mockResolvedValue(agentWithQueryParam);
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'param-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.requiredParameters).toEqual(['muting']);
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(result.current.error).toMatch(/muting/);
+      expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+    });
+
+    it('forwards supplied parameters to the streaming request', async () => {
+      mockGetByName.mockResolvedValue(agentWithQueryParam);
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('Hi'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'param-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.requiredParameters).toEqual(['muting']);
+      });
+
+      act(() => {
+        result.current.setParameterValue('muting', 'BANANAPHONE');
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.at(-1)).toEqual([
+        { name: 'muting', value: 'BANANAPHONE' },
+      ]);
     });
   });
 });

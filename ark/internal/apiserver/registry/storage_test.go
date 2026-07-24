@@ -5,13 +5,17 @@ package registry
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/storage"
@@ -278,6 +282,24 @@ func TestGenericStorage_List_WithLabelSelector(t *testing.T) {
 	}
 }
 
+func TestGenericStorage_List_FieldSelectorReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	fs, err := fields.ParseSelector("status.phase=Running")
+	if err != nil {
+		t.Fatalf("ParseSelector() error = %v", err)
+	}
+	_, err = gs.List(ctx, &metainternalversion.ListOptions{FieldSelector: fs})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsBadRequest(err) {
+		t.Errorf("expected BadRequest, got %T: %v", err, err)
+	}
+}
+
 func TestGenericStorage_Update(t *testing.T) {
 	t.Parallel()
 	gs, backend := newTestStorage()
@@ -456,6 +478,205 @@ func TestGenericStorage_Delete_WithValidation(t *testing.T) {
 	}
 }
 
+func TestGenericStorage_Delete_WithFinalizers_SetsDeletionTimestamp(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+
+	resultAgent, ok := result.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", result)
+	}
+	if resultAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be set on returned object")
+	}
+
+	stored, ok := backend.objects["Agent/default/test-agent"]
+	if !ok {
+		t.Fatal("expected object to remain in backend while finalizers are present")
+	}
+	storedAgent := stored.(*arkv1alpha1.Agent)
+	if storedAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be persisted in backend")
+	}
+}
+
+func TestGenericStorage_Delete_WithFinalizers_DeletionTimestampNotReset(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	original := metav1.NewTime(time.Now().Add(-time.Hour))
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	agent.DeletionTimestamp = &original
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+
+	resultAgent := result.(*arkv1alpha1.Agent)
+	if !resultAgent.DeletionTimestamp.Equal(&original) {
+		t.Errorf("expected existing deletionTimestamp to be preserved, got %v", resultAgent.DeletionTimestamp)
+	}
+}
+
+func TestGenericStorage_Delete_PreconditionUIDMismatch(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.UID = types.UID("actual-uid")
+	backend.objects["Agent/default/test-agent"] = agent
+
+	staleUID := types.UID("stale-uid")
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &staleUID},
+	})
+	if !apierrors.IsConflict(err) {
+		t.Errorf("expected conflict error, got %T: %v", err, err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain when UID precondition fails")
+	}
+}
+
+func TestGenericStorage_Delete_PreconditionResourceVersionMismatch(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.ResourceVersion = "5"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	staleRV := "3"
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{ResourceVersion: &staleRV},
+	})
+	if !apierrors.IsConflict(err) {
+		t.Errorf("expected conflict error, got %T: %v", err, err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain when resourceVersion precondition fails")
+	}
+}
+
+func TestGenericStorage_Delete_PreconditionsMatch(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.UID = types.UID("actual-uid")
+	agent.ResourceVersion = "5"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	uid := types.UID("actual-uid")
+	rv := "5"
+	_, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv},
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if !deleted {
+		t.Error("expected deleted to be true when preconditions match")
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; ok {
+		t.Error("expected object to be removed when preconditions match")
+	}
+}
+
+func TestGenericStorage_Update_RemovingLastFinalizer_TriggersDelete(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	now := metav1.NewTime(time.Now())
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	agent.DeletionTimestamp = &now
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updated := &arkv1alpha1.Agent{}
+	updated.Name = testAgentName
+	updated.Namespace = testNS()
+	updated.DeletionTimestamp = &now
+	updated.Finalizers = nil
+
+	updater := &simpleUpdatedObjectInfo{obj: updated}
+	_, created, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if created {
+		t.Error("expected created to be false")
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; ok {
+		t.Error("expected object to be deleted after last finalizer removed")
+	}
+}
+
+func TestGenericStorage_Update_FinalizersRemaining_DoesNotDelete(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	now := metav1.NewTime(time.Now())
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"a", "b"}
+	agent.DeletionTimestamp = &now
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updated := &arkv1alpha1.Agent{}
+	updated.Name = testAgentName
+	updated.Namespace = testNS()
+	updated.DeletionTimestamp = &now
+	updated.Finalizers = []string{"b"}
+
+	updater := &simpleUpdatedObjectInfo{obj: updated}
+	_, _, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain while a finalizer is still present")
+	}
+}
+
 func TestGenericStorage_Watch(t *testing.T) {
 	t.Parallel()
 	gs, _ := newTestStorage()
@@ -469,6 +690,24 @@ func TestGenericStorage_Watch(t *testing.T) {
 		t.Error("expected non-nil watcher")
 	}
 	watcher.Stop()
+}
+
+func TestGenericStorage_Watch_FieldSelectorReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	fs, err := fields.ParseSelector("status.phase=Running")
+	if err != nil {
+		t.Fatalf("ParseSelector() error = %v", err)
+	}
+	_, err = gs.Watch(ctx, &metainternalversion.ListOptions{FieldSelector: fs})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsBadRequest(err) {
+		t.Errorf("expected BadRequest, got %T: %v", err, err)
+	}
 }
 
 func TestGenericStorage_ConvertToTable_Single(t *testing.T) {
@@ -515,6 +754,85 @@ func TestGenericStorage_ConvertToTable_List(t *testing.T) {
 
 	if len(table.Rows) != 2 {
 		t.Errorf("expected 2 rows, got %d", len(table.Rows))
+	}
+}
+
+func TestGenericStorage_ConvertToTable_ListWithoutContinueToken(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
+	// A list without a continue token must yield an empty token (not a panic
+	// or stale value), so single-page results are not mislabeled as truncated.
+	list := &arkv1alpha1.AgentList{
+		Items: []arkv1alpha1.Agent{
+			{ObjectMeta: metav1.ObjectMeta{Name: "agent-1", CreationTimestamp: metav1.Now()}},
+		},
+	}
+
+	table, err := gs.ConvertToTable(ctx, list, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
+	if table.Continue != "" {
+		t.Errorf("expected empty continue for un-paginated list, got %q", table.Continue)
+	}
+	if table.RemainingItemCount != nil {
+		t.Errorf("expected nil remainingItemCount, got %v", *table.RemainingItemCount)
+	}
+}
+
+func TestGenericStorage_ConvertToTable_PropagatesListMeta(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
+	remaining := int64(42)
+	list := &arkv1alpha1.AgentList{
+		ListMeta: metav1.ListMeta{
+			ResourceVersion:    "123",
+			Continue:           "next-token",
+			RemainingItemCount: &remaining,
+		},
+		Items: []arkv1alpha1.Agent{
+			{ObjectMeta: metav1.ObjectMeta{Name: "agent-1", CreationTimestamp: metav1.Now()}},
+		},
+	}
+
+	table, err := gs.ConvertToTable(ctx, list, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
+	if table.Continue != "next-token" {
+		t.Errorf("expected continue 'next-token', got %q", table.Continue)
+	}
+	if table.ResourceVersion != "123" {
+		t.Errorf("expected resourceVersion '123', got %q", table.ResourceVersion)
+	}
+	if table.RemainingItemCount == nil || *table.RemainingItemCount != remaining {
+		t.Errorf("expected remainingItemCount %d, got %v", remaining, table.RemainingItemCount)
+	}
+}
+
+func TestGenericStorage_ConvertToTable_SinglePropagatesResourceVersion(t *testing.T) {
+	t.Parallel()
+	gs, _ := newTestStorage()
+	ctx := context.Background()
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.ResourceVersion = "777"
+	agent.CreationTimestamp = metav1.Now()
+
+	table, err := gs.ConvertToTable(ctx, agent, nil)
+	if err != nil {
+		t.Fatalf("ConvertToTable() error = %v", err)
+	}
+
+	if table.ResourceVersion != "777" {
+		t.Errorf("expected resourceVersion '777', got %q", table.ResourceVersion)
 	}
 }
 
@@ -571,5 +889,65 @@ func TestSetListItems(t *testing.T) {
 	}
 	if list.Continue != "next-token" {
 		t.Errorf("expected continue 'next-token', got '%s'", list.Continue)
+	}
+}
+
+func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		rvs      []string
+		expected string
+	}{
+		{
+			name:     "digit-count boundary 9 vs 10",
+			rvs:      []string{"9", "10"},
+			expected: "10",
+		},
+		{
+			name:     "digit-count boundary 9 vs 100",
+			rvs:      []string{"9", "100"},
+			expected: "100",
+		},
+		{
+			name:     "mixed order",
+			rvs:      []string{"3", "20", "100", "5"},
+			expected: "100",
+		},
+		{
+			name:     "empty and invalid rvs are skipped",
+			rvs:      []string{"", "not-a-number", "42"},
+			expected: "42",
+		},
+		{
+			name:     "no valid rvs leaves list rv unset",
+			rvs:      []string{"", "abc"},
+			expected: "",
+		},
+		{
+			name:     "empty list leaves rv unset",
+			rvs:      nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			list := &arkv1alpha1.AgentList{}
+			objects := make([]runtime.Object, 0, len(tt.rvs))
+			for i, rv := range tt.rvs {
+				objects = append(objects, &arkv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{Name: "a" + strconv.Itoa(i), ResourceVersion: rv},
+				})
+			}
+
+			if err := setListItems(list, objects, ""); err != nil {
+				t.Fatalf("setListItems() error = %v", err)
+			}
+
+			if got := list.ResourceVersion; got != tt.expected {
+				t.Errorf("list resourceVersion = %q, want %q", got, tt.expected)
+			}
+		})
 	}
 }

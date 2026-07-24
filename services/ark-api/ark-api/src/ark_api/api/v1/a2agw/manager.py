@@ -12,7 +12,12 @@ from starlette.applications import Starlette
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .execution import ARKAgentExecutor
-from .registry import get_registry
+from .registry import (
+    apply_forwarded_url,
+    external_forwarded_base_from_headers,
+    forwarded_base_ctx,
+    get_registry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +72,28 @@ class ProxyApp:
             })
             return
         
+        # Publish the request's external base URL (derived from X-Forwarded-*
+        # headers) so the agent-card modifier can advertise a tenant-prefixed
+        # URL. Pure ASGI forwarding keeps us in the same task, so a contextvar
+        # set here is visible to the downstream agent-card handler.
+        token = None
+        if scope.get("type") == "http":
+            headers = {
+                key.decode("latin-1").lower(): value.decode("latin-1")
+                for key, value in scope.get("headers", [])
+            }
+            forwarded_base = external_forwarded_base_from_headers(headers)
+            if forwarded_base:
+                token = forwarded_base_ctx.set(forwarded_base)
+
         # Forward to current app - this is safe because we hold a reference
         # Even if set_app() is called during this await, we continue using
         # the app instance we already have
-        await app(scope, receive, send)
+        try:
+            await app(scope, receive, send)
+        finally:
+            if token is not None:
+                forwarded_base_ctx.reset(token)
     
     def set_app(self, app: ASGIApp):
         """Atomically replace the target app.
@@ -186,7 +209,8 @@ class DynamicManager:
 
             server = A2AStarletteApplication(
                 agent_card=agent_card,
-                http_handler=request_handler
+                http_handler=request_handler,
+                card_modifier=apply_forwarded_url,
             )
 
             new_app.mount(f"/{name}/", server.build())

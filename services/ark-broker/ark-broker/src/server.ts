@@ -9,7 +9,13 @@ import {
 import {createHttpLogger} from './http/middleware/http-logger.js';
 import {requestId} from './http/middleware/request-id.js';
 import {MemoryBroker} from './brokers/memory-broker.js';
+import type {MessageStream} from './brokers/stream/message-stream.js';
+import type {EventStream} from './brokers/event-broker.js';
+import {type Db, pingDb} from './db/db.js';
+import type {RedisClient} from './redis/redis.js';
+import {pingRedis} from './redis/redis.js';
 import {CompletionChunkBroker} from './brokers/chunks-broker.js';
+import type {ChunkStream} from './brokers/stream/chunk-stream.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
 import {SessionsBroker} from './brokers/sessions-broker.js';
@@ -38,30 +44,32 @@ export function buildApp(deps: {
   config: AppConfig;
   logger: Logger;
   version: string;
+  messageStream: MessageStream;
+  chunkStream: ChunkStream;
+  eventStream: EventStream;
+  db?: Db;
+  redis?: RedisClient;
 }): AppBundle {
-  const {config, logger, version} = deps;
+  const {
+    config,
+    logger,
+    version,
+    messageStream,
+    chunkStream,
+    eventStream,
+    db,
+    redis,
+  } = deps;
   const app = express();
 
-  const memory = new MemoryBroker(
-    logger.child({broker: 'memory'}),
-    config.persistence.memoryFilePath,
-    config.limits.maxMessages
-  );
-  const chunks = new CompletionChunkBroker(
-    logger.child({broker: 'chunks'}),
-    config.persistence.streamFilePath,
-    config.limits.maxChunks
-  );
+  const memory = new MemoryBroker(messageStream);
+  const chunks = new CompletionChunkBroker(chunkStream);
   const traces = new TraceBroker(
     logger.child({broker: 'traces'}),
     config.persistence.traceFilePath,
     config.limits.maxSpans
   );
-  const events = new EventBroker(
-    logger.child({broker: 'events'}),
-    config.persistence.eventFilePath,
-    config.limits.maxEvents
-  );
+  const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(
     logger.child({broker: 'sessions'}),
     config.persistence.sessionsFilePath
@@ -76,6 +84,19 @@ export function buildApp(deps: {
 
   app.get('/health', (_req, res) => {
     res.status(200).send('OK');
+  });
+
+  app.get('/readyz', async (_req, res) => {
+    try {
+      await Promise.all([
+        db ? pingDb(db) : Promise.resolve(),
+        redis ? pingRedis(redis) : Promise.resolve(),
+      ]);
+      res.status(200).send('OK');
+    } catch (err) {
+      logger.warn({err}, 'readyz ping failed');
+      res.status(503).send('Service Unavailable');
+    }
   });
 
   app.use('/', createMemoryRouter(memory, sessions));

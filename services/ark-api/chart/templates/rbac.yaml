@@ -55,6 +55,10 @@ rules:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Ark resource status subresources (for HITL approval)
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["a2atasks/status"]
+    verbs: ["get", "patch", "update"]
   # Argo Workflows resources
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
@@ -89,10 +93,20 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
+  # Read namespace metadata to detect the ark.mckinsey.com/demo label
+  # (read-only mode) in GET /v1/context. Namespaces are cluster-scoped, so this
+  # must be granted here rather than in the namespaced Role.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
   # Cluster-scoped Ark resources (singleton ArkConfig for global defaults)
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["arkconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Marketplace-sources permission probe issues a SelfSubjectAccessReview
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["selfsubjectaccessreviews"]
+    verbs: ["create"]
   {{- if .Values.impersonation.enabled }}
   # User impersonation for SSO-authenticated requests (must be cluster-scoped)
   - apiGroups: [""]

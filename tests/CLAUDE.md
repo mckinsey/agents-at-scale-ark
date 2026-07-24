@@ -12,7 +12,7 @@ Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
 |---|---|---|
 | *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
 | `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
-| `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `postgresql: "true"` | Requires PostgreSQL backend + broker with postgres backend | Excluded from etcd-only runs |
 | `etcd-only: "true"` | Requires etcd backend (e.g., uses cluster-scoped CRDs not served by embedded apiserver) | Excluded from postgresql backend runs |
 | `requires-images: "true"` | Requires built container images | Conditional |
 | `standard: "true"` | Explicit standard marker | Always runs |
@@ -171,7 +171,7 @@ JMESPath's `contains()` requires a string or array — it throws a hard type err
       status:
         (contains(response.content, 'expected text')): true
 
-# Good - wait for completion first, then assert
+# Good - wait until response.content is populated, then assert against it
 - apply:
     file: manifests/a04-query.yaml
 - wait:
@@ -180,9 +180,8 @@ JMESPath's `contains()` requires a string or array — it throws a hard type err
     name: test-query
     timeout: 2m
     for:
-      condition:
-        name: Completed
-        value: 'True'
+      jsonPath:
+        path: '{.status.response.content}'
 - assert:
     resource:
       ...
@@ -190,7 +189,9 @@ JMESPath's `contains()` requires a string or array — it throws a hard type err
         (contains(response.content, 'expected text')): true
 ```
 
-This applies to both success and error queries — the `Completed` condition is set to `True` regardless of outcome (`QuerySucceeded`, `QueryErrored`, `QueryCanceled`).
+Prefer `for.jsonPath` over `for.condition: Completed=True` whenever the next step reads `response.content`. `Completed=True` can become visible on a watch before `response.content` has propagated to a subsequent read (especially on the postgresql backend, where watch events hop through the WAL consumer), and `contains(nil, ...)` errors rather than failing-with-retry. Waiting on the jsonpath itself fires only once the field is non-empty, so the follow-up assert and any shell-script `kubectl get … jsonpath='{.status.response.content}'` (which has no retry of its own) both see a populated value.
+
+`Completed=True` is still the right wait for tests that only care that the query terminated — for example, error queries where the body of `response.content` is not what's under test.
 
 ### Model Assertions
 Models should assert existence and readiness:
@@ -997,3 +998,31 @@ If options are still detaching after this, the likely cause is a parent componen
 
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events
+
+## PostgreSQL Broker Tests
+
+Tests labeled `postgresql: "true"` run in the `storage-backend: postgresql` CI matrix, where the broker uses Postgres for both messages and events (`backends.message=postgres`, `backends.event=postgres`). This means broker messages and events are persisted in the `messages` and `events` tables of the `ark-storage-dev` Postgres instance in `ark-system`.
+
+Use this label when a test needs to verify broker message/event persistence, `expires_at`, or other Postgres-specific behavior.
+
+### Querying Postgres from a chainsaw test
+
+Use the shared `psql-query.sh` script to run SQL against `ark-storage-dev`:
+
+```yaml
+- name: verify-postgres
+  try:
+  - script:
+      timeout: 30s
+      content: |
+        TTL=$(bash ../shared/psql-query.sh \
+          "SELECT EXTRACT(EPOCH FROM (expires_at - created_at))::int FROM messages WHERE query_id='my-query' LIMIT 1;" \
+          | tr -d ' \n')
+        echo "ttl_seconds: ${TTL}"
+        [ "${TTL}" = "3600" ] || { echo "expected 3600, got ${TTL}"; exit 1; }
+      env:
+      - name: NAMESPACE
+        value: ($namespace)
+```
+
+The script reads the password from the `ark-storage-dev-password` secret in `ark-system` and execs psql on the `ark-storage-dev` deployment.

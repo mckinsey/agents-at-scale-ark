@@ -1,4 +1,4 @@
-FROM python:3.14.4-slim
+FROM python:3.14.6-slim
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN adduser --system --uid 1001 --home /home/arkmcp arkmcp && \
     chown -R arkmcp:nogroup /home/arkmcp
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
 
 # Copy dependency files
 COPY ark-mcp/pyproject.toml ark-mcp/uv.lock ./

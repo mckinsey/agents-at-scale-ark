@@ -79,8 +79,8 @@ spec:
               workflow: "{{workflow.name}}"
           spec:
             input: "{{inputs.parameters.question}}"
-            targets:
-            - name: "{{inputs.parameters.model-name}}"
+            target:
+              name: "{{inputs.parameters.model-name}}"
               type: model
             timeout: 5m
             ttl: 24h

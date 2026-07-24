@@ -34,10 +34,11 @@ const (
 
 // Query annotations
 const (
-	Query           = ARKPrefix + "query"
-	Auto            = ARKPrefix + "auto"
-	QueryGeneration = ARKPrefix + "query-generation"
-	QueryPhase      = ARKPrefix + "query-phase"
+	Query                = ARKPrefix + "query"
+	Auto                 = ARKPrefix + "auto"
+	QueryGeneration      = ARKPrefix + "query-generation"
+	QueryPhase           = ARKPrefix + "query-phase"
+	ApprovalCascadeCount = ARKPrefix + "approval-cascade-count"
 )
 
 // General annotations

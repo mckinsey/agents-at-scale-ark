@@ -17,6 +17,9 @@ runs:
       uses: actions/setup-go@v5
       with:
         go-version: ${{ inputs.go-version }}
+        # This step only `go install`s gcov2lcov; it does not build the
+        # project, so module caching has no value here.
+        cache: false
     
     - name: Install gcov2lcov
       shell: bash

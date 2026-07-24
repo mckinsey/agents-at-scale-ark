@@ -1,9 +1,8 @@
 import {BrokerItem} from './stream/broker-item.js';
-import {BrokerItemStream} from './stream/broker-item-stream.js';
+import type {Stream} from './stream/stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
-/** Event data from Ark controller operations */
 export interface EventData {
   timestamp: string;
   eventType: string;
@@ -22,44 +21,72 @@ export interface EventData {
   };
 }
 
-/**
- * Broker for storing Ark controller operation events.
- * Events are grouped by query ID.
- */
+export interface EventFilter {
+  queryId?: string;
+  sessionId?: string;
+  afterSequence?: number;
+}
+
+export interface EventStream extends Stream<EventData> {
+  deleteByQuery(queryId: string): Promise<void>;
+  paginateBy(
+    params: PaginationParams,
+    filter?: EventFilter
+  ): Promise<PaginatedList<BrokerItem<EventData>>>;
+  filterBy(filter: EventFilter): Promise<BrokerItem<EventData>[]>;
+  deleteBy(filter: EventFilter): Promise<void>;
+}
+
 export class EventBroker {
-  private stream: BrokerItemStream<EventData>;
+  private readonly stream: EventStream;
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<EventData>(
-      logger,
-      'Event',
-      path,
-      maxItems
-    );
+  constructor(stream: EventStream, _logger?: Logger) {
+    this.stream = stream;
   }
 
-  addEvent(event: EventData): BrokerItem<EventData> {
-    return this.stream.append(event);
+  async addEvent(
+    event: EventData,
+    ttlSeconds?: number
+  ): Promise<BrokerItem<EventData>> {
+    return this.stream.append(event, ttlSeconds);
   }
 
-  getByQuery(queryId: string): BrokerItem<EventData>[] {
-    return this.stream.filter((item) => item.data.data.queryId === queryId);
+  async getByQuery(queryId: string): Promise<BrokerItem<EventData>[]> {
+    return this.stream.filterBy({queryId});
   }
 
-  getEventsByQuery(queryId: string): EventData[] {
-    return this.getByQuery(queryId).map((item) => item.data);
+  async getEventsByQuery(queryId: string): Promise<EventData[]> {
+    return (await this.getByQuery(queryId)).map((item) => item.data);
   }
 
-  all(): BrokerItem<EventData>[] {
+  async eventsAfter(
+    cursor: number,
+    sessionId?: string
+  ): Promise<BrokerItem<EventData>[]> {
+    return this.stream.filterBy({sessionId, afterSequence: cursor});
+  }
+
+  async queryEventsAfter(
+    queryId: string,
+    cursor: number
+  ): Promise<BrokerItem<EventData>[]> {
+    return this.stream.filterBy({queryId, afterSequence: cursor});
+  }
+
+  all(): Promise<BrokerItem<EventData>[]> {
     return this.stream.all();
   }
 
-  save(): void {
-    this.stream.save();
+  save(): Promise<void> {
+    return this.stream.save();
   }
 
-  delete(): void {
-    this.stream.delete();
+  async delete(): Promise<void> {
+    return this.stream.delete();
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    return this.stream.deleteByQuery(queryId);
   }
 
   subscribe(callback: (item: BrokerItem<EventData>) => void): () => void {
@@ -77,31 +104,27 @@ export class EventBroker {
     });
   }
 
-  paginate(params: PaginationParams): PaginatedList<BrokerItem<EventData>> {
-    return this.stream.paginate(params);
+  async paginate(
+    params: PaginationParams
+  ): Promise<PaginatedList<BrokerItem<EventData>>> {
+    return this.stream.paginateBy(params);
   }
 
-  paginateByQuery(
+  async paginateByQuery(
     queryId: string,
     params: PaginationParams
-  ): PaginatedList<BrokerItem<EventData>> {
-    return this.stream.paginate(
-      params,
-      (item) => item.data.data.queryId === queryId
-    );
+  ): Promise<PaginatedList<BrokerItem<EventData>>> {
+    return this.stream.paginateBy(params, {queryId});
   }
 
-  paginateBySessionId(
+  async paginateBySessionId(
     sessionId: string,
     params: PaginationParams
-  ): PaginatedList<BrokerItem<EventData>> {
-    return this.stream.paginate(
-      params,
-      (item) => item.data.data.sessionId === sessionId
-    );
+  ): Promise<PaginatedList<BrokerItem<EventData>>> {
+    return this.stream.paginateBy(params, {sessionId});
   }
 
-  getCurrentSequence(): number {
+  async getCurrentSequence(): Promise<number> {
     return this.stream.getCurrentSequence();
   }
 }

@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 
 from kubernetes_asyncio.client import CustomObjectsApi
-from kubernetes_asyncio.client.api_client import ApiClient
 
 from ark_sdk.client import with_ark_client
 from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
+from .client_utils import get_impersonating_api_client
 
 from ...models.models import (
     ModelResponse,
@@ -138,7 +138,7 @@ async def list_models(request: Request, namespace: Optional[str] = Query(None, d
 
 @router.post("", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="model")
-async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
+async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Create a new Model CR.
 
@@ -218,7 +218,7 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
         "metadata": {"name": body.name, "namespace": namespace},
         "spec": model_spec,
     }
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         created_cr = await custom_api.create_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
@@ -232,7 +232,7 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
 
 @router.get("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="model")
-async def get_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
+async def get_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Get a specific Model CR by name.
     
@@ -248,7 +248,7 @@ async def get_model(model_name: str, namespace: Optional[str] = Query(None, desc
     """
     if namespace is None:
         namespace = get_context()["namespace"]
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         model_cr = await custom_api.get_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
@@ -314,7 +314,7 @@ def _build_config_dict_from_body(body_config, provider: str) -> dict:
 
 @router.put("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="model")
-async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
+async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Update a Model CR by name.
 
@@ -323,7 +323,7 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
     """
     if namespace is None:
         namespace = get_context()["namespace"]
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         existing_cr = await custom_api.get_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
@@ -332,18 +332,17 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
             plural=MODEL_CRD_PLURAL,
             name=model_name,
         )
-    spec = existing_cr.get("spec", {})
-    provider = get_provider_from_spec(spec)
+        spec = existing_cr.get("spec", {})
+        provider = get_provider_from_spec(spec)
 
-    if body.model is not None:
-        spec["model"] = {"value": body.model}
+        if body.model is not None:
+            spec["model"] = {"value": body.model}
 
-    if body.config is not None:
-        spec["config"] = _build_config_dict_from_body(body.config, provider)
+        if body.config is not None:
+            spec["config"] = _build_config_dict_from_body(body.config, provider)
 
-    existing_cr["spec"] = spec
-    async with ApiClient() as api_client:
-        custom_api = CustomObjectsApi(api_client)
+        existing_cr["spec"] = spec
+
         updated_cr = await custom_api.replace_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
             version=VERSION,

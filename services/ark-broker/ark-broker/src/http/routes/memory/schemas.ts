@@ -4,6 +4,7 @@ export const postMessagesBodySchema = z.object({
   conversation_id: z.string(),
   query_id: z.string(),
   messages: z.array(z.unknown()),
+  ttl_seconds: z.coerce.number().int().positive().optional(),
 });
 export type PostMessagesBody = z.infer<typeof postMessagesBodySchema>;
 

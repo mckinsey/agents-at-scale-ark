@@ -3,6 +3,7 @@
 import logging
 import os
 import json
+import time
 from typing import Optional, Dict, Any
 import jwt
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError, InvalidAudienceError, InvalidIssuerError
@@ -15,6 +16,11 @@ from .exceptions import TokenValidationError, InvalidTokenError as AuthInvalidTo
 from .config import AuthConfig
 
 logger = logging.getLogger(__name__)
+
+# OIDC providers rotate signing keys (Dex rotates ~every 6h), so a JWKS set
+# cached for the process lifetime goes stale and rejects tokens signed by a
+# newly-rotated key. Bound the cache and refetch on an unknown kid.
+JWKS_CACHE_TTL_SECONDS = int(os.getenv("OIDC_JWKS_CACHE_TTL_SECONDS", "300"))
 
 
 class TokenValidator:
@@ -101,10 +107,13 @@ class TokenValidator:
             logger.error(f"Failed to fetch JWKS: {e}")
             raise TokenValidationError(f"Failed to fetch JWKS: {e}")
     
-    def _get_jwks(self) -> Dict[str, Any]:
-        """Get JWKS with caching."""
-        if self._jwks_cache is None:
+    def _get_jwks(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """Get JWKS, cached with a TTL. ``force_refresh`` bypasses the cache."""
+        now = time.monotonic()
+        expired = self._cache_expiry is not None and now >= self._cache_expiry
+        if force_refresh or self._jwks_cache is None or expired:
             self._jwks_cache = self._fetch_jwks()
+            self._cache_expiry = now + JWKS_CACHE_TTL_SECONDS
         return self._jwks_cache
     
     def _jwk_to_pem(self, jwk_dict: Dict[str, Any]) -> str:
@@ -142,14 +151,13 @@ class TokenValidator:
             if not kid:
                 raise TokenValidationError("Token header does not contain 'kid'")
 
-            # Get JWKS
-            jwks = self._get_jwks()
-
-            # Find the key with matching kid
-            for key in jwks.get('keys', []):
-                if key.get('kid') == kid:
-                    # Convert JWK to PEM
-                    return self._jwk_to_pem(key)
+            # Try the cached JWKS first; on an unknown kid, refetch once in case
+            # the IdP rotated its signing keys since the cache was populated.
+            for force_refresh in (False, True):
+                jwks = self._get_jwks(force_refresh=force_refresh)
+                for key in jwks.get('keys', []):
+                    if key.get('kid') == kid:
+                        return self._jwk_to_pem(key)
 
             raise TokenValidationError(f"Unable to find key with kid: {kid}")
 

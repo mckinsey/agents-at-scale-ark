@@ -18,7 +18,7 @@ type OperationTracker interface {
 
 type TokenCollector interface {
 	StartTokenCollection(ctx context.Context) context.Context
-	AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens int64)
+	AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens, cachedTokens int64)
 	AddTokenUsage(ctx context.Context, usage arkv1alpha1.TokenUsage)
 	AddCompletionUsage(ctx context.Context, usage openai.CompletionUsage)
 	GetTokenSummary(ctx context.Context) arkv1alpha1.TokenUsage

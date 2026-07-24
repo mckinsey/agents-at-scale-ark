@@ -1,25 +1,19 @@
 """A2A Proxy routes for making agent to agent comunication accesible from outside """
 import logging
 import os
-from multiprocessing import get_context
-from token import OP
 from ark_api.utils.ark_services import get_headers
 from ark_sdk.k8s import get_context
 from ark_sdk.client import with_ark_client
-from datetime import datetime
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
-from posix import preadv
 from typing import Optional
 import httpx
-import resource
 
 from fastapi import APIRouter, Depends, Query, Request, Response, HTTPException
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ....auth.dependencies import get_impersonation_config
 
-from ..exceptions import handle_k8s_errors
+from ..client_utils import get_impersonating_api_client
 from ....models.models import ServiceListResponse
 from .proxy_resources import Resource
 
@@ -169,13 +163,14 @@ async def _proxy_request(
 
 @router.get("/services", response_model=ServiceListResponse)
 async def list_services(
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> ServiceListResponse:
     """List services available for proxying in the current namespace."""
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         v1 = client.CoreV1Api(api_client)
         services = await v1.list_namespaced_service(namespace=namespace)
         service_names = [svc.metadata.name for svc in services.items]

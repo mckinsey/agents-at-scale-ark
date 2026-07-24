@@ -21,7 +21,7 @@ class TestNamespacesEndpoint(unittest.TestCase):
 
         self.client = TestClient(app)
 
-    @patch("ark_api.api.v1.namespaces.ApiClient")
+    @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
     def test_list_namespaces_success(self, mock_v1_api, mock_api_client):
         """Test successful namespace listing."""
@@ -64,7 +64,7 @@ class TestContextEndpoint(unittest.TestCase):
         self.client = TestClient(app)
 
     @patch("ark_api.api.v1.namespaces.get_current_context")
-    @patch("ark_api.api.v1.namespaces.ApiClient")
+    @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
     def test_get_context_success(
         self, mock_v1_api, mock_api_client, mock_get_current_context
@@ -96,7 +96,7 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertEqual(data["read_only_mode"], False)
 
     @patch("ark_api.api.v1.namespaces.get_current_context")
-    @patch("ark_api.api.v1.namespaces.ApiClient")
+    @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
     def test_get_context_with_valid_namespace(
         self, mock_v1_api, mock_api_client, mock_get_current_context
@@ -126,7 +126,7 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertEqual(data["read_only_mode"], True)  # Demo namespace has read_only
 
     @patch("ark_api.api.v1.namespaces.get_current_context")
-    @patch("ark_api.api.v1.namespaces.ApiClient")
+    @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
     def test_get_context_namespace_not_found(
         self, mock_v1_api, mock_api_client, mock_get_current_context
@@ -978,7 +978,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
-        self.assertEqual(data["items"][1]["model_ref"], "default")
+        self.assertIsNone(data["items"][1]["model_ref"])
         self.assertEqual(data["items"][1]["available"], "False")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
@@ -1306,7 +1306,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.create_api_client")
     def test_create_model_openai_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1356,7 +1356,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.create_api_client")
     def test_create_model_azure_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1407,7 +1407,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.create_api_client")
     def test_create_model_bedrock_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1464,7 +1464,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.create_api_client")
     def test_get_model_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1514,7 +1514,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.create_api_client")
     def test_update_model_success(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):
@@ -1576,7 +1576,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
     @patch("ark_api.api.v1.models.get_context", return_value={"namespace": "default"})
     @patch("ark_api.api.v1.models.CustomObjectsApi")
-    @patch("ark_api.api.v1.models.ApiClient")
+    @patch("ark_api.api.v1.client_utils.create_api_client")
     def test_update_model_partial(
         self, mock_api_client_cls, mock_custom_api_cls, mock_get_context
     ):

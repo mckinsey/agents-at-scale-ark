@@ -18,7 +18,6 @@ from ...models.agents import (
     AgentCreateRequest,
     AgentUpdateRequest,
     AgentDetailResponse,
-    ModelRef
 )
 from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
@@ -38,7 +37,7 @@ def agent_to_response(agent: dict) -> AgentResponse:
     status = agent.get("status", {})
 
     # Extract model ref name if exists
-    model_ref = "default"
+    model_ref = None
     if spec.get("modelRef"):
         model_ref = spec["modelRef"].get("name")
 
@@ -91,7 +90,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         executionEngine=spec.get("executionEngine"),
-        modelRef=spec.get("modelRef", ModelRef(name="default")),
+        modelRef=spec.get("modelRef"),
         parameters=spec.get("parameters"),
         prompt=spec.get("prompt"),
         tools=spec.get("tools"),

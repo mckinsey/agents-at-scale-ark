@@ -21,7 +21,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
+import { apiUrl } from '@/lib/api/config';
+import {
+  getAttributeStringValue,
+  getSessionDisplayNameFromEntries,
+} from '@/lib/broker/session-utils';
 import { type BrokerStatus, proxyService } from '@/lib/services/proxy';
 import type { GraphEdge } from '@/lib/types/chat-message';
 
@@ -100,7 +104,9 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
       }
 
       setError(null);
-      let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
+      let url = apiUrl(
+        `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`,
+      );
       if (cursor !== undefined && cursor !== null) {
         url += `&cursor=${cursor}`;
       }
@@ -154,7 +160,9 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
+        let url = apiUrl(
+          `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`,
+        );
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }
@@ -320,9 +328,10 @@ function DebugStreamView({
             attr !== null &&
             'key' in attr &&
             attr.key === 'ark.session.id',
-        ) as { value?: string } | undefined;
-        if (sessionAttr?.value) {
-          return sessionAttr.value;
+        ) as { value?: unknown } | undefined;
+        const sessionValue = getAttributeStringValue(sessionAttr?.value);
+        if (sessionValue) {
+          return sessionValue;
         }
       }
     }
@@ -335,9 +344,10 @@ function DebugStreamView({
           attr !== null &&
           'key' in attr &&
           attr.key === 'ark.session.id',
-      ) as { value?: string } | undefined;
-      if (sessionAttr?.value) {
-        return sessionAttr.value;
+      ) as { value?: unknown } | undefined;
+      const sessionValue = getAttributeStringValue(sessionAttr?.value);
+      if (sessionValue) {
+        return sessionValue;
       }
     }
 

@@ -3,7 +3,8 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
-import { FILES_API_BASE_URL } from '@/lib/api/files-client';
+import { apiUrl } from '@/lib/api/config';
+import { filesApiClient } from '@/lib/api/files-client';
 import {
   getLanguageFromExtension,
   isImageFile,
@@ -73,7 +74,7 @@ export function useMultiFilePreview() {
     setPreviewOpen(true);
 
     try {
-      const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
+      const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -107,7 +108,7 @@ export function useMultiFilePreview() {
           const base64Content = await base64Promise;
 
           // Call the API endpoint
-          const apiResponse = await fetch('/api/v1/file-preview/spreadsheet', {
+          const apiResponse = await fetch(apiUrl('/api/v1/file-preview/spreadsheet'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

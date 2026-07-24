@@ -40,6 +40,7 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	DeleteQuery(ctx context.Context, queryID string) error
 	Close() error
 }
 
@@ -49,12 +50,14 @@ type Config struct {
 	RetryDelay     time.Duration
 	ConversationId string
 	QueryName      string
+	TtlSeconds     *int64
 }
 
 type MessagesRequest struct {
 	ConversationID string                                   `json:"conversation_id,omitempty"`
 	QueryID        string                                   `json:"query_id"`
 	Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	TtlSeconds     *int64                                   `json:"ttl_seconds,omitempty"`
 }
 
 type MessageRecord struct {
@@ -88,10 +91,11 @@ func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryNam
 	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, config, memoryRecorder)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, ttlSeconds *int64, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	config := DefaultConfig()
 	config.ConversationId = conversationId
 	config.QueryName = queryName
+	config.TtlSeconds = ttlSeconds
 
 	var memoryName, memoryNamespace string
 
@@ -99,7 +103,13 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 		// Try to load "default" memory from the same namespace
 		_, err := getMemoryResource(ctx, k8sClient, "default", namespace)
 		if err != nil {
-			// If default memory doesn't exist, use noop memory
+			// If default memory doesn't exist, use noop memory. When the query
+			// carries a conversationId the caller expected continuity, so warn
+			// at default verbosity instead of hiding it behind V(2).
+			if conversationId != "" {
+				logf.FromContext(ctx).Info("conversationId set but no Memory backend reachable in namespace; conversation history disabled for this query",
+					"conversationId", conversationId, "queryName", queryName, "namespace", namespace)
+			}
 			return NewNoopMemory(), nil
 		}
 		memoryName, memoryNamespace = "default", namespace //nolint:goconst // "default" here is memory name, not model
