@@ -8,5 +8,5 @@ spec:
     type: agent
     name: sessions-postgres-agent-b
   sessionId: e2e-sessions-broker-postgres
-  conversationId: e2e-sessions-broker-postgres-conv
+  conversationId: e2e-sessions-broker-postgres-conv-2
   ttl: "1h0m0s"

@@ -1,12 +1,12 @@
 # sessions-broker-postgres
 
-Verifies that two queries sharing a `sessionId`/`conversationId` are recorded as two rows in the Postgres `session_queries` table under one `sessions` header row, with `conversations`/`participants`/`error_count` aggregated correctly.
+Verifies that two queries sharing a `sessionId` are recorded as two rows in the Postgres `session_queries` table under one `sessions` header row, with `conversations`/`participants`/`error_count` aggregated correctly.
 
 ## What it tests
-- Two queries, targeting two different agents, both set `spec.sessionId` and `spec.conversationId` to the same values
+- Two queries, targeting two different agents in two different conversations, both set `spec.sessionId` to the same value
 - Both queries complete with `phase: done`
 - The broker's `session_queries` table has one row per query, both `phase='done'`
-- The `sessions` header row shows `status=idle`, `error_count=0`, one conversation (both queries share it), two participants (the two agents)
+- The `sessions` header row shows `status=idle`, `error_count=0`, two conversations, two participants (the two agents)
 - `GET /sessions/:id` returns the same shape over the broker HTTP API
 - Requires the broker running with postgres sessions backend (`postgresql: "true"` label)
 

@@ -16,13 +16,21 @@ spec:
             -o jsonpath='{.data.password}' | base64 -d)
           MIGRATE_IMAGE="${ARK_BROKER_IMAGE:+${ARK_BROKER_IMAGE%ark-broker}ark-broker-migrate}"
 
+          # Install with a single replica first, so exactly one migrate init
+          # container runs against the shared database - two pods' migrate
+          # containers racing the same target database at replicaCount=2 from
+          # the start has been observed to trip golang-migrate into a bad
+          # "dirty at version N, no down migration to recover" state. Once
+          # the schema is confirmed at its target version, scaling up is
+          # race-free: the second pod's migrate container just sees it's
+          # already there.
           helm upgrade --install ark-broker ../../services/ark-broker/chart \
             --namespace $NAMESPACE \
             ${ARK_BROKER_IMAGE:+--set app.image.repository=${ARK_BROKER_IMAGE}} \
             ${ARK_BROKER_IMAGE_TAG:+--set app.image.tag=${ARK_BROKER_IMAGE_TAG}} \
             ${MIGRATE_IMAGE:+--set migrate.image.repository=${MIGRATE_IMAGE}} \
             ${ARK_BROKER_IMAGE_TAG:+--set migrate.image.tag=${ARK_BROKER_IMAGE_TAG}} \
-            --set replicaCount=2 \
+            --set replicaCount=1 \
             --set backends.message=postgres \
             --set backends.event=postgres \
             --set backends.sessions=postgres \
@@ -30,6 +38,12 @@ spec:
             --set restartController.enabled=false \
             --set otelEndpoint.enabled=false \
             --set persistence.enabled=false \
+            --wait --timeout=180s
+
+          helm upgrade --install ark-broker ../../services/ark-broker/chart \
+            --namespace $NAMESPACE \
+            --reuse-values \
+            --set replicaCount=2 \
             --wait --timeout=180s
         env:
         - name: NAMESPACE

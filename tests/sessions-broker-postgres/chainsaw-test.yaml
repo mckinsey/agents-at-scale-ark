@@ -5,7 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: Two queries sharing a sessionId/conversationId land as two rows in the Postgres session_queries table under one sessions header row, with conversations/participants/errorCount aggregated correctly; GET /sessions/:id returns the same shape over HTTP
+  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations/participants/errorCount aggregated correctly; GET /sessions/:id returns the same shape over HTTP
   steps:
   - name: setup-mock-llm
     try:
@@ -121,7 +121,7 @@ spec:
             "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) || ',' || jsonb_array_length(participants) FROM sessions WHERE session_id='${SESSION_ID}';" \
             | tr -d ' \n')
           echo "sessions header (status,error_count,conversations,participants): ${HEADER}"
-          [ "${HEADER}" = "idle,0,1,2" ] || { echo "expected 'idle,0,1,2', got '${HEADER}'"; exit 1; }
+          [ "${HEADER}" = "idle,0,2,2" ] || { echo "expected 'idle,0,2,2', got '${HEADER}'"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -148,7 +148,7 @@ spec:
                   const convCount = (b.conversations || []).length;
                   const participantCount = (b.participants || []).length;
                   process.stdout.write([queryCount, convCount, participantCount, b.errorCount].join(','));
-                  process.exit(queryCount === 2 && convCount === 1 && participantCount === 2 && b.errorCount === 0 ? 0 : 1);
+                  process.exit(queryCount === 2 && convCount === 2 && participantCount === 2 && b.errorCount === 0 ? 0 : 1);
                 });
               }).on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
             ")
