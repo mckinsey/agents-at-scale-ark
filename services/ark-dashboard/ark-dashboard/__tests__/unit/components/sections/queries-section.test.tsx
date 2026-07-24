@@ -145,11 +145,40 @@ describe('QueriesSection', () => {
     expect(screen.getByText('Running')).toBeInTheDocument();
   });
 
-  it('links each row to its query detail page', () => {
-    renderSection({
+  it('renders queued queries with the amber Queued badge', () => {
+    const { container } = renderSection({
       queryResult: {
         data: {
           items: [twoQueries.items[0]],
+          count: 1,
+          total: 1,
+          page: 1,
+          page_size: 25,
+        },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        refetch: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('q-queued')).toBeInTheDocument();
+    expect(container.querySelector('.bg-amber-300')).not.toBeNull();
+  });
+
+  it('renders queued queries with the amber Queued badge', () => {
+    const { container } = renderSection({
+      queryResult: {
+        data: {
+          items: [
+            {
+              name: 'q-queued',
+              namespace: 'default',
+              input: 'waiting for a slot',
+              creationTimestamp: '2026-01-03T00:00:00Z',
+              status: { phase: 'queued' },
+            },
+          ],
           count: 1,
           total: 1,
           page: 1,
@@ -167,9 +196,7 @@ describe('QueriesSection', () => {
     );
   });
 
-  it('calls queriesService.delete and refetches when delete is clicked', async () => {
-    const refetch = vi.fn();
-    vi.mocked(queriesService.delete).mockResolvedValueOnce(undefined);
+  it('links each row to its query detail page', () => {
     renderSection({
       queryResult: {
         data: {
@@ -180,6 +207,7 @@ describe('QueriesSection', () => {
           page_size: 25,
         },
         isLoading: false,
+        isFetching: false,
         isError: false,
         refetch,
       },
@@ -191,5 +219,56 @@ describe('QueriesSection', () => {
 
     expect(queriesService.delete).toHaveBeenCalledWith('q-1');
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it('exposes openAddEditor via ref that navigates to /query/new', () => {
+    const { ref } = renderSection({
+      queryResult: {
+        data: { items: [], count: 0, total: 0, page: 1, page_size: 25 },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        refetch: vi.fn(),
+      },
+    });
+
+    ref.current?.openAddEditor();
+    expect(mockPush).toHaveBeenCalledWith('/query/new');
+  });
+
+  it('does not propagate cancel click to the row', async () => {
+    vi.mocked(queriesService.cancel).mockResolvedValueOnce({
+      name: 'q-1',
+      namespace: 'default',
+      input: 'hello',
+    } as never);
+    renderSection({
+      queryResult: {
+        data: {
+          items: [
+            {
+              name: 'q-1',
+              namespace: 'default',
+              input: 'hello',
+              creationTimestamp: '2026-01-01T00:00:00Z',
+              status: { phase: 'running' },
+            },
+          ],
+          count: 1,
+          total: 1,
+          page: 1,
+          page_size: 25,
+        },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        refetch: vi.fn(),
+      },
+    });
+
+    await userEvent.click(screen.getByText('Cancel'));
+
+    expect(queriesService.cancel).toHaveBeenCalledWith('q-1');
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

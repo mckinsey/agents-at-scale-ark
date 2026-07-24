@@ -2075,7 +2075,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_team2.to_dict.return_value = {
             "metadata": {"name": "research-team", "namespace": "default"},
             "spec": {
-                "strategy": "parallel",
+                "strategy": "selector",
                 "members": [{"name": "researcher", "type": "agent"}],
             },
             "status": {"phase": "pending"},
@@ -2102,7 +2102,7 @@ class TestTeamsEndpoint(unittest.TestCase):
 
         # Check second team
         self.assertEqual(data["items"][1]["name"], "research-team")
-        self.assertEqual(data["items"][1]["strategy"], "parallel")
+        self.assertEqual(data["items"][1]["strategy"], "selector")
         self.assertEqual(data["items"][1]["members_count"], 1)
         self.assertEqual(data["items"][1]["status"], "pending")
 
@@ -2364,7 +2364,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                     {"name": "frontend", "type": "agent"},
                     {"name": "backend", "type": "agent"},
                 ],
-                "strategy": "parallel",
+                "strategy": "selector",
             },
             "status": {
                 "phase": "Ready",
@@ -2383,7 +2383,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "dev-team")
         self.assertEqual(data["description"], "Development team")
         self.assertEqual(len(data["members"]), 2)
-        self.assertEqual(data["strategy"], "parallel")
+        self.assertEqual(data["strategy"], "selector")
         self.assertEqual(data["status"]["phase"], "Ready")
 
     @patch("ark_api.api.v1.teams.with_ark_client")
@@ -2416,7 +2416,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                     {"name": "agent1", "type": "agent"},
                     {"name": "agent2", "type": "agent"},
                 ],
-                "strategy": "parallel",
+                "strategy": "selector",
             },
             "status": {"phase": "Ready"},
         }
@@ -2431,7 +2431,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 {"name": "agent1", "type": "agent"},
                 {"name": "agent2", "type": "agent"},
             ],
-            "strategy": "parallel",
+            "strategy": "selector",
         }
         response = self.client.put(
             "/v1/teams/test-team?namespace=default", json=request_data
@@ -2443,7 +2443,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "test-team")
         self.assertEqual(data["description"], "Updated description")
         self.assertEqual(len(data["members"]), 2)
-        self.assertEqual(data["strategy"], "parallel")
+        self.assertEqual(data["strategy"], "selector")
 
     @patch("ark_api.api.v1.teams.with_ark_client")
     def test_update_team_partial(self, mock_ark_client):

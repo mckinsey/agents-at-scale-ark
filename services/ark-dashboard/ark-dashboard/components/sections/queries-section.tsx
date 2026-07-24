@@ -254,6 +254,34 @@ export function QueriesSection({
     }
   };
 
+  const getConditionMessage = (query: QueryResponse): string | undefined => {
+    const conditions = (query.status as { conditions?: Array<{ type?: string; message?: string }> })?.conditions;
+    if (!conditions) return undefined;
+    const completed = conditions.find(c => c.type === 'Completed');
+    return completed?.message || undefined;
+  };
+
+  const getStatusBadge = (status: string | undefined, queryName: string, query: QueryResponse) => {
+    const normalizedStatus = status as
+      | 'done'
+      | 'error'
+      | 'running'
+      | 'provisioning'
+      | 'queued'
+      | 'canceled'
+      | 'default';
+    const variant = ['done', 'error', 'running', 'provisioning', 'queued', 'canceled'].includes(status || '')
+      ? normalizedStatus
+      : 'default';
+    return (
+      <StatusDot
+        variant={variant}
+        onCancel={status === 'running' ? () => handleCancel(queryName) : undefined}
+        conditionMessage={status === 'provisioning' ? getConditionMessage(query) : undefined}
+      />
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-full flex-1 items-center justify-center">
