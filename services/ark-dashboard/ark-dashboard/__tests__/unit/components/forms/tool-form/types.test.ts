@@ -71,9 +71,9 @@ describe('toolFormSchema', () => {
 });
 
 describe('ToolFormMode', () => {
-  it('exposes create and edit modes', () => {
+  it('exposes create and view modes', () => {
     expect(ToolFormMode.CREATE).toBe('create');
-    expect(ToolFormMode.EDIT).toBe('edit');
+    expect(ToolFormMode.VIEW).toBe('view');
   });
 });
 

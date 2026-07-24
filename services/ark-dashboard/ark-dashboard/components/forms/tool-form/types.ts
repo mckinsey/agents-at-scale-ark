@@ -56,7 +56,7 @@ export type ToolFormValues = z.infer<typeof toolFormSchema>;
 
 export enum ToolFormMode {
   CREATE = 'create',
-  EDIT = 'edit',
+  VIEW = 'view',
 }
 
 export const TOOL_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> =
@@ -71,7 +71,6 @@ export interface ToolFormState {
   loading: boolean;
   saving: boolean;
   tool: ToolDetail | null;
-  hasChanges: boolean;
   agents: Agent[];
   teams: Team[];
   agentsLoading: boolean;
