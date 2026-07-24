@@ -21,6 +21,7 @@ import {
   type ApiQueryParameter,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
 import type {
@@ -107,8 +108,6 @@ function buildCascadingApprovalMessage(
     },
   } as ExtendedChatMessage;
 }
-
-const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 100;
 
 interface UseChatSessionParams {
   name: string;
@@ -255,9 +254,13 @@ export function useChatSession({
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScrollRef = useRef(true);
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll,
+    scrollToBottom,
+    resumeAutoScroll,
+  } = useStickyScroll();
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
@@ -267,19 +270,6 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(name, type);
-
-  const scrollToBottom = useCallback(() => {
-    if (!shouldAutoScrollRef.current) return;
-    messagesEndRef.current?.scrollIntoView({ block: 'end' });
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    shouldAutoScrollRef.current =
-      distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -933,7 +923,7 @@ export function useChatSession({
   const sendMessage = useCallback(
     async (userMessage: string) => {
       setError(null);
-      shouldAutoScrollRef.current = true;
+      resumeAutoScroll();
 
       if (missingParameters.length > 0) {
         const plural = missingParameters.length > 1;
@@ -1008,6 +998,7 @@ export function useChatSession({
       isChatStreamingEnabled,
       missingParameters,
       name,
+      resumeAutoScroll,
       toApiParameters,
       type,
       updateChatMessages,

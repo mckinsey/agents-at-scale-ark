@@ -1,10 +1,11 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { type RefObject, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, memo, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
 import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
@@ -23,7 +24,6 @@ import { SessionMessage } from './session-message';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
-const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 100;
 
 type ToolCall = NonNullable<ChatMessage['tool_calls']>[number];
 type EnhancedToolCall = ToolCall & { result?: string };
@@ -293,9 +293,13 @@ export function MessageDisplay({
     sessionId,
     conversationId,
   );
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScrollRef = useRef(true);
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll,
+    scrollToBottom,
+    resumeAutoScroll,
+  } = useStickyScroll();
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
@@ -502,22 +506,19 @@ export function MessageDisplay({
     needsApproval,
   ]);
 
-  const handleScroll = () => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    shouldAutoScrollRef.current =
-      distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
-  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [
+    messages,
+    pendingMessages,
+    isProcessing,
+    isWaitingForNextMessage,
+    scrollToBottom,
+  ]);
 
   useEffect(() => {
-    if (!shouldAutoScrollRef.current) return;
-    messagesEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages, pendingMessages, isProcessing, isWaitingForNextMessage]);
-
-  useEffect(() => {
-    shouldAutoScrollRef.current = true;
-  }, [conversationId]);
+    resumeAutoScroll();
+  }, [conversationId, resumeAutoScroll]);
 
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;
