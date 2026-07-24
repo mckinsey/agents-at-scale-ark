@@ -212,6 +212,57 @@ describe('ARK Broker API', () => {
     });
   });
 
+  describe('GET /memory-status', () => {
+    test('returns aggregated per-conversation message and query counts', async () => {
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-1',
+          query_id: 'status-q1',
+          messages: [{role: 'user', content: 'one'}],
+        });
+
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-1',
+          query_id: 'status-q2',
+          messages: [{role: 'user', content: 'two'}],
+        });
+
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-2',
+          query_id: 'status-q3',
+          messages: [{role: 'user', content: 'three'}],
+        });
+
+      const response = await request(app).get('/memory-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_conversations).toBe(2);
+      expect(response.body.total_messages).toBe(3);
+      expect(response.body.conversations['status-conv-1']).toEqual({
+        message_count: 2,
+        query_count: 2,
+      });
+      expect(response.body.conversations['status-conv-2']).toEqual({
+        message_count: 1,
+        query_count: 1,
+      });
+    });
+
+    test('returns zero totals when memory is empty', async () => {
+      const response = await request(app).get('/memory-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_conversations).toBe(0);
+      expect(response.body.total_messages).toBe(0);
+      expect(response.body.conversations).toEqual({});
+    });
+  });
+
   describe('Multiple Messages Endpoints', () => {
     test('should add and retrieve multiple messages at once', async () => {
       const messages = [
