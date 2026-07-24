@@ -172,7 +172,4 @@ storage:
     user: ""
     passwordSecretName: ""
     passwordSecretKey: "password"
-    # sslMode is the only TLS knob available here. Custom CA bundles and mutual
-    # TLS (sslRootCertKey/sslClientCertKey/sslClientKeyKey/sslSecretName) are
-    # configured on the ark-apiserver chart, which runs the embedded apiserver.
-    sslMode: "require"
+    sslMode: "disable"
