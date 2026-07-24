@@ -238,9 +238,10 @@ export const QueriesSection = forwardRef<
       | 'error'
       | 'running'
       | 'provisioning'
+      | 'queued'
       | 'canceled'
       | 'default';
-    const variant = ['done', 'error', 'running', 'provisioning', 'canceled'].includes(status || '')
+    const variant = ['done', 'error', 'running', 'provisioning', 'queued', 'canceled'].includes(status || '')
       ? normalizedStatus
       : 'default';
     return (
@@ -428,7 +429,7 @@ export const QueriesSection = forwardRef<
 });
 
 interface StatusDotProps {
-  variant: 'done' | 'error' | 'running' | 'canceled' | 'provisioning' | 'default';
+  variant: 'done' | 'error' | 'running' | 'canceled' | 'provisioning' | 'queued' | 'default';
   onCancel?: () => void;
   conditionMessage?: string;
 }
@@ -443,6 +444,8 @@ function StatusDot({ variant, onCancel, conditionMessage }: StatusDotProps) {
       case 'running':
         return 'bg-blue-300';
       case 'provisioning':
+        return 'bg-amber-300';
+      case 'queued':
         return 'bg-amber-300';
       case 'canceled':
         return 'bg-gray-300';
@@ -460,6 +463,8 @@ function StatusDot({ variant, onCancel, conditionMessage }: StatusDotProps) {
         return 'Running';
       case 'provisioning':
         return 'Provisioning';
+      case 'queued':
+        return 'Queued';
       case 'canceled':
         return 'Canceled';
       default:
