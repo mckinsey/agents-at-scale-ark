@@ -1,0 +1,161 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: sessions-broker-postgres-xreplica
+  labels:
+    postgresql: "true"
+spec:
+  description: A self-installed 2-replica broker shares one Postgres-backed sessions store - events for three queries in one session, posted through alternating replicas, aggregate identically regardless of which replica's pod is read from afterwards
+  steps:
+  - name: setup-broker
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          PG_PASSWORD=$(kubectl -n ark-system get secret ark-storage-dev-password \
+            -o jsonpath='{.data.password}' | base64 -d)
+          MIGRATE_IMAGE="${ARK_BROKER_IMAGE:+${ARK_BROKER_IMAGE%ark-broker}ark-broker-migrate}"
+
+          helm upgrade --install ark-broker ../../services/ark-broker/chart \
+            --namespace $NAMESPACE \
+            ${ARK_BROKER_IMAGE:+--set app.image.repository=${ARK_BROKER_IMAGE}} \
+            ${ARK_BROKER_IMAGE_TAG:+--set app.image.tag=${ARK_BROKER_IMAGE_TAG}} \
+            ${MIGRATE_IMAGE:+--set migrate.image.repository=${MIGRATE_IMAGE}} \
+            ${ARK_BROKER_IMAGE_TAG:+--set migrate.image.tag=${ARK_BROKER_IMAGE_TAG}} \
+            --set replicaCount=2 \
+            --set backends.message=postgres \
+            --set backends.event=postgres \
+            --set backends.sessions=postgres \
+            --set "database.url=postgres://postgres:${PG_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=require" \
+            --set restartController.enabled=false \
+            --set otelEndpoint.enabled=false \
+            --set persistence.enabled=false \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Events ==="
+          kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp'
+          echo "=== ark-broker logs ==="
+          kubectl -n $NAMESPACE logs -l app.kubernetes.io/name=ark-broker --all-containers --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-cross-replica-session
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          POD_A=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | awk 'NR==1')
+          POD_B=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | awk 'NR==2')
+
+          if [ -z "$POD_A" ] || [ -z "$POD_B" ]; then
+            echo "Need 2 broker pods, got A='$POD_A' B='$POD_B'"
+            exit 1
+          fi
+          echo "Replica A: $POD_A, Replica B: $POD_B"
+
+          cat > /tmp/xreplica-post-event.mjs << 'NODEEOF'
+          import http from 'http';
+          const [sessionId, queryName, conversationId, agentField, agentValue, targetType, reason, error] = process.argv.slice(2);
+          const body = JSON.stringify({
+            timestamp: new Date().toISOString(),
+            eventType: reason,
+            reason,
+            message: 'xreplica test event',
+            data: {
+              queryId: queryName,
+              queryName,
+              queryNamespace: 'default',
+              sessionId,
+              conversationId,
+              [agentField]: agentValue,
+              targetType,
+              ...(error ? {error} : {}),
+            },
+          });
+          const req = http.request(
+            {
+              hostname: 'localhost',
+              port: 8080,
+              path: '/events',
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body)},
+            },
+            (res) => {
+              res.resume();
+              res.on('end', () => process.exit(res.statusCode === 201 ? 0 : 1));
+            }
+          );
+          req.on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
+          req.end(body);
+          NODEEOF
+
+          cat > /tmp/xreplica-get-session.mjs << 'NODEEOF'
+          import http from 'http';
+          const [sessionId] = process.argv.slice(2);
+          http.get(`http://localhost:8080/sessions/${sessionId}`, (res) => {
+            let d = '';
+            res.on('data', (c) => { d += c; });
+            res.on('end', () => {
+              const b = JSON.parse(d);
+              const queryCount = Object.keys(b.queries || {}).length;
+              const convCount = (b.conversations || []).length;
+              const participants = (b.participants || []).map((p) => p.name).sort();
+              process.stdout.write(JSON.stringify({queryCount, convCount, participants, errorCount: b.errorCount, status: b.status}));
+              const ok = queryCount === 3 && convCount === 2 && b.errorCount === 1
+                && JSON.stringify(participants) === JSON.stringify(['agent-a', 'agent-b', 'tool-c']);
+              process.exit(ok ? 0 : 1);
+            });
+          }).on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
+          NODEEOF
+
+          kubectl cp /tmp/xreplica-post-event.mjs $NAMESPACE/$POD_A:/tmp/xreplica-post-event.mjs
+          kubectl cp /tmp/xreplica-post-event.mjs $NAMESPACE/$POD_B:/tmp/xreplica-post-event.mjs
+          kubectl cp /tmp/xreplica-get-session.mjs $NAMESPACE/$POD_A:/tmp/xreplica-get-session.mjs
+          kubectl cp /tmp/xreplica-get-session.mjs $NAMESPACE/$POD_B:/tmp/xreplica-get-session.mjs
+
+          SESSION_ID="e2e-sessions-broker-postgres-xreplica"
+
+          echo "--- posting query-1 (conv-1, agent-a) via replica A ---"
+          kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-post-event.mjs \
+            "$SESSION_ID" "xr-q1" "conv-1" agent agent-a agent AgentExecutionStart ""
+
+          echo "--- posting query-2 (conv-1, agent-b, done) via replica B ---"
+          kubectl exec -n $NAMESPACE $POD_B -- node /tmp/xreplica-post-event.mjs \
+            "$SESSION_ID" "xr-q2" "conv-1" agent agent-b agent QueryExecutionComplete ""
+
+          echo "--- posting query-3 (conv-2, tool-c, error) via replica A ---"
+          kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-post-event.mjs \
+            "$SESSION_ID" "xr-q3" "conv-2" tool tool-c tool QueryExecutionComplete boom
+
+          echo "--- reading session from replica A ---"
+          RESULT_A=$(kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-get-session.mjs "$SESSION_ID")
+          echo "replica A sees: $RESULT_A"
+
+          echo "--- reading session from replica B ---"
+          RESULT_B=$(kubectl exec -n $NAMESPACE $POD_B -- node /tmp/xreplica-get-session.mjs "$SESSION_ID")
+          echo "replica B sees: $RESULT_B"
+
+          echo "Cross-replica session aggregate verified consistent on both replicas"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-broker --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
