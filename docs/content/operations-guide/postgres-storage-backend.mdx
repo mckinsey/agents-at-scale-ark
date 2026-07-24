@@ -108,7 +108,31 @@ storage:
     sslMode: require
 ```
 
-`sslMode` accepts the standard libpq values: `disable`, `require`, `verify-ca`, `verify-full`.
+`sslMode` accepts the standard libpq values: `disable`, `require`, `verify-ca`, `verify-full`. The default is `require`, so the controller→database connection is encrypted out of the box; set `disable` explicitly for a non-TLS database (e.g. local dev).
+
+`require` encrypts the connection but does not verify the server's identity, so it only protects against a passive eavesdropper on the wire. An active attacker who can present any TLS certificate — a rogue pod, DNS misroute, or MITM — can still impersonate the database. For production, use `verify-full`, which validates the server certificate and hostname; `verify-ca` validates the certificate but not the hostname. Against a publicly-trusted managed database (RDS, Cloud SQL) they work with no extra configuration because the controller image trusts the system CA bundle. For a private CA, self-signed certificate, or mutual TLS, mount the PEM files via a Secret on the apiserver chart:
+
+```bash
+kubectl create secret generic ark-pg-tls \
+  --namespace ark-system \
+  --from-file=ca.crt=ca.crt \
+  --from-file=tls.crt=client.crt \
+  --from-file=tls.key=client.key
+
+helm upgrade --install ark-apiserver \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-apiserver \
+  --namespace ark-system \
+  --set postgresql.host=ark-storage.example.com \
+  --set postgresql.user=ark \
+  --set postgresql.passwordSecretName=ark-db-password \
+  --set postgresql.sslMode=verify-full \
+  --set postgresql.sslSecretName=ark-pg-tls \
+  --set postgresql.sslRootCertKey=ca.crt \
+  --set postgresql.sslClientCertKey=tls.crt \
+  --set postgresql.sslClientKeyKey=tls.key
+```
+
+The Secret is mounted read-only at `/etc/ark/postgres-tls` and the named keys are passed to libpq as `sslrootcert`/`sslcert`/`sslkey`. Only set the client cert/key keys if the database requires client-certificate authentication; `sslRootCertKey` alone is enough for `verify-ca`/`verify-full` against a private CA.
 
 The `--backend` CLI flag and `ARK_STORAGE_BACKEND` env var override the config value, useful for testing the same code against a different backend without editing the file.
 
@@ -185,16 +209,22 @@ The aggregated apiserver enforces the same access control as the rest of the clu
 - **Verified serving TLS.** With `certManager.enabled` (the default), cert-manager issues the serving certificate for the `ark-apiserver` service, mounts it into the pod, and injects the CA into both APIServices — the kube-apiserver verifies the aggregated apiserver's identity instead of `insecureSkipTLSVerify`. The certificate rotates through cert-manager and the server reloads it without a restart. Setting `certManager.enabled=false` restores the previous behavior (ephemeral self-signed certificate, unverified proxy channel) for clusters without cert-manager.
 - **Optional NetworkPolicy.** `networkPolicy.enabled=true` restricts ingress to the serving and health ports; use `networkPolicy.extraIngressFrom` to pin the allowed sources for the serving port (the origin of kube-apiserver traffic depends on your CNI, which is why this is off by default).
 
-## Multi-replica behaviour
+## Availability and multi-replica behaviour
 
-The `ark-apiserver` chart defaults to a single replica. The chart wires the RBAC needed for controller-runtime leader election on a `Lease` named `ark-apiserver-leader`.
+The chart defaults to a single replica. Understand what that means before running it in production: when the aggregated apiserver is unavailable, the `ark.mckinsey.com` APIService goes unavailable, which degrades kube-apiserver API discovery and the garbage-collection and namespace controllers **cluster-wide** — a standard Kubernetes aggregation-layer failure mode, not something specific to Ark. A single replica is therefore a cluster-wide single point of failure during pod restarts, node drains, and crashes.
 
-If you scale to multiple replicas:
+For production, run two replicas and enable the disruption budget:
 
-- Only one instance acquires the lease and runs the WAL consumer.
-- The replication slot's `active` flag is a second backstop — even without leader election, Postgres only lets one connection hold the slot at a time.
+```bash
+--set replicas=2 --set podDisruptionBudget.enabled=true
+```
 
-Multi-replica mainly improves API request throughput; the WAL stream is still single-consumer by design.
+How multiple replicas behave:
+
+- **API serving is active-active.** Every replica serves reads and writes directly against Postgres; the Service load-balances across them. Killing any one pod leaves the APIService available.
+- **The watch stream is single-consumer by design.** Only the replica holding the `ark-apiserver-leader` lease runs the WAL consumer that drives real-time watch events (the logical replication slot admits one connection; the slot's `active` flag is a backstop even without the lease). Non-leader replicas do not touch the slot.
+- **Watches served by non-leader replicas are relist-bound.** Without the WAL stream, a non-leader refreshes its watchers on a periodic relist (up to ~120 seconds stale). Controllers tolerate this — informers resync — but if consistently low watch latency matters, keep a single replica and accept the SPOF trade-off, or route watch-heavy clients through the kubectl path.
+- **Failover:** if the leader dies, a surviving replica acquires the lease (roughly the 15s lease duration) and starts the WAL consumer; the slot position is persistent, so no events are lost across the handover.
 
 ## Backups and restore
 
@@ -206,9 +236,9 @@ Treat the `resources` table like any other application table:
 
 ## Uninstall and cleanup
 
-`helm uninstall` removes the apiserver Deployment and APIService but does **not** drop the publication or the replication slot. An orphaned slot will pin WAL retention and can fill the disk.
+`helm uninstall` runs a `post-delete` hook Job that drops the `ark_cdc` replication slot and publication. Without this cleanup, an orphaned slot would pin WAL retention and can fill the disk. The Job connects with the same credentials as the apiserver, so the password secret must still exist when you uninstall.
 
-After uninstalling, drop the slot manually:
+If the hook Job could not run (for example the database was unreachable, or you removed the release with `--no-hooks`), drop the slot manually:
 
 ```sql
 SELECT pg_drop_replication_slot('ark_cdc');

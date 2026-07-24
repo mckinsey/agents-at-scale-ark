@@ -61,7 +61,8 @@ func init() {
 	// as the internal representation (no conversion needed).
 	// Without this, kubectl patch fails with "no kind X is registered for internal version".
 	internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
-	Scheme.AddKnownTypes(internalGV,
+	Scheme.AddKnownTypes(
+		internalGV,
 		&arkv1alpha1.Agent{},
 		&arkv1alpha1.AgentList{},
 		&arkv1alpha1.Team{},
@@ -81,7 +82,8 @@ func init() {
 		&arkv1alpha1.ArkConfig{},
 		&arkv1alpha1.ArkConfigList{},
 	)
-	Scheme.AddKnownTypes(internalGV,
+	Scheme.AddKnownTypes(
+		internalGV,
 		&arkv1prealpha1.A2AServer{},
 		&arkv1prealpha1.A2AServerList{},
 		&arkv1prealpha1.ExecutionEngine{},
@@ -95,23 +97,27 @@ const (
 )
 
 type Config struct {
-	PostgresHost string
-	PostgresPort int
-	PostgresDB   string
-	PostgresUser string
-	PostgresPass string
-	PostgresSSL  string
-	BindPort     int
-	AuthMode     string
-	TLSCertFile  string
-	TLSKeyFile   string
-	K8sClient    client.Client
+	PostgresHost    string
+	PostgresPort    int
+	PostgresDB      string
+	PostgresUser    string
+	PostgresPass    string
+	PostgresSSL     string
+	PostgresSSLRoot string
+	PostgresSSLCert string
+	PostgresSSLKey  string
+	BindPort        int
+	AuthMode        string
+	TLSCertFile     string
+	TLSKeyFile      string
+	K8sClient       client.Client
 }
 
 type Server struct {
-	config  Config
-	backend storage.Backend
-	stopCh  chan struct{}
+	config       Config
+	backend      *postgresql.PostgreSQLBackend
+	backendReady chan struct{}
+	stopCh       chan struct{}
 }
 
 func New(cfg Config) *Server {
@@ -122,8 +128,40 @@ func New(cfg Config) *Server {
 		cfg.AuthMode = AuthModeDelegated
 	}
 	return &Server{
-		config: cfg,
-		stopCh: make(chan struct{}),
+		config:       cfg,
+		backendReady: make(chan struct{}),
+		stopCh:       make(chan struct{}),
+	}
+}
+
+// walConsumer starts the backend's WAL consumer once this replica holds the
+// leader lease. The replication slot is single-consumer: without this gate,
+// extra replicas error-loop trying to acquire the slot.
+type walConsumer struct {
+	ready <-chan struct{}
+	start func()
+}
+
+func (w *walConsumer) Start(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-w.ready:
+	}
+	klog.Info("Leader lease acquired; starting WAL consumer")
+	w.start()
+	<-ctx.Done()
+	return nil
+}
+
+func (w *walConsumer) NeedLeaderElection() bool {
+	return true
+}
+
+func (s *Server) WALConsumer() *walConsumer {
+	return &walConsumer{
+		ready: s.backendReady,
+		start: func() { s.backend.StartWALConsumer() },
 	}
 }
 
@@ -138,17 +176,21 @@ func (s *Server) Start(ctx context.Context) error {
 	var err error
 
 	cfg := postgresql.Config{
-		Host:     s.config.PostgresHost,
-		Port:     s.config.PostgresPort,
-		Database: s.config.PostgresDB,
-		User:     s.config.PostgresUser,
-		Password: s.config.PostgresPass,
-		SSLMode:  s.config.PostgresSSL,
+		Host:        s.config.PostgresHost,
+		Port:        s.config.PostgresPort,
+		Database:    s.config.PostgresDB,
+		User:        s.config.PostgresUser,
+		Password:    s.config.PostgresPass,
+		SSLMode:     s.config.PostgresSSL,
+		SSLRootCert: s.config.PostgresSSLRoot,
+		SSLCert:     s.config.PostgresSSLCert,
+		SSLKey:      s.config.PostgresSSLKey,
 	}
 	s.backend, err = postgresql.New(cfg, converter)
 	if err != nil {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
+	close(s.backendReady)
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
