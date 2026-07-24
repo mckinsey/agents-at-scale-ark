@@ -15,8 +15,7 @@ def _resolve_level(default: int = logging.INFO) -> int:
     name = os.getenv("LOG_LEVEL", "").strip().upper()
     if not name:
         return default
-    level = getattr(logging, name, None)
-    return level if isinstance(level, int) else default
+    return logging.getLevelNamesMapping().get(name, default)
 
 
 def _install_redaction_filter() -> None:
@@ -32,12 +31,12 @@ def _install_redaction_filter() -> None:
         if not any(isinstance(f, SensitiveDataFilter) for f in handler.filters):
             handler.addFilter(SensitiveDataFilter())
 
-    # Attach at the *logger* level too: uvicorn wires its access/error handlers
-    # on its own schedule, and logger-level filters run regardless of that timing.
+    # Attach at the *handler* level for uvicorn too. uvicorn configures its own
+    # handlers before setup_logging() runs at import, so they already exist here;
+    # scrubbing at the emitting handler covers every record that exits through it,
+    # regardless of which uvicorn logger originated it.
     for name in _UVICORN_LOGGERS:
         lg = logging.getLogger(name)
-        if not any(isinstance(f, SensitiveDataFilter) for f in lg.filters):
-            lg.addFilter(SensitiveDataFilter())
         for handler in lg.handlers:
             if not any(isinstance(f, SensitiveDataFilter) for f in handler.filters):
                 handler.addFilter(SensitiveDataFilter())
