@@ -7,6 +7,7 @@ import {
   HomepageMemoryCard,
   HomepageModelsCard,
   HomepageTeamsCard,
+  HomepageWorkflowTemplatesCard,
 } from '@/components/cards';
 import { PageHeader } from '@/components/common/page-header';
 
@@ -30,6 +31,7 @@ export default function HomePage() {
           <HomepageModelsCard />
           <HomepageAgentsCard />
           <HomepageTeamsCard />
+          <HomepageWorkflowTemplatesCard />
           <HomepageMcpServersCard />
           <HomepageMemoryCard />
         </div>
