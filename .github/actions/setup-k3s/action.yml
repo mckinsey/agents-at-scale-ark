@@ -204,14 +204,17 @@ runs:
     # k3s reads this file when containerd starts, so it must land before install.
     - name: Configure docker.io registry mirror
       run: |
+        set -euo pipefail
         sudo mkdir -p /etc/rancher/k3s
-        sudo tee /etc/rancher/k3s/registries.yaml > /dev/null <<'EOF'
-        mirrors:
-          docker.io:
-            endpoint:
-              - "https://mirror.gcr.io"
-              - "https://registry-1.docker.io"
-        EOF
+        tmp=$(mktemp)
+        if sudo test -f /etc/rancher/k3s/registries.yaml; then
+          sudo cat /etc/rancher/k3s/registries.yaml > "$tmp"
+        else
+          echo '{}' > "$tmp"
+        fi
+        yq -i '.mirrors["docker.io"].endpoint = ["https://mirror.gcr.io", "https://registry-1.docker.io"]' "$tmp"
+        sudo install -m 0644 "$tmp" /etc/rancher/k3s/registries.yaml
+        rm -f "$tmp"
       shell: bash
 
     - name: Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}
