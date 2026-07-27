@@ -382,6 +382,18 @@ describe('PostgresSessionsStorage', () => {
       expect(store.sessions['s1']!.queries['q1']).toBeDefined();
       expect(store.sessions['s2']!.queries['q2']).toBeDefined();
     });
+
+    test('getAll drops expired sessions and their queries', async () => {
+      await storage.applyEvent({sessionId: 'live', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'stale', queryName: 'q2'});
+      await db()`
+        UPDATE sessions SET expires_at = now() - interval '1 second'
+        WHERE session_id = 'stale'
+      `;
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toEqual(['live']);
+    });
   });
 
   describe('paginate', () => {
@@ -470,6 +482,105 @@ describe('PostgresSessionsStorage', () => {
         'many-convs',
         'few-convs',
       ]);
+    });
+
+    test('sorts by name and by last activity, in both directions', async () => {
+      await storage.applyEvent({sessionId: 'session-charlie', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'session-alpha', queryName: 'q2'});
+      await storage.applyEvent({sessionId: 'session-bravo', queryName: 'q3'});
+
+      // Pin last_activity: three writes can land in the same millisecond, and
+      // then the date ordering between them is arbitrary.
+      await db()`
+        UPDATE sessions SET last_activity = CASE session_id
+          WHEN 'session-charlie' THEN TIMESTAMPTZ '2024-01-01T00:00:00Z'
+          WHEN 'session-alpha'   THEN TIMESTAMPTZ '2024-01-02T00:00:00Z'
+          WHEN 'session-bravo'   THEN TIMESTAMPTZ '2024-01-03T00:00:00Z'
+        END
+      `;
+
+      const byNameAsc = await storage.paginate({limit: 10}, undefined, {
+        field: 'name',
+        direction: 'asc',
+      });
+      expect(byNameAsc.items.map((s) => s.name)).toEqual([
+        'alpha',
+        'bravo',
+        'charlie',
+      ]);
+
+      const byNameDesc = await storage.paginate({limit: 10}, undefined, {
+        field: 'name',
+        direction: 'desc',
+      });
+      expect(byNameDesc.items.map((s) => s.name)).toEqual([
+        'charlie',
+        'bravo',
+        'alpha',
+      ]);
+
+      // 'date' is also the fallback when no sort is given: newest first.
+      const byDateDesc = await storage.paginate({limit: 10}, undefined, {
+        field: 'date',
+        direction: 'desc',
+      });
+      expect(byDateDesc.items.map((s) => s.name)).toEqual([
+        'bravo',
+        'alpha',
+        'charlie',
+      ]);
+
+      const byDateAsc = await storage.paginate({limit: 10}, undefined, {
+        field: 'date',
+        direction: 'asc',
+      });
+      expect(byDateAsc.items.map((s) => s.name)).toEqual([
+        'charlie',
+        'alpha',
+        'bravo',
+      ]);
+
+      const unsorted = await storage.paginate({limit: 10});
+      expect(unsorted.items.map((s) => s.name)).toEqual(
+        byDateDesc.items.map((s) => s.name)
+      );
+    });
+
+    test('filters by dateFrom/dateTo against last activity', async () => {
+      await storage.applyEvent({sessionId: 'old', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'recent', queryName: 'q2'});
+
+      await db()`
+        UPDATE sessions SET last_activity = '2020-01-01T00:00:00Z'
+        WHERE session_id = 'old'
+      `;
+
+      const from2021 = await storage.paginate(
+        {limit: 10},
+        {
+          dateFrom: '2021-01-01T00:00:00Z',
+        }
+      );
+      expect(from2021.items.map((s) => s.sessionId)).toEqual(['recent']);
+      expect(from2021.total).toBe(1);
+      expect(from2021.statusCounts.active).toBe(1);
+
+      const until2021 = await storage.paginate(
+        {limit: 10},
+        {
+          dateTo: '2021-01-01T00:00:00Z',
+        }
+      );
+      expect(until2021.items.map((s) => s.sessionId)).toEqual(['old']);
+
+      const windowed = await storage.paginate(
+        {limit: 10},
+        {
+          dateFrom: '2019-01-01T00:00:00Z',
+          dateTo: '2021-01-01T00:00:00Z',
+        }
+      );
+      expect(windowed.items.map((s) => s.sessionId)).toEqual(['old']);
     });
 
     test('paginates with limit/cursor and reports hasMore/nextCursor', async () => {
@@ -748,6 +859,31 @@ describe('PostgresSessionsStorage', () => {
       expect(withoutTimestamps(fromPg.conversations!)).toEqual(
         withoutTimestamps(fromMemory.conversations!)
       );
+    });
+
+    test('conversation startTime comes from the earliest query, whatever order rows come back in', async () => {
+      await storage.applyEvent({
+        sessionId: 's',
+        queryName: 'zzz-first',
+        conversationId: 'c1',
+        agent: 'agent-a',
+      });
+      await storage.applyEvent({
+        sessionId: 's',
+        queryName: 'aaa-second',
+        conversationId: 'c1',
+        agent: 'agent-a',
+      });
+
+      // Names sort the opposite way to creation, so a missing ORDER BY
+      // created_at in refreshHeader would pick the wrong query here.
+      const [earliest] = await db()<{created_at: Date}[]>`
+        SELECT created_at FROM session_queries
+        WHERE session_id = 's' ORDER BY created_at LIMIT 1
+      `;
+
+      const conv = (await storage.getSession('s'))!.conversations![0]!;
+      expect(conv.startTime).toBe(earliest!.created_at.toISOString());
     });
 
     test('a header corrupted out from under the storage repairs on the next write', async () => {
