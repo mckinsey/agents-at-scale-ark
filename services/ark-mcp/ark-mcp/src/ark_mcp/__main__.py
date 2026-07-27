@@ -1,9 +1,13 @@
 """Main entry point for the Ark MCP server."""
 
-import signal
 import time
 
 _BOOT_T0 = time.monotonic()
+
+import logging  # noqa: E402
+import os  # noqa: E402
+import signal  # noqa: E402
+import sys  # noqa: E402
 
 
 def _boot_log(phase: str) -> None:
@@ -12,13 +16,7 @@ def _boot_log(phase: str) -> None:
 
 _boot_log("process-start")
 
-import logging
-import os
-import sys
-
-_boot_log("stdlib-imported")
-
-from .server import create_app
+from .server import create_app  # noqa: E402
 
 _boot_log("server-module-imported")
 
