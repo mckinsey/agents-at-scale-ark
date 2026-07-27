@@ -146,10 +146,18 @@ export class PostgresSessionsStorage implements SessionsStorage {
   }
 
   /**
-   * Call BEFORE any write to session_queries in the same transaction: an
-   * INSERT there takes an implicit FOR KEY SHARE on this same row via the
-   * foreign key, so acquiring FOR UPDATE afterwards lets two transactions
-   * writing different queries of one session deadlock upgrading the lock.
+   * Every write path must take this first, before it so much as reads
+   * session_queries. Two reasons, and both are load-bearing:
+   *
+   * An INSERT into session_queries takes an implicit FOR KEY SHARE on this row
+   * via the foreign key, so locking the header afterwards lets two writers on
+   * one session deadlock upgrading that lock.
+   *
+   * And reading the query row first is not safe either: FOR UPDATE on a row
+   * that does not exist yet locks nothing, so both writers read "no such
+   * query", and the one that commits second overwrites the first's fields
+   * from its own stale view. Serializing here means the second writer reads
+   * the row the first one just wrote.
    */
   private async lockHeader(
     sql: postgres.TransactionSql,
@@ -224,6 +232,12 @@ export class PostgresSessionsStorage implements SessionsStorage {
         ON CONFLICT (session_id) DO NOTHING
       `;
 
+      const header = await this.lockHeader(sql, sessionId);
+
+      // After the header lock, never before: the INSERT above takes no lock
+      // when the row already exists, and FOR UPDATE on a query row that does
+      // not exist yet locks nothing, so reading first lets two writers both
+      // see "no such query" and the second one overwrite the first's fields.
       const existingRows = await sql<SessionQueryRow[]>`
         SELECT * FROM session_queries
         WHERE session_id = ${sessionId} AND query_id = ${queryName}
@@ -238,9 +252,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
       ) {
         return false;
       }
-
-      // Before the session_queries write below, never after - see lockHeader.
-      const header = await this.lockHeader(sql, sessionId);
 
       const now = new Date().toISOString();
       const entry = existingRow
@@ -311,8 +322,25 @@ export class PostgresSessionsStorage implements SessionsStorage {
     sequence?: number
   ): Promise<void> {
     await this.db.begin(async (sql) => {
+      // Callers know the query but not its session, so this unlocked probe
+      // resolves the owner before taking any lock - keeping the header-first
+      // order applyEvent uses. A query name can exist under more than one
+      // session; pick one deterministically rather than locking every match.
+      const owners = await sql<{session_id: string}[]>`
+        SELECT session_id FROM session_queries
+        WHERE query_id = ${queryId}
+        ORDER BY session_id
+        LIMIT 1
+      `;
+      const owner = owners[0];
+      if (!owner) return;
+
+      const header = await this.lockHeader(sql, owner.session_id);
+
       const existingRows = await sql<SessionQueryRow[]>`
-        SELECT * FROM session_queries WHERE query_id = ${queryId} FOR UPDATE
+        SELECT * FROM session_queries
+        WHERE session_id = ${owner.session_id} AND query_id = ${queryId}
+        FOR UPDATE
       `;
       const existingRow = existingRows[0];
       if (!existingRow) return;
@@ -323,9 +351,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
       ) {
         return;
       }
-
-      // Same order as applyEvent, or the two deadlock - see lockHeader.
-      const header = await this.lockHeader(sql, existingRow.session_id);
 
       const now = new Date().toISOString();
       const resolvedConversationId =

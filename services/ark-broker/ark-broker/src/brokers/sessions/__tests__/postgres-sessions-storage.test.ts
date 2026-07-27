@@ -804,6 +804,88 @@ describe('PostgresSessionsStorage', () => {
       expect(query.phase).toBe('done');
     });
 
+    test('the same, with the session header already committed', async () => {
+      // The test above only passes because the session does not exist yet: both
+      // transactions collide on the same speculative `sessions` row and Postgres
+      // serializes them for us. Once the header is committed, INSERT ... ON
+      // CONFLICT DO NOTHING takes no lock, and a SELECT ... FOR UPDATE on a
+      // query row that does not exist yet locks nothing either - so both
+      // transactions can read "no such query" before either has written one.
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'seed'});
+
+      // Hold the header so both writers are parked behind it, guaranteeing they
+      // both got past that read. Without it the race is real but rarely lands.
+      let release = (): void => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const gate = db().begin(async (sql) => {
+        await sql`SELECT session_id FROM sessions WHERE session_id = 'sess-1' FOR UPDATE`;
+        await held;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Staggered so the lock queue order is known: the writer carrying the
+      // metadata commits first, and the one behind it must not erase it.
+      const first = storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        conversationId: 'conv-1',
+        agent: 'agent-a',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const second = storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        _reason: 'QueryExecutionComplete',
+      });
+      const writers = Promise.all([first, second]);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      release();
+      await gate;
+      await writers;
+
+      const session = (await storage.getSession('sess-1'))!;
+      const query = session.queries['query-1']!;
+      expect(query.agent).toBe('agent-a');
+      expect(query.conversationId).toBe('conv-1');
+      expect(session.conversations).toHaveLength(1);
+    });
+
+    test('events and messages interleaved on one session never deadlock', async () => {
+      // Both write paths must lock the session header before they read
+      // session_queries. If either one is reordered back to read-then-lock,
+      // the two take their locks in opposite orders and Postgres kills one
+      // of them with 40P01.
+      const N = 8;
+      await Promise.all(
+        Array.from({length: N}, (_, i) =>
+          storage.applyEvent({
+            sessionId: 'mixed',
+            queryName: `q-${i}`,
+            conversationId: `conv-${i}`,
+            agent: 'agent-a',
+          })
+        )
+      );
+
+      await Promise.all(
+        Array.from({length: N}, (_, i) => [
+          storage.applyEvent({
+            sessionId: 'mixed',
+            queryName: `q-${i}`,
+            _reason: 'QueryExecutionComplete',
+          }),
+          storage.applyMessage(`conv-${i}`, `q-${i}`),
+        ]).flat()
+      );
+
+      const session = (await storage.getSession('mixed'))!;
+      expect(Object.keys(session.queries)).toHaveLength(N);
+      expect(session.conversations).toHaveLength(N);
+      expect(session.status).toBe('idle');
+    });
+
     test('many concurrent conversation-joining queries in one session all count in messageCount', async () => {
       const N = 12;
       await Promise.all(
