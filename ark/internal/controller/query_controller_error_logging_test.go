@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -94,4 +97,64 @@ func TestHandleQueryDispatchLogsErrors(t *testing.T) {
 		assert.Contains(t, joined, "bad-engine-query")
 		assert.Contains(t, joined, `"stage":"resolve-dispatch-address"`)
 	})
+
+	t.Run("dispatch failure emits an error log", func(t *testing.T) {
+		// Executor returns HTTP 500 (the scenario in the issue): sendQueryA2A
+		// fails and handleQueryDispatch logs the dispatch stage.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := newReconciler()
+		r.CompletionsAddr = server.URL
+		logger, lines := newCapturingLogger()
+		ctx := logf.IntoContext(context.Background(), logger)
+		_, span := r.Telemetry.Tracer().Start(ctx, "test")
+
+		obj := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "dispatch-fail-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: targetTypeTeam, Name: "t"},
+			},
+		}
+
+		err := r.handleQueryDispatch(ctx, obj, span, r.Client)
+		require.Error(t, err)
+
+		joined := strings.Join(*lines, "\n")
+		assert.Contains(t, joined, "query execution failed")
+		assert.Contains(t, joined, `"error"`, "log line should be level=error")
+		assert.Contains(t, joined, "dispatch-fail-query")
+		assert.Contains(t, joined, `"stage":"dispatch"`)
+	})
+}
+
+// TestExecuteQueryAsyncLogsClientError covers the get-client stage, which lives
+// in executeQueryAsync (not handleQueryDispatch): a query with a ServiceAccount
+// forces getClientForQuery through rest.InClusterConfig, which fails outside a
+// cluster.
+func TestExecuteQueryAsyncLogsClientError(t *testing.T) {
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "sa-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:         &arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "some-agent"},
+			ServiceAccount: "restricted-sa",
+		},
+	}
+	r := &QueryReconciler{
+		Client: fake.NewClientBuilder().WithScheme(newTestScheme()).
+			WithObjects(query).WithStatusSubresource(&arkv1alpha1.Query{}).Build(),
+		Telemetry: telemetryconfig.NewProvider(context.Background(), nil),
+		Eventing:  eventingconfig.NewProviderWithClient(context.Background(), nil),
+	}
+	logger, lines := newCapturingLogger()
+	ctx := logf.IntoContext(context.Background(), logger)
+
+	r.executeQueryAsync(ctx, *query, types.NamespacedName{Name: "sa-query", Namespace: "default"})
+
+	joined := strings.Join(*lines, "\n")
+	assert.Contains(t, joined, "query execution failed")
+	assert.Contains(t, joined, `"error"`, "log line should be level=error")
+	assert.Contains(t, joined, `"stage":"get-client"`)
 }
