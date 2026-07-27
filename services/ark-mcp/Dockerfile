@@ -14,17 +14,15 @@ RUN adduser --system --uid 1001 --home /home/arkmcp arkmcp && \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
 
-# Copy dependency files
+# Copy dependency files and install dependencies (cached unless deps change)
 COPY ark-mcp/pyproject.toml ark-mcp/uv.lock ./
-
-# Copy wheel files
 COPY ark-mcp/out/ark*.whl ./
-
-# Copy source code only (not pyproject.toml again)
-COPY ark-mcp/src/ ./src/
-
-# Sync all dependencies
 RUN uv sync --frozen --no-install-project
+
+# Copy source code and install the project itself so `uv run` at container
+# start doesn't rebuild the local wheel on every boot.
+COPY ark-mcp/src/ ./src/
+RUN uv sync --frozen
 
 # Set up directories for non-root user
 RUN mkdir -p /home/arkmcp/.cache/uv && \
