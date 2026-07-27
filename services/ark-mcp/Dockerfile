@@ -24,6 +24,11 @@ RUN uv sync --frozen --no-install-project
 COPY ark-mcp/src/ ./src/
 RUN uv sync --frozen
 
+# Precompile bytecode for the venv and the project so cold-start doesn't pay
+# per-file parse+compile cost on first import (~30k .py files across ark-sdk +
+# kubernetes-asyncio + fastmcp).
+RUN uv run python -m compileall -q -j 0 .venv/lib src || true
+
 # Set up directories for non-root user
 RUN mkdir -p /home/arkmcp/.cache/uv && \
     mkdir -p /app/src/ark_mcp.egg-info && \
