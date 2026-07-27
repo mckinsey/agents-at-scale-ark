@@ -85,3 +85,22 @@ func TestHandleRunningPhase_RunningUpdateError_ReleasesSemaphore(t *testing.T) {
 	require.Error(t, err, "handleRunningPhase must surface a running-write failure so the reconciler retries")
 	assert.True(t, r.sem.TryAcquire(1), "semaphore slot must be released on running-write error to prevent a permanent leak")
 }
+
+func TestFailQueryOnTimeout_StatusUpdateError_Propagates(t *testing.T) {
+	q := newTestQueryForHandleRunningPhaseError("timeout-write-err")
+
+	c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+		WithObjects(q).
+		WithStatusSubresource(&arkv1alpha1.Query{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, _ string, _ client.Object, _ ...client.SubResourceUpdateOption) error {
+				return apierrors.NewBadRequest("simulated permanent status update error")
+			},
+		}).Build()
+
+	r := &QueryReconciler{Client: c, Scheme: c.Scheme()}
+
+	err := r.failQueryOnTimeout(context.Background(), q, reasonTimedOutInQueue, "test message")
+
+	require.Error(t, err, "failQueryOnTimeout must surface the update failure so the reconciler retries and doesn't silently swallow a lost terminal write")
+}

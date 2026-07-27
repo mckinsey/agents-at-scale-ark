@@ -430,6 +430,117 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 		})
 	})
 
+	Context("spec.timeout enforcement", func() {
+		// Spec.Timeout is set to 1ms so the wall-clock budget is effectively
+		// zero by the time the reconciler runs. Time.Sleep in each test gives
+		// the deadline enough margin to elapse deterministically across CI.
+		newExpiredQuery := func(name string) *arkv1alpha1.Query {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+					Timeout: &metav1.Duration{Duration: time.Millisecond},
+					TTL:     &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			Expect(q.Spec.SetInputString("timeout test")).To(Succeed())
+			return q
+		}
+
+		findCompletedCondition := func(q *arkv1alpha1.Query) *metav1.Condition {
+			for i := range q.Status.Conditions {
+				if q.Status.Conditions[i].Type == string(arkv1alpha1.QueryCompleted) {
+					return &q.Status.Conditions[i]
+				}
+			}
+			return nil
+		}
+
+		It("fails a queued query with TimedOutInQueue when spec.timeout has elapsed", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			query := newExpiredQuery("timeout-queue-elapsed")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			// Force phase=queued via a status write so timeoutReasonForPhase
+			// picks TimedOutInQueue on the deadline path.
+			query.Status.Phase = statusQueued
+			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+			// Let the 1ms budget elapse.
+			time.Sleep(20 * time.Millisecond)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleQueryExecution(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal(statusError))
+			cond := findCompletedCondition(after)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal(reasonTimedOutInQueue))
+			Expect(cond.Message).To(ContainSubstring("capacity"))
+		})
+
+		It("fails a running query with TimedOutInExecution when spec.timeout has elapsed", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			query := newExpiredQuery("timeout-running-elapsed")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			query.Status.Phase = statusRunning
+			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+			time.Sleep(20 * time.Millisecond)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleQueryExecution(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal(statusError))
+			cond := findCompletedCondition(after)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal(reasonTimedOutInExecution))
+			Expect(cond.Message).To(ContainSubstring("execution"))
+		})
+
+		It("does not re-transition an already terminal query even when budget has elapsed", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			query := newExpiredQuery("timeout-already-terminal")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			// Move to a terminal phase directly, mimicking a successful run.
+			Expect(r.updateStatus(ctx, query, statusDone)).To(Succeed())
+
+			refetched := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, refetched)).To(Succeed())
+			terminalRV := refetched.ResourceVersion
+			terminalReason := findCompletedCondition(refetched).Reason
+
+			time.Sleep(20 * time.Millisecond)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleQueryExecution(ctx, req, *refetched)
+			Expect(err).NotTo(HaveOccurred())
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal(statusDone), "terminal phase must be preserved")
+			Expect(after.ResourceVersion).To(Equal(terminalRV), "no status write should have been issued on a terminal query")
+			Expect(findCompletedCondition(after).Reason).To(Equal(terminalReason), "condition reason must not be clobbered")
+		})
+	})
+
 	Context("safety-net requeue", func() {
 		It("arms a bounded requeue for an in-flight op without spawning a duplicate", func() {
 			r := &QueryReconciler{
