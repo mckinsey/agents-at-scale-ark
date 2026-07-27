@@ -49,5 +49,6 @@ ENV FASTMCP_CHECK_FOR_UPDATES=off
 # Expose port 2627 (AMCP on dial pad)
 EXPOSE 2627
 
-# Run the MCP server
-CMD ["uv", "run", "python", "-m", "ark_mcp"]
+# Run the MCP server directly from the pre-populated venv so `uv run`'s
+# implicit sync/freshness check doesn't re-execute on every pod start.
+CMD [".venv/bin/python", "-m", "ark_mcp"]
