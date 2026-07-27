@@ -4,6 +4,7 @@ Test cases for the authentication middleware.
 This module tests the AuthMiddleware functionality.
 """
 
+import logging
 import unittest
 from unittest.mock import Mock, patch, AsyncMock
 import os
@@ -297,6 +298,64 @@ class TestAuthMiddleware(unittest.TestCase):
         # Verify that call_next was called (authentication was skipped)
         call_next.assert_called_once_with(request)
         self.assertIsNotNone(response)
+
+
+class TestAuthMiddlewareTokenRedaction(unittest.IsolatedAsyncioTestCase):
+    """The raw bearer token must never reach the JWT auth-failure logs.
+
+    Guards ``auth/middleware.py`` :187 (``JWT validation failed: {e}``) and :190
+    (``JWT authentication error: {e}``): both log the *exception*, never the token.
+    Uses IsolatedAsyncioTestCase so ``dispatch`` is actually awaited (the plain
+    unittest.TestCase cases above are coroutines that never run).
+    """
+
+    async def test_jwt_failure_does_not_log_bearer_token(self):
+        sentinel = "SENTINEL-JWT-eyJraw.token.value"
+        env = {
+            "AUTH_MODE": "sso",
+            "OIDC_ISSUER_URL": "https://issuer.example",
+            "OIDC_APPLICATION_ID": "test-app-id",
+        }
+        with patch.dict(os.environ, env), \
+                patch("ark_api.auth.middleware.TokenValidator") as mock_validator_class:
+            # Realistic failure: the validator raises a generic error that does
+            # NOT embed the token (matches ark_sdk's actual behaviour).
+            mock_validator = Mock()
+            mock_validator.validate_token.side_effect = TokenValidationError("Invalid token")
+            mock_validator_class.return_value = mock_validator
+
+            middleware = AuthMiddleware(Mock())
+
+            request = Mock()
+            request.url.path = "/api/v1/agents"
+            request.headers = {"Authorization": f"Bearer {sentinel}"}
+            call_next = AsyncMock()
+
+            with self.assertLogs("ark_api.auth.middleware", level=logging.DEBUG) as cm:
+                response = await middleware.dispatch(request, call_next)
+
+        logged = "\n".join(cm.output)
+        # 1. we actually exercised the JWT failure path
+        self.assertTrue(
+            any("JWT validation failed" in line for line in cm.output),
+            f"expected the JWT-failure log; got: {cm.output}",
+        )
+        # 2. the raw bearer token must not appear in the logs...
+        self.assertNotIn(sentinel, logged)
+        # 3. ...nor be echoed back in the 401 response body
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn(sentinel, response.body.decode())
+
+    async def test_bearer_token_redacted_if_error_ever_carries_it(self):
+        """Defence in depth: even if the validator error DID contain the token,
+        the global SensitiveDataFilter would scrub it. This pins that safety net
+        so a regression in either layer is caught.
+        """
+        from ark_api.services.sensitive_data_filter import _redact_string
+
+        token = "eyJhbGci.SECRETPAYLOAD.sig"
+        leaked_error = f"authorization: Bearer {token} rejected"
+        self.assertNotIn(token, _redact_string(leaked_error))
 
 
 if __name__ == '__main__':
