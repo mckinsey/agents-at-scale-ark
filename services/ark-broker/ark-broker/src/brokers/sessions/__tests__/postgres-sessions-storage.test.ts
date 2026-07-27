@@ -1,5 +1,7 @@
 import {createLogger} from '@ark-broker/logging/logger.js';
+import type {ConversationSummary} from '../../sessions-broker.js';
 import {usePgContainer} from '../../../db/__tests__/testHelpers/pg-testcontainer.js';
+import {InMemorySessionsStorage} from '../in-memory-sessions-storage.js';
 import {PostgresSessionsStorage} from '../postgres-sessions-storage.js';
 
 jest.setTimeout(120_000);
@@ -707,6 +709,78 @@ describe('PostgresSessionsStorage', () => {
       const session = (await storage.getSession('shared-conv'))!;
       expect(session.conversations).toHaveLength(1);
       expect(session.conversations![0]!.messageCount).toBe(N);
+    });
+  });
+
+  describe('header aggregates', () => {
+    const events = [
+      {sessionId: 's', queryName: 'q1', conversationId: 'c1', agent: 'agent-a'},
+      {sessionId: 's', queryName: 'q2', conversationId: 'c1', agent: 'agent-b'},
+      {
+        sessionId: 's',
+        queryName: 'q2',
+        conversationId: 'c1',
+        agent: 'agent-b',
+        _reason: 'QueryExecutionComplete',
+        error: 'boom',
+      },
+      {sessionId: 's', queryName: 'q3', conversationId: 'c2', team: 'team-c'},
+    ];
+
+    test('aggregates match the in-memory backend event for event', async () => {
+      const inMemory = new InMemorySessionsStorage(silentLogger);
+      for (const event of events) {
+        await storage.applyEvent(event);
+        await inMemory.applyEvent(event);
+      }
+
+      const fromPg = (await storage.getSession('s'))!;
+      const fromMemory = (await inMemory.getSession('s'))!;
+
+      expect(fromPg.status).toEqual(fromMemory.status);
+      expect(fromPg.errorCount).toEqual(fromMemory.errorCount);
+      expect(fromPg.participants).toEqual(fromMemory.participants);
+      // Wall-clock fields differ by the milliseconds between the two writes.
+      const withoutTimestamps = (
+        list: ConversationSummary[]
+      ): Record<string, unknown>[] =>
+        list.map((c) => ({...c, duration: null, startTime: null}));
+      expect(withoutTimestamps(fromPg.conversations!)).toEqual(
+        withoutTimestamps(fromMemory.conversations!)
+      );
+    });
+
+    test('a header corrupted out from under the storage repairs on the next write', async () => {
+      for (const event of events) {
+        await storage.applyEvent(event);
+      }
+      const healthy = (await storage.getSession('s'))!;
+
+      await db()`
+        UPDATE sessions SET
+          status = 'active',
+          error_count = 99,
+          participants = '[]'::jsonb,
+          conversations = '[]'::jsonb
+        WHERE session_id = 's'
+      `;
+      expect((await storage.getSession('s'))!.errorCount).toBe(99);
+
+      await storage.applyEvent({
+        sessionId: 's',
+        queryName: 'q3',
+        conversationId: 'c2',
+        team: 'team-c',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      const repaired = (await storage.getSession('s'))!;
+      expect(repaired.status).toBe(healthy.status);
+      expect(repaired.errorCount).toBe(healthy.errorCount);
+      expect(repaired.participants).toEqual(healthy.participants);
+      expect(repaired.conversations).toHaveLength(
+        healthy.conversations!.length
+      );
     });
   });
 });

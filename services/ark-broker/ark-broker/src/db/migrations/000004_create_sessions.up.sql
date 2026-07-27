@@ -3,9 +3,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   name          TEXT        NOT NULL,
   status        TEXT        NOT NULL DEFAULT 'idle',
   error_count   INTEGER     NOT NULL DEFAULT 0,
-  -- Queries in a running/pending phase, maintained incrementally so `status`
-  -- can be derived without rescanning session_queries.
-  active_count  INTEGER     NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_activity TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at    TIMESTAMPTZ NOT NULL,

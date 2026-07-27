@@ -4,7 +4,6 @@ import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
 import {DEFAULT_LIMIT, type PaginationParams} from '../pagination.js';
 import {
-  QueryPhases,
   type ConversationSummary,
   type Participant,
   type PaginatedSessionsList,
@@ -19,10 +18,8 @@ import {
 } from '../sessions-broker.js';
 import {
   buildQueryEntry,
-  deriveParticipants,
-  isActivePhase,
   normalizeEventData,
-  patchConversationForQuery,
+  recalculateSessionStatus,
   resolveQueryPhase,
   updateExistingQuery,
 } from './session-aggregate.js';
@@ -34,7 +31,6 @@ type SessionRow = {
   name: string;
   status: string;
   error_count: number;
-  active_count: number;
   created_at: Date;
   last_activity: Date;
   expires_at: Date;
@@ -165,39 +161,37 @@ export class PostgresSessionsStorage implements SessionsStorage {
     return headerRows[0]!;
   }
 
-  private async patchHeader(
+  /**
+   * Recomputes the header's aggregates from the session's own query rows, via
+   * the same pure function the in-memory backend uses, so the two backends
+   * cannot drift apart and a wrong aggregate repairs itself on the next write.
+   * Runs after the session_queries write, with the header already locked, so
+   * it sees this transaction's own row and no concurrent writer's half-state.
+   * Ordered by created_at because conversation startTime and duration are
+   * taken from the first and last query of each conversation.
+   */
+  private async refreshHeader(
     sql: postgres.TransactionSql,
     header: SessionRow,
-    now: string,
-    entry: QueryEntry,
-    deltas: {activeDelta: number; errorDelta: number; isNewlyAssigned: boolean}
+    now: string
   ): Promise<void> {
-    const conversations = header.conversations as ConversationSummary[];
+    const rows = await sql<SessionQueryRow[]>`
+      SELECT * FROM session_queries
+      WHERE session_id = ${header.session_id}
+      ORDER BY created_at, query_id
+    `;
 
-    const patchedConversations = patchConversationForQuery(
-      conversations,
-      entry,
-      {isNewlyAssigned: deltas.isNewlyAssigned, errorDelta: deltas.errorDelta}
-    );
-    const participants = deriveParticipants(patchedConversations);
-
-    const newActiveCount = header.active_count + deltas.activeDelta;
-    const status =
-      newActiveCount > 0
-        ? 'active'
-        : entry.phase === QueryPhases.Error
-          ? 'error'
-          : 'idle';
+    const session = rowsToSessionEntry(header, rows);
+    recalculateSessionStatus(session);
 
     await sql`
       UPDATE sessions SET
-        error_count = error_count + ${deltas.errorDelta},
-        active_count = active_count + ${deltas.activeDelta},
-        status = ${status},
+        error_count = ${session.errorCount ?? 0},
+        status = ${session.status ?? 'idle'},
         last_activity = ${now},
         expires_at = now() + make_interval(secs => ${this.ttlSeconds}),
-        conversations = ${sql.json(patchedConversations as unknown as postgres.JSONValue)},
-        participants = ${sql.json(participants as unknown as postgres.JSONValue)}
+        conversations = ${sql.json((session.conversations ?? []) as unknown as postgres.JSONValue)},
+        participants = ${sql.json((session.participants ?? []) as unknown as postgres.JSONValue)}
       WHERE session_id = ${header.session_id}
     `;
   }
@@ -249,14 +243,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
       const header = await this.lockHeader(sql, sessionId);
 
       const now = new Date().toISOString();
-      const wasActive = existingRow
-        ? isActivePhase(existingRow.phase as QueryPhase)
-        : false;
-      const wasError = existingRow
-        ? existingRow.phase === QueryPhases.Error
-        : false;
-      const hadConversationId = Boolean(existingRow?.conversation_id);
-
       const entry = existingRow
         ? rowToQueryEntry(existingRow)
         : buildQueryEntry(
@@ -304,14 +290,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
       `;
       if (upserted.length === 0) return false;
 
-      const isActive = isActivePhase(entry.phase);
-      const isError = entry.phase === QueryPhases.Error;
-
-      await this.patchHeader(sql, header, now, entry, {
-        activeDelta: (isActive ? 1 : 0) - (wasActive ? 1 : 0),
-        errorDelta: (isError ? 1 : 0) - (wasError ? 1 : 0),
-        isNewlyAssigned: !hadConversationId && Boolean(entry.conversationId),
-      });
+      await this.refreshHeader(sql, header, now);
 
       return true;
     });
@@ -349,7 +328,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
       const header = await this.lockHeader(sql, existingRow.session_id);
 
       const now = new Date().toISOString();
-      const hadConversationId = Boolean(existingRow.conversation_id);
       const resolvedConversationId =
         existingRow.conversation_id ?? conversationId;
 
@@ -370,15 +348,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
       `;
       if (updated.length === 0) return;
 
-      const entry = rowToQueryEntry(existingRow);
-      entry.conversationId = resolvedConversationId;
-      entry.lastActivity = now;
-
-      await this.patchHeader(sql, header, now, entry, {
-        activeDelta: 0,
-        errorDelta: 0,
-        isNewlyAssigned: !hadConversationId,
-      });
+      await this.refreshHeader(sql, header, now);
     });
   }
 

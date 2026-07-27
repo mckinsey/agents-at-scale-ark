@@ -3,8 +3,6 @@ import {
   ERROR_REASON_SUFFIX,
   EventReasons,
   QueryPhases,
-  type ConversationSummary,
-  type Participant,
   type ParticipantType,
   type QueryEntry,
   type QueryPhase,
@@ -117,80 +115,6 @@ export function calculateDuration(start: string, end?: string): string {
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(seconds / 60);
   return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
-}
-
-export function isActivePhase(phase: QueryPhase): boolean {
-  return phase === QueryPhases.Running || phase === QueryPhases.Pending;
-}
-
-/**
- * `isNewlyAssigned` must be true only the first time this query is attributed
- * to `entry.conversationId`, so messageCount counts queries, not events.
- */
-export function patchConversationForQuery(
-  conversations: ConversationSummary[],
-  entry: QueryEntry,
-  options: {isNewlyAssigned: boolean; errorDelta: number}
-): ConversationSummary[] {
-  if (!entry.conversationId) return conversations;
-
-  const index = conversations.findIndex(
-    (c) => c.conversationId === entry.conversationId
-  );
-
-  if (index === -1) {
-    const participantType: ParticipantType =
-      entry.targetType === 'team'
-        ? 'team'
-        : entry.targetType === 'tool'
-          ? 'tool'
-          : 'agent';
-    const participantName =
-      entry.team || entry.agent || entry.tool || entry.conversationId;
-
-    return [
-      ...conversations,
-      {
-        conversationId: entry.conversationId,
-        name: participantName,
-        participants: [participantName],
-        messageCount: 1,
-        duration: calculateDuration(entry.createdAt, entry.completedAt),
-        startTime: entry.createdAt,
-        participantType,
-        errorCount: entry.phase === QueryPhases.Error ? 1 : 0,
-      },
-    ];
-  }
-
-  const existing = conversations[index]!;
-  const updated: ConversationSummary = {
-    ...existing,
-    messageCount: existing.messageCount + (options.isNewlyAssigned ? 1 : 0),
-    errorCount: existing.errorCount + options.errorDelta,
-    duration: entry.completedAt
-      ? calculateDuration(existing.startTime, entry.completedAt)
-      : existing.duration,
-  };
-  const next = conversations.slice();
-  next[index] = updated;
-  return next;
-}
-
-export function deriveParticipants(
-  conversations: ConversationSummary[]
-): Participant[] {
-  const seen = new Map<string, Participant>();
-  for (const conv of conversations) {
-    if (!seen.has(conv.name)) {
-      seen.set(conv.name, {
-        id: conv.name,
-        name: conv.name,
-        type: conv.participantType,
-      });
-    }
-  }
-  return Array.from(seen.values());
 }
 
 function recalculateConversations(session: SessionEntry): void {
