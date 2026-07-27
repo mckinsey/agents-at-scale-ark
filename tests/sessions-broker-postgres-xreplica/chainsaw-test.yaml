@@ -124,9 +124,15 @@ spec:
               const queryCount = Object.keys(b.queries || {}).length;
               const convCount = (b.conversations || []).length;
               const participants = (b.participants || []).map((p) => p.name).sort();
-              process.stdout.write(JSON.stringify({queryCount, convCount, participants, errorCount: b.errorCount, status: b.status}));
+              const convParticipants = (b.conversations || [])
+                .map((c) => (c.participants || []).slice().sort().join('+')).sort();
+              process.stdout.write(JSON.stringify({queryCount, convCount, participants, convParticipants, errorCount: b.errorCount, status: b.status}));
+              // Session participants are one per conversation, named after the
+              // conversation's first agent - so agent-b shows up inside conv-1,
+              // not at session level. This matches the in-memory backend.
               const ok = queryCount === 3 && convCount === 2 && b.errorCount === 1
-                && JSON.stringify(participants) === JSON.stringify(['agent-a', 'agent-b', 'tool-c']);
+                && JSON.stringify(participants) === JSON.stringify(['agent-a', 'tool-c'])
+                && JSON.stringify(convParticipants) === JSON.stringify(['agent-a+agent-b', 'tool-c']);
               process.exit(ok ? 0 : 1);
             });
           }).on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
@@ -152,13 +158,17 @@ spec:
             "$SESSION_ID" "xr-q3" "conv-2" tool tool-c tool QueryExecutionComplete boom
 
           echo "--- reading session from replica A ---"
-          RESULT_A=$(kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-get-session.mjs "$SESSION_ID")
+          RESULT_A=$(kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-get-session.mjs "$SESSION_ID") \
+            || { echo "replica A rejected the aggregate: $RESULT_A"; exit 1; }
           echo "replica A sees: $RESULT_A"
 
           echo "--- reading session from replica B ---"
-          RESULT_B=$(kubectl exec -n $NAMESPACE $POD_B -- node /tmp/xreplica-get-session.mjs "$SESSION_ID")
+          RESULT_B=$(kubectl exec -n $NAMESPACE $POD_B -- node /tmp/xreplica-get-session.mjs "$SESSION_ID") \
+            || { echo "replica B rejected the aggregate: $RESULT_B"; exit 1; }
           echo "replica B sees: $RESULT_B"
 
+          [ "$RESULT_A" = "$RESULT_B" ] \
+            || { echo "replicas disagree:"; echo "  A: $RESULT_A"; echo "  B: $RESULT_B"; exit 1; }
           echo "Cross-replica session aggregate verified consistent on both replicas"
         env:
         - name: NAMESPACE

@@ -968,6 +968,42 @@ describe('PostgresSessionsStorage', () => {
       expect(conv.startTime).toBe(earliest!.created_at.toISOString());
     });
 
+    test('a second agent joining a conversation shows up in the conversation, not at session level', async () => {
+      // Pins the shape the sessions-broker-postgres-xreplica e2e asserts.
+      // Session participants are one per conversation, named after that
+      // conversation's first agent, so a second agent on the same conversation
+      // is only visible inside it. Matches the in-memory backend.
+      const shared = {
+        sessionId: 's',
+        conversationId: 'c1',
+        targetType: 'agent',
+      };
+      await storage.applyEvent({...shared, queryName: 'q1', agent: 'agent-a'});
+      await storage.applyEvent({...shared, queryName: 'q2', agent: 'agent-b'});
+      await storage.applyEvent({
+        sessionId: 's',
+        queryName: 'q3',
+        conversationId: 'c2',
+        tool: 'tool-c',
+        targetType: 'tool',
+        _reason: 'QueryExecutionComplete',
+        error: 'boom',
+      });
+
+      const session = (await storage.getSession('s'))!;
+      expect(Object.keys(session.queries)).toHaveLength(3);
+      expect(session.errorCount).toBe(1);
+      expect(session.participants!.map((p) => p.name).sort()).toEqual([
+        'agent-a',
+        'tool-c',
+      ]);
+      expect(
+        session
+          .conversations!.map((c) => c.participants.slice().sort().join('+'))
+          .sort()
+      ).toEqual(['agent-a+agent-b', 'tool-c']);
+    });
+
     test('a header corrupted out from under the storage repairs on the next write', async () => {
       for (const event of events) {
         await storage.applyEvent(event);

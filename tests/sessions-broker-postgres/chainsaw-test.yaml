@@ -160,6 +160,7 @@ spec:
               }).on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
             ")
           echo "HTTP session (queries,conversations,participants,errorCount): ${RESULT}"
+          [ "${RESULT}" = "2,2,2,0" ] || { echo "expected '2,2,2,0', got '${RESULT}'"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)
