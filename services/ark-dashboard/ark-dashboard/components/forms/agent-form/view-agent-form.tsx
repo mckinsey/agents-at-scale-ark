@@ -5,8 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import { CollapseContent, ExpandContent } from '@/components/icons';
-import { Button } from '@/components/ui/button';
 import {
   FieldDescription,
   FieldError,
@@ -14,10 +12,8 @@ import {
   FieldTitle,
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
-import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
-import { PromptEditor } from '@/components/ui/prompt-editor';
 import {
   Select,
   SelectContent,
@@ -29,10 +25,10 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Agent, agentsService } from '@/lib/services';
-import { cn } from '@/lib/utils';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { PromptField } from './prompt-field';
 import { SkillsDisplaySection } from './sections';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
@@ -92,7 +88,6 @@ export function ViewAgentForm({
   const promptValue = form.watch('prompt') || '';
   const isA2A = agent?.isA2A ?? false;
   const isDisabled = form.formState.isSubmitting;
-  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
 
   const fetchAgentYaml = useCallback(async (name: string) => {
     try {
@@ -270,48 +265,14 @@ export function ViewAgentForm({
                           control={form.control}
                           name="prompt"
                           render={({ field, fieldState }) => (
-                            <FieldSet className="gap-2">
-                              <div className="flex items-center justify-between">
-                                <FieldTitle>Prompt</FieldTitle>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    setIsPromptExpanded(!isPromptExpanded)
-                                  }
-                                  className="h-8 gap-1 px-2">
-                                  <IconShell size="sm" variant="secondary">
-                                    {isPromptExpanded ? (
-                                      <CollapseContent />
-                                    ) : (
-                                      <ExpandContent />
-                                    )}
-                                  </IconShell>
-                                  {isPromptExpanded ? 'Collapse' : 'Expand'}
-                                </Button>
-                              </div>
-                              <PromptEditor
-                                variant="compact"
-                                showSublabel={false}
-                                showFooter={false}
-                                value={field.value || ''}
-                                onChange={field.onChange}
-                                placeholder="Hint the agent objective here..."
-                                disabled={isDisabled}
-                                parameters={parameters}
-                                className={cn(
-                                  'border-stroke-divider focus-within:border-stroke-status-focus border bg-transparent pb-3 transition-all duration-200',
-                                  isPromptExpanded
-                                    ? 'min-h-[560px]'
-                                    : 'min-h-[248px]',
-                                  fieldState.error && 'border-status-error',
-                                )}
-                              />
-                              <FieldError>
-                                {fieldState.error?.message}
-                              </FieldError>
-                            </FieldSet>
+                            <PromptField
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              error={fieldState.error?.message}
+                              hasError={!!fieldState.error}
+                              disabled={isDisabled}
+                              parameters={parameters}
+                            />
                           )}
                         />
                       )}
