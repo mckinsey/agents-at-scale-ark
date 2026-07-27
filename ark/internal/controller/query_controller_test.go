@@ -21,6 +21,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -292,6 +294,8 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r := &QueryReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 0,
 			}
 			Expect(r.sem).To(BeNil(), "nil semaphore means enforcement is disabled")
@@ -335,6 +339,8 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r := &QueryReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 1,
 				sem:                  semaphore.NewWeighted(1),
 			}
@@ -371,6 +377,8 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r := &QueryReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 0,
 			}
 			Expect(r.sem).To(BeNil())
@@ -533,6 +541,10 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 		It("recovers from a panic in the goroutine and still cleans up", func() {
 			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 1,
 				sem:                  semaphore.NewWeighted(1),
 			}
