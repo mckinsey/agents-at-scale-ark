@@ -197,6 +197,23 @@ runs:
       run: sudo install -m 0755 /tmp/k3s-bin/k3s /usr/local/bin/k3s
       shell: bash
 
+    # Route docker.io pulls through mirror.gcr.io. Without this, calico-node's
+    # sandbox image (rancher/mirrored-pause) is on the CNI-install critical
+    # path with zero retry budget: a single DockerHub timeout leaves /opt/cni/bin
+    # empty and every subsequent pod fails with `plugin "bridge" not found`.
+    # k3s reads this file when containerd starts, so it must land before install.
+    - name: Configure docker.io registry mirror
+      run: |
+        sudo mkdir -p /etc/rancher/k3s
+        sudo tee /etc/rancher/k3s/registries.yaml > /dev/null <<'EOF'
+        mirrors:
+          docker.io:
+            endpoint:
+              - "https://mirror.gcr.io"
+              - "https://registry-1.docker.io"
+        EOF
+      shell: bash
+
     - name: Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}
       run: |
         echo "::group::Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}"
