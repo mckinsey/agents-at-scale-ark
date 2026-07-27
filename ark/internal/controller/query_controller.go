@@ -74,6 +74,17 @@ const (
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
 	queryRunningSafetyRequeue = 30 * time.Second
+
+	// Condition reasons for QueryCompleted when spec.timeout elapses.
+	// spec.timeout is a wall-clock budget from metadata.creationTimestamp; the
+	// reason records which side of the semaphore the deadline was hit on.
+	reasonTimedOutInQueue     = "TimedOutInQueue"
+	reasonTimedOutInExecution = "TimedOutInExecution"
+
+	// defaultQueryTimeout mirrors the CRD default on Query.spec.timeout so
+	// callers without an explicit value get the same budget the apiserver's
+	// mutating admission would compute.
+	defaultQueryTimeout = 5 * time.Minute
 )
 
 type QueryReconciler struct {
@@ -197,6 +208,19 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	// spec.timeout is a wall-clock SLO from creationTimestamp. If it has
+	// elapsed on a non-terminal Query, fail loudly with a TimedOut* reason
+	// before any further work is dispatched — clients see a definite terminal
+	// state instead of a query wedged in queued/running forever.
+	if !isTerminalPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
+		r.cleanupExistingOperation(req.NamespacedName)
+		reason, message := timeoutReasonForPhase(obj.Status.Phase)
+		if err := r.failQueryOnTimeout(ctx, &obj, reason, message); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
 		remaining := ttlRemaining(&obj)
@@ -237,6 +261,30 @@ func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
 	return time.Until(anchor.Add(obj.Spec.TTL.Duration))
 }
 
+// remainingBudget is spec.timeout minus wall time since creation. Negative
+// values mean the deadline has already elapsed and the Query should be failed
+// with a TimedOut* reason before any further work is dispatched.
+func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
+	timeout := defaultQueryTimeout
+	if obj.Spec.Timeout != nil {
+		timeout = obj.Spec.Timeout.Duration
+	}
+	return time.Until(obj.CreationTimestamp.Time.Add(timeout))
+}
+
+// timeoutReasonForPhase picks the QueryCompleted condition reason for a
+// spec.timeout-elapsed transition based on the phase the Query was in when
+// the deadline was hit. Non-terminal phases beyond running/input-required
+// (pending, provisioning, queued, empty) all fall into the "in queue" bucket.
+func timeoutReasonForPhase(phase string) (reason, message string) {
+	switch phase {
+	case statusRunning, statusInputRequired:
+		return reasonTimedOutInExecution, "Query timed out during execution"
+	default:
+		return reasonTimedOutInQueue, "Query timed out waiting for controller capacity"
+	}
+}
+
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -254,7 +302,14 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
+		// Clamp the requeue to the spec.timeout deadline so a saturated
+		// queue can't stall past the SLO — the next reconcile then hits the
+		// pre-flight timeout check in handleQueryExecution.
+		requeue := queryCapacityRequeueDelay
+		if budget := remainingBudget(&obj); budget > 0 && budget < requeue {
+			requeue = budget
+		}
+		return ctrl.Result{RequeueAfter: requeue}, nil
 	}
 
 	if obj.Status.Phase != statusRunning {
@@ -417,7 +472,17 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 
 	if err := r.handleQueryDispatch(opCtx, &obj, dispatchSpan, impersonatedClient); err != nil {
-		_ = r.updateStatus(opCtx, &obj, statusError)
+		// Distinguish spec.timeout-elapsed dispatch failures from ordinary
+		// executor errors so the QueryCompleted condition carries the
+		// TimedOutInExecution reason instead of the default QueryErrored.
+		// A fresh remainingBudget check is more reliable than pattern-
+		// matching err — sendQueryA2A returns a plain string when the
+		// budget was already zero, not a wrapped DeadlineExceeded.
+		if remainingBudget(&obj) <= 0 {
+			_ = r.failQueryOnTimeout(opCtx, &obj, reasonTimedOutInExecution, "Query timed out during execution")
+		} else {
+			_ = r.updateStatus(opCtx, &obj, statusError)
+		}
 	}
 }
 
@@ -567,9 +632,13 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	timeout := 5 * time.Minute
-	if query.Spec.Timeout != nil {
-		timeout = query.Spec.Timeout.Duration
+	// Bound the A2A call by whatever remains of the spec.timeout budget
+	// (measured from creationTimestamp), not the full timeout — otherwise a
+	// query that spent 4:55 in queued+running would still get a fresh 5m
+	// execution budget, blowing past its SLO.
+	timeout := remainingBudget(&query)
+	if timeout <= 0 {
+		return nil, engineResponseMeta{}, fmt.Errorf("query timeout elapsed before A2A dispatch")
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 
@@ -996,6 +1065,40 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 }
 
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
+	// Do NOT clear A2A taskID when transitioning from input-required to running.
+	// The executor needs the taskID to detect this is a resumption after approval
+	// and clears it after processing (handler.go).
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) {
+		q.Status.Phase = status
+		r.setConditionForPhase(q, status)
+		if duration != nil {
+			q.Status.Duration = duration
+		}
+	}, "status="+status)
+}
+
+// failQueryOnTimeout transitions a Query to phase: error with a caller-supplied
+// Completed condition reason (TimedOutIn{Queue,Execution}) instead of the
+// default QueryErrored reason updateStatus would set via setConditionForPhase.
+// Idempotent: no-op if the Query is already in a terminal phase (so a race
+// between reconcile-time and executor-side timeout detection doesn't
+// double-transition).
+func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1alpha1.Query, reason, message string) error {
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) {
+		if isTerminalPhase(q.Status.Phase) {
+			return
+		}
+		q.Status.Phase = statusError
+		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
+	}, "timeout reason="+reason)
+}
+
+// mutateStatus is the shared retry-and-fetch shell used by updateStatus and
+// failQueryOnTimeout. It fetches the latest Query, preserves response/token
+// fields via savedQueryStatus, runs the caller-supplied mutator against the
+// refetched object, then persists via Status().Update with retry-on-conflict
+// semantics. logCtx is used only in error log lines to identify the writer.
+func (r *QueryReconciler) mutateStatus(ctx context.Context, query *arkv1alpha1.Query, mutate func(*arkv1alpha1.Query), logCtx string) error {
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -1004,10 +1107,6 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		tokenUsage:     query.Status.TokenUsage,
 		conversationId: query.Status.ConversationId,
 	}
-	// Do NOT clear A2A taskID when transitioning from input-required to running.
-	// The executor needs the taskID to detect this is a resumption after approval
-	// and clears it after processing (handler.go).
-
 	return retry.OnError(retry.DefaultBackoff, isRetriableStatusUpdateErr, func() error {
 		if ctx.Err() != nil {
 			return nil
@@ -1018,19 +1117,15 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			}
 			return err
 		}
-		query.Status.Phase = status
 		saved.restoreOnto(query)
-		r.setConditionForPhase(query, status)
-		if duration != nil {
-			query.Status.Duration = duration
-		}
+		mutate(query)
 		err := r.Status().Update(ctx, query)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if !isRetriableStatusUpdateErr(err) {
-				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+				logf.FromContext(ctx).Error(err, "failed to update query status", "context", logCtx)
 			}
 		}
 		return err
