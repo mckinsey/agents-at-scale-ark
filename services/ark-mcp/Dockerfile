@@ -39,6 +39,10 @@ USER arkmcp
 ENV HOME=/home/arkmcp
 ENV XDG_CACHE_HOME=/home/arkmcp/.cache
 
+# FastMCP calls pypi.org on every pod boot to check for CLI updates; disable it
+# to remove an outbound network hop from the container startup path.
+ENV FASTMCP_CHECK_FOR_UPDATES=off
+
 # Expose port 2627 (AMCP on dial pad)
 EXPOSE 2627
 
