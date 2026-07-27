@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -422,11 +423,34 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
 	if rec := recover(); rec != nil {
-		logf.FromContext(ctx).Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
+		logf.FromContext(ctx).Error(
+			fmt.Errorf("query execution goroutine panic: %v", rec),
+			"Query execution goroutine panicked",
+			"stack", string(debug.Stack()),
+		)
+		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
 	if r.sem != nil {
 		r.sem.Release(1)
+	}
+}
+
+// markQueryErroredAfterPanic sets the query status to error so it converges
+// instead of relying on the safety-net requeue to retry the panicking dispatch.
+func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) {
+	var q arkv1alpha1.Query
+	if err := r.Get(ctx, namespacedName, &q); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to fetch query after panic; leaving to safety-net requeue")
+		return
+	}
+	if q.Status.Response == nil {
+		q.Status.Response = &arkv1alpha1.Response{}
+	}
+	q.Status.Response.Phase = statusError
+	q.Status.Response.Content = fmt.Sprintf("query execution goroutine panicked: %v", rec)
+	if err := r.updateStatus(ctx, &q, statusError); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to mark query errored after panic; leaving to safety-net requeue")
 	}
 }
 
