@@ -1014,11 +1014,12 @@ describe('PostgresSessionsStorage', () => {
         UPDATE sessions SET
           status = 'active',
           error_count = 99,
-          participants = '[]'::jsonb,
           conversations = '[]'::jsonb
         WHERE session_id = 's'
       `;
-      expect((await storage.getSession('s'))!.errorCount).toBe(99);
+      const corrupted = (await storage.getSession('s'))!;
+      expect(corrupted.errorCount).toBe(99);
+      expect(corrupted.participants).toEqual([]);
 
       await storage.applyEvent({
         sessionId: 's',

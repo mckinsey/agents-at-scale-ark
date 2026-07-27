@@ -6,20 +6,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_activity TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at    TIMESTAMPTZ NOT NULL,
-  participants  JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  -- Participants are one per conversation and derived from this column on
+  -- read, so they are not stored: nothing filters or sorts on them in SQL.
   conversations JSONB       NOT NULL DEFAULT '[]'::jsonb
 );
 
-CREATE INDEX sessions_status_idx        ON sessions (status);
-CREATE INDEX sessions_last_activity_idx ON sessions (last_activity);
-CREATE INDEX sessions_expires_at_idx    ON sessions (expires_at);
+CREATE INDEX IF NOT EXISTS sessions_status_idx        ON sessions (status);
+CREATE INDEX IF NOT EXISTS sessions_last_activity_idx ON sessions (last_activity);
+CREATE INDEX IF NOT EXISTS sessions_expires_at_idx    ON sessions (expires_at);
+-- paginate can sort by name.
+CREATE INDEX IF NOT EXISTS sessions_name_idx          ON sessions (name);
 
 -- One row per query, so an event/message for one query upserts one small row
 -- instead of rewriting every other query in the same session.
 CREATE TABLE IF NOT EXISTS session_queries (
   session_id                    TEXT        NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
   query_id                      TEXT        NOT NULL,
-  name                          TEXT        NOT NULL,
   namespace                     TEXT,
   conversation_id               TEXT,
   agent                         TEXT,
@@ -38,8 +40,8 @@ CREATE TABLE IF NOT EXISTS session_queries (
 
 -- applyMessage looks up by query_id alone; the primary key is session_id-first
 -- so it can't serve that.
-CREATE INDEX session_queries_query_id_idx ON session_queries (query_id);
+CREATE INDEX IF NOT EXISTS session_queries_query_id_idx ON session_queries (query_id);
 
-CREATE INDEX session_queries_conversation_id_idx
+CREATE INDEX IF NOT EXISTS session_queries_conversation_id_idx
   ON session_queries (conversation_id)
   WHERE conversation_id IS NOT NULL;

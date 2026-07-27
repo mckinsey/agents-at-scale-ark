@@ -3,6 +3,8 @@ import {
   ERROR_REASON_SUFFIX,
   EventReasons,
   QueryPhases,
+  type ConversationSummary,
+  type Participant,
   type ParticipantType,
   type QueryEntry,
   type QueryPhase,
@@ -164,28 +166,24 @@ function recalculateConversations(session: SessionEntry): void {
   );
 }
 
-function recalculateParticipants(session: SessionEntry): void {
-  // Derive participants from conversations instead of queries
-  if (!session.conversations || session.conversations.length === 0) {
-    session.participants = [];
-    return;
+/** One participant per conversation, named after that conversation. */
+export function deriveParticipants(
+  conversations: ConversationSummary[] | undefined
+): Participant[] {
+  const byName = new Map<string, Participant>();
+  for (const conv of conversations ?? []) {
+    if (byName.has(conv.name)) continue;
+    byName.set(conv.name, {
+      id: conv.name,
+      name: conv.name,
+      type: conv.participantType || 'agent',
+    });
   }
+  return Array.from(byName.values());
+}
 
-  // Get unique participant names from conversation names
-  const participantNames = Array.from(
-    new Set(session.conversations.map((conv) => conv.name))
-  );
-
-  session.participants = participantNames.map((name) => {
-    // Find a conversation to get participant type
-    const conv = session.conversations!.find((c) => c.name === name);
-
-    return {
-      id: name,
-      name: name,
-      type: conv?.participantType || 'agent',
-    };
-  });
+function recalculateParticipants(session: SessionEntry): void {
+  session.participants = deriveParticipants(session.conversations);
 }
 
 export function recalculateSessionStatus(session: SessionEntry): void {

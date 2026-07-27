@@ -5,7 +5,6 @@ import type {Db} from '@ark-broker/db/db.js';
 import {DEFAULT_LIMIT, type PaginationParams} from '../pagination.js';
 import {
   type ConversationSummary,
-  type Participant,
   type PaginatedSessionsList,
   type QueryEntry,
   type QueryPhase,
@@ -18,6 +17,7 @@ import {
 } from '../sessions-broker.js';
 import {
   buildQueryEntry,
+  deriveParticipants,
   normalizeEventData,
   recalculateSessionStatus,
   resolveQueryPhase,
@@ -36,14 +36,12 @@ type SessionRow = {
   created_at: Date;
   last_activity: Date;
   expires_at: Date;
-  participants: unknown;
   conversations: unknown;
 };
 
 type SessionQueryRow = {
   session_id: string;
   query_id: string;
-  name: string;
   namespace: string | null;
   conversation_id: string | null;
   agent: string | null;
@@ -61,7 +59,7 @@ type SessionQueryRow = {
 
 function rowToQueryEntry(row: SessionQueryRow): QueryEntry {
   return {
-    name: row.name,
+    name: row.query_id,
     namespace: row.namespace ?? undefined,
     conversationId: row.conversation_id ?? undefined,
     agent: row.agent ?? undefined,
@@ -90,8 +88,10 @@ function rowsToSessionEntry(
     queries,
     status: header.status as 'active' | 'idle' | 'error',
     errorCount: header.error_count,
-    participants: header.participants as Participant[],
     conversations: header.conversations as ConversationSummary[],
+    participants: deriveParticipants(
+      header.conversations as ConversationSummary[]
+    ),
     createdAt: header.created_at.toISOString(),
     lastActivity: header.last_activity.toISOString(),
   };
@@ -218,8 +218,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
         status = ${session.status ?? 'idle'},
         last_activity = ${now},
         expires_at = now() + make_interval(secs => ${this.ttlSeconds}),
-        conversations = ${sql.json((session.conversations ?? []) as unknown as postgres.JSONValue)},
-        participants = ${sql.json((session.participants ?? []) as unknown as postgres.JSONValue)}
+        conversations = ${sql.json((session.conversations ?? []) as unknown as postgres.JSONValue)}
       WHERE session_id = ${header.session_id}
     `;
   }
@@ -289,11 +288,11 @@ export class PostgresSessionsStorage implements SessionsStorage {
 
       const upserted = await sql<{query_id: string}[]>`
         INSERT INTO session_queries (
-          session_id, query_id, name, namespace, conversation_id, agent,
+          session_id, query_id, namespace, conversation_id, agent,
           team, tool, target_type, phase, error, created_at, completed_at,
           last_activity, last_applied_event_sequence
         ) VALUES (
-          ${sessionId}, ${queryName}, ${entry.name}, ${entry.namespace ?? null},
+          ${sessionId}, ${queryName}, ${entry.namespace ?? null},
           ${entry.conversationId ?? null}, ${entry.agent ?? null},
           ${entry.team ?? null}, ${entry.tool ?? null}, ${entry.targetType},
           ${entry.phase}, ${entry.error ?? null}, ${entry.createdAt},

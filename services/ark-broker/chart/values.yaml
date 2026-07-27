@@ -43,8 +43,8 @@ database:
   statementTimeoutMs: 30000
   messageVisibilityTtlSeconds: 2592000
   eventVisibilityTtlSeconds: 2592000
-  # Must be >= both of the above, since sessions are materialized from
-  # messages and events and shouldn't outlive the data they're built from.
+  # Must be >= both of the above: a session is the index into its messages
+  # and events, so hiding it first would strand data that is still retained.
   sessionsVisibilityTtlSeconds: 2592000
   debugQueries: false
 

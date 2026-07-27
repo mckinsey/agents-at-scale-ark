@@ -104,7 +104,7 @@ export const envSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          'SESSIONS_VISIBILITY_TTL_SECONDS must be at least as long as MESSAGE_VISIBILITY_TTL_SECONDS and EVENT_VISIBILITY_TTL_SECONDS, so sessions never outlive the data they are built from',
+          'SESSIONS_VISIBILITY_TTL_SECONDS must be at least as long as MESSAGE_VISIBILITY_TTL_SECONDS and EVENT_VISIBILITY_TTL_SECONDS, so a session is never hidden while the messages and events it indexes are still retained',
         path: ['SESSIONS_VISIBILITY_TTL_SECONDS'],
       });
     }
