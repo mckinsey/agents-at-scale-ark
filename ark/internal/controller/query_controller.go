@@ -269,7 +269,7 @@ func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 	if obj.Spec.Timeout != nil {
 		timeout = obj.Spec.Timeout.Duration
 	}
-	return time.Until(obj.CreationTimestamp.Time.Add(timeout))
+	return time.Until(obj.CreationTimestamp.Add(timeout))
 }
 
 // timeoutReasonForPhase picks the QueryCompleted condition reason for a

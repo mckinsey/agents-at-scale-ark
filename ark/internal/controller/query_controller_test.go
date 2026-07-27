@@ -456,20 +456,22 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			return nil
 		}
 
-		It("fails a queued query with TimedOutInQueue when spec.timeout has elapsed", func() {
+		// Shared exerciser: seed a query with the given non-terminal phase, let
+		// its 1ms spec.timeout elapse, drive one reconcile, assert the deadline
+		// wrote phase=error with the expected TimedOut* reason and message
+		// fragment. Extracted so the queued/running cases don't duplicate
+		// setup+assertions (dupl-linter clean).
+		expectTimeoutTransition := func(name, phase, wantReason, msgFragment string) {
 			ctx := context.Background()
 			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
 
-			query := newExpiredQuery("timeout-queue-elapsed")
+			query := newExpiredQuery(name)
 			Expect(k8sClient.Create(ctx, query)).To(Succeed())
 			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
 
-			// Force phase=queued via a status write so timeoutReasonForPhase
-			// picks TimedOutInQueue on the deadline path.
-			query.Status.Phase = statusQueued
+			query.Status.Phase = phase
 			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
 
-			// Let the 1ms budget elapse.
 			time.Sleep(20 * time.Millisecond)
 
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
@@ -481,34 +483,16 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(after.Status.Phase).To(Equal(statusError))
 			cond := findCompletedCondition(after)
 			Expect(cond).NotTo(BeNil())
-			Expect(cond.Reason).To(Equal(reasonTimedOutInQueue))
-			Expect(cond.Message).To(ContainSubstring("capacity"))
+			Expect(cond.Reason).To(Equal(wantReason))
+			Expect(cond.Message).To(ContainSubstring(msgFragment))
+		}
+
+		It("fails a queued query with TimedOutInQueue when spec.timeout has elapsed", func() {
+			expectTimeoutTransition("timeout-queue-elapsed", statusQueued, reasonTimedOutInQueue, "capacity")
 		})
 
 		It("fails a running query with TimedOutInExecution when spec.timeout has elapsed", func() {
-			ctx := context.Background()
-			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-			query := newExpiredQuery("timeout-running-elapsed")
-			Expect(k8sClient.Create(ctx, query)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
-
-			query.Status.Phase = statusRunning
-			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
-
-			time.Sleep(20 * time.Millisecond)
-
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
-			_, err := r.handleQueryExecution(ctx, req, *query)
-			Expect(err).NotTo(HaveOccurred())
-
-			after := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
-			Expect(after.Status.Phase).To(Equal(statusError))
-			cond := findCompletedCondition(after)
-			Expect(cond).NotTo(BeNil())
-			Expect(cond.Reason).To(Equal(reasonTimedOutInExecution))
-			Expect(cond.Message).To(ContainSubstring("execution"))
+			expectTimeoutTransition("timeout-running-elapsed", statusRunning, reasonTimedOutInExecution, "execution")
 		})
 
 		It("does not re-transition an already terminal query even when budget has elapsed", func() {
