@@ -45,11 +45,9 @@ from ...services.pkce import (
     generate_state,
     generate_verifier,
 )
-from ...services.mcp_auth_log_filter import SensitiveDataFilter
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
-logger.addFilter(SensitiveDataFilter())
 
 router = APIRouter(tags=["mcp-auth"])
 

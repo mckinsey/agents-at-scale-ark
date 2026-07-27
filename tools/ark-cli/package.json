@@ -86,6 +86,7 @@
   },
   "overrides": {
     "brace-expansion": ">=5.0.7",
+    "ip-address": "^10.3.1",
     "minimatch": "^10.2.3",
     "rollup": "4.59.0",
     "hono": "^4.12.25",
