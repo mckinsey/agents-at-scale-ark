@@ -10,6 +10,7 @@ import {handleStreamingSessions} from '../src/http/routes/sessions/handlers.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '@ark-broker/brokers/sessions/sessions-storage-factory.js';
 import {usePgContainer} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
 
 jest.setTimeout(120_000);
@@ -122,6 +123,7 @@ describeIntegration('postgres sessions backend — cross-replica', () => {
       messageStream: createMessageStream(config, logger, dbA),
       chunkStream: createChunkStream(config, logger),
       eventStream: createEventStream(config, logger, dbA),
+      sessionsStorage: createSessionsStorage(config, logger, dbA),
       db: dbA,
     });
     appA = builtA.app;
@@ -133,6 +135,7 @@ describeIntegration('postgres sessions backend — cross-replica', () => {
       messageStream: createMessageStream(config, logger, dbB),
       chunkStream: createChunkStream(config, logger),
       eventStream: createEventStream(config, logger, dbB),
+      sessionsStorage: createSessionsStorage(config, logger, dbB),
       db: dbB,
     });
     appB = builtB.app;

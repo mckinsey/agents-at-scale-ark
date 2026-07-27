@@ -18,8 +18,10 @@ import {CompletionChunkBroker} from './brokers/chunks-broker.js';
 import type {ChunkStream} from './brokers/stream/chunk-stream.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
-import {SessionsBroker} from './brokers/sessions-broker.js';
-import {createSessionsStorage} from './brokers/sessions/sessions-storage-factory.js';
+import {
+  SessionsBroker,
+  type SessionsStorage,
+} from './brokers/sessions-broker.js';
 import {createMemoryRouter} from './http/routes/memory/index.js';
 import {createStreamRouter} from './http/routes/stream/index.js';
 import {createTracesRouter} from './http/routes/traces/index.js';
@@ -48,6 +50,7 @@ export function buildApp(deps: {
   messageStream: MessageStream;
   chunkStream: ChunkStream;
   eventStream: EventStream;
+  sessionsStorage: SessionsStorage;
   db?: Db;
   redis?: RedisClient;
 }): AppBundle {
@@ -58,6 +61,7 @@ export function buildApp(deps: {
     messageStream,
     chunkStream,
     eventStream,
+    sessionsStorage,
     db,
     redis,
   } = deps;
@@ -71,9 +75,7 @@ export function buildApp(deps: {
     config.limits.maxSpans
   );
   const events = new EventBroker(eventStream);
-  const sessions = new SessionsBroker(
-    createSessionsStorage(config, logger, db)
-  );
+  const sessions = new SessionsBroker(sessionsStorage);
 
   logger.info('brokers initialized');
 

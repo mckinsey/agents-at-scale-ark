@@ -5,6 +5,7 @@ import {buildApp} from './server.js';
 import {createMessageStream} from './brokers/stream/message-stream-factory.js';
 import {createChunkStream} from './brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from './brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from './brokers/sessions/sessions-storage-factory.js';
 import {createDb} from './db/db.js';
 import {createRedis} from './redis/redis.js';
 
@@ -44,6 +45,7 @@ const main = async (): Promise<void> => {
   const messageStream = createMessageStream(config, logger, db);
   const chunkStream = createChunkStream(config, logger, redis);
   const eventStream = createEventStream(config, logger, db);
+  const sessionsStorage = createSessionsStorage(config, logger, db);
   const {app, brokers} = buildApp({
     config,
     logger,
@@ -51,6 +53,7 @@ const main = async (): Promise<void> => {
     messageStream,
     chunkStream,
     eventStream,
+    sessionsStorage,
     db,
     redis,
   });
