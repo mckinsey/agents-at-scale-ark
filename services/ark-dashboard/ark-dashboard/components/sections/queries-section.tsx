@@ -116,6 +116,7 @@ function QueryStatus({
       {normalized === 'running' && onCancel && (
         <button
           type="button"
+          aria-label="Cancel running query"
           onClick={e => {
             e.preventDefault();
             e.stopPropagation();
