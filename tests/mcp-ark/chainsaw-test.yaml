@@ -35,6 +35,30 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
+  - name: dump-ark-mcp-diagnostics
+    try:
+    - script:
+        content: |
+          echo "=== Events (sorted) ==="
+          kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp' || true
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide || true
+          echo "=== Container statuses ==="
+          kubectl -n $NAMESPACE get pod -l app=ark-mcp -o jsonpath='{range .items[*]}{.metadata.name}{"  restarts="}{.status.containerStatuses[*].restartCount}{"  state="}{.status.containerStatuses[*].state}{"\n"}{end}' || true
+          echo
+          echo "=== Describe ark-mcp pod ==="
+          kubectl -n $NAMESPACE describe pod -l app=ark-mcp || true
+          echo "=== Current logs ==="
+          for p in $(kubectl -n $NAMESPACE get pod -l app=ark-mcp -o name); do
+            echo "--- $p (current) ---"
+            kubectl -n $NAMESPACE logs $p --tail=300 --all-containers || true
+            echo "--- $p (previous) ---"
+            kubectl -n $NAMESPACE logs $p --tail=300 --all-containers --previous || true
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: wait-for-mcpserver-ready
     try:
     - assert:

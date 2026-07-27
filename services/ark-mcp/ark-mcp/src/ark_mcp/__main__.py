@@ -1,9 +1,26 @@
 """Main entry point for the Ark MCP server."""
 
+import signal
+import time
+
+_BOOT_T0 = time.monotonic()
+
+
+def _boot_log(phase: str) -> None:
+    print(f"BOOT {phase} {time.monotonic() - _BOOT_T0:.2f}s", flush=True)
+
+
+_boot_log("process-start")
+
 import logging
 import os
 import sys
+
+_boot_log("stdlib-imported")
+
 from .server import create_app
+
+_boot_log("server-module-imported")
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +42,27 @@ def setup_logging():
     )
 
 
+def _install_boot_signal_handlers() -> None:
+    def _handler(signum, _frame):
+        _boot_log(f"signal-{signum}")
+        raise SystemExit(128 + signum)
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, _handler)
+
+
 def main():
     """Main application entry point."""
     setup_logging()
+    _boot_log("logging-configured")
+    _install_boot_signal_handlers()
     logger.info("Starting Ark MCP Server")
 
     app = create_app()
+    _boot_log("app-created")
 
     try:
+        _boot_log("about-to-run")
         # Run the MCP server on port 2627 (AMCP on dial pad)
         app.run(transport="http", host="0.0.0.0", port=2627, path="/mcp", host_origin_protection=False)
     except KeyboardInterrupt:
