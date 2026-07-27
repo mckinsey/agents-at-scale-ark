@@ -3,13 +3,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   name          TEXT        NOT NULL,
   status        TEXT        NOT NULL DEFAULT 'idle',
   error_count   INTEGER     NOT NULL DEFAULT 0,
-  -- Count of queries currently in a running/pending phase. Maintained
-  -- incrementally (+1/-1 on each phase transition) so `status` can be
-  -- derived without rescanning session_queries: status is 'active' if
-  -- active_count > 0, otherwise it follows the phase of whichever query
-  -- was just written (which is always the most recently active one, by
-  -- construction - a write always sets that query's last_activity to
-  -- the current time).
+  -- Queries in a running/pending phase, maintained incrementally so `status`
+  -- can be derived without rescanning session_queries.
   active_count  INTEGER     NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_activity TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -22,11 +17,8 @@ CREATE INDEX sessions_status_idx        ON sessions (status);
 CREATE INDEX sessions_last_activity_idx ON sessions (last_activity);
 CREATE INDEX sessions_expires_at_idx    ON sessions (expires_at);
 
--- One row per query, instead of embedding all of a session's queries as a
--- single JSONB blob on the sessions row: an event/message for one query
--- upserts one small row here, instead of locking and rewriting every other
--- query in the same session. See session_queries_query_id_idx for why this
--- needs its own index beyond the composite primary key.
+-- One row per query, so an event/message for one query upserts one small row
+-- instead of rewriting every other query in the same session.
 CREATE TABLE IF NOT EXISTS session_queries (
   session_id                    TEXT        NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
   query_id                      TEXT        NOT NULL,
@@ -47,12 +39,10 @@ CREATE TABLE IF NOT EXISTS session_queries (
   PRIMARY KEY (session_id, query_id)
 );
 
--- applyMessage looks up a query by query_id alone (it doesn't know the
--- session_id upfront) - the composite primary key above is session_id-first,
--- so it can't serve that lookup on its own.
+-- applyMessage looks up by query_id alone; the primary key is session_id-first
+-- so it can't serve that.
 CREATE INDEX session_queries_query_id_idx ON session_queries (query_id);
 
--- getQueryByConversationId looks up by conversation_id alone.
 CREATE INDEX session_queries_conversation_id_idx
   ON session_queries (conversation_id)
   WHERE conversation_id IS NOT NULL;

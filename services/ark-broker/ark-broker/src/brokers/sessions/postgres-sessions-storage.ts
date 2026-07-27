@@ -99,22 +99,21 @@ function rowsToSessionEntry(
   };
 }
 
-/**
- * Postgres-backed SessionsStorage. Unlike the v1 design this replaces,
- * queries live in their own `session_queries` row per query instead of a
- * JSONB blob on the session header - an event/message for one query locks
- * and rewrites one small row, not the whole session. The header row keeps
- * incrementally-maintained aggregates (status/error_count/active_count/
- * conversations/participants), patched in place rather than recomputed
- * from every query on each write. See session-aggregate.ts for the pure
- * patch functions this delegates to.
- *
- * Two independent watermarks (last_applied_event_sequence on the query row,
- * last_applied_message_sequence) guard against a redelivered or reordered
- * event/message regressing state a later one already applied - necessary
- * here because, unlike the in-memory backend, the mutation runs in its own
- * transaction rather than trusting single-process in-order delivery.
- */
+function hydrateSessions(
+  headers: SessionRow[],
+  queryRows: SessionQueryRow[]
+): SessionEntry[] {
+  const bySession = new Map<string, SessionQueryRow[]>();
+  for (const row of queryRows) {
+    const list = bySession.get(row.session_id) ?? [];
+    list.push(row);
+    bySession.set(row.session_id, list);
+  }
+  return headers.map((header) =>
+    rowsToSessionEntry(header, bySession.get(header.session_id) ?? [])
+  );
+}
+
 export class PostgresSessionsStorage implements SessionsStorage {
   private readonly emitter = new EventEmitter();
   private readonly listening: Promise<void>;
@@ -127,13 +126,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
     this.listening = this.startListening();
   }
 
-  /**
-   * Resolves once the LISTEN registration for cross-replica notify has
-   * completed. Production code doesn't need this (a notify that arrives
-   * before setup finishes is simply missed, and self-heals on the next
-   * mutation via getReplay); tests await it so subscribe assertions aren't
-   * racing the async listen handshake.
-   */
+  /** Tests await this so subscribe assertions don't race the LISTEN handshake. */
   async whenListening(): Promise<void> {
     return this.listening;
   }
@@ -157,14 +150,10 @@ export class PostgresSessionsStorage implements SessionsStorage {
   }
 
   /**
-   * Locks the session header row. Callers must do this BEFORE any write to
-   * session_queries in the same transaction (an INSERT there checks the
-   * foreign key against sessions and takes an implicit FOR KEY SHARE lock
-   * on this same row) - otherwise two concurrent transactions writing
-   * different queries in the same session each pick up that FOR KEY SHARE
-   * first, then both try to upgrade to FOR UPDATE here and deadlock. Taking
-   * FOR UPDATE first means the later FK check just confirms a lock this
-   * transaction already holds.
+   * Call BEFORE any write to session_queries in the same transaction: an
+   * INSERT there takes an implicit FOR KEY SHARE on this same row via the
+   * foreign key, so acquiring FOR UPDATE afterwards lets two transactions
+   * writing different queries of one session deadlock upgrading the lock.
    */
   private async lockHeader(
     sql: postgres.TransactionSql,
@@ -176,13 +165,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
     return headerRows[0]!;
   }
 
-  /**
-   * Patches the session header's incremental aggregates (error/active
-   * counts, status, conversations, participants) for one query's write,
-   * using a header row already locked by lockHeader. The merge itself runs
-   * in JS over the small conversations array - not the O(all queries)
-   * rescan the in-memory backend's recalculateSessionStatus performs.
-   */
   private async patchHeader(
     sql: postgres.TransactionSql,
     header: SessionRow,
@@ -263,8 +245,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
         return false;
       }
 
-      // Must lock the header before writing session_queries below - see
-      // lockHeader's docstring for why the order matters.
+      // Before the session_queries write below, never after - see lockHeader.
       const header = await this.lockHeader(sql, sessionId);
 
       const now = new Date().toISOString();
@@ -335,6 +316,8 @@ export class PostgresSessionsStorage implements SessionsStorage {
       return true;
     });
 
+    // After the commit above, on the pool - notifying inside db.begin()
+    // deadlocks postgres.js's own connection pool under concurrent load.
     if (applied) {
       await this.db.notify(
         NOTIFY_CHANNEL,
@@ -362,8 +345,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
         return;
       }
 
-      // Lock the header in the same order applyEvent does, before touching
-      // session_queries - see lockHeader's docstring.
+      // Same order as applyEvent, or the two deadlock - see lockHeader.
       const header = await this.lockHeader(sql, existingRow.session_id);
 
       const now = new Date().toISOString();
@@ -423,19 +405,9 @@ export class PostgresSessionsStorage implements SessionsStorage {
       WHERE s.expires_at > now()
     `;
 
-    const queriesBySession = new Map<string, SessionQueryRow[]>();
-    for (const row of queryRows) {
-      const list = queriesBySession.get(row.session_id) ?? [];
-      list.push(row);
-      queriesBySession.set(row.session_id, list);
-    }
-
     const sessions: Record<string, SessionEntry> = {};
-    for (const header of headerRows) {
-      sessions[header.session_id] = rowsToSessionEntry(
-        header,
-        queriesBySession.get(header.session_id) ?? []
-      );
+    for (const entry of hydrateSessions(headerRows, queryRows)) {
+      sessions[entry.sessionId] = entry;
     }
     return {sessions};
   }
@@ -512,16 +484,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
           SELECT * FROM session_queries WHERE session_id = ANY(${sessionIds})
         `
       : [];
-    const queriesBySession = new Map<string, SessionQueryRow[]>();
-    for (const row of queryRows) {
-      const list = queriesBySession.get(row.session_id) ?? [];
-      list.push(row);
-      queriesBySession.set(row.session_id, list);
-    }
-
-    const items = pageHeaders.map((header) =>
-      rowsToSessionEntry(header, queriesBySession.get(header.session_id) ?? [])
-    );
+    const items = hydrateSessions(pageHeaders, queryRows);
 
     return {
       items,
@@ -555,7 +518,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
   }
 
   async delete(): Promise<void> {
-    // session_queries rows cascade via ON DELETE CASCADE
     await this.db`DELETE FROM sessions`;
   }
 

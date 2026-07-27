@@ -12,21 +12,6 @@ import {
   type SessionEventData,
 } from '../sessions-broker.js';
 
-/**
- * Pure per-query merge logic shared by every SessionsStorage backend:
- * resolveQueryPhase/updateExistingQuery/buildQueryEntry/normalizeEventData
- * operate on a single QueryEntry and don't care where it's stored, so both
- * the in-memory backend and PostgresSessionsStorage apply an event/message
- * with identical semantics.
- *
- * recalculateSessionStatus/Conversations/Participants below are different:
- * they recompute session-wide aggregates from a full set of queries, which
- * only the in-memory backend still does this way (a full JS rescan is cheap
- * for a single process). PostgresSessionsStorage keeps those aggregates on
- * the sessions header row and updates them incrementally in SQL instead of
- * calling these - see postgres-sessions-storage.ts.
- */
-
 export function resolveQueryPhase(
   reason: string,
   errorMsg?: string
@@ -139,13 +124,8 @@ export function isActivePhase(phase: QueryPhase): boolean {
 }
 
 /**
- * Incremental counterpart to recalculateConversations/Participants below,
- * for PostgresSessionsStorage: patches (or appends) the one conversation
- * entry a single query's write touches, instead of rebuilding the whole
- * array from every query in the session. `isNewlyAssigned` must be true
- * only the first time this query is attributed to `entry.conversationId`
- * (conversationId never changes once set - see updateExistingQuery) so
- * messageCount counts queries, not events.
+ * `isNewlyAssigned` must be true only the first time this query is attributed
+ * to `entry.conversationId`, so messageCount counts queries, not events.
  */
 export function patchConversationForQuery(
   conversations: ConversationSummary[],
@@ -197,12 +177,6 @@ export function patchConversationForQuery(
   return next;
 }
 
-/**
- * Incremental counterpart to recalculateParticipants below: re-derives the
- * full participants list from the (small, already-patched) conversations
- * array. Cheap to run on every write since conversations is bounded by the
- * number of distinct conversations in a session, not by query count.
- */
 export function deriveParticipants(
   conversations: ConversationSummary[]
 ): Participant[] {

@@ -124,20 +124,13 @@ export interface SessionsSort {
   direction: 'asc' | 'desc';
 }
 
-/**
- * Storage seam for the sessions materialized view. Unlike the append-only
- * Stream<T> family (messages, events, chunks), sessions are a mutate-in-place
- * read model: applyEvent/applyMessage upsert and recompute derived fields on
- * an existing row rather than appending a new one.
- */
 export interface SessionsStorage {
   /**
-   * `sequence` is the event's position in the events stream. Backends that
-   * apply the mutation in a separate transaction from the event insert (see
-   * PostgresSessionsStorage) use it as an idempotency watermark, so a
-   * redelivered or reordered event can't regress state already applied by a
-   * later one. The in-memory backend ignores it: single-process, no reorder
-   * risk.
+   * `sequence` is the event's position in the events stream, used as an
+   * idempotency watermark by backends that apply the mutation in a separate
+   * transaction from the event insert, so concurrent replicas can't let an
+   * older event regress state a later one already applied. The in-memory
+   * backend ignores it: single process, no reorder risk.
    */
   applyEvent(
     eventData: Partial<SessionEventData>,
