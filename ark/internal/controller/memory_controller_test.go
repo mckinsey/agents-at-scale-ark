@@ -27,7 +27,7 @@ var _ = Describe("Memory Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: testNamespace, // TODO(user):Modify as needed
 		}
 		memory := &arkv1alpha1.Memory{}
 
@@ -38,7 +38,7 @@ var _ = Describe("Memory Controller", func() {
 				resource := &arkv1alpha1.Memory{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: testNamespace,
 					},
 					Spec: arkv1alpha1.MemorySpec{
 						Address: arkv1alpha1.ValueSource{
@@ -89,7 +89,7 @@ var _ = Describe("Memory Controller", func() {
 			secretList := &corev1.SecretList{}
 			_ = k8sClient.List(ctx, secretList)
 			for _, s := range secretList.Items {
-				if s.Namespace == "default" {
+				if s.Namespace == testNamespace {
 					_ = k8sClient.Delete(ctx, &s)
 				}
 			}
@@ -97,7 +97,7 @@ var _ = Describe("Memory Controller", func() {
 			configMapList := &corev1.ConfigMapList{}
 			_ = k8sClient.List(ctx, configMapList)
 			for _, cm := range configMapList.Items {
-				if cm.Namespace == "default" {
+				if cm.Namespace == testNamespace {
 					_ = k8sClient.Delete(ctx, &cm)
 				}
 			}
@@ -108,7 +108,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -139,19 +139,19 @@ var _ = Describe("Memory Controller", func() {
 
 			By("First reconcile to set running state")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: testNamespace}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
@@ -162,7 +162,7 @@ var _ = Describe("Memory Controller", func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "memory-token-secret",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Data: map[string][]byte{
 					"token": []byte("secret-bearer-token"),
@@ -174,7 +174,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -206,19 +206,19 @@ var _ = Describe("Memory Controller", func() {
 
 			By("First reconcile to set running state")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: testNamespace}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
@@ -229,7 +229,7 @@ var _ = Describe("Memory Controller", func() {
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "memory-config",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Data: map[string]string{
 					"api-key": "configmap-api-key-value",
@@ -241,7 +241,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -273,19 +273,19 @@ var _ = Describe("Memory Controller", func() {
 
 			By("First reconcile to set running state")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: testNamespace}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
@@ -296,7 +296,7 @@ var _ = Describe("Memory Controller", func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "mixed-secret",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Data: map[string][]byte{
 					"token": []byte("secret-token-value"),
@@ -308,7 +308,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -346,19 +346,19 @@ var _ = Describe("Memory Controller", func() {
 
 			By("First reconcile to set running state")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: testNamespace}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
@@ -369,7 +369,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -386,19 +386,19 @@ var _ = Describe("Memory Controller", func() {
 
 			By("First reconcile to set running state")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: testNamespace}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 		})
 
@@ -409,7 +409,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -444,19 +444,19 @@ var _ = Describe("Memory Controller", func() {
 
 			By("First reconcile to set running state")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: testNamespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying memory reached ready state with queryParameterRef in spec")
 			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: testNamespace}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal(statusReady))
 			Expect(updatedMemory.Spec.Headers).To(HaveLen(2))
 			Expect(updatedMemory.Spec.Headers[0].Value.ValueFrom.QueryParameterRef.Name).To(Equal("userId"))
@@ -479,14 +479,14 @@ var _ = Describe("Memory Controller", func() {
 			secretList := &corev1.SecretList{}
 			_ = k8sClient.List(ctx, secretList)
 			for i := range secretList.Items {
-				if secretList.Items[i].Namespace == "default" {
+				if secretList.Items[i].Namespace == testNamespace {
 					_ = k8sClient.Delete(ctx, &secretList.Items[i])
 				}
 			}
 			configMapList := &corev1.ConfigMapList{}
 			_ = k8sClient.List(ctx, configMapList)
 			for i := range configMapList.Items {
-				if configMapList.Items[i].Namespace == "default" {
+				if configMapList.Items[i].Namespace == testNamespace {
 					_ = k8sClient.Delete(ctx, &configMapList.Items[i])
 				}
 			}
@@ -500,7 +500,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -519,7 +519,7 @@ var _ = Describe("Memory Controller", func() {
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
-			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+			nn := types.NamespacedName{Name: memoryName, Namespace: testNamespace}
 
 			By("First reconcile initializes phase to running")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
@@ -540,7 +540,7 @@ var _ = Describe("Memory Controller", func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      secretName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Data: map[string][]byte{
 					"addr": []byte("http://healed-memory-service:8080"),
@@ -566,7 +566,7 @@ var _ = Describe("Memory Controller", func() {
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      memoryName,
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
@@ -583,7 +583,7 @@ var _ = Describe("Memory Controller", func() {
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
-			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+			nn := types.NamespacedName{Name: memoryName, Namespace: testNamespace}
 
 			By("Reconciling an errored resource with a valid address reaches ready")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
@@ -597,7 +597,7 @@ var _ = Describe("Memory Controller", func() {
 		It("stays terminal in the ready phase without reprocessing", func() {
 			memoryName := "memory-ready-terminal"
 			memory := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{Name: memoryName, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: memoryName, Namespace: testNamespace},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{Value: "http://ready:8080"},
 				},
@@ -607,7 +607,7 @@ var _ = Describe("Memory Controller", func() {
 			Expect(k8sClient.Status().Update(ctx, memory)).To(Succeed())
 
 			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+			nn := types.NamespacedName{Name: memoryName, Namespace: testNamespace}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 			Expect(err).NotTo(HaveOccurred())
@@ -624,13 +624,13 @@ var _ = Describe("Memory Controller", func() {
 
 			By("Creating a Secret whose value is empty")
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: testNamespace},
 				Data:       map[string][]byte{"addr": []byte("")},
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			memory := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{Name: memoryName, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: memoryName, Namespace: testNamespace},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -645,7 +645,7 @@ var _ = Describe("Memory Controller", func() {
 			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
 
 			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-			nn := types.NamespacedName{Name: memoryName, Namespace: "default"}
+			nn := types.NamespacedName{Name: memoryName, Namespace: testNamespace}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 			Expect(err).NotTo(HaveOccurred())
@@ -668,7 +668,7 @@ var _ = Describe("Memory Controller", func() {
 		It("maps a changed ConfigMap to the Memories that reference it", func() {
 			configMapName := "mapped-configmap"
 			referencing := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{Name: "mem-ref-cm", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mem-ref-cm", Namespace: testNamespace},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -683,10 +683,10 @@ var _ = Describe("Memory Controller", func() {
 			Expect(k8sClient.Create(ctx, referencing)).To(Succeed())
 
 			controllerReconciler := &MemoryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: "default"}}
+			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: testNamespace}}
 			requests := controllerReconciler.mapConfigMapToMemories(ctx, cm)
 			Expect(requests).To(ConsistOf(reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: "mem-ref-cm", Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: "mem-ref-cm", Namespace: testNamespace},
 			}))
 		})
 
@@ -694,7 +694,7 @@ var _ = Describe("Memory Controller", func() {
 			secretName := "mapped-secret"
 			By("Creating one Memory referencing the Secret and one that does not")
 			referencing := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{Name: "mem-ref-secret", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mem-ref-secret", Namespace: testNamespace},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -707,7 +707,7 @@ var _ = Describe("Memory Controller", func() {
 				},
 			}
 			unrelated := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{Name: "mem-direct", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mem-direct", Namespace: testNamespace},
 				Spec: arkv1alpha1.MemorySpec{
 					Address: arkv1alpha1.ValueSource{Value: "http://direct:8080"},
 				},
@@ -721,11 +721,11 @@ var _ = Describe("Memory Controller", func() {
 			}
 
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: testNamespace},
 			}
 			requests := controllerReconciler.mapSecretToMemories(ctx, secret)
 			Expect(requests).To(ConsistOf(reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: "mem-ref-secret", Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: "mem-ref-secret", Namespace: testNamespace},
 			}))
 		})
 	})
