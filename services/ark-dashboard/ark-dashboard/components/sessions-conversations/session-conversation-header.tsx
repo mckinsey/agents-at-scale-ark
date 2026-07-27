@@ -39,7 +39,7 @@ export function SessionConversationHeader({ session, formattedDate }: SessionCon
   const remainingCount = Math.max(0, participants.length - MAX_VISIBLE_PARTICIPANTS);
 
   return (
-    <div className="flex justify-start items-center overflow-hidden">
+    <div className="flex shrink-0 justify-start items-center overflow-hidden">
       <div className="flex-1 content-shell p-5 bg-surface-bg-secondary outline outline-1 outline-offset-[-1px] outline-stroke-divider flex flex-col justify-center items-start gap-5">
         <div className="self-stretch flex justify-between items-start">
           <div className="flex justify-start items-end gap-9">

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +8,7 @@ import { queriesService } from '@/lib/services/queries';
 
 vi.mock('@/lib/services/queries', () => ({
   queriesService: {
+    cancel: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -171,6 +172,40 @@ describe('QueriesSection', () => {
 
     expect(screen.getByText('q-queued')).toBeInTheDocument();
     expect(screen.getByText('Queued')).toBeInTheDocument();
+  });
+
+  it('cancels a running query when its Cancel action is clicked', async () => {
+    const refetch = vi.fn();
+    vi.mocked(queriesService.cancel).mockResolvedValueOnce({} as never);
+    renderSection({
+      queryResult: {
+        data: {
+          items: [
+            {
+              name: 'q-running',
+              namespace: 'default',
+              input: 'in progress',
+              creationTimestamp: '2026-01-04T00:00:00Z',
+              status: { phase: 'running' },
+            },
+          ],
+          count: 1,
+          total: 1,
+          page: 1,
+          page_size: 25,
+        },
+        isLoading: false,
+        isError: false,
+        refetch,
+      },
+    });
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    await waitFor(() => {
+      expect(queriesService.cancel).toHaveBeenCalledWith('q-running');
+      expect(refetch).toHaveBeenCalled();
+    });
   });
 
   it('links each row to its query detail page', () => {

@@ -97,18 +97,35 @@ function getPhase(query: QueryResponse): string | undefined {
   return (query.status as { phase?: string })?.phase;
 }
 
-function QueryStatus({ phase }: Readonly<{ phase: string | undefined }>) {
+function QueryStatus({
+  phase,
+  onCancel,
+}: Readonly<{ phase: string | undefined; onCancel?: () => void }>) {
   if (!phase) return <span className="text-fg-secondary">—</span>;
-  const config = STATUS_CONFIG[phase.toLowerCase()] ?? {
+  const normalized = phase.toLowerCase();
+  const config = STATUS_CONFIG[normalized] ?? {
     label: phase,
     dotClass: 'bg-fg-tertiary',
   };
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="group/status inline-flex items-center gap-2">
       <span className={cn('size-2 shrink-0 rounded-full', config.dotClass)} />
       <span className="label-regular-primary text-fg-primary">
         {config.label}
       </span>
+      {normalized === 'running' && onCancel && (
+        <button
+          type="button"
+          aria-label="Cancel running query"
+          onClick={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+          }}
+          className="text-fg-secondary hover:text-fg-primary ml-1 hidden text-sm underline underline-offset-2 transition-colors group-hover/status:inline">
+          Cancel
+        </button>
+      )}
     </span>
   );
 }
@@ -131,9 +148,10 @@ function HeaderInfo({ tooltip }: Readonly<{ tooltip: string }>) {
 interface QueryRowProps {
   readonly query: QueryResponse;
   readonly onDelete: (name: string) => void;
+  readonly onCancel: (name: string) => void;
 }
 
-function QueryRow({ query, onDelete }: Readonly<QueryRowProps>) {
+function QueryRow({ query, onDelete, onCancel }: Readonly<QueryRowProps>) {
   const href = `/query/${encodeURIComponent(query.name)}`;
   const target = getTargetDisplay(query);
   const input = getInputDisplayText(query.input);
@@ -192,8 +210,11 @@ function QueryRow({ query, onDelete }: Readonly<QueryRowProps>) {
         {formatTokenUsage(query)}
       </TableCell>
 
-      <TableCell size="small" className="w-[120px]">
-        <QueryStatus phase={getPhase(query)} />
+      <TableCell size="small" className="relative z-10 w-[120px]">
+        <QueryStatus
+          phase={getPhase(query)}
+          onCancel={() => onCancel(query.name)}
+        />
       </TableCell>
 
       <TableCell size="small" className="relative z-10 w-[72px]">
@@ -249,6 +270,21 @@ export function QueriesSection({
       refetch();
     } catch (err) {
       toast.error('Failed to Delete Query', {
+        description:
+          err instanceof Error ? err.message : 'An unexpected error occurred',
+      });
+    }
+  };
+
+  const handleCancel = async (queryName: string) => {
+    try {
+      await queriesService.cancel(queryName);
+      toast.success('Query Canceled', {
+        description: 'Successfully canceled query',
+      });
+      refetch();
+    } catch (err) {
+      toast.error('Failed to Cancel Query', {
         description:
           err instanceof Error ? err.message : 'An unexpected error occurred',
       });
@@ -332,6 +368,7 @@ export function QueriesSection({
               key={query.name}
               query={query}
               onDelete={handleDelete}
+              onCancel={handleCancel}
             />
           ))}
         </TableBody>

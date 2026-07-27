@@ -14,7 +14,6 @@ import {
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
-import { PromptEditor } from '@/components/ui/prompt-editor';
 import {
   Select,
   SelectContent,
@@ -26,10 +25,10 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Agent, agentsService } from '@/lib/services';
-import { cn } from '@/lib/utils';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { PromptField } from './prompt-field';
 import { SkillsDisplaySection } from './sections';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
@@ -266,26 +265,14 @@ export function ViewAgentForm({
                           control={form.control}
                           name="prompt"
                           render={({ field, fieldState }) => (
-                            <FieldSet className="gap-2">
-                              <FieldTitle>Prompt</FieldTitle>
-                              <PromptEditor
-                                variant="compact"
-                                showSublabel={false}
-                                showFooter={false}
-                                value={field.value || ''}
-                                onChange={field.onChange}
-                                placeholder="Hint the agent objective here..."
-                                disabled={isDisabled}
-                                parameters={parameters}
-                                className={cn(
-                                  'border-stroke-divider focus-within:border-stroke-status-focus min-h-[248px] border bg-transparent pb-3 transition-colors',
-                                  fieldState.error && 'border-status-error',
-                                )}
-                              />
-                              <FieldError>
-                                {fieldState.error?.message}
-                              </FieldError>
-                            </FieldSet>
+                            <PromptField
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              error={fieldState.error?.message}
+                              hasError={!!fieldState.error}
+                              disabled={isDisabled}
+                              parameters={parameters}
+                            />
                           )}
                         />
                       )}

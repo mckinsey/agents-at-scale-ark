@@ -144,7 +144,7 @@ export default function SessionDetailPage() {
   const formattedDate = `${dateStr} ${timeStr}`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6 py-8">
+    <div className="flex flex-col gap-5">
       <button
         onClick={handleBackToSessions}
         className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer self-start"
@@ -155,24 +155,26 @@ export default function SessionDetailPage() {
 
       <SessionConversationHeader session={session} formattedDate={formattedDate} />
 
-      <div className="flex min-h-0 flex-1 justify-start overflow-hidden">
-        <Tabs defaultValue={HISTORY_TAB} className="flex min-h-0 flex-1 content-shell flex-col">
-          <TabsList className="shrink-0 justify-start items-center rounded-none border-b border-stroke-tertiary bg-transparent p-0 h-auto gap-3">
-            <TabsTrigger
-              value={HISTORY_TAB}
-              className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
-            >
-              History
-            </TabsTrigger>
-            <TabsTrigger
-              value={LOGS_TAB}
-              className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
-            >
-              Logs
-            </TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue={HISTORY_TAB} className="flex shrink-0 content-shell flex-col">
+        <TabsList className="sticky top-0 z-20 shrink-0 justify-start items-center rounded-none border-b border-stroke-tertiary bg-surface-bg-base p-0 h-auto gap-3">
+          <TabsTrigger
+            value={HISTORY_TAB}
+            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
+          >
+            History
+          </TabsTrigger>
+          <TabsTrigger
+            value={LOGS_TAB}
+            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-4 pt-2 pb-3 text-fg-secondary text-base font-normal leading-6 shadow-none outline-none data-[state=active]:border-b-stroke-active data-[state=active]:bg-transparent data-[state=active]:text-fg-primary data-[state=active]:font-normal data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-0"
+          >
+            Logs
+          </TabsTrigger>
+        </TabsList>
 
-        <TabsContent value={HISTORY_TAB} className="flex min-h-0 flex-1 flex-col">
+        <TabsContent
+          value={HISTORY_TAB}
+          className="flex min-h-0 flex-col h-[calc(100vh-104px)]"
+        >
           <ConversationsTab
             sessionId={session_id}
             initialParticipant={memoizedInitialParticipant}
@@ -182,11 +184,13 @@ export default function SessionDetailPage() {
           />
         </TabsContent>
 
-          <TabsContent value={LOGS_TAB} className="flex min-h-0 flex-1 flex-col">
-            <LogsTab sessionId={session_id} />
-          </TabsContent>
-        </Tabs>
-      </div>
+        <TabsContent
+          value={LOGS_TAB}
+          className="flex min-h-0 flex-col h-[calc(100vh-104px)]"
+        >
+          <LogsTab sessionId={session_id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

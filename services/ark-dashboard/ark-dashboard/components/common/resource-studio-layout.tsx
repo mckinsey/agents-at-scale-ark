@@ -91,31 +91,41 @@ export function ResourceStudioLayout({
             </Button>
           </div>
         </div>
-        <div className="flex items-end justify-between">
-          <h1 className="text-fg-primary text-xl leading-7">{displayName}</h1>
-          {hasChanges && (
-            <div className="flex items-center gap-1">
-              <IconShell size="sm" className="text-status-warning opacity-100">
-                <Warning />
-              </IconShell>
-              <span className="text-fg-primary text-sm leading-5 tracking-[-0.112px]">
-                You have unsaved changes
-              </span>
-            </div>
-          )}
-        </div>
       </header>
 
       <div
         className={`relative flex min-h-0 flex-1 overflow-hidden ${
           isLeftPanelCollapsed ? '' : 'gap-6'
         }`}>
+        {!isLeftPanelCollapsed && (
+          <div
+            aria-hidden="true"
+            className="bg-stroke-tertiary pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2"
+          />
+        )}
         <div
           className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
             isLeftPanelCollapsed ? 'w-0' : 'flex-1'
           }`}>
           {!isLeftPanelCollapsed && (
             <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex flex-none items-end justify-between gap-4 pb-4">
+                <h1 className="text-fg-primary text-xl leading-7">
+                  {displayName}
+                </h1>
+                {hasChanges && (
+                  <div className="flex items-center gap-1">
+                    <IconShell
+                      size="sm"
+                      className="text-status-warning opacity-100">
+                      <Warning />
+                    </IconShell>
+                    <span className="text-fg-primary text-sm leading-5 tracking-[-0.112px]">
+                      You have unsaved changes
+                    </span>
+                  </div>
+                )}
+              </div>
               <ResourceSwitcherBar
                 value={switcherValue}
                 placeholder={switcherPlaceholder}
