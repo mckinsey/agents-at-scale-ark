@@ -730,23 +730,22 @@ describe('PostgresSessionsStorage', () => {
     });
 
     test('event and message watermarks are tracked independently', async () => {
-      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'}, 5);
-      await storage.applyMessage('conv-1', 'query-1', 5);
-      await storage.applyMessage('conv-should-not-apply', 'query-1', 5);
+      // The two streams number their own rows, so a message sequence below the
+      // last event sequence is not a replay and must still apply. One shared
+      // watermark column would reject it, and the two columns below would
+      // hold the same value.
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'}, 10);
+      await storage.applyMessage('conv-1', 'query-1', 3);
 
       const query = (await storage.getSession('sess-1'))!.queries['query-1']!;
       expect(query.conversationId).toBe('conv-1');
 
-      await storage.applyEvent(
-        {
-          sessionId: 'sess-1',
-          queryName: 'query-1',
-          _reason: 'QueryExecutionComplete',
-        },
-        6
-      );
-      const updated = (await storage.getSession('sess-1'))!.queries['query-1']!;
-      expect(updated.phase).toBe('done');
+      const [watermarks] = await db()<
+        {event: string; message: string}[]
+      >`SELECT last_applied_event_sequence AS event,
+               last_applied_message_sequence AS message
+        FROM session_queries WHERE query_id = 'query-1'`;
+      expect(watermarks).toEqual({event: '10', message: '3'});
     });
   });
 
