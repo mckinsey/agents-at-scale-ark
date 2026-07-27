@@ -356,6 +356,22 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		assert.True(t, meta.MemoryUnavailable)
 	})
 
+	t.Run("extracts memoryDegraded flag", func(t *testing.T) {
+		msg := &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("response")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId": "conv-1",
+					"memoryDegraded": true,
+				},
+			},
+		}
+		meta := extractEngineResponseMeta(&protocol.MessageResult{Result: msg})
+		assert.True(t, meta.MemoryDegraded)
+		assert.False(t, meta.MemoryUnavailable)
+	})
+
 	t.Run("extracts native A2A contextId and taskId from message", func(t *testing.T) {
 		contextID := "native-ctx"
 		taskID := "native-task"
@@ -430,6 +446,39 @@ func TestSetConditionMemoryUnavailable(t *testing.T) {
 		query := &arkv1alpha1.Query{}
 		r.setConditionMemoryUnavailable(query, true)
 		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	})
+}
+
+func TestSetConditionMemoryDegraded(t *testing.T) {
+	r := &QueryReconciler{}
+	condType := string(arkv1alpha1.QueryMemoryDegraded)
+
+	t.Run("sets True with GetMessagesFailed reason when degraded", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryDegraded(query, true)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, "GetMessagesFailed", cond.Reason)
+		assert.NotEmpty(t, cond.Message)
+	})
+
+	t.Run("sets False when history was read", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryDegraded(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, "MemoryHealthy", cond.Reason)
+	})
+
+	t.Run("clears a prior True to False on re-run", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryDegraded(query, true)
+		r.setConditionMemoryDegraded(query, false)
 		cond := findCondition(query.Status.Conditions, condType)
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionFalse, cond.Status)
