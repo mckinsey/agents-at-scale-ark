@@ -19,9 +19,14 @@ export function handleStreamingSessions(
     subscribe: (callback) =>
       sessionsBroker.subscribe(({sessionId}) => {
         if (filterSessionId && sessionId !== filterSessionId) return;
-        void sessionsBroker.getSession(sessionId).then((updated) => {
-          if (updated) callback({sessionId, session: updated});
-        });
+        void sessionsBroker
+          .getSession(sessionId)
+          .then((updated) => {
+            if (updated) callback({sessionId, session: updated});
+          })
+          .catch((err) => {
+            req.log.error({err, sessionId}, 'failed to read updated session');
+          });
       }),
     getReplay: async (): Promise<unknown[]> => {
       const store = await sessionsBroker.getAll();

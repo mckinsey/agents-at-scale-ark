@@ -91,9 +91,12 @@ export function createMemoryRouter(
         );
         await memory.save();
 
-        const lastSequence = persisted.at(-1)?.sequenceNumber;
-        if (sessions && conversation_id && lastSequence !== undefined) {
-          await sessions.applyMessage(conversation_id, query_id, lastSequence);
+        if (sessions && conversation_id) {
+          await sessions.applyMessage(
+            conversation_id,
+            query_id,
+            persisted.at(-1)?.sequenceNumber
+          );
         }
 
         res.status(200).send();

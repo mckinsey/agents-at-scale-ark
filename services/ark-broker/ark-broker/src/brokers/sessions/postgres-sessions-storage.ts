@@ -25,6 +25,8 @@ import {
 } from './session-aggregate.js';
 
 const NOTIFY_CHANNEL = 'sessions_updated';
+const LISTEN_RETRY_INITIAL_MS = 500;
+const LISTEN_RETRY_MAX_MS = 30_000;
 
 type SessionRow = {
   session_id: string;
@@ -127,21 +129,39 @@ export class PostgresSessionsStorage implements SessionsStorage {
     return this.listening;
   }
 
+  /**
+   * Retries forever with backoff. postgres.js re-registers channels when an
+   * established listen connection drops, but if the very first attempt fails -
+   * a replica booting during a failover, say - there is nothing registered to
+   * re-register, and that pod serves reads normally while never delivering a
+   * live update again.
+   */
   private async startListening(): Promise<void> {
-    try {
-      await this.db.listen(NOTIFY_CHANNEL, (payload) => {
-        try {
-          const data = JSON.parse(payload) as {
-            sessionId: string;
-            queryName: string;
-          };
-          this.emitter.emit('upsert', data);
-        } catch (err) {
-          this.logger.error({err}, 'failed to parse sessions notify payload');
-        }
-      });
-    } catch (err) {
-      this.logger.error({err}, 'failed to listen for session notifications');
+    let delayMs = LISTEN_RETRY_INITIAL_MS;
+    for (;;) {
+      try {
+        await this.db.listen(NOTIFY_CHANNEL, (payload) => {
+          try {
+            const data = JSON.parse(payload) as {
+              sessionId: string;
+              queryName: string;
+            };
+            this.emitter.emit('upsert', data);
+          } catch (err) {
+            this.logger.error({err}, 'failed to parse sessions notify payload');
+          }
+        });
+        return;
+      } catch (err) {
+        this.logger.error(
+          {err, retryInMs: delayMs},
+          'failed to listen for session notifications, retrying'
+        );
+        await new Promise((resolve) => {
+          setTimeout(resolve, delayMs).unref();
+        });
+        delayMs = Math.min(delayMs * 2, LISTEN_RETRY_MAX_MS);
+      }
     }
   }
 
