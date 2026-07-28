@@ -16,12 +16,13 @@ import {
   type SessionsStore,
 } from '../sessions-broker.js';
 import {
+  applyQueryPhase,
   buildQueryEntry,
   deriveParticipants,
+  mergeQueryMetadata,
   normalizeEventData,
   recalculateSessionStatus,
   resolveQueryPhase,
-  updateExistingQuery,
 } from './session-aggregate.js';
 
 const NOTIFY_CHANNEL = 'sessions_updated';
@@ -264,13 +265,15 @@ export class PostgresSessionsStorage implements SessionsStorage {
       `;
       const existingRow = existingRows[0];
 
-      if (
-        existingRow &&
+      // Out of order, so its phase must not be applied - but its identity
+      // fields still can be, because filling them is first-write-wins and
+      // order-independent. Dropping the whole event would lose the agent and
+      // conversationId that only the earlier event carries, and a query with
+      // no conversationId never joins its conversation at all.
+      const stale =
+        existingRow !== undefined &&
         sequence !== undefined &&
-        sequence <= Number(existingRow.last_applied_event_sequence)
-      ) {
-        return false;
-      }
+        sequence <= Number(existingRow.last_applied_event_sequence);
 
       const now = new Date().toISOString();
       const entry = existingRow
@@ -283,7 +286,9 @@ export class PostgresSessionsStorage implements SessionsStorage {
             errorMsg
           );
       if (existingRow) {
-        updateExistingQuery(entry, queryPhase, normalizedEventData, errorMsg);
+        const filled = mergeQueryMetadata(entry, normalizedEventData, now);
+        if (stale && !filled) return false;
+        if (!stale) applyQueryPhase(entry, queryPhase, now, errorMsg);
       }
 
       const upserted = await sql<{query_id: string}[]>`
@@ -310,12 +315,12 @@ export class PostgresSessionsStorage implements SessionsStorage {
           error = EXCLUDED.error,
           completed_at = EXCLUDED.completed_at,
           last_activity = EXCLUDED.last_activity,
-          last_applied_event_sequence = COALESCE(
-            ${sequence ?? null}::bigint,
-            session_queries.last_applied_event_sequence
+          -- Never regress: a merged-late event keeps the higher watermark, so
+          -- the phase it was not allowed to write stays unreachable.
+          last_applied_event_sequence = GREATEST(
+            session_queries.last_applied_event_sequence,
+            COALESCE(${sequence ?? null}::bigint, 0)
           )
-        WHERE ${sequence ?? null}::bigint IS NULL
-          OR session_queries.last_applied_event_sequence < ${sequence ?? null}::bigint
         RETURNING query_id
       `;
       if (upserted.length === 0) return false;

@@ -653,9 +653,12 @@ describe('PostgresSessionsStorage', () => {
       expect(received).toHaveLength(1);
     });
 
-    test('does not emit for a stale redelivered event (dropped before reaching NOTIFY)', async () => {
+    test('does not emit for a redelivered event that carries nothing new', async () => {
       await storage.whenListening();
-      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'}, 5);
+      await storage.applyEvent(
+        {sessionId: 'sess-1', queryName: 'query-1', agent: 'agent-a'},
+        5
+      );
       // Let the first applyEvent's own notification land before subscribing,
       // so it can't be mistaken for one fired by the stale retry below.
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -663,7 +666,7 @@ describe('PostgresSessionsStorage', () => {
       const received: Array<{sessionId: string; queryName: string}> = [];
       storage.subscribe((data) => received.push(data));
       await storage.applyEvent(
-        {sessionId: 'sess-1', queryName: 'query-1', agent: 'late-arrival'},
+        {sessionId: 'sess-1', queryName: 'query-1', agent: 'agent-a'},
         3
       );
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -707,6 +710,46 @@ describe('PostgresSessionsStorage', () => {
 
       const query = (await storage.getSession('sess-1'))!.queries['query-1']!;
       expect(query.phase).toBe('done');
+    });
+
+    test('an out-of-order event still contributes fields the query is missing', async () => {
+      // The completion event carries no agent or conversationId - only the
+      // start event does, and it lost the race. Dropping it outright would
+      // leave the query with no conversation, so it would never show up in
+      // one, and with no agent name to display.
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          _reason: 'QueryExecutionComplete',
+        },
+        10
+      );
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          conversationId: 'conv-1',
+          agent: 'agent-a',
+          _reason: 'AgentExecutionStart',
+        },
+        7
+      );
+
+      const session = (await storage.getSession('sess-1'))!;
+      const query = session.queries['query-1']!;
+      expect(query.phase).toBe('done');
+      expect(query.agent).toBe('agent-a');
+      expect(query.conversationId).toBe('conv-1');
+      expect(session.conversations).toHaveLength(1);
+
+      // The watermark must not have regressed to the merged event's sequence,
+      // or the phase it was denied would become writable by a replay.
+      const [watermark] = await db()<{event: string}[]>`
+        SELECT last_applied_event_sequence AS event
+        FROM session_queries WHERE query_id = 'query-1'
+      `;
+      expect(watermark!.event).toBe('10');
     });
 
     test('an undefined sequence never poisons the watermark to NULL: a later real sequence still applies', async () => {

@@ -63,30 +63,59 @@ export function buildQueryEntry(
   };
 }
 
-export function updateExistingQuery(
+/**
+ * Fills the still-empty identity fields and bumps lastActivity. Every rule here
+ * is first-write-wins, so this is safe to apply out of order: an older event can
+ * only fill a gap, never overwrite. Returns whether it changed anything, which
+ * lets a caller tell a genuinely new event from a bare redelivery.
+ *
+ * lastActivity is the wall clock of this apply, not the event's own time, so it
+ * still moves forward when an older event is merged late.
+ */
+export function mergeQueryMetadata(
   existing: QueryEntry,
-  phase: QueryPhase,
   eventData: Partial<SessionEventData>,
-  errorMsg?: string
-): void {
-  const now = new Date().toISOString();
-  existing.lastActivity = now;
+  now: string
+): boolean {
+  let filled = false;
 
   if (eventData.conversationId && !existing.conversationId) {
     existing.conversationId = eventData.conversationId;
+    filled = true;
   }
   if (eventData.agent && !existing.agent) {
     existing.agent = eventData.agent;
+    filled = true;
   }
   if (eventData.team && !existing.team) {
     existing.team = eventData.team;
+    filled = true;
   }
   if (eventData.tool && !existing.tool) {
     existing.tool = eventData.tool;
+    filled = true;
   }
   if (eventData.targetType && existing.targetType === 'agent') {
     existing.targetType = eventData.targetType;
+    filled = true;
   }
+
+  if (filled) existing.lastActivity = now;
+  return filled;
+}
+
+/**
+ * The order-sensitive half. `done` clearing a prior `error` is the one rule that
+ * is not monotonic, which is why an out-of-order event must not reach this -
+ * an older `done` would erase a newer `error`.
+ */
+export function applyQueryPhase(
+  existing: QueryEntry,
+  phase: QueryPhase,
+  now: string,
+  errorMsg?: string
+): void {
+  existing.lastActivity = now;
 
   if (phase === QueryPhases.Error) {
     existing.phase = QueryPhases.Error;
@@ -109,6 +138,17 @@ export function updateExistingQuery(
     existing.error = undefined;
     existing.completedAt = now;
   }
+}
+
+export function updateExistingQuery(
+  existing: QueryEntry,
+  phase: QueryPhase,
+  eventData: Partial<SessionEventData>,
+  errorMsg?: string
+): void {
+  const now = new Date().toISOString();
+  mergeQueryMetadata(existing, eventData, now);
+  applyQueryPhase(existing, phase, now, errorMsg);
 }
 
 export function calculateDuration(start: string, end?: string): string {
