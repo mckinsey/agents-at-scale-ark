@@ -284,6 +284,23 @@ describe('PostgresSessionsStorage', () => {
       expect(query.conversationId).toBe('original');
     });
 
+    test('does not revive a session that has already expired', async () => {
+      // The owner probe and the header lock are what a message resolves the
+      // session through, and refreshHeader pushes expires_at forward - so
+      // without the expiry filter a message makes a session that getSession
+      // already reports as gone visible again.
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
+      await db()`
+        UPDATE sessions SET expires_at = now() - interval '1 second'
+        WHERE session_id = 'sess-1'
+      `;
+      expect(await storage.getSession('sess-1')).toBeUndefined();
+
+      await storage.applyMessage('conv-1', 'query-1');
+
+      expect(await storage.getSession('sess-1')).toBeUndefined();
+    });
+
     test('does nothing if query not found', async () => {
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
       await storage.applyMessage('conv-abc', 'nonexistent-query');
@@ -794,6 +811,40 @@ describe('PostgresSessionsStorage', () => {
       expect(watermark!.event).toBe('10');
     });
 
+    test('a stale event does not re-elect its query as the latest one', async () => {
+      // lastActivity decides which query's phase becomes the session status, so
+      // an event already known to be out of order must not touch it - otherwise
+      // merging its metadata quietly erases a newer failure elsewhere.
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'healthy',
+          _reason: 'QueryExecutionComplete',
+        },
+        5
+      );
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'failed',
+          _reason: 'QueryExecutionComplete',
+          error: 'it really failed',
+        },
+        10
+      );
+      expect((await storage.getSession('sess-1'))!.status).toBe('error');
+
+      await storage.applyEvent(
+        {sessionId: 'sess-1', queryName: 'healthy', queryNamespace: 'ns-x'},
+        1
+      );
+
+      const session = (await storage.getSession('sess-1'))!;
+      expect(session.queries['healthy']!.namespace).toBe('ns-x');
+      expect(session.status).toBe('error');
+      expect(session.errorCount).toBe(1);
+    });
+
     test('an out-of-order event contributes a namespace the query is missing', async () => {
       // namespace has no merge rule of its own in the phase half, so if it is
       // not merged here a stale event carrying only a namespace looks like it
@@ -1067,6 +1118,44 @@ describe('PostgresSessionsStorage', () => {
       },
       {sessionId: 's', queryName: 'q3', conversationId: 'c2', team: 'team-c'},
     ];
+
+    test('a message does not re-elect the status, on either backend', async () => {
+      // A message bumps the query's lastActivity, so recomputing the status
+      // election here would let a message on a healthy query erase a newer
+      // failure - and push that wrong value to every watcher.
+      const inMemory = new InMemorySessionsStorage(silentLogger);
+      const healthy = {
+        sessionId: 's',
+        queryName: 'healthy',
+        _reason: 'QueryExecutionComplete',
+      };
+      const failed = {
+        sessionId: 's',
+        queryName: 'failed',
+        _reason: 'QueryExecutionComplete',
+        error: 'it really failed',
+      };
+      for (const backend of [storage, inMemory]) {
+        await backend.applyEvent(healthy);
+        // The status election ties on equal lastActivity and keeps the first
+        // query, and the in-memory backend applies both within one millisecond.
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        await backend.applyEvent(failed);
+        expect((await backend.getSession('s'))!.status).toBe('error');
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        await backend.applyMessage('c1', 'healthy');
+      }
+
+      const fromPg = (await storage.getSession('s'))!;
+      const fromMemory = (await inMemory.getSession('s'))!;
+      expect(fromPg.status).toBe('error');
+      expect(fromMemory.status).toBe('error');
+      expect(fromPg.errorCount).toBe(1);
+      expect(fromMemory.errorCount).toBe(1);
+      // ...while the conversation the message revealed is still picked up.
+      expect(fromPg.conversations).toHaveLength(1);
+      expect(fromMemory.conversations).toHaveLength(1);
+    });
 
     test('aggregates match the in-memory backend when a message joins the conversation', async () => {
       // Some queries only learn their conversation from a message, and a query

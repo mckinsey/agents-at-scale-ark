@@ -21,6 +21,7 @@ import {
   deriveParticipants,
   mergeQueryMetadata,
   normalizeEventData,
+  recalculateSessionConversations,
   recalculateSessionStatus,
   resolveQueryPhase,
 } from './session-aggregate.js';
@@ -227,7 +228,8 @@ export class PostgresSessionsStorage implements SessionsStorage {
   private async refreshHeader(
     sql: postgres.TransactionSql,
     header: SessionRow,
-    now: string
+    now: string,
+    conversationsOnly = false
   ): Promise<void> {
     const rows = await sql<SessionQueryRow[]>`
       SELECT * FROM session_queries
@@ -236,7 +238,11 @@ export class PostgresSessionsStorage implements SessionsStorage {
     `;
 
     const session = rowsToSessionEntry(header, rows);
-    recalculateSessionStatus(session);
+    if (conversationsOnly) {
+      recalculateSessionConversations(session);
+    } else {
+      recalculateSessionStatus(session);
+    }
 
     await sql`
       UPDATE sessions SET
@@ -313,11 +319,10 @@ export class PostgresSessionsStorage implements SessionsStorage {
       if (existingRow) {
         const filled = mergeQueryMetadata(entry, normalizedEventData);
         if (stale && !filled) return false;
-        if (stale) {
-          entry.lastActivity = now;
-        } else {
-          applyQueryPhase(entry, queryPhase, now, errorMsg);
-        }
+        // Deliberately leaves lastActivity alone when stale: it elects which
+        // query decides the session's status, and an event we already know is
+        // out of order has no business winning that election.
+        if (!stale) applyQueryPhase(entry, queryPhase, now, errorMsg);
       }
 
       await sql`
@@ -378,9 +383,10 @@ export class PostgresSessionsStorage implements SessionsStorage {
       // order applyEvent uses. A query name can exist under more than one
       // session; pick one deterministically rather than locking every match.
       const owners = await sql<{session_id: string}[]>`
-        SELECT session_id FROM session_queries
-        WHERE query_id = ${queryId}
-        ORDER BY session_id
+        SELECT sq.session_id FROM session_queries sq
+        JOIN sessions s ON s.session_id = sq.session_id
+        WHERE sq.query_id = ${queryId} AND s.expires_at > now()
+        ORDER BY sq.session_id
         LIMIT 1
       `;
       const owner = owners[0];
@@ -428,7 +434,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
       `;
       if (updated.length === 0) return;
 
-      await this.refreshHeader(sql, header, now);
+      await this.refreshHeader(sql, header, now, true);
 
       // Only a message that attaches the query to a conversation changes what a
       // watcher would render; the rest just moves last_activity along, which is

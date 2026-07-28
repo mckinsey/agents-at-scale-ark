@@ -236,14 +236,30 @@ function recalculateParticipants(session: SessionEntry): void {
   session.participants = deriveParticipants(session.conversations);
 }
 
+/**
+ * Rebuilds the conversation list and the participants derived from it. Split out
+ * from recalculateSessionStatus because a caller that has only learned which
+ * conversation a query belongs to must not also re-run the status election: that
+ * picks whichever query has the newest lastActivity, so recomputing both would
+ * let a message on a healthy query erase a newer failure from the session.
+ */
+export function recalculateSessionConversations(session: SessionEntry): void {
+  if (Object.keys(session.queries).length === 0) {
+    session.participants = [];
+    session.conversations = [];
+    return;
+  }
+  recalculateConversations(session);
+  recalculateParticipants(session);
+}
+
 export function recalculateSessionStatus(session: SessionEntry): void {
   const queries = Object.values(session.queries);
 
   if (queries.length === 0) {
     session.status = 'idle';
     session.errorCount = 0;
-    session.participants = [];
-    session.conversations = [];
+    recalculateSessionConversations(session);
     return;
   }
 
@@ -265,6 +281,5 @@ export function recalculateSessionStatus(session: SessionEntry): void {
     session.status = latestQuery.phase === 'error' ? 'error' : 'idle';
   }
 
-  recalculateConversations(session);
-  recalculateParticipants(session);
+  recalculateSessionConversations(session);
 }

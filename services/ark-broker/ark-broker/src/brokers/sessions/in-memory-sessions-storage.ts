@@ -16,6 +16,7 @@ import type {
 import {
   buildQueryEntry,
   normalizeEventData,
+  recalculateSessionConversations,
   recalculateSessionStatus,
   resolveQueryPhase,
   updateExistingQuery,
@@ -161,7 +162,7 @@ export class InMemorySessionsStorage implements SessionsStorage {
     // without this the conversation would never appear at all. The aggregate
     // really changed, so watchers are told, as they are for an event.
     if (joinedConversation) {
-      recalculateSessionStatus(session);
+      recalculateSessionConversations(session);
       this.emitter.emit('upsert', {sessionId, queryName: queryId});
     }
     this.deferredSave();
