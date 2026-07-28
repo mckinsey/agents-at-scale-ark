@@ -19,6 +19,9 @@ const (
 	// QueryMemoryUnavailable indicates that the query carried a conversationId
 	// but no Memory backend was reachable, so conversation history was dropped.
 	QueryMemoryUnavailable QueryConditionType = "MemoryUnavailable"
+	// QueryMemoryDegraded indicates that a Memory backend was reachable but
+	// reading the conversation history failed, so the query ran without it.
+	QueryMemoryDegraded QueryConditionType = "MemoryDegraded"
 )
 
 const (
@@ -142,7 +145,7 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;input-required;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;queued;input-required;error;done;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state
