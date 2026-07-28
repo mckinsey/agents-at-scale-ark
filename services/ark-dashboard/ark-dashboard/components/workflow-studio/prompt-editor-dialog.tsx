@@ -29,7 +29,6 @@ export function PromptEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        showCloseButton={false}
         data-testid="prompt-editor-dialog"
         className="flex h-[90vh] w-[90vw] max-w-[90vw] flex-col gap-4 p-6 sm:max-w-[90vw]">
         <DialogHeader className="shrink-0">

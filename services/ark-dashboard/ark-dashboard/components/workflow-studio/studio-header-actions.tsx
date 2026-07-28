@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, ExternalLink, Trash2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -194,14 +194,14 @@ export function StudioHeaderActions({
                   size="sm"
                   disabled={!persisted}
                   data-testid="studio-activity-trigger">
-                  <Activity className="mr-2 h-4 w-4" />
-                  Activity
                   <Badge
                     variant="secondary"
-                    className="ml-2"
+                    className="mr-2 size-5 justify-center rounded-full border bg-white p-0 text-neutral-900"
                     data-testid="studio-activity-badge">
                     {totalRuns}
                   </Badge>
+                  Activity
+                  <ChevronDown className="ml-1 h-4 w-4" />
                 </Button>
               </PopoverTrigger>
             </TooltipTrigger>

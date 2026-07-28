@@ -125,7 +125,7 @@ export function NameWorkflowDialog({
           }}>
           <div className="space-y-2">
             <Label htmlFor="workflow-name">
-              Name <span className="text-destructive">*</span>
+              Workflow name <span className="text-destructive">*</span>
             </Label>
             <Input
               id="workflow-name"
@@ -149,12 +149,14 @@ export function NameWorkflowDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workflow-title">Title</Label>
+            <Label htmlFor="workflow-title">
+              Workflow display name <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="workflow-title"
               data-testid="workflow-title-input"
               value={title}
-              placeholder="e.g. Data ingestion pipeline"
+              placeholder="e.g. Data Ingestion"
               onChange={event => setTitle(event.target.value)}
             />
           </div>

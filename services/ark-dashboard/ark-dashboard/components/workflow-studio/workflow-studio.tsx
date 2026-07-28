@@ -72,6 +72,7 @@ interface WorkflowStudioProps {
 interface EditMetaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  name: string;
   title: string;
   description: string;
   onSave: (title: string, description: string) => void;
@@ -80,6 +81,7 @@ interface EditMetaDialogProps {
 function EditMetaDialog({
   open,
   onOpenChange,
+  name,
   title,
   description,
   onSave,
@@ -105,7 +107,22 @@ function EditMetaDialog({
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="workflow-meta-title">Title</Label>
+            <Label htmlFor="workflow-meta-name">Workflow name</Label>
+            <Input
+              id="workflow-meta-name"
+              data-testid="studio-name-input"
+              value={name}
+              disabled
+              readOnly
+            />
+            <p className="text-muted-foreground text-xs">
+              You&apos;re not able to rename workflow after creation.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="workflow-meta-title">
+              Workflow display name <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="workflow-meta-title"
               data-testid="studio-title-input"
@@ -168,7 +185,7 @@ function NameModal({ open, onConfirm, onCancel }: NameModalProps) {
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="workflow-name">Name</Label>
+          <Label htmlFor="workflow-name">Workflow name</Label>
           <Input
             id="workflow-name"
             data-testid="workflow-name-input"
@@ -550,6 +567,7 @@ export function WorkflowStudio({
       <EditMetaDialog
         open={editMetaOpen}
         onOpenChange={setEditMetaOpen}
+        name={studio.workflowName}
         title={studio.title}
         description={studio.description}
         onSave={(nextTitle, nextDescription) => {
@@ -570,32 +588,47 @@ export function WorkflowStudio({
             <Button
               type="button"
               variant="outline"
-              className="justify-start"
+              className="h-auto justify-start py-3"
               disabled={!studio.draftYaml.trim()}
               onClick={handleDownloadYaml}
               data-testid="studio-download-yaml">
               <Download className="mr-2 h-4 w-4" />
-              YAML
+              <div className="flex flex-col items-start">
+                <span>YAML</span>
+                <span className="text-muted-foreground text-xs">
+                  Download the workflow template as a .yaml file
+                </span>
+              </div>
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="justify-start"
+              className="h-auto justify-start py-3"
               disabled={!studio.draftYaml.trim()}
               onClick={handleDownloadDiagram}
               data-testid="studio-download-diagram">
               <Download className="mr-2 h-4 w-4" />
-              Diagram
+              <div className="flex flex-col items-start">
+                <span>Diagram</span>
+                <span className="text-muted-foreground text-xs">
+                  Download the workflow diagram as a .svg image
+                </span>
+              </div>
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="justify-start"
+              className="h-auto justify-start py-3"
               disabled={!studio.draftYaml.trim()}
               onClick={handleDownloadBoth}
               data-testid="studio-download-both">
               <Download className="mr-2 h-4 w-4" />
-              Both
+              <div className="flex flex-col items-start">
+                <span>Both</span>
+                <span className="text-muted-foreground text-xs">
+                  Download the YAML and the diagram together
+                </span>
+              </div>
             </Button>
           </div>
           <DialogFooter>

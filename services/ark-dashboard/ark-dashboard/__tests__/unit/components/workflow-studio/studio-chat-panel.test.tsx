@@ -32,6 +32,15 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
+vi.mock('next/navigation', async () => {
+  const actual =
+    await vi.importActual<typeof import('next/navigation')>('next/navigation');
+  return {
+    ...actual,
+    useSearchParams: () => new URLSearchParams(),
+  };
+});
+
 vi.mock('@/components/ui/markdown-editor', () => ({
   MarkdownEditor: ({
     value,
@@ -100,6 +109,11 @@ interface HarnessOptions {
   resumeConversation?: boolean;
   strict?: boolean;
   loading?: boolean;
+  gated?: boolean;
+  agentMissing?: boolean;
+  agentNotReady?: boolean;
+  mcpMissing?: boolean;
+  mcpNotReady?: boolean;
 }
 
 function renderPanel(options: HarnessOptions = {}) {
@@ -146,11 +160,11 @@ function renderPanel(options: HarnessOptions = {}) {
         <StudioChatPanel
           chat={chat}
           loading={options.loading ?? false}
-          gated={false}
-          agentMissing={false}
-          agentNotReady={false}
-          mcpMissing={false}
-          mcpNotReady={false}
+          gated={options.gated ?? false}
+          agentMissing={options.agentMissing ?? false}
+          agentNotReady={options.agentNotReady ?? false}
+          mcpMissing={options.mcpMissing ?? false}
+          mcpNotReady={options.mcpNotReady ?? false}
         />
       </>
     );
@@ -392,6 +406,50 @@ describe('StudioChatPanel', () => {
         expect(screen.getByTestId('studio-chat-send')).not.toBeDisabled(),
       );
       expect(screen.queryByTestId('studio-composer-lock')).toBeNull();
+    });
+  });
+
+  describe('not ready gate', () => {
+    it('renders warning banners instead of the install overlay when installed but not ready', () => {
+      renderPanel({
+        gated: true,
+        agentNotReady: true,
+        mcpNotReady: true,
+      });
+
+      expect(
+        screen.getByTestId('studio-chat-disabled-banner'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('studio-chat-disabled-banner-agent'),
+      ).toHaveTextContent('Agent has a problem, please fix to use the chat');
+      expect(
+        screen.getByTestId('studio-chat-disabled-banner-mcp'),
+      ).toHaveTextContent('k8s mcp server has a problem, fix to use the chat');
+
+      expect(screen.queryByTestId('studio-chat-gate')).toBeNull();
+      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+    });
+
+    it('renders only the affected banner for a single not-ready dependency', () => {
+      renderPanel({ gated: true, agentNotReady: true });
+
+      expect(
+        screen.getByTestId('studio-chat-disabled-banner-agent'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId('studio-chat-disabled-banner-mcp'),
+      ).toBeNull();
+    });
+
+    it('keeps the install overlay when a dependency is missing', () => {
+      renderPanel({ gated: true, agentMissing: true, mcpNotReady: true });
+
+      expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument();
+      expect(
+        screen.queryByTestId('studio-chat-disabled-banner'),
+      ).toBeNull();
     });
   });
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { Maximize2, RotateCcw, SendHorizontal, Sparkles } from 'lucide-react';
+import { Info, Maximize2, RotateCcw, SendHorizontal, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
@@ -12,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 
 import { PromptEditorDialog } from './prompt-editor-dialog';
+import { StudioChatDisabledBanner } from './studio-chat-disabled-banner';
 import { StudioChatGate } from './studio-chat-gate';
 import { type UseStudioChatReturn } from './use-studio-chat';
 
@@ -86,6 +88,9 @@ export function StudioChatPanel({
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const composerDisabled = chat.composerDisabled || gated;
   const inputDisabled = chat.inputDisabled || gated;
+  const notInstalled = agentMissing || mcpMissing;
+  const installedNotReady =
+    !notInstalled && (agentNotReady || mcpNotReady);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -109,7 +114,7 @@ export function StudioChatPanel({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {gated && (
+      {notInstalled && (
         <StudioChatGate
           agentMissing={agentMissing}
           agentNotReady={agentNotReady}
@@ -118,8 +123,17 @@ export function StudioChatPanel({
         />
       )}
 
+      {installedNotReady && (
+        <StudioChatDisabledBanner
+          agentNotReady={agentNotReady}
+          mcpNotReady={mcpNotReady}
+        />
+      )}
+
       <div
-        className="min-h-0 flex-1 overflow-auto p-4"
+        className={`min-h-0 flex-1 overflow-auto p-4${
+          installedNotReady ? ' pointer-events-none opacity-50' : ''
+        }`}
         data-testid="studio-chat-transcript">
         {chat.messages.length === 0 ? (
           <StudioChatEmptyState
@@ -156,13 +170,19 @@ export function StudioChatPanel({
         )}
       </div>
 
-      <div className="border-border shrink-0 border-t p-4">
+      <div
+        className={`border-border shrink-0 border-t p-4${
+          installedNotReady ? ' opacity-50' : ''
+        }`}>
         {chat.composerLocked && (
-          <div
-            className="text-muted-foreground mb-2 text-xs"
+          <Alert
+            className="mb-3 flex items-center gap-3"
             data-testid="studio-composer-lock">
-            {chat.lockReason}
-          </div>
+            <Info className="h-4 w-4" />
+            <AlertTitle className="col-start-auto flex-1">
+              {chat.lockReason}
+            </AlertTitle>
+          </Alert>
         )}
         <div className="bg-card flex items-end gap-2 border p-2">
           <Textarea
@@ -175,16 +195,6 @@ export function StudioChatPanel({
             placeholder="Message workflow builder agent"
             className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0"
           />
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            onClick={() => setPromptEditorOpen(true)}
-            disabled={inputDisabled}
-            aria-label="Open prompt editor"
-            data-testid="studio-chat-expand">
-            <Maximize2 className="h-4 w-4" />
-          </Button>
           <Button
             type="button"
             size="icon"
@@ -208,15 +218,28 @@ export function StudioChatPanel({
               Show tool calls
             </Label>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={chat.newConversation}
-            data-testid="studio-new-conversation">
-            <RotateCcw className="mr-1 h-4 w-4" />
-            Reset chat
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={chat.newConversation}
+              data-testid="studio-new-conversation">
+              <RotateCcw className="mr-1 h-4 w-4" />
+              Reset chat
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setPromptEditorOpen(true)}
+              disabled={inputDisabled}
+              aria-label="Open prompt editor"
+              data-testid="studio-chat-expand">
+              <Maximize2 className="mr-1 h-4 w-4" />
+              Expand
+            </Button>
+          </div>
         </div>
       </div>
 

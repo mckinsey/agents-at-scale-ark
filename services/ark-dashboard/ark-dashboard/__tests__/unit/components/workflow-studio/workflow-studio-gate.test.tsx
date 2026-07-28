@@ -115,7 +115,7 @@ describe('WorkflowStudio author-agent gate', () => {
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
-  it('links to the agent (not the marketplace) when the agent is present but not ready', async () => {
+  it('shows the disabled banner linking to the agent when the agent is present but not ready', async () => {
     preflightMock.mockResolvedValue({
       agentPresent: true,
       agentReady: false,
@@ -127,14 +127,13 @@ describe('WorkflowStudio author-agent gate', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByTestId('studio-gate-step-agent-not-ready'),
+        screen.getByTestId('studio-chat-disabled-banner-agent'),
       ).toBeInTheDocument(),
     );
-    expect(screen.queryByTestId('studio-gate-step-agent-missing')).toBeNull();
-    expect(screen.getByTestId('studio-gate-go-to-agent')).toHaveAttribute(
-      'href',
-      `/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`,
-    );
+    expect(screen.queryByTestId('studio-chat-gate')).toBeNull();
+    expect(
+      screen.getByTestId('studio-chat-disabled-banner-agent-fix'),
+    ).toHaveAttribute('href', `/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`);
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
@@ -159,7 +158,7 @@ describe('WorkflowStudio author-agent gate', () => {
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
-  it('links to the MCP server (not the marketplace) when it is present but not ready', async () => {
+  it('shows the disabled banner linking to the MCP server when it is present but not ready', async () => {
     preflightMock.mockResolvedValue({
       agentPresent: true,
       agentReady: true,
@@ -171,14 +170,13 @@ describe('WorkflowStudio author-agent gate', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByTestId('studio-gate-step-mcp-not-ready'),
+        screen.getByTestId('studio-chat-disabled-banner-mcp'),
       ).toBeInTheDocument(),
     );
-    expect(screen.queryByTestId('studio-gate-step-mcp-missing')).toBeNull();
-    expect(screen.getByTestId('studio-gate-go-to-mcp')).toHaveAttribute(
-      'href',
-      '/mcp',
-    );
+    expect(screen.queryByTestId('studio-chat-gate')).toBeNull();
+    expect(
+      screen.getByTestId('studio-chat-disabled-banner-mcp-fix'),
+    ).toHaveAttribute('href', '/mcp');
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
