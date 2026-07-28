@@ -59,16 +59,20 @@ For the complete release process including RC and stable release cycles, artifac
      - Version updates in version files across the monorepo (defined in `.github/release-please-config.json`)
      - Consistent version synchronization across all packages, charts, and services
 
-3. **Release Activation** (When Release PR is merged)
-   - The CI/CD pipeline re-runs fully and creates a GitHub release with the new version tag
+3. **RC Release Activation** (When an RC Release PR is merged)
+   - The CI/CD pipeline re-runs fully and creates a GitHub release with the new RC version tag
    - Changelog is automatically attached to the GitHub release
    - Sets `release_created` output to trigger downstream jobs (in `.github/workflows/cicd.yaml`):
       - **release-libs**: Attaches the Python wheel files to the GitHub release
       - **release-charts**: Attaches the Helm chart packages to the GitHub release
       - **release-ark-cli**: Attaches the ARK CLI npm package to the GitHub release
       - **release-fark**: Builds the `fark` CLI with GoReleaser and attaches its binaries to the GitHub release
-      - **run-deploy-workflow**: Triggers the Deploy workflow (`deploy.yml`), which publishes the distribution channels — documentation to GitHub Pages, multi-arch containers, the Helm chart, the npm CLI, and the PyPI SDK
-   - On stable releases only, **verify-ark-installation** smoke-tests the published install and **bootstrap-next-rc-cycle** opens the next release-candidate cycle
+   - RC releases are not published to public registries
+
+4. **Stable Promotion** (Custom flow, not Release Please)
+   - A tested RC is promoted to stable via the "Prepare Release" workflow (`prepare-release.yaml`), which opens a reviewed `release: vX.Y.Z` PR
+   - Merging that PR runs `release-on-merge.yaml`, which tags the stable version, rebuilds artifacts **from the tested RC commit**, and triggers the Deploy workflow (`deploy.yml`) to publish containers, Helm charts, npm CLI, PyPI SDK, and docs to GitHub Pages, then runs installation verification
+   - See [Release Process → Stable Release Cycle](/reference/release-process#stable-release-cycle) for the full flow. The older `promote-to-stable.yaml` + Release Please promotion path is retained as a fallback.
 
 ### Version Synchronization
 
