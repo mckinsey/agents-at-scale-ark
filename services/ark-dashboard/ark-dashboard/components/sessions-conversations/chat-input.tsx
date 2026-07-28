@@ -1,16 +1,22 @@
 'use client';
 
-import { Send, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useAgentQueryParameters } from '@/lib/hooks/use-agent-query-parameters';
-import type { Conversation } from '@/lib/services/conversations';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Autorenew, Build, Info, Send } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
+import type { Conversation } from '@/lib/services/conversations';
+import { toast } from '@/components/ui/sonner';
+import { useAgentQueryParameters } from '@/lib/hooks/use-agent-query-parameters';
+import { cn } from '@/lib/utils';
 
 const FALLBACK_PARTICIPANT_NAME = 'participant';
 
@@ -52,9 +58,17 @@ export function ChatInput({
   const toolCallCount = conversation?.toolCallCount || 0;
 
   const {
-    requiredParameters,
-    values: parameterValues,
-    setValue: setParameterValue,
+    variant: parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    rows: parameterRows,
+    addRow: addParameterRow,
+    setRowName: setParameterRowName,
+    setRowValue: setParameterRowValue,
+    setRowAgent: setParameterRowAgent,
+    removeRow: removeParameterRow,
+    canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(participantName, participantType);
@@ -66,39 +80,13 @@ export function ChatInput({
       } before you can send a message.`
     : '';
 
-  // Don't render chat input for workflow conversations (multiple different participants)
+  // Workflow conversations have multiple different participants (not teams)
   // In workflows, we don't know which agent to target for new messages
   const participantCount = conversation?.participants?.length || 0;
-  const isWorkflowConversation = participantCount > 1;
+  const isWorkflowConversation = participantCount > 1 && participantType !== 'team';
 
-  if (isWorkflowConversation) {
-    // For workflows, only show tool toggle if there are tool calls
-    if (toolCallCount > 0) {
-      return (
-        <div className="border-border border-t border-r border-b">
-          <div className="text-muted-foreground flex items-center gap-3 px-8 py-3 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Wrench className="size-4" />
-                <span className="bg-muted-foreground text-background absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[10px] font-medium">
-                  {toolCallCount}
-                </span>
-              </div>
-              <Switch
-                checked={showToolCalls}
-                onCheckedChange={onShowToolCallsChange}
-                className="scale-75"
-                aria-label="Toggle tool call visibility"
-              />
-              <span className="text-xs">Show tool calls</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    // Don't render anything - workflows are not conversational
-    return null;
-  }
+  // Disable input when no conversation is selected
+  const isDisabled = !conversationId || isPending || isWorkflowConversation;
 
   const handleSend = () => {
     if (!message.trim() || isPending) return;
@@ -148,63 +136,127 @@ export function ChatInput({
   };
 
   return (
-    <div className="border-border border-t border-r border-b">
-      {requiredParameters.length > 0 && (
-        <div className="px-8 pt-4">
-          <ChatParameterFields
-            requiredParameters={requiredParameters}
-            values={parameterValues}
-            onChange={setParameterValue}
-            disabled={isPending}
-          />
+    <div className="bg-surface-bg-primary border-x border-t border-stroke-divider flex flex-col gap-2 px-4 py-3 shrink-0">
+      {hasParameters && (
+        <div>
+          {parameterVariant === 'team' ? (
+            <ChatParameterFields
+              variant="team"
+              teamAgents={teamAgents}
+              rows={parameterRows}
+              onAddRow={addParameterRow}
+              onChangeAgent={setParameterRowAgent}
+              onChangeName={setParameterRowName}
+              onChangeValue={setParameterRowValue}
+              onRemoveRow={removeParameterRow}
+              canAddRow={canAddParameterRow}
+              disabled={isPending}
+            />
+          ) : (
+            <ChatParameterFields
+              variant="agent"
+              availableParameters={availableParameters}
+              rows={parameterRows}
+              onAddRow={addParameterRow}
+              onChangeName={setParameterRowName}
+              onChangeValue={setParameterRowValue}
+              onRemoveRow={removeParameterRow}
+              canAddRow={canAddParameterRow}
+              disabled={isPending}
+            />
+          )}
         </div>
       )}
-      <div className="relative flex items-center gap-2 py-6 pr-8 pl-6">
-        <Textarea
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={`Message ${participantName}`}
-          className="placeholder:text-muted-foreground min-h-[48px] flex-1 resize-none border-0 bg-transparent pt-6 pr-16 pb-3 placeholder:text-sm placeholder:leading-none placeholder:tracking-[-0.01px] focus-visible:ring-0"
-          disabled={isPending}
-          rows={2}
-        />
+
+      <Textarea
+        rows={1}
+        autoResize
+        maxRows={17}
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={`Message ${participantName}`}
+        className="min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm font-normal leading-5 shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent placeholder:text-fg-tertiary"
+        disabled={isDisabled}
+      />
+
+      {hasUnsuppliedParameters && (
+        <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 self-stretch rounded-full px-4 py-2">
+          <IconShell className="text-status-information shrink-0">
+            <Info />
+          </IconShell>
+          <span className="text-sm">
+            This {participantType === 'team' ? 'team' : 'agent'} needs a value
+            definition before you can send a message. Please add it above.
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Clear chat"
+                disabled={!message.trim() || isPending}
+                onClick={() => setMessage('')}>
+                <IconShell size="sm" variant="secondary">
+                  <Autorenew />
+                </IconShell>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Clear chat</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-pressed={showToolCalls}
+                aria-label={
+                  showToolCalls ? 'Disable tool calls' : 'Activate tool calls'
+                }
+                onClick={() => onShowToolCallsChange(!showToolCalls)}
+                className="relative">
+                <IconShell size="sm" variant="secondary">
+                  <Build />
+                </IconShell>
+                <span
+                  className={cn(
+                    'absolute -right-0.5 -top-0.5 size-2 rounded-full',
+                    showToolCalls ? 'bg-status-success' : 'bg-status-error',
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {showToolCalls ? 'Disable tool calls' : 'Activate tool calls'}
+            </TooltipContent>
+          </Tooltip>
+
+          {toolCallCount > 0 && (
+            <span className="text-fg-tertiary ml-1 font-mono text-xs">
+              {toolCallCount.toLocaleString()} tool{' '}
+              {toolCallCount === 1 ? 'call' : 'calls'}
+            </span>
+          )}
+        </div>
 
         <Button
           onClick={handleSend}
-          disabled={!message.trim() || isPending || hasUnsuppliedParameters}
-          variant="secondary"
-          size="icon"
-          className="bg-field-enabled text-secondary-foreground hover:bg-field-hover absolute right-10 h-9 w-9">
-          <Send className="size-4" />
+          disabled={!message.trim() || isDisabled || hasUnsuppliedParameters}
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Send message"
+          className="bg-fill-active text-fg-primary-inverse hover:bg-fill-active/90 disabled:bg-surface-bg-tertiary disabled:text-fg-tertiary">
+          <IconShell size="sm">
+            <Send />
+          </IconShell>
         </Button>
       </div>
-
-      {hasUnsuppliedParameters && (
-        <div className="text-muted-foreground px-8 pb-3 text-xs">
-          {parameterHint}
-        </div>
-      )}
-
-      {toolCallCount > 0 && (
-        <div className="text-muted-foreground flex items-center gap-3 px-8 py-3 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Wrench className="size-4" />
-              <span className="bg-muted-foreground text-background absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[10px] font-medium">
-                {toolCallCount}
-              </span>
-            </div>
-            <Switch
-              checked={showToolCalls}
-              onCheckedChange={onShowToolCallsChange}
-              className="scale-75"
-              aria-label="Toggle tool call visibility"
-            />
-            <span className="text-xs">Show tool calls</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

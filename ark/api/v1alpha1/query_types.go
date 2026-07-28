@@ -19,6 +19,9 @@ const (
 	// QueryMemoryUnavailable indicates that the query carried a conversationId
 	// but no Memory backend was reachable, so conversation history was dropped.
 	QueryMemoryUnavailable QueryConditionType = "MemoryUnavailable"
+	// QueryMemoryDegraded indicates that a Memory backend was reachable but
+	// reading the conversation history failed, so the query ran without it.
+	QueryMemoryDegraded QueryConditionType = "MemoryDegraded"
 )
 
 const (

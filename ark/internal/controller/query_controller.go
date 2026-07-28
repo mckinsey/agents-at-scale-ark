@@ -710,6 +710,7 @@ type engineResponseMeta struct {
 	A2AContextID      string
 	A2ATaskID         string
 	MemoryUnavailable bool
+	MemoryDegraded    bool
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -750,6 +751,10 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 
 	if memoryUnavailable, ok := arkMap["memoryUnavailable"].(bool); ok {
 		responseMeta.MemoryUnavailable = memoryUnavailable
+	}
+
+	if memoryDegraded, ok := arkMap["memoryDegraded"].(bool); ok {
+		responseMeta.MemoryDegraded = memoryDegraded
 	}
 
 	if messagesRaw, ok := arkMap["messages"]; ok {
@@ -929,6 +934,25 @@ func (r *QueryReconciler) setConditionMemoryUnavailable(query *arkv1alpha1.Query
 	}
 	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
 		Type:               string(arkv1alpha1.QueryMemoryUnavailable),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: query.Generation,
+	})
+}
+
+func (r *QueryReconciler) setConditionMemoryDegraded(query *arkv1alpha1.Query, degraded bool) {
+	status := metav1.ConditionFalse
+	reason := "MemoryHealthy"
+	message := "Conversation history was read from memory for this query"
+	if degraded {
+		status = metav1.ConditionTrue
+		reason = "GetMessagesFailed"
+		message = "failed to read conversation history from the memory backend; the query ran without prior context. See the MemoryGetMessagesError event for the underlying error"
+	}
+	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
+		Type:               string(arkv1alpha1.QueryMemoryDegraded),
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -1460,6 +1484,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 	}
 
 	r.setConditionMemoryUnavailable(obj, engineMeta.MemoryUnavailable)
+	r.setConditionMemoryDegraded(obj, engineMeta.MemoryDegraded)
 
 	queryStatus := r.determineQueryStatus(response)
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
