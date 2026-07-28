@@ -379,7 +379,7 @@ describe('StudioChatPanel', () => {
   });
 
   describe('lock', () => {
-    it('locks only the send button with unsaved hand edits and unlocks after save', async () => {
+    it('replaces the composer with a lock banner for unsaved hand edits and restores it after save', async () => {
       renderPanel({
         draft: validYaml,
         lastAgent: validYaml,
@@ -390,22 +390,20 @@ describe('StudioChatPanel', () => {
       expect(screen.getByTestId('studio-composer-lock')).toHaveTextContent(
         'Save your YAML changes to continue chatting',
       );
-      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled();
-      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
-
-      fireEvent.change(screen.getByTestId('studio-chat-input'), {
-        target: { value: 'a message typed while locked' },
-      });
-      expect(screen.getByTestId('studio-chat-input')).toHaveValue(
-        'a message typed while locked',
-      );
+      expect(screen.queryByTestId('studio-chat-input')).toBeNull();
+      expect(screen.queryByTestId('studio-chat-send')).toBeNull();
 
       fireEvent.click(screen.getByTestId('harness-save'));
 
       await waitFor(() =>
-        expect(screen.getByTestId('studio-chat-send')).not.toBeDisabled(),
+        expect(screen.getByTestId('studio-chat-input')).toBeInTheDocument(),
       );
       expect(screen.queryByTestId('studio-composer-lock')).toBeNull();
+
+      fireEvent.change(screen.getByTestId('studio-chat-input'), {
+        target: { value: 'a message typed after unlocking' },
+      });
+      expect(screen.getByTestId('studio-chat-send')).not.toBeDisabled();
     });
   });
 
@@ -447,9 +445,7 @@ describe('StudioChatPanel', () => {
       renderPanel({ gated: true, agentMissing: true, mcpNotReady: true });
 
       expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument();
-      expect(
-        screen.queryByTestId('studio-chat-disabled-banner'),
-      ).toBeNull();
+      expect(screen.queryByTestId('studio-chat-disabled-banner')).toBeNull();
     });
   });
 

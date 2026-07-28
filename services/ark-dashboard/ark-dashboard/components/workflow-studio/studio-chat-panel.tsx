@@ -1,10 +1,15 @@
 'use client';
 
-import { Info, Maximize2, RotateCcw, SendHorizontal, Sparkles } from 'lucide-react';
+import {
+  Lock,
+  Maximize2,
+  RotateCcw,
+  SendHorizontal,
+  Sparkles,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
-import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
@@ -89,8 +94,7 @@ export function StudioChatPanel({
   const composerDisabled = chat.composerDisabled || gated;
   const inputDisabled = chat.inputDisabled || gated;
   const notInstalled = agentMissing || mcpMissing;
-  const installedNotReady =
-    !notInstalled && (agentNotReady || mcpNotReady);
+  const installedNotReady = !notInstalled && (agentNotReady || mcpNotReady);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -131,8 +135,8 @@ export function StudioChatPanel({
       )}
 
       <div
-        className={`min-h-0 flex-1 overflow-auto p-4${
-          installedNotReady ? ' pointer-events-none opacity-50' : ''
+        className={`min-h-0 flex-1 overflow-auto p-4 ${
+          installedNotReady ? 'pointer-events-none opacity-50' : ''
         }`}
         data-testid="studio-chat-transcript">
         {chat.messages.length === 0 ? (
@@ -171,39 +175,40 @@ export function StudioChatPanel({
       </div>
 
       <div
-        className={`border-border shrink-0 border-t p-4${
-          installedNotReady ? ' opacity-50' : ''
+        className={`border-border shrink-0 border-t p-4 ${
+          installedNotReady ? 'opacity-50' : ''
         }`}>
-        {chat.composerLocked && (
-          <Alert
-            className="mb-3 flex items-center gap-3"
+        {chat.composerLocked ? (
+          <div
+            className="bg-muted/40 border p-2"
             data-testid="studio-composer-lock">
-            <Info className="h-4 w-4" />
-            <AlertTitle className="col-start-auto flex-1">
+            <div className="text-muted-foreground flex min-h-[48px] items-center justify-center gap-2 text-sm">
+              <Lock className="h-4 w-4" />
               {chat.lockReason}
-            </AlertTitle>
-          </Alert>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-card flex items-end gap-2 border p-2">
+            <Textarea
+              data-testid="studio-chat-input"
+              value={chat.input}
+              disabled={inputDisabled}
+              spellCheck={false}
+              onChange={event => chat.setInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message workflow builder agent"
+              className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0"
+            />
+            <Button
+              type="button"
+              size="icon"
+              onClick={() => void chat.send()}
+              disabled={composerDisabled || chat.input.trim() === ''}
+              data-testid="studio-chat-send">
+              <SendHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
         )}
-        <div className="bg-card flex items-end gap-2 border p-2">
-          <Textarea
-            data-testid="studio-chat-input"
-            value={chat.input}
-            disabled={inputDisabled}
-            spellCheck={false}
-            onChange={event => chat.setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Message workflow builder agent"
-            className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0"
-          />
-          <Button
-            type="button"
-            size="icon"
-            onClick={() => void chat.send()}
-            disabled={composerDisabled || chat.input.trim() === ''}
-            data-testid="studio-chat-send">
-            <SendHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Switch
