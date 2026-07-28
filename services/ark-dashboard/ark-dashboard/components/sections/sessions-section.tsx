@@ -1036,6 +1036,9 @@ export function SessionsSection() {
     }
 
     const queryString = params.toString();
+    if (queryString === searchParams.toString()) {
+      return;
+    }
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
   }, [
