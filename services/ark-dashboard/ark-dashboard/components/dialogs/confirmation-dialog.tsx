@@ -1,7 +1,6 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
-
+import { Warning } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { IconShell } from '@/components/ui/icon-shell';
 
 interface ConfirmationDialogProps {
   open: boolean;
@@ -51,8 +51,10 @@ export function ConfirmationDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             {variant === 'destructive' && (
-              <div className="bg-destructive/10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full">
-                <AlertTriangle className="text-destructive h-5 w-5" />
+              <div className="bg-status-error/10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full">
+                <IconShell size="default" className="text-status-error">
+                  <Warning />
+                </IconShell>
               </div>
             )}
             <div className="min-w-0 flex-1">

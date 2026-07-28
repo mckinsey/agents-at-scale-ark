@@ -25,9 +25,9 @@ export default function LogoutPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button asChild className="w-full">
-            <NamespacedLink href="/">Return to Sign In</NamespacedLink>
-          </Button>
+          <NamespacedLink href="/">
+            <Button className="w-full">Return to Sign In</Button>
+          </NamespacedLink>
         </CardContent>
       </Card>
     </div>

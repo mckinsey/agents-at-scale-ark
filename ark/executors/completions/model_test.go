@@ -91,7 +91,7 @@ func setupModelTestClient(objects []client.Object) client.Client {
 }
 
 func TestLoadModelCRD_ConcurrentAccess(t *testing.T) {
-	name, ns := "concurrent-model", "default"
+	name, ns := "concurrent-model", defaultNamespace
 	cacheKey := ns + "/" + name
 	modelCRDCache.Delete(cacheKey)
 	t.Cleanup(func() { modelCRDCache.Delete(cacheKey) })
@@ -143,7 +143,7 @@ func TestResolveModelHeaders_FromSecret(t *testing.T) {
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: defaultNamespace},
 		Data:       map[string][]byte{"token": []byte("secret-token")},
 	}
 	fakeClient := setupModelTestClient([]client.Object{secret})
@@ -167,7 +167,7 @@ func TestResolveModelHeaders_FromQueryParameter(t *testing.T) {
 		},
 	}
 	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-query", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-query", Namespace: defaultNamespace},
 		Spec:       arkv1alpha1.QuerySpec{Parameters: []arkv1alpha1.Parameter{{Name: "userId", Value: "user-123"}}},
 	}
 	fakeClient := setupModelTestClient(nil)
@@ -180,8 +180,8 @@ func TestResolveModelHeaders_FromQueryParameter(t *testing.T) {
 }
 
 func TestLoadModelCRD_CacheHit(t *testing.T) {
-	cacheKey := "default/cached-model"
-	cached := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: "cached-model", Namespace: "default"}}
+	cacheKey := defaultNamespace + "/cached-model"
+	cached := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: "cached-model", Namespace: defaultNamespace}}
 	modelCRDCache.Store(cacheKey, &modelCRDCacheEntry{
 		crd:       cached,
 		expiresAt: time.Now().Add(modelCRDCacheTTL),
@@ -190,13 +190,13 @@ func TestLoadModelCRD_CacheHit(t *testing.T) {
 
 	fakeClient := setupModelTestClient(nil)
 
-	got, err := loadModelCRD(context.Background(), fakeClient, "cached-model", "default")
+	got, err := loadModelCRD(context.Background(), fakeClient, "cached-model", defaultNamespace)
 	require.NoError(t, err)
 	require.Same(t, cached, got)
 }
 
 func TestLoadModelCRD_CacheMiss(t *testing.T) {
-	name, ns := "miss-model", "default"
+	name, ns := "miss-model", defaultNamespace
 	cacheKey := ns + "/" + name
 	modelCRDCache.Delete(cacheKey)
 	t.Cleanup(func() { modelCRDCache.Delete(cacheKey) })
@@ -214,7 +214,7 @@ func TestLoadModelCRD_CacheMiss(t *testing.T) {
 }
 
 func TestLoadModelCRD_ExpiredEntry(t *testing.T) {
-	name, ns := "expired-model", "default"
+	name, ns := "expired-model", defaultNamespace
 	cacheKey := ns + "/" + name
 
 	stale := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
