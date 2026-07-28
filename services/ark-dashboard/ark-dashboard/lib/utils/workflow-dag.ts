@@ -135,7 +135,8 @@ function parseDependencies(
   }
   if (!depends) return [];
   return depends
-    .split(/\s*&&\s*|\s*\|\|\s*/)
+    .split('&&')
+    .flatMap(part => part.split('||'))
     .map(dep => dep.trim())
     .filter(dep => dep.length > 0);
 }

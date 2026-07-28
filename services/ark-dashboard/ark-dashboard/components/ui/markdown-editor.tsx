@@ -33,11 +33,141 @@ const CODE_STYLE: CSSProperties = {
 
 const FENCE = /^\s*(```|~~~)/;
 const HEADING = /^\s*#{1,6}(\s.*)?$/;
-const BLOCKQUOTE = /^(\s*>+\s?)(.*)$/;
 const BULLET = /^(\s*)([-*+]\s|\d+\.\s)(.*)$/;
-const INLINE =
-  /(`[^`\n]*`)|(\[[^\]\n]*\]\([^)\n]*\))|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
 const LINK = /^(\[)([^\]]*)(\]\()([^)]*)(\))$/;
+
+type InlineTokenType = 'code' | 'link' | 'emphasis';
+
+interface InlineToken {
+  index: number;
+  token: string;
+  type: InlineTokenType;
+}
+
+function isWhitespace(char: string): boolean {
+  return char.trim() === '';
+}
+
+function parseBlockquote(
+  line: string,
+): { marker: string; rest: string } | null {
+  let index = 0;
+  while (index < line.length && isWhitespace(line[index])) {
+    index += 1;
+  }
+  if (line[index] !== '>') {
+    return null;
+  }
+  while (line[index] === '>') {
+    index += 1;
+  }
+  if (index < line.length && isWhitespace(line[index])) {
+    index += 1;
+  }
+  return { marker: line.slice(0, index), rest: line.slice(index) };
+}
+
+function scanCode(text: string, start: number): number {
+  if (text[start] !== '`') {
+    return -1;
+  }
+  let index = start + 1;
+  while (index < text.length && text[index] !== '`' && text[index] !== '\n') {
+    index += 1;
+  }
+  return text[index] === '`' ? index + 1 : -1;
+}
+
+function scanLink(text: string, start: number): number {
+  if (text[start] !== '[') {
+    return -1;
+  }
+  let index = start + 1;
+  while (index < text.length && text[index] !== ']' && text[index] !== '\n') {
+    index += 1;
+  }
+  if (text[index] !== ']') {
+    return -1;
+  }
+  index += 1;
+  if (text[index] !== '(') {
+    return -1;
+  }
+  index += 1;
+  while (index < text.length && text[index] !== ')' && text[index] !== '\n') {
+    index += 1;
+  }
+  return text[index] === ')' ? index + 1 : -1;
+}
+
+function scanBold(text: string, start: number): number {
+  if (text[start] !== '*' || text[start + 1] !== '*') {
+    return -1;
+  }
+  let index = start + 2;
+  let inner = 0;
+  while (index < text.length && text[index] !== '*' && text[index] !== '\n') {
+    index += 1;
+    inner += 1;
+  }
+  if (inner > 0 && text[index] === '*' && text[index + 1] === '*') {
+    return index + 2;
+  }
+  return -1;
+}
+
+function scanWrapped(text: string, start: number, delimiter: string): number {
+  if (text[start] !== delimiter) {
+    return -1;
+  }
+  let index = start + 1;
+  let inner = 0;
+  while (
+    index < text.length &&
+    text[index] !== delimiter &&
+    text[index] !== '\n'
+  ) {
+    index += 1;
+    inner += 1;
+  }
+  if (inner > 0 && text[index] === delimiter) {
+    return index + 1;
+  }
+  return -1;
+}
+
+function findInlineTokens(text: string): InlineToken[] {
+  const tokens: InlineToken[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    let end = -1;
+    let type: InlineTokenType | null = null;
+    if (char === '`') {
+      end = scanCode(text, index);
+      type = 'code';
+    } else if (char === '[') {
+      end = scanLink(text, index);
+      type = 'link';
+    } else if (char === '*') {
+      end = scanBold(text, index);
+      if (end === -1) {
+        end = scanWrapped(text, index, '*');
+      }
+      type = 'emphasis';
+    } else if (char === '_') {
+      end = scanWrapped(text, index, '_');
+      type = 'emphasis';
+    }
+    if (end !== -1 && type !== null) {
+      tokens.push({ index, token: text.slice(index, end), type });
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+  return tokens;
+}
 
 function renderEmphasis(token: string, key: string): ReactNode {
   const marker = token.startsWith('**') ? '**' : token[0];
@@ -72,27 +202,23 @@ function highlightInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let last = 0;
   let count = 0;
-  INLINE.lastIndex = 0;
-  let match = INLINE.exec(text);
-  while (match !== null) {
-    if (match.index > last) {
-      nodes.push(text.slice(last, match.index));
+  for (const { index, token, type } of findInlineTokens(text)) {
+    if (index > last) {
+      nodes.push(text.slice(last, index));
     }
-    const token = match[0];
     const key = `${keyPrefix}-${count++}`;
-    if (match[1]) {
+    if (type === 'code') {
       nodes.push(
         <span key={key} className="md-tok-code">
           {token}
         </span>,
       );
-    } else if (match[2]) {
+    } else if (type === 'link') {
       nodes.push(renderLink(token, key));
     } else {
       nodes.push(renderEmphasis(token, key));
     }
-    last = INLINE.lastIndex;
-    match = INLINE.exec(text);
+    last = index + token.length;
   }
   if (last < text.length) {
     nodes.push(text.slice(last));
@@ -109,9 +235,9 @@ function highlightTextLine(line: string, index: number): ReactNode {
     );
   }
 
-  const quote = BLOCKQUOTE.exec(line);
+  const quote = parseBlockquote(line);
   if (quote) {
-    const [, marker, rest] = quote;
+    const { marker, rest } = quote;
     return (
       <span key={index}>
         <span className="md-tok-punc">{marker}</span>
