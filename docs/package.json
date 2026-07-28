@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",

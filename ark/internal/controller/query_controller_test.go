@@ -21,6 +21,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -292,6 +294,8 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r := &QueryReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 0,
 			}
 			Expect(r.sem).To(BeNil(), "nil semaphore means enforcement is disabled")
@@ -314,6 +318,115 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "spawn path arms the safety-net requeue, not the capacity delay")
 			_, exists := r.operations.Load(req.NamespacedName)
 			Expect(exists).To(BeTrue(), "should register the operation, proving execution branch was taken despite no semaphore")
+		})
+	})
+
+	Context("queued phase visibility", func() {
+		newTestQuery := func(name string) *arkv1alpha1.Query {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+					TTL:    &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			Expect(q.Spec.SetInputString("phase visibility test")).To(Succeed())
+			return q
+		}
+
+		It("transitions phase queued -> running once the semaphore drains", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+
+			query := newTestQuery("phase-queued-then-running")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleRunningPhase(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			queued := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, queued)).To(Succeed())
+			Expect(queued.Status.Phase).To(Equal(statusQueued))
+
+			r.sem.Release(1)
+
+			_, err = r.handleRunningPhase(ctx, req, *queued)
+			Expect(err).NotTo(HaveOccurred())
+
+			running := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, running)).To(Succeed())
+			Expect(running.Status.Phase).To(Equal(statusRunning))
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "acquire path should have spawned the executor")
+			r.cleanupExistingOperation(req.NamespacedName)
+		})
+
+		It("never writes queued when MaxConcurrentQueries is 0", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
+				MaxConcurrentQueries: 0,
+			}
+			Expect(r.sem).To(BeNil())
+
+			query := newTestQuery("phase-no-semaphore")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleRunningPhase(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			refetched := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, refetched)).To(Succeed())
+			Expect(refetched.Status.Phase).To(Equal(statusRunning))
+			r.cleanupExistingOperation(req.NamespacedName)
+		})
+
+		It("does not rewrite status when phase is already queued", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+
+			query := newTestQuery("phase-queued-idempotent")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleRunningPhase(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			afterFirst := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, afterFirst)).To(Succeed())
+			Expect(afterFirst.Status.Phase).To(Equal(statusQueued))
+			firstRV := afterFirst.ResourceVersion
+
+			_, err = r.handleRunningPhase(ctx, req, *afterFirst)
+			Expect(err).NotTo(HaveOccurred())
+
+			afterSecond := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, afterSecond)).To(Succeed())
+			Expect(afterSecond.Status.Phase).To(Equal(statusQueued))
+			Expect(afterSecond.ResourceVersion).To(Equal(firstRV), "no status update should have been issued the second time")
 		})
 	})
 
@@ -428,6 +541,10 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 		It("recovers from a panic in the goroutine and still cleans up", func() {
 			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 1,
 				sem:                  semaphore.NewWeighted(1),
 			}

@@ -1,20 +1,15 @@
-import { Database, Key, Lock, Search, Server, Store, Zap } from 'lucide-react';
+import { Cog, Search, Zap } from 'lucide-react';
 
 export type SettingPage =
-  | 'a2a-servers'
-  | 'memory'
-  | 'manage-marketplace'
-  | 'service-api-keys'
-  | 'secrets'
+  | 'queries'
   | 'experimental-features'
-  | 'queries';
-
-export const MANAGE_MARKETPLACE_KEY = 'manage-marketplace' as const;
+  | 'execution-engines';
 
 export type SettingMenuItem = {
   key: SettingPage;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  experimental?: boolean;
 };
 
 export type SettingsSection = {
@@ -25,24 +20,9 @@ export type SettingsSection = {
 
 export const settingsSections: SettingsSection[] = [
   {
-    sectionKey: 'general',
-    sectionLabel: 'General',
+    sectionKey: 'settings',
+    sectionLabel: '',
     items: [
-      {
-        key: 'a2a-servers',
-        label: 'A2A Servers',
-        icon: Server,
-      },
-      {
-        key: 'memory',
-        label: 'Memory',
-        icon: Database,
-      },
-      {
-        key: 'manage-marketplace',
-        label: 'Manage marketplace',
-        icon: Store,
-      },
       {
         key: 'queries',
         label: 'Queries',
@@ -50,24 +30,14 @@ export const settingsSections: SettingsSection[] = [
       },
       {
         key: 'experimental-features',
-        label: 'Experimental Features',
+        label: 'Experimental features',
         icon: Zap,
       },
-    ],
-  },
-  {
-    sectionKey: 'privacy',
-    sectionLabel: 'Privacy',
-    items: [
       {
-        key: 'service-api-keys',
-        label: 'Service API Keys',
-        icon: Key,
-      },
-      {
-        key: 'secrets',
-        label: 'Secrets',
-        icon: Lock,
+        key: 'execution-engines',
+        label: 'Execution Engines',
+        icon: Cog,
+        experimental: true,
       },
     ],
   },

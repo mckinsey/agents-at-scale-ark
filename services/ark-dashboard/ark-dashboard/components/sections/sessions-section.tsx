@@ -39,6 +39,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -61,6 +62,11 @@ type TeamStepType =
   | 'delegation'
   | 'tool-call'
   | 'response';
+
+const sortOrderItems = [
+  { label: 'Newest First', value: 'newest' },
+  { label: 'Oldest First', value: 'oldest' },
+];
 
 interface WorkflowStepDetail {
   image?: string;
@@ -202,16 +208,16 @@ function getSessionTypeIcon(type: SessionType) {
 
 function getStatusBadgeVariant(
   status: StepStatus,
-): 'default' | 'secondary' | 'destructive' | 'outline' {
+): 'success' | 'error' | 'alternative' | 'high-emphasis' {
   switch (status) {
     case 'succeeded':
-      return 'default';
+      return 'success';
     case 'failed':
-      return 'destructive';
+      return 'error';
     case 'running':
-      return 'secondary';
+      return 'alternative';
     default:
-      return 'outline';
+      return 'high-emphasis';
   }
 }
 
@@ -840,7 +846,7 @@ function SessionDetailView({
                   {session.status}
                 </Badge>
                 <Badge
-                  variant="outline"
+                  variant="alternative"
                   className="text-xs font-medium capitalize">
                   {session.type}
                 </Badge>
@@ -864,18 +870,17 @@ function SessionDetailView({
             {session.type === 'workflow' &&
               session.namespace &&
               session.uid && (
-                <Button variant="outline" size="sm" asChild>
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="View in Argo Workflows"
-                    className="gap-2">
+                <a
+                  href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View in Argo Workflows">
+                  <Button variant="outline" size="sm" className="gap-2">
                     <ExternalLink className="h-4 w-4" />
                     <span className="hidden sm:inline">View in Argo</span>
                     <span className="sm:hidden">Argo</span>
-                  </a>
-                </Button>
+                  </Button>
+                </a>
               )}
           </div>
         </div>
@@ -930,7 +935,7 @@ function SessionListItem({
             {session.status}
           </Badge>
           <Badge
-            variant="outline"
+            variant="alternative"
             className="h-5 text-xs font-medium capitalize">
             {session.type}
           </Badge>
@@ -1232,7 +1237,7 @@ export function SessionsSection() {
             <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0">
               <Select
                 value={statusFilter || 'all'}
-                onValueChange={setStatusFilter}>
+                onValueChange={(value) => setStatusFilter(value as string)}>
                 <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -1264,14 +1269,18 @@ export function SessionsSection() {
                 </SelectContent>
               </Select>
               <Select
+                items={sortOrderItems}
                 value={sortOrder}
                 onValueChange={value => setSortOrder(value as SortOrder)}>
                 <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="newest">Newest First</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  {sortOrderItems.map(item => (
+                    <SelectItem key={item.value} value={item.value}>
+                      <SelectItemText>{item.label}</SelectItemText>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button

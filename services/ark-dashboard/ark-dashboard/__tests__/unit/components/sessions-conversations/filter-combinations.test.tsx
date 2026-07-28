@@ -6,7 +6,7 @@ import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 
 vi.mock('@/lib/services/broker-sessions-hooks');
-vi.mock('sonner');
+vi.mock('@/components/ui/sonner');
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({
   SessionTableRow: ({ session }: any) => (
     <div data-testid={`session-row-${session.sessionId}`}>{session.name}</div>
@@ -110,7 +110,7 @@ describe('Filter Combination Scenarios', () => {
   });
 
   describe('Date Range Filter', () => {
-    it('should send undefined when date range is "all"', () => {
+    it('should send undefined when date range is empty (Choose option)', () => {
       render(
         <SessionsTable
           onSelectSession={mockOnSelectSession}

@@ -19,6 +19,8 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
 import {
   type ApiQueryParameter,
+  type ParameterRow,
+  type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
@@ -128,9 +130,17 @@ interface UseChatSessionReturn {
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
   pollAfterApproval: () => Promise<void>;
-  requiredParameters: string[];
-  parameterValues: Record<string, string>;
-  setParameterValue: (name: string, value: string) => void;
+  parameterVariant: 'agent' | 'team';
+  hasParameters: boolean;
+  availableParameters: string[];
+  teamAgents: TeamAgentParameters[];
+  parameterRows: ParameterRow[];
+  addParameterRow: () => void;
+  setParameterRowName: (id: string, name: string) => void;
+  setParameterRowValue: (id: string, value: string) => void;
+  setParameterRowAgent: (id: string, agent: string) => void;
+  removeParameterRow: (id: string) => void;
+  canAddParameterRow: boolean;
   missingParameters: string[];
 }
 
@@ -280,9 +290,17 @@ export function useChatSession({
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
-    requiredParameters,
-    values: parameterValues,
-    setValue: setParameterValue,
+    variant: parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    rows: parameterRows,
+    addRow: addParameterRow,
+    setRowName: setParameterRowName,
+    setRowValue: setParameterRowValue,
+    setRowAgent: setParameterRowAgent,
+    removeRow: removeParameterRow,
+    canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(name, type);
@@ -944,12 +962,6 @@ export function useChatSession({
       setError(null);
 
       if (missingParameters.length > 0) {
-        const plural = missingParameters.length > 1;
-        setError(
-          `This agent needs the ${missingParameters.join(', ')} parameter${
-            plural ? 's' : ''
-          } — supply ${plural ? 'them' : 'it'} above, or use the Queries form to create the query.`,
-        );
         return;
       }
 
@@ -1197,9 +1209,17 @@ export function useChatSession({
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,
     pollAfterApproval,
-    requiredParameters,
-    parameterValues,
-    setParameterValue,
+    parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    parameterRows,
+    addParameterRow,
+    setParameterRowName,
+    setParameterRowValue,
+    setParameterRowAgent,
+    removeParameterRow,
+    canAddParameterRow,
     missingParameters,
   };
 }

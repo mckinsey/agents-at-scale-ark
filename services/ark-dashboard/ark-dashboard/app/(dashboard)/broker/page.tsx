@@ -1,12 +1,13 @@
 'use client';
 
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { PageHeader } from '@/components/common/page-header';
+import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Select,
   SelectContent,
@@ -19,271 +20,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiUrl } from '@/lib/api/config';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useSSEStream } from '@/lib/hooks/use-sse-stream';
 import { type Memory, memoriesService } from '@/lib/services/memories';
+import { type StreamEntry } from '@/lib/utils/sse-stream';
 
-interface StreamEntry {
-  id: string;
-  timestamp: string;
-  data: unknown;
-}
+const PURGE_PAGE_SIZE = 1000;
 
-interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  hasMore: boolean;
-  nextCursor?: number;
-}
-
-function extractItemTimestamp(item: unknown): string {
-  if (!item) {
-    return new Date().toISOString();
-  }
-  const typedItem = item as Record<string, unknown>;
-  if (typedItem.timestamp) {
-    return typedItem.timestamp as string;
-  }
-  let unixTimestamp = '';
-  if (typedItem?.startTimeUnixNano) {
-    unixTimestamp = typedItem.startTimeUnixNano as string;
-  }
-  const spans = typedItem?.spans as Array<Record<string, unknown>>;
-  if (!unixTimestamp && spans && spans.length > 0) {
-    unixTimestamp = spans[0].startTimeUnixNano as string;
-  }
-  if (unixTimestamp) {
-    return new Date(parseInt(unixTimestamp.substring(0, 13))).toISOString();
-  }
-
-  return new Date().toISOString();
-}
-
-export function useSSEStream(endpoint: string | null, memory: string) {
-  const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
-  const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const nextCursorRef = useRef<number | undefined>(undefined);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const initialFetchDoneRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  const connect = useCallback(
-    (cursor?: number) => {
-      if (!endpoint) return;
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-
-      setError(null);
-      let url = apiUrl(`/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`);
-      if (cursor !== undefined && cursor !== null) {
-        url += `&cursor=${cursor}`;
-      }
-      const eventSource = new EventSource(url);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        if (!mountedRef.current) return;
-        setIsConnected(true);
-        setError(null);
-      };
-
-      eventSource.onmessage = event => {
-        if (!mountedRef.current) return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.error) {
-            setError(data.error.message || 'Stream error');
-            return;
-          }
-          const entry: StreamEntry = {
-            id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-            timestamp: extractItemTimestamp(data),
-            data,
-          };
-          setStreamedEntries(prev => [entry, ...prev.slice(0, 499)]);
-        } catch {
-          console.error('Failed to parse SSE data:', event.data);
-        }
-      };
-
-      eventSource.onerror = () => {
-        if (!mountedRef.current) return;
-        setIsConnected(false);
-        eventSource.close();
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) {
-            connect(nextCursorRef.current);
-          }
-        }, 3000);
-      };
-    },
-    [endpoint, memory],
-  );
-
-  const fetchPage = useCallback(
-    async (cursor?: number) => {
-      if (!endpoint) return null;
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = new AbortController();
-
-      setIsLoading(true);
-      try {
-        let url = apiUrl(
-          `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=1000`,
-        );
-        if (cursor !== undefined && cursor !== null) {
-          url += `&cursor=${cursor}`;
-        }
-        const response = await fetch(url, {
-          signal: abortControllerRef.current.signal,
-        });
-        if (!mountedRef.current) return null;
-        const data: PaginatedResponse<unknown> = await response.json();
-        if ((data as unknown as { error?: { message?: string } }).error) {
-          if (mountedRef.current) {
-            setError(
-              (data as unknown as { error: { message?: string } }).error
-                .message || 'Fetch error',
-            );
-          }
-          return null;
-        }
-        const newEntries: StreamEntry[] = data.items.map((item, i) => ({
-          id: `fetched-${cursor ?? 0}-${i}-${Math.random().toString(36).substring(2, 11)}`,
-          timestamp: extractItemTimestamp(item),
-          data: item,
-        }));
-        if (mountedRef.current) {
-          setFetchedEntries(prev => [...prev, ...newEntries]);
-          setHasMore(data.hasMore);
-        }
-        nextCursorRef.current = data.nextCursor;
-        return data;
-      } catch (e) {
-        if ((e as Error).name !== 'AbortError' && mountedRef.current) {
-          setError('Failed to fetch data');
-        }
-        return null;
-      } finally {
-        if (mountedRef.current) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [endpoint, memory],
-  );
-
-  const loadMore = useCallback(() => {
-    if (
-      !isLoading &&
-      hasMore &&
-      nextCursorRef.current !== undefined &&
-      nextCursorRef.current !== null
-    ) {
-      fetchPage(nextCursorRef.current);
-    }
-  }, [fetchPage, isLoading, hasMore]);
-
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    setIsConnected(false);
-  }, []);
-
-  const purge = useCallback(async () => {
-    try {
-      const res = await fetch(
-        apiUrl(`/api${endpoint}?memory=${encodeURIComponent(memory)}`),
-        {
-          method: 'DELETE',
-        },
-      );
-      if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText}`);
-      }
-      setStreamedEntries([]);
-      setFetchedEntries([]);
-      nextCursorRef.current = undefined;
-      setHasMore(false);
-      trackEvent({
-        name: 'broker_data_purged',
-        properties: {
-          streamType: endpoint?.split('/').pop(),
-          memoryName: memory,
-        },
-      });
-    } catch (e) {
-      toast.error('Failed to purge data', {
-        description: (e as Error).message,
-      });
-    }
-  }, [endpoint, memory]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    if (!endpoint) {
-      disconnect();
-      setStreamedEntries([]);
-      setFetchedEntries([]);
-      nextCursorRef.current = undefined;
-      setHasMore(true);
-      setError(null);
-      initialFetchDoneRef.current = false;
-      return;
-    }
-
-    if (initialFetchDoneRef.current) return;
-    initialFetchDoneRef.current = true;
-
-    async function init() {
-      let cursor: number | undefined;
-
-      while (mountedRef.current) {
-        const result = await fetchPage(cursor);
-        if (!result || !mountedRef.current) {
-          break;
-        }
-
-        if (result.hasMore && result.nextCursor !== undefined) {
-          cursor = result.nextCursor;
-        } else {
-          break;
-        }
-      }
-
-      if (mountedRef.current) {
-        connect(cursor);
-      }
-    }
-    init();
-
-    return () => {
-      mountedRef.current = false;
-      disconnect();
-      abortControllerRef.current?.abort();
-      initialFetchDoneRef.current = false;
-    };
-  }, [endpoint, connect, disconnect, fetchPage]);
-
-  const entries = [...streamedEntries, ...fetchedEntries];
-
-  return { entries, isConnected, isLoading, hasMore, error, purge, loadMore };
+function trackPurge(streamType: string, memory: string) {
+  trackEvent({
+    name: 'broker_data_purged',
+    properties: { streamType, memoryName: memory },
+  });
 }
 
 interface StreamViewProps {
@@ -370,16 +117,16 @@ function StreamView({
                     key={entry.id}
                     className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
                     <div className="flex min-w-0 items-center gap-1">
-                      <span
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
                         className="flex shrink-0 cursor-pointer items-center gap-1"
                         onClick={() => toggleExpanded(entry.id)}>
-                        {isExpanded ? (
-                          <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
-                        ) : (
-                          <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                        )}
+                        <IconShell size="sm" className="shrink-0">
+                          {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                        </IconShell>
                         <span>{entry.timestamp}</span>
-                      </span>
+                      </button>
                       {!isExpanded && (
                         <span className="text-muted-foreground w-0 flex-1 truncate">
                           {JSON.stringify(entry.data)}
@@ -433,6 +180,7 @@ export function SessionsView({ memory }: { memory: string }) {
           setStore({ sessions: { ...sessions } });
         }
       } catch {
+        console.error('Failed to parse session data:', event.data);
       }
     };
     es.onerror = () => setIsConnected(false);
@@ -466,7 +214,10 @@ export function SessionsView({ memory }: { memory: string }) {
     try {
       await fetch(apiUrl(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`), { method: 'DELETE' });
       setStore({ sessions: {} });
-    } catch {
+    } catch (e) {
+      toast.error('Failed to purge sessions', {
+        description: (e as Error).message,
+      });
     }
   };
 
@@ -507,11 +258,9 @@ export function SessionsView({ memory }: { memory: string }) {
                       aria-expanded={isExpanded}
                       className="flex shrink-0 cursor-pointer items-center gap-1 bg-transparent p-0"
                       onClick={() => toggleExpanded(sid)}>
-                      {isExpanded ? (
-                        <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
-                      ) : (
-                        <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                      )}
+                      <IconShell size="sm" className="shrink-0">
+                        {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                      </IconShell>
                     </button>
                     {(sessions[sid] as { lastActivity?: string })?.lastActivity && (
                       <span className="text-muted-foreground shrink-0">
@@ -541,17 +290,55 @@ export default function BrokerPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('traces');
 
-  const traces = useSSEStream(activeTab === 'traces' ? '/v1/broker/traces' : null, selectedMemory);
-  const messages = useSSEStream(activeTab === 'messages' ? '/v1/broker/messages' : null, selectedMemory);
-  const chunks = useSSEStream(activeTab === 'chunks' ? '/v1/broker/chunks' : null, selectedMemory);
-  const events = useSSEStream(activeTab === 'events' ? '/v1/broker/events' : null, selectedMemory);
+  const selectedMemoryRef = useRef(selectedMemory);
+  selectedMemoryRef.current = selectedMemory;
+
+  const traces = useSSEStream(
+    activeTab === 'traces' ? '/v1/broker/traces' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('traces', selectedMemory),
+    },
+  );
+  const messages = useSSEStream(
+    activeTab === 'messages' ? '/v1/broker/messages' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('messages', selectedMemory),
+    },
+  );
+  const chunks = useSSEStream(
+    activeTab === 'chunks' ? '/v1/broker/chunks' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('chunks', selectedMemory),
+    },
+  );
+  const events = useSSEStream(
+    activeTab === 'events' ? '/v1/broker/events' : null,
+    selectedMemory,
+    {
+      pageSize: PURGE_PAGE_SIZE,
+      fetchAllPages: true,
+      onPurge: () => trackPurge('events', selectedMemory),
+    },
+  );
 
   useEffect(() => {
     async function fetchMemories() {
       try {
         const data = await memoriesService.getAll();
         setMemories(data);
-        if (data.length > 0 && !data.find(m => m.name === selectedMemory)) {
+        if (
+          data.length > 0 &&
+          !data.some(m => m.name === selectedMemoryRef.current)
+        ) {
           setSelectedMemory(data[0].name);
         }
       } catch (err) {
@@ -561,7 +348,7 @@ export default function BrokerPage() {
       }
     }
     fetchMemories();
-  }, [selectedMemory]);
+  }, []);
 
   return (
     <>
@@ -583,11 +370,11 @@ export default function BrokerPage() {
               <span className="text-muted-foreground text-sm">Memory:</span>
               <Select
                 value={selectedMemory}
-                onValueChange={value => {
-                  setSelectedMemory(value);
+                onValueChange={(value) => {
+                  setSelectedMemory(value as string);
                   trackEvent({
                     name: 'broker_memory_changed',
-                    properties: { memoryName: value },
+                    properties: { memoryName: value as string },
                   });
                 }}
                 disabled={loading}>
