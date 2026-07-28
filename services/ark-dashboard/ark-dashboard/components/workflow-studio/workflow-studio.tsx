@@ -538,7 +538,7 @@ export function WorkflowStudio({
                   }}>
                   {studio.draftYaml.trim() === '' ? (
                     <div
-                      className="text-muted-foreground absolute top-12 left-1/2 -translate-x-1/2 text-sm"
+                      className="text-muted-foreground absolute top-16 left-1/2 -translate-x-1/2 text-sm"
                       data-testid="studio-diagram-empty">
                       The workflow diagram will appear here.
                     </div>
