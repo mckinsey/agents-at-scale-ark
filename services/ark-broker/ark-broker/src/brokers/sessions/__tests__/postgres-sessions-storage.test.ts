@@ -284,21 +284,32 @@ describe('PostgresSessionsStorage', () => {
       expect(query.conversationId).toBe('original');
     });
 
-    test('does not revive a session that has already expired', async () => {
-      // The owner probe and the header lock are what a message resolves the
-      // session through, and refreshHeader pushes expires_at forward - so
-      // without the expiry filter a message makes a session that getSession
-      // already reports as gone visible again.
+    test('both write paths revive an expired session and extend its TTL', async () => {
+      // expires_at hides a session from reads; it does not delete it, and no
+      // reaper removes it yet. A write path that refused to touch an expired row
+      // would therefore discard real work for as long as that row sits there -
+      // for an event, a brand-new query under a recycled session id. So every
+      // write revives, and the two paths have to agree on that.
+      const expire = async (): Promise<void> => {
+        await db()`
+          UPDATE sessions SET expires_at = now() - interval '1 second'
+          WHERE session_id = 'sess-1'
+        `;
+      };
+
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
-      await db()`
-        UPDATE sessions SET expires_at = now() - interval '1 second'
-        WHERE session_id = 'sess-1'
-      `;
-      expect(await storage.getSession('sess-1')).toBeUndefined();
 
+      await expire();
+      expect(await storage.getSession('sess-1')).toBeUndefined();
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-2'});
+      expect(await storage.getSession('sess-1')).toBeDefined();
+
+      await expire();
+      expect(await storage.getSession('sess-1')).toBeUndefined();
       await storage.applyMessage('conv-1', 'query-1');
-
-      expect(await storage.getSession('sess-1')).toBeUndefined();
+      const revived = await storage.getSession('sess-1');
+      expect(revived).toBeDefined();
+      expect(revived!.queries['query-1']!.conversationId).toBe('conv-1');
     });
 
     test('does nothing if query not found', async () => {

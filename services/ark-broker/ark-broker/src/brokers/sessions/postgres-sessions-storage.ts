@@ -382,11 +382,15 @@ export class PostgresSessionsStorage implements SessionsStorage {
       // resolves the owner before taking any lock - keeping the header-first
       // order applyEvent uses. A query name can exist under more than one
       // session; pick one deterministically rather than locking every match.
+      //
+      // Deliberately does not filter on expires_at. That column hides a session
+      // from reads, it does not delete it, so skipping an expired row here would
+      // drop this message for good - and applyEvent revives instead, which the
+      // two paths have to agree on. refreshHeader pushes the TTL out below.
       const owners = await sql<{session_id: string}[]>`
-        SELECT sq.session_id FROM session_queries sq
-        JOIN sessions s ON s.session_id = sq.session_id
-        WHERE sq.query_id = ${queryId} AND s.expires_at > now()
-        ORDER BY sq.session_id
+        SELECT session_id FROM session_queries
+        WHERE query_id = ${queryId}
+        ORDER BY session_id
         LIMIT 1
       `;
       const owner = owners[0];
