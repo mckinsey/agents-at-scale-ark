@@ -53,6 +53,8 @@ app:
       value: ""
     - name: OIDC_PROVIDER_ID
       value: ""
+    - name: OIDC_SCOPES
+      value: ""  # Space-separated OAuth scopes; defaults to "openid email profile". Add "offline_access" for refresh tokens (e.g. Dex).
     - name: SESSION_MAX_AGE
       value: ""
     - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS

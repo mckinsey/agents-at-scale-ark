@@ -79,3 +79,7 @@ certManager:
 networkPolicy:
   enabled: false
   extraIngressFrom: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1

@@ -80,15 +80,10 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     groupLabel: 'Queries',
     features: [
       {
-        type: 'select',
+        type: 'number',
         feature: 'Query Timeout',
         description: 'Default timeout for query execution',
         atom: storedQueryTimeoutSettingAtom,
-        options: [
-          { value: '5m', label: '5m (default)' },
-          { value: '10m', label: '10m' },
-          { value: '15m', label: '15m' },
-        ],
       },
     ],
   },

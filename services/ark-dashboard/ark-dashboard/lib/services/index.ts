@@ -36,12 +36,6 @@ export { toolsService, type Tool } from './tools';
 export { queriesService } from './queries';
 export { secretsService, type Secret } from './secrets';
 export {
-  arkServicesService,
-  type ArkService,
-  type HTTPRouteInfo,
-  type ArkServiceListResponse,
-} from './ark-services';
-export {
   chatService,
   type ChatMessage,
   type ChatSession,

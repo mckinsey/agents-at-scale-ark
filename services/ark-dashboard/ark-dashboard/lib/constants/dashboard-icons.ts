@@ -3,7 +3,6 @@ import {
   Bot,
   Calendar,
   ClipboardList,
-  Cog,
   Database,
   Download,
   FileText,
@@ -24,7 +23,6 @@ import {
 
 import {
   BROKER_FEATURE_KEY,
-  EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
 } from '@/atoms/experimental-features';
 
@@ -57,12 +55,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Users,
     group: 'agent-builder',
   },
-  queries: {
-    key: 'queries',
-    title: 'Queries',
-    icon: Search,
-    group: 'agent-builder',
-  },
 
   // Workflow Templates
   'workflow-templates': {
@@ -88,17 +80,23 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'configurations',
   },
 
-  // Monitoring
+  // Monitoring - order: Sessions, Workflow runs, Query Logs, Broker, Events
+  'session-history': {
+    key: 'session-history',
+    title: 'Sessions',
+    icon: MessageSquare,
+    group: 'monitoring',
+  },
   sessions: {
     key: 'sessions',
-    title: 'Workflow Runs',
+    title: 'Workflow runs',
     icon: Play,
     group: 'monitoring',
   },
-  events: {
-    key: 'events',
-    title: 'Events',
-    icon: Calendar,
+  queries: {
+    key: 'queries',
+    title: 'Query Logs',
+    icon: Search,
     group: 'monitoring',
   },
   broker: {
@@ -108,10 +106,10 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
   },
-  'session-history': {
-    key: 'session-history',
-    title: 'Sessions',
-    icon: MessageSquare,
+  events: {
+    key: 'events',
+    title: 'Events',
+    icon: Calendar,
     group: 'monitoring',
   },
 
@@ -154,14 +152,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'A2A Servers',
     icon: Server,
     group: 'runtime',
-  },
-
-  'execution-engines': {
-    key: 'execution-engines',
-    title: 'Execution Engines',
-    icon: Cog,
-    group: 'runtime',
-    enablerFeature: EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   },
 
   // Service
