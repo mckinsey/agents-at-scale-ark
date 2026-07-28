@@ -207,14 +207,20 @@ describe('SessionsSection', () => {
     refresh: vi.fn(),
   };
 
-  const mockSearchParams = new URLSearchParams();
+  let currentSearch = '';
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
 
   beforeEach(() => {
     vi.clearAllMocks();
+    currentSearch = '';
+    mockRouter.replace.mockImplementation((url: string) => {
+      currentSearch = url.split('?')[1] ?? '';
+    });
     vi.mocked(useRouter).mockReturnValue(mockRouter as any);
-    vi.mocked(useSearchParams).mockReturnValue(mockSearchParams as any);
-    
+    vi.mocked(useSearchParams).mockImplementation(
+      () => new URLSearchParams(currentSearch) as any,
+    );
+
     vi.mocked(mapArgoWorkflowsToSessions).mockImplementation((workflows) =>
       workflows.map((w: any) => ({
         id: w.metadata.name,
@@ -828,6 +834,18 @@ describe('SessionsSection', () => {
         const lastCall = mockRouter.replace.mock.calls[mockRouter.replace.mock.calls.length - 1];
         expect(lastCall[0]).not.toContain('workflowName');
       });
+    });
+
+    it('should not replace URL when it already matches current filters', async () => {
+      currentSearch = 'workflowName=test';
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('test')).toBeInTheDocument();
+      });
+
+      expect(mockRouter.replace).not.toHaveBeenCalled();
     });
   });
 
