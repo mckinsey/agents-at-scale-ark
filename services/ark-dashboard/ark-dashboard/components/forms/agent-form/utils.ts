@@ -1,6 +1,7 @@
 'use client';
 
 import type { Parameter } from '@/components/ui/parameter-editor';
+import { generateUUID } from '@/lib/utils/uuid';
 
 interface AgentParameterInput {
   name: string;
@@ -49,6 +50,7 @@ export function transformAgentParametersToForm(
       const queryParamName = p.valueFrom.queryParameterRef.name;
       const namesDiffer = queryParamName !== p.name;
       return {
+        id: generateUUID(),
         name: p.name,
         source: 'queryParameter' as const,
         value: '',
@@ -58,6 +60,7 @@ export function transformAgentParametersToForm(
     }
     if (p.valueFrom?.configMapKeyRef) {
       return {
+        id: generateUUID(),
         name: p.name,
         source: 'configMapKeyRef' as const,
         value: '',
@@ -71,6 +74,7 @@ export function transformAgentParametersToForm(
     }
     if (p.valueFrom?.secretKeyRef) {
       return {
+        id: generateUUID(),
         name: p.name,
         source: 'secretKeyRef' as const,
         value: '',
@@ -83,6 +87,7 @@ export function transformAgentParametersToForm(
       };
     }
     return {
+      id: generateUUID(),
       name: p.name,
       source: 'value' as const,
       value: p.value || '',

@@ -28,6 +28,7 @@ const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
+const mockTeamGetByName = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -41,6 +42,9 @@ vi.mock('@/lib/services', () => ({
   },
   agentsService: {
     getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+  teamsService: {
+    getByName: (...args: unknown[]) => mockTeamGetByName(...args),
   },
 }));
 
@@ -112,6 +116,7 @@ describe('useChatSession', () => {
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     mockGetByName.mockResolvedValue({ parameters: [] });
+    mockTeamGetByName.mockResolvedValue({ members: [] });
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -835,7 +840,7 @@ describe('useChatSession', () => {
       ],
     };
 
-    it('blocks sending and sets an error when a required parameter is missing', async () => {
+    it('blocks sending without setting an error when a required parameter is missing', async () => {
       mockGetByName.mockResolvedValue(agentWithQueryParam);
 
       const { result } = renderHook(
@@ -844,14 +849,14 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       await act(async () => {
         await result.current.sendMessage('Hello');
       });
 
-      expect(result.current.error).toMatch(/muting/);
+      expect(result.current.error).toBeNull();
       expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
       expect(mockSubmitChatQuery).not.toHaveBeenCalled();
     });
@@ -872,11 +877,18 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       act(() => {
-        result.current.setParameterValue('muting', 'BANANAPHONE');
+        result.current.addParameterRow();
+      });
+      const rowId = result.current.parameterRows[0].id;
+      act(() => {
+        result.current.setParameterRowName(rowId, 'muting');
+      });
+      act(() => {
+        result.current.setParameterRowValue(rowId, 'BANANAPHONE');
       });
 
       await act(async () => {

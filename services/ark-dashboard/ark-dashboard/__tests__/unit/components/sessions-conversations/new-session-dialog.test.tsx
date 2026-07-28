@@ -10,8 +10,8 @@ import { toolsService } from '@/lib/services/tools';
 vi.mock('@/lib/services/agents');
 vi.mock('@/lib/services/teams');
 vi.mock('@/lib/services/tools');
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: () => ({ push: vi.fn() }),
 }));
 vi.mock('@/lib/utils/uuid', () => ({
   generateUUID: () => 'test-uuid-123',
@@ -67,7 +67,7 @@ describe('NewSessionDialog', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Create new session')).toBeInTheDocument();
-    expect(screen.getByText('Select one participant to start a session')).toBeInTheDocument();
+    expect(screen.getByText('Select one target to start a session')).toBeInTheDocument();
   });
 
   it('should display loading state initially', () => {
@@ -90,7 +90,7 @@ describe('NewSessionDialog', () => {
       </QueryClientProvider>
     );
 
-    expect(screen.getByText('Loading participants...')).toBeInTheDocument();
+    expect(screen.getByText('Loading targets...')).toBeInTheDocument();
   });
 
   it('should display all participants when loaded', async () => {
@@ -132,7 +132,7 @@ describe('NewSessionDialog', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Agents'));
+    await user.click(screen.getByRole('button', { name: 'Agents' }));
 
     await waitFor(() => {
       expect(screen.getByText('agent-1')).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe('NewSessionDialog', () => {
     });
   });
 
-  it('should enable Create button when participant selected', async () => {
+  it('should enable Create button when a target is selected', async () => {
     const user = userEvent.setup();
 
     renderWithClient(<NewSessionDialog open={true} onOpenChange={mockOnOpenChange} />);
@@ -154,13 +154,12 @@ describe('NewSessionDialog', () => {
     const createButton = screen.getByRole('button', { name: /create/i });
     expect(createButton).toBeDisabled();
 
-    const radio = screen.getAllByRole('radio')[0];
-    await user.click(radio);
+    await user.click(screen.getByText('agent-1'));
 
     expect(createButton).not.toBeDisabled();
   });
 
-  it('should show participant count when selected', async () => {
+  it('should toggle single selection off when clicked again', async () => {
     const user = userEvent.setup();
 
     renderWithClient(<NewSessionDialog open={true} onOpenChange={mockOnOpenChange} />);
@@ -169,12 +168,13 @@ describe('NewSessionDialog', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('0 participants selected')).toBeInTheDocument();
+    const createButton = screen.getByRole('button', { name: /create/i });
 
-    const radio = screen.getAllByRole('radio')[0];
-    await user.click(radio);
+    await user.click(screen.getByText('agent-1'));
+    expect(createButton).not.toBeDisabled();
 
-    expect(screen.getByText('1 participant selected')).toBeInTheDocument();
+    await user.click(screen.getByText('agent-1'));
+    expect(createButton).toBeDisabled();
   });
 
   it('should close dialog on Cancel button', async () => {
@@ -200,7 +200,7 @@ describe('NewSessionDialog', () => {
     await user.type(searchInput, 'nonexistent');
 
     await waitFor(() => {
-      expect(screen.getByText('No participants found')).toBeInTheDocument();
+      expect(screen.getByText('No targets found')).toBeInTheDocument();
     });
   });
 });

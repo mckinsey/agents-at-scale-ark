@@ -474,6 +474,7 @@ spec:
                 - pending
                 - provisioning
                 - running
+                - queued
                 - input-required
                 - error
                 - done
