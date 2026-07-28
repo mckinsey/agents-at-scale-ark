@@ -1,11 +1,21 @@
 """Tests for the sensitive data logging filter."""
 from __future__ import annotations
 
+import json
 import logging
 import sys
 import unittest
+from pathlib import Path
 
 from ark_api.services.sensitive_data_filter import SensitiveDataFilter, _redact_string
+
+# Shared vectors, canonical copy in ark/internal/telemetry/redact/testdata/. parents[4]=repo root.
+_FIXTURES = json.loads(
+    (
+        Path(__file__).resolve().parents[4]
+        / "ark" / "internal" / "telemetry" / "redact" / "testdata" / "credential-redaction.json"
+    ).read_text()
+)
 
 
 class TestRedactString(unittest.TestCase):
@@ -168,6 +178,52 @@ class TestSensitiveDataFilter(unittest.TestCase):
 
         handler.emit = old_emit
         test_logger.removeHandler(handler)
+
+
+class TestSharedFixtures(unittest.TestCase):
+    def test_redacted_cases(self):
+        for tc in _FIXTURES["redacted"]:
+            with self.subTest(tc["name"]):
+                out = _redact_string(tc["input"])
+                for absent in tc["absent"]:
+                    self.assertNotIn(absent, out, tc["name"])
+                self.assertIn("[REDACTED]", out, tc["name"])
+
+    def test_preserved_cases(self):
+        for tc in _FIXTURES["preserved"]:
+            with self.subTest(tc["name"]):
+                out = _redact_string(tc["input"])
+                for present in tc["present"]:
+                    self.assertIn(present, out, tc["name"])
+
+
+class TestShapeTokens(unittest.TestCase):
+    def test_shape_tokens_redacted(self):
+        # Assembled at runtime so no secret-shaped literal is committed.
+        tokens = [
+            "eyJ" + "a" * 12 + ".eyJ" + "b" * 12 + "." + "c" * 20,
+            "sk-" + "A" * 48,
+            "ghp_" + "A" * 36,
+            "github_pat_" + "A" * 24,
+            "AKIA" + "A" * 16,
+            "AIza" + "A" * 35,
+            "xoxb-" + "A" * 12,
+            "sk_live_" + "A" * 20,
+            "-----BEGIN RSA PRIVATE KEY-----\n" + "A" * 24 + "\n-----END RSA PRIVATE KEY-----",
+            "00000000-0000-0000-0000-000000000000:" + "A" * 24,  # McKinsey Service Credential
+        ]
+        for tok in tokens:
+            out = _redact_string("lead " + tok + " trail")
+            self.assertNotIn(tok, out)
+            self.assertIn("[REDACTED]", out)
+
+    def test_basic_auth_value_redacted(self):
+        out = _redact_string("authorization: Basic " + "A" * 24)
+        self.assertNotIn("A" * 24, out)
+
+    def test_uuid_short_value_preserved(self):
+        out = _redact_string("id 00000000-0000-0000-0000-000000000000:8080 ok")
+        self.assertIn(":8080", out)
 
 
 if __name__ == "__main__":
