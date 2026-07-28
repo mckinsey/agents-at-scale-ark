@@ -95,7 +95,13 @@ export function mergeQueryMetadata(
     existing.tool = eventData.tool;
     filled = true;
   }
-  if (eventData.targetType && existing.targetType === 'agent') {
+  // 'agent' is the default, so guarding on it alone would report a fill on
+  // every event that merely repeats it - which is every event.
+  if (
+    eventData.targetType &&
+    eventData.targetType !== 'agent' &&
+    existing.targetType === 'agent'
+  ) {
     existing.targetType = eventData.targetType;
     filled = true;
   }

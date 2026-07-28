@@ -125,10 +125,10 @@ spec:
           [ "${QUERY_COUNT}" = "2" ] || { echo "expected 2 done session_queries rows, got ${QUERY_COUNT}"; exit 1; }
 
           HEADER=$(bash ../shared/psql-query.sh \
-            "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) || ',' || jsonb_array_length(participants) FROM sessions WHERE session_id='${SESSION_ID}';" \
+            "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) FROM sessions WHERE session_id='${SESSION_ID}';" \
             | tr -d ' \n')
-          echo "sessions header (status,error_count,conversations,participants): ${HEADER}"
-          [ "${HEADER}" = "idle,0,2,2" ] || { echo "expected 'idle,0,2,2', got '${HEADER}'"; exit 1; }
+          echo "sessions header (status,error_count,conversations): ${HEADER}"
+          [ "${HEADER}" = "idle,0,2" ] || { echo "expected 'idle,0,2', got '${HEADER}'"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)

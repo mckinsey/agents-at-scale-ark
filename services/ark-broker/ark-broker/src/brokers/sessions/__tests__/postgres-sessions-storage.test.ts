@@ -654,21 +654,25 @@ describe('PostgresSessionsStorage', () => {
     });
 
     test('does not emit for a redelivered event that carries nothing new', async () => {
+      // The payload is what the controller actually sends, targetType included:
+      // treating a repeat of the default 'agent' as a fill would push a
+      // spurious update to every watcher on every replica.
+      const event = {
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        agent: 'agent-a',
+        targetType: 'agent',
+        conversationId: 'conv-1',
+      };
       await storage.whenListening();
-      await storage.applyEvent(
-        {sessionId: 'sess-1', queryName: 'query-1', agent: 'agent-a'},
-        5
-      );
+      await storage.applyEvent(event, 5);
       // Let the first applyEvent's own notification land before subscribing,
       // so it can't be mistaken for one fired by the stale retry below.
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       const received: Array<{sessionId: string; queryName: string}> = [];
       storage.subscribe((data) => received.push(data));
-      await storage.applyEvent(
-        {sessionId: 'sess-1', queryName: 'query-1', agent: 'agent-a'},
-        3
-      );
+      await storage.applyEvent(event, 3);
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       expect(received).toHaveLength(0);
@@ -678,38 +682,68 @@ describe('PostgresSessionsStorage', () => {
   describe('idempotency watermark', () => {
     test('a redelivered event with an equal-or-lower sequence is ignored', async () => {
       await storage.applyEvent(
-        {sessionId: 'sess-1', queryName: 'query-1', agent: 'first'},
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          agent: 'first',
+          _reason: 'QueryExecutionComplete',
+        },
         5
       );
       await storage.applyEvent(
-        {sessionId: 'sess-1', queryName: 'query-1', agent: 'stale-retry'},
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          agent: 'stale-retry',
+          _reason: 'QueryExecutionCanceled',
+        },
         5
       );
 
       const query = (await storage.getSession('sess-1'))!.queries['query-1']!;
+      // agent is first-write-wins with or without the watermark, so it alone
+      // proves nothing; the phase is what the watermark has to protect.
       expect(query.agent).toBe('first');
+      expect(query.phase).toBe('done');
     });
 
-    test('an out-of-order lower sequence arriving after a higher one is ignored', async () => {
+    test('a stale terminal event cannot undo a newer one', async () => {
+      // The case the metadata/phase split exists for. A later `done` is allowed
+      // to clear an earlier `error` (HITL approval), which makes the phase rule
+      // non-monotonic - so an older `done` arriving late must not be applied,
+      // or it erases a real failure. Asserting a stale `running` instead proves
+      // nothing: applyQueryPhase ignores `running` on an existing row anyway.
       await storage.applyEvent(
         {
           sessionId: 'sess-1',
           queryName: 'query-1',
           _reason: 'QueryExecutionComplete',
+          error: 'it really failed',
         },
         10
       );
+      // It has to carry something new, or the early return drops it before the
+      // phase rule is even reached and this would pass either way.
       await storage.applyEvent(
         {
           sessionId: 'sess-1',
           queryName: 'query-1',
-          _reason: 'AgentExecutionStart',
+          conversationId: 'conv-1',
+          agent: 'agent-a',
+          _reason: 'QueryExecutionComplete',
         },
         7
       );
 
-      const query = (await storage.getSession('sess-1'))!.queries['query-1']!;
-      expect(query.phase).toBe('done');
+      const session = (await storage.getSession('sess-1'))!;
+      const query = session.queries['query-1']!;
+      expect(query.phase).toBe('error');
+      expect(query.error).toBe('it really failed');
+      expect(session.errorCount).toBe(1);
+      expect(session.status).toBe('error');
+      // ...while its metadata was still taken.
+      expect(query.agent).toBe('agent-a');
+      expect(query.conversationId).toBe('conv-1');
     });
 
     test('an out-of-order event still contributes fields the query is missing', async () => {

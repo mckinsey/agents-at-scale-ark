@@ -316,7 +316,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
         if (!stale) applyQueryPhase(entry, queryPhase, now, errorMsg);
       }
 
-      const upserted = await sql<{query_id: string}[]>`
+      await sql`
         INSERT INTO session_queries (
           session_id, query_id, namespace, conversation_id, agent,
           team, tool, target_type, phase, error, created_at, completed_at,
@@ -346,9 +346,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
             session_queries.last_applied_event_sequence,
             COALESCE(${sequence ?? null}::bigint, 0)
           )
-        RETURNING query_id
       `;
-      if (upserted.length === 0) return false;
 
       await this.refreshHeader(sql, header, now);
 
