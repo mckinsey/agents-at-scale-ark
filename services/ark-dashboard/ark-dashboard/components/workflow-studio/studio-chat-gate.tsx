@@ -6,8 +6,6 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
   ARGO_MAKE_AUTHOR_AGENT_NAME,
-  ARGO_MAKE_AUTHOR_MARKETPLACE_URL,
-  KUBERNETES_MCP_MARKETPLACE_URL,
   KUBERNETES_MCP_SERVER_NAME,
 } from '@/lib/constants/argo-make';
 
@@ -36,23 +34,6 @@ function StepCard({ step, title, testId, children }: StepCardProps) {
       <p className="text-foreground text-sm font-medium">{title}</p>
       {children}
     </li>
-  );
-}
-
-interface ExternalLinkButtonProps {
-  href: string;
-  label: string;
-  testId: string;
-}
-
-function ExternalLinkButton({ href, label, testId }: ExternalLinkButtonProps) {
-  return (
-    <Button asChild type="button" variant="outline" size="sm">
-      <a href={href} target="_blank" rel="noreferrer" data-testid={testId}>
-        <ExternalLink className="h-4 w-4" />
-        {label}
-      </a>
-    </Button>
   );
 }
 
@@ -102,8 +83,8 @@ function AgentAction({
       <div
         className="flex flex-col items-center gap-2"
         data-testid="studio-gate-step-agent-missing">
-        <ExternalLinkButton
-          href={ARGO_MAKE_AUTHOR_MARKETPLACE_URL}
+        <InternalLinkButton
+          href="/marketplace"
           label="Install from marketplace"
           testId="studio-gate-agent-marketplace-link"
         />
@@ -143,8 +124,8 @@ function McpAction({
       <div
         className="flex flex-col items-center gap-2"
         data-testid="studio-gate-step-mcp-missing">
-        <ExternalLinkButton
-          href={KUBERNETES_MCP_MARKETPLACE_URL}
+        <InternalLinkButton
+          href="/marketplace"
           label="Install from marketplace"
           testId="studio-gate-mcp-marketplace-link"
         />

@@ -3,11 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatGate } from '@/components/workflow-studio/studio-chat-gate';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
-import {
-  ARGO_MAKE_AUTHOR_AGENT_NAME,
-  ARGO_MAKE_AUTHOR_MARKETPLACE_URL,
-  KUBERNETES_MCP_MARKETPLACE_URL,
-} from '@/lib/constants/argo-make';
+import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
 
 const pushMock = vi.fn();
@@ -111,7 +107,7 @@ describe('WorkflowStudio author-agent gate', () => {
     );
     expect(
       screen.getByTestId('studio-gate-agent-marketplace-link'),
-    ).toHaveAttribute('href', ARGO_MAKE_AUTHOR_MARKETPLACE_URL);
+    ).toHaveAttribute('href', '/marketplace');
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
@@ -154,7 +150,7 @@ describe('WorkflowStudio author-agent gate', () => {
     );
     expect(
       screen.getByTestId('studio-gate-mcp-marketplace-link'),
-    ).toHaveAttribute('href', KUBERNETES_MCP_MARKETPLACE_URL);
+    ).toHaveAttribute('href', '/marketplace');
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
@@ -343,8 +339,7 @@ describe('StudioChatGate', () => {
     );
 
     const link = screen.getByTestId('studio-gate-agent-marketplace-link');
-    expect(link).toHaveAttribute('href', ARGO_MAKE_AUTHOR_MARKETPLACE_URL);
-    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('href', '/marketplace');
   });
 
   it('links to the marketplace when the MCP server is missing', () => {
@@ -358,8 +353,7 @@ describe('StudioChatGate', () => {
     );
 
     const link = screen.getByTestId('studio-gate-mcp-marketplace-link');
-    expect(link).toHaveAttribute('href', KUBERNETES_MCP_MARKETPLACE_URL);
-    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('href', '/marketplace');
   });
 
   it('links to the MCP server page when it is present but not ready', () => {
