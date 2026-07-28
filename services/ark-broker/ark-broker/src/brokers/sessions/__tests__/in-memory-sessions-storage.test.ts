@@ -333,8 +333,11 @@ describe('InMemorySessionsStorage', () => {
       // left behind on the query row decides the status all over again.
       const reloaded = new InMemorySessionsStorage(silentLogger, path);
       const session = (await reloaded.getSession('sess-1'))!;
-      expect(session.status).toBe('error');
+      // The failure is still on the query either way - the bug is the session
+      // disagreeing with it, reporting idle next to a non-zero errorCount.
+      expect(session.queries['failed'].phase).toBe('error');
       expect(session.errorCount).toBe(1);
+      expect(session.status).toBe('error');
     });
   });
 

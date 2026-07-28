@@ -312,6 +312,29 @@ describe('PostgresSessionsStorage', () => {
       expect(revived!.queries['query-1']!.conversationId).toBe('conv-1');
     });
 
+    test('a message prefers a live owner over an expired one', async () => {
+      // Reviving is the right answer only when every owner is expired. Two
+      // sessions can hold the same query_id - nothing removes session_queries
+      // rows when a Query is deleted, so recreating a Query under the same name
+      // leaves the old row behind - and handing the message to the dead session
+      // would both lose the live session's conversation and pop the dead one
+      // back into the sessions list. 'a-old' sorts first, so plain session_id
+      // ordering picks exactly the wrong row.
+      await storage.applyEvent({sessionId: 'a-old', queryName: 'chat'});
+      await storage.applyEvent({sessionId: 'z-new', queryName: 'chat'});
+      await db()`
+        UPDATE sessions SET expires_at = now() - interval '1 second'
+        WHERE session_id = 'a-old'
+      `;
+
+      await storage.applyMessage('conv-live', 'chat');
+
+      const live = (await storage.getSession('z-new'))!;
+      expect(live.queries['chat']!.conversationId).toBe('conv-live');
+      expect(live.conversations).toHaveLength(1);
+      expect(await storage.getSession('a-old')).toBeUndefined();
+    });
+
     test('does nothing if query not found', async () => {
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
       await storage.applyMessage('conv-abc', 'nonexistent-query');
