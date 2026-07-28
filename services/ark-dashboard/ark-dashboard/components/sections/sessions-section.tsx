@@ -1112,7 +1112,7 @@ export function SessionsSection() {
 
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
-      const currentStatus = selectedWorkflowDetail.status.phase;
+      const currentStatus = selectedWorkflowDetail.status?.phase;
       const previousStatus = previousStatusRef.current;
 
       const isTerminalState =
