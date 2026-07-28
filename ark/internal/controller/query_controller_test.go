@@ -497,8 +497,22 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			expectTimeoutTransition("timeout-queue-elapsed", statusQueued, reasonTimedOutInQueue, "capacity")
 		})
 
+		It("fails a pre-queue query (no phase set yet) with a neutral before-execution message", func() {
+			// Empty phase means the reconciler hasn't gotten to it — should
+			// NOT claim "waiting for controller capacity", which is
+			// specifically the queued-phase reason.
+			expectTimeoutTransition("timeout-prequeue-elapsed", "", reasonTimedOutInQueue, "before execution began")
+		})
+
 		It("fails a running query with TimedOutInExecution when spec.timeout has elapsed", func() {
 			expectTimeoutTransition("timeout-running-elapsed", statusRunning, reasonTimedOutInExecution, "execution")
+		})
+
+		It("fails an input-required query with an awaiting-approval message", func() {
+			// spec.timeout is a wall-clock SLO, so approval waits count.
+			// Message distinguishes from generic execution timeout so users
+			// realise a slow reviewer (not a slow LLM) tripped the deadline.
+			expectTimeoutTransition("timeout-inputrequired-elapsed", statusInputRequired, reasonTimedOutInExecution, "awaiting approval")
 		})
 
 		It("does not re-transition an already terminal query even when budget has elapsed", func() {

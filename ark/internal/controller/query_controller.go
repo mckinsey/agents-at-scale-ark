@@ -272,16 +272,28 @@ func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 	return time.Until(obj.CreationTimestamp.Add(timeout))
 }
 
-// timeoutReasonForPhase picks the QueryCompleted condition reason for a
-// spec.timeout-elapsed transition based on the phase the Query was in when
-// the deadline was hit. Non-terminal phases beyond running/input-required
-// (pending, provisioning, queued, empty) all fall into the "in queue" bucket.
+// timeoutReasonForPhase picks the QueryCompleted condition reason and a
+// phase-appropriate user-facing message for a spec.timeout-elapsed transition.
+// Reasons collapse to two buckets (before-execution vs. during-execution) but
+// messages stay specific so users see an accurate "why" rather than an
+// over-claim like "waiting for controller capacity" when the Query never
+// reached the queue in the first place.
 func timeoutReasonForPhase(phase string) (reason, message string) {
 	switch phase {
-	case statusRunning, statusInputRequired:
+	case statusRunning:
 		return reasonTimedOutInExecution, "Query timed out during execution"
-	default:
+	case statusInputRequired:
+		// Also see Query.spec.timeout vs A2ATask approval timeout interaction:
+		// clients should set spec.timeout larger than the agent's approval
+		// timeout, or the Query auto-fails before the human can respond.
+		return reasonTimedOutInExecution, "Query timed out awaiting approval"
+	case statusQueued:
 		return reasonTimedOutInQueue, "Query timed out waiting for controller capacity"
+	default:
+		// "", statusPending, statusProvisioning — the query never actually
+		// reached the queue (reconciler backlog, provisioning wait on Model
+		// probe / MCP tool discovery, etc.). Don't overclaim the cause.
+		return reasonTimedOutInQueue, "Query timed out before execution began"
 	}
 }
 
