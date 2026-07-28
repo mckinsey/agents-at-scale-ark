@@ -20,10 +20,6 @@ from ...models.mcp_servers import (
     MCPServerAuthorization,
 )
 from ...models.common import AvailabilityStatus, extract_availability_from_conditions
-from ...services.mcp_auth_persistence import (
-    ANNOTATION_AUTHORIZED_AT,
-    ANNOTATION_AUTHORIZED_BY,
-)
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -35,10 +31,8 @@ router = APIRouter(
 VERSION = "v1alpha1"
 
 
-def _build_authorization(
-    status: dict, annotations: Optional[dict]
-) -> Optional[MCPServerAuthorization]:
-    """Build the authorization block from status.authorization and annotations.
+def _build_authorization(status: dict) -> Optional[MCPServerAuthorization]:
+    """Build the authorization block from status.authorization.
 
     Returns None when status.authorization is absent. Never includes token or
     Secret material.
@@ -46,13 +40,10 @@ def _build_authorization(
     authorization = status.get("authorization")
     if not authorization:
         return None
-    annotations = annotations or {}
     return MCPServerAuthorization(
         state=authorization.get("state"),
         resourceName=authorization.get("resourceName"),
         expiresAt=authorization.get("expiresAt"),
-        authorizedBy=annotations.get(ANNOTATION_AUTHORIZED_BY),
-        authorizedAt=annotations.get(ANNOTATION_AUTHORIZED_AT),
     )
 
 def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
@@ -80,7 +71,7 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         transport=spec.get("transport"),
         available=availability,
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations")),
+        authorization=_build_authorization(status),
     )
 
 
@@ -105,7 +96,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
         address=status.get("resolvedAddress"),
         transport=spec.get("transport"),
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations")),
+        authorization=_build_authorization(status),
     )
 
 

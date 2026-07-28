@@ -302,7 +302,7 @@ class TestAuthStart(_AuthBase):
 class TestAuthStartRedirectAndIdentity(_AuthBase):
     @patch("ark_api.api.v1.mcp_auth.write_flow_state", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_cached_client_creds", new_callable=AsyncMock)
-    def test_redirect_on_complete_round_trips_and_defaults_cli(self, mock_read_creds, mock_write):
+    def test_redirect_on_complete_round_trips(self, mock_read_creds, mock_write):
         from ark_api.services.mcp_auth_persistence import CachedClientCreds
 
         mock_read_creds.return_value = CachedClientCreds(client_id="cid", client_secret="csec")
@@ -316,7 +316,6 @@ class TestAuthStartRedirectAndIdentity(_AuthBase):
         self.assertEqual(response.status_code, 200, response.text)
         kwargs = mock_write.call_args.kwargs
         self.assertTrue(kwargs["redirect_on_complete"])
-        self.assertEqual(kwargs["caller_identity"], "cli")
         body = response.json()
         self.assertNotIn("caller_identity", body)
         self.assertNotIn("redirect_on_complete", body)
@@ -359,35 +358,20 @@ class TestAuthStartRedirectAndIdentity(_AuthBase):
         mock_register.assert_awaited_once()
         self.assertTrue(mock_write.call_args.kwargs["redirect_on_complete"])
 
-    def test_resolve_identity_returns_username_when_present(self):
-        from ark_api.api.v1.mcp_auth import _resolve_caller_identity
-
-        req = MagicMock()
-        req.state.user_identity.username = "alice@example.com"
-        self.assertEqual(_resolve_caller_identity(req), "alice@example.com")
-
-    def test_resolve_identity_falls_back_to_cli(self):
-        from ark_api.api.v1.mcp_auth import _resolve_caller_identity
-
-        req = MagicMock()
-        req.state.user_identity = None
-        self.assertEqual(_resolve_caller_identity(req), "cli")
-
 
 class TestAuthCallback(_AuthBase):
     @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
-    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
-    def test_happy_path(self, mock_read_flow, mock_exchange, mock_write, mock_annotate, mock_mark):
+    def test_happy_path(self, mock_read_flow, mock_exchange, mock_write, mock_mark):
         from ark_api.services.mcp_auth_persistence import FlowState
         from ark_api.services.oauth_token import TokenResponse
 
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v" * 64,
             status="pending", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
             secret_name="notion-mcp-tokens",
@@ -404,7 +388,6 @@ class TestAuthCallback(_AuthBase):
             )
         self.assertEqual(response.status_code, 200, response.text)
         mock_write.assert_awaited_once()
-        mock_annotate.assert_awaited_once()
         mock_mark.assert_awaited_once()
 
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
@@ -422,7 +405,7 @@ class TestAuthCallback(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v",
             status="pending", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
             secret_name="notion-mcp-tokens",
@@ -448,7 +431,7 @@ def _dashboard_flow(**overrides):
     defaults = dict(
         auth_id="aid-123", state_param="st1", verifier="v" * 64,
         status="pending", message="", expires_at="2030-01-01T00:00:00Z",
-        caller_identity="cli", token_expires_at="",
+        token_expires_at="",
         server_name="notion-mcp", namespace="team-a",
         client_id="cid", client_secret="csec",
         secret_name="notion-mcp-tokens", redirect_on_complete=True,
@@ -466,17 +449,16 @@ class TestAuthCallbackDashboardRedirect(_AuthBase):
         self.addCleanup(patcher.stop)
 
     @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
-    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
     def test_success_redirects_with_auth_id(
-        self, mock_read_flow, mock_exchange, _mock_write, mock_annotate, _mock_mark
+        self, mock_read_flow, mock_exchange, _mock_write, _mock_mark
     ):
         from ark_api.services.oauth_token import TokenResponse
 
         self._enable_dashboard()
-        mock_read_flow.return_value = _dashboard_flow(caller_identity="alice@example.com")
+        mock_read_flow.return_value = _dashboard_flow()
         mock_exchange.return_value = TokenResponse(
             access_token="at", refresh_token="rt", expires_in=3600, raw={}
         )
@@ -494,8 +476,6 @@ class TestAuthCallbackDashboardRedirect(_AuthBase):
         self.assertIn("authorized=notion-mcp", loc)
         self.assertIn("namespace=team-a", loc)
         self.assertIn("auth_id=aid-123", loc)
-        mock_annotate.assert_awaited_once()
-        self.assertEqual(mock_annotate.await_args.args[2], "alice@example.com")
 
     @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
@@ -574,17 +554,16 @@ class TestAuthCallbackDashboardRedirect(_AuthBase):
         self.assertIn("Unknown or expired state", response.text)
 
     @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
-    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
     def test_cli_flow_renders_html_even_with_dashboard_url(
-        self, mock_read_flow, mock_exchange, _mock_write, mock_annotate, _mock_mark
+        self, mock_read_flow, mock_exchange, _mock_write, _mock_mark
     ):
         from ark_api.services.oauth_token import TokenResponse
 
         self._enable_dashboard()
-        mock_read_flow.return_value = _dashboard_flow(redirect_on_complete=False, caller_identity="cli")
+        mock_read_flow.return_value = _dashboard_flow(redirect_on_complete=False)
         mock_exchange.return_value = TokenResponse(
             access_token="at", refresh_token="rt", expires_in=3600, raw={}
         )
@@ -597,15 +576,13 @@ class TestAuthCallbackDashboardRedirect(_AuthBase):
             )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertIn("Authorization complete", response.text)
-        self.assertEqual(mock_annotate.await_args.args[2], "cli")
 
     @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
-    @patch("ark_api.api.v1.mcp_auth.annotate_mcpserver_authorized", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
     def test_path_prefix_dashboard_url_and_open_redirect_guard(
-        self, mock_read_flow, mock_exchange, _mock_write, _mock_annotate, _mock_mark
+        self, mock_read_flow, mock_exchange, _mock_write, _mock_mark
     ):
         from ark_api.services.oauth_token import TokenResponse
 
@@ -651,7 +628,7 @@ class TestAuthStatus(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v",
             status="pending", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
         )
@@ -673,7 +650,7 @@ class TestAuthStatus(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v",
             status="authorized", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="2026-01-01T00:00:00Z",
+            token_expires_at="2026-01-01T00:00:00Z",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
         )
@@ -694,7 +671,7 @@ class TestAuthStatus(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v",
             status="authorized", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="2026-01-01T00:00:00Z",
+            token_expires_at="2026-01-01T00:00:00Z",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
         )
@@ -717,7 +694,7 @@ class TestAuthStatus(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v",
             status="failed", message="invalid_grant", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
         )
@@ -736,7 +713,7 @@ class TestAuthStatus(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="aid", state_param="st1", verifier="v",
             status="authorized", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="2026-01-01T00:00:00Z",
+            token_expires_at="2026-01-01T00:00:00Z",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
         )
@@ -931,7 +908,7 @@ class TestAuthStatusExpired(_AuthBase):
         mock_read_flow.return_value = FlowState(
             auth_id="different-id", state_param="st1", verifier="v",
             status="pending", message="", expires_at="2030-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="notion-mcp", namespace="default",
             client_id="cid", client_secret="csec",
         )

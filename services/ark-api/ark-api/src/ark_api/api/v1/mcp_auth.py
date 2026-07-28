@@ -22,7 +22,6 @@ from ...models.mcp_auth import (
 from ...services.mcp_auth_persistence import (
     SecretKeys,
     SecretPatchPayload,
-    annotate_mcpserver_authorized,
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
@@ -52,22 +51,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["mcp-auth"])
 
 VERSION = "v1alpha1"
-DEFAULT_AUTHORIZED_BY = "cli"
 MAX_AUTH_ERROR_DESC = 200
 TOKEN_EXCHANGE_FAILED_CODE = "token_exchange_failed"
 INVALID_REQUEST_CODE = "invalid_request"
-
-
-def _resolve_caller_identity(request: Request) -> str:
-    """Resolve the caller's identity from the impersonation middleware.
-
-    Returns the authenticated user's resolved identity when present, else the
-    literal string ``cli`` (in-cluster Service path, or impersonation disabled).
-    """
-    identity = getattr(request.state, "user_identity", None)
-    if identity is not None and getattr(identity, "username", None):
-        return identity.username
-    return DEFAULT_AUTHORIZED_BY
 
 
 def _get_config_or_503():
@@ -148,7 +134,6 @@ async def start_mcp_auth(
     cfg = _get_config_or_503()
     redirect_uri = cfg.public_callback_url
     force = bool(body.force)
-    caller_identity = _resolve_caller_identity(request)
 
     async with with_ark_client(namespace, VERSION) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
@@ -257,7 +242,6 @@ async def start_mcp_auth(
             state_param=state_random,
             verifier=verifier,
             expires_at=flow_expires,
-            caller_identity=caller_identity,
             server_name=mcp_server_name,
             client_id=client_id,
             client_secret=client_secret,
@@ -463,9 +447,6 @@ async def mcp_auth_callback(
                 client_id=flow.client_id,
                 client_secret=flow.client_secret,
             ),
-        )
-        await annotate_mcpserver_authorized(
-            ark_client, flow.server_name, flow.caller_identity
         )
         await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
 

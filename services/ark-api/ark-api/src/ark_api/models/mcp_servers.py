@@ -60,13 +60,10 @@ class MCPServerHeader(BaseModel):
 class MCPServerAuthorization(BaseModel):
     """Authorization state of an MCPServer, for rendering state and expiry.
 
-    Sourced from status.authorization and the mcp-auth-authorized-* annotations.
-    Never carries token or Secret material.
+    Sourced from status.authorization. Never carries token or Secret material.
     """
     state: str
     resourceName: Optional[str] = None
-    authorizedBy: Optional[str] = None
-    authorizedAt: Optional[str] = None
     expiresAt: Optional[str] = None
 
 
