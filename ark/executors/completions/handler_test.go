@@ -486,6 +486,19 @@ func TestBuildResponseMeta(t *testing.T) {
 		_, hasMessages := meta["messages"]
 		assert.True(t, hasMessages)
 	})
+
+	t.Run("flags degraded memory so the controller can surface it", func(t *testing.T) {
+		state := &executionState{conversationId: "conv-1", memoryDegraded: true}
+		meta := buildResponseMeta(state, nil, nil, arkv1alpha1.TokenUsage{})
+		assert.Equal(t, true, meta["memoryDegraded"])
+	})
+
+	t.Run("omits memoryDegraded when history loaded", func(t *testing.T) {
+		state := &executionState{conversationId: "conv-1"}
+		meta := buildResponseMeta(state, nil, nil, arkv1alpha1.TokenUsage{})
+		_, hasDegraded := meta["memoryDegraded"]
+		assert.False(t, hasDegraded)
+	})
 }
 
 func TestResolveSelectorResourceTypes(t *testing.T) {

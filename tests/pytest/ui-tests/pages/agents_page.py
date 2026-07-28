@@ -2,7 +2,7 @@ import logging
 import random
 import pytest
 from datetime import datetime
-from playwright.sync_api import Page
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -18,7 +18,7 @@ class AgentsPage(BasePage):
     SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
-    CHAT_BUTTON = "button:has(svg.lucide-message-circle)"
+    CHAT_BUTTON = "button[aria-label='Chat with agent']"
     CHAT_WINDOW = "div[data-slot='card']"
     CLOSE_CHAT_BUTTON = "button[aria-label='Close chat']"
 
@@ -63,7 +63,7 @@ class AgentsPage(BasePage):
         if self.page.locator(self.CHAT_WINDOW).is_visible(timeout=100):
             logger.error("Chat already open")
             return
-        row = self.page.locator(f"[role='link']:has(p.truncate.text-sm.font-medium:has-text('{agent_name}'))").first
+        row = self.page.locator(f"tr:has(a[title='{agent_name}'])").first
         row.locator(self.CHAT_BUTTON).click()
         self.wait_for_element(self.CHAT_WINDOW)
 
@@ -253,11 +253,7 @@ class AgentsPage(BasePage):
             for tool_name in tools:
                 self._select_tool(tool_name)
         
-        save_button = self.page.locator("button:has-text('Create Agent'), button:has-text('Save Changes')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        save_button = self.page.locator(self.SAVE_BUTTON).first
         
         logger.info("Clicking Create/Save button")
         save_button.scroll_into_view_if_needed()
@@ -295,10 +291,13 @@ class AgentsPage(BasePage):
             name_element = self.page.get_by_text(agent_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete agent'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete agent'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=agent_name).first
+            delete_btn = row.get_by_role("button", name="Delete agent")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            # The delete action is disabled while the agent's chat window is open;
+            # wait for it to become enabled before clicking.
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for agent '%s': %s", agent_name, e)
             return self._delete_not_available(agent_name)

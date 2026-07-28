@@ -136,7 +136,7 @@ describe('EmbeddedChatPanel', () => {
   it('should persist new sessionId to atom on new chat creation', async () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
-    const newChatButton = screen.getByText(/New Chat/i);
+    const newChatButton = screen.getByRole('button', { name: /new chat/i });
     expect(newChatButton).toBeInTheDocument();
   });
 
@@ -200,7 +200,9 @@ describe('EmbeddedChatPanel', () => {
     const chatTab = screen.getByRole('tab', { name: /Chat/i });
     await user.click(chatTab);
 
-    const newChatButton = await screen.findByText(/New Chat/i);
+    const newChatButton = await screen.findByRole('button', {
+      name: /new chat/i,
+    });
     expect(newChatButton).not.toBeDisabled();
 
     await user.click(newChatButton);
