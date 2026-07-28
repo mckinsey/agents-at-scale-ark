@@ -208,14 +208,11 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	// spec.timeout is a wall-clock SLO from creationTimestamp. If it has
-	// elapsed on a non-terminal Query, fail loudly with a TimedOut* reason
-	// before any further work is dispatched — clients see a definite terminal
-	// state instead of a query wedged in queued/running forever.
-	if !isTerminalPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
+	// Pre-execution wall-SLO: fail if Ark hasn't started work within
+	// spec.timeout. See isPreExecutionPhase for the phase set.
+	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
 		r.cleanupExistingOperation(req.NamespacedName)
-		reason, message := timeoutReasonForPhase(obj.Status.Phase)
-		if err := r.failQueryOnTimeout(ctx, &obj, reason, message); err != nil {
+		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -272,29 +269,13 @@ func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 	return time.Until(obj.CreationTimestamp.Add(timeout))
 }
 
-// timeoutReasonForPhase picks the QueryCompleted condition reason and a
-// phase-appropriate user-facing message for a spec.timeout-elapsed transition.
-// Reasons collapse to two buckets (before-execution vs. during-execution) but
-// messages stay specific so users see an accurate "why" rather than an
-// over-claim like "waiting for controller capacity" when the Query never
-// reached the queue in the first place.
-func timeoutReasonForPhase(phase string) (reason, message string) {
-	switch phase {
-	case statusRunning:
-		return reasonTimedOutInExecution, "Query timed out during execution"
-	case statusInputRequired:
-		// Also see Query.spec.timeout vs A2ATask approval timeout interaction:
-		// clients should set spec.timeout larger than the agent's approval
-		// timeout, or the Query auto-fails before the human can respond.
-		return reasonTimedOutInExecution, "Query timed out awaiting approval"
-	case statusQueued:
-		return reasonTimedOutInQueue, "Query timed out waiting for controller capacity"
-	default:
-		// "", statusPending, statusProvisioning — the query never actually
-		// reached the queue (reconciler backlog, provisioning wait on Model
-		// probe / MCP tool discovery, etc.). Don't overclaim the cause.
-		return reasonTimedOutInQueue, "Query timed out before execution began"
+// preExecutionTimeoutMessage picks a phase-specific message for the pre-flight
+// wall-SLO transition. Caller pairs it with reasonTimedOutInQueue.
+func preExecutionTimeoutMessage(phase string) string {
+	if phase == statusQueued {
+		return "Query timed out waiting for controller capacity"
 	}
+	return "Query timed out before execution began"
 }
 
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
@@ -484,13 +465,9 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 
 	if err := r.handleQueryDispatch(opCtx, &obj, dispatchSpan, impersonatedClient); err != nil {
-		// Distinguish spec.timeout-elapsed dispatch failures from ordinary
-		// executor errors so the QueryCompleted condition carries the
-		// TimedOutInExecution reason instead of the default QueryErrored.
-		// A fresh remainingBudget check is more reliable than pattern-
-		// matching err — sendQueryA2A returns a plain string when the
-		// budget was already zero, not a wrapped DeadlineExceeded.
-		if remainingBudget(&obj) <= 0 {
+		// Executor-context deadline → TimedOutInExecution; anything else →
+		// generic QueryErrored via the normal error path.
+		if stderrors.Is(err, context.DeadlineExceeded) {
 			_ = r.failQueryOnTimeout(opCtx, &obj, reasonTimedOutInExecution, "Query timed out during execution")
 		} else {
 			_ = r.updateStatus(opCtx, &obj, statusError)
@@ -644,13 +621,12 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	// Bound the A2A call by whatever remains of the spec.timeout budget
-	// (measured from creationTimestamp), not the full timeout — otherwise a
-	// query that spent 4:55 in queued+running would still get a fresh 5m
-	// execution budget, blowing past its SLO.
-	timeout := remainingBudget(&query)
-	if timeout <= 0 {
-		return nil, engineResponseMeta{}, fmt.Errorf("query timeout elapsed before A2A dispatch")
+	// Per-round budget: fresh spec.timeout for each A2A call, so HITL waits
+	// don't consume it. Pre-execution wall-SLO enforced separately in
+	// handleQueryExecution.
+	timeout := defaultQueryTimeout
+	if query.Spec.Timeout != nil {
+		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 
@@ -974,6 +950,18 @@ func isTerminalPhase(phase string) bool {
 	return false
 }
 
+// isPreExecutionPhase reports whether a Query is still waiting for Ark to
+// dispatch work. spec.timeout is a wall-SLO on these phases; running is
+// bounded per-round by the executor context, and input-required by the
+// A2ATask approval timeout — neither counted here.
+func isPreExecutionPhase(phase string) bool {
+	switch phase {
+	case "", statusPending, statusProvisioning, statusQueued:
+		return true
+	}
+	return false
+}
+
 // queryCompletedAt returns the timestamp when the Query reached a terminal
 // phase, or nil if it has not. The QueryCompleted condition flips to
 // Status=True only on terminal phases (Done/Error/Canceled), and
@@ -1089,18 +1077,10 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	}, "status="+status)
 }
 
-// failQueryOnTimeout transitions a Query to phase: error with a caller-supplied
-// Completed condition reason (TimedOutIn{Queue,Execution}) instead of the
-// default QueryErrored reason updateStatus would set via setConditionForPhase.
-// Idempotent: no-op if the Query is already in a terminal phase (so a race
-// between reconcile-time and executor-side timeout detection doesn't
-// double-transition).
-//
-// Also mirrors the timeout message into Status.Response.Content so downstream
-// observers (chat UI, dashboard, kubectl describe) see a discoverable "why" in
-// the same slot executor errors populate. Otherwise a queue-side timeout would
-// leave response.content nil — asymmetric with executor errors and invisible
-// through the UI.
+// failQueryOnTimeout transitions a Query to phase: error with a specific
+// TimedOutIn{Queue,Execution} condition reason, and mirrors the message
+// into Status.Response.Content so it renders in the same slot as executor
+// errors (chat UI, dashboard, kubectl describe). Idempotent on terminal.
 func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1alpha1.Query, reason, message string) error {
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) {
 		if isTerminalPhase(q.Status.Phase) {
@@ -1109,11 +1089,8 @@ func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1al
 		q.Status.Phase = statusError
 		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
 
-		// Preserve an existing Response's target (e.g. from a partial
-		// execution that then hit the deadline); fall back to Spec.Target
-		// when the executor never got that far. Overwrite Content/Phase to
-		// reflect the timeout — a mid-stream partial message would mislead
-		// users about the actual outcome.
+		// Preserve target from an existing Response (partial exec) or Spec;
+		// overwrite Content/Phase.
 		target := arkv1alpha1.QueryTarget{}
 		switch {
 		case q.Status.Response != nil:

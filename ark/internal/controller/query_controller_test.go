@@ -498,21 +498,56 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 		})
 
 		It("fails a pre-queue query (no phase set yet) with a neutral before-execution message", func() {
-			// Empty phase means the reconciler hasn't gotten to it — should
-			// NOT claim "waiting for controller capacity", which is
-			// specifically the queued-phase reason.
+			// Empty phase → don't overclaim "capacity"; it just means the
+			// reconciler hasn't gotten to it yet.
 			expectTimeoutTransition("timeout-prequeue-elapsed", "", reasonTimedOutInQueue, "before execution began")
 		})
 
-		It("fails a running query with TimedOutInExecution when spec.timeout has elapsed", func() {
-			expectTimeoutTransition("timeout-running-elapsed", statusRunning, reasonTimedOutInExecution, "execution")
+		// Shared exerciser for phases where spec.timeout does NOT apply at
+		// the reconciler level: running (executor per-round context takes
+		// over) and input-required (HITL owns its own timer via A2ATask).
+		// A query with elapsed wall time in either phase must NOT be
+		// auto-transitioned by the pre-flight check.
+		expectNoTransition := func(name, phase string) {
+			ctx := context.Background()
+			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			query := newExpiredQuery(name)
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			query.Status.Phase = phase
+			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+			preRV := query.ResourceVersion
+
+			time.Sleep(20 * time.Millisecond)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			// Guard against handleQueryExecution racing an execution spawn
+			// or A2ATask fetch on the running/input-required branches: we
+			// only care that the pre-flight timeout check did NOT fire.
+			_, _ = r.handleQueryExecution(ctx, req, *query)
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).NotTo(Equal(statusError), "pre-flight must not fire for %s: spec.timeout is not a wall-SLO on this phase", phase)
+			cond := findCompletedCondition(after)
+			if cond != nil {
+				Expect(cond.Reason).NotTo(Or(Equal(reasonTimedOutInQueue), Equal(reasonTimedOutInExecution)), "no timeout reason should have been written")
+			}
+			// Belt-and-braces: no timeout-shaped Response.
+			if after.Status.Response != nil {
+				Expect(after.Status.Response.Content).NotTo(ContainSubstring("timed out"))
+			}
+			_ = preRV
+		}
+
+		It("does not fail a running query on elapsed spec.timeout (executor per-round budget owns it)", func() {
+			expectNoTransition("timeout-running-onthehouse", statusRunning)
 		})
 
-		It("fails an input-required query with an awaiting-approval message", func() {
-			// spec.timeout is a wall-clock SLO, so approval waits count.
-			// Message distinguishes from generic execution timeout so users
-			// realise a slow reviewer (not a slow LLM) tripped the deadline.
-			expectTimeoutTransition("timeout-inputrequired-elapsed", statusInputRequired, reasonTimedOutInExecution, "awaiting approval")
+		It("does not fail an input-required query on elapsed spec.timeout (HITL wait is on-the-house)", func() {
+			expectNoTransition("timeout-hitl-onthehouse", statusInputRequired)
 		})
 
 		It("does not re-transition an already terminal query even when budget has elapsed", func() {
