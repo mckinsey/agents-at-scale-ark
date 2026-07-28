@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -103,4 +104,68 @@ func TestFailQueryOnTimeout_StatusUpdateError_Propagates(t *testing.T) {
 	err := r.failQueryOnTimeout(context.Background(), q, reasonTimedOutInQueue, "test message")
 
 	require.Error(t, err, "failQueryOnTimeout must surface the update failure so the reconciler retries and doesn't silently swallow a lost terminal write")
+}
+
+// remainingBudget is the load-bearing helper every timeout branch depends on
+// (pre-flight check, sem-full clamp, executor context, executor-error
+// discrimination). Direct table-driven coverage so a subtle sign flip or
+// default-fallback regression can't slip through the higher-level Ginkgo
+// suites — the nil-Timeout fallback in particular is the common case for
+// clients that omit the field.
+func TestRemainingBudget(t *testing.T) {
+	tests := []struct {
+		name          string
+		creationAgo   time.Duration
+		timeout       *metav1.Duration
+		wantPositive  bool
+		approxSeconds float64
+	}{
+		{
+			name:          "nil spec.Timeout falls back to defaultQueryTimeout",
+			creationAgo:   0,
+			timeout:       nil,
+			wantPositive:  true,
+			approxSeconds: defaultQueryTimeout.Seconds(),
+		},
+		{
+			name:          "explicit spec.Timeout is honored",
+			creationAgo:   0,
+			timeout:       &metav1.Duration{Duration: 30 * time.Second},
+			wantPositive:  true,
+			approxSeconds: 30,
+		},
+		{
+			// The negative-sign convention every enforcement branch depends
+			// on: `remainingBudget <= 0` is the timeout trigger.
+			name:          "elapsed budget returns negative",
+			creationAgo:   10 * time.Minute,
+			timeout:       nil, // default 5m — 10m ago → -5m
+			wantPositive:  false,
+			approxSeconds: -(5 * time.Minute).Seconds(),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "budget-test",
+					Namespace:         "default",
+					CreationTimestamp: metav1.NewTime(time.Now().Add(-tc.creationAgo)),
+				},
+				Spec: arkv1alpha1.QuerySpec{Timeout: tc.timeout},
+			}
+
+			got := remainingBudget(q)
+			if tc.wantPositive {
+				assert.Greater(t, got, time.Duration(0), "expected positive remaining budget")
+			} else {
+				assert.Less(t, got, time.Duration(0), "expected negative remaining budget (elapsed)")
+			}
+			// 1s tolerance absorbs the tiny drift between CreationTimestamp
+			// capture and the remainingBudget call.
+			assert.InDelta(t, tc.approxSeconds, got.Seconds(), 1.0,
+				"remainingBudget should be within 1s of the expected value")
+		})
+	}
 }
