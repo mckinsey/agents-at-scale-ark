@@ -151,6 +151,33 @@ runs:
         echo "::endgroup::"
       shell: bash
 
+    # The install script returns as soon as `systemctl start k3s` returns,
+    # which is well before the apiserver has bound :6443 on a cold runner
+    # (60-90s is typical with --docker). Wait for reachability before probing
+    # anything auth-related, so a slow apiserver start doesn't look like an
+    # RBAC race in the failure diagnostics.
+    - name: Wait for k3s apiserver reachable
+      run: |
+        echo "::group::Wait for k3s apiserver reachable"
+        for attempt in $(seq 1 60); do
+          if kubectl get --raw /livez >/dev/null 2>&1; then
+            echo "k3s apiserver reachable (attempt $attempt/60)"
+            break
+          fi
+          echo "Waiting for k3s apiserver (attempt $attempt/60)..."
+          sleep 3
+          if [ "$attempt" -eq 60 ]; then
+            echo "Timed out waiting for k3s apiserver"
+            echo "--- systemctl status k3s ---"
+            sudo systemctl status k3s --no-pager || true
+            echo "--- journalctl -u k3s (last 5 min) ---"
+            sudo journalctl -u k3s --no-pager --since "5 minutes ago" --lines=200 || true
+            exit 1
+          fi
+        done
+        echo "::endgroup::"
+      shell: bash
+
     # Wait for k3s to finish creating the bootstrap RBAC the cloud-controller
     # manager needs before we apply anything on top of it. If we don't, the
     # cloud-controller can race against its own rolebinding, hit a 403 reading

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -211,13 +212,10 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	case statusInputRequired:
 		// Query is awaiting approval/input, check if A2ATask has completed
 		return r.handleInputRequiredPhase(ctx, &obj)
-	case statusProvisioning, statusRunning:
+	case statusProvisioning, statusRunning, statusQueued:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
-		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+		return r.handleRunningPhase(ctx, req, obj)
 	}
 }
 
@@ -251,7 +249,21 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 	if r.sem != nil && !r.sem.TryAcquire(1) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
+		if obj.Status.Phase != statusQueued {
+			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
+	}
+
+	if obj.Status.Phase != statusRunning {
+		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
+			if r.sem != nil {
+				r.sem.Release(1)
+			}
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Execution deadline is governed by Spec.Timeout, applied per-A2A-call in
@@ -411,11 +423,34 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
 	if rec := recover(); rec != nil {
-		logf.FromContext(ctx).Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
+		logf.FromContext(ctx).Error(
+			fmt.Errorf("query execution goroutine panic: %v", rec),
+			"Query execution goroutine panicked",
+			"stack", string(debug.Stack()),
+		)
+		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
 	if r.sem != nil {
 		r.sem.Release(1)
+	}
+}
+
+// markQueryErroredAfterPanic sets the query status to error so it converges
+// instead of relying on the safety-net requeue to retry the panicking dispatch.
+func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) {
+	var q arkv1alpha1.Query
+	if err := r.Get(ctx, namespacedName, &q); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to fetch query after panic; leaving to safety-net requeue")
+		return
+	}
+	if q.Status.Response == nil {
+		q.Status.Response = &arkv1alpha1.Response{}
+	}
+	q.Status.Response.Phase = statusError
+	q.Status.Response.Content = fmt.Sprintf("query execution goroutine panicked: %v", rec)
+	if err := r.updateStatus(ctx, &q, statusError); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to mark query errored after panic; leaving to safety-net requeue")
 	}
 }
 
@@ -905,6 +940,8 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	switch status {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
+	case statusQueued:
+		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryQueued", "Query is queued waiting for controller capacity")
 	case statusDone:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
