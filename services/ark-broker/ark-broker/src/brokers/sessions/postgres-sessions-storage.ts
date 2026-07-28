@@ -183,11 +183,36 @@ export class PostgresSessionsStorage implements SessionsStorage {
   private async lockHeader(
     sql: postgres.TransactionSql,
     sessionId: string
-  ): Promise<SessionRow> {
+  ): Promise<SessionRow | undefined> {
     const headerRows = await sql<SessionRow[]>`
       SELECT * FROM sessions WHERE session_id = ${sessionId} FOR UPDATE
     `;
-    return headerRows[0]!;
+    return headerRows[0];
+  }
+
+  /**
+   * The caller's INSERT ... ON CONFLICT DO NOTHING takes no lock when the row
+   * already exists, so a purge can commit between it and the lock and leave
+   * this write with no parent row - the query insert would then trip the
+   * foreign key. Recreating it is the same outcome the event would have had if
+   * it had arrived a moment later, so recover rather than fail. ON CONFLICT DO
+   * UPDATE both locks and returns the row, so this cannot come back empty.
+   */
+  private async lockHeaderOrRecreate(
+    sql: postgres.TransactionSql,
+    sessionId: string,
+    name: string
+  ): Promise<SessionRow> {
+    const header = await this.lockHeader(sql, sessionId);
+    if (header) return header;
+
+    const recreated = await sql<SessionRow[]>`
+      INSERT INTO sessions (session_id, name, expires_at)
+      VALUES (${sessionId}, ${name}, now() + make_interval(secs => ${this.ttlSeconds}))
+      ON CONFLICT (session_id) DO UPDATE SET name = EXCLUDED.name
+      RETURNING *
+    `;
+    return recreated[0]!;
   }
 
   /**
@@ -252,7 +277,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
         ON CONFLICT (session_id) DO NOTHING
       `;
 
-      const header = await this.lockHeader(sql, sessionId);
+      const header = await this.lockHeaderOrRecreate(sql, sessionId, name);
 
       // After the header lock, never before: the INSERT above takes no lock
       // when the row already exists, and FOR UPDATE on a query row that does
@@ -359,7 +384,10 @@ export class PostgresSessionsStorage implements SessionsStorage {
       const owner = owners[0];
       if (!owner) return;
 
+      // A purge can have removed it since the probe above; its query rows
+      // went with it, so there is nothing left to apply this message to.
       const header = await this.lockHeader(sql, owner.session_id);
+      if (!header) return;
 
       const existingRows = await sql<SessionQueryRow[]>`
         SELECT * FROM session_queries

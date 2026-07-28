@@ -928,6 +928,43 @@ describe('PostgresSessionsStorage', () => {
       expect(session.status).toBe('idle');
     });
 
+    test('a purge committing while a write waits for the header does not fail the write', async () => {
+      // The header insert takes no lock when the row already exists, so a purge
+      // can commit between it and the header lock. The write then holds a lock
+      // on nothing, and its query insert would trip the foreign key. Held here
+      // deterministically: the gate owns the header, the write parks behind it,
+      // and the gate deletes the row before releasing.
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'seed'});
+
+      let release = (): void => {};
+      const parked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const gate = db().begin(async (sql) => {
+        await sql`SELECT session_id FROM sessions WHERE session_id = 'sess-1' FOR UPDATE`;
+        await parked;
+        await sql`DELETE FROM sessions WHERE session_id = 'sess-1'`;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const write = storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'query-1',
+        conversationId: 'conv-1',
+        agent: 'agent-a',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      release();
+      await gate;
+
+      await expect(write).resolves.toBeUndefined();
+
+      // The purge won, so the event recreates the session rather than failing.
+      const session = (await storage.getSession('sess-1'))!;
+      expect(Object.keys(session.queries)).toEqual(['query-1']);
+      expect(session.queries['query-1']!.agent).toBe('agent-a');
+    });
+
     test('many concurrent conversation-joining queries in one session all count in messageCount', async () => {
       const N = 12;
       await Promise.all(
