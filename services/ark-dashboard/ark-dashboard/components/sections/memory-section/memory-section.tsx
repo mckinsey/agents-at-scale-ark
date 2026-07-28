@@ -9,17 +9,20 @@ import {
   ResourceNoResults,
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
+import {
+  Combobox,
+  ComboboxAnchor,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from '@/components/ui/combobox';
 import { IconShell } from '@/components/ui/icon-shell';
+import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Pagination } from '@/components/ui/pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -55,22 +58,29 @@ type SortDirection = 'asc' | 'desc';
 /** URL query parameters the filters are stored in. */
 type MemoryFilterParam = 'memory' | 'conversationId' | 'queryId';
 
-interface FilterSelectProps {
+interface FilterOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+interface FilterComboboxProps {
   readonly label: string;
   readonly value: string;
   readonly options: readonly string[];
   readonly allLabel: string;
+  readonly noMatchesMessage: string;
   readonly onChange: (value: string) => void;
 }
 
-function FilterSelect({
+function FilterCombobox({
   label,
   value,
   options,
   allLabel,
+  noMatchesMessage,
   onChange,
-}: FilterSelectProps) {
-  const items = useMemo(
+}: FilterComboboxProps) {
+  const items = useMemo<FilterOption[]>(
     () => [
       { value: ALL, label: allLabel },
       ...options.map(option => ({ value: option, label: option })),
@@ -78,23 +88,43 @@ function FilterSelect({
     [options, allLabel],
   );
 
+  const selected = items.find(item => item.value === value) ?? items[0];
+
   return (
     <div className="flex w-48 flex-col gap-2">
       <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
         {label}
       </span>
-      <Select items={items} value={value} onValueChange={v => onChange(String(v))}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={allLabel} />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map(item => (
-            <SelectItem key={item.value} value={item.value}>
-              <SelectItemText>{item.label}</SelectItemText>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Combobox
+        items={items}
+        value={selected}
+        onValueChange={(next: FilterOption | null) => onChange(next?.value ?? ALL)}
+        itemToStringLabel={(item: FilterOption) => item.label}
+        isItemEqualToValue={(a: FilterOption, b: FilterOption) =>
+          a.value === b.value
+        }
+        filter={(item: FilterOption, query: string) =>
+          item.label.toLowerCase().includes(query.toLowerCase())
+        }>
+        <ComboboxAnchor>
+          <InputGroup>
+            <ComboboxInput placeholder={allLabel} aria-label={label} />
+            <InputGroupAddon align="inline-end">
+              <ComboboxTrigger />
+            </InputGroupAddon>
+          </InputGroup>
+        </ComboboxAnchor>
+        <ComboboxContent>
+          <ComboboxEmpty>{noMatchesMessage}</ComboboxEmpty>
+          <ComboboxList>
+            {(item: FilterOption) => (
+              <ComboboxItem key={item.value} value={item}>
+                {item.label}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
     </div>
   );
 }
@@ -130,7 +160,10 @@ export function MemorySection() {
   });
 
   const memoryOptions = useMemo(
-    () => (memoryResources.data ?? []).map(memory => memory.name).sort(),
+    () =>
+      (memoryResources.data ?? [])
+        .map(memory => memory.name)
+        .sort((a, b) => a.localeCompare(b)),
     [memoryResources.data],
   );
 
@@ -139,7 +172,7 @@ export function MemorySection() {
       Array.from(
         // Extract unique conversation IDs for filtering
         new Set(conversations.data?.map(c => c.conversationId)),
-      ).sort(),
+      ).sort((a, b) => a.localeCompare(b)),
     [conversations.data],
   );
 
@@ -277,23 +310,26 @@ export function MemorySection() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <FilterSelect
+        <FilterCombobox
           label="Memories"
           allLabel="All"
+          noMatchesMessage="No memories match your filter"
           value={filters.memoryName ?? ALL}
           options={memoryOptions}
           onChange={value => handleFilterChange('memory', value)}
         />
-        <FilterSelect
+        <FilterCombobox
           label="Conversations"
           allLabel="All"
+          noMatchesMessage="No conversations match your filter"
           value={filters.conversationId ?? ALL}
           options={conversationOptions}
           onChange={value => handleFilterChange('conversationId', value)}
         />
-        <FilterSelect
+        <FilterCombobox
           label="Queries"
           allLabel="All"
+          noMatchesMessage="No queries match your filter"
           value={filters.queryId ?? ALL}
           options={queryOptions}
           onChange={value => handleFilterChange('queryId', value)}
