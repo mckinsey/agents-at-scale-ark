@@ -306,7 +306,7 @@ describe('PostgresSessionsStorage', () => {
       expect(session.conversations![0]!.messageCount).toBe(1);
     });
 
-    test('does not emit a subscribe notification (matches in-memory backend parity)', async () => {
+    test('emits when a message attaches the query to a conversation', async () => {
       await storage.whenListening();
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
       // Let applyEvent's own notification land before subscribing, so it
@@ -318,6 +318,14 @@ describe('PostgresSessionsStorage', () => {
       await storage.applyMessage('conv-abc', 'query-1');
       await new Promise((resolve) => setTimeout(resolve, 200));
 
+      // The conversation list changed, so a watcher that was not told would
+      // keep serving the previous one.
+      expect(received).toEqual([{sessionId: 'sess-1', queryName: 'query-1'}]);
+
+      // ...but a message that changes nothing stays quiet.
+      received.length = 0;
+      await storage.applyMessage('conv-ignored', 'query-1');
+      await new Promise((resolve) => setTimeout(resolve, 200));
       expect(received).toHaveLength(0);
     });
   });
@@ -786,6 +794,33 @@ describe('PostgresSessionsStorage', () => {
       expect(watermark!.event).toBe('10');
     });
 
+    test('an out-of-order event contributes a namespace the query is missing', async () => {
+      // namespace has no merge rule of its own in the phase half, so if it is
+      // not merged here a stale event carrying only a namespace looks like it
+      // changed nothing and gets dropped whole.
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          _reason: 'QueryExecutionComplete',
+        },
+        10
+      );
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          queryNamespace: 'team-a',
+          _reason: 'AgentExecutionStart',
+        },
+        7
+      );
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1']!;
+      expect(query.namespace).toBe('team-a');
+      expect(query.phase).toBe('done');
+    });
+
     test('an undefined sequence never poisons the watermark to NULL: a later real sequence still applies', async () => {
       await storage.applyEvent({
         sessionId: 'sess-1',
@@ -1032,6 +1067,36 @@ describe('PostgresSessionsStorage', () => {
       },
       {sessionId: 's', queryName: 'q3', conversationId: 'c2', team: 'team-c'},
     ];
+
+    test('aggregates match the in-memory backend when a message joins the conversation', async () => {
+      // Some queries only learn their conversation from a message, and a query
+      // that is already terminal gets no further event - so whichever backend
+      // skips the recompute here never shows that conversation at all.
+      const inMemory = new InMemorySessionsStorage(silentLogger);
+      const event = {
+        sessionId: 's',
+        queryName: 'q1',
+        agent: 'agent-a',
+        _reason: 'QueryExecutionComplete',
+      };
+      await storage.applyEvent(event);
+      await inMemory.applyEvent(event);
+      await storage.applyMessage('c1', 'q1');
+      await inMemory.applyMessage('c1', 'q1');
+
+      const fromPg = (await storage.getSession('s'))!;
+      const fromMemory = (await inMemory.getSession('s'))!;
+
+      expect(fromPg.queries['q1']!.conversationId).toBe('c1');
+      expect(fromPg.conversations).toHaveLength(1);
+      expect(fromPg.participants).toEqual([
+        {id: 'agent-a', name: 'agent-a', type: 'agent'},
+      ]);
+      expect(fromMemory.participants).toEqual(fromPg.participants);
+      expect(fromMemory.conversations!.map((c) => c.conversationId)).toEqual(
+        fromPg.conversations!.map((c) => c.conversationId)
+      );
+    });
 
     test('aggregates match the in-memory backend event for event', async () => {
       const inMemory = new InMemorySessionsStorage(silentLogger);

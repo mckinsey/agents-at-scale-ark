@@ -12,7 +12,7 @@ import {
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
-import {createSessionsStorage} from '@ark-broker/brokers/sessions/sessions-storage-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 import {usePgContainer} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
 
 jest.setTimeout(120_000);

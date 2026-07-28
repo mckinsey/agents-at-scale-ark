@@ -64,23 +64,27 @@ export function buildQueryEntry(
 }
 
 /**
- * Fills the still-empty identity fields and bumps lastActivity. Every rule here
- * is first-write-wins, so this is safe to apply out of order: an older event can
- * only fill a gap, never overwrite. Returns whether it changed anything, which
- * lets a caller tell a genuinely new event from a bare redelivery.
+ * Fills the still-empty identity fields. Every rule here is first-write-wins, so
+ * this is safe to apply out of order: an older event can only fill a gap, never
+ * overwrite. Returns whether it changed anything, which is what lets a caller
+ * tell a genuinely new event from a bare redelivery.
  *
- * lastActivity is the wall clock of this apply, not the event's own time, so it
- * still moves forward when an older event is merged late.
+ * It deliberately does not touch lastActivity. Every caller that keeps the write
+ * goes on to applyQueryPhase, which sets it; the one that does not keep the
+ * write discards this entry entirely.
  */
 export function mergeQueryMetadata(
   existing: QueryEntry,
-  eventData: Partial<SessionEventData>,
-  now: string
+  eventData: Partial<SessionEventData>
 ): boolean {
   let filled = false;
 
   if (eventData.conversationId && !existing.conversationId) {
     existing.conversationId = eventData.conversationId;
+    filled = true;
+  }
+  if (eventData.queryNamespace && !existing.namespace) {
+    existing.namespace = eventData.queryNamespace;
     filled = true;
   }
   if (eventData.agent && !existing.agent) {
@@ -95,8 +99,9 @@ export function mergeQueryMetadata(
     existing.tool = eventData.tool;
     filled = true;
   }
-  // 'agent' is the default, so guarding on it alone would report a fill on
-  // every event that merely repeats it - which is every event.
+  // 'agent' is both the default and a real value, so comparing only the stored
+  // side would report a fill on every event that merely repeats it - which is
+  // every event. A non-agent value is never downgraded, in either direction.
   if (
     eventData.targetType &&
     eventData.targetType !== 'agent' &&
@@ -106,7 +111,6 @@ export function mergeQueryMetadata(
     filled = true;
   }
 
-  if (filled) existing.lastActivity = now;
   return filled;
 }
 
@@ -153,7 +157,7 @@ export function updateExistingQuery(
   errorMsg?: string
 ): void {
   const now = new Date().toISOString();
-  mergeQueryMetadata(existing, eventData, now);
+  mergeQueryMetadata(existing, eventData);
   applyQueryPhase(existing, phase, now, errorMsg);
 }
 

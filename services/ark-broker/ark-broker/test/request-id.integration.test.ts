@@ -6,7 +6,7 @@ import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
-import {createSessionsStorage} from '@ark-broker/brokers/sessions/sessions-storage-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 
 class MemorySink extends Writable {
   public readonly lines: string[] = [];

@@ -151,10 +151,19 @@ export class InMemorySessionsStorage implements SessionsStorage {
     if (!query) return;
 
     query.lastActivity = new Date().toISOString();
-    if (!query.conversationId) {
+    const joinedConversation = !query.conversationId;
+    if (joinedConversation) {
       query.conversationId = conversationId;
     }
     session.lastActivity = query.lastActivity;
+    // A message is what first attaches some queries to a conversation, and a
+    // query that is already terminal gets no further event to fold it in - so
+    // without this the conversation would never appear at all. The aggregate
+    // really changed, so watchers are told, as they are for an event.
+    if (joinedConversation) {
+      recalculateSessionStatus(session);
+      this.emitter.emit('upsert', {sessionId, queryName: queryId});
+    }
     this.deferredSave();
   }
 

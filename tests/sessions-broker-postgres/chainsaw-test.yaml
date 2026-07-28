@@ -5,7 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations/participants/errorCount aggregated correctly; GET /sessions/:id returns the same shape over HTTP
+  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations and errorCount aggregated on it; GET /sessions/:id returns the same shape over HTTP, participants included
   steps:
   - name: setup-mock-llm
     try:

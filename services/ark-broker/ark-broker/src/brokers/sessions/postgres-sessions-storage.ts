@@ -311,9 +311,13 @@ export class PostgresSessionsStorage implements SessionsStorage {
             errorMsg
           );
       if (existingRow) {
-        const filled = mergeQueryMetadata(entry, normalizedEventData, now);
+        const filled = mergeQueryMetadata(entry, normalizedEventData);
         if (stale && !filled) return false;
-        if (!stale) applyQueryPhase(entry, queryPhase, now, errorMsg);
+        if (stale) {
+          entry.lastActivity = now;
+        } else {
+          applyQueryPhase(entry, queryPhase, now, errorMsg);
+        }
       }
 
       await sql`
@@ -368,7 +372,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
     queryId: string,
     sequence?: number
   ): Promise<void> {
-    await this.db.begin(async (sql) => {
+    const touched = await this.db.begin(async (sql) => {
       // Callers know the query but not its session, so this unlocked probe
       // resolves the owner before taking any lock - keeping the header-first
       // order applyEvent uses. A query name can exist under more than one
@@ -403,6 +407,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
       }
 
       const now = new Date().toISOString();
+      const joinedConversation = !existingRow.conversation_id;
       const resolvedConversationId =
         existingRow.conversation_id ?? conversationId;
 
@@ -424,7 +429,21 @@ export class PostgresSessionsStorage implements SessionsStorage {
       if (updated.length === 0) return;
 
       await this.refreshHeader(sql, header, now);
+
+      // Only a message that attaches the query to a conversation changes what a
+      // watcher would render; the rest just moves last_activity along, which is
+      // what the in-memory backend does silently too.
+      return joinedConversation ? owner.session_id : undefined;
     });
+
+    // refreshHeader just rewrote conversations, participants and status, so a
+    // watcher that is not told would keep serving the previous list.
+    if (touched) {
+      await this.db.notify(
+        NOTIFY_CHANNEL,
+        JSON.stringify({sessionId: touched, queryName: queryId})
+      );
+    }
   }
 
   async getSession(sessionId: string): Promise<SessionEntry | undefined> {

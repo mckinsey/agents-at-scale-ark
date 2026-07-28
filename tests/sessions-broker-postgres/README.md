@@ -1,6 +1,6 @@
 # sessions-broker-postgres
 
-Verifies that two queries sharing a `sessionId` are recorded as two rows in the Postgres `session_queries` table under one `sessions` header row, with `conversations`/`participants`/`error_count` aggregated correctly.
+Verifies that two queries sharing a `sessionId` are recorded as two rows in the Postgres `session_queries` table under one `sessions` header row, with `conversations` and `error_count` aggregated on it and `participants` derived from those conversations on read.
 
 ## What it tests
 - Two queries, targeting two different agents in two different conversations, both set `spec.sessionId` to the same value
