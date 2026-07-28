@@ -1083,6 +1083,12 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 // Idempotent: no-op if the Query is already in a terminal phase (so a race
 // between reconcile-time and executor-side timeout detection doesn't
 // double-transition).
+//
+// Also mirrors the timeout message into Status.Response.Content so downstream
+// observers (chat UI, dashboard, kubectl describe) see a discoverable "why" in
+// the same slot executor errors populate. Otherwise a queue-side timeout would
+// leave response.content nil — asymmetric with executor errors and invisible
+// through the UI.
 func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1alpha1.Query, reason, message string) error {
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) {
 		if isTerminalPhase(q.Status.Phase) {
@@ -1090,6 +1096,24 @@ func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1al
 		}
 		q.Status.Phase = statusError
 		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
+
+		// Preserve an existing Response's target (e.g. from a partial
+		// execution that then hit the deadline); fall back to Spec.Target
+		// when the executor never got that far. Overwrite Content/Phase to
+		// reflect the timeout — a mid-stream partial message would mislead
+		// users about the actual outcome.
+		target := arkv1alpha1.QueryTarget{}
+		switch {
+		case q.Status.Response != nil:
+			target = q.Status.Response.Target
+		case q.Spec.Target != nil:
+			target = *q.Spec.Target
+		}
+		q.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: message,
+			Phase:   statusError,
+		}
 	}, "timeout reason="+reason)
 }
 

@@ -485,6 +485,12 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal(wantReason))
 			Expect(cond.Message).To(ContainSubstring(msgFragment))
+			// Response.Content mirrors the timeout message so downstream
+			// observers (chat, dashboard, kubectl describe) see a
+			// discoverable "why" in the same slot executor errors populate.
+			Expect(after.Status.Response).NotTo(BeNil(), "timeout must populate response.content so the user-facing reason isn't asymmetric with executor errors")
+			Expect(after.Status.Response.Content).To(ContainSubstring(msgFragment))
+			Expect(after.Status.Response.Phase).To(Equal(statusError))
 		}
 
 		It("fails a queued query with TimedOutInQueue when spec.timeout has elapsed", func() {

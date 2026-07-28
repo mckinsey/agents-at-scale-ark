@@ -49,7 +49,13 @@ spec:
             name: test-query-math-timeout
           status:
             phase: error
-            (contains(response.content, 'Client.Timeout exceeded') || contains(response.content, 'context deadline exceeded')): true
+            # spec.timeout is now enforced by the controller as an SLO from
+            # creationTime (#2597 sub-item 2). A 1ms budget elapses before any
+            # A2A dispatch, so the terminal state carries a TimedOut* condition
+            # reason and the timeout message in response.content — replacing
+            # the pre-fix pattern where an in-flight A2A call surfaced
+            # "context deadline exceeded" via the executor's error path.
+            (contains(response.content, 'timed out')): true
     catch:
     - events: {}
     - describe:
