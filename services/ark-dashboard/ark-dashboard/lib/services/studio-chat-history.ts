@@ -28,7 +28,7 @@ function pickLatestConversation(
       return current;
     }
     return currentTime > latestTime ? current : latest;
-  });
+  }, conversations[0]);
 }
 
 export const studioChatHistoryService = {

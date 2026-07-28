@@ -82,6 +82,47 @@ describe('studioChatHistoryService.load', () => {
     });
   });
 
+  it('keeps the latest when the current startTime is not parseable', async () => {
+    vi.mocked(brokerSessionsService.getSession).mockResolvedValueOnce(
+      session([
+        conversation('conv-a', '2026-01-01T00:00:00Z'),
+        conversation('conv-b', 'not-a-date'),
+      ]),
+    );
+    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce([
+      message('reply'),
+    ]);
+
+    await studioChatHistoryService.load('argo-make');
+
+    expect(conversationsService.getMessages).toHaveBeenCalledWith('conv-a');
+  });
+
+  it('takes the current when the latest startTime is not parseable', async () => {
+    vi.mocked(brokerSessionsService.getSession).mockResolvedValueOnce(
+      session([
+        conversation('conv-a', 'not-a-date'),
+        conversation('conv-b', '2026-01-05T00:00:00Z'),
+      ]),
+    );
+    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce([
+      message('reply'),
+    ]);
+
+    await studioChatHistoryService.load('argo-make');
+
+    expect(conversationsService.getMessages).toHaveBeenCalledWith('conv-b');
+  });
+
+  it('returns null when the session is missing', async () => {
+    vi.mocked(brokerSessionsService.getSession).mockResolvedValueOnce(null);
+
+    const result = await studioChatHistoryService.load('missing');
+
+    expect(result).toBeNull();
+    expect(conversationsService.getMessages).not.toHaveBeenCalled();
+  });
+
   it('returns null when the session has no conversations', async () => {
     vi.mocked(brokerSessionsService.getSession).mockResolvedValueOnce(
       session([]),
