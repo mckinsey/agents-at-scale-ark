@@ -11,7 +11,7 @@ import {
 } from 'react';
 import type { Control, UseFormReturn, UseFormSetValue } from 'react-hook-form';
 import { useForm, useWatch } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  FieldDescription,
+  FieldError,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
+import {
   Form,
   FormControl,
   FormDescription,
@@ -36,14 +42,21 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { getModelTypeDisplayName } from '@/lib/constants/model-types';
+import {
+  AZURE_AUTH_METHOD_DISPLAY_NAMES,
+  getModelTypeDisplayName,
+  MODEL_PROVIDER_DISPLAY_NAMES,
+  SUPPORTED_MODEL_PROVIDERS,
+} from '@/lib/constants/model-types';
 import type { Secret } from '@/lib/services';
 import type { SecretDetailResponse } from '@/lib/services/secrets';
 import {
@@ -51,6 +64,7 @@ import {
   useGetAllSecrets,
 } from '@/lib/services/secrets-hooks';
 import type { KeysOfUnion } from '@/lib/types/utils';
+import { cn } from '@/lib/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -85,83 +99,84 @@ export function ModelConfiguratorForm() {
         <form
           id={formId}
           onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-4">
+          className="flex flex-col gap-6">
           <FormField
             control={form.control}
             name="name"
             render={({ field, fieldState }) => (
-              <FormItem>
-                <FormLabel>Name</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    placeholder="e.g., gpt-4-turbo"
-                    className={fieldState.error ? 'border-red-500' : undefined}
-                    disabled={disabledFields?.name}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+              <FieldSet className="gap-2">
+                <FieldTitle>Name</FieldTitle>
+                <Input
+                  variant="inline"
+                  {...field}
+                  placeholder="e.g., gpt-4-turbo"
+                  disabled={disabledFields?.name}
+                  aria-invalid={!!fieldState.error}
+                />
+                <FieldError>{fieldState.error?.message}</FieldError>
+              </FieldSet>
             )}
           />
-          <FormItem>
-            <FormLabel>Type</FormLabel>
-            <FormControl>
-              <Input
-                value={getModelTypeDisplayName('completions')}
-                disabled={true}
-                className="bg-muted"
-              />
-            </FormControl>
-          </FormItem>
+          <FieldSet className="gap-2">
+            <FieldTitle>Type</FieldTitle>
+            <Input
+              variant="inline"
+              value={getModelTypeDisplayName('completions')}
+              disabled
+              readOnly
+            />
+          </FieldSet>
           <FormField
             control={form.control}
             name="provider"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Provider</FormLabel>
+              <FieldSet className="gap-2">
+                <FieldTitle>Provider</FieldTitle>
                 <Select
+                  items={MODEL_PROVIDER_DISPLAY_NAMES}
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={disabledFields?.provider}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="azure">Azure OpenAI</SelectItem>
-                    <SelectItem value="bedrock">AWS Bedrock</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                  <SelectTrigger
+                    aria-label="Provider"
+                    className={cn(GHOST_TRIGGER, 'w-full')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-fill-onsurface-ui-2">
+                    {SUPPORTED_MODEL_PROVIDERS.map(value => (
+                      <SelectItem key={value} value={value}>
+                        <SelectItemText>
+                          {MODEL_PROVIDER_DISPLAY_NAMES[value]}
+                        </SelectItemText>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
-              </FormItem>
+              </FieldSet>
             )}
           />
           <FormField
             control={form.control}
             name="model"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Model</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    placeholder={
-                      provider === 'openai'
-                        ? 'e.g., gpt-4-turbo-preview'
-                        : provider === 'azure'
-                          ? 'e.g., gpt-4'
-                          : provider === 'anthropic'
-                            ? 'e.g., claude-sonnet-4-20250514'
-                            : 'e.g., anthropic.claude-v2'
-                    }
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+            render={({ field, fieldState }) => (
+              <FieldSet className="gap-2">
+                <FieldTitle>Model</FieldTitle>
+                <Input
+                  variant="inline"
+                  {...field}
+                  placeholder={
+                    provider === 'openai'
+                      ? 'e.g., gpt-4-turbo-preview'
+                      : provider === 'azure'
+                        ? 'e.g., gpt-4'
+                        : provider === 'anthropic'
+                          ? 'e.g., claude-sonnet-4-20250514'
+                          : 'e.g., anthropic.claude-v2'
+                  }
+                  aria-invalid={!!fieldState.error}
+                />
+                <FieldError>{fieldState.error?.message}</FieldError>
+              </FieldSet>
             )}
           />
           {provider === 'openai' && (
@@ -224,34 +239,34 @@ function SecretSelectorField({
     <FormField
       control={control}
       name={fieldName}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <Select onValueChange={field.onChange} value={field.value as string}>
-            <FormControl>
-              <div className="flex gap-4">
-                <SelectTrigger>
-                  <SelectValue placeholder={placeholder} />
-                </SelectTrigger>
-                <CreateNewSecretButton fieldName={fieldName} />
-              </div>
-            </FormControl>
-            <SelectContent>
+      render={({ field, fieldState }) => (
+        <FieldSet className="gap-2">
+          <FieldTitle>{label}</FieldTitle>
+          <Select
+            onValueChange={value => field.onChange(value ?? '')}
+            value={field.value as string}>
+            <div className="flex items-center gap-3">
+              <SelectTrigger className={cn(GHOST_TRIGGER, 'flex-1')}>
+                <SelectValue placeholder={placeholder} />
+              </SelectTrigger>
+              <CreateNewSecretButton fieldName={fieldName} />
+            </div>
+            <SelectContent className="bg-fill-onsurface-ui-2">
               {isSecretsPending ? (
                 <Spinner size="sm" className="mx-auto my-2" />
               ) : (
                 <>
                   {secrets?.map(secret => (
                     <SelectItem key={secret.name} value={secret.name}>
-                      {secret.name}
+                      <SelectItemText>{secret.name}</SelectItemText>
                     </SelectItem>
                   ))}
                 </>
               )}
             </SelectContent>
           </Select>
-          <FormMessage />
-        </FormItem>
+          <FieldError>{fieldState.error?.message}</FieldError>
+        </FieldSet>
       )}
     />
   );
@@ -268,18 +283,18 @@ function BaseUrlField({
     <FormField
       control={control}
       name="baseUrl"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Base URL</FormLabel>
-          <FormControl>
-            <Input
-              {...field}
-              value={field.value ?? ''}
-              placeholder={placeholder}
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
+      render={({ field, fieldState }) => (
+        <FieldSet className="gap-2">
+          <FieldTitle>Base URL</FieldTitle>
+          <Input
+            variant="inline"
+            {...field}
+            value={field.value ?? ''}
+            placeholder={placeholder}
+            aria-invalid={!!fieldState.error}
+          />
+          <FieldError>{fieldState.error?.message}</FieldError>
+        </FieldSet>
       )}
     />
   );
@@ -325,32 +340,32 @@ function AzureSpecificFields({
         control={control}
         name="azureAuthMethod"
         render={({ field }) => (
-          <FormItem>
-            <FormLabel>Authentication</FormLabel>
+          <FieldSet className="gap-2">
+            <FieldTitle>Authentication</FieldTitle>
             <Select
+              items={AZURE_AUTH_METHOD_DISPLAY_NAMES}
               onValueChange={field.onChange}
               value={field.value ?? 'apiKey'}>
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select auth method" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                <SelectItem value="apiKey">API Key</SelectItem>
-                <SelectItem value="managedIdentity">
-                  Managed Identity
-                </SelectItem>
-                <SelectItem value="workloadIdentity">
-                  Workload Identity
-                </SelectItem>
+              <SelectTrigger
+                aria-label="Authentication"
+                className={cn(GHOST_TRIGGER, 'w-full')}>
+                <SelectValue placeholder="Select auth method" />
+              </SelectTrigger>
+              <SelectContent className="bg-fill-onsurface-ui-2">
+                {Object.entries(AZURE_AUTH_METHOD_DISPLAY_NAMES).map(
+                  ([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      <SelectItemText>{label}</SelectItemText>
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
-            <FormDescription>
+            <FieldDescription>
               API Key: use a secret. Managed Identity: AKS node identity.
               Workload Identity: K8s ServiceAccount federated to Azure.
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
+            </FieldDescription>
+          </FieldSet>
         )}
       />
       {azureAuthMethod === 'apiKey' ? (
@@ -367,39 +382,39 @@ function AzureSpecificFields({
           <FormField
             control={control}
             name="azureClientId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
+            render={({ field, fieldState }) => (
+              <FieldSet className="gap-2">
+                <FieldTitle>
                   Client ID
                   {azureAuthMethod === 'managedIdentity' ? ' (optional)' : ''}
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    value={field.value ?? ''}
-                    placeholder="Azure Managed Identity client ID (GUID)"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+                </FieldTitle>
+                <Input
+                  variant="inline"
+                  {...field}
+                  value={field.value ?? ''}
+                  placeholder="Azure Managed Identity client ID (GUID)"
+                  aria-invalid={!!fieldState.error}
+                />
+                <FieldError>{fieldState.error?.message}</FieldError>
+              </FieldSet>
             )}
           />
           {azureAuthMethod === 'workloadIdentity' && (
             <FormField
               control={control}
               name="azureTenantId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tenant ID</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      value={field.value ?? ''}
-                      placeholder="Azure AD tenant ID (GUID)"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+              render={({ field, fieldState }) => (
+                <FieldSet className="gap-2">
+                  <FieldTitle>Tenant ID</FieldTitle>
+                  <Input
+                    variant="inline"
+                    {...field}
+                    value={field.value ?? ''}
+                    placeholder="Azure AD tenant ID (GUID)"
+                    aria-invalid={!!fieldState.error}
+                  />
+                  <FieldError>{fieldState.error?.message}</FieldError>
+                </FieldSet>
               )}
             />
           )}
@@ -409,17 +424,17 @@ function AzureSpecificFields({
       <FormField
         control={control}
         name="azureApiVersion"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>API Version (Optional)</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="2023-05-15"
-              />
-            </FormControl>
-            <FormDescription>
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>API Version (Optional)</FieldTitle>
+            <Input
+              variant="inline"
+              {...field}
+              value={field.value ?? ''}
+              placeholder="2023-05-15"
+              aria-invalid={!!fieldState.error}
+            />
+            <FieldDescription>
               If your instance is opted in to the{' '}
               <a
                 rel="noreferrer"
@@ -430,9 +445,9 @@ function AzureSpecificFields({
               </a>
               , this field is optional. Otherwise, you must provide an API
               version.
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
+            </FieldDescription>
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
         )}
       />
     </>
@@ -531,35 +546,35 @@ function AWSBedrockSpecificFields({
       <FormField
         control={control}
         name="region"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Region (Optional)</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="us-east-1"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>Region (Optional)</FieldTitle>
+            <Input
+              variant="inline"
+              {...field}
+              value={field.value ?? ''}
+              placeholder="us-east-1"
+              aria-invalid={!!fieldState.error}
+            />
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
         )}
       />
       <FormField
         control={control}
         name="modelARN"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Model ARN (Optional)</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="arn:aws:bedrock:..."
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>Model ARN (Optional)</FieldTitle>
+            <Input
+              variant="inline"
+              {...field}
+              value={field.value ?? ''}
+              placeholder="arn:aws:bedrock:..."
+              aria-invalid={!!fieldState.error}
+            />
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
         )}
       />
     </>
@@ -585,18 +600,18 @@ function AnthropicSpecificFields({
       <FormField
         control={control}
         name="anthropicVersion"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Anthropic Version (Optional)</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="2023-06-01"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>Anthropic Version (Optional)</FieldTitle>
+            <Input
+              variant="inline"
+              {...field}
+              value={field.value ?? ''}
+              placeholder="2023-06-01"
+              aria-invalid={!!fieldState.error}
+            />
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
         )}
       />
     </>
@@ -654,7 +669,10 @@ function SecretDialogProvider({
   const handleSuccess = useCallback(
     (data: SecretDetailResponse) => {
       if (fieldToSet) {
-        formValueSetter(fieldToSet, data.name);
+        formValueSetter(fieldToSet, data.name, {
+          shouldValidate: true,
+          shouldDirty: true,
+        });
         setFieldToSet(undefined);
       }
       toggleDialog();

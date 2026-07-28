@@ -1,30 +1,19 @@
-"""Logging filter that redacts known-sensitive keys from ark-api log records.
+"""Logging filter that redacts credentials from ark-api log records.
 
-Attached globally (root + uvicorn handlers) by ``core.config.setup_logging`` so it
-applies to all ark-api logs, not just the MCP auth flow. See the Logging Contract
-docs for the exact keys and the boundary with content-level DLP.
-
-Key-anchored: a credential is redacted only when a known key sits next to it
-(``key=value``, ``key: value``, ``'key': 'value'``, ``?key=value``,
-``authorization: Bearer <token>``). A bare value with no adjacent key -- e.g. a
-lone positional ``%s`` arg -- is not recognised; that boundary is in the docs.
+Attached globally by ``core.config.setup_logging``. Two passes: key-anchored
+(``key=value`` / ``Bearer <token>``) and shape-based (JWTs, provider API keys, PEM
+private keys) for bare tokens. Kept in sync with the Go trace redactor
+(``ark/internal/telemetry/redact``) via shared testdata fixtures. Not content-level DLP:
+opaque secrets and PII are not detected.
 """
 from __future__ import annotations
 
 import logging
 import re
 
-# Value group matches a quoted string, a `Bearer <token>` pair, or an unquoted
-# token bounded by whitespace / , ; & } and quotes, so it doesn't swallow an
-# adjacent field or a trailing ` HTTP/1.1`. Key may be quoted (dict repr).
-_KEYS = r"access_token|refresh_token|client_secret|code_verifier|authorization"
-SENSITIVE_PATTERNS = re.compile(
-    r"(?P<key>['\"]?(?:" + _KEYS + r")['\"]?)"
-    r"(?P<sep>\s*[=:]\s*)"
-    r"(?P<val>'[^']*'|\"[^\"]*\"|[Bb]earer\s+[^\s,;]+|[^\s,;&}'\"]+)",
-    re.IGNORECASE,
-)
-
+# Single source of truth for the credential key names. Both the string-redaction regex
+# (_KEYS below) and the dict-key redaction (_redact_mapping) derive from this set, so
+# adding a key updates both paths at once -- they cannot silently drift apart.
 SENSITIVE_KEYS = frozenset({
     "access_token",
     "refresh_token",
@@ -32,6 +21,35 @@ SENSITIVE_KEYS = frozenset({
     "code_verifier",
     "authorization",
 })
+
+# Value group matches a quoted string, a `Bearer <token>` pair, or an unquoted
+# token bounded by whitespace / , ; & } and quotes, so it doesn't swallow an
+# adjacent field or a trailing ` HTTP/1.1`. Key may be quoted (dict repr). The key
+# alternation is derived from SENSITIVE_KEYS; sorted() keeps the compiled pattern
+# deterministic (frozenset order isn't), and order is irrelevant since the keys are
+# disjoint literals.
+_KEYS = "|".join(re.escape(k) for k in sorted(SENSITIVE_KEYS))
+SENSITIVE_PATTERNS = re.compile(
+    r"(?P<key>['\"]?(?:" + _KEYS + r")['\"]?)"
+    r"(?P<sep>\s*[=:]\s*)"
+    r"(?P<val>'[^']*'|\"[^\"]*\"|(?:[Bb]earer|[Bb]asic)\s+[^\s,;]+|[^\s,;&}'\"]+)",
+    re.IGNORECASE,
+)
+
+# Case-sensitive; kept in sync with shapePattern in ark/internal/telemetry/redact/redact.go.
+_SHAPE_ALTERNATIVES = [
+    r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",  # JWT
+    r"sk-(?:ant-|proj-)?[A-Za-z0-9_-]{40,}",  # OpenAI/Anthropic
+    r"gh[pousr]_[A-Za-z0-9]{36,}",  # GitHub
+    r"github_pat_[A-Za-z0-9_]{22,}",  # GitHub PAT
+    r"(?:AKIA|ASIA)[0-9A-Z]{16}",  # AWS
+    r"AIza[0-9A-Za-z_-]{35}",  # Google
+    r"xox[baprs]-[A-Za-z0-9-]{10,}",  # Slack
+    r"(?:sk|rk)_live_[A-Za-z0-9]{16,}",  # Stripe
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}:[A-Za-z0-9._~+/=-]{16,}",  # McKinsey svc cred (uuid:token)
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",  # PEM
+]
+SHAPE_PATTERNS = re.compile("|".join(_SHAPE_ALTERNATIVES))
 
 REDACTED = "[REDACTED]"
 
@@ -66,10 +84,11 @@ def _safe_get_message(record: logging.LogRecord) -> str:
 
 
 def _redact_string(s: str) -> str:
-    return SENSITIVE_PATTERNS.sub(
+    s = SENSITIVE_PATTERNS.sub(
         lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}",
         s,
     )
+    return SHAPE_PATTERNS.sub(REDACTED, s)
 
 
 def _redact_value(v):

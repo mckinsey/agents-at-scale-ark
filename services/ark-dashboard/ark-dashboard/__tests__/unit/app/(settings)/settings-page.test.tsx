@@ -52,7 +52,7 @@ describe('SettingsPage', () => {
   it('should redirect to default page preserving namespace when no page segment is provided', () => {
     (useParams as ReturnType<typeof vi.fn>).mockReturnValue({ page: undefined });
     renderPage();
-    expect(mockReplace).toHaveBeenCalledWith('/settings/a2a-servers?namespace=demo');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/queries?namespace=demo');
   });
 
   it('should redirect to default page preserving namespace when an invalid page is provided', () => {
@@ -60,12 +60,12 @@ describe('SettingsPage', () => {
       page: ['nonexistent'],
     });
     renderPage();
-    expect(mockReplace).toHaveBeenCalledWith('/settings/a2a-servers?namespace=demo');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/queries?namespace=demo');
   });
 
   it('should not redirect when a valid page is provided', () => {
     (useParams as ReturnType<typeof vi.fn>).mockReturnValue({
-      page: ['secrets'],
+      page: ['queries'],
     });
     renderPage();
     expect(mockReplace).not.toHaveBeenCalled();
@@ -74,11 +74,11 @@ describe('SettingsPage', () => {
 
   it('should pass the valid page key to sidebar and content', () => {
     (useParams as ReturnType<typeof vi.fn>).mockReturnValue({
-      page: ['memory'],
+      page: ['queries'],
     });
     renderPage();
-    expect(screen.getByTestId('settings-sidebar')).toHaveTextContent('memory');
-    expect(screen.getByTestId('settings-content')).toHaveTextContent('memory');
+    expect(screen.getByTestId('settings-sidebar')).toHaveTextContent('queries');
+    expect(screen.getByTestId('settings-content')).toHaveTextContent('queries');
   });
 
   it('should pass default page to sidebar and content when page is invalid', () => {
@@ -87,19 +87,15 @@ describe('SettingsPage', () => {
     });
     renderPage();
     expect(screen.getByTestId('settings-sidebar')).toHaveTextContent(
-      'a2a-servers',
+      'queries',
     );
     expect(screen.getByTestId('settings-content')).toHaveTextContent(
-      'a2a-servers',
+      'queries',
     );
   });
 
   it.each([
-    'a2a-servers',
-    'memory',
-    'manage-marketplace',
-    'service-api-keys',
-    'secrets',
+    'queries',
     'experimental-features',
   ])('should accept "%s" as a valid page', page => {
     (useParams as ReturnType<typeof vi.fn>).mockReturnValue({ page: [page] });

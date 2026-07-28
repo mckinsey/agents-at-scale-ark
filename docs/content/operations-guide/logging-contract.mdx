@@ -44,27 +44,38 @@ responses, and model output/answer content.
 
 ## Credential redaction
 
-Ark redacts a fixed set of credential fields from log records before they are emitted. This is
-**key/pattern-based**, not content classification — it catches `key=value` and `key: value`
-text and structured fields, not arbitrary secrets embedded in free text.
+Ark redacts credentials from log records (and OTel trace span attributes) before they are
+emitted, using two pattern-based passes: **key-anchored** — `key=value` / `key: value` text and
+structured fields for a known key set — and **shape-based** — standalone tokens matching
+well-known, prefixed credential formats (JWTs, provider API keys, PEM private-key blocks). It is
+pattern-based, not full content classification: it does **not** detect opaque/unknown secrets or
+PII embedded in free text.
 
-- **ark-api** — a `SensitiveDataFilter` redacts `access_token`, `refresh_token`,
-  `client_secret`, `code_verifier`, and `authorization` values. The filter is
-  attached to the **root log handler and the uvicorn access/error loggers**, so it applies to
-  **all** ark-api logs (including request-line query strings). It scrubs the log message, its
-  arguments (including credentials nested inside dict/list structures), and the **exception
-  message and traceback** attached to a record.
+- **ark-api** — a `SensitiveDataFilter` redacts the keys `access_token`, `refresh_token`,
+  `client_secret`, `code_verifier`, and `authorization`, **plus** standalone tokens matching
+  known formats: JWTs (`eyJ….eyJ….…`), OpenAI/Anthropic (`sk-…`), GitHub (`ghp_…`, `gho_…`,
+  `ghu_…`, `ghs_…`, `ghr_…`, `github_pat_…`), AWS (`AKIA…`/`ASIA…`), Google (`AIza…`), Slack
+  (`xox[baprs]-…`), Stripe (`sk_live_…`/`rk_live_…`/`pk_live_…`), and PEM `PRIVATE KEY` blocks.
+  The filter is attached to the **root log handler and the uvicorn access/error loggers**, so it
+  applies to **all** ark-api logs (including request-line query strings). It scrubs the log
+  message, its arguments (including credentials nested inside dict/list structures), and the
+  **exception message and traceback** attached to a record.
 - **ark-broker** — the Pino logger auto-redacts the `authorization`, `cookie`, `x-api-key`,
   `x-auth-token`, `x-csrf-token`, `set-cookie`, and `proxy-authorization` headers and the
   `password`, `token`, `secret`, and `apiKey` fields.
 - **Controller** — query input/output is truncated to 48 characters in operation data; full
   payloads are not logged at info level.
+- **OTel traces** — the controller and completions engine apply the **same two-pass redaction**
+  (key-anchored + shape-based) to span attributes (prompts, model messages, tool-call arguments,
+  query input/output) before export to any telemetry backend, sharing the same patterns and
+  [test vectors](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/internal/telemetry/redact/testdata/credential-redaction.json)
+  as the ark-api filter. See [trace redaction](/developer-guide/observability#credential-redaction-in-traces).
 
 <Callout type="warning">
-Redaction covers the credential **keys listed above**, not every possible secret. Values that
-do not match a known key or the `key=value` / `key: value` shape (for example a bare token
-passed as a positional log argument) may not be redacted. Treat log destinations as sensitive
-and restrict access accordingly.
+Redaction covers the credential **keys and known token formats listed above**, not every
+possible secret. A value matching **neither** a known key **nor** a known token format — an
+opaque/custom credential, or PII — may not be redacted. Treat log and trace destinations as
+sensitive and restrict access accordingly.
 </Callout>
 
 ## Enabling verbose logging
@@ -82,10 +93,11 @@ log pipeline's access controls and retention before enabling it in production.
 
 ## Content is not masked
 
-Ark does not inspect, filter, or classify data **content** at any point in the query lifecycle.
-Even with credential redaction on, prompts, tool inputs, agent outputs, and MCP payloads that
-appear at verbose level are written verbatim. If your workload processes PII or regulated data,
-configure content-level masking in your log aggregator before long-term storage.
+Beyond the credential redaction described above, Ark does not inspect, filter, or classify data
+**content**. Prompts, tool inputs, agent outputs, and MCP payloads that appear at verbose level
+(logs) or on span attributes (traces) are otherwise written as-is — non-credential content and
+PII are not masked. If your workload processes PII or regulated data, configure content-level
+masking in your log aggregator / observability backend before long-term storage.
 
 This is the same boundary documented under [Log
 sanitization](/operations-guide/data-flow-and-encryption#log-sanitization) and [Data loss
