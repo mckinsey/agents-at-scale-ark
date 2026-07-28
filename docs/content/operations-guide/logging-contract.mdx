@@ -1,0 +1,105 @@
+---
+title: Logging Contract
+description: What query, prompt, and tool-call payload content Ark writes to its own logs at default versus verbose levels, and which credentials Ark redacts
+---
+
+import { Callout } from 'nextra/components'
+
+# Logging Contract
+
+This page states what payload content reaches Ark's **own** logs (stdout/stderr of Ark's
+pods) at the default log level versus verbose, and which credentials Ark redacts before
+emitting. It exists so operators do not have to infer logging behaviour from source code.
+
+It complements the [Data Flow and Encryption](/operations-guide/data-flow-and-encryption)
+guide and the [Logging and events](/developer-guide/logging-and-events) reference.
+
+<Callout type="info">
+This contract covers **Ark's built-in redaction and log-level behaviour only**. Ark does
+**not** perform content-level PII/DLP masking of prompts, tool inputs, or outputs — that is
+intentionally deferred to your log aggregator (see [Content is not
+masked](#content-is-not-masked) below).
+</Callout>
+
+## The guarantee
+
+- **At the default level, Ark does not write raw query inputs, agent prompts, or tool-call
+  payload content to its logs.** Default-level logs carry identifiers and metadata (task and
+  context IDs, resource names, phases, counts, error messages), and — on the Go side — query
+  input/output truncated to 48 characters.
+- **Raw payload content appears only at verbose levels**, and must be explicitly enabled.
+
+"Raw payload content" means: the text of a user query/prompt, tool-call arguments, tool
+responses, and model output/answer content.
+
+## What reaches logs, by component and level
+
+| Component | Default level | Verbose adds |
+|-----------|---------------|--------------|
+| **ark-api** (`INFO`) | Task/context IDs, resource names, timeouts, HTTP request/response lines, error messages. No raw prompt or response content. | `LOG_LEVEL=DEBUG`: full user prompt (A2A gateway) and full query status/response objects incl. model output. |
+| **ark-mcp** (`INFO`) | Agent/target names, phases, counts. No raw query input. | `LOG_LEVEL=DEBUG`: full agent query input. |
+| **Controller** (`V0`) | Query/model resolution events; query input/output **truncated to 48 characters**. | `V1` agent/team execution; `V2` LLM call tracking; `V3` full response content. |
+| **Executor** (`V0`) | Message counts, roles, tool names/IDs, HTTP method/URL/status. Tool-call arguments or an HTTP body template appear **only on parse/resolution error paths**. | `V2` full MCP tool responses. |
+| **ark-broker** | Structured request logs with credential fields redacted (see below). | — |
+
+## Credential redaction
+
+Ark redacts credentials from log records (and OTel trace span attributes) before they are
+emitted, using two pattern-based passes: **key-anchored** — `key=value` / `key: value` text and
+structured fields for a known key set — and **shape-based** — standalone tokens matching
+well-known, prefixed credential formats (JWTs, provider API keys, PEM private-key blocks). It is
+pattern-based, not full content classification: it does **not** detect opaque/unknown secrets or
+PII embedded in free text.
+
+- **ark-api** — a `SensitiveDataFilter` redacts the keys `access_token`, `refresh_token`,
+  `client_secret`, `code_verifier`, and `authorization`, **plus** standalone tokens matching
+  known formats: JWTs (`eyJ….eyJ….…`), OpenAI/Anthropic (`sk-…`), GitHub (`ghp_…`, `gho_…`,
+  `ghu_…`, `ghs_…`, `ghr_…`, `github_pat_…`), AWS (`AKIA…`/`ASIA…`), Google (`AIza…`), Slack
+  (`xox[baprs]-…`), Stripe (`sk_live_…`/`rk_live_…`/`pk_live_…`), and PEM `PRIVATE KEY` blocks.
+  The filter is attached to the **root log handler and the uvicorn access/error loggers**, so it
+  applies to **all** ark-api logs (including request-line query strings). It scrubs the log
+  message, its arguments (including credentials nested inside dict/list structures), and the
+  **exception message and traceback** attached to a record.
+- **ark-broker** — the Pino logger auto-redacts the `authorization`, `cookie`, `x-api-key`,
+  `x-auth-token`, `x-csrf-token`, `set-cookie`, and `proxy-authorization` headers and the
+  `password`, `token`, `secret`, and `apiKey` fields.
+- **Controller** — query input/output is truncated to 48 characters in operation data; full
+  payloads are not logged at info level.
+- **OTel traces** — the controller and completions engine apply the **same two-pass redaction**
+  (key-anchored + shape-based) to span attributes (prompts, model messages, tool-call arguments,
+  query input/output) before export to any telemetry backend, sharing the same patterns and
+  [test vectors](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/internal/telemetry/redact/testdata/credential-redaction.json)
+  as the ark-api filter. See [trace redaction](/developer-guide/observability#credential-redaction-in-traces).
+
+<Callout type="warning">
+Redaction covers the credential **keys and known token formats listed above**, not every
+possible secret. A value matching **neither** a known key **nor** a known token format — an
+opaque/custom credential, or PII — may not be redacted. Treat log and trace destinations as
+sensitive and restrict access accordingly.
+</Callout>
+
+## Enabling verbose logging
+
+- **ark-api and ark-mcp** — set the `LOG_LEVEL` environment variable (e.g. `LOG_LEVEL=DEBUG`).
+  It defaults to `INFO`. Enabling `DEBUG` surfaces the raw payload content listed above.
+- **Controller and executor (Go)** — set verbosity via the `ZAPLOGLEVEL` environment variable,
+  the `--zap-log-level` argument, or the Helm chart `logLevel` value. See
+  [Log verbosity configuration](/developer-guide/logging-and-events#log-verbosity-configuration).
+
+<Callout type="warning">
+Verbose logging writes prompts, tool payloads, and model output to stdout/stderr. Review your
+log pipeline's access controls and retention before enabling it in production.
+</Callout>
+
+## Content is not masked
+
+Beyond the credential redaction described above, Ark does not inspect, filter, or classify data
+**content**. Prompts, tool inputs, agent outputs, and MCP payloads that appear at verbose level
+(logs) or on span attributes (traces) are otherwise written as-is — non-credential content and
+PII are not masked. If your workload processes PII or regulated data, configure content-level
+masking in your log aggregator / observability backend before long-term storage.
+
+This is the same boundary documented under [Log
+sanitization](/operations-guide/data-flow-and-encryption#log-sanitization) and [Data loss
+prevention](/operations-guide/data-flow-and-encryption#data-loss-prevention) — content-level
+DLP is a deployment responsibility, not something Ark performs.

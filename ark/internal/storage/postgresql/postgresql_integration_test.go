@@ -91,6 +91,7 @@ func TestOptimisticConcurrency_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx := context.Background()
 	testName := "concurrency-test-resource"
@@ -201,6 +202,7 @@ func TestOptimisticConcurrency_Status_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx := context.Background()
 	testName := "status-concurrency-test"
@@ -300,6 +302,7 @@ func TestCreateAlreadyExists_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx := context.Background()
 	testName := "already-exists-test-resource"
@@ -359,6 +362,7 @@ func TestWatchAddedForFirstSeenUID_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -471,6 +475,7 @@ func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T)
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx := context.Background()
 	testName := "graceful-delete-resource"
@@ -581,6 +586,7 @@ func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx := context.Background()
 	testKind := "PaginationTestResource"
@@ -744,6 +750,7 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx := context.Background()
 	testKind := "TestResource"

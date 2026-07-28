@@ -72,7 +72,7 @@ describe('ExportPage', () => {
     const checkbox = within(agentRow!).getByRole('checkbox');
     await user.click(checkbox);
 
-    expect(screen.getByText(/Export Selected \(1\)/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Export Selected \( 1 \)/ })).toBeInTheDocument();
 
     // Export selected
     const exportButton = screen.getByRole('button', { name: /Export Selected/ });
@@ -115,7 +115,7 @@ describe('ExportPage', () => {
     });
 
     // Export Selected should be disabled when nothing is selected
-    const exportButton = screen.getByRole('button', { name: /Export Selected \(0\)/ });
+    const exportButton = screen.getByRole('button', { name: /Export Selected \( 0 \)/ });
     expect(exportButton).toBeDisabled();
   });
 

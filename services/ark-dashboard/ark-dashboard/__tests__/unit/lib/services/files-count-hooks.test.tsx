@@ -34,6 +34,7 @@ describe('files-count-hooks', () => {
     it('should fetch and return total file count for single page', async () => {
       vi.mocked(filesService.list).mockResolvedValue({
         files: Array(50).fill({ name: 'file.txt' }),
+        directories: [],
         next_token: undefined,
       } as any);
 
@@ -54,14 +55,17 @@ describe('files-count-hooks', () => {
       vi.mocked(filesService.list)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token1',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token2',
         } as any)
         .mockResolvedValueOnce({
           files: Array(500).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: undefined,
         } as any);
 
@@ -93,46 +97,57 @@ describe('files-count-hooks', () => {
       vi.mocked(filesService.list)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token1',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token2',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token3',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token4',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token5',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token6',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token7',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token8',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token9',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token10',
         } as any)
         .mockResolvedValueOnce({
           files: Array(1000).fill({ name: 'file.txt' }),
+        directories: [],
           next_token: 'token11',
         } as any);
 
@@ -154,6 +169,7 @@ describe('files-count-hooks', () => {
       vi.mocked(filesService.list).mockReset();
       vi.mocked(filesService.list).mockResolvedValueOnce({
         files: [],
+        directories: [],
         next_token: undefined,
       } as any);
 
@@ -194,6 +210,7 @@ describe('files-count-hooks', () => {
     it('should use correct staleTime', () => {
       vi.mocked(filesService.list).mockResolvedValue({
         files: [],
+        directories: [],
         next_token: undefined,
       } as any);
 
