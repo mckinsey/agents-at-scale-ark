@@ -1,50 +1,110 @@
 'use client';
 
-import { ChevronDown, Database } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 
+import { Database, SwapVert } from '@/components/icons';
+import {
+  ResourceEmptyState,
+  ResourceNoResults,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { Input } from '@/components/ui/input';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import type { MemoryFilters } from '@/lib/services/memory';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import {
   useGetAllMemoryMessages,
   useGetConversations,
   useGetMemoryResources,
 } from '@/lib/services/memory-hooks';
-import { cn } from '@/lib/utils';
+import { formatAge } from '@/lib/utils/time';
 
-import { DeleteMemoryDropdownMenu } from './delete-memory';
+import { MemoryDeleteActions } from './delete-memory';
+
+const ALL = 'all';
+
+const MEMORY_DOCS_URL =
+  'https://mckinsey.github.io/agents-at-scale-ark/reference/resources/memory/';
+
+const COL = {
+  added: 'w-[120px]',
+  memory: 'w-[140px]',
+  conversation: 'w-[200px]',
+  query: 'w-[220px]',
+};
+
+type SortDirection = 'asc' | 'desc';
+
+/** URL query parameters the filters are stored in. */
+type MemoryFilterParam = 'memory' | 'conversationId' | 'queryId';
+
+interface FilterSelectProps {
+  readonly label: string;
+  readonly value: string;
+  readonly options: readonly string[];
+  readonly allLabel: string;
+  readonly onChange: (value: string) => void;
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  allLabel,
+  onChange,
+}: FilterSelectProps) {
+  const items = useMemo(
+    () => [
+      { value: ALL, label: allLabel },
+      ...options.map(option => ({ value: option, label: option })),
+    ],
+    [options, allLabel],
+  );
+
+  return (
+    <div className="flex w-48 flex-col gap-2">
+      <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+        {label}
+      </span>
+      <Select items={items} value={value} onValueChange={v => onChange(String(v))}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={allLabel} />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map(item => (
+            <SelectItem key={item.value} value={item.value}>
+              <SelectItemText>{item.label}</SelectItemText>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 export function MemorySection() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [memoryFilter, setMemoryFilter] = useState('');
-  const [conversationFilter, setConversationFilter] = useState('');
-  const [queryFilter, setQueryFilter] = useState('');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const filters = {
     page: parseInt(searchParams.get('page') || '1', 10),
@@ -58,57 +118,48 @@ export function MemorySection() {
   const conversations = useGetConversations();
   const memoryMessages = useGetAllMemoryMessages({
     memory:
-      filters.memoryName && filters.memoryName !== 'all'
+      filters.memoryName && filters.memoryName !== ALL
         ? filters.memoryName
         : undefined,
     conversation:
-      filters.conversationId && filters.conversationId !== 'all'
+      filters.conversationId && filters.conversationId !== ALL
         ? filters.conversationId
         : undefined,
     query:
-      filters.queryId && filters.queryId !== 'all'
-        ? filters.queryId
-        : undefined,
+      filters.queryId && filters.queryId !== ALL ? filters.queryId : undefined,
   });
 
-  const filteredMemories = useMemo(() => {
-    return (
-      memoryResources.data?.filter(memory =>
-        memory.name.toLowerCase().includes(memoryFilter.toLowerCase()),
-      ) || []
-    );
-  }, [memoryResources.data, memoryFilter]);
+  const memoryOptions = useMemo(
+    () => (memoryResources.data ?? []).map(memory => memory.name).sort(),
+    [memoryResources.data],
+  );
 
-  const filteredConversations = useMemo(() => {
-    return Array.from(
-      // Extract unique conversation IDs for filtering
-      new Set(conversations.data?.map(c => c.conversationId)),
-    )
-      .sort()
-      .filter(conversation =>
-        conversation.toLowerCase().includes(conversationFilter.toLowerCase()),
-      );
-  }, [conversations, conversationFilter]);
+  const conversationOptions = useMemo(
+    () =>
+      Array.from(
+        // Extract unique conversation IDs for filtering
+        new Set(conversations.data?.map(c => c.conversationId)),
+      ).sort(),
+    [conversations.data],
+  );
 
   const sortedMessages = useMemo(() => {
-    // Sort by sequence number descending (newest first) to maintain proper chronological order
+    // Sort by sequence number (newest first by default) to maintain proper chronological order
     // This ensures messages appear in the correct order regardless of timestamp precision
-    return (
-      memoryMessages.data?.sort(
-        (a, b) => (b.sequence || 0) - (a.sequence || 0),
-      ) || []
-    );
-  }, [memoryMessages]);
+    const messages = [...(memoryMessages.data ?? [])];
+    return messages.sort((a, b) => {
+      const diff = (a.sequence || 0) - (b.sequence || 0);
+      return sortDirection === 'desc' ? -diff : diff;
+    });
+  }, [memoryMessages.data, sortDirection]);
 
-  const totalMessages = useMemo(() => {
-    return sortedMessages.length;
-  }, [sortedMessages]);
+  const totalMessages = sortedMessages.length;
 
   const availableQueries = useMemo(() => {
     // Extract unique queryID - conversationID pairs
     return Array.from(
       new Map(
-        sortedMessages?.map(m => [
+        sortedMessages.map(m => [
           `${m.conversationId}-${m.queryId}`,
           {
             queryId: m.queryId,
@@ -119,11 +170,10 @@ export function MemorySection() {
     ).sort((a, b) => a.queryId.localeCompare(b.queryId));
   }, [sortedMessages]);
 
-  const filteredQueries = useMemo(() => {
-    return availableQueries.filter(query =>
-      query.queryId.toLowerCase().includes(queryFilter.toLowerCase()),
-    );
-  }, [availableQueries, queryFilter]);
+  const queryOptions = useMemo(
+    () => availableQueries.map(query => query.queryId),
+    [availableQueries],
+  );
 
   const totalPages = Math.max(1, Math.ceil(totalMessages / filters.limit));
 
@@ -154,10 +204,10 @@ export function MemorySection() {
   );
 
   const handleFilterChange = (
-    key: keyof MemoryFilters,
+    key: MemoryFilterParam,
     value: string | undefined,
   ) => {
-    const effectiveValue = value === 'all' ? undefined : value;
+    const effectiveValue = value === ALL ? undefined : value;
     updateUrlParams({
       [key]: effectiveValue,
       page: 1,
@@ -168,7 +218,7 @@ export function MemorySection() {
     updateUrlParams({
       page: 1,
       limit: filters.limit,
-      memoryName: undefined,
+      memory: undefined,
       conversationId: undefined,
       queryId: undefined,
     });
@@ -178,357 +228,218 @@ export function MemorySection() {
     updateUrlParams({ page: newPage });
   };
 
-  // Format timestamp for display
-  const formatTimestamp = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      });
-    } catch {
-      return timestamp;
-    }
-  };
-
   const handleItemsPerPageChange = (newLimit: number) => {
-    // Only update URL - let the useEffect handle state updates
     updateUrlParams({
       limit: newLimit,
       page: 1,
     });
   };
 
-  if (
+  const hasActiveFilters = Boolean(
+    (filters.memoryName && filters.memoryName !== ALL) ||
+      (filters.conversationId && filters.conversationId !== ALL) ||
+      (filters.queryId && filters.queryId !== ALL),
+  );
+
+  const isLoading =
     memoryResources.isPending ||
     conversations.isPending ||
-    memoryMessages.isPending
-  ) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-center">
-          <Database className="mx-auto mb-4 h-8 w-8 animate-pulse text-gray-400" />
-          <p className="text-gray-500">Loading memory messages...</p>
-        </div>
-      </div>
-    );
-  }
+    memoryMessages.isPending;
+
+  const selectedConversation = searchParams.get('conversationId');
+  const selectedQueryId = searchParams.get('queryId');
 
   return (
-    <div className="mt-3">
-      <div className="flex flex-wrap items-center gap-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-9 w-48 min-w-0 justify-between text-sm font-normal">
-              <span
-                className={cn('min-w-0 truncate', {
-                  'text-muted-foreground':
-                    !searchParams.get('memory') ||
-                    searchParams.get('memory') === 'all',
-                })}>
-                {!searchParams.get('memory') ||
-                searchParams.get('memory') === 'all'
-                  ? 'All Memories'
-                  : filters.memoryName}
-              </span>
-              <ChevronDown className="ml-1 h-4 w-4 flex-shrink-0" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-48" align="start">
-            <div className="p-2">
-              <Input
-                autoFocus
-                placeholder="Filter memories..."
-                value={memoryFilter}
-                onChange={e => setMemoryFilter(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-            <DropdownMenuSeparator />
-            <div className="max-h-64 overflow-auto">
-              <DropdownMenuItem
-                onClick={() => {
-                  updateUrlParams({ memory: undefined, page: 1 });
-                }}>
-                All Memories
-              </DropdownMenuItem>
-              {filteredMemories.map(memory => (
-                <DropdownMenuItem
-                  key={memory.name}
-                  onClick={() => {
-                    updateUrlParams({ memory: memory.name, page: 1 });
-                  }}>
-                  {memory.name}
-                </DropdownMenuItem>
-              ))}
-              {filteredMemories.length === 0 && memoryFilter && (
-                <div className="p-3 text-sm text-gray-500">
-                  No memories match your filter
-                </div>
-              )}
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-9 w-64 min-w-0 justify-between text-sm font-normal">
-              <span
-                className={cn('min-w-0 truncate', {
-                  'text-muted-foreground':
-                    !searchParams.get('conversationId') ||
-                    searchParams.get('conversationId') === 'all',
-                })}>
-                {!searchParams.get('conversationId') ||
-                searchParams.get('conversationId') === 'all'
-                  ? 'All Conversations'
-                  : filters.conversationId}
-              </span>
-              <ChevronDown className="ml-1 h-4 w-4 flex-shrink-0" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64" align="start">
-            <div className="p-2">
-              <Input
-                autoFocus
-                placeholder="Filter conversations..."
-                value={conversationFilter}
-                onChange={e => setConversationFilter(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-            <DropdownMenuSeparator />
-            <div className="max-h-64 overflow-auto">
-              <DropdownMenuItem
-                onClick={() => {
-                  handleFilterChange('conversationId', 'all');
-                }}>
-                All Conversations
-              </DropdownMenuItem>
-              {filteredConversations.map(conversationId => (
-                <DropdownMenuItem
-                  key={conversationId}
-                  onClick={() => {
-                    handleFilterChange('conversationId', conversationId);
-                  }}>
-                  {conversationId.length > 30
-                    ? `${conversationId.substring(0, 30)}...`
-                    : conversationId}
-                </DropdownMenuItem>
-              ))}
-              {filteredConversations.length === 0 && conversationFilter && (
-                <div className="p-3 text-sm text-gray-500">
-                  No conversations match your filter
-                </div>
-              )}
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-9 w-64 min-w-0 justify-between text-sm font-normal">
-              <span
-                className={cn('min-w-0 truncate', {
-                  'text-muted-foreground':
-                    !searchParams.get('queryId') ||
-                    searchParams.get('queryId') === 'all',
-                })}>
-                {!searchParams.get('queryId') ||
-                searchParams.get('queryId') === 'all'
-                  ? 'All Queries'
-                  : filters.queryId}
-              </span>
-              <ChevronDown className="ml-1 h-4 w-4 flex-shrink-0" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64" align="start">
-            <div className="p-2">
-              <Input
-                autoFocus
-                placeholder="Filter queries..."
-                value={queryFilter}
-                onChange={e => setQueryFilter(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-            <DropdownMenuSeparator />
-            <div className="max-h-64 overflow-auto">
-              <DropdownMenuItem
-                onClick={() => {
-                  handleFilterChange('queryId', 'all');
-                }}>
-                All Queries
-              </DropdownMenuItem>
-              {filteredQueries.map(({ queryId }) => (
-                <DropdownMenuItem
-                  key={queryId}
-                  onClick={() => {
-                    handleFilterChange('queryId', queryId);
-                  }}>
-                  {queryId.length > 30
-                    ? `${queryId.substring(0, 30)}...`
-                    : queryId}
-                </DropdownMenuItem>
-              ))}
-              {filteredQueries.length === 0 && queryFilter && (
-                <div className="p-3 text-sm text-gray-500">
-                  No queries match your filter
-                </div>
-              )}
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={clearFilters}
-          disabled={
-            !(
-              (filters.memoryName && filters.memoryName !== 'all') ||
-              (filters.conversationId && filters.conversationId !== 'all') ||
-              (filters.queryId && filters.queryId !== 'all')
-            )
-          }>
-          Clear Filters
-        </Button>
-        <DeleteMemoryDropdownMenu
-          className="ml-auto"
+    <div className="content-shell flex h-full w-full flex-col gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1" data-testid="page-header">
+          <div className="flex items-center gap-1">
+            <IconShell size="default" variant="primary">
+              <Database />
+            </IconShell>
+            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+              Memory
+            </h1>
+          </div>
+          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+            Manage persistent memory, context, and agent knowledge
+          </p>
+        </div>
+        <MemoryDeleteActions
           selectedQuery={
-            searchParams.get('queryId')
-              ? filteredQueries.find(
-                  q => q.queryId === searchParams.get('queryId'),
-                )
+            selectedQueryId
+              ? availableQueries.find(q => q.queryId === selectedQueryId)
               : undefined
           }
-          selectedConversation={searchParams.get('conversationId')}
+          selectedConversation={selectedConversation}
           onSuccess={clearFilters}
         />
       </div>
 
-      {/* Messages Table */}
-      <div className="rounded-lg border">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-            <thead className="bg-gray-50 dark:bg-gray-900/50">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Timestamp
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Memory
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Conversation
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Query
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Message
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-950">
-              {paginatedMessages.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <DASHBOARD_SECTIONS.memory.icon />
-                        </EmptyMedia>
-                        <EmptyTitle>No Messages Yet</EmptyTitle>
-                      </EmptyHeader>
-                    </Empty>
-                  </td>
-                </tr>
-              ) : (
-                paginatedMessages.map((messageRecord, index) => (
-                  <tr
-                    key={`${messageRecord.conversationId}-${messageRecord.queryId}-${index}`}
-                    className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/30">
-                    <td className="px-3 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
-                      {formatTimestamp(messageRecord.timestamp)}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs">
-                      <div className="max-w-20 truncate">
-                        {messageRecord.memoryName}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger className="text-left">
-                            <div className="max-w-24 truncate">
-                              {messageRecord.conversationId}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="font-mono text-xs">
-                              {messageRecord.conversationId}
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger className="text-left">
-                            <div className="max-w-24 truncate">
-                              {messageRecord.queryId}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="font-mono text-xs">
-                              {messageRecord.queryId}
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs">
-                      <pre className="text-xs whitespace-pre-wrap text-gray-900 dark:text-gray-100">
-                        {JSON.stringify(messageRecord.message, null, 2)}
-                      </pre>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <FilterSelect
+          label="Memories"
+          allLabel="All"
+          value={filters.memoryName ?? ALL}
+          options={memoryOptions}
+          onChange={value => handleFilterChange('memory', value)}
+        />
+        <FilterSelect
+          label="Conversations"
+          allLabel="All"
+          value={filters.conversationId ?? ALL}
+          options={conversationOptions}
+          onChange={value => handleFilterChange('conversationId', value)}
+        />
+        <FilterSelect
+          label="Queries"
+          allLabel="All"
+          value={filters.queryId ?? ALL}
+          options={queryOptions}
+          onChange={value => handleFilterChange('queryId', value)}
+        />
+        <Button
+          variant="ghost"
+          onClick={clearFilters}
+          disabled={!hasActiveFilters}>
+          Clear filters
+        </Button>
       </div>
 
-      {/* Summary and Pagination */}
-      <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          Showing {paginatedMessages.length > 0 ? startIndex + 1 : 0} to{' '}
-          {Math.min(startIndex + filters.limit, totalMessages)} of{' '}
-          {totalMessages} messages
+      {isLoading && (
+        <div className="text-fg-secondary flex flex-1 items-center justify-center py-8">
+          Loading...
         </div>
-        <Pagination
-          currentPage={filters.page}
-          totalPages={totalPages}
-          itemsPerPage={filters.limit}
-          onPageChange={handlePageChange}
-          onItemsPerPageChange={handleItemsPerPageChange}
+      )}
+
+      {!isLoading && totalMessages === 0 && hasActiveFilters && (
+        <ResourceNoResults
+          icon={<Database />}
+          message="No messages match your filters."
         />
-      </div>
+      )}
+
+      {!isLoading && totalMessages === 0 && !hasActiveFilters && (
+        <ResourceEmptyState
+          icon={<Database />}
+          title="No memory yet"
+          description={
+            <>
+              <p>You haven&apos;t added any memory yet.</p>
+              <p>Get started to see memory.</p>
+            </>
+          }
+          actions={
+            <a href={MEMORY_DOCS_URL} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">Learn more</Button>
+            </a>
+          }
+        />
+      )}
+
+      {!isLoading && totalMessages > 0 && (
+        <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+          <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+            <Table
+              aria-label="Memory messages"
+              className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+              <TableHeader>
+                <TableRow>
+                  <TableHead size="small" className={COL.added}>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-left"
+                      onClick={() =>
+                        setSortDirection(prev =>
+                          prev === 'desc' ? 'asc' : 'desc',
+                        )
+                      }
+                      aria-label={`Sort by added, currently ${sortDirection === 'desc' ? 'newest first' : 'oldest first'}`}>
+                      Added
+                      <IconShell size="sm" variant="secondary">
+                        <SwapVert />
+                      </IconShell>
+                    </button>
+                  </TableHead>
+                  <TableHead size="small" className={COL.memory}>
+                    Memory
+                  </TableHead>
+                  <TableHead size="small" className={COL.conversation}>
+                    Conversation
+                  </TableHead>
+                  <TableHead size="small" className={COL.query}>
+                    Query
+                  </TableHead>
+                  <TableHead size="small">Message</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedMessages.map((messageRecord, index) => {
+                  const message = JSON.stringify(messageRecord.message);
+                  return (
+                    <TableRow
+                      key={`${messageRecord.conversationId}-${messageRecord.queryId}-${index}`}>
+                      <TableCell size="small" className={COL.added}>
+                        <span className="text-fg-primary">
+                          {formatAge(messageRecord.timestamp)}
+                        </span>
+                      </TableCell>
+                      <TableCell size="small" className={COL.memory}>
+                        <TruncatedTooltip label={messageRecord.memoryName}>
+                          <span className="text-fg-primary block truncate">
+                            {messageRecord.memoryName}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell size="small" className={COL.conversation}>
+                        <TruncatedTooltip label={messageRecord.conversationId}>
+                          <span className="text-fg-primary block truncate">
+                            {messageRecord.conversationId}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell size="small" className={COL.query}>
+                        <TruncatedTooltip label={messageRecord.queryId}>
+                          <span className="text-fg-primary block truncate">
+                            {messageRecord.queryId}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell size="small">
+                        <TruncatedTooltip
+                          label={
+                            <pre className="max-w-md text-xs whitespace-pre-wrap">
+                              {JSON.stringify(messageRecord.message, null, 2)}
+                            </pre>
+                          }>
+                          <span className="text-fg-primary block truncate">
+                            {message}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+
+          <div className="flex flex-none flex-col items-center justify-between gap-4 sm:flex-row">
+            <span className="text-fg-secondary text-sm leading-5">
+              Showing {paginatedMessages.length > 0 ? startIndex + 1 : 0} to{' '}
+              {Math.min(startIndex + filters.limit, totalMessages)} of{' '}
+              {totalMessages} messages
+            </span>
+            <Pagination
+              currentPage={filters.page}
+              totalPages={totalPages}
+              itemsPerPage={filters.limit}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
