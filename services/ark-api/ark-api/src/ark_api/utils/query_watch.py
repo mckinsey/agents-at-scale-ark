@@ -58,7 +58,9 @@ def _get_error_detail(status: dict) -> dict:
     error_message = status.get("message", "")
     response = status.get("response", {})
 
-    logger.info(f"_get_error_detail - error_message: {error_message}, response: {response}")
+    # The response dict carries model output content; keep it verbose-only (see logging contract).
+    logger.info(f"_get_error_detail - error_message: {error_message}")
+    logger.debug(f"_get_error_detail - response: {response}")
 
     # Get error from response content if available
     response_content = response.get("content", "") if response else ""

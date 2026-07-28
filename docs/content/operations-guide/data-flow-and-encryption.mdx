@@ -73,9 +73,11 @@ A single Query execution touches multiple storage and communication surfaces. Th
 
 Ark redacts sensitive data from logs in several components:
 
-- **ark-api**: `SensitiveDataFilter` redacts `access_token`, `refresh_token`, `client_secret`, `code_verifier`, and `authorization` values from MCP auth logs.
+- **ark-api**: `SensitiveDataFilter` redacts the keys `access_token`, `refresh_token`, `client_secret`, `code_verifier`, and `authorization`, plus standalone tokens matching known formats (JWTs, provider API keys such as `sk-…`/`ghp_…`/`AKIA…`/`AIza…`, and PEM private-key blocks). It is attached to the root log handler and the uvicorn access/error loggers, so it applies to **all** ark-api logs — not only the MCP auth flow. The OTel trace redactor shares the same patterns and test vectors.
 - **ark-broker**: Pino logger auto-redacts `authorization`, `cookie`, `x-api-key`, `x-auth-token`, `x-csrf-token`, `set-cookie`, `proxy-authorization` headers and fields like `password`, `token`, `secret`, `apiKey`.
 - **Controller**: Query input/output is truncated to 48 characters in operation data. Full payloads are not logged at info level.
+
+For the full statement of what payload content reaches logs at default versus verbose levels, see the [Logging Contract](/operations-guide/logging-contract).
 
 <Callout type="info">
 Log redaction does **not** cover query inputs, agent prompts, or tool call payloads. If your workload processes PII or regulated data, configure your log aggregator to filter or mask these fields before long-term storage.
@@ -111,4 +113,3 @@ DLP controls are a deployment responsibility. Common integration points:
 - **Admission webhooks** — A Kubernetes validating webhook can inspect Query CRD `.spec.input` at creation time to block or flag content that matches DLP rules.
 - **MCP server layer** — MCP servers can implement input validation and output filtering before returning tool results to the executor.
 - **Log aggregator** — Configure field-level masking in your log pipeline to prevent PII from reaching long-term storage.
-
