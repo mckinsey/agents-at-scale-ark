@@ -1,14 +1,17 @@
+import {mkdtempSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createLogger} from '@ark-broker/logging/logger.js';
 import {InMemorySessionsStorage} from '../in-memory-sessions-storage.js';
+
+const silentLogger = createLogger({level: 'silent', pretty: false});
 
 describe('InMemorySessionsStorage', () => {
   let storage: InMemorySessionsStorage;
 
   beforeEach(() => {
     jest.useFakeTimers();
-    storage = new InMemorySessionsStorage(
-      createLogger({level: 'silent', pretty: false})
-    );
+    storage = new InMemorySessionsStorage(silentLogger);
   });
 
   afterEach(() => {
@@ -272,6 +275,66 @@ describe('InMemorySessionsStorage', () => {
 
       const query = (await storage.getSession('sess-1'))!.queries['query-1'];
       expect(query.conversationId).toBeUndefined();
+    });
+
+    test('moves the session header forward but not the query it belongs to', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
+      const session = (await storage.getSession('sess-1'))!;
+      const queryBefore = session.queries['query-1'].lastActivity;
+      const headerBefore = session.lastActivity;
+
+      jest.advanceTimersByTime(1000);
+      await storage.applyMessage('conv-abc', 'query-1');
+
+      const after = (await storage.getSession('sess-1'))!;
+      expect(after.queries['query-1'].lastActivity).toBe(queryBefore);
+      expect(new Date(after.lastActivity).getTime()).toBeGreaterThan(
+        new Date(headerBefore).getTime()
+      );
+    });
+  });
+
+  describe('status election after a reload', () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'ark-sessions-'));
+    });
+
+    afterEach(() => {
+      rmSync(dir, {recursive: true, force: true});
+    });
+
+    test('a message on a healthy query does not turn the session idle', async () => {
+      const path = join(dir, 'sessions.json');
+      const persisted = new InMemorySessionsStorage(silentLogger, path);
+
+      await persisted.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'healthy',
+        conversationId: 'conv-1',
+        _reason: 'QueryExecutionComplete',
+      });
+      jest.advanceTimersByTime(1000);
+      await persisted.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'failed',
+        conversationId: 'conv-1',
+        _reason: 'QueryExecutionComplete',
+        error: 'boom',
+      });
+      expect((await persisted.getSession('sess-1'))!.status).toBe('error');
+
+      jest.advanceTimersByTime(1000);
+      await persisted.applyMessage('conv-1', 'healthy');
+      await persisted.save();
+
+      // A reload re-runs the election from scratch, so anything the message
+      // left behind on the query row decides the status all over again.
+      const reloaded = new InMemorySessionsStorage(silentLogger, path);
+      const session = (await reloaded.getSession('sess-1'))!;
+      expect(session.status).toBe('error');
+      expect(session.errorCount).toBe(1);
     });
   });
 

@@ -64,7 +64,11 @@ export interface QueryEntry {
   createdAt: string;
   /** ISO timestamp when the query reached a terminal phase */
   completedAt?: string;
-  /** ISO timestamp of the most recent event for this query */
+  /**
+   * ISO timestamp of the most recent event for this query. Events only: this is
+   * what elects whose phase becomes the session status, so a write that cannot
+   * change a phase must not move it.
+   */
   lastActivity: string;
 }
 

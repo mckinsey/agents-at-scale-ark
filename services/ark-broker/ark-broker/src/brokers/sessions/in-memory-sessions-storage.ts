@@ -151,12 +151,15 @@ export class InMemorySessionsStorage implements SessionsStorage {
     const query = session.queries[queryId];
     if (!query) return;
 
-    query.lastActivity = new Date().toISOString();
     const joinedConversation = !query.conversationId;
     if (joinedConversation) {
       query.conversationId = conversationId;
     }
-    session.lastActivity = query.lastActivity;
+    // The session is active, so the header moves - but the query's own
+    // lastActivity does not. That field elects which query's phase becomes the
+    // session status, and a message cannot change a phase, so letting it win
+    // that election would report a healthy query's phase over a newer failure.
+    session.lastActivity = new Date().toISOString();
     // A message is what first attaches some queries to a conversation, and a
     // query that is already terminal gets no further event to fold it in - so
     // without this the conversation would never appear at all. The aggregate

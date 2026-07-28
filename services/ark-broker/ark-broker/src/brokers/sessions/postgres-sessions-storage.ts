@@ -417,10 +417,14 @@ export class PostgresSessionsStorage implements SessionsStorage {
       const resolvedConversationId =
         existingRow.conversation_id ?? conversationId;
 
+      // last_activity stays where the last event left it. It elects which
+      // query's phase becomes the session status, and a message cannot change a
+      // phase - so a message that moved it would hand a healthy query the
+      // election on the next header refresh, over a newer failure elsewhere.
+      // The session is still active; that is recorded on the header below.
       const updated = await sql<{query_id: string}[]>`
         UPDATE session_queries SET
           conversation_id = ${resolvedConversationId},
-          last_activity = ${now},
           last_applied_message_sequence = COALESCE(
             ${sequence ?? null}::bigint,
             session_queries.last_applied_message_sequence
@@ -437,13 +441,13 @@ export class PostgresSessionsStorage implements SessionsStorage {
       await this.refreshHeader(sql, header, now, true);
 
       // Only a message that attaches the query to a conversation changes what a
-      // watcher would render; the rest just moves last_activity along, which is
-      // what the in-memory backend does silently too.
+      // watcher would render; the rest just moves the header's last_activity and
+      // expires_at along, which is what the in-memory backend does silently too.
       return joinedConversation ? owner.session_id : undefined;
     });
 
-    // refreshHeader just rewrote conversations, participants and status, so a
-    // watcher that is not told would keep serving the previous list.
+    // refreshHeader just rewrote conversations and participants, so a watcher
+    // that is not told would keep serving the previous list.
     if (touched) {
       await this.db.notify(
         NOTIFY_CHANNEL,

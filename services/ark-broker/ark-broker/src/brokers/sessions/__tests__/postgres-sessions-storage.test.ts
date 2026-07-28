@@ -1157,6 +1157,88 @@ describe('PostgresSessionsStorage', () => {
       expect(fromMemory.conversations).toHaveLength(1);
     });
 
+    test('a message does not re-elect the status on a later header refresh', async () => {
+      // Skipping the election in the message's own transaction is not enough:
+      // any later write refreshes the header and runs the election again, so a
+      // message must leave nothing behind that could win it.
+      await storage.applyEvent(
+        {
+          sessionId: 's',
+          queryName: 'healthy',
+          conversationId: 'c1',
+          _reason: 'QueryExecutionComplete',
+        },
+        1
+      );
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      await storage.applyEvent(
+        {
+          sessionId: 's',
+          queryName: 'failed',
+          conversationId: 'c1',
+          _reason: 'QueryExecutionComplete',
+          error: 'it really failed',
+        },
+        2
+      );
+      expect((await storage.getSession('s'))!.status).toBe('error');
+
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      await storage.applyMessage('c1', 'healthy');
+
+      // A second replica applying an out-of-order event for the failed query:
+      // its phase is denied, but its metadata merges, and that write refreshes
+      // the header.
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      await storage.applyEvent(
+        {
+          sessionId: 's',
+          queryName: 'failed',
+          agent: 'agent-late',
+          _reason: 'QueryExecutionComplete',
+          error: 'it really failed',
+        },
+        1
+      );
+
+      const session = (await storage.getSession('s'))!;
+      expect(session.queries['failed']!.agent).toBe('agent-late');
+      expect(session.status).toBe('error');
+      expect(session.errorCount).toBe(1);
+    });
+
+    test('a message moves the header and the TTL forward, not the query row', async () => {
+      type Timestamps = {header: Date; query: Date; expires: Date};
+      const readTimestamps = async (): Promise<Timestamps[]> =>
+        db()<Timestamps[]>`
+          SELECT s.last_activity AS header, s.expires_at AS expires,
+                 sq.last_activity AS query
+          FROM sessions s
+          JOIN session_queries sq ON sq.session_id = s.session_id
+          WHERE s.session_id = 's'
+        `;
+
+      await storage.applyEvent({
+        sessionId: 's',
+        queryName: 'q1',
+        _reason: 'QueryExecutionComplete',
+      });
+      const [before] = await readTimestamps();
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await storage.applyMessage('c1', 'q1');
+
+      const [after] = await readTimestamps();
+      // A message is activity for the session - it keeps the session at the top
+      // of a date-sorted list and holds the TTL open - but it is not activity
+      // for the query, whose lastActivity elects the session status.
+      expect(after!.query.getTime()).toBe(before!.query.getTime());
+      expect(after!.header.getTime()).toBeGreaterThan(before!.header.getTime());
+      expect(after!.expires.getTime()).toBeGreaterThan(
+        before!.expires.getTime()
+      );
+    });
+
     test('aggregates match the in-memory backend when a message joins the conversation', async () => {
       // Some queries only learn their conversation from a message, and a query
       // that is already terminal gets no further event - so whichever backend
