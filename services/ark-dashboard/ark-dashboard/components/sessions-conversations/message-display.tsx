@@ -3,7 +3,6 @@
 import { useSearchParams } from 'next/navigation';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
 import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
@@ -15,6 +14,9 @@ import type {
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 import type { ChatMessage } from '@/lib/types/chat-message';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { IconShell } from '@/components/ui/icon-shell';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
@@ -507,37 +509,41 @@ export function MessageDisplay({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-border bg-muted border-b p-4">
-        <div className="flex items-center gap-2">
-          {getParticipantIcon(participantType, { size: '4' })}
-          <span className="font-semibold">
-            {stripNamespace(participantName)}
-          </span>
-          <Badge className="bg-muted/50 text-muted-foreground border-0 capitalize">
-            {participantType}
-          </Badge>
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-b border-stroke-tertiary bg-surface-bg-secondary px-5 py-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <IconShell size="sm" className="opacity-100">
+            {getParticipantIcon(participantType, { size: '4' })}
+          </IconShell>
+          <TruncatedTooltip label={stripNamespace(participantName)}>
+            <span className="block min-w-0 truncate text-base font-semibold leading-6 text-fg-primary">
+              {stripNamespace(participantName)}
+            </span>
+          </TruncatedTooltip>
+          <span className="shrink-0 text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        <MessageContent
-          isTemporary={isTemporary}
-          messages={messages}
-          pendingMessages={pendingMessages}
-          participantName={participantName}
-          isProcessing={isProcessing}
-          showToolCalls={showToolCalls}
-          queryName={effectiveQueryId || undefined}
-          queryNamespace={namespace}
-          approvalData={
-            needsApproval && approvalDetails ? approvalDetails : undefined
-          }
-          existingDecision={existingDecision}
-          isWaitingForNextMessage={isWaitingForNextMessage}
-          onApprove={handleApprove}
-          onReject={handleReject}
-        />
-      </div>
+      <ScrollArea className="flex-1 h-0 border-r border-stroke-divider">
+        <div className="space-y-4 p-4">
+          <MessageContent
+            isTemporary={isTemporary}
+            messages={messages}
+            pendingMessages={pendingMessages}
+            participantName={participantName}
+            isProcessing={isProcessing}
+            showToolCalls={showToolCalls}
+            queryName={effectiveQueryId || undefined}
+            queryNamespace={namespace}
+            approvalData={
+              needsApproval && approvalDetails ? approvalDetails : undefined
+            }
+            existingDecision={existingDecision}
+            isWaitingForNextMessage={isWaitingForNextMessage}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+        </div>
+      </ScrollArea>
     </div>
   );
 }

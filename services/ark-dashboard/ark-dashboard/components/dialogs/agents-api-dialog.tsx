@@ -1,9 +1,9 @@
 'use client';
 
 import copy from 'copy-to-clipboard';
-import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import { Check, ContentCopy } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,12 +17,13 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Agent } from '@/lib/services';
+import { type Agent, agentsService } from '@/lib/services';
 
 import { getBashSnippet } from './code-snippets/bash-snippet';
 import { getGoSnippet } from './code-snippets/go-snippet';
@@ -31,35 +32,35 @@ import { getPythonSnippet } from './code-snippets/python-snippet';
 interface AgentsAPIDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agents: Agent[];
 }
+
+const codeBlockClass =
+  'bg-fill-onsurface-ui-2 text-fg-primary overflow-x-auto p-3 text-xs';
 
 export function AgentsAPIDialog({
   open,
   onOpenChange,
-  agents,
-}: AgentsAPIDialogProps) {
+}: Readonly<AgentsAPIDialogProps>) {
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
-
-  // Track user's explicit selection separately from the displayed selection
   const [userSelectedAgent, setUserSelectedAgent] = useState<string | null>(
     null,
   );
+  const [activeTab, setActiveTab] = useState('python');
+  const [isInternalEndpoint, setIsInternalEndpoint] = useState(false);
 
-  // Derive the actual selected agent:
-  // 1. Use user's selection if it exists and is still valid
-  // 2. Otherwise use the first agent in the list
-  // 3. Fall back to empty string if no agents exist
+  useEffect(() => {
+    if (!open) return;
+    agentsService.getAll().then(setAgents).catch(console.error);
+  }, [open]);
+
   const selectedAgent = (() => {
     if (userSelectedAgent && agents.some(a => a.name === userSelectedAgent)) {
       return userSelectedAgent;
     }
     return agents[0]?.name || '';
   })();
-
-  const [activeTab, setActiveTab] = useState('python');
-  const [isInternalEndpoint, setIsInternalEndpoint] = useState(false);
 
   const apiPath = '/api/v1/queries/';
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -86,16 +87,17 @@ export function AgentsAPIDialog({
   const pythonCode = getPythonSnippet(fullEndpoint, selectedAgent);
   const goCode = getGoSnippet(fullEndpoint, selectedAgent);
   const bashCode = getBashSnippet(fullEndpoint, selectedAgent);
-
   const codeSnippets: Record<string, string> = {
     python: pythonCode,
     go: goCode,
     bash: bashCode,
   };
 
+  const agentItems = agents.map(a => ({ value: a.name, label: a.name }));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] w-[95vw] max-w-2xl overflow-y-auto sm:max-w-2xl md:max-w-3xl">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl">
         <DialogHeader>
           <DialogTitle>API Access</DialogTitle>
           <DialogDescription>
@@ -103,30 +105,35 @@ export function AgentsAPIDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Select Agent</label>
-            <Select value={selectedAgent} onValueChange={setUserSelectedAgent}>
-              <SelectTrigger>
+        <div className="flex max-h-[70vh] min-w-0 flex-col gap-4 overflow-y-auto">
+          <div className="flex min-w-0 flex-col gap-2">
+            <Label className="text-fg-secondary text-sm">Select Agent</Label>
+            <Select
+              items={agentItems}
+              value={selectedAgent}
+              onValueChange={value =>
+                setUserSelectedAgent(value as string | null)
+              }>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
               <SelectContent>
-                {agents.map(agent => (
-                  <SelectItem key={agent.id} value={agent.name}>
-                    {agent.name}
+                {agentItems.map(item => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className="flex min-w-0 flex-col gap-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Endpoint</label>
+              <Label className="text-fg-secondary text-sm">Endpoint</Label>
               <div className="flex items-center gap-2">
                 <Label
                   htmlFor="endpoint-toggle"
-                  className="text-muted-foreground text-xs">
+                  className="text-fg-secondary text-xs">
                   Cluster internal
                 </Label>
                 <Switch
@@ -136,31 +143,37 @@ export function AgentsAPIDialog({
                 />
               </div>
             </div>
-            <div className="bg-muted flex items-center justify-between gap-2 overflow-hidden rounded-md p-3">
-              <code className="overflow-x-auto text-sm">{fullEndpoint}</code>
+            <div className="bg-fill-onsurface-ui-2 flex items-center justify-between gap-2 p-3">
+              <code className="text-fg-primary block min-w-0 flex-1 overflow-x-auto text-sm whitespace-nowrap">
+                {fullEndpoint}
+              </code>
               <Button
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
-                className="flex-shrink-0"
+                className="shrink-0"
+                aria-label="Copy endpoint"
                 onClick={() => copyToClipboard(fullEndpoint, 'endpoint')}>
                 {copiedEndpoint ? (
-                  <Check className="h-4 w-4" />
+                  <Check className="size-4" />
                 ) : (
-                  <Copy className="h-4 w-4" />
+                  <ContentCopy className="size-4" />
                 )}
               </Button>
             </div>
             {isInternalEndpoint && (
-              <p className="text-muted-foreground text-xs">
+              <p className="text-fg-secondary text-xs">
                 Replace <code>&lt;namespace&gt;</code> with the namespace where
                 Ark is deployed.
               </p>
             )}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Code Examples</label>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex min-w-0 flex-col gap-2">
+            <Label className="text-fg-secondary text-sm">Code Examples</Label>
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="min-w-0">
               <div className="flex items-center justify-between">
                 <TabsList>
                   <TabsTrigger value="python">Python</TabsTrigger>
@@ -168,32 +181,27 @@ export function AgentsAPIDialog({
                   <TabsTrigger value="bash">Bash</TabsTrigger>
                 </TabsList>
                 <Button
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
+                  aria-label="Copy code"
                   onClick={() =>
                     copyToClipboard(codeSnippets[activeTab], 'code')
                   }>
                   {copiedCode ? (
-                    <Check className="h-4 w-4" />
+                    <Check className="size-4" />
                   ) : (
-                    <Copy className="h-4 w-4" />
+                    <ContentCopy className="size-4" />
                   )}
                 </Button>
               </div>
-              <TabsContent value="python">
-                <pre className="bg-muted overflow-x-auto rounded-md p-3 text-xs">
-                  {pythonCode}
-                </pre>
+              <TabsContent value="python" className="min-w-0">
+                <pre className={codeBlockClass}>{pythonCode}</pre>
               </TabsContent>
-              <TabsContent value="go">
-                <pre className="bg-muted overflow-x-auto rounded-md p-3 text-xs">
-                  {goCode}
-                </pre>
+              <TabsContent value="go" className="min-w-0">
+                <pre className={codeBlockClass}>{goCode}</pre>
               </TabsContent>
-              <TabsContent value="bash">
-                <pre className="bg-muted overflow-x-auto rounded-md p-3 text-xs">
-                  {bashCode}
-                </pre>
+              <TabsContent value="bash" className="min-w-0">
+                <pre className={codeBlockClass}>{bashCode}</pre>
               </TabsContent>
             </Tabs>
           </div>

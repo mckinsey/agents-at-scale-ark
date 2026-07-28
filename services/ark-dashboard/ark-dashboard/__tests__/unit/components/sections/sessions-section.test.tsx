@@ -443,7 +443,7 @@ describe('SessionsSection', () => {
       const statusSelect = comboboxes[0];
       await user.click(statusSelect);
 
-      const failedOption = screen.getByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', { name: /failed/i });
       await user.click(failedOption);
 
       await waitFor(() => {
@@ -533,7 +533,7 @@ describe('SessionsSection', () => {
       const sortSelect = comboboxes[1];
       await user.click(sortSelect);
 
-      const oldestOption = screen.getByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
       expect(oldestOption).toBeInTheDocument();
       await user.click(oldestOption);
 
@@ -784,7 +784,7 @@ describe('SessionsSection', () => {
       const statusSelect = comboboxes[0];
       await user.click(statusSelect);
 
-      const failedOption = screen.getByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', { name: /failed/i });
       await user.click(failedOption);
 
       await waitFor(() => {
@@ -803,7 +803,7 @@ describe('SessionsSection', () => {
       const sortSelect = comboboxes[1];
       await user.click(sortSelect);
 
-      const oldestOption = screen.getByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
       await user.click(oldestOption);
 
       await waitFor(() => {

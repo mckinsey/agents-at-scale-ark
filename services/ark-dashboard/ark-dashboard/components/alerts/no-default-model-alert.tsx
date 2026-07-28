@@ -1,13 +1,18 @@
 'use client';
 
 import { AlertTriangleIcon, ArrowRight } from 'lucide-react';
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  AlertTitle,
+} from '@/components/ui/alert';
 import { useGetAllModels } from '@/lib/services/models-hooks';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function NoDefaultModelAlert() {
   const { data: models, error } = useGetAllModels();
@@ -26,15 +31,17 @@ export function NoDefaultModelAlert() {
   if (models && !models.some(m => m.name === 'default')) {
     return (
       <NamespacedLink href="/models/new?name=default">
-        <Alert variant="warning" className="flex flex-row flex-wrap gap-2">
-          <div className="flex items-center gap-1">
-            <AlertTriangleIcon className="h-4 w-4" />
+        <Alert layout="long">
+          <AlertIcon className="text-status-warning">
+            <AlertTriangleIcon className="text-[25px]" />
+          </AlertIcon>
+          <AlertContent className="flex-row items-center justify-between gap-3 pt-0">
             <AlertTitle>You have no default Model configured.</AlertTitle>
-          </div>
-          <AlertDescription className="text-primary ml-auto flex items-center">
-            <span>Configure Default Model</span>
-            <ArrowRight className="h-4 w-4" />
-          </AlertDescription>
+            <AlertDescription className="text-primary flex items-center">
+              <span>Configure Default Model</span>
+              <ArrowRight className="h-4 w-4" />
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       </NamespacedLink>
     );
