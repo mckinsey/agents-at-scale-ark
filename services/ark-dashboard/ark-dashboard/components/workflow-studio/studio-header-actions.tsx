@@ -195,7 +195,7 @@ export function StudioHeaderActions({
                   disabled={!persisted}
                   data-testid="studio-activity-trigger">
                   <Badge
-                    variant="secondary"
+                    variant="alternative"
                     className="mr-2 size-5 justify-center rounded-full border bg-white p-0 text-neutral-900"
                     data-testid="studio-activity-badge">
                     {totalRuns}

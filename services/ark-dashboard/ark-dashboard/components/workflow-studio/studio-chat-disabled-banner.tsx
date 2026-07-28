@@ -20,10 +20,7 @@ interface ProblemBannerProps {
 
 function ProblemBanner({ message, href, testId, fixTestId }: ProblemBannerProps) {
   return (
-    <Alert
-      variant="warning"
-      className="flex items-center gap-3"
-      data-testid={testId}>
+    <Alert className="flex items-center gap-3" data-testid={testId}>
       <AlertTriangle className="h-4 w-4" />
       <AlertTitle className="col-start-auto flex-1">{message}</AlertTitle>
       <NamespacedLink
