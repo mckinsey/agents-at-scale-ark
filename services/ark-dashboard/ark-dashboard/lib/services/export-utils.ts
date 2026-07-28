@@ -3,22 +3,13 @@
  * Contains common mapping logic used by both client and server export services
  */
 
-import type {
-  AgentListResponse,
-  ModelListResponse,
-  TeamListResponse,
-  QueryListResponse,
-  MCPServerListResponse,
-  A2AServerListResponse,
-  ResourceExportData,
-  ExportItem,
-} from '@/lib/services/export';
+import type { ResourceExportData, ExportItem } from '@/lib/services/export';
 
 /**
  * Maps API response items to ExportItem format
  */
 function mapToExportItems(
-  items: Array<{ name?: string }> | undefined,
+  items: Array<{ name?: string; description?: string | null }> | undefined,
   type: string,
 ): ExportItem[] {
   if (!items) return [];
@@ -27,6 +18,7 @@ function mapToExportItems(
     id: item.name || '',
     name: item.name || '',
     type,
+    description: item.description || undefined,
   }));
 }
 
@@ -87,6 +79,9 @@ export function processResourceResponses(
         id: template.metadata.name || '',
         name: template.metadata.name || '',
         type: 'workflow',
+        description:
+          template.metadata.annotations?.['workflows.argoproj.io/description'] ||
+          undefined,
       }));
     }
   }

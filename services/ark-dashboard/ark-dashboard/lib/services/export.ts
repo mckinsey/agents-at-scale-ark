@@ -33,6 +33,7 @@ export interface ExportItem {
   id: string;
   name: string;
   type: string;
+  description?: string;
   selected?: boolean;
 }
 
