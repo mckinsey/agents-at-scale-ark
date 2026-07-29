@@ -125,7 +125,7 @@ export function NameWorkflowDialog({
           }}>
           <div className="space-y-2">
             <Label htmlFor="workflow-name">
-              Workflow name <span className="text-destructive">*</span>
+              Workflow name <span className="text-status-error">*</span>
             </Label>
             <Input
               id="workflow-name"
@@ -141,7 +141,7 @@ export function NameWorkflowDialog({
             />
             {touched && nameError && (
               <p
-                className="text-destructive text-sm"
+                className="text-status-error text-sm"
                 data-testid="workflow-name-error">
                 {nameError}
               </p>
@@ -150,7 +150,7 @@ export function NameWorkflowDialog({
 
           <div className="space-y-2">
             <Label htmlFor="workflow-title">
-              Workflow display name <span className="text-destructive">*</span>
+              Workflow display name <span className="text-status-error">*</span>
             </Label>
             <Input
               id="workflow-title"

@@ -773,15 +773,15 @@
   }
 }
 
-.yaml-tok-key { color: #b794f6; }
-.yaml-tok-str { color: #7ee787; }
-.yaml-tok-num, .yaml-tok-bool { color: #e3a679; }
-.yaml-tok-comment { color: var(--muted-foreground); font-style: italic; }
-.yaml-tok-punc { color: var(--muted-foreground); }
-.yaml-tok-val { color: var(--foreground); }
-.yaml-err-line { display: inline-block; min-width: 100%; background: color-mix(in srgb, var(--destructive) 18%, transparent); text-decoration: underline wavy var(--destructive); text-underline-offset: 3px; }
+.yaml-tok-key { color: var(--color-tags-accent-primary-indigo); }
+.yaml-tok-str { color: var(--color-tags-accent-primary-emerald); }
+.yaml-tok-num, .yaml-tok-bool { color: var(--color-tags-accent-primary-amber); }
+.yaml-tok-comment { color: var(--color-fg-tertiary); font-style: italic; }
+.yaml-tok-punc { color: var(--color-fg-secondary); }
+.yaml-tok-val { color: var(--color-fg-primary); }
+.yaml-err-line { display: inline-block; min-width: 100%; background: color-mix(in srgb, var(--color-status-error) 18%, transparent); text-decoration: underline wavy var(--color-status-error); text-underline-offset: 3px; }
 
-.md-tok-heading { color: #b794f6; }
-.md-tok-code { color: #7ee787; }
-.md-tok-link { color: #6cb6ff; }
-.md-tok-punc { color: var(--muted-foreground); }
+.md-tok-heading { color: var(--color-tags-accent-primary-indigo); }
+.md-tok-code { color: var(--color-tags-accent-primary-emerald); }
+.md-tok-link { color: var(--color-tags-accent-primary-blue); }
+.md-tok-punc { color: var(--color-fg-secondary); }

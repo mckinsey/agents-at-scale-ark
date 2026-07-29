@@ -1,10 +1,10 @@
 'use client';
 
-import { ChevronDown, ExternalLink, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
+import { ChevronDown, OpenInNew, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -155,7 +155,7 @@ export function StudioHeaderActions({
               disabled={!persisted}
               onClick={handleOpenInArgo}
               data-testid="studio-open-argo">
-              <ExternalLink className="h-4 w-4" />
+              <OpenInNew className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -175,7 +175,7 @@ export function StudioHeaderActions({
                 disabled={!persisted}
                 onClick={() => setDeleteOpen(true)}
                 data-testid="studio-delete">
-                <Trash2 className="h-4 w-4" />
+                <Trash className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -196,7 +196,7 @@ export function StudioHeaderActions({
                   data-testid="studio-activity-trigger">
                   <Badge
                     variant="alternative"
-                    className="mr-2 size-5 justify-center rounded-full border bg-white p-0 text-neutral-900"
+                    className="border-stroke-divider bg-surface-primary text-fg-primary mr-2 size-5 justify-center border p-0"
                     data-testid="studio-activity-badge">
                     {totalRuns}
                   </Badge>
@@ -218,9 +218,9 @@ export function StudioHeaderActions({
                     key={stat.key}
                     href={runsHref(stat.status)}
                     onClick={() => setActivityOpen(false)}
-                    className="hover:bg-accent flex flex-col rounded-md p-1 transition-colors"
+                    className="hover:bg-fill-subtle flex flex-col p-1 transition-colors"
                     data-testid={`studio-activity-link-${stat.key}`}>
-                    <span className="text-muted-foreground">{stat.label}</span>
+                    <span className="text-fg-secondary">{stat.label}</span>
                     <span
                       className="text-lg font-semibold"
                       data-testid={`studio-activity-${stat.key}`}>

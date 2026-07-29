@@ -364,7 +364,7 @@ export function MarkdownEditor({
         autoFocus={autoFocus}
         data-testid={dataTestId}
         style={{ ...SHARED_TEXT_STYLE, color: 'transparent' }}
-        className="caret-foreground placeholder:text-muted-foreground absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent outline-none"
+        className="caret-fg-primary placeholder:text-fg-tertiary absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent outline-none"
       />
     </div>
   );

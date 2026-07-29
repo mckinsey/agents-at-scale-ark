@@ -22,7 +22,7 @@ interface WorkflowDagViewerProps {
 function CustomNode({ data }: { data: { label: string; width: number } }) {
   return (
     <div
-      className="border-border bg-card text-card-foreground dark:border-border dark:bg-card dark:text-card-foreground flex items-center justify-center rounded-md border-2 px-2 py-2 text-xs font-medium"
+      className="border-stroke-secondary bg-surface-primary text-fg-primary flex items-center justify-center border-2 px-2 py-2 text-xs font-medium"
       style={{
         width: data.width,
         height: nodeHeight,
@@ -66,12 +66,12 @@ export function WorkflowDagViewer({ manifest, fill }: WorkflowDagViewerProps) {
       type: 'smoothstep',
       animated: true,
       style: {
-        stroke: '#6b7280',
+        stroke: 'var(--color-fg-tertiary)',
         strokeWidth: 2,
       },
       markerEnd: {
         type: MarkerType.Arrow,
-        color: '#6b7280',
+        color: 'var(--color-fg-tertiary)',
         width: 15,
         height: 15,
       },
@@ -84,15 +84,13 @@ export function WorkflowDagViewer({ manifest, fill }: WorkflowDagViewerProps) {
 
   if (error) {
     return (
-      <div className="bg-muted text-destructive rounded-lg p-4 text-sm">
-        {error}
-      </div>
+      <div className="bg-fill-muted text-status-error p-4 text-sm">{error}</div>
     );
   }
 
   if (nodes.length === 0) {
     return (
-      <div className="bg-muted text-muted-foreground rounded-lg p-4 text-sm">
+      <div className="bg-fill-muted text-fg-secondary p-4 text-sm">
         No tasks found in DAG
       </div>
     );
@@ -103,36 +101,36 @@ export function WorkflowDagViewer({ manifest, fill }: WorkflowDagViewerProps) {
       className={
         fill
           ? 'h-full w-full bg-transparent'
-          : 'bg-muted h-[500px] w-full rounded-lg border'
+          : 'bg-fill-muted border-stroke-divider h-[500px] w-full border'
       }>
       <style jsx global>{`
         .react-flow__controls {
-          background: hsl(var(--card)) !important;
-          border: 1px solid hsl(var(--border)) !important;
+          background: var(--color-surface-primary) !important;
+          border: 1px solid var(--color-stroke-divider) !important;
         }
         .react-flow__controls button {
-          background: hsl(var(--card)) !important;
-          background-color: hsl(var(--card)) !important;
-          border-bottom: 1px solid hsl(var(--border)) !important;
-          color: hsl(var(--foreground)) !important;
+          background: var(--color-surface-primary) !important;
+          background-color: var(--color-surface-primary) !important;
+          border-bottom: 1px solid var(--color-stroke-divider) !important;
+          color: var(--color-fg-primary) !important;
         }
         .react-flow__controls button:hover {
-          background: hsl(var(--accent)) !important;
-          background-color: hsl(var(--accent)) !important;
+          background: var(--color-fill-subtle) !important;
+          background-color: var(--color-fill-subtle) !important;
         }
         .react-flow__controls button svg,
         .react-flow__controls button path {
           fill: currentColor !important;
         }
         .dark .react-flow__attribution {
-          background: hsl(var(--card));
-          color: hsl(var(--muted-foreground));
-          border: 1px solid hsl(var(--border));
+          background: var(--color-surface-primary);
+          color: var(--color-fg-secondary);
+          border: 1px solid var(--color-stroke-divider);
           padding: 2px 6px;
-          border-radius: 4px;
+          border-radius: 0;
         }
         .dark .react-flow__attribution a {
-          color: hsl(var(--foreground));
+          color: var(--color-fg-primary);
         }
       `}</style>
       <ReactFlow
@@ -142,7 +140,7 @@ export function WorkflowDagViewer({ manifest, fill }: WorkflowDagViewerProps) {
         fitView
         attributionPosition="bottom-right">
         <Background />
-        <Controls className="!bg-card" />
+        <Controls className="!bg-surface-primary" />
       </ReactFlow>
     </div>
   );

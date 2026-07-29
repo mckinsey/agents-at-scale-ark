@@ -1,7 +1,6 @@
 'use client';
 
-import { ExternalLink, Lock } from 'lucide-react';
-
+import { Lock, OpenInNew } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,12 +25,12 @@ interface StepCardProps {
 function StepCard({ step, title, testId, children }: StepCardProps) {
   return (
     <li
-      className="border-border flex flex-col items-center gap-3 border p-5 text-center"
+      className="border-stroke-divider flex flex-col items-center gap-3 border p-5 text-center"
       data-testid={testId}>
-      <span className="bg-muted text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium">
+      <span className="bg-fill-muted text-fg-secondary flex h-8 w-8 shrink-0 items-center justify-center text-sm font-medium">
         {step}
       </span>
-      <p className="text-foreground text-sm font-medium">{title}</p>
+      <p className="text-fg-primary text-sm font-medium">{title}</p>
       {children}
     </li>
   );
@@ -47,7 +46,7 @@ function InternalLinkButton({ href, label, testId }: InternalLinkButtonProps) {
   return (
     <Button asChild type="button" variant="outline" size="sm">
       <NamespacedLink href={href} data-testid={testId}>
-        <ExternalLink className="h-4 w-4" />
+        <OpenInNew className="h-4 w-4" />
         {label}
       </NamespacedLink>
     </Button>
@@ -97,9 +96,7 @@ function AgentAction({
       <div
         className="flex flex-col items-center gap-2"
         data-testid="studio-gate-step-agent-not-ready">
-        <p className="text-muted-foreground text-sm">
-          Installed but not ready.
-        </p>
+        <p className="text-fg-secondary text-sm">Installed but not ready.</p>
         <InternalLinkButton
           href={`/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`}
           label="Open agent"
@@ -138,9 +135,7 @@ function McpAction({
       <div
         className="flex flex-col items-center gap-2"
         data-testid="studio-gate-step-mcp-not-ready">
-        <p className="text-muted-foreground text-sm">
-          Installed but not ready.
-        </p>
+        <p className="text-fg-secondary text-sm">Installed but not ready.</p>
         <InternalLinkButton
           href="/mcp"
           label="Open MCP server"
@@ -164,11 +159,11 @@ export function StudioChatGate({
       className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center p-6 backdrop-blur-sm"
       data-testid="studio-chat-gate">
       <div className="flex w-full max-w-xl flex-col items-center gap-4 text-center">
-        <Lock className="text-muted-foreground h-7 w-7" />
-        <p className="text-foreground text-lg font-semibold">
+        <Lock className="text-fg-secondary h-7 w-7" />
+        <p className="text-fg-primary text-lg font-semibold">
           Chat not available
         </p>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-fg-secondary text-sm">
           Follow the steps below to start chatting with the{' '}
           {ARGO_MAKE_AUTHOR_AGENT_NAME} agent
         </p>

@@ -113,7 +113,7 @@ export const renderMarkdown = (
 
           return (
             <code
-              className="rounded bg-current/10 px-1 py-0.5 font-mono text-xs"
+              className="bg-current/10 px-1 py-0.5 font-mono text-xs"
               {...props}>
               {children}
             </code>

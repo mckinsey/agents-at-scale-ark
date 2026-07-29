@@ -39,7 +39,7 @@ export function PromptEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="bg-card focus-within:ring-ring/50 min-h-0 flex-1 overflow-hidden rounded-md border focus-within:ring-[3px]">
+        <div className="bg-surface-primary focus-within:ring-stroke-status-focus border-stroke-divider min-h-0 flex-1 overflow-hidden border focus-within:ring-[3px]">
           <MarkdownEditor
             value={value}
             onChange={onChange}

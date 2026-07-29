@@ -1,7 +1,8 @@
 'use client';
 
-import { CircleAlert, Lock } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
+
+import { ErrorIcon, Lock } from '@/components/icons';
 
 interface StudioYamlEditorError {
   message: string;
@@ -150,12 +151,12 @@ export function StudioYamlEditor({
               highlightRef.current.scrollLeft = target.scrollLeft;
             }
           }}
-          className="caret-foreground absolute inset-0 resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-relaxed whitespace-pre text-transparent outline-none"
+          className="caret-fg-primary absolute inset-0 resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-relaxed whitespace-pre text-transparent outline-none"
         />
         {readOnly && (
           <div
             data-testid="studio-build-lock"
-            className="bg-background/70 text-muted-foreground absolute inset-0 flex items-center justify-center gap-2 text-sm backdrop-blur-[1px]">
+            className="bg-background/70 text-fg-secondary absolute inset-0 flex items-center justify-center gap-2 text-sm backdrop-blur-[1px]">
             <Lock className="h-4 w-4" />
             Agent is building — editing locked
           </div>
@@ -165,13 +166,13 @@ export function StudioYamlEditor({
         <div
           role="alert"
           data-testid="studio-yaml-banner"
-          className="border-destructive bg-destructive/10 flex shrink-0 items-start gap-2 border-t px-4 py-3 text-sm">
-          <CircleAlert className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
+          className="border-stroke-status-error bg-status-error/10 flex shrink-0 items-start gap-2 border-t px-4 py-3 text-sm">
+          <ErrorIcon className="text-status-error mt-0.5 h-4 w-4 shrink-0" />
           <div className="flex min-w-0 flex-col">
-            <span className="text-destructive font-medium">
+            <span className="text-status-error font-medium">
               Invalid workflow YAML
             </span>
-            <span className="text-muted-foreground font-mono text-xs break-words">
+            <span className="text-fg-secondary font-mono text-xs break-words">
               {error.message}
             </span>
           </div>

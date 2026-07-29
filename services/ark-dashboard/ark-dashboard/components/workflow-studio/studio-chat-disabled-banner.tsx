@@ -1,7 +1,6 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
-
+import { Warning } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
@@ -21,7 +20,7 @@ interface ProblemBannerProps {
 function ProblemBanner({ message, href, testId, fixTestId }: ProblemBannerProps) {
   return (
     <Alert className="flex items-center gap-3" data-testid={testId}>
-      <AlertTriangle className="h-4 w-4" />
+      <Warning className="h-4 w-4" />
       <AlertTitle className="col-start-auto flex-1">{message}</AlertTitle>
       <NamespacedLink
         href={href}

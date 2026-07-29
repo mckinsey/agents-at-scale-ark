@@ -1,7 +1,6 @@
 'use client';
 
-import { ArrowUpRightIcon } from 'lucide-react';
-
+import { ArrowOutward } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -33,10 +32,10 @@ export function WorkflowTemplatesNotInstalled() {
       <Button
         variant="ghost"
         asChild
-        className="text-muted-foreground"
+        className="text-fg-secondary"
         size="sm">
         <a href={ARGO_WORKFLOWS_DOCS_URL} target="_blank" rel="noreferrer">
-          Learn how to install Argo Workflows <ArrowUpRightIcon />
+          Learn how to install Argo Workflows <ArrowOutward />
         </a>
       </Button>
     </Empty>

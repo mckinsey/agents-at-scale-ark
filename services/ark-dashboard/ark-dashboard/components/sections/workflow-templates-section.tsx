@@ -1,6 +1,5 @@
 'use client';
 
-import { ArrowUpRightIcon } from 'lucide-react';
 import {
   forwardRef,
   useCallback,
@@ -11,6 +10,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 
+import { ArrowOutward } from '@/components/icons';
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
 import { WorkflowTemplatesNotInstalled } from '@/components/sections/workflow-templates-not-installed';
 import {
@@ -175,12 +175,12 @@ export const WorkflowTemplatesSection = forwardRef<
         <Button
           variant="ghost"
           asChild
-          className="text-muted-foreground"
+          className="text-fg-secondary"
           size="sm">
           <a
             href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/workflows/"
             target="_blank">
-            Learn how to create Workflow Templates <ArrowUpRightIcon />
+            Learn how to create Workflow Templates <ArrowOutward />
           </a>
         </Button>
       </Empty>

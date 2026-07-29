@@ -1,17 +1,17 @@
 'use client';
 
-import {
-  ChevronLeft,
-  Download,
-  FileCode,
-  Network,
-  Pencil,
-  Play,
-} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
+import {
+  AccountTree,
+  ChevronLeft,
+  Code,
+  Edit,
+  PlayArrow,
+  SaveAlt,
+} from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
   AlertDialog,
@@ -115,13 +115,13 @@ function EditMetaDialog({
               disabled
               readOnly
             />
-            <p className="text-muted-foreground text-xs">
+            <p className="text-fg-secondary text-xs">
               You&apos;re not able to rename workflow after creation.
             </p>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="workflow-meta-title">
-              Workflow display name <span className="text-destructive">*</span>
+              Workflow display name <span className="text-status-error">*</span>
             </Label>
             <Input
               id="workflow-meta-title"
@@ -223,25 +223,23 @@ interface ViewToggleProps {
 
 function ViewToggle({ view, onChange }: ViewToggleProps) {
   return (
-    <div className="border-border inline-flex items-center border">
+    <div className="border-stroke-divider inline-flex items-center border">
       <Button
         type="button"
         variant={view === 'diagram' ? 'default' : 'ghost'}
         size="sm"
-        className="rounded-none"
         onClick={() => onChange('diagram')}
         data-testid="studio-view-diagram">
-        <Network className="mr-2 h-4 w-4" />
+        <AccountTree className="mr-2 h-4 w-4" />
         Diagram
       </Button>
       <Button
         type="button"
         variant={view === 'yaml' ? 'default' : 'ghost'}
         size="sm"
-        className="rounded-none"
         onClick={() => onChange('yaml')}
         data-testid="studio-view-yaml">
-        <FileCode className="mr-2 h-4 w-4" />
+        <Code className="mr-2 h-4 w-4" />
         YAML
       </Button>
     </div>
@@ -384,26 +382,26 @@ export function WorkflowStudio({
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
-      <header className="border-border shrink-0 border-b">
+      <header className="border-stroke-divider shrink-0 border-b">
         <div className="flex items-center justify-between gap-4 px-6 pt-4">
-          <div className="text-muted-foreground flex min-w-0 items-center gap-1 text-sm">
+          <div className="text-fg-secondary flex min-w-0 items-center gap-1 text-sm">
             <NamespacedLink
               href="/workflow-templates"
-              className="hover:text-foreground flex items-center gap-1">
+              className="hover:text-fg-primary flex items-center gap-1">
               <ChevronLeft className="h-4 w-4" />
               Workflow Templates
             </NamespacedLink>
             <span>/</span>
-            <span className="text-foreground truncate font-medium">
+            <span className="text-fg-primary truncate font-medium">
               Workflow Studio
             </span>
           </div>
           <div className="flex items-center gap-3">
             {studio.isDirty && (
               <span
-                className="text-muted-foreground flex items-center gap-2 text-sm"
+                className="text-fg-secondary flex items-center gap-2 text-sm"
                 data-testid="studio-dirty-badge">
-                <span className="bg-primary h-1.5 w-1.5 rounded-full" />
+                <span className="bg-fill-active h-1.5 w-1.5" />
                 Unsaved changes
               </span>
             )}
@@ -425,7 +423,7 @@ export function WorkflowStudio({
                     type="button"
                     disabled={!canRun}
                     data-testid="studio-run">
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlayArrow className="mr-2 h-4 w-4" />
                     Run workflow
                   </Button>
                 }
@@ -452,7 +450,7 @@ export function WorkflowStudio({
                       aria-label="Edit workflow details"
                       onClick={() => setEditMetaOpen(true)}
                       data-testid="studio-edit-meta">
-                      <Pencil className="text-muted-foreground h-4 w-4" />
+                      <Edit className="text-fg-secondary h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Edit workflow details</TooltipContent>
@@ -461,14 +459,14 @@ export function WorkflowStudio({
             </div>
             {studio.description.trim() && (
               <p
-                className="text-muted-foreground max-w-[600px] truncate text-sm"
+                className="text-fg-secondary max-w-[600px] truncate text-sm"
                 data-testid="studio-description">
                 {studio.description}
               </p>
             )}
             {studio.title.trim() && studio.workflowName && (
               <span
-                className="text-muted-foreground truncate font-mono text-xs"
+                className="text-fg-secondary truncate font-mono text-xs"
                 data-testid="studio-name">
                 {studio.workflowName}
               </span>
@@ -513,7 +511,7 @@ export function WorkflowStudio({
                       disabled={!studio.draftYaml.trim()}
                       onClick={() => setDownloadOpen(true)}
                       data-testid="studio-download">
-                      <Download className="h-4 w-4" />
+                      <SaveAlt className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Download</TooltipContent>
@@ -523,7 +521,7 @@ export function WorkflowStudio({
 
             <div className="relative min-h-0 flex-1">
               {studio.loading ? (
-                <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
+                <div className="text-fg-secondary flex h-full items-center justify-center gap-2 text-sm">
                   <Spinner />
                   Loading workflow...
                 </div>
@@ -531,14 +529,14 @@ export function WorkflowStudio({
                 <div
                   className="absolute inset-0"
                   style={{
-                    backgroundColor: 'var(--background)',
+                    backgroundColor: 'var(--color-background)',
                     backgroundImage:
-                      'radial-gradient(color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px)',
+                      'radial-gradient(color-mix(in srgb, var(--color-fg-primary) 6%, transparent) 1px, transparent 1px)',
                     backgroundSize: '22px 22px',
                   }}>
                   {studio.draftYaml.trim() === '' ? (
                     <div
-                      className="text-muted-foreground absolute top-16 left-1/2 -translate-x-1/2 text-sm"
+                      className="text-fg-secondary absolute top-16 left-1/2 -translate-x-1/2 text-sm"
                       data-testid="studio-diagram-empty">
                       The workflow diagram will appear here.
                     </div>
@@ -592,10 +590,10 @@ export function WorkflowStudio({
               disabled={!studio.draftYaml.trim()}
               onClick={handleDownloadYaml}
               data-testid="studio-download-yaml">
-              <Download className="mr-2 h-4 w-4" />
+              <SaveAlt className="mr-2 h-4 w-4" />
               <div className="flex flex-col items-start">
                 <span>YAML</span>
-                <span className="text-muted-foreground text-xs">
+                <span className="text-fg-secondary text-xs">
                   Download the workflow template as a .yaml file
                 </span>
               </div>
@@ -607,10 +605,10 @@ export function WorkflowStudio({
               disabled={!studio.draftYaml.trim()}
               onClick={handleDownloadDiagram}
               data-testid="studio-download-diagram">
-              <Download className="mr-2 h-4 w-4" />
+              <SaveAlt className="mr-2 h-4 w-4" />
               <div className="flex flex-col items-start">
                 <span>Diagram</span>
-                <span className="text-muted-foreground text-xs">
+                <span className="text-fg-secondary text-xs">
                   Download the workflow diagram as a .svg image
                 </span>
               </div>
@@ -622,10 +620,10 @@ export function WorkflowStudio({
               disabled={!studio.draftYaml.trim()}
               onClick={handleDownloadBoth}
               data-testid="studio-download-both">
-              <Download className="mr-2 h-4 w-4" />
+              <SaveAlt className="mr-2 h-4 w-4" />
               <div className="flex flex-col items-start">
                 <span>Both</span>
-                <span className="text-muted-foreground text-xs">
+                <span className="text-fg-secondary text-xs">
                   Download the YAML and the diagram together
                 </span>
               </div>

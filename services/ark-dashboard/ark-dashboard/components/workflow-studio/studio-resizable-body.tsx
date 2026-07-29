@@ -62,7 +62,7 @@ export function StudioResizableBody({ chat, canvas }: StudioResizableBodyProps) 
   return (
     <div ref={containerRef} className="flex min-h-0 flex-1">
       <div
-        className="border-border flex min-w-0 shrink-0 flex-col border-r"
+        className="border-stroke-divider flex min-w-0 shrink-0 flex-col border-r"
         style={{ width: chatWidth === null ? '40%' : `${chatWidth}px` }}
         data-testid="studio-chat-slot">
         {chat}
@@ -79,7 +79,7 @@ export function StudioResizableBody({ chat, canvas }: StudioResizableBodyProps) 
         onPointerUp={handlePointerUp}
         onKeyDown={handleKeyDown}
         className="group relative flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-transparent outline-none">
-        <span className="bg-border group-hover:bg-primary group-focus-visible:bg-primary h-10 w-0.5 rounded-full transition-colors" />
+        <span className="bg-stroke-divider group-hover:bg-stroke-active group-focus-visible:bg-stroke-active h-10 w-0.5 transition-colors" />
       </div>
 
       <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">

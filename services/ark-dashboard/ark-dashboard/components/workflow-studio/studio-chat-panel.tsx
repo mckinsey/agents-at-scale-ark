@@ -1,15 +1,15 @@
 'use client';
 
-import {
-  Lock,
-  Maximize2,
-  RotateCcw,
-  SendHorizontal,
-  Sparkles,
-} from 'lucide-react';
 import { useState } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import {
+  AutoAwesome,
+  ExpandContent,
+  Lock,
+  RestartAlt,
+  Send,
+} from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
@@ -41,11 +41,11 @@ function StudioChatEmptyState({
     <div
       className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       data-testid="studio-chat-empty">
-      <Sparkles className="text-muted-foreground h-7 w-7" />
-      <p className="text-foreground text-lg font-semibold">
+      <AutoAwesome className="text-fg-secondary h-7 w-7" />
+      <p className="text-fg-primary text-lg font-semibold">
         Describe your workflow
       </p>
-      <p className="text-muted-foreground text-sm">
+      <p className="text-fg-secondary text-sm">
         The {ARGO_MAKE_AUTHOR_AGENT_NAME} agent drafts an argo workflow template
         live as you chat
       </p>
@@ -62,7 +62,7 @@ function StudioChatEmptyState({
               onExample(prompt);
             }}
             data-testid={`studio-chat-suggestion-${index}`}
-            className="bg-secondary text-foreground hover:bg-accent focus-visible:border-ring focus-visible:ring-ring/50 w-full rounded-md border px-3 py-2 text-left text-sm outline-none focus-visible:ring-[3px] disabled:opacity-50">
+            className="bg-fill-subtle text-fg-primary hover:bg-fill-muted focus-visible:border-stroke-status-focus focus-visible:ring-stroke-status-focus border-stroke-divider w-full border px-3 py-2 text-left text-sm outline-none focus-visible:ring-[3px] disabled:opacity-50">
             {prompt}
           </button>
         ))}
@@ -108,7 +108,7 @@ export function StudioChatPanel({
   if (loading) {
     return (
       <div
-        className="text-muted-foreground flex h-full min-h-0 flex-col items-center justify-center gap-2 text-sm"
+        className="text-fg-secondary flex h-full min-h-0 flex-col items-center justify-center gap-2 text-sm"
         data-testid="studio-chat-loading">
         <Spinner />
         Loading chat...
@@ -164,7 +164,7 @@ export function StudioChatPanel({
             ))}
             {chat.isStreaming && (
               <div
-                className="text-muted-foreground flex items-center gap-2 text-sm"
+                className="text-fg-secondary flex items-center gap-2 text-sm"
                 data-testid="studio-chat-typing">
                 <Spinner className="h-4 w-4" />
                 Agent is building...
@@ -175,20 +175,20 @@ export function StudioChatPanel({
       </div>
 
       <div
-        className={`border-border shrink-0 border-t p-4 ${
+        className={`border-stroke-divider shrink-0 border-t p-4 ${
           installedNotReady ? 'opacity-50' : ''
         }`}>
         {chat.composerLocked ? (
           <div
-            className="bg-muted/40 border p-2"
+            className="bg-fill-muted/40 border-stroke-divider border p-2"
             data-testid="studio-composer-lock">
-            <div className="text-muted-foreground flex min-h-[48px] items-center justify-center gap-2 text-sm">
+            <div className="text-fg-secondary flex min-h-[48px] items-center justify-center gap-2 text-sm">
               <Lock className="h-4 w-4" />
               {chat.lockReason}
             </div>
           </div>
         ) : (
-          <div className="bg-card flex items-end gap-2 border p-2">
+          <div className="bg-surface-primary border-stroke-divider flex items-end gap-2 border p-2">
             <Textarea
               data-testid="studio-chat-input"
               value={chat.input}
@@ -205,7 +205,7 @@ export function StudioChatPanel({
               onClick={() => void chat.send()}
               disabled={composerDisabled || chat.input.trim() === ''}
               data-testid="studio-chat-send">
-              <SendHorizontal className="h-4 w-4" />
+              <Send className="h-4 w-4" />
             </Button>
           </div>
         )}
@@ -219,7 +219,7 @@ export function StudioChatPanel({
             />
             <Label
               htmlFor="studio-show-tool-calls"
-              className="text-muted-foreground text-xs">
+              className="text-fg-secondary text-xs">
               Show tool calls
             </Label>
           </div>
@@ -230,7 +230,7 @@ export function StudioChatPanel({
               size="sm"
               onClick={chat.newConversation}
               data-testid="studio-new-conversation">
-              <RotateCcw className="mr-1 h-4 w-4" />
+              <RestartAlt className="mr-1 h-4 w-4" />
               Reset chat
             </Button>
             <Button
@@ -241,7 +241,7 @@ export function StudioChatPanel({
               disabled={inputDisabled}
               aria-label="Open prompt editor"
               data-testid="studio-chat-expand">
-              <Maximize2 className="mr-1 h-4 w-4" />
+              <ExpandContent className="mr-1 h-4 w-4" />
               Expand
             </Button>
           </div>

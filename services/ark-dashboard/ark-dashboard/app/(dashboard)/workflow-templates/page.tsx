@@ -1,9 +1,9 @@
 'use client';
 
-import { Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
+import { Plus } from '@/components/icons';
 import {
   NameWorkflowDialog,
   type NameWorkflowValues,
@@ -67,7 +67,7 @@ export default function WorkflowTemplatesPage() {
       <div className="flex flex-1 flex-col">
         <div className="">
           <h1 className="text-xl">Workflow Templates</h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-fg-secondary text-sm">
             Automate complex processes with agentic orchestration
           </p>
         </div>
