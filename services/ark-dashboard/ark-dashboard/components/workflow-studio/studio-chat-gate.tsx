@@ -24,7 +24,12 @@ interface StepCardProps {
   children: React.ReactNode;
 }
 
-function StepCard({ step, title, testId, children }: StepCardProps) {
+function StepCard({
+  step,
+  title,
+  testId,
+  children,
+}: Readonly<StepCardProps>) {
   return (
     <li
       className="border-stroke-divider flex flex-col items-center gap-3 border p-5 text-center"
@@ -44,7 +49,11 @@ interface InternalLinkButtonProps {
   testId: string;
 }
 
-function InternalLinkButton({ href, label, testId }: InternalLinkButtonProps) {
+function InternalLinkButton({
+  href,
+  label,
+  testId,
+}: Readonly<InternalLinkButtonProps>) {
   return (
     <Button asChild type="button" variant="outline" size="sm">
       <NamespacedLink href={href} data-testid={testId}>
@@ -59,7 +68,7 @@ interface InstalledButtonProps {
   testId: string;
 }
 
-function InstalledButton({ testId }: InstalledButtonProps) {
+function InstalledButton({ testId }: Readonly<InstalledButtonProps>) {
   return (
     <Button
       type="button"
@@ -75,10 +84,10 @@ function InstalledButton({ testId }: InstalledButtonProps) {
 function AgentAction({
   agentMissing,
   agentNotReady,
-}: {
+}: Readonly<{
   agentMissing: boolean;
   agentNotReady: boolean;
-}) {
+}>) {
   if (agentMissing) {
     return (
       <div
@@ -114,10 +123,10 @@ function AgentAction({
 function McpAction({
   mcpMissing,
   mcpNotReady,
-}: {
+}: Readonly<{
   mcpMissing: boolean;
   mcpNotReady: boolean;
-}) {
+}>) {
   if (mcpMissing) {
     return (
       <div
@@ -156,7 +165,7 @@ export function StudioChatGate({
   mcpMissing,
   mcpNotReady,
   unverifiable,
-}: StudioChatGateProps) {
+}: Readonly<StudioChatGateProps>) {
   return (
     <div
       className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center p-6 backdrop-blur-sm"

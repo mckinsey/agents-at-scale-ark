@@ -183,7 +183,7 @@ export const renderMarkdown = (
   );
 };
 
-const MermaidCode = ({ content }: { content: string }) => {
+const MermaidCode = ({ content }: Readonly<{ content: string }>) => {
   const [showMermaidPreview, setShowMermaidPreview] = useState(false);
 
   return (
@@ -220,7 +220,7 @@ const MermaidCode = ({ content }: { content: string }) => {
   );
 };
 
-const MermaidDiagram = ({ content }: { content: string }) => {
+const MermaidDiagram = ({ content }: Readonly<{ content: string }>) => {
   const [diagram, setDiagram] = useState<string | boolean>(true);
 
   useEffect(() => {

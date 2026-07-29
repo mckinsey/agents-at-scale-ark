@@ -43,7 +43,7 @@ function errorMessage(error: unknown): string {
 export function StudioHeaderActions({
   workflowName,
   persisted,
-}: StudioHeaderActionsProps) {
+}: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
   const { push } = useNamespacedNavigation();
 

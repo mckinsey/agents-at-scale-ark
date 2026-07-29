@@ -85,7 +85,7 @@ function EditMetaDialog({
   title,
   description,
   onSave,
-}: EditMetaDialogProps) {
+}: Readonly<EditMetaDialogProps>) {
   const [draftTitle, setDraftTitle] = useState(title);
   const [draftDescription, setDraftDescription] = useState(description);
 
@@ -164,7 +164,7 @@ interface NameModalProps {
   onCancel: () => void;
 }
 
-function NameModal({ open, onConfirm, onCancel }: NameModalProps) {
+function NameModal({ open, onConfirm, onCancel }: Readonly<NameModalProps>) {
   const [name, setName] = useState('');
   const trimmed = name.trim();
 
@@ -221,7 +221,7 @@ interface ViewToggleProps {
   onChange: (view: WorkflowStudioView) => void;
 }
 
-function ViewToggle({ view, onChange }: ViewToggleProps) {
+function ViewToggle({ view, onChange }: Readonly<ViewToggleProps>) {
   return (
     <div className="border-stroke-divider inline-flex items-center border">
       <Button
@@ -251,7 +251,7 @@ export function WorkflowStudio({
   initialName,
   initialTitle,
   initialDescription,
-}: WorkflowStudioProps) {
+}: Readonly<WorkflowStudioProps>) {
   const studio = useWorkflowStudio({
     mode,
     initialName,
@@ -286,7 +286,7 @@ export function WorkflowStudio({
     anchor.download = fileName;
     document.body.appendChild(anchor);
     anchor.click();
-    document.body.removeChild(anchor);
+    anchor.remove();
     URL.revokeObjectURL(url);
   };
 

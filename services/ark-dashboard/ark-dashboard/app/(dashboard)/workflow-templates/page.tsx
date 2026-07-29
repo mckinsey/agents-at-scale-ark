@@ -34,8 +34,12 @@ export default function WorkflowTemplatesPage() {
     description,
   }: NameWorkflowValues) => {
     setShowNameDialog(false);
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    const descriptionParam = description
+      ? `&description=${encodeURIComponent(description)}`
+      : '';
     push(
-      `/workflow-templates/new?name=${encodeURIComponent(name)}${title ? `&title=${encodeURIComponent(title)}` : ''}${description ? `&description=${encodeURIComponent(description)}` : ''}`,
+      `/workflow-templates/new?name=${encodeURIComponent(name)}${titleParam}${descriptionParam}`,
     );
   };
 

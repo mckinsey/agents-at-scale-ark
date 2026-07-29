@@ -17,7 +17,12 @@ interface ProblemBannerProps {
   fixTestId: string;
 }
 
-function ProblemBanner({ message, href, testId, fixTestId }: ProblemBannerProps) {
+function ProblemBanner({
+  message,
+  href,
+  testId,
+  fixTestId,
+}: Readonly<ProblemBannerProps>) {
   return (
     <Alert className="flex items-center gap-3" data-testid={testId}>
       <Warning className="h-4 w-4" />
@@ -35,7 +40,7 @@ function ProblemBanner({ message, href, testId, fixTestId }: ProblemBannerProps)
 export function StudioChatDisabledBanner({
   agentNotReady,
   mcpNotReady,
-}: StudioChatDisabledBannerProps) {
+}: Readonly<StudioChatDisabledBannerProps>) {
   return (
     <div
       className="flex flex-col gap-2 p-4"

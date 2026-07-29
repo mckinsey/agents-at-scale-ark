@@ -13,7 +13,7 @@ interface FencedBlock {
 const FENCE_REGEX = /^[ \t]*```([^\n`]*)\r?\n([\s\S]*?)^[ \t]*```[ \t]*$/gm;
 
 function findFencedBlocks(message: string): FencedBlock[] {
-  const normalized = message.replace(/\r\n/g, '\n');
+  const normalized = message.replaceAll('\r\n', '\n');
   const blocks: FencedBlock[] = [];
   let match: RegExpExecArray | null;
   FENCE_REGEX.lastIndex = 0;
@@ -63,7 +63,10 @@ export function extractWorkflowYaml(message: string): ExtractResult {
     return { ok: false, reason: 'none' };
   }
 
-  const block = yamlBlocks[yamlBlocks.length - 1];
+  const block = yamlBlocks.at(-1);
+  if (!block) {
+    return { ok: false, reason: 'none' };
+  }
   const result = parseMapping(block.content);
   if (!result.valid) {
     return {

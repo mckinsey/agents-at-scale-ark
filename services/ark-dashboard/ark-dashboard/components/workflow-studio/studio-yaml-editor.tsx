@@ -69,7 +69,7 @@ function highlightLine(line: string, index: number): ReactNode {
     );
   }
 
-  const keyMatch = /^(\s*)(- )?([A-Za-z0-9_.\-]+)(:)(?=\s|$)(.*)$/.exec(line);
+  const keyMatch = /^(\s*)(- )?([A-Za-z0-9_.-]+)(:)(?=\s|$)(.*)$/.exec(line);
   if (keyMatch) {
     const [, indent, dash, key, colon, rest] = keyMatch;
     return (
@@ -124,7 +124,7 @@ export function StudioYamlEditor({
   onChange,
   readOnly,
   error,
-}: StudioYamlEditorProps) {
+}: Readonly<StudioYamlEditorProps>) {
   const highlightRef = useRef<HTMLPreElement>(null);
 
   return (

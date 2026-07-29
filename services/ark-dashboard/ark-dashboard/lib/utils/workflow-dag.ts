@@ -261,7 +261,7 @@ function expandTemplate(
 
     if (stepExpansions.length > 0) {
       entryNodes = stepExpansions[0].flatMap(exp => exp.entryNodes);
-      exitNodes = stepExpansions[stepExpansions.length - 1].flatMap(
+      exitNodes = (stepExpansions.at(-1) ?? []).flatMap(
         exp => exp.exitNodes,
       );
     }

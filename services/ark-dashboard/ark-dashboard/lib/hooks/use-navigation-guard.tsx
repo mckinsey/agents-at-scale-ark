@@ -31,9 +31,9 @@ const NavigationGuardContext =
 
 export function NavigationGuardProvider({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   const router = useRouter();
   const predicateRef = useRef<NavigationPredicate | null>(null);
   const pendingRef = useRef<(() => void) | null>(null);

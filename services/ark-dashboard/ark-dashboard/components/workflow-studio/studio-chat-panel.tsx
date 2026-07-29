@@ -36,7 +36,7 @@ interface StudioChatEmptyStateProps {
 function StudioChatEmptyState({
   onExample,
   disabled,
-}: StudioChatEmptyStateProps) {
+}: Readonly<StudioChatEmptyStateProps>) {
   return (
     <div
       className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
@@ -91,7 +91,7 @@ export function StudioChatPanel({
   mcpMissing,
   mcpNotReady,
   unverifiable,
-}: StudioChatPanelProps) {
+}: Readonly<StudioChatPanelProps>) {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const composerDisabled = chat.composerDisabled || gated;
   const inputDisabled = chat.inputDisabled || gated;

@@ -19,7 +19,9 @@ interface WorkflowDagViewerProps {
   fill?: boolean;
 }
 
-function CustomNode({ data }: { data: { label: string; width: number } }) {
+function CustomNode({
+  data,
+}: Readonly<{ data: { label: string; width: number } }>) {
   return (
     <div
       className="border-stroke-secondary bg-surface-primary text-fg-primary flex items-center justify-center border-2 px-2 py-2 text-xs font-medium"
@@ -38,7 +40,10 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-export function WorkflowDagViewer({ manifest, fill }: WorkflowDagViewerProps) {
+export function WorkflowDagViewer({
+  manifest,
+  fill,
+}: Readonly<WorkflowDagViewerProps>) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [error, setError] = useState<string | null>(null);

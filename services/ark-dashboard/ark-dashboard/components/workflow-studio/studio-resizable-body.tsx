@@ -18,7 +18,10 @@ function clampChatWidth(raw: number, containerWidth: number): number {
   return Math.min(Math.max(raw, MIN_CHAT_WIDTH), max);
 }
 
-export function StudioResizableBody({ chat, canvas }: StudioResizableBodyProps) {
+export function StudioResizableBody({
+  chat,
+  canvas,
+}: Readonly<StudioResizableBodyProps>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const [chatWidth, setChatWidth] = useState<number | null>(null);

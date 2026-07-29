@@ -51,7 +51,7 @@ export function NameWorkflowDialog({
   open,
   onOpenChange,
   onConfirm,
-}: NameWorkflowDialogProps) {
+}: Readonly<NameWorkflowDialogProps>) {
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
