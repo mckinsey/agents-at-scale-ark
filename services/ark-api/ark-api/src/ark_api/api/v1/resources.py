@@ -362,8 +362,10 @@ async def update_core_resource(
     """
     Update (replace) a core Kubernetes resource by name.
 
-    Reads the live object to reconcile its resourceVersion onto the submitted
-    body, then performs a replace (last-write-wins).
+    Honours a caller-supplied resourceVersion for optimistic concurrency; only
+    when the caller omits it do we inject the live object's resourceVersion so
+    the replace succeeds (last-write-wins convenience). The URL path name is
+    authoritative for the target resource.
 
     Args:
         version: API version (e.g., 'v1')
@@ -390,11 +392,12 @@ async def update_core_resource(
             kind=kind
         )
 
-        existing = await api_resource.get(name=resource_name, namespace=namespace)
-        body.setdefault("metadata", {})
-        body["metadata"]["resourceVersion"] = existing.metadata.resourceVersion
+        metadata = body.setdefault("metadata", {})
+        if not metadata.get("resourceVersion"):
+            existing = await api_resource.get(name=resource_name, namespace=namespace)
+            metadata["resourceVersion"] = existing.metadata.resourceVersion
 
-        resource = await api_resource.replace(body=body, namespace=namespace)
+        resource = await api_resource.replace(name=resource_name, body=body, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
 
@@ -414,8 +417,10 @@ async def update_grouped_resource(
     """
     Update (replace) a grouped Kubernetes resource by name.
 
-    Reads the live object to reconcile its resourceVersion onto the submitted
-    body, then performs a replace (last-write-wins).
+    Honours a caller-supplied resourceVersion for optimistic concurrency; only
+    when the caller omits it do we inject the live object's resourceVersion so
+    the replace succeeds (last-write-wins convenience). The URL path name is
+    authoritative for the target resource.
 
     Args:
         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
@@ -446,11 +451,12 @@ async def update_grouped_resource(
             kind=kind
         )
 
-        existing = await api_resource.get(name=resource_name, namespace=namespace)
-        body.setdefault("metadata", {})
-        body["metadata"]["resourceVersion"] = existing.metadata.resourceVersion
+        metadata = body.setdefault("metadata", {})
+        if not metadata.get("resourceVersion"):
+            existing = await api_resource.get(name=resource_name, namespace=namespace)
+            metadata["resourceVersion"] = existing.metadata.resourceVersion
 
-        resource = await api_resource.replace(body=body, namespace=namespace)
+        resource = await api_resource.replace(name=resource_name, body=body, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
 

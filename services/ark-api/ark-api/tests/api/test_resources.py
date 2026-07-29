@@ -1274,7 +1274,7 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_update_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test successful replace of a core Kubernetes resource in place."""
+        """Test replace respects a caller-supplied resourceVersion (optimistic concurrency)."""
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_api_client_instance = AsyncMock()
@@ -1291,7 +1291,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         resource_body = {
             "apiVersion": "v1",
             "kind": "ConfigMap",
-            "metadata": {"name": "test-cm", "resourceVersion": "999"},
+            "metadata": {"name": "test-cm", "resourceVersion": "111"},
             "data": {"key": "value"},
         }
         mock_resource.to_dict.return_value = resource_body
@@ -1309,8 +1309,9 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         expected_body = dict(submitted)
-        expected_body["metadata"] = {"name": "test-cm", "resourceVersion": "999"}
-        mock_api_resource.replace.assert_called_once_with(body=expected_body, namespace="default")
+        expected_body["metadata"] = {"name": "test-cm", "resourceVersion": "111"}
+        mock_api_resource.replace.assert_called_once_with(name="test-cm", body=expected_body, namespace="default")
+        mock_api_resource.get.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -1355,7 +1356,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["kind"], "WorkflowTemplate")
         expected_body = dict(submitted)
         expected_body["metadata"] = {"name": "test-wt", "resourceVersion": "555"}
-        mock_api_resource.replace.assert_called_once_with(body=expected_body, namespace="default")
+        mock_api_resource.replace.assert_called_once_with(name="test-wt", body=expected_body, namespace="default")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -1432,6 +1433,45 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.get.assert_called_once_with(name="test-cm", namespace="custom-ns")
         called_kwargs = mock_api_resource.replace.call_args.kwargs
         self.assertEqual(called_kwargs["namespace"], "custom-ns")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_update_resource_name_mismatch_uses_path_name(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test replace targets the URL path name, not body.metadata.name, when they differ."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_existing = Mock()
+        mock_existing.metadata.resourceVersion = "42"
+
+        mock_api_resource = AsyncMock()
+        mock_resource = Mock()
+        mock_resource.to_dict.return_value = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "body-name", "resourceVersion": "42"},
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_existing)
+        mock_api_resource.replace = AsyncMock(return_value=mock_resource)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        submitted = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "body-name"},
+        }
+        response = self.client.put("/v1/resources/api/v1/ConfigMap/path-name", json=submitted)
+
+        self.assertEqual(response.status_code, 200)
+        mock_api_resource.get.assert_called_once_with(name="path-name", namespace="default")
+        called_kwargs = mock_api_resource.replace.call_args.kwargs
+        self.assertEqual(called_kwargs["name"], "path-name")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.get_context')
