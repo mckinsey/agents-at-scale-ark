@@ -2,29 +2,23 @@
 
 import copy from 'copy-to-clipboard';
 import { useAtom } from 'jotai';
-import {
-  ChevronLeft,
-  Copy,
-  Download,
-  Eye,
-  FileIcon,
-  FolderIcon,
-  MoreVertical,
-  Trash2,
-  Upload as UploadIcon,
-} from 'lucide-react';
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { MultiTabPreviewDialog } from '@/components/file-preview/multi-tab-preview-dialog';
+import {
+  Add,
+  Autorenew,
+  ContentCopy,
+  Folder,
+  InsertDriveFile,
+  MoreVert,
+  SaveAlt,
+  Trash,
+} from '@/components/icons';
+import { ResourceEmptyState } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -40,27 +34,37 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { filesService } from '@/lib/services/files';
+import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 import {
   useDeleteDirectory,
   useDeleteFile,
   useListFiles,
 } from '@/lib/services/files-hooks';
 import type { DirectoryItem, FileItem } from '@/lib/types/files';
-import { formatAge } from '@/lib/utils/time';
+
+const FILE_GATEWAY_DOCS_URL =
+  'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/';
+
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
+
+const MENU_CONTENT_CLASS =
+  'w-[211px] rounded-none border-0 bg-surface-bg-tertiary';
+const MENU_ITEM_CLASS =
+  'text-fg-secondary rounded-none px-3 py-2 transition-colors hover:bg-stateslayer-overlay-hover hover:text-fg-primary focus:bg-stateslayer-overlay-hover focus:text-fg-primary';
 
 function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -78,622 +82,583 @@ function parseBreadcrumbs(prefix: string): string[] {
   return prefix.split('/').filter(Boolean);
 }
 
-export const FilesSection = forwardRef<{ refresh: () => void }>(
-  function FilesSection(_, ref) {
-    const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploading, setUploading] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState<{
-      type: 'file' | 'directory';
-      key: string;
-      name: string;
-    } | null>(null);
-    const [allFiles, setAllFiles] = useState<FileItem[]>([]);
-    const [allDirectories, setAllDirectories] = useState<DirectoryItem[]>([]);
-    const [nextToken, setNextToken] = useState<string | undefined>(undefined);
-    const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-    const [pendingFile, setPendingFile] = useState<File | null>(null);
-    const [filename, setFilename] = useState('');
-    const [isDragging, setIsDragging] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+function formatDate(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString('en-GB');
+}
 
-    // Use the multi-file preview hook
-    const {
-      previewOpen,
-      tabs,
-      activeTab,
-      activeTabKey,
-      handlePreview,
-      closeTab,
-      closeAllTabs,
-      setActiveTabKey,
-      setPreviewOpen,
-    } = useMultiFilePreview();
+function RowActionsMenu({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <TableCell size="small" className="relative z-10">
+      <div className="flex items-center justify-center">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="More actions"
+              onClick={e => e.stopPropagation()}>
+              <MoreVert className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className={MENU_CONTENT_CLASS}
+            onClick={e => e.stopPropagation()}>
+            {children}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </TableCell>
+  );
+}
 
-    const {
-      data: listFilesData,
-      isLoading: listFilesLoading,
-      isFetching: _listFilesFetching,
-      isError: listFilesError,
-      error: listFilesErrorObject,
-      refetch: loadFiles,
-    } = useListFiles({ prefix, max_keys: 100 });
+export function FilesSection() {
+  const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
+  const [uploading, setUploading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'file' | 'directory';
+    key: string;
+    name: string;
+  } | null>(null);
+  const [allFiles, setAllFiles] = useState<FileItem[]>([]);
+  const [allDirectories, setAllDirectories] = useState<DirectoryItem[]>([]);
+  const [nextToken, setNextToken] = useState<string | undefined>(undefined);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [filename, setFilename] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const deleteMutation = useDeleteFile();
-    const deleteDirectoryMutation = useDeleteDirectory();
+  // Use the multi-file preview hook
+  const {
+    previewOpen,
+    tabs,
+    activeTab,
+    activeTabKey,
+    handlePreview,
+    closeTab,
+    closeAllTabs,
+    setActiveTabKey,
+    setPreviewOpen,
+  } = useMultiFilePreview();
 
-    useImperativeHandle(ref, () => ({
-      refresh: () => {
-        loadFiles();
-      },
-    }));
+  const {
+    data: listFilesData,
+    isLoading: listFilesLoading,
+    isFetching: _listFilesFetching,
+    isError: listFilesError,
+    error: listFilesErrorObject,
+    refetch: loadFiles,
+  } = useListFiles({ prefix, max_keys: 100 });
 
-    useEffect(() => {
-      if (listFilesData && !listFilesError) {
-        setAllFiles(listFilesData.files);
-        setAllDirectories(listFilesData.directories);
-        setNextToken(listFilesData.next_token);
-      }
+  const deleteMutation = useDeleteFile();
+  const deleteDirectoryMutation = useDeleteDirectory();
 
-      if (listFilesError) {
-        if (prefix !== '') {
-          setPrefix('');
-        } else {
-          toast.error('Failed to Load Files', {
-            description:
-              listFilesErrorObject instanceof Error
-                ? listFilesErrorObject.message
-                : 'An unexpected error occurred',
-          });
-        }
-      }
-    }, [
-      listFilesError,
-      listFilesData,
-      listFilesErrorObject,
-      prefix,
-      setPrefix,
-    ]);
+  const { data: filesCount } = useGetFilesCount();
+  const pageTitle =
+    filesCount === undefined ? 'Files' : `Files (${filesCount})`;
 
-    const handleNavigateToDirectory = (dirPrefix: string) => {
-      setPrefix(dirPrefix);
-      setAllFiles([]);
-      setAllDirectories([]);
-      setNextToken(undefined);
-    };
+  useEffect(() => {
+    if (listFilesData && !listFilesError) {
+      setAllFiles(listFilesData.files);
+      setAllDirectories(listFilesData.directories);
+      setNextToken(listFilesData.next_token);
+    }
 
-    const handleGoUp = () => {
-      const segments = parseBreadcrumbs(prefix);
-      if (segments.length > 0) {
-        segments.pop();
-        const newPrefix = segments.length > 0 ? segments.join('/') + '/' : '';
-        handleNavigateToDirectory(newPrefix);
-      }
-    };
-
-    const handleBreadcrumbClick = (index: number) => {
-      const segments = parseBreadcrumbs(prefix);
-      const newPrefix = segments.slice(0, index + 1).join('/') + '/';
-      handleNavigateToDirectory(newPrefix);
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(true);
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        const file = files[0];
-        if (!assertFileSize(file)) {
-          return;
-        }
-
-        setPendingFile(file);
-        setFilename(file.name);
-        setUploadDialogOpen(true);
-      }
-    };
-
-    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        const file = files[0];
-        if (!assertFileSize(file)) {
-          return;
-        }
-
-        setPendingFile(file);
-        setFilename(file.name);
-        setUploadDialogOpen(true);
-      }
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    };
-
-    const assertFileSize = (file: File) => {
-      const MAX_FILE_SIZE = 1024 * 1024;
-      if (file.size > MAX_FILE_SIZE) {
-        toast.error('File is too large', {
-          description: (
-            <span>
-              Maximum allowed is 1MB, see the{' '}
-              <a
-                href="https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline">
-                File Gateway Service documentation
-              </a>{' '}
-              for more details.
-            </span>
-          ),
+    if (listFilesError) {
+      if (prefix !== '') {
+        setPrefix('');
+      } else {
+        toast.error('Failed to Load Files', {
+          description:
+            listFilesErrorObject instanceof Error
+              ? listFilesErrorObject.message
+              : 'An unexpected error occurred',
         });
-
-        return false;
       }
+    }
+  }, [listFilesError, listFilesData, listFilesErrorObject, prefix, setPrefix]);
 
-      return true;
-    };
+  const handleNavigateToDirectory = (dirPrefix: string) => {
+    setPrefix(dirPrefix);
+    setAllFiles([]);
+    setAllDirectories([]);
+    setNextToken(undefined);
+  };
 
-    const handleDropZoneClick = () => {
-      if (!uploading) {
-        fileInputRef.current?.click();
-      }
-    };
+  const handleBreadcrumbClick = (index: number) => {
+    const segments = parseBreadcrumbs(prefix);
+    const newPrefix = segments.slice(0, index + 1).join('/') + '/';
+    handleNavigateToDirectory(newPrefix);
+  };
 
-    const handleConfirmUpload = async () => {
-      if (!pendingFile || !filename.trim()) {
-        toast.error('Please enter a filename');
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (!assertFileSize(file)) {
         return;
       }
 
-      setUploading(true);
-      setUploadProgress(0);
-      setUploadDialogOpen(false);
-
-      try {
-        const renamedFile = new File([pendingFile], filename, {
-          type: pendingFile.type,
-        });
-
-        await filesService.upload(renamedFile, prefix, progress => {
-          setUploadProgress(progress);
-        });
-
-        toast.success('File Uploaded Successfully');
-        setPendingFile(null);
-        setFilename('');
-        loadFiles();
-      } catch (error) {
-        toast.error('Failed to Upload File', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-      } finally {
-        setUploading(false);
-        setUploadProgress(0);
-      }
-    };
-
-    const handleCancelUpload = () => {
-      setUploadDialogOpen(false);
-      setPendingFile(null);
-      setFilename('');
-    };
-
-    const handleDelete = (
-      type: 'file' | 'directory',
-      key: string,
-      name: string,
-    ) => {
-      setDeleteTarget({ type, key, name });
-      setDeleteDialogOpen(true);
-    };
-
-    const handleConfirmDelete = async () => {
-      if (!deleteTarget) return;
-
-      try {
-        if (deleteTarget.type === 'file') {
-          await deleteMutation.mutateAsync(deleteTarget.key);
-          toast.success('File Deleted');
-        } else {
-          const result = await deleteDirectoryMutation.mutateAsync(
-            deleteTarget.key,
-          );
-          toast.success(`Directory Deleted (${result.deleted_count} files)`);
-        }
-
-        setAllFiles([]);
-        setAllDirectories([]);
-        setNextToken(undefined);
-        loadFiles();
-      } catch (error) {
-        toast.error(
-          `Failed to Delete ${deleteTarget.type === 'file' ? 'File' : 'Directory'}`,
-          {
-            description:
-              error instanceof Error
-                ? error.message
-                : 'An unexpected error occurred',
-          },
-        );
-      } finally {
-        setDeleteDialogOpen(false);
-        setDeleteTarget(null);
-      }
-    };
-
-    const handleDownload = (key: string) => {
-      filesService.download(key);
-    };
-
-    const handleCopySuccess = (path: string) => {
-      toast.success('Path Copied', {
-        description: `Copied "${path}" to clipboard`,
-      });
-    };
-
-    const handleLoadMore = async () => {
-      if (!nextToken) return;
-
-      try {
-        const moreData = await filesService.list({
-          prefix,
-          max_keys: 100,
-          continuation_token: nextToken,
-        });
-
-        setAllFiles(prev => [...prev, ...moreData.files]);
-        setAllDirectories(prev => [...prev, ...moreData.directories]);
-        setNextToken(moreData.next_token);
-      } catch (error) {
-        toast.error('Failed to Load More Files', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-      }
-    };
-
-    const breadcrumbs = parseBreadcrumbs(prefix);
-    const hasFiles = allFiles.length > 0 || allDirectories.length > 0;
-
-    if (listFilesLoading) {
-      return (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-muted-foreground">Loading files...</p>
-        </div>
-      );
+      setPendingFile(file);
+      setFilename(file.name);
+      setUploadDialogOpen(true);
     }
 
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const assertFileSize = (file: File) => {
+    const MAX_FILE_SIZE = 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File is too large', {
+        description: (
+          <span>
+            Maximum allowed is 1MB, see the{' '}
+            <a
+              href="https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline">
+              File Gateway Service documentation
+            </a>{' '}
+            for more details.
+          </span>
+        ),
+      });
+
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleDropZoneClick = () => {
+    if (!uploading) {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!pendingFile || !filename.trim()) {
+      toast.error('Please enter a filename');
+      return;
+    }
+
+    setUploading(true);
+    setUploadDialogOpen(false);
+
+    try {
+      const renamedFile = new File([pendingFile], filename, {
+        type: pendingFile.type,
+      });
+
+      await filesService.upload(renamedFile, prefix);
+
+      toast.success('File Uploaded Successfully');
+      setPendingFile(null);
+      setFilename('');
+      loadFiles();
+    } catch (error) {
+      toast.error('Failed to Upload File', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCancelUpload = () => {
+    setUploadDialogOpen(false);
+    setPendingFile(null);
+    setFilename('');
+  };
+
+  const handleDelete = (
+    type: 'file' | 'directory',
+    key: string,
+    name: string,
+  ) => {
+    setDeleteTarget({ type, key, name });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      if (deleteTarget.type === 'file') {
+        await deleteMutation.mutateAsync(deleteTarget.key);
+        toast.success('File Deleted');
+      } else {
+        const result = await deleteDirectoryMutation.mutateAsync(
+          deleteTarget.key,
+        );
+        toast.success(`Directory Deleted (${result.deleted_count} files)`);
+      }
+
+      setAllFiles([]);
+      setAllDirectories([]);
+      setNextToken(undefined);
+      loadFiles();
+    } catch (error) {
+      toast.error(
+        `Failed to Delete ${deleteTarget.type === 'file' ? 'File' : 'Directory'}`,
+        {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        },
+      );
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleDownload = (key: string) => {
+    filesService.download(key);
+  };
+
+  const handleCopySuccess = (path: string) => {
+    toast.success('Path Copied', {
+      description: `Copied "${path}" to clipboard`,
+    });
+  };
+
+  const handleLoadMore = async () => {
+    if (!nextToken) return;
+
+    try {
+      const moreData = await filesService.list({
+        prefix,
+        max_keys: 100,
+        continuation_token: nextToken,
+      });
+
+      setAllFiles(prev => [...prev, ...moreData.files]);
+      setAllDirectories(prev => [...prev, ...moreData.directories]);
+      setNextToken(moreData.next_token);
+    } catch (error) {
+      toast.error('Failed to Load More Files', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    }
+  };
+
+  const breadcrumbs = parseBreadcrumbs(prefix);
+  const hasFiles = allFiles.length > 0 || allDirectories.length > 0;
+
+  if (listFilesLoading) {
     return (
-      <div className="mt-4 flex flex-1 flex-col gap-4">
-        {prefix && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGoUp}
-              disabled={!prefix}>
-              <ChevronLeft className="h-4 w-4" />
-              Go Up
-            </Button>
-            <div className="text-muted-foreground flex items-center gap-1 font-mono text-sm">
-              <span>/</span>
-              {breadcrumbs.map((segment, index) => (
-                <span key={index}>
-                  <button
-                    onClick={() => handleBreadcrumbClick(index)}
-                    className="hover:text-primary hover:underline">
-                    {segment}
-                  </button>
-                  <span className="mx-1">/</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!hasFiles && !listFilesLoading && (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <DASHBOARD_SECTIONS.files.icon />
-              </EmptyMedia>
-              <EmptyTitle>No Files Yet</EmptyTitle>
-              <EmptyDescription>
-                This directory is empty. Upload your first file to get started.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent></EmptyContent>
-          </Empty>
-        )}
-
-        {hasFiles && (
-          <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
-                <thead className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">
-                      Name
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">
-                      Size
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">
-                      Last Modified
-                    </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium uppercase">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allDirectories.map(dir => (
-                    <tr
-                      key={dir.prefix}
-                      className="cursor-pointer border-b border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30"
-                      onClick={() => handleNavigateToDirectory(dir.prefix)}>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <FolderIcon className="text-muted-foreground h-4 w-4" />
-                          <span>
-                            {dir.prefix.split('/').filter(Boolean).pop()}/
-                          </span>
-                        </div>
-                      </td>
-                      <td className="text-muted-foreground px-3 py-3 text-sm">
-                        —
-                      </td>
-                      <td className="text-muted-foreground px-3 py-3 text-sm">
-                        —
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={e => e.stopPropagation()}
-                              aria-label="More actions">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation();
-                                copy(dir.prefix);
-                                handleCopySuccess(dir.prefix);
-                              }}>
-                              <Copy className="h-4 w-4" />
-                              Copy Path
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={e => {
-                                e.stopPropagation();
-                                handleDelete(
-                                  'directory',
-                                  dir.prefix,
-                                  dir.prefix.split('/').filter(Boolean).pop() ||
-                                    dir.prefix,
-                                );
-                              }}>
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                  {allFiles.map(file => (
-                    <tr
-                      key={file.key + file.etag}
-                      className="border-b border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30">
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handlePreview(file.key)}
-                            className="p-1"
-                            aria-label="Preview file">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <FileIcon className="text-muted-foreground h-4 w-4" />
-                          <span>{file.key.split('/').pop()}</span>
-                        </div>
-                      </td>
-                      <td className="text-muted-foreground px-3 py-3 text-sm">
-                        {formatBytes(file.size)}
-                      </td>
-                      <td className="text-muted-foreground px-3 py-3 text-sm">
-                        {formatAge(new Date(file.last_modified))}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDownload(file.key)}>
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                aria-label="More actions">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  copy(file.key);
-                                  handleCopySuccess(file.key);
-                                }}>
-                                <Copy className="h-4 w-4" />
-                                Copy Path
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() =>
-                                  handleDelete(
-                                    'file',
-                                    file.key,
-                                    file.key.split('/').pop() || file.key,
-                                  )
-                                }>
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {nextToken && (
-          <div className="flex justify-center">
-            <Button variant="outline" onClick={handleLoadMore}>
-              Load More
-            </Button>
-          </div>
-        )}
-
-        <div
-          className={`mt-auto rounded-lg border-2 border-dashed p-8 transition-colors ${
-            isDragging
-              ? 'border-primary bg-primary/10'
-              : 'border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/30'
-          } ${uploading ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={handleDropZoneClick}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleFileInputChange}
-            aria-label="Browse files"
-          />
-          <div className="flex flex-col items-center justify-center gap-2 text-center">
-            <UploadIcon className="text-muted-foreground h-8 w-8" />
-            <p className="text-sm font-medium">
-              {uploading
-                ? 'Uploading...'
-                : 'Drag and drop a file here or click to browse'}
-            </p>
-            {uploading && (
-              <div className="mt-2 flex w-full max-w-xs items-center gap-2">
-                <Progress value={uploadProgress} className="flex-1" />
-                <span className="text-muted-foreground text-sm">
-                  {Math.round(uploadProgress)}%
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Upload File</DialogTitle>
-              <DialogDescription>
-                Enter the filename to save as in the current directory.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="filename">Filename</Label>
-                <div className="flex items-center gap-2">
-                  {prefix && (
-                    <span className="text-muted-foreground font-mono text-sm">
-                      /{prefix}
-                    </span>
-                  )}
-                  <Input
-                    id="filename"
-                    value={filename}
-                    onChange={e => setFilename(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        handleConfirmUpload();
-                      }
-                    }}
-                    placeholder="filename.txt"
-                    autoFocus
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancelUpload}>
-                Cancel
-              </Button>
-              <Button onClick={handleConfirmUpload} disabled={!filename.trim()}>
-                Upload
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <ConfirmationDialog
-          open={deleteDialogOpen}
-          onOpenChange={setDeleteDialogOpen}
-          onConfirm={handleConfirmDelete}
-          title={
-            deleteTarget?.type === 'file'
-              ? `Delete ${deleteTarget.name}?`
-              : `Delete directory and all contents?`
-          }
-          description={
-            deleteTarget?.type === 'file'
-              ? 'This action cannot be undone.'
-              : `This will delete ${deleteTarget?.name} and ALL files inside. This action cannot be undone.`
-          }
-          variant="destructive"
-        />
-
-        <MultiTabPreviewDialog
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          tabs={tabs}
-          activeTab={activeTab}
-          activeTabKey={activeTabKey}
-          onTabClick={setActiveTabKey}
-          onTabClose={closeTab}
-          onCloseAll={closeAllTabs}
-        />
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-muted-foreground">Loading files...</p>
       </div>
     );
-  },
-);
+  }
+
+  return (
+    <div className="content-shell flex h-full w-full flex-col gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <IconShell size="default" variant="primary">
+              <InsertDriveFile />
+            </IconShell>
+            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+              {pageTitle}
+            </h1>
+          </div>
+          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+            Manage datasets, documents, and assets used by agents
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => loadFiles()}>
+            <Autorenew className="h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={handleDropZoneClick}>
+            <Add className="h-4 w-4" />
+            Add file
+          </Button>
+        </div>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileInputChange}
+        aria-label="Browse files"
+      />
+
+      {prefix && (
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+          <button
+            type="button"
+            onClick={() => handleNavigateToDirectory('')}
+            className="text-fg-disabled hover:text-fg-secondary cursor-pointer transition-colors">
+            Files
+          </button>
+          {breadcrumbs.map((segment, index) => {
+            const isLast = index === breadcrumbs.length - 1;
+            const segmentPath = breadcrumbs.slice(0, index + 1).join('/');
+            return (
+              <Fragment key={segmentPath}>
+                <span aria-hidden="true" className="text-fg-secondary">
+                  /
+                </span>
+                {isLast ? (
+                  <span aria-current="page" className="text-fg-secondary">
+                    {segment}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleBreadcrumbClick(index)}
+                    className="text-fg-disabled hover:text-fg-secondary cursor-pointer transition-colors">
+                    {segment}
+                  </button>
+                )}
+              </Fragment>
+            );
+          })}
+        </nav>
+      )}
+
+      {!hasFiles && !listFilesLoading && (
+        <ResourceEmptyState
+          icon={<InsertDriveFile />}
+          title="No Files Yet"
+          description={
+            <>
+              <p className="mb-2">This directory is empty.</p>
+              <p>Upload your first file to get started.</p>
+            </>
+          }
+          actions={
+            <a
+              href={FILE_GATEWAY_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer">
+              <Button variant="outline">Learn more</Button>
+            </a>
+          }
+        />
+      )}
+
+      {hasFiles && (
+        <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+          <TableHeader>
+            <TableRow>
+              <TableHead size="small">Name</TableHead>
+              <TableHead size="small" className="w-[140px]">
+                Size
+              </TableHead>
+              <TableHead size="small" className="w-[200px]">
+                Last modified
+              </TableHead>
+              <TableHead size="small" className="w-[64px] text-center">
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {allDirectories.map(dir => (
+              <TableRow
+                key={dir.prefix}
+                className="relative isolate cursor-pointer transition-colors"
+                onClick={() => handleNavigateToDirectory(dir.prefix)}>
+                <TableCell size="small">
+                  <span aria-hidden className={rowHoverOverlayClass} />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <IconShell size="sm" variant="secondary">
+                      <Folder />
+                    </IconShell>
+                    <span className="text-fg-primary truncate">
+                      {dir.prefix.split('/').filter(Boolean).pop()}/
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell size="small" className="text-fg-secondary">
+                  —
+                </TableCell>
+                <TableCell size="small" className="text-fg-secondary">
+                  —
+                </TableCell>
+                <RowActionsMenu>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => {
+                      copy(dir.prefix);
+                      handleCopySuccess(dir.prefix);
+                    }}>
+                    <ContentCopy />
+                    Copy path
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() =>
+                      handleDelete(
+                        'directory',
+                        dir.prefix,
+                        dir.prefix.split('/').filter(Boolean).pop() ||
+                          dir.prefix,
+                      )
+                    }>
+                    <Trash className="size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </RowActionsMenu>
+              </TableRow>
+            ))}
+            {allFiles.map(file => (
+              <TableRow
+                key={file.key + file.etag}
+                className="relative isolate cursor-pointer transition-colors"
+                onClick={() => handlePreview(file.key)}>
+                <TableCell size="small">
+                  <span aria-hidden className={rowHoverOverlayClass} />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <IconShell size="sm" variant="secondary">
+                      <InsertDriveFile />
+                    </IconShell>
+                    <span className="text-fg-primary truncate">
+                      {file.key.split('/').pop()}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell size="small" className="text-fg-secondary">
+                  {formatBytes(file.size)}
+                </TableCell>
+                <TableCell size="small" className="text-fg-secondary">
+                  {formatDate(file.last_modified)}
+                </TableCell>
+                <RowActionsMenu>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => {
+                      copy(file.key);
+                      handleCopySuccess(file.key);
+                    }}>
+                    <ContentCopy />
+                    Copy path
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => handleDownload(file.key)}>
+                    <SaveAlt />
+                    Download
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={MENU_ITEM_CLASS}
+                    onClick={() =>
+                      handleDelete(
+                        'file',
+                        file.key,
+                        file.key.split('/').pop() || file.key,
+                      )
+                    }>
+                    <Trash className="size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </RowActionsMenu>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      {nextToken && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={handleLoadMore}>
+            Load More
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload File</DialogTitle>
+            <DialogDescription>
+              Enter the filename to save as in the current directory.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="filename">Filename</Label>
+              <div className="flex items-center gap-2">
+                {prefix && (
+                  <span className="text-muted-foreground font-mono text-sm">
+                    /{prefix}
+                  </span>
+                )}
+                <Input
+                  id="filename"
+                  value={filename}
+                  onChange={e => setFilename(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      handleConfirmUpload();
+                    }
+                  }}
+                  placeholder="filename.txt"
+                  autoFocus
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelUpload}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmUpload} disabled={!filename.trim()}>
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        title={
+          deleteTarget?.type === 'file'
+            ? `Delete ${deleteTarget.name}?`
+            : `Delete directory and all contents?`
+        }
+        description={
+          deleteTarget?.type === 'file'
+            ? 'This action cannot be undone.'
+            : `This will delete ${deleteTarget?.name} and ALL files inside. This action cannot be undone.`
+        }
+        variant="destructive"
+      />
+
+      <MultiTabPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        tabs={tabs}
+        activeTab={activeTab}
+        activeTabKey={activeTabKey}
+        onTabClick={setActiveTabKey}
+        onTabClose={closeTab}
+        onCloseAll={closeAllTabs}
+      />
+    </div>
+  );
+}
