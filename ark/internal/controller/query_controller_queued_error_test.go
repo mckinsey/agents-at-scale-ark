@@ -106,6 +106,40 @@ func TestFailQueryOnTimeout_StatusUpdateError_Propagates(t *testing.T) {
 	require.Error(t, err, "failQueryOnTimeout must surface the update failure so the reconciler retries and doesn't silently swallow a lost terminal write")
 }
 
+// A HITL-resumed query that hits TimedOutInExecution must retain its A2A
+// correlation and raw payload — only Content/Phase get overwritten with
+// the timeout signal.
+func TestFailQueryOnTimeout_PreservesA2AAndRaw(t *testing.T) {
+	q := newTestQueryForHandleRunningPhaseError("timeout-preserve-a2a")
+	q.Status.Response = &arkv1alpha1.Response{
+		Target:  arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+		Content: "partial output before timeout",
+		Raw:     `{"partial":"payload"}`,
+		Phase:   statusRunning,
+		A2A:     &arkv1alpha1.A2AMetadata{ContextID: "ctx-preserve", TaskID: "task-preserve"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+		WithObjects(q).
+		WithStatusSubresource(&arkv1alpha1.Query{}).
+		Build()
+	require.NoError(t, c.Status().Update(context.Background(), q))
+
+	r := &QueryReconciler{Client: c, Scheme: c.Scheme()}
+	require.NoError(t, r.failQueryOnTimeout(context.Background(), q, reasonTimedOutInExecution, "Query timed out during execution"))
+
+	after := &arkv1alpha1.Query{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, after))
+	require.NotNil(t, after.Status.Response)
+	assert.Equal(t, statusError, after.Status.Phase)
+	assert.Equal(t, "Query timed out during execution", after.Status.Response.Content, "Content must be replaced with the timeout signal")
+	assert.Equal(t, statusError, after.Status.Response.Phase, "Response.Phase must mirror the terminal state")
+	assert.Equal(t, `{"partial":"payload"}`, after.Status.Response.Raw, "Raw payload must survive so downstream observers can debug the timed-out call")
+	require.NotNil(t, after.Status.Response.A2A, "A2A metadata must survive so the associated A2ATask can still be correlated")
+	assert.Equal(t, "task-preserve", after.Status.Response.A2A.TaskID)
+	assert.Equal(t, "ctx-preserve", after.Status.Response.A2A.ContextID)
+}
+
 // remainingBudget is the load-bearing helper every timeout branch depends on
 // (pre-flight check, sem-full clamp, executor context, executor-error
 // discrimination). Direct table-driven coverage so a subtle sign flip or

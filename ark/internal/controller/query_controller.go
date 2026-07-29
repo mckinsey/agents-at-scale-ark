@@ -1119,19 +1119,27 @@ func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1al
 		q.Status.Phase = statusError
 		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
 
-		// Preserve target from an existing Response (partial exec) or Spec;
-		// overwrite Content/Phase.
+		// Overwrite Content/Phase with the timeout signal; preserve Target,
+		// Raw, and A2A metadata from any prior partial-exec Response so the
+		// A2ATask correlation (taskID/contextID) and raw payload survive for
+		// downstream observers.
 		target := arkv1alpha1.QueryTarget{}
+		var raw string
+		var a2a *arkv1alpha1.A2AMetadata
 		switch {
 		case q.Status.Response != nil:
 			target = q.Status.Response.Target
+			raw = q.Status.Response.Raw
+			a2a = q.Status.Response.A2A
 		case q.Spec.Target != nil:
 			target = *q.Spec.Target
 		}
 		q.Status.Response = &arkv1alpha1.Response{
 			Target:  target,
 			Content: message,
+			Raw:     raw,
 			Phase:   statusError,
+			A2A:     a2a,
 		}
 	}, "timeout reason="+reason)
 }
