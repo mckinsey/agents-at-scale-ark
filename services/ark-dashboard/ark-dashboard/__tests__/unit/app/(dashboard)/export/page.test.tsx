@@ -13,6 +13,9 @@ vi.mock('@/components/ui/sonner', () => ({
     success: vi.fn(),
   },
 }));
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({ namespace: 'default' }),
+}));
 
 const mockResources = {
   agents: [

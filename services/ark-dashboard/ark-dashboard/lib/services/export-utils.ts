@@ -4,6 +4,9 @@
  */
 
 import type { ResourceExportData, ExportItem } from '@/lib/services/export';
+import type { WorkflowTemplate } from '@/lib/services/workflow-templates';
+
+const ARGO_DESCRIPTION_ANNOTATION = 'workflows.argoproj.io/description';
 
 /**
  * Maps API response items to ExportItem format
@@ -75,12 +78,13 @@ export function processResourceResponses(
   if (includeWorkflows && workflowTemplates) {
     if (workflowTemplates.status === 'fulfilled' && workflowTemplates.value) {
       // Workflow templates have a different structure
-      data.workflows = workflowTemplates.value.map((template: any) => ({
+      const templates: WorkflowTemplate[] = workflowTemplates.value;
+      data.workflows = templates.map(template => ({
         id: template.metadata.name || '',
         name: template.metadata.name || '',
         type: 'workflow',
         description:
-          template.metadata.annotations?.['workflows.argoproj.io/description'] ||
+          template.metadata.annotations?.[ARGO_DESCRIPTION_ANNOTATION] ||
           undefined,
       }));
     }

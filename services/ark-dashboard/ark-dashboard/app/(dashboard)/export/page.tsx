@@ -1,7 +1,7 @@
 'use client';
 
 import type { ComponentType, SVGProps } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   AccountTree,
@@ -35,14 +35,18 @@ import {
 import { Tag } from '@/components/ui/tag';
 import { TagToggle } from '@/components/ui/tag-toggle';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import { useDelayedLoading } from '@/lib/hooks';
 import type {
   ExportItem,
   ResourceExportData,
   ResourceType,
 } from '@/lib/services/export';
 import { exportService } from '@/lib/services/export';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type TabValue = ResourceType | 'all';
+
+type ExportAction = 'selected' | 'all';
 
 interface ResourceMeta {
   readonly type: ResourceType;
@@ -81,11 +85,11 @@ const TAG_CLASSES =
   'data-[state=on]:bg-fill-muted data-[state=on]:text-fg-primary ' +
   'data-[state=on]:focus-visible:bg-fill-muted';
 
-const TABLE_COL = {
+const COL = {
   select: 'w-12',
   name: 'w-[240px]',
   type: 'w-[160px]',
-};
+} as const;
 
 interface ExportRow {
   readonly meta: ResourceMeta;
@@ -96,30 +100,25 @@ function rowKey(row: ExportRow): string {
   return `${row.meta.type}:${row.item.id}`;
 }
 
-function getHeaderCheckedState(
-  selected: number,
-  total: number,
-): boolean | 'indeterminate' {
-  if (total > 0 && selected === total) return true;
-  if (selected > 0) return 'indeterminate';
-  return false;
-}
-
 interface ExportTableRowProps {
   readonly row: ExportRow;
+  readonly selected: boolean;
   readonly onToggle: (selected: boolean) => void;
 }
 
-function ExportTableRow({ row, onToggle }: Readonly<ExportTableRowProps>) {
+function ExportTableRow({
+  row,
+  selected,
+  onToggle,
+}: Readonly<ExportTableRowProps>) {
   const { meta, item } = row;
   const Icon = meta.icon;
-  const selected = item.selected ?? false;
 
   return (
     <TableRow
       className="relative isolate cursor-pointer transition-colors"
       onClick={() => onToggle(!selected)}>
-      <TableCell size="small" className={TABLE_COL.select}>
+      <TableCell size="small" className={COL.select}>
         <span aria-hidden className={rowHoverOverlayClass} />
         <Checkbox
           checked={selected}
@@ -128,7 +127,7 @@ function ExportTableRow({ row, onToggle }: Readonly<ExportTableRowProps>) {
           aria-label={`Select ${item.name}`}
         />
       </TableCell>
-      <TableCell size="small" className={TABLE_COL.name}>
+      <TableCell size="small" className={COL.name}>
         <TruncatedTooltip label={item.name}>
           <span className="text-fg-primary block truncate">{item.name}</span>
         </TruncatedTooltip>
@@ -144,7 +143,7 @@ function ExportTableRow({ row, onToggle }: Readonly<ExportTableRowProps>) {
           <span className="text-fg-tertiary">—</span>
         )}
       </TableCell>
-      <TableCell size="small" className={TABLE_COL.type}>
+      <TableCell size="small" className={COL.type}>
         <Tag
           variant="primary"
           size="sm"
@@ -160,36 +159,25 @@ function ExportTableRow({ row, onToggle }: Readonly<ExportTableRowProps>) {
 }
 
 export default function ExportPage() {
+  const { namespace } = useNamespace();
   const [resources, setResources] = useState<ResourceExportData>({});
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportingAction, setExportingAction] = useState<ExportAction | null>(
+    null,
+  );
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [lastExportTime, setLastExportTime] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const showLoading = useDelayedLoading(isLoading);
 
-  useEffect(() => {
-    loadResources();
-    exportService.getLastExportTime().then(lastTime => {
-      setLastExportTime(lastTime);
-    });
-  }, []);
-
-  const loadResources = async () => {
+  const loadResources = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await exportService.fetchAllResources();
-
-      const initializedData: ResourceExportData = {};
-      for (const [key, items] of Object.entries(data)) {
-        if (items && Array.isArray(items)) {
-          initializedData[key as ResourceType] = items.map(item => ({
-            ...item,
-            selected: false,
-          }));
-        }
-      }
-
-      setResources(initializedData);
+      setSelectedKeys(new Set());
+      setResources(await exportService.fetchAllResources());
     } catch (error) {
       toast.error('Failed to load resources', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -197,7 +185,12 @@ export default function ExportPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadResources();
+    void exportService.getLastExportTime().then(setLastExportTime);
+  }, [namespace, loadResources]);
 
   const allRows = useMemo<ExportRow[]>(() => {
     const rows: ExportRow[] = [];
@@ -211,7 +204,9 @@ export default function ExportPage() {
 
   const searchedRows = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return allRows;
+    if (!query) {
+      return allRows;
+    }
     return allRows.filter(
       row =>
         row.item.name.toLowerCase().includes(query) ||
@@ -220,57 +215,64 @@ export default function ExportPage() {
   }, [allRows, searchQuery]);
 
   const visibleRows = useMemo(() => {
-    if (activeTab === 'all') return searchedRows;
+    if (activeTab === 'all') {
+      return searchedRows;
+    }
     return searchedRows.filter(row => row.meta.type === activeTab);
   }, [searchedRows, activeTab]);
 
   const tabCounts = useMemo(() => {
-    const counts: Record<TabValue, number> = {
-      all: searchedRows.length,
-      agents: 0,
-      teams: 0,
-      models: 0,
-      queries: 0,
-      a2a: 0,
-      mcpservers: 0,
-      workflows: 0,
-    };
+    const counts = new Map<TabValue, number>(
+      RESOURCES.map(meta => [meta.type, 0]),
+    );
     for (const row of searchedRows) {
-      counts[row.meta.type] += 1;
+      counts.set(row.meta.type, (counts.get(row.meta.type) ?? 0) + 1);
     }
+    counts.set('all', searchedRows.length);
     return counts;
   }, [searchedRows]);
 
   const totalCount = allRows.length;
-  const selectedCount = allRows.filter(row => row.item.selected).length;
-  const visibleSelectedCount = visibleRows.filter(
-    row => row.item.selected,
+  const selectedCount = selectedKeys.size;
+  const visibleSelectedCount = visibleRows.filter(row =>
+    selectedKeys.has(rowKey(row)),
   ).length;
 
-  const setSelection = (keys: ReadonlySet<string>, selected: boolean) => {
-    setResources(prev => {
-      const next: ResourceExportData = {};
-      for (const meta of RESOURCES) {
-        const items = prev[meta.type];
-        if (!items) continue;
-        next[meta.type] = items.map(item =>
-          keys.has(`${meta.type}:${item.id}`) ? { ...item, selected } : item,
-        );
+  let headerChecked: boolean | 'indeterminate' = false;
+  if (visibleSelectedCount > 0) {
+    headerChecked =
+      visibleSelectedCount === visibleRows.length ? true : 'indeterminate';
+  }
+
+  const toggleKeys = (keys: readonly string[], selected: boolean) => {
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      for (const key of keys) {
+        if (selected) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
       }
       return next;
     });
   };
 
-  const handleSelectVisible = (selected: boolean) => {
-    setSelection(new Set(visibleRows.map(rowKey)), selected);
+  const buildSelection = (): ResourceExportData => {
+    const selection: ResourceExportData = {};
+    for (const row of allRows) {
+      if (!selectedKeys.has(rowKey(row))) {
+        continue;
+      }
+      const items = selection[row.meta.type] ?? [];
+      items.push({ ...row.item, selected: true });
+      selection[row.meta.type] = items;
+    }
+    return selection;
   };
 
-  const handleSelectRow = (row: ExportRow, selected: boolean) => {
-    setSelection(new Set([rowKey(row)]), selected);
-  };
-
-  const handleExport = async (exportAll: boolean) => {
-    if (!exportAll && selectedCount === 0) {
+  const handleExport = async (action: ExportAction) => {
+    if (action === 'selected' && selectedCount === 0) {
       toast.error('No resources selected', {
         description: 'Please select at least one resource to export',
       });
@@ -278,32 +280,34 @@ export default function ExportPage() {
     }
 
     try {
-      setIsExporting(true);
+      setExportingAction(action);
 
-      if (exportAll) {
+      if (action === 'all') {
         await exportService.exportAll();
         toast.success('Export successful', {
           description: 'Successfully exported all resources',
         });
       } else {
-        await exportService.exportResources(resources);
+        await exportService.exportResources(buildSelection());
         toast.success('Export successful', {
           description: `Successfully exported ${selectedCount} resources`,
         });
       }
 
-      exportService.getLastExportTime().then(time => setLastExportTime(time));
+      setLastExportTime(await exportService.getLastExportTime());
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
       });
     } finally {
-      setIsExporting(false);
+      setExportingAction(null);
     }
   };
 
   const formatLastExportTime = () => {
-    if (!lastExportTime) return 'Never';
+    if (!lastExportTime) {
+      return 'Never';
+    }
     return new Date(lastExportTime).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -313,15 +317,14 @@ export default function ExportPage() {
     });
   };
 
-  const noResultsMessage =
-    totalCount === 0
-      ? 'There are no resources available to export.'
-      : 'No resources match your search.';
+  const noResultsMessage = searchQuery.trim()
+    ? 'No resources match your search.'
+    : 'There are no resources to export.';
 
   return (
     <div className="content-shell flex h-full w-full flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1" data-testid="page-header">
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1">
             <IconShell size="default" variant="primary">
               <SaveAlt />
@@ -337,15 +340,15 @@ export default function ExportPage() {
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            disabled={isExporting || selectedCount === 0}
-            onClick={() => handleExport(false)}>
-            {isExporting && <Spinner size="sm" />}
+            disabled={exportingAction !== null || selectedCount === 0}
+            onClick={() => handleExport('selected')}>
+            {exportingAction === 'selected' && <Spinner size="sm" />}
             Export selected ({selectedCount})
           </Button>
           <Button
-            disabled={isExporting || totalCount === 0}
-            onClick={() => handleExport(true)}>
-            {isExporting && <Spinner size="sm" />}
+            disabled={exportingAction !== null || totalCount === 0}
+            onClick={() => handleExport('all')}>
+            {exportingAction === 'all' && <Spinner size="sm" />}
             Export all ({totalCount})
           </Button>
         </div>
@@ -366,9 +369,11 @@ export default function ExportPage() {
             className={TAG_CLASSES}
             pressed={activeTab === 'all'}
             onPressedChange={pressed => {
-              if (pressed) setActiveTab('all');
+              if (pressed) {
+                setActiveTab('all');
+              }
             }}>
-            All ({tabCounts.all})
+            All ({tabCounts.get('all') ?? 0})
           </TagToggle>
           {RESOURCES.map(meta => {
             const Icon = meta.icon;
@@ -379,21 +384,23 @@ export default function ExportPage() {
                 className={TAG_CLASSES}
                 pressed={activeTab === meta.type}
                 onPressedChange={pressed => {
-                  if (pressed) setActiveTab(meta.type);
+                  if (pressed) {
+                    setActiveTab(meta.type);
+                  }
                 }}>
                 <IconShell
                   size="sm"
                   variant={activeTab === meta.type ? 'primary' : 'secondary'}>
                   <Icon />
                 </IconShell>
-                {meta.label} ({tabCounts[meta.type]})
+                {meta.label} ({tabCounts.get(meta.type) ?? 0})
               </TagToggle>
             );
           })}
         </div>
       </div>
 
-      {isLoading && (
+      {showLoading && (
         <div className="text-fg-secondary flex flex-1 items-center justify-center py-8">
           Loading...
         </div>
@@ -410,35 +417,36 @@ export default function ExportPage() {
             className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
             <TableHeader>
               <TableRow>
-                <TableHead size="small" className={TABLE_COL.select}>
+                <TableHead size="small" className={COL.select}>
                   <Checkbox
-                    checked={getHeaderCheckedState(
-                      visibleSelectedCount,
-                      visibleRows.length,
-                    )}
+                    checked={headerChecked}
                     onCheckedChange={checked =>
-                      handleSelectVisible(checked === true)
+                      toggleKeys(visibleRows.map(rowKey), checked === true)
                     }
                     aria-label="Select all resources"
                   />
                 </TableHead>
-                <TableHead size="small" className={TABLE_COL.name}>
+                <TableHead size="small" className={COL.name}>
                   Name
                 </TableHead>
                 <TableHead size="small">Description</TableHead>
-                <TableHead size="small" className={TABLE_COL.type}>
+                <TableHead size="small" className={COL.type}>
                   Type
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleRows.map(row => (
-                <ExportTableRow
-                  key={rowKey(row)}
-                  row={row}
-                  onToggle={selected => handleSelectRow(row, selected)}
-                />
-              ))}
+              {visibleRows.map(row => {
+                const key = rowKey(row);
+                return (
+                  <ExportTableRow
+                    key={key}
+                    row={row}
+                    selected={selectedKeys.has(key)}
+                    onToggle={selected => toggleKeys([key], selected)}
+                  />
+                );
+              })}
             </TableBody>
           </Table>
         </ScrollArea>
