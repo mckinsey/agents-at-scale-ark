@@ -1,7 +1,7 @@
 'use client';
 
 import { useAtomValue } from 'jotai';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import {
   oneDark,
@@ -28,6 +28,8 @@ const EDITOR_FONT_FAMILY =
 const EDITOR_FONT_SIZE = '0.875rem';
 const EDITOR_LINE_HEIGHT = 1.625;
 const EDITOR_PADDING = '1rem';
+const GUTTER_PADDING_LEFT = '0.75rem';
+const GUTTER_PADDING_RIGHT = '0.75rem';
 
 export function StudioYamlEditor({
   value,
@@ -36,8 +38,17 @@ export function StudioYamlEditor({
   error,
 }: Readonly<StudioYamlEditorProps>) {
   const highlightRef = useRef<HTMLDivElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
   const isDarkMode = useAtomValue(isExperimentalDarkModeEnabledAtom);
   const theme = isDarkMode ? oneDark : oneLight;
+
+  const lineNumbers = useMemo(() => {
+    const count = value.length === 0 ? 1 : value.split('\n').length;
+    return Array.from({ length: count }, (_, index) => index + 1);
+  }, [value]);
+
+  const gutterDigits = Math.max(2, String(lineNumbers.length).length);
+  const gutterWidth = `calc(${gutterDigits}ch + ${GUTTER_PADDING_LEFT} + ${GUTTER_PADDING_RIGHT})`;
 
   return (
     <div className="relative flex h-full w-full flex-col">
@@ -51,7 +62,10 @@ export function StudioYamlEditor({
             style={theme}
             customStyle={{
               margin: 0,
-              padding: EDITOR_PADDING,
+              paddingTop: EDITOR_PADDING,
+              paddingBottom: EDITOR_PADDING,
+              paddingRight: EDITOR_PADDING,
+              paddingLeft: gutterWidth,
               background: 'transparent',
               backgroundColor: 'transparent',
               overflow: 'visible',
@@ -102,15 +116,43 @@ export function StudioYamlEditor({
               highlightRef.current.scrollTop = target.scrollTop;
               highlightRef.current.scrollLeft = target.scrollLeft;
             }
+            if (gutterRef.current) {
+              gutterRef.current.scrollTop = target.scrollTop;
+            }
           }}
           style={{
             fontFamily: EDITOR_FONT_FAMILY,
             fontSize: EDITOR_FONT_SIZE,
             lineHeight: EDITOR_LINE_HEIGHT,
-            padding: EDITOR_PADDING,
+            paddingTop: EDITOR_PADDING,
+            paddingBottom: EDITOR_PADDING,
+            paddingRight: EDITOR_PADDING,
+            paddingLeft: gutterWidth,
           }}
           className="caret-fg-primary absolute inset-0 resize-none overflow-auto bg-transparent whitespace-pre text-transparent outline-none"
         />
+        <div
+          ref={gutterRef}
+          aria-hidden="true"
+          data-testid="studio-yaml-gutter"
+          className="text-fg-tertiary border-stroke-divider bg-background pointer-events-none absolute inset-y-0 left-0 overflow-hidden border-r select-none"
+          style={{ width: gutterWidth }}>
+          <div
+            style={{
+              paddingTop: EDITOR_PADDING,
+              paddingBottom: EDITOR_PADDING,
+              paddingLeft: GUTTER_PADDING_LEFT,
+              paddingRight: GUTTER_PADDING_RIGHT,
+              fontFamily: EDITOR_FONT_FAMILY,
+              fontSize: EDITOR_FONT_SIZE,
+              lineHeight: EDITOR_LINE_HEIGHT,
+              textAlign: 'right',
+            }}>
+            {lineNumbers.map(lineNumber => (
+              <div key={lineNumber}>{lineNumber}</div>
+            ))}
+          </div>
+        </div>
         {readOnly && (
           <div
             data-testid="studio-build-lock"
