@@ -3,8 +3,6 @@ package completions
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/openai/openai-go/option"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,15 +14,6 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
-
-const modelCRDCacheTTL = 5 * time.Minute
-
-type modelCRDCacheEntry struct {
-	crd       *arkv1alpha1.Model
-	expiresAt time.Time
-}
-
-var modelCRDCache sync.Map
 
 const defaultModelName = "default"
 
@@ -111,20 +100,11 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 }
 
 func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace string) (*arkv1alpha1.Model, error) {
-	cacheKey := namespace + "/" + name
-	if v, ok := modelCRDCache.Load(cacheKey); ok {
-		entry := v.(*modelCRDCacheEntry)
-		if time.Now().Before(entry.expiresAt) {
-			return entry.crd, nil
-		}
-	}
-
 	var modelCRD arkv1alpha1.Model
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &modelCRD); err != nil {
 		return nil, fmt.Errorf("failed to get Model %s/%s: %w", namespace, name, err)
 	}
 
-	modelCRDCache.Store(cacheKey, &modelCRDCacheEntry{crd: &modelCRD, expiresAt: time.Now().Add(modelCRDCacheTTL)})
 	return &modelCRD, nil
 }
 
