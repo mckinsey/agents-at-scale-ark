@@ -1,5 +1,6 @@
 'use client';
 
+import { AccessDenied } from '@/components/access/access-denied';
 import { Lock, OpenInNew } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ interface StudioChatGateProps {
   agentNotReady: boolean;
   mcpMissing: boolean;
   mcpNotReady: boolean;
+  unverifiable: boolean;
 }
 
 interface StepCardProps {
@@ -153,38 +155,45 @@ export function StudioChatGate({
   agentNotReady,
   mcpMissing,
   mcpNotReady,
+  unverifiable,
 }: StudioChatGateProps) {
   return (
     <div
       className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center p-6 backdrop-blur-sm"
       data-testid="studio-chat-gate">
-      <div className="flex w-full max-w-xl flex-col items-center gap-4 text-center">
-        <Lock className="text-fg-secondary h-7 w-7" />
-        <p className="text-fg-primary text-lg font-semibold">
-          Chat not available
-        </p>
-        <p className="text-fg-secondary text-sm">
-          Follow the steps below to start chatting with the{' '}
-          {ARGO_MAKE_AUTHOR_AGENT_NAME} agent
-        </p>
-        <ol className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-          <StepCard
-            step={1}
-            title={`Install ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent`}
-            testId="studio-gate-item-agent">
-            <AgentAction
-              agentMissing={agentMissing}
-              agentNotReady={agentNotReady}
-            />
-          </StepCard>
-          <StepCard
-            step={2}
-            title={`Install ${KUBERNETES_MCP_SERVER_NAME}`}
-            testId="studio-gate-item-mcp">
-            <McpAction mcpMissing={mcpMissing} mcpNotReady={mcpNotReady} />
-          </StepCard>
-        </ol>
-      </div>
+      {unverifiable ? (
+        <div className="w-full" data-testid="studio-gate-unverifiable">
+          <AccessDenied />
+        </div>
+      ) : (
+        <div className="flex w-full max-w-xl flex-col items-center gap-4 text-center">
+          <Lock className="text-fg-secondary h-7 w-7" />
+          <p className="text-fg-primary text-lg font-semibold">
+            Chat not available
+          </p>
+          <p className="text-fg-secondary text-sm">
+            Follow the steps below to start chatting with the{' '}
+            {ARGO_MAKE_AUTHOR_AGENT_NAME} agent
+          </p>
+          <ol className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+            <StepCard
+              step={1}
+              title={`Install ${ARGO_MAKE_AUTHOR_AGENT_NAME} agent`}
+              testId="studio-gate-item-agent">
+              <AgentAction
+                agentMissing={agentMissing}
+                agentNotReady={agentNotReady}
+              />
+            </StepCard>
+            <StepCard
+              step={2}
+              title={`Install ${KUBERNETES_MCP_SERVER_NAME}`}
+              testId="studio-gate-item-mcp">
+              <McpAction mcpMissing={mcpMissing} mcpNotReady={mcpNotReady} />
+            </StepCard>
+          </ol>
+        </div>
+      )}
     </div>
   );
 }

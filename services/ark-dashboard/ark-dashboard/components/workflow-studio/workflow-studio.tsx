@@ -493,6 +493,7 @@ export function WorkflowStudio({
             agentNotReady={gate.agentNotReady}
             mcpMissing={gate.mcpMissing}
             mcpNotReady={gate.mcpNotReady}
+            unverifiable={gate.unverifiable}
           />
         }
         canvas={

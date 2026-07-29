@@ -51,6 +51,7 @@ describe('getAuthorAgentPreflight', () => {
       agentReady: true,
       mcpServerPresent: true,
       mcpServerReady: true,
+      unverifiable: false,
     });
   });
 
@@ -100,10 +101,60 @@ describe('getAuthorAgentPreflight', () => {
     expect(result.mcpServerReady).toBe(false);
   });
 
-  it('propagates non-404 MCP server errors so the gate fails closed', async () => {
+  it('fails closed for the failing lookup on unknown errors without discarding the other success', async () => {
     vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
     vi.mocked(mcpServersService.get).mockRejectedValueOnce(httpError(500));
 
-    await expect(getAuthorAgentPreflight('argo-make-author')).rejects.toThrow();
+    const result = await getAuthorAgentPreflight('argo-make-author');
+
+    expect(result.agentPresent).toBe(true);
+    expect(result.agentReady).toBe(true);
+    expect(result.mcpServerPresent).toBe(false);
+    expect(result.mcpServerReady).toBe(false);
+    expect(result.unverifiable).toBe(false);
+  });
+
+  it.each([401, 403])(
+    'marks the result unverifiable and preserves the agent success when the MCP lookup returns %i',
+    async status => {
+      vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
+      vi.mocked(mcpServersService.get).mockRejectedValueOnce(httpError(status));
+
+      const result = await getAuthorAgentPreflight('argo-make-author');
+
+      expect(result.unverifiable).toBe(true);
+      expect(result.agentPresent).toBe(true);
+      expect(result.agentReady).toBe(true);
+      expect(result.mcpServerPresent).toBe(false);
+      expect(result.mcpServerReady).toBe(false);
+    },
+  );
+
+  it.each([401, 403])(
+    'marks the result unverifiable and preserves the MCP success when the agent lookup returns %i',
+    async status => {
+      vi.mocked(agentsService.getByName).mockRejectedValueOnce(
+        httpError(status),
+      );
+      vi.mocked(mcpServersService.get).mockResolvedValueOnce(readyMcpServer);
+
+      const result = await getAuthorAgentPreflight('argo-make-author');
+
+      expect(result.unverifiable).toBe(true);
+      expect(result.agentPresent).toBe(false);
+      expect(result.agentReady).toBe(false);
+      expect(result.mcpServerPresent).toBe(true);
+      expect(result.mcpServerReady).toBe(true);
+    },
+  );
+
+  it('does not mark the result unverifiable when the MCP server 404s', async () => {
+    vi.mocked(agentsService.getByName).mockResolvedValueOnce(readyAgent);
+    vi.mocked(mcpServersService.get).mockRejectedValueOnce(httpError(404));
+
+    const result = await getAuthorAgentPreflight('argo-make-author');
+
+    expect(result.unverifiable).toBe(false);
+    expect(result.mcpServerPresent).toBe(false);
   });
 });

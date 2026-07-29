@@ -8,31 +8,48 @@ export interface AuthorAgentPreflight {
   agentReady: boolean;
   mcpServerPresent: boolean;
   mcpServerReady: boolean;
+  unverifiable: boolean;
 }
 
-async function getMcpServerOrNull(name: string) {
-  try {
-    return await mcpServersService.get(name);
-  } catch (error) {
-    if (error instanceof APIError && error.status === 404) {
-      return null;
-    }
-    throw error;
-  }
+function isAuthError(error: unknown): boolean {
+  return (
+    error instanceof APIError && (error.status === 401 || error.status === 403)
+  );
 }
 
 export async function getAuthorAgentPreflight(
   agentName: string,
 ): Promise<AuthorAgentPreflight> {
-  const [agent, mcpServer] = await Promise.all([
+  const [agentResult, mcpServerResult] = await Promise.allSettled([
     agentsService.getByName(agentName),
-    getMcpServerOrNull(KUBERNETES_MCP_SERVER_NAME),
+    mcpServersService.get(KUBERNETES_MCP_SERVER_NAME),
   ]);
 
+  let unverifiable = false;
+
+  let agentPresent = false;
+  let agentReady = false;
+  if (agentResult.status === 'fulfilled') {
+    agentPresent = agentResult.value !== null;
+    agentReady = agentResult.value?.available === 'True';
+  } else if (isAuthError(agentResult.reason)) {
+    unverifiable = true;
+  }
+
+  let mcpServerPresent = false;
+  let mcpServerReady = false;
+  if (mcpServerResult.status === 'fulfilled') {
+    mcpServerPresent = mcpServerResult.value !== null;
+    mcpServerReady = mcpServerResult.value?.available === 'True';
+  } else if (isAuthError(mcpServerResult.reason)) {
+    unverifiable = true;
+  }
+
   return {
-    agentPresent: agent !== null,
-    agentReady: agent?.available === 'True',
-    mcpServerPresent: mcpServer !== null,
-    mcpServerReady: mcpServer?.available === 'True',
+    agentPresent,
+    agentReady,
+    mcpServerPresent,
+    mcpServerReady,
+    unverifiable,
   };
 }

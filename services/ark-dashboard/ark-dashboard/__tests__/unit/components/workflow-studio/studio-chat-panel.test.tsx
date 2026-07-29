@@ -114,6 +114,7 @@ interface HarnessOptions {
   agentNotReady?: boolean;
   mcpMissing?: boolean;
   mcpNotReady?: boolean;
+  unverifiable?: boolean;
 }
 
 function renderPanel(options: HarnessOptions = {}) {
@@ -165,6 +166,7 @@ function renderPanel(options: HarnessOptions = {}) {
           agentNotReady={options.agentNotReady ?? false}
           mcpMissing={options.mcpMissing ?? false}
           mcpNotReady={options.mcpNotReady ?? false}
+          unverifiable={options.unverifiable ?? false}
         />
       </>
     );
@@ -446,6 +448,26 @@ describe('StudioChatPanel', () => {
 
       expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument();
       expect(screen.queryByTestId('studio-chat-disabled-banner')).toBeNull();
+    });
+
+    it('shows the access-denied gate instead of install steps when unverifiable', () => {
+      renderPanel({
+        gated: true,
+        unverifiable: true,
+        agentMissing: true,
+        mcpMissing: true,
+      });
+
+      expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('studio-gate-unverifiable'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('No access to this namespace'),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId('studio-gate-item-agent')).toBeNull();
+      expect(screen.queryByTestId('studio-chat-disabled-banner')).toBeNull();
+      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
     });
   });
 

@@ -12,6 +12,7 @@ export interface AuthorAgentGate {
   agentNotReady: boolean;
   mcpMissing: boolean;
   mcpNotReady: boolean;
+  unverifiable: boolean;
   loading: boolean;
 }
 
@@ -22,6 +23,7 @@ export function useAuthorAgentGate(): AuthorAgentGate {
   const [agentNotReady, setAgentNotReady] = useState<boolean>(false);
   const [mcpMissing, setMcpMissing] = useState<boolean>(true);
   const [mcpNotReady, setMcpNotReady] = useState<boolean>(false);
+  const [unverifiable, setUnverifiable] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   const tokenRef = useRef<number>(0);
@@ -42,6 +44,7 @@ export function useAuthorAgentGate(): AuthorAgentGate {
         setAgentNotReady(result.agentPresent && !result.agentReady);
         setMcpMissing(!result.mcpServerPresent);
         setMcpNotReady(result.mcpServerPresent && !result.mcpServerReady);
+        setUnverifiable(result.unverifiable);
       })
       .catch(() => {
         if (cancelled || tokenRef.current !== token) {
@@ -51,6 +54,7 @@ export function useAuthorAgentGate(): AuthorAgentGate {
         setAgentNotReady(false);
         setMcpMissing(true);
         setMcpNotReady(false);
+        setUnverifiable(false);
       })
       .finally(() => {
         if (cancelled || tokenRef.current !== token) {
@@ -65,11 +69,17 @@ export function useAuthorAgentGate(): AuthorAgentGate {
   }, [namespace]);
 
   return {
-    gated: agentMissing || agentNotReady || mcpMissing || mcpNotReady,
+    gated:
+      unverifiable ||
+      agentMissing ||
+      agentNotReady ||
+      mcpMissing ||
+      mcpNotReady,
     agentMissing,
     agentNotReady,
     mcpMissing,
     mcpNotReady,
+    unverifiable,
     loading,
   };
 }

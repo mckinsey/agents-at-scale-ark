@@ -79,6 +79,7 @@ export interface StudioChatPanelProps {
   agentNotReady: boolean;
   mcpMissing: boolean;
   mcpNotReady: boolean;
+  unverifiable: boolean;
 }
 
 export function StudioChatPanel({
@@ -89,12 +90,14 @@ export function StudioChatPanel({
   agentNotReady,
   mcpMissing,
   mcpNotReady,
+  unverifiable,
 }: StudioChatPanelProps) {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const composerDisabled = chat.composerDisabled || gated;
   const inputDisabled = chat.inputDisabled || gated;
-  const notInstalled = agentMissing || mcpMissing;
-  const installedNotReady = !notInstalled && (agentNotReady || mcpNotReady);
+  const notInstalled = !unverifiable && (agentMissing || mcpMissing);
+  const installedNotReady =
+    !unverifiable && !notInstalled && (agentNotReady || mcpNotReady);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -118,12 +121,13 @@ export function StudioChatPanel({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {notInstalled && (
+      {(unverifiable || notInstalled) && (
         <StudioChatGate
           agentMissing={agentMissing}
           agentNotReady={agentNotReady}
           mcpMissing={mcpMissing}
           mcpNotReady={mcpNotReady}
+          unverifiable={unverifiable}
         />
       )}
 

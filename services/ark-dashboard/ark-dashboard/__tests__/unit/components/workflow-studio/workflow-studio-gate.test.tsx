@@ -72,6 +72,7 @@ const present = {
   agentReady: true,
   mcpServerPresent: true,
   mcpServerReady: true,
+  unverifiable: false,
 };
 
 const validYaml = [
@@ -98,6 +99,7 @@ describe('WorkflowStudio author-agent gate', () => {
       agentReady: false,
       mcpServerPresent: true,
       mcpServerReady: true,
+      unverifiable: false,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -117,6 +119,7 @@ describe('WorkflowStudio author-agent gate', () => {
       agentReady: false,
       mcpServerPresent: true,
       mcpServerReady: true,
+      unverifiable: false,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -139,6 +142,7 @@ describe('WorkflowStudio author-agent gate', () => {
       agentReady: true,
       mcpServerPresent: false,
       mcpServerReady: false,
+      unverifiable: false,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -160,6 +164,7 @@ describe('WorkflowStudio author-agent gate', () => {
       agentReady: true,
       mcpServerPresent: true,
       mcpServerReady: false,
+      unverifiable: false,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -196,6 +201,28 @@ describe('WorkflowStudio author-agent gate', () => {
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
+  it('shows the access-denied gate (not install steps) when the preflight is unverifiable', async () => {
+    preflightMock.mockResolvedValue({
+      agentPresent: false,
+      agentReady: false,
+      mcpServerPresent: false,
+      mcpServerReady: false,
+      unverifiable: true,
+    });
+
+    render(<WorkflowStudio mode="new" initialName="wf" />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('studio-gate-unverifiable')).toBeInTheDocument(),
+    );
+    expect(screen.getByText('No access to this namespace')).toBeInTheDocument();
+    expect(screen.queryByTestId('studio-gate-item-agent')).toBeNull();
+    expect(
+      screen.queryByTestId('studio-gate-agent-marketplace-link'),
+    ).toBeNull();
+    expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+  });
+
   it('re-runs the preflight when the namespace changes', async () => {
     const { rerender } = render(<WorkflowStudio mode="new" initialName="wf" />);
 
@@ -213,6 +240,7 @@ describe('WorkflowStudio author-agent gate', () => {
       agentReady: false,
       mcpServerPresent: false,
       mcpServerReady: false,
+      unverifiable: false,
     });
 
     render(<WorkflowStudio mode="new" initialName="wf" />);
@@ -259,6 +287,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -278,6 +307,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -297,6 +327,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing={false}
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -317,6 +348,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -335,6 +367,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing={false}
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -349,6 +382,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -363,6 +397,7 @@ describe('StudioChatGate', () => {
         agentNotReady={false}
         mcpMissing={false}
         mcpNotReady
+        unverifiable={false}
       />,
     );
 
@@ -382,6 +417,7 @@ describe('StudioChatGate', () => {
         agentNotReady
         mcpMissing={false}
         mcpNotReady={false}
+        unverifiable={false}
       />,
     );
 
@@ -393,5 +429,25 @@ describe('StudioChatGate', () => {
       'href',
       `/agents/${ARGO_MAKE_AUTHOR_AGENT_NAME}`,
     );
+  });
+
+  it('renders the access-denied message and no install steps when unverifiable', () => {
+    render(
+      <StudioChatGate
+        agentMissing
+        agentNotReady={false}
+        mcpMissing
+        mcpNotReady={false}
+        unverifiable
+      />,
+    );
+
+    expect(screen.getByTestId('studio-gate-unverifiable')).toBeInTheDocument();
+    expect(screen.getByText('No access to this namespace')).toBeInTheDocument();
+    expect(screen.queryByTestId('studio-gate-item-agent')).toBeNull();
+    expect(screen.queryByTestId('studio-gate-item-mcp')).toBeNull();
+    expect(
+      screen.queryByTestId('studio-gate-agent-marketplace-link'),
+    ).toBeNull();
   });
 });
