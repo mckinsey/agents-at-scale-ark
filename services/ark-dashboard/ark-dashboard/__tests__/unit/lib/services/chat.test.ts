@@ -17,6 +17,12 @@ vi.mock('@/lib/api/client', () => ({
   },
 }));
 
+// Mock apiUrl with a non-empty base path so we can assert the chunk stream
+// honours the tenant prefix (regression: raw fetch used to drop it).
+vi.mock('@/lib/api/config', () => ({
+  apiUrl: vi.fn((path: string) => `/tenant-a${path}`),
+}));
+
 // Mock crypto.randomUUID
 Object.defineProperty(global, 'crypto', {
   value: {
@@ -264,6 +270,26 @@ describe('chatService', () => {
 
       expect(result).toEqual({
         status: 'running',
+        terminal: false,
+        response: 'No response',
+      });
+    });
+
+    it('should return non-terminal status for queued query', async () => {
+      const mockQuery: QueryDetailResponse = {
+        name: 'test-query',
+        input: 'Test',
+        status: {
+          phase: 'queued',
+        },
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
+
+      const result = await chatService.getQueryResult('test-query');
+
+      expect(result).toEqual({
+        status: 'queued',
         terminal: false,
         response: 'No response',
       });
@@ -654,6 +680,42 @@ describe('chatService', () => {
 
       await expect(generator.next()).rejects.toThrow(
         'No response body available for streaming',
+      );
+    });
+
+    it('prefixes the chunk stream URL with the tenant base path', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      } as unknown as QueryDetailResponse;
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      const fetchMock = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockResolvedValueOnce({ done: true }),
+            releaseLock: vi.fn(),
+          }),
+        },
+      });
+      global.fetch = fetchMock;
+
+      const generator = chatService.streamChatResponse(
+        messages,
+        'agent',
+        'test-agent',
+        'session-123',
+      );
+      await generator.next();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/tenant-a\/api\/v1\/broker\/chunks\?/),
+        expect.anything(),
       );
     });
   });

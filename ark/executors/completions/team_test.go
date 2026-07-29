@@ -62,6 +62,22 @@ func TestExecute_UnsupportedStrategy(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported strategy")
 }
 
+func TestExecute_DeprecatedStrategiesUnsupported(t *testing.T) {
+	members := []TeamMember{
+		&execMockTeamMember{name: "a", execFunc: func(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+			return &ExecutionResult{Messages: []Message{NewAssistantMessage("ok")}}, nil
+		}},
+	}
+	for _, strategy := range []string{"graph", "round-robin"} {
+		t.Run(strategy, func(t *testing.T) {
+			team := newTestTeam(members, strategy, false, nil)
+			_, err := team.Execute(context.Background(), NewUserMessage("hello"), nil, nil, nil, ExecuteOptions{})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "unsupported strategy")
+		})
+	}
+}
+
 func TestExecuteSequential_SinglePass(t *testing.T) {
 	var order []string
 	makeMember := func(name string) *execMockTeamMember {

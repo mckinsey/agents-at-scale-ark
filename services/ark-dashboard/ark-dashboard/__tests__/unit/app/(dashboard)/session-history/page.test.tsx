@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SessionHistoryPage from '@/app/(dashboard)/session-history/page';
@@ -29,6 +30,11 @@ vi.mock('@/components/sessions-conversations/sessions-table', () => ({
       </button>
     </div>
   ),
+}));
+
+vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
+  NewSessionDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="new-session-dialog">Dialog</div> : null,
 }));
 
 const queryClient = new QueryClient({
@@ -76,5 +82,19 @@ describe('SessionHistoryPage', () => {
     );
 
     expect(screen.getByText('Sessions')).toBeInTheDocument();
+  });
+
+  it('should open the new session dialog when clicking New session', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SessionHistoryPage />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByText('New session'));
+
+    expect(screen.getByTestId('new-session-dialog')).toBeInTheDocument();
   });
 });

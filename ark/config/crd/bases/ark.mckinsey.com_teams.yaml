@@ -77,6 +77,9 @@ spec:
                     name:
                       type: string
                     type:
+                      enum:
+                      - agent
+                      - team
                       type: string
                   required:
                   - name
@@ -95,6 +98,11 @@ spec:
                     type: string
                 type: object
               strategy:
+                enum:
+                - sequential
+                - round-robin
+                - selector
+                - graph
                 type: string
             required:
             - members

@@ -1,6 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
+import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
@@ -33,7 +34,12 @@ export type QueryUpdateRequest = Omit<
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running' | 'input-required';
+type NonTerminalQueryStatusPhase =
+  | 'pending'
+  | 'provisioning'
+  | 'running'
+  | 'queued'
+  | 'input-required';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -46,7 +52,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'unknown',
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'provisioning', 'running', 'input-required'] as const;
+  ['pending', 'provisioning', 'running', 'queued', 'input-required'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
@@ -423,7 +429,7 @@ export const chatService = {
       unknown
     > {
       const response = await fetch(
-        `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+        apiUrl(`/api/v1/broker/chunks?watch=true&query-id=${queryName}`),
         {
           signal: abortSignal,
         },

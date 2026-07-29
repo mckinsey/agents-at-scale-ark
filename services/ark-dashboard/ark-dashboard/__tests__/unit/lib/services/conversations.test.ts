@@ -187,15 +187,15 @@ describe('conversationsService', () => {
         items: [
           {
             reason: 'ToolCallComplete',
-            data: { queryName: 'query-1' },
+            data: { queryName: 'query-1', toolName: 'search' },
           },
           {
             reason: 'ToolCallComplete',
-            data: { queryName: 'query-1' },
+            data: { queryName: 'query-1', toolName: 'calculate' },
           },
           {
             reason: 'ToolCallComplete',
-            data: { queryName: 'other-query' },
+            data: { queryName: 'other-query', toolName: 'fetch' },
           },
         ],
       };

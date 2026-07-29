@@ -35,7 +35,7 @@ export function useWorkflows(
 export function useWorkflow(
   name: string,
   namespace: string = 'default',
-  refreshInterval: number = 2000,
+  refreshInterval: number = 5000,
 ) {
   const [workflow, setWorkflow] = useState<ArgoWorkflow | null>(null);
   const [loading, setLoading] = useState(true);

@@ -17,6 +17,14 @@ helm upgrade --install ark-apiserver ./dist/chart-apiserver \
 
 ## Operational notes
 
+### Authentication, authorization and TLS
+
+Requests are authenticated and authorized against the kube-apiserver (TokenReview + SubjectAccessReview), so Kubernetes RBAC applies to direct service access, not only to the kubectl path. The chart ships the required `system:auth-delegator` and `extension-apiserver-authentication-reader` bindings.
+
+With `certManager.enabled` (default `true`, requires cert-manager) the serving certificate is issued by cert-manager and its CA is injected into the APIServices, so the kube-apiserver verifies the aggregated apiserver's identity. Set `certManager.enabled=false` to fall back to an ephemeral self-signed certificate with `insecureSkipTLSVerify` on the APIServices.
+
+`networkPolicy.enabled=true` adds an ingress policy for the serving and health ports; restrict serving-port sources with `networkPolicy.extraIngressFrom`.
+
 ### Replication slot lifecycle
 
 The apiserver creates a **persistent** logical replication slot named `ark_cdc` on the configured PostgreSQL database to drive its watch stream. The slot survives apiserver pod restarts, which is what lets watchers resume from the last confirmed WAL position rather than missing events from the restart gap.
@@ -31,7 +39,9 @@ If you redeploy the apiserver later, it detects the existing slot on startup and
 
 ### Multi-replica behaviour
 
-The chart defaults to a single replica. The chart grants the apiserver ServiceAccount the RBAC needed for `controller-runtime` leader election (`Lease/ark-apiserver-leader`). If you scale to multiple replicas, only one instance acquires the lease and runs the WAL consumer — the persistent replication slot's `active` flag also serves as a backstop, so even without leader election only one replica can hold the slot at a time.
+The chart defaults to a single replica — note that an unavailable aggregated apiserver degrades kube-apiserver discovery and garbage collection cluster-wide, so for production run `replicas=2` with `podDisruptionBudget.enabled=true`.
+
+All replicas serve API traffic; only the leader (`Lease/ark-apiserver-leader`) runs the WAL consumer, since the replication slot admits a single connection (the slot's `active` flag is a backstop). Non-leader replicas do not touch the slot and serve watches from a periodic relist (up to ~120s stale) until they acquire the lease.
 
 ### Required PostgreSQL configuration
 

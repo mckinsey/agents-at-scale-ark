@@ -28,6 +28,7 @@ const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
+const mockTeamGetByName = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -42,6 +43,9 @@ vi.mock('@/lib/services', () => ({
   agentsService: {
     getByName: (...args: unknown[]) => mockGetByName(...args),
   },
+  teamsService: {
+    getByName: (...args: unknown[]) => mockTeamGetByName(...args),
+  },
 }));
 
 function createArkFinalChunk(opts: {
@@ -49,11 +53,13 @@ function createArkFinalChunk(opts: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cachedTokens?: number;
   };
   openaiUsage?: {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: { cached_tokens: number };
   };
   phase?: string;
   raw?: string;
@@ -110,6 +116,7 @@ describe('useChatSession', () => {
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     mockGetByName.mockResolvedValue({ parameters: [] });
+    mockTeamGetByName.mockResolvedValue({ members: [] });
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -165,6 +172,7 @@ describe('useChatSession', () => {
               promptTokens: 100,
               completionTokens: 50,
               totalTokens: 150,
+              cachedTokens: 30,
             },
           }),
         ]),
@@ -184,6 +192,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 30,
         });
       });
     });
@@ -206,6 +215,7 @@ describe('useChatSession', () => {
               prompt_tokens: 200,
               completion_tokens: 80,
               total_tokens: 280,
+              prompt_tokens_details: { cached_tokens: 60 },
             },
           },
         ]),
@@ -225,6 +235,7 @@ describe('useChatSession', () => {
           prompt_tokens: 200,
           completion_tokens: 80,
           total_tokens: 280,
+          cached_tokens: 60,
         });
       });
     });
@@ -263,6 +274,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 0,
         });
       });
     });
@@ -345,6 +357,7 @@ describe('useChatSession', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
+          cached_tokens: 0,
         });
       });
 
@@ -357,6 +370,7 @@ describe('useChatSession', () => {
           prompt_tokens: 300,
           completion_tokens: 150,
           total_tokens: 450,
+          cached_tokens: 0,
         });
       });
     });
@@ -393,6 +407,7 @@ describe('useChatSession', () => {
           prompt_tokens: 50,
           completion_tokens: 25,
           total_tokens: 75,
+          cached_tokens: 0,
         });
       });
     });
@@ -436,6 +451,7 @@ describe('useChatSession', () => {
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
+          cached_tokens: 0,
         });
         expect(result.current.messageTokenUsage).toEqual({});
         expect(result.current.messages).toEqual([]);
@@ -824,7 +840,7 @@ describe('useChatSession', () => {
       ],
     };
 
-    it('blocks sending and sets an error when a required parameter is missing', async () => {
+    it('blocks sending without setting an error when a required parameter is missing', async () => {
       mockGetByName.mockResolvedValue(agentWithQueryParam);
 
       const { result } = renderHook(
@@ -833,14 +849,14 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       await act(async () => {
         await result.current.sendMessage('Hello');
       });
 
-      expect(result.current.error).toMatch(/muting/);
+      expect(result.current.error).toBeNull();
       expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
       expect(mockSubmitChatQuery).not.toHaveBeenCalled();
     });
@@ -861,11 +877,18 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       act(() => {
-        result.current.setParameterValue('muting', 'BANANAPHONE');
+        result.current.addParameterRow();
+      });
+      const rowId = result.current.parameterRows[0].id;
+      act(() => {
+        result.current.setParameterRowName(rowId, 'muting');
+      });
+      act(() => {
+        result.current.setParameterRowValue(rowId, 'BANANAPHONE');
       });
 
       await act(async () => {

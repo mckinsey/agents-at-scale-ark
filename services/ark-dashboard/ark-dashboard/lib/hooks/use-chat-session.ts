@@ -19,6 +19,8 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
 import {
   type ApiQueryParameter,
+  type ParameterRow,
+  type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { chatService } from '@/lib/services';
@@ -128,9 +130,17 @@ interface UseChatSessionReturn {
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
   pollAfterApproval: () => Promise<void>;
-  requiredParameters: string[];
-  parameterValues: Record<string, string>;
-  setParameterValue: (name: string, value: string) => void;
+  parameterVariant: 'agent' | 'team';
+  hasParameters: boolean;
+  availableParameters: string[];
+  teamAgents: TeamAgentParameters[];
+  parameterRows: ParameterRow[];
+  addParameterRow: () => void;
+  setParameterRowName: (id: string, name: string) => void;
+  setParameterRowValue: (id: string, value: string) => void;
+  setParameterRowAgent: (id: string, agent: string) => void;
+  removeParameterRow: (id: string) => void;
+  canAddParameterRow: boolean;
   missingParameters: string[];
 }
 
@@ -207,6 +217,7 @@ export function useChatSession({
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
+          cached_tokens: 0,
         };
         return {
           ...safePrev,
@@ -217,6 +228,7 @@ export function useChatSession({
               completion_tokens:
                 currentUsage.completion_tokens + usage.completion_tokens,
               total_tokens: currentUsage.total_tokens + usage.total_tokens,
+              cached_tokens: currentUsage.cached_tokens + usage.cached_tokens,
             },
           },
         };
@@ -253,9 +265,17 @@ export function useChatSession({
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
-    requiredParameters,
-    values: parameterValues,
-    setValue: setParameterValue,
+    variant: parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    rows: parameterRows,
+    addRow: addParameterRow,
+    setRowName: setParameterRowName,
+    setRowValue: setParameterRowValue,
+    setRowAgent: setParameterRowAgent,
+    removeRow: removeParameterRow,
+    canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(name, type);
@@ -503,12 +523,14 @@ export function useChatSession({
                 prompt_tokens: arkTokenUsage.promptTokens || 0,
                 completion_tokens: arkTokenUsage.completionTokens || 0,
                 total_tokens: arkTokenUsage.totalTokens || 0,
+                cached_tokens: arkTokenUsage.cachedTokens || 0,
               }
             : typedChunk?.usage
               ? {
                   prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
                   completion_tokens: typedChunk.usage.completion_tokens ?? 0,
                   total_tokens: typedChunk.usage.total_tokens ?? 0,
+                  cached_tokens: typedChunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
                 }
               : null;
 
@@ -916,12 +938,6 @@ export function useChatSession({
       setError(null);
 
       if (missingParameters.length > 0) {
-        const plural = missingParameters.length > 1;
-        setError(
-          `This agent needs the ${missingParameters.join(', ')} parameter${
-            plural ? 's' : ''
-          } — supply ${plural ? 'them' : 'it'} above, or use the Queries form to create the query.`,
-        );
         return;
       }
 
@@ -1003,7 +1019,12 @@ export function useChatSession({
       [chatKey]: {
         messages: [],
         sessionId: newSessionId,
-        tokenUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        tokenUsage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          cached_tokens: 0,
+        },
         messageTokenUsage: {},
       },
     }));
@@ -1162,9 +1183,17 @@ export function useChatSession({
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,
     pollAfterApproval,
-    requiredParameters,
-    parameterValues,
-    setParameterValue,
+    parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    parameterRows,
+    addParameterRow,
+    setParameterRowName,
+    setParameterRowValue,
+    setParameterRowAgent,
+    removeParameterRow,
+    canAddParameterRow,
     missingParameters,
   };
 }
