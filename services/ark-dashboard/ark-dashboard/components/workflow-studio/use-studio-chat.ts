@@ -8,7 +8,10 @@ import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
 import type { ConversationMessage } from '@/lib/services/conversations';
 import { studioChatHistoryService } from '@/lib/services/studio-chat-history';
-import type { ArkExtendedChunk } from '@/lib/types/chat-message';
+import type {
+  ArkCompletedQueryData,
+  ArkExtendedChunk,
+} from '@/lib/types/chat-message';
 import { extractWorkflowYaml } from '@/lib/utils/extract-workflow-yaml';
 import { generateUUID } from '@/lib/utils/uuid';
 
@@ -121,6 +124,108 @@ function historyToStudioMessages(
   return studioMessages;
 }
 
+interface StreamAccumulator {
+  assistantText: string;
+  toolCalls: ToolCallData[];
+  conversationId?: string;
+  hadError: boolean;
+  errorMessage: string;
+}
+
+type ToolCallDelta = {
+  id?: string;
+  function?: { name?: string; arguments?: string };
+};
+
+type ChunkOutcome = 'skip' | 'break' | 'update';
+
+function mergeToolCallDeltas(
+  toolCalls: ToolCallData[],
+  deltas: ToolCallDelta[],
+): void {
+  for (const toolCallDelta of deltas) {
+    let existingIndex = -1;
+    if (toolCallDelta.id) {
+      existingIndex = toolCalls.findIndex(tc => tc.id === toolCallDelta.id);
+    }
+    if (existingIndex === -1 && toolCallDelta.function?.name) {
+      toolCalls.push({
+        id: toolCallDelta.id || '',
+        type: 'function',
+        function: {
+          name: toolCallDelta.function.name,
+          arguments: '',
+        },
+      });
+      existingIndex = toolCalls.length - 1;
+    }
+    if (existingIndex === -1) {
+      continue;
+    }
+    if (toolCallDelta.id) {
+      toolCalls[existingIndex].id = toolCallDelta.id;
+    }
+    if (toolCallDelta.function?.arguments) {
+      toolCalls[existingIndex].function.arguments +=
+        toolCallDelta.function.arguments;
+    }
+  }
+}
+
+function applyCompletionData(
+  acc: StreamAccumulator,
+  completedQuery: ArkCompletedQueryData['completedQuery'],
+): void {
+  const status = completedQuery?.status;
+  if (status?.conversationId) {
+    acc.conversationId = status.conversationId;
+  }
+  if (status?.phase === 'error') {
+    acc.hadError = true;
+    acc.errorMessage = status.response?.content || 'Query failed';
+  }
+}
+
+function handleStreamChunk(
+  acc: StreamAccumulator,
+  typedChunk: ArkExtendedChunk,
+): ChunkOutcome {
+  if ('type' in typedChunk && typedChunk.type === 'tool_approval_request') {
+    return 'skip';
+  }
+
+  if ('error' in typedChunk && typedChunk.error) {
+    acc.hadError = true;
+    acc.errorMessage = typedChunk.error.message || 'An error occurred';
+    return 'break';
+  }
+
+  if (
+    'id' in typedChunk &&
+    typedChunk.id === 'chatcmpl-final' &&
+    'ark' in typedChunk &&
+    typedChunk.ark
+  ) {
+    applyCompletionData(acc, typedChunk.ark.completedQuery);
+    if (acc.hadError) {
+      return 'break';
+    }
+  }
+
+  const delta =
+    'choices' in typedChunk ? typedChunk.choices?.[0]?.delta : undefined;
+
+  if (delta?.content) {
+    acc.assistantText += delta.content;
+  }
+
+  if (delta?.tool_calls) {
+    mergeToolCallDeltas(acc.toolCalls, delta.tool_calls);
+  }
+
+  return 'update';
+}
+
 export function useStudioChat({
   draftYaml,
   lastAgentYaml,
@@ -212,11 +317,12 @@ export function useStudioChat({
       setBuilding(true);
       setIsStreaming(true);
 
-      let assistantText = '';
-      const toolCalls: ToolCallData[] = [];
-      let hadError = false;
-      let errorMessage = '';
-      let conversationId: string | undefined;
+      const acc: StreamAccumulator = {
+        assistantText: '',
+        toolCalls: [],
+        hadError: false,
+        errorMessage: '',
+      };
 
       const updateAssistant = () => {
         setMessages(prev =>
@@ -224,8 +330,9 @@ export function useStudioChat({
             message.id === assistantId
               ? {
                   ...message,
-                  content: assistantText,
-                  toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
+                  content: acc.assistantText,
+                  toolCalls:
+                    acc.toolCalls.length > 0 ? [...acc.toolCalls] : undefined,
                 }
               : message,
           ),
@@ -244,94 +351,28 @@ export function useStudioChat({
         );
 
         for await (const chunk of chunks) {
-          const typedChunk = chunk as unknown as ArkExtendedChunk;
-
-          if (
-            'type' in typedChunk &&
-            typedChunk.type === 'tool_approval_request'
-          ) {
+          const outcome = handleStreamChunk(
+            acc,
+            chunk as unknown as ArkExtendedChunk,
+          );
+          if (outcome === 'skip') {
             continue;
           }
-
-          if ('error' in typedChunk && typedChunk.error) {
-            hadError = true;
-            errorMessage = typedChunk.error.message || 'An error occurred';
+          if (outcome === 'break') {
             break;
           }
-
-          if (
-            'id' in typedChunk &&
-            typedChunk.id === 'chatcmpl-final' &&
-            'ark' in typedChunk &&
-            typedChunk.ark
-          ) {
-            const arkData = typedChunk.ark;
-            const returnedConversationId =
-              arkData.completedQuery?.status?.conversationId;
-            if (returnedConversationId) {
-              conversationId = returnedConversationId;
-            }
-            if (arkData.completedQuery?.status?.phase === 'error') {
-              hadError = true;
-              errorMessage =
-                arkData.completedQuery.status.response?.content ||
-                'Query failed';
-              break;
-            }
-          }
-
-          const delta =
-            'choices' in typedChunk
-              ? typedChunk.choices?.[0]?.delta
-              : undefined;
-
-          if (delta?.content) {
-            assistantText += delta.content;
-          }
-
-          if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              let existingIndex = -1;
-              if (toolCallDelta.id) {
-                existingIndex = toolCalls.findIndex(
-                  tc => tc.id === toolCallDelta.id,
-                );
-              }
-              if (existingIndex === -1 && toolCallDelta.function?.name) {
-                toolCalls.push({
-                  id: toolCallDelta.id || '',
-                  type: 'function',
-                  function: {
-                    name: toolCallDelta.function.name,
-                    arguments: '',
-                  },
-                });
-                existingIndex = toolCalls.length - 1;
-              }
-              if (existingIndex !== -1) {
-                if (toolCallDelta.id) {
-                  toolCalls[existingIndex].id = toolCallDelta.id;
-                }
-                if (toolCallDelta.function?.arguments) {
-                  toolCalls[existingIndex].function.arguments +=
-                    toolCallDelta.function.arguments;
-                }
-              }
-            }
-          }
-
           updateAssistant();
         }
 
-        if (conversationId) {
-          conversationIdRef.current = conversationId;
+        if (acc.conversationId) {
+          conversationIdRef.current = acc.conversationId;
         }
 
-        if (hadError) {
+        if (acc.hadError) {
           setMessages(prev =>
             prev.map(message =>
               message.id === assistantId
-                ? { ...message, content: errorMessage, status: 'failed' }
+                ? { ...message, content: acc.errorMessage, status: 'failed' }
                 : message,
             ),
           );
@@ -340,7 +381,7 @@ export function useStudioChat({
 
         updateAssistant();
 
-        const extraction = extractWorkflowYaml(assistantText);
+        const extraction = extractWorkflowYaml(acc.assistantText);
         if (extraction.ok) {
           commitAgentYaml(extraction.yaml);
         } else if (extraction.reason === 'invalid') {
