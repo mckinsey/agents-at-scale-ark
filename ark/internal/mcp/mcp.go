@@ -31,7 +31,7 @@ type MCPClient struct {
 }
 
 const (
-	connectMaxReties = 5
+	connectMaxRetries = 5
 
 	sseTransport  = "sse"
 	httpTransport = "http"
@@ -72,7 +72,7 @@ func NewMCPClient(ctx context.Context, url string, headers map[string]string, tr
 	maps.Copy(mergedHeaders, headers)
 	maps.Copy(mergedHeaders, mcpSetting.Headers)
 
-	mcpClient, err := createMCPClientWithRetry(ctx, url, mergedHeaders, transportType, timeout, connectMaxReties)
+	mcpClient, err := createMCPClientWithRetry(ctx, url, mergedHeaders, transportType, timeout, connectMaxRetries)
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +170,12 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			WWWAuthenticate: resp.Header.Get("WWW-Authenticate"),
 		}
 		t.mu.Unlock()
+	}
+	if err == nil && resp != nil && isTransientHTTPStatus(resp.StatusCode) {
+		if capture := transientCaptureFrom(req.Context()); capture != nil {
+			retryAfter, _ := parseRetryAfter(resp.Header.Get("Retry-After"))
+			capture.record(resp.StatusCode, retryAfter)
+		}
 	}
 	return resp, err
 }
