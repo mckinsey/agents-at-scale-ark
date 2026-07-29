@@ -240,6 +240,52 @@ func TestResolveA2AExecutionTimeout_DefaultsWhenNoDeadline(t *testing.T) {
 	assert.Equal(t, defaultA2AExecutionTimeout, timeout)
 }
 
+func TestWithA2AExecutionTimeout_AppliesServerTimeout(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		Spec: arkv1prealpha1.A2AServerSpec{Timeout: "30m"},
+	}
+
+	ctx, cancel, err := withA2AExecutionTimeout(context.Background(), a2aServer)
+	require.NoError(t, err)
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	assert.WithinDuration(t, time.Now().Add(30*time.Minute), deadline, time.Minute)
+}
+
+func TestWithA2AExecutionTimeout_PreservesCallerDeadline(t *testing.T) {
+	callerCtx, callerCancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer callerCancel()
+
+	ctx, cancel, err := withA2AExecutionTimeout(callerCtx, &arkv1prealpha1.A2AServer{})
+	require.NoError(t, err)
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	assert.WithinDuration(t, time.Now().Add(20*time.Minute), deadline, time.Minute)
+}
+
+func TestWithA2AExecutionTimeout_InvalidServerTimeout(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		Spec: arkv1prealpha1.A2AServerSpec{Timeout: "not-a-duration"},
+	}
+
+	_, _, err := withA2AExecutionTimeout(context.Background(), a2aServer)
+	require.Error(t, err)
+}
+
+func TestStreamFinalResponseChunk(t *testing.T) {
+	stream := &mockEventStream{}
+
+	streamFinalResponseChunk(context.Background(), nil, "model-1", "hello")
+	assert.Empty(t, stream.chunks)
+
+	streamFinalResponseChunk(context.Background(), stream, "model-1", "hello")
+	require.Len(t, stream.chunks, 1)
+}
+
 func TestStreamContentChunkSkipsEmpty(t *testing.T) {
 	ctx := context.Background()
 	stream := &mockEventStream{}

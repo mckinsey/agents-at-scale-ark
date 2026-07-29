@@ -57,15 +57,11 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	timeout, err := resolveA2AExecutionTimeout(ctx, &a2aServer)
+	ctx, cancel, err := withA2AExecutionTimeout(ctx, &a2aServer)
 	if err != nil {
 		return nil, err
 	}
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
+	defer cancel()
 
 	content := ""
 	if userInput.OfUser != nil && userInput.OfUser.Content.OfString.Value != "" {
@@ -95,16 +91,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	responseMessage := NewAssistantMessage(a2aResponse.Content)
 
-	if eventStream != nil {
-		completionID := getQueryID(ctx)
-		chunk := NewContentChunk(completionID, modelID, a2aResponse.Content)
-		chunk.Choices[0].Delta.Role = RoleAssistant
-		chunk.Choices[0].FinishReason = "stop"
-		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
-		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
-			log.Error(err, "failed to send A2A response chunk to event stream")
-		}
-	}
+	streamFinalResponseChunk(ctx, eventStream, modelID, a2aResponse.Content)
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
@@ -172,6 +159,19 @@ func resolveA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A
 		return 0, nil
 	}
 	return defaultA2AExecutionTimeout, nil
+}
+
+func withA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) (context.Context, context.CancelFunc, error) {
+	timeout, err := resolveA2AExecutionTimeout(ctx, a2aServer)
+	if err != nil {
+		return nil, nil, err
+	}
+	if timeout <= 0 {
+		return ctx, func() {}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	return ctx, cancel, nil
 }
 
 var defaultA2AStreamIdleTimeout = 8 * time.Minute
@@ -307,6 +307,20 @@ func streamContentChunk(ctx context.Context, eventStream EventStreamInterface, c
 	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
 	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to send A2A streaming chunk")
+	}
+}
+
+func streamFinalResponseChunk(ctx context.Context, eventStream EventStreamInterface, modelID, content string) {
+	if eventStream == nil {
+		return
+	}
+
+	chunk := NewContentChunk(getQueryID(ctx), modelID, content)
+	chunk.Choices[0].Delta.Role = RoleAssistant
+	chunk.Choices[0].FinishReason = "stop"
+	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to send A2A response chunk to event stream")
 	}
 }
 
