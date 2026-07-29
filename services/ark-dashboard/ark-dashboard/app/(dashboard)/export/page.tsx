@@ -116,6 +116,7 @@ function ExportTableRow({
 
   return (
     <TableRow
+      selected={selected}
       className="relative isolate cursor-pointer transition-colors"
       onClick={() => onToggle(!selected)}>
       <TableCell size="small" className={COL.select}>
@@ -177,7 +178,12 @@ export default function ExportPage() {
     try {
       setIsLoading(true);
       setSelectedKeys(new Set());
-      setResources(await exportService.fetchAllResources());
+      const [data, lastTime] = await Promise.all([
+        exportService.fetchAllResources(),
+        exportService.getLastExportTime(),
+      ]);
+      setResources(data);
+      setLastExportTime(lastTime);
     } catch (error) {
       toast.error('Failed to load resources', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -188,8 +194,7 @@ export default function ExportPage() {
   }, []);
 
   useEffect(() => {
-    void loadResources();
-    void exportService.getLastExportTime().then(setLastExportTime);
+    loadResources();
   }, [namespace, loadResources]);
 
   const allRows = useMemo<ExportRow[]>(() => {
