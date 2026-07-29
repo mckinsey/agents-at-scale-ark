@@ -381,7 +381,12 @@ function StandardMessage({
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
   const alignClass = isUser ? 'items-end' : 'items-start';
-  const bubbleWidthClass = shouldExpand ? '' : 'max-w-[80%]';
+  let bubbleWidthClass = 'max-w-[80%]';
+  if (shouldExpand) {
+    bubbleWidthClass = '';
+  } else if (constrainWidth && !isUser) {
+    bubbleWidthClass = 'w-full';
+  }
   const bubbleStyle =
     shouldExpand && expandedWidth
       ? { minWidth: `${expandedWidth}px` }

@@ -159,5 +159,23 @@ describe('collapsible fenced code blocks', () => {
 
       expect(isBodyVisible(container)).toBe(true);
     });
+
+    it('lets the user expand a collapsed block when constrainWidth is set', () => {
+      const { container } = render(
+        <ChatMessage
+          role="assistant"
+          viewMode="markdown"
+          content={'```yaml\nkey: value\n```'}
+          defaultCodeCollapsed
+          constrainWidth
+        />,
+      );
+
+      expect(isBodyVisible(container)).toBe(false);
+
+      fireEvent.click(screen.getByRole('button', { name: /yaml/i }));
+
+      expect(isBodyVisible(container)).toBe(true);
+    });
   });
 });
