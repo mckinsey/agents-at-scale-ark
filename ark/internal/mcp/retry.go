@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const jsonrpcCodeRejectedByTransport = -32005
@@ -29,6 +32,74 @@ func defaultRetryConfig() RetryConfig {
 		BaseDelay:   500 * time.Millisecond,
 		MaxDelay:    4 * time.Second,
 	}
+}
+
+func (cfg RetryConfig) withDefaults() RetryConfig {
+	def := defaultRetryConfig()
+	if cfg.MaxAttempts <= 0 {
+		cfg.MaxAttempts = def.MaxAttempts
+	}
+	if cfg.Budget <= 0 {
+		cfg.Budget = def.Budget
+	}
+	if cfg.BaseDelay <= 0 {
+		cfg.BaseDelay = def.BaseDelay
+	}
+	if cfg.MaxDelay <= 0 {
+		cfg.MaxDelay = def.MaxDelay
+	}
+	return cfg
+}
+
+func (c *MCPClient) CallTool(ctx context.Context, params *mcpsdk.CallToolParams) (*mcpsdk.CallToolResult, error) {
+	if c.Client == nil {
+		return nil, errors.New("MCP client session not initialized")
+	}
+
+	log := logf.FromContext(ctx)
+	cfg := c.retry.withDefaults()
+	ctx, capture := withTransientCapture(ctx)
+	budgetEnd := time.Now().Add(cfg.Budget)
+
+	var lastErr error
+	var retryAfter time.Duration
+	attempts := 0
+
+	for attempts < cfg.MaxAttempts {
+		if attempts > 0 {
+			delay := toolCallBackoff(attempts-1, cfg, retryAfter)
+			wakeAt := time.Now().Add(delay)
+			if wakeAt.After(budgetEnd) {
+				break
+			}
+			if ctxDeadline, ok := ctx.Deadline(); ok && wakeAt.After(ctxDeadline) {
+				break
+			}
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, fmt.Errorf("tool call %s aborted during retry backoff: %w", params.Name, ctx.Err())
+			case <-timer.C:
+			}
+		}
+
+		attempts++
+		result, err := c.Client.CallTool(ctx, params)
+		if err == nil {
+			return result, nil
+		}
+
+		status, nextRetryAfter, captured := capture.take()
+		if !isRetryableToolCallError(err, status, captured) {
+			return nil, err
+		}
+		lastErr = err
+		retryAfter = nextRetryAfter
+		log.V(1).Info("retrying MCP tool call after transient error", "tool", params.Name, "attempt", attempts, "status", status, "error", err.Error())
+	}
+
+	return nil, fmt.Errorf("tool call %s failed after %d attempts: %w", params.Name, attempts, lastErr)
 }
 
 type transientCaptureKey struct{}

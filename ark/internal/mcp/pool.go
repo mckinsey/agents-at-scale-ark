@@ -19,11 +19,13 @@ type MCPClientConfig struct {
 type MCPClientPool struct {
 	mu      sync.RWMutex
 	clients map[string]*MCPClient
+	opts    []Option
 }
 
-func NewMCPClientPool() *MCPClientPool {
+func NewMCPClientPool(opts ...Option) *MCPClientPool {
 	return &MCPClientPool{
 		clients: make(map[string]*MCPClient),
+		opts:    opts,
 	}
 }
 
@@ -46,7 +48,7 @@ func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConf
 
 	mcpSetting := mcpSettings[key]
 
-	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting)
+	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting, p.opts...)
 	if err != nil {
 		return nil, err
 	}

@@ -28,6 +28,15 @@ type MCPClient struct {
 	URL     string
 	Headers map[string]string
 	Client  *mcpsdk.ClientSession
+	retry   RetryConfig
+}
+
+type Option func(*MCPClient)
+
+func WithToolCallRetry(cfg RetryConfig) Option {
+	return func(c *MCPClient) {
+		c.retry = cfg
+	}
 }
 
 const (
@@ -67,7 +76,7 @@ func IsUnauthorizedError(err error) (*UnauthorizedError, bool) {
 	return nil, false
 }
 
-func NewMCPClient(ctx context.Context, url string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings) (*MCPClient, error) {
+func NewMCPClient(ctx context.Context, url string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings, opts ...Option) (*MCPClient, error) {
 	mergedHeaders := make(map[string]string)
 	maps.Copy(mergedHeaders, headers)
 	maps.Copy(mergedHeaders, mcpSetting.Headers)
@@ -77,9 +86,13 @@ func NewMCPClient(ctx context.Context, url string, headers map[string]string, tr
 		return nil, err
 	}
 
+	for _, opt := range opts {
+		opt(mcpClient)
+	}
+
 	if len(mcpSetting.ToolCalls) > 0 {
 		for _, setting := range mcpSetting.ToolCalls {
-			if _, err := mcpClient.Client.CallTool(ctx, &setting); err != nil {
+			if _, err := mcpClient.CallTool(ctx, &setting); err != nil {
 				return nil, fmt.Errorf("failed to execute MCP setting tool call %s: %w", setting.Name, err)
 			}
 		}
