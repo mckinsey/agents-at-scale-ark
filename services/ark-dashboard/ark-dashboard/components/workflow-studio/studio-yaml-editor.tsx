@@ -1,7 +1,14 @@
 'use client';
 
-import { type ReactNode, useRef } from 'react';
+import { useAtomValue } from 'jotai';
+import { useRef } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import {
+  oneDark,
+  oneLight,
+} from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+import { isExperimentalDarkModeEnabledAtom } from '@/atoms/experimental-features';
 import { ErrorIcon, Lock } from '@/components/icons';
 
 interface StudioYamlEditorError {
@@ -16,108 +23,11 @@ interface StudioYamlEditorProps {
   error?: StudioYamlEditorError;
 }
 
-function highlightValue(value: string, keyPrefix: string): ReactNode {
-  const trimmed = value.trimStart();
-  if (trimmed === '') {
-    return value;
-  }
-  const leading = value.slice(0, value.length - trimmed.length);
-  if (trimmed.startsWith('#')) {
-    return (
-      <span key={keyPrefix} className="yaml-tok-comment">
-        {value}
-      </span>
-    );
-  }
-  if (/^["']/.test(trimmed)) {
-    return (
-      <span key={keyPrefix}>
-        {leading}
-        <span className="yaml-tok-str">{trimmed}</span>
-      </span>
-    );
-  }
-  if (/^(true|false|null)\s*$/i.test(trimmed)) {
-    return (
-      <span key={keyPrefix}>
-        {leading}
-        <span className="yaml-tok-bool">{trimmed}</span>
-      </span>
-    );
-  }
-  if (/^-?\d[\d.]*\s*$/.test(trimmed)) {
-    return (
-      <span key={keyPrefix}>
-        {leading}
-        <span className="yaml-tok-num">{trimmed}</span>
-      </span>
-    );
-  }
-  return (
-    <span key={keyPrefix} className="yaml-tok-val">
-      {value}
-    </span>
-  );
-}
-
-function highlightLine(line: string, index: number): ReactNode {
-  if (line.trimStart().startsWith('#')) {
-    return (
-      <span key={index} className="yaml-tok-comment">
-        {line}
-      </span>
-    );
-  }
-
-  const keyMatch = /^(\s*)(- )?([A-Za-z0-9_.-]+)(:)(?=\s|$)(.*)$/.exec(line);
-  if (keyMatch) {
-    const [, indent, dash, key, colon, rest] = keyMatch;
-    return (
-      <span key={index}>
-        {indent}
-        {dash ? <span className="yaml-tok-punc">{dash}</span> : null}
-        <span className="yaml-tok-key">{key}</span>
-        <span className="yaml-tok-punc">{colon}</span>
-        {highlightValue(rest, `${index}-v`)}
-      </span>
-    );
-  }
-
-  const listMatch = /^(\s*)(- )(.*)$/.exec(line);
-  if (listMatch) {
-    const [, indent, dash, rest] = listMatch;
-    return (
-      <span key={index}>
-        {indent}
-        <span className="yaml-tok-punc">{dash}</span>
-        {highlightValue(rest, `${index}-v`)}
-      </span>
-    );
-  }
-
-  return <span key={index}>{line}</span>;
-}
-
-function highlightYaml(source: string, errorLine?: number): ReactNode[] {
-  const lines = source.split('\n');
-  return lines.map((line, index) => {
-    const content = highlightLine(line, index);
-    const node =
-      errorLine && index + 1 === errorLine ? (
-        <span key={index} className="yaml-err-line">
-          {line === '' ? ' ' : content}
-        </span>
-      ) : (
-        content
-      );
-    return (
-      <span key={index}>
-        {node}
-        {index < lines.length - 1 ? '\n' : null}
-      </span>
-    );
-  });
-}
+const EDITOR_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+const EDITOR_FONT_SIZE = '0.875rem';
+const EDITOR_LINE_HEIGHT = 1.625;
+const EDITOR_PADDING = '1rem';
 
 export function StudioYamlEditor({
   value,
@@ -125,17 +35,59 @@ export function StudioYamlEditor({
   readOnly,
   error,
 }: Readonly<StudioYamlEditorProps>) {
-  const highlightRef = useRef<HTMLPreElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const isDarkMode = useAtomValue(isExperimentalDarkModeEnabledAtom);
+  const theme = isDarkMode ? oneDark : oneLight;
 
   return (
     <div className="relative flex h-full w-full flex-col">
       <div className="relative min-h-0 flex-1">
-        <pre
+        <div
           ref={highlightRef}
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 m-0 overflow-auto p-4 font-mono text-sm leading-relaxed whitespace-pre">
-          <code>{highlightYaml(value, error?.line)}</code>
-        </pre>
+          className="pointer-events-none absolute inset-0 overflow-hidden">
+          <SyntaxHighlighter
+            language="yaml"
+            style={theme}
+            customStyle={{
+              margin: 0,
+              padding: EDITOR_PADDING,
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              overflow: 'visible',
+              width: 'max-content',
+              minWidth: '100%',
+              minHeight: '100%',
+              fontFamily: EDITOR_FONT_FAMILY,
+              fontSize: EDITOR_FONT_SIZE,
+              lineHeight: EDITOR_LINE_HEIGHT,
+              whiteSpace: 'pre',
+            }}
+            codeTagProps={{
+              style: {
+                fontFamily: EDITOR_FONT_FAMILY,
+                fontSize: EDITOR_FONT_SIZE,
+                lineHeight: EDITOR_LINE_HEIGHT,
+                whiteSpace: 'pre',
+              },
+            }}>
+            {value === '' ? ' ' : value}
+          </SyntaxHighlighter>
+          {error?.line ? (
+            <div
+              className="yaml-err-line"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                display: 'block',
+                fontSize: EDITOR_FONT_SIZE,
+                top: `calc(${EDITOR_PADDING} + ${(error.line - 1) * EDITOR_LINE_HEIGHT}em)`,
+                height: `${EDITOR_LINE_HEIGHT}em`,
+              }}
+            />
+          ) : null}
+        </div>
         <textarea
           data-testid="studio-yaml-editor"
           value={value}
@@ -151,7 +103,13 @@ export function StudioYamlEditor({
               highlightRef.current.scrollLeft = target.scrollLeft;
             }
           }}
-          className="caret-fg-primary absolute inset-0 resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-relaxed whitespace-pre text-transparent outline-none"
+          style={{
+            fontFamily: EDITOR_FONT_FAMILY,
+            fontSize: EDITOR_FONT_SIZE,
+            lineHeight: EDITOR_LINE_HEIGHT,
+            padding: EDITOR_PADDING,
+          }}
+          className="caret-fg-primary absolute inset-0 resize-none overflow-auto bg-transparent whitespace-pre text-transparent outline-none"
         />
         {readOnly && (
           <div
