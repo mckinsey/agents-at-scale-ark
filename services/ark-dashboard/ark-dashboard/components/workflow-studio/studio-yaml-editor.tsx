@@ -49,6 +49,7 @@ export function StudioYamlEditor({
 
   const gutterDigits = Math.max(2, String(lineNumbers.length).length);
   const gutterWidth = `calc(${gutterDigits}ch + ${GUTTER_PADDING_LEFT} + ${GUTTER_PADDING_RIGHT})`;
+  const editorPadding = `${EDITOR_PADDING} ${EDITOR_PADDING} ${EDITOR_PADDING} ${gutterWidth}`;
 
   return (
     <div className="relative flex h-full w-full flex-col">
@@ -62,10 +63,7 @@ export function StudioYamlEditor({
             style={theme}
             customStyle={{
               margin: 0,
-              paddingTop: EDITOR_PADDING,
-              paddingBottom: EDITOR_PADDING,
-              paddingRight: EDITOR_PADDING,
-              paddingLeft: gutterWidth,
+              padding: editorPadding,
               background: 'transparent',
               backgroundColor: 'transparent',
               overflow: 'visible',
@@ -124,10 +122,7 @@ export function StudioYamlEditor({
             fontFamily: EDITOR_FONT_FAMILY,
             fontSize: EDITOR_FONT_SIZE,
             lineHeight: EDITOR_LINE_HEIGHT,
-            paddingTop: EDITOR_PADDING,
-            paddingBottom: EDITOR_PADDING,
-            paddingRight: EDITOR_PADDING,
-            paddingLeft: gutterWidth,
+            padding: editorPadding,
           }}
           className="caret-fg-primary absolute inset-0 resize-none overflow-auto bg-transparent whitespace-pre text-transparent outline-none"
         />
@@ -136,7 +131,11 @@ export function StudioYamlEditor({
           aria-hidden="true"
           data-testid="studio-yaml-gutter"
           className="text-fg-tertiary border-stroke-divider bg-background pointer-events-none absolute inset-y-0 left-0 overflow-hidden border-r select-none"
-          style={{ width: gutterWidth }}>
+          style={{
+            width: gutterWidth,
+            fontFamily: EDITOR_FONT_FAMILY,
+            fontSize: EDITOR_FONT_SIZE,
+          }}>
           <div
             style={{
               paddingTop: EDITOR_PADDING,
