@@ -157,6 +157,7 @@ export function StudioChatPanel({
                 content={message.content}
                 viewMode="markdown"
                 defaultCodeCollapsed
+                constrainWidth
                 status={message.status}
                 sender={
                   message.role === 'assistant'

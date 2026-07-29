@@ -38,6 +38,7 @@ interface ChatMessageProps {
   namespace?: string;
   pollAfterApproval?: () => Promise<void>;
   defaultCodeCollapsed?: boolean;
+  constrainWidth?: boolean;
 }
 
 type ApprovalDecision = 'approved' | 'rejected';
@@ -356,6 +357,7 @@ function StandardMessage({
   toolCalls,
   className,
   defaultCodeCollapsed,
+  constrainWidth,
 }: Readonly<{
   isUser: boolean;
   isFailed: boolean;
@@ -367,6 +369,7 @@ function StandardMessage({
   toolCalls?: ToolCallData[];
   className?: string;
   defaultCodeCollapsed?: boolean;
+  constrainWidth?: boolean;
 }>) {
   const markdownContent = renderMarkdown(content, { defaultCodeCollapsed });
   const { contentRef, needsExpansion, expandedWidth } = useContentExpansion(
@@ -374,12 +377,13 @@ function StandardMessage({
     markdownContent,
   );
 
+  const shouldExpand = !constrainWidth && needsExpansion;
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
   const alignClass = isUser ? 'items-end' : 'items-start';
-  const bubbleWidthClass = needsExpansion ? '' : 'max-w-[80%]';
+  const bubbleWidthClass = shouldExpand ? '' : 'max-w-[80%]';
   const bubbleStyle =
-    needsExpansion && expandedWidth
+    shouldExpand && expandedWidth
       ? { minWidth: `${expandedWidth}px` }
       : undefined;
 
@@ -437,6 +441,7 @@ export function ChatMessage({
   namespace = 'default',
   pollAfterApproval,
   defaultCodeCollapsed,
+  constrainWidth,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -479,6 +484,7 @@ export function ChatMessage({
       toolCalls={toolCalls}
       className={className}
       defaultCodeCollapsed={defaultCodeCollapsed}
+      constrainWidth={constrainWidth}
     />
   );
 }
