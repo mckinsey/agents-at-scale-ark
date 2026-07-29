@@ -1,5 +1,7 @@
 # Deploy kubernetes-mcp-server in production and enable it by default
 
+> **Status: Superseded / outdated (archived unimplemented).** This proposal shipped an in-repo production umbrella chart and enabled the server by default in devspace. We instead publish `kubernetes-mcp-server` to the Ark marketplace and offer it as an optional, marketplace-backed install in the ark CLI (`tools/ark-cli/src/arkServices.ts`), matching `noah` / `file-gateway`. Archived for the record; the deltas below were never synced into the canonical specs.
+
 ## Why
 
 PR #2536 (merged to `main`) wired the read-only `kubernetes-mcp-server` into the local `devspace dev` stack and added the Ark `MCPServer` registration that discovers its `resources_list` / `resources_get` `Tool` CRDs. That wiring is dev-only and opt-in: the server appears in the root `devspace.yaml` as a commented-out dependency, behind no enable flag and absent from the deploy/dev pipelines, with no production Helm path. Consumers that ground an Agent through these tools have no way to install the server in a real Ark deployment, and dev users must hand-uncomment it.
