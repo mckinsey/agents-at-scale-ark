@@ -55,26 +55,29 @@ describe('useStickyScroll', () => {
       .mockImplementation(() => {});
   });
 
+  it('disengages when the user scrolls above the threshold, then re-engages when scrolled back within it', () => {
+    render(<Harness />);
+    const container = screen.getByTestId('container');
+
+    // Start well above the bottom (distance = 700) — must disengage.
+    setGeometry(container, { scrollHeight: 1000, clientHeight: 300, scrollTop: 0 });
+    fireEvent.scroll(container);
+    scrollSpy.mockClear();
+    fireEvent.click(screen.getByTestId('scroll'));
+    expect(scrollSpy).not.toHaveBeenCalled();
+
+    // Now within the 100px threshold (distance = 50) — must re-engage.
+    setGeometry(container, { scrollHeight: 1000, clientHeight: 300, scrollTop: 650 });
+    fireEvent.scroll(container);
+    scrollSpy.mockClear();
+    fireEvent.click(screen.getByTestId('scroll'));
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('follows new content when the user is at the bottom', () => {
     render(<Harness />);
     const container = screen.getByTestId('container');
     setGeometry(container, { scrollHeight: 300, clientHeight: 300, scrollTop: 0 });
-
-    fireEvent.scroll(container);
-    scrollSpy.mockClear();
-    fireEvent.click(screen.getByTestId('scroll'));
-
-    expect(scrollSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('treats being within the threshold as at the bottom', () => {
-    render(<Harness />);
-    const container = screen.getByTestId('container');
-    setGeometry(container, {
-      scrollHeight: 1000,
-      clientHeight: 300,
-      scrollTop: 650,
-    });
 
     fireEvent.scroll(container);
     scrollSpy.mockClear();
@@ -95,16 +98,18 @@ describe('useStickyScroll', () => {
     expect(scrollSpy).not.toHaveBeenCalled();
   });
 
-  it('re-engages auto-follow after resumeAutoScroll', () => {
+  it('re-engages auto-follow after resumeAutoScroll even when scrolled up', () => {
     render(<Harness />);
     const container = screen.getByTestId('container');
     setGeometry(container, { scrollHeight: 1000, clientHeight: 300, scrollTop: 0 });
 
     fireEvent.scroll(container);
-    fireEvent.click(screen.getByTestId('resume'));
     scrollSpy.mockClear();
     fireEvent.click(screen.getByTestId('scroll'));
+    expect(scrollSpy).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByTestId('resume'));
+    fireEvent.click(screen.getByTestId('scroll'));
     expect(scrollSpy).toHaveBeenCalledTimes(1);
   });
 });

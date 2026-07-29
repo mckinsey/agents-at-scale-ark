@@ -323,7 +323,8 @@ export function useChatSession({
   }, []);
 
   useEffect(() => {
-    setTimeout(scrollToBottom, 100);
+    const id = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(id);
   }, [chatMessages, scrollToBottom]);
 
   const buildChatMessages = useCallback(
