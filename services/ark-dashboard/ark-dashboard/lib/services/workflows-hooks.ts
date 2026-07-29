@@ -60,9 +60,9 @@ export function useWorkflow(
           setLoading(false);
 
           const isTerminalState =
-            data.status.phase === 'Succeeded' ||
-            data.status.phase === 'Failed' ||
-            data.status.phase === 'Error';
+            data.status?.phase === 'Succeeded' ||
+            data.status?.phase === 'Failed' ||
+            data.status?.phase === 'Error';
 
           if (isTerminalState && intervalId) {
             clearInterval(intervalId);
@@ -85,9 +85,9 @@ export function useWorkflow(
 
       if (mounted && initialData) {
         const isTerminalState =
-          initialData.status.phase === 'Succeeded' ||
-          initialData.status.phase === 'Failed' ||
-          initialData.status.phase === 'Error';
+          initialData.status?.phase === 'Succeeded' ||
+          initialData.status?.phase === 'Failed' ||
+          initialData.status?.phase === 'Error';
 
         if (!isTerminalState) {
           intervalId = setInterval(fetchWorkflow, refreshInterval);

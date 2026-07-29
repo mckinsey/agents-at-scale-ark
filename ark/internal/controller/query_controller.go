@@ -61,6 +61,15 @@ const (
 	messageCleanupGracePeriod   = 5 * time.Minute
 	messageCleanupRetryInterval = 15 * time.Second
 
+	// queryExecutionFailedMsg is the log message emitted on every query error
+	// path; the stage field distinguishes where in dispatch the failure occurred.
+	queryExecutionFailedMsg = "query execution failed"
+
+	stageGetClient              = "get-client"
+	stageResolveTarget          = "resolve-target"
+	stageResolveDispatchAddress = "resolve-dispatch-address"
+	stageDispatch               = "dispatch"
+
 	// defaultCompletionsEngineName is the well-known name of the per-tenant
 	// completions ExecutionEngine. When a query has no explicitly named engine,
 	// the controller prefers an ExecutionEngine of this name in the query's
@@ -367,6 +376,11 @@ func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *ark
 	return ctrl.Result{}, nil
 }
 
+func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage string) {
+	logf.FromContext(ctx).Error(err, queryExecutionFailedMsg,
+		"query", obj.Name, "namespace", obj.Namespace, "stage", stage)
+}
+
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
 
@@ -412,6 +426,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
+		logQueryError(opCtx, err, &obj, stageGetClient)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
@@ -1432,6 +1447,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 	target, err := r.resolveTarget(opCtx, *obj, impersonatedClient)
 	if err != nil {
+		logQueryError(opCtx, err, obj, stageResolveTarget)
 		dispatchSpan.RecordError(err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve target: %v", err), err, nil)
 		return err
@@ -1443,6 +1459,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 	address, err := r.resolveDispatchAddress(opCtx, *target, obj.Namespace)
 	if err != nil {
+		logQueryError(opCtx, err, obj, stageResolveDispatchAddress)
 		dispatchSpan.RecordError(err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve dispatch address: %v", err), err, nil)
 		return err
@@ -1456,6 +1473,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
 			return err
 		}
+		logQueryError(opCtx, err, obj, stageDispatch)
 		dispatchSpan.RecordError(err)
 		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
