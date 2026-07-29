@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -24,6 +25,67 @@ import (
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
+
+func findCompletedCondition(q *arkv1alpha1.Query) *metav1.Condition {
+	for i := range q.Status.Conditions {
+		if q.Status.Conditions[i].Type == string(arkv1alpha1.QueryCompleted) {
+			return &q.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+// timeoutQueryBuilder assembles a Query configured for the spec.timeout
+// tests. Default is a 1ms budget, no anchor, no Response — override with the
+// with* methods and finalise with seed(phase).
+type timeoutQueryBuilder struct{ q *arkv1alpha1.Query }
+
+func newTimeoutQuery(name string) *timeoutQueryBuilder {
+	q := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+			Timeout: &metav1.Duration{Duration: time.Millisecond},
+			TTL:     &metav1.Duration{Duration: time.Hour},
+		},
+	}
+	Expect(q.Spec.SetInputString("timeout test")).To(Succeed())
+	return &timeoutQueryBuilder{q}
+}
+
+func (b *timeoutQueryBuilder) withTimeout(d time.Duration) *timeoutQueryBuilder {
+	b.q.Spec.Timeout.Duration = d
+	return b
+}
+
+func (b *timeoutQueryBuilder) withAnchorAgo(d time.Duration) *timeoutQueryBuilder {
+	if b.q.Annotations == nil {
+		b.q.Annotations = map[string]string{}
+	}
+	b.q.Annotations[roundAnchorAnnotation] = time.Now().Add(-d).UTC().Format(time.RFC3339Nano)
+	return b
+}
+
+func (b *timeoutQueryBuilder) withHITLResponse(taskID string) *timeoutQueryBuilder {
+	b.q.Status.Response = &arkv1alpha1.Response{
+		Target: arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+		Phase:  statusInputRequired,
+		A2A:    &arkv1alpha1.A2AMetadata{TaskID: taskID, ContextID: "ctx-" + taskID},
+	}
+	return b
+}
+
+// seed persists the Query, applies status.phase (and Response, if set), and
+// registers cleanup. Returns the persisted query for subsequent reconcile.
+func (b *timeoutQueryBuilder) seed(ctx context.Context, c client.Client, phase string) *arkv1alpha1.Query {
+	Expect(c.Create(ctx, b.q)).To(Succeed())
+	DeferCleanup(func() { _ = c.Delete(ctx, b.q) })
+	if phase != "" || b.q.Status.Response != nil {
+		b.q.Status.Phase = phase
+		Expect(c.Status().Update(ctx, b.q)).To(Succeed())
+	}
+	return b.q
+}
 
 var _ = Describe("Query Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -431,246 +493,98 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 	})
 
 	Context("spec.timeout enforcement", func() {
-		// Spec.Timeout is set to 1ms so the wall-clock budget is effectively
-		// zero by the time the reconciler runs. Time.Sleep in each test gives
-		// the deadline enough margin to elapse deterministically across CI.
-		newExpiredQuery := func(name string) *arkv1alpha1.Query {
-			q := &arkv1alpha1.Query{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-				Spec: arkv1alpha1.QuerySpec{
-					Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-					Timeout: &metav1.Duration{Duration: time.Millisecond},
-					TTL:     &metav1.Duration{Duration: time.Hour},
-				},
-			}
-			Expect(q.Spec.SetInputString("timeout test")).To(Succeed())
-			return q
+		var (
+			ctx context.Context
+			r   *QueryReconciler
+		)
+		BeforeEach(func() {
+			ctx = context.Background()
+			r = &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		})
+
+		reconcile := func(q *arkv1alpha1.Query) *arkv1alpha1.Query {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
+			_, _ = r.handleQueryExecution(ctx, req, *q)
+			out := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, out)).To(Succeed())
+			return out
 		}
 
-		findCompletedCondition := func(q *arkv1alpha1.Query) *metav1.Condition {
-			for i := range q.Status.Conditions {
-				if q.Status.Conditions[i].Type == string(arkv1alpha1.QueryCompleted) {
-					return &q.Status.Conditions[i]
-				}
-			}
-			return nil
-		}
-
-		// Shared exerciser: seed a query with the given non-terminal phase, let
-		// its 1ms spec.timeout elapse, drive one reconcile, assert the deadline
-		// wrote phase=error with the expected TimedOut* reason and message
-		// fragment. Extracted so the queued/running cases don't duplicate
-		// setup+assertions (dupl-linter clean).
-		expectTimeoutTransition := func(name, phase, wantReason, msgFragment string) {
-			ctx := context.Background()
-			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-			query := newExpiredQuery(name)
-			Expect(k8sClient.Create(ctx, query)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
-
-			query.Status.Phase = phase
-			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
-
-			time.Sleep(20 * time.Millisecond)
-
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
-			_, err := r.handleQueryExecution(ctx, req, *query)
-			Expect(err).NotTo(HaveOccurred())
-
-			after := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+		expectTimedOut := func(after *arkv1alpha1.Query, wantReason, msgFragment string) {
 			Expect(after.Status.Phase).To(Equal(statusError))
 			cond := findCompletedCondition(after)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal(wantReason))
 			Expect(cond.Message).To(ContainSubstring(msgFragment))
-			// Response.Content mirrors the timeout message so downstream
-			// observers (chat, dashboard, kubectl describe) see a
-			// discoverable "why" in the same slot executor errors populate.
-			Expect(after.Status.Response).NotTo(BeNil(), "timeout must populate response.content so the user-facing reason isn't asymmetric with executor errors")
+			Expect(after.Status.Response).NotTo(BeNil())
 			Expect(after.Status.Response.Content).To(ContainSubstring(msgFragment))
 			Expect(after.Status.Response.Phase).To(Equal(statusError))
 		}
 
-		It("fails a queued query with TimedOutInQueue when spec.timeout has elapsed", func() {
-			expectTimeoutTransition("timeout-queue-elapsed", statusQueued, reasonTimedOutInQueue, "capacity")
-		})
-
-		It("fails a pre-queue query (no phase set yet) with a neutral before-execution message", func() {
-			// Empty phase → don't overclaim "capacity"; it just means the
-			// reconciler hasn't gotten to it yet.
-			expectTimeoutTransition("timeout-prequeue-elapsed", "", reasonTimedOutInQueue, "before execution began")
-		})
-
-		// Shared exerciser for phases where spec.timeout does NOT apply at
-		// the reconciler level: running (executor per-round context takes
-		// over) and input-required (HITL owns its own timer via A2ATask).
-		// A query with elapsed wall time in either phase must NOT be
-		// auto-transitioned by the pre-flight check.
-		expectNoTransition := func(name, phase string) {
-			ctx := context.Background()
-			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-			query := newExpiredQuery(name)
-			Expect(k8sClient.Create(ctx, query)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
-
-			query.Status.Phase = phase
-			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
-			preRV := query.ResourceVersion
-
-			time.Sleep(20 * time.Millisecond)
-
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
-			// Guard against handleQueryExecution racing an execution spawn
-			// or A2ATask fetch on the running/input-required branches: we
-			// only care that the pre-flight timeout check did NOT fire.
-			_, _ = r.handleQueryExecution(ctx, req, *query)
-
-			after := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
-			Expect(after.Status.Phase).NotTo(Equal(statusError), "pre-flight must not fire for %s: spec.timeout is not a wall-SLO on this phase", phase)
-			cond := findCompletedCondition(after)
-			if cond != nil {
-				Expect(cond.Reason).NotTo(Or(Equal(reasonTimedOutInQueue), Equal(reasonTimedOutInExecution)), "no timeout reason should have been written")
+		expectNoTimeout := func(after *arkv1alpha1.Query) {
+			Expect(after.Status.Phase).NotTo(Equal(statusError))
+			if cond := findCompletedCondition(after); cond != nil {
+				Expect(cond.Reason).NotTo(Or(Equal(reasonTimedOutInQueue), Equal(reasonTimedOutInExecution)))
 			}
-			// Belt-and-braces: no timeout-shaped Response.
 			if after.Status.Response != nil {
 				Expect(after.Status.Response.Content).NotTo(ContainSubstring("timed out"))
 			}
-			_ = preRV
 		}
 
-		It("does not fail a running query on elapsed spec.timeout (executor per-round budget owns it)", func() {
-			expectNoTransition("timeout-running-onthehouse", statusRunning)
+		It("fails an elapsed queued query with TimedOutInQueue", func() {
+			q := newTimeoutQuery("elapsed-queued").seed(ctx, k8sClient, statusQueued)
+			time.Sleep(20 * time.Millisecond)
+			expectTimedOut(reconcile(q), reasonTimedOutInQueue, "capacity")
 		})
 
-		It("does not fail an input-required query on elapsed spec.timeout (HITL wait is on-the-house)", func() {
-			expectNoTransition("timeout-hitl-onthehouse", statusInputRequired)
+		It("fails an elapsed pre-queue query with a neutral before-execution message", func() {
+			q := newTimeoutQuery("elapsed-prequeue").seed(ctx, k8sClient, "")
+			time.Sleep(20 * time.Millisecond)
+			expectTimedOut(reconcile(q), reasonTimedOutInQueue, "before execution began")
 		})
 
-		It("gives a HITL-resumed query a fresh per-round budget when the round anchor is recent", func() {
-			// Per-round wall-SLO: even though creationTimestamp is well past
-			// spec.timeout, a freshly stamped round-anchor annotation resets
-			// the budget so the resumed round is not killed by pre-flight.
-			ctx := context.Background()
-			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		DescribeTable(
+			"pre-flight is not a wall-SLO on this phase",
+			func(phase string) {
+				q := newTimeoutQuery("no-transition-"+phase).seed(ctx, k8sClient, phase)
+				time.Sleep(20 * time.Millisecond)
+				expectNoTimeout(reconcile(q))
+			},
+			Entry("running (executor per-round budget owns it)", statusRunning),
+			Entry("input-required (HITL owns its own timer via A2ATask)", statusInputRequired),
+		)
 
-			// Longer per-round budget so a "fresh" anchor is unambiguously non-elapsed.
-			query := &arkv1alpha1.Query{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "timeout-hitl-fresh-anchor",
-					Namespace: "default",
-					Annotations: map[string]string{
-						roundAnchorAnnotation: time.Now().UTC().Format(time.RFC3339Nano),
-					},
-				},
-				Spec: arkv1alpha1.QuerySpec{
-					Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-					Timeout: &metav1.Duration{Duration: time.Minute},
-					TTL:     &metav1.Duration{Duration: time.Hour},
-				},
-			}
-			Expect(query.Spec.SetInputString("hitl fresh anchor")).To(Succeed())
-			Expect(k8sClient.Create(ctx, query)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
-
-			// Backdate creationTimestamp far past spec.timeout to prove the
-			// anchor annotation — not creationTimestamp — drives the budget.
-			// (Fake client accepts direct status.phase seeding; creationTimestamp
-			// is server-populated so we simulate the passage of time by using
-			// a 1-minute spec.timeout against a subsecond-old anchor.)
-			query.Status.Phase = statusQueued
-			query.Status.Response = &arkv1alpha1.Response{
-				Target: arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-				Phase:  statusInputRequired,
-				A2A:    &arkv1alpha1.A2AMetadata{ContextID: "ctx-fresh", TaskID: "task-fresh"},
-			}
-			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
-
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
-			_, _ = r.handleQueryExecution(ctx, req, *query)
-
-			after := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
-			Expect(after.Status.Phase).NotTo(Equal(statusError), "fresh round anchor must give the resumed round a full spec.timeout budget")
-			cond := findCompletedCondition(after)
-			if cond != nil {
-				Expect(cond.Reason).NotTo(Equal(reasonTimedOutInQueue), "no TimedOutInQueue for a resumed round with time left")
-			}
-		})
-
-		It("fails a HITL-resumed queued query when the per-round budget has elapsed", func() {
-			// The dual of the fresh-anchor test: if the round anchor itself
-			// is older than spec.timeout, the resumed round is over budget
-			// and pre-flight must fire. This is how a permanently saturated
-			// cluster eventually surfaces a queue-timeout post-resumption.
-			ctx := context.Background()
-			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-			query := &arkv1alpha1.Query{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "timeout-hitl-elapsed-anchor",
-					Namespace: "default",
-					Annotations: map[string]string{
-						roundAnchorAnnotation: time.Now().Add(-2 * time.Second).UTC().Format(time.RFC3339Nano),
-					},
-				},
-				Spec: arkv1alpha1.QuerySpec{
-					Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-					Timeout: &metav1.Duration{Duration: time.Millisecond},
-					TTL:     &metav1.Duration{Duration: time.Hour},
-				},
-			}
-			Expect(query.Spec.SetInputString("hitl elapsed anchor")).To(Succeed())
-			Expect(k8sClient.Create(ctx, query)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
-
-			query.Status.Phase = statusQueued
-			query.Status.Response = &arkv1alpha1.Response{
-				Target: arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-				Phase:  statusInputRequired,
-				A2A:    &arkv1alpha1.A2AMetadata{ContextID: "ctx-elapsed", TaskID: "task-elapsed"},
-			}
-			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
-
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
-			_, err := r.handleQueryExecution(ctx, req, *query)
-			Expect(err).NotTo(HaveOccurred())
-
-			after := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
-			Expect(after.Status.Phase).To(Equal(statusError), "elapsed per-round anchor must trip pre-flight for a resumed queued query")
-			cond := findCompletedCondition(after)
-			Expect(cond).NotTo(BeNil())
-			Expect(cond.Reason).To(Equal(reasonTimedOutInQueue))
-		})
+		DescribeTable(
+			"per-round anchor drives the budget for HITL-resumed queries",
+			func(name string, anchorAgo, timeout time.Duration, wantTimeout bool) {
+				q := newTimeoutQuery(name).
+					withTimeout(timeout).
+					withAnchorAgo(anchorAgo).
+					withHITLResponse("resumed").
+					seed(ctx, k8sClient, statusQueued)
+				after := reconcile(q)
+				if wantTimeout {
+					expectTimedOut(after, reasonTimedOutInQueue, "capacity")
+				} else {
+					expectNoTimeout(after)
+				}
+			},
+			Entry("fresh anchor gives a full budget", "hitl-fresh-anchor", time.Duration(0), time.Minute, false),
+			Entry("elapsed anchor trips pre-flight", "hitl-elapsed-anchor", 2*time.Second, time.Millisecond, true),
+		)
 
 		It("does not re-transition an already terminal query even when budget has elapsed", func() {
-			ctx := context.Background()
-			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-			query := newExpiredQuery("timeout-already-terminal")
-			Expect(k8sClient.Create(ctx, query)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
-
-			// Move to a terminal phase directly, mimicking a successful run.
-			Expect(r.updateStatus(ctx, query, statusDone)).To(Succeed())
+			q := newTimeoutQuery("already-terminal").seed(ctx, k8sClient, "")
+			Expect(r.updateStatus(ctx, q, statusDone)).To(Succeed())
 
 			refetched := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, refetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, refetched)).To(Succeed())
 			terminalRV := refetched.ResourceVersion
 			terminalReason := findCompletedCondition(refetched).Reason
 
 			time.Sleep(20 * time.Millisecond)
 
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
-			_, err := r.handleQueryExecution(ctx, req, *refetched)
-			Expect(err).NotTo(HaveOccurred())
-
-			after := &arkv1alpha1.Query{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			after := reconcile(refetched)
 			Expect(after.Status.Phase).To(Equal(statusDone), "terminal phase must be preserved")
 			Expect(after.ResourceVersion).To(Equal(terminalRV), "no status write should have been issued on a terminal query")
 			Expect(findCompletedCondition(after).Reason).To(Equal(terminalReason), "condition reason must not be clobbered")
