@@ -25,10 +25,11 @@ type MCPSettings struct {
 }
 
 type MCPClient struct {
-	URL     string
-	Headers map[string]string
-	Client  *mcpsdk.ClientSession
-	retry   RetryConfig
+	URL        string
+	Headers    map[string]string
+	Client     *mcpsdk.ClientSession
+	retry      RetryConfig
+	serverName string
 }
 
 type Option func(*MCPClient)
@@ -36,6 +37,12 @@ type Option func(*MCPClient)
 func WithToolCallRetry(cfg RetryConfig) Option {
 	return func(c *MCPClient) {
 		c.retry = cfg
+	}
+}
+
+func WithServerName(name string) Option {
+	return func(c *MCPClient) {
+		c.serverName = name
 	}
 }
 

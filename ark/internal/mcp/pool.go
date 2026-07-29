@@ -48,7 +48,8 @@ func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConf
 
 	mcpSetting := mcpSettings[key]
 
-	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting, p.opts...)
+	opts := append([]Option{WithServerName(key)}, p.opts...)
+	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting, opts...)
 	if err != nil {
 		return nil, err
 	}

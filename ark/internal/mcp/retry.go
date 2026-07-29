@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,40 @@ func (cfg RetryConfig) withDefaults() RetryConfig {
 	return cfg
 }
 
+func (c *MCPClient) serverLabel() string {
+	if c.serverName != "" {
+		return c.serverName
+	}
+	if parsed, err := url.Parse(c.URL); err == nil {
+		return parsed.Host
+	}
+	return ""
+}
+
+func recordRetryOutcome(result, server string, attempts int) {
+	if attempts > 1 {
+		toolCallRetries.WithLabelValues(result, server).Inc()
+	}
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration, budgetEnd time.Time) (bool, error) {
+	wakeAt := time.Now().Add(delay)
+	if wakeAt.After(budgetEnd) {
+		return false, nil
+	}
+	if ctxDeadline, ok := ctx.Deadline(); ok && wakeAt.After(ctxDeadline) {
+		return false, nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-timer.C:
+		return true, nil
+	}
+}
+
 func (c *MCPClient) CallTool(ctx context.Context, params *mcpsdk.CallToolParams) (*mcpsdk.CallToolResult, error) {
 	if c.Client == nil {
 		return nil, errors.New("MCP client session not initialized")
@@ -58,6 +93,7 @@ func (c *MCPClient) CallTool(ctx context.Context, params *mcpsdk.CallToolParams)
 
 	log := logf.FromContext(ctx)
 	cfg := c.retry.withDefaults()
+	label := c.serverLabel()
 	ctx, capture := withTransientCapture(ctx)
 	budgetEnd := time.Now().Add(cfg.Budget)
 
@@ -67,33 +103,28 @@ func (c *MCPClient) CallTool(ctx context.Context, params *mcpsdk.CallToolParams)
 
 	for attempts < cfg.MaxAttempts {
 		if attempts > 0 {
-			delay := toolCallBackoff(attempts-1, cfg, retryAfter)
-			wakeAt := time.Now().Add(delay)
-			if wakeAt.After(budgetEnd) {
-				break
+			proceed, err := waitForRetry(ctx, toolCallBackoff(attempts-1, cfg, retryAfter), budgetEnd)
+			if err != nil {
+				return nil, fmt.Errorf("tool call %s aborted during retry backoff: %w", params.Name, err)
 			}
-			if ctxDeadline, ok := ctx.Deadline(); ok && wakeAt.After(ctxDeadline) {
+			if !proceed {
 				break
-			}
-			timer := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, fmt.Errorf("tool call %s aborted during retry backoff: %w", params.Name, ctx.Err())
-			case <-timer.C:
 			}
 		}
 
 		attempts++
 		result, err := c.Client.CallTool(ctx, params)
 		if err == nil {
+			recordRetryOutcome("success", label, attempts)
 			return result, nil
 		}
 
 		status, nextRetryAfter, captured := capture.take()
 		if !isRetryableToolCallError(err, status, captured) {
+			recordRetryOutcome("permanent_error", label, attempts)
 			return nil, err
 		}
+		recordRetryOutcome("transient_error", label, attempts)
 		lastErr = err
 		retryAfter = nextRetryAfter
 		log.V(1).Info("retrying MCP tool call after transient error", "tool", params.Name, "attempt", attempts, "status", status, "error", err.Error())

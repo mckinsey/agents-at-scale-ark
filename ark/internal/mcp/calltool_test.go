@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -171,6 +172,23 @@ func TestCallToolBudgetExhausted(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed after 1 attempts")
 	require.Equal(t, 1, server.toolCalls())
+}
+
+func TestCallToolRetryMetrics(t *testing.T) {
+	server := newFlakyMCPServer(t, 2, http.StatusTooManyRequests, "")
+	client, err := NewMCPClient(context.Background(), server.URL, nil, httpTransport, 5*time.Second, MCPSettings{},
+		WithToolCallRetry(fastRetryConfig()), WithServerName("test/metrics-server"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Client.Close() })
+
+	successBefore := testutil.ToFloat64(toolCallRetries.WithLabelValues("success", "test/metrics-server"))
+	transientBefore := testutil.ToFloat64(toolCallRetries.WithLabelValues("transient_error", "test/metrics-server"))
+
+	_, err = client.CallTool(context.Background(), echoParams())
+	require.NoError(t, err)
+
+	require.Equal(t, successBefore+1, testutil.ToFloat64(toolCallRetries.WithLabelValues("success", "test/metrics-server")))
+	require.Equal(t, transientBefore+1, testutil.ToFloat64(toolCallRetries.WithLabelValues("transient_error", "test/metrics-server")))
 }
 
 func TestCallToolHonorsRetryAfter(t *testing.T) {
