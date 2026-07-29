@@ -508,6 +508,22 @@ describe('PostgresMessageStream', () => {
 
       expect(ids.sort()).toEqual([convA, convB].sort());
     });
+
+    it('excludes conversations whose messages have all expired', async () => {
+      const suffix = Math.random().toString(36).slice(2);
+      const expiredConversation = 'conv-expired-' + suffix;
+      const liveConversation = 'conv-live-' + suffix;
+      await stream.append(
+        makeMessageData({conversationId: expiredConversation}),
+        1
+      );
+      await stream.append(makeMessageData({conversationId: liveConversation}));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      expect(await stream.distinctConversationIds()).toEqual([
+        liveConversation,
+      ]);
+    });
   });
 
   describe('conversationStats', () => {
