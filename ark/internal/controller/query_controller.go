@@ -213,9 +213,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	// Pre-execution wall-SLO. Per-round: anchor is metadata.creationTimestamp
-	// for the initial round and re-stamped to now on HITL resumption, so
-	// each round gets a fresh spec.timeout budget for the pre-execution gap.
+	// Enforces per-round pre-execution wall-SLO.
 	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
@@ -282,9 +280,6 @@ func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 	return time.Until(anchor.Add(timeout))
 }
 
-// stampRoundAnchor patches the round-anchor annotation to now, so
-// remainingBudget starts a fresh spec.timeout for the next pre-execution
-// round. Called at HITL resumption sites before flipping to running.
 func (r *QueryReconciler) stampRoundAnchor(ctx context.Context, obj *arkv1alpha1.Query) error {
 	patch := client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(
 		`{"metadata":{"annotations":{%q:%q}}}`,
@@ -294,8 +289,6 @@ func (r *QueryReconciler) stampRoundAnchor(ctx context.Context, obj *arkv1alpha1
 	return r.Patch(ctx, obj, patch)
 }
 
-// preExecutionTimeoutMessage picks a phase-specific message for the pre-flight
-// wall-SLO transition. Caller pairs it with reasonTimedOutInQueue.
 func preExecutionTimeoutMessage(phase string) string {
 	if phase == statusQueued {
 		return "Query timed out waiting for controller capacity"
@@ -651,9 +644,6 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	// Per-round budget: fresh spec.timeout for each A2A call, so HITL waits
-	// don't consume it. Pre-execution wall-SLO enforced separately in
-	// handleQueryExecution.
 	timeout := defaultQueryTimeout
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration

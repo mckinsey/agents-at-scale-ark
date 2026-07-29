@@ -140,12 +140,6 @@ func TestFailQueryOnTimeout_PreservesA2AAndRaw(t *testing.T) {
 	assert.Equal(t, "ctx-preserve", after.Status.Response.A2A.ContextID)
 }
 
-// remainingBudget is the load-bearing helper every timeout branch depends on
-// (pre-flight check, sem-full clamp, executor context, executor-error
-// discrimination). Direct table-driven coverage so a subtle sign flip or
-// default-fallback regression can't slip through the higher-level Ginkgo
-// suites — the nil-Timeout fallback in particular is the common case for
-// clients that omit the field.
 func TestRemainingBudget(t *testing.T) {
 	tests := []struct {
 		name          string
