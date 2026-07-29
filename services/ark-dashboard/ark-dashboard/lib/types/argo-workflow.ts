@@ -89,7 +89,7 @@ export interface ArgoWorkflow {
   kind: string;
   metadata: ArgoWorkflowMetadata;
   spec: ArgoWorkflowSpec;
-  status: ArgoWorkflowStatus;
+  status?: ArgoWorkflowStatus;
 }
 
 export interface ArgoWorkflowList {
