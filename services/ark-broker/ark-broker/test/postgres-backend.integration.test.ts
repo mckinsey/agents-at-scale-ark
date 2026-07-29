@@ -319,6 +319,45 @@ describeIntegration('postgres backend — HTTP integration', () => {
     expect(res.body.items[0].query_id).toBe('keep-q');
   });
 
+  it('DELETE /conversations/:conversationId/queries/:queryId/messages removes only rows in that conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-1',
+        query_id: 'scoped-q',
+        messages: ['a'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-1',
+        query_id: 'other-q',
+        messages: ['b'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-2',
+        query_id: 'scoped-q',
+        messages: ['c'],
+      })
+      .expect(200);
+
+    await request(app)
+      .delete('/conversations/scoped-conv-1/queries/scoped-q/messages')
+      .expect(200);
+
+    const res = await request(app).get('/messages').expect(200);
+    expect(
+      res.body.items.map(
+        (item: {conversation_id: string; query_id: string}) =>
+          `${item.conversation_id}/${item.query_id}`
+      )
+    ).toEqual(['scoped-conv-1/other-q', 'scoped-conv-2/scoped-q']);
+  });
+
   it('GET /memory-status aggregates per-conversation counts via a single query', async () => {
     await request(app)
       .post('/messages')

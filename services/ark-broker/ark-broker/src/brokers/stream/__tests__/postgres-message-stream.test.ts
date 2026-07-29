@@ -399,6 +399,44 @@ describe('PostgresMessageStream', () => {
       expect(all[0]!.sequenceNumber).toBe(survivor.sequenceNumber);
     });
 
+    it('combines conversationId and queryId as AND, sparing rows that match only one', async () => {
+      const suffix = Math.random().toString(36).slice(2);
+      const targetConversation = 'conv-target-' + suffix;
+      const otherConversation = 'conv-other-' + suffix;
+      const targetQuery = 'q-target-' + suffix;
+      const otherQuery = 'q-other-' + suffix;
+
+      await stream.append(
+        makeMessageData({
+          conversationId: targetConversation,
+          queryId: targetQuery,
+        })
+      );
+      const sameConversationOtherQuery = await stream.append(
+        makeMessageData({
+          conversationId: targetConversation,
+          queryId: otherQuery,
+        })
+      );
+      const otherConversationSameQuery = await stream.append(
+        makeMessageData({
+          conversationId: otherConversation,
+          queryId: targetQuery,
+        })
+      );
+
+      await stream.deleteBy({
+        conversationId: targetConversation,
+        queryId: targetQuery,
+      });
+
+      const all = await stream.all();
+      expect(all.map((item) => item.sequenceNumber)).toEqual([
+        sameConversationOtherQuery.sequenceNumber,
+        otherConversationSameQuery.sequenceNumber,
+      ]);
+    });
+
     it('removes rows regardless of expiry (ignores TTL)', async () => {
       const conversationId = 'conv-' + Math.random().toString(36).slice(2);
       const item = await stream.append(makeMessageData({conversationId}), 1);
