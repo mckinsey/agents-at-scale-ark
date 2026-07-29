@@ -1,3 +1,5 @@
+> **Status: Superseded / outdated (archived unimplemented).** This proposal bundled the canonical `argo-make-author` Agent manifest as a static dashboard artifact installed via the resources passthrough. We instead publish `argo-make-author` to the Ark marketplace as an `agent` item and let it be installed optionally through the Ark API's existing source-based marketplace — disabled by default (opt-in: the item appears only when a marketplace source is configured, and the dashboard marketplace feature is off by default). The agent definition therefore lives in the marketplace repository, not in this repo. Archived for the record; the deltas below were never synced into the canonical specs.
+
 ## Why
 
 Conversational authoring of Argo `WorkflowTemplate` resources needs an LLM that can compose generic Argo steps with the user's existing Ark primitives — `Agent`, `Model`, and `Team` resources a `Query` can address. That LLM must never invent a query target that does not exist: the generated workflow submits real `Query` resources, so a target that is absent or unavailable turns into a runtime failure the user only discovers after Save and Run.
