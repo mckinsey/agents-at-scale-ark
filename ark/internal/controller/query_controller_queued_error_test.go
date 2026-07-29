@@ -116,6 +116,7 @@ func TestRemainingBudget(t *testing.T) {
 	tests := []struct {
 		name          string
 		creationAgo   time.Duration
+		anchorAgo     *time.Duration // nil => no annotation set
 		timeout       *metav1.Duration
 		wantPositive  bool
 		approxSeconds float64
@@ -143,17 +144,45 @@ func TestRemainingBudget(t *testing.T) {
 			wantPositive:  false,
 			approxSeconds: -(5 * time.Minute).Seconds(),
 		},
+		{
+			// Per-round semantics: an old creationTimestamp is overridden by
+			// a fresh round-anchor annotation, giving the resumed round a
+			// full spec.timeout budget.
+			name:          "fresh anchor annotation overrides old creationTimestamp",
+			creationAgo:   10 * time.Minute,
+			anchorAgo:     durPtr(0),
+			timeout:       &metav1.Duration{Duration: 30 * time.Second},
+			wantPositive:  true,
+			approxSeconds: 30,
+		},
+		{
+			// Even an elapsed anchor is honored — this is the mechanism that
+			// eventually surfaces a queue-timeout for a resumed round stuck
+			// in a permanently saturated cluster.
+			name:          "elapsed anchor annotation overrides recent creationTimestamp",
+			creationAgo:   0,
+			anchorAgo:     durPtr(2 * time.Minute),
+			timeout:       &metav1.Duration{Duration: time.Minute},
+			wantPositive:  false,
+			approxSeconds: -time.Minute.Seconds(),
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			meta := metav1.ObjectMeta{
+				Name:              "budget-test",
+				Namespace:         "default",
+				CreationTimestamp: metav1.NewTime(time.Now().Add(-tc.creationAgo)),
+			}
+			if tc.anchorAgo != nil {
+				meta.Annotations = map[string]string{
+					roundAnchorAnnotation: time.Now().Add(-*tc.anchorAgo).UTC().Format(time.RFC3339Nano),
+				}
+			}
 			q := &arkv1alpha1.Query{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "budget-test",
-					Namespace:         "default",
-					CreationTimestamp: metav1.NewTime(time.Now().Add(-tc.creationAgo)),
-				},
-				Spec: arkv1alpha1.QuerySpec{Timeout: tc.timeout},
+				ObjectMeta: meta,
+				Spec:       arkv1alpha1.QuerySpec{Timeout: tc.timeout},
 			}
 
 			got := remainingBudget(q)
@@ -162,10 +191,10 @@ func TestRemainingBudget(t *testing.T) {
 			} else {
 				assert.Less(t, got, time.Duration(0), "expected negative remaining budget (elapsed)")
 			}
-			// 1s tolerance absorbs the tiny drift between CreationTimestamp
-			// capture and the remainingBudget call.
 			assert.InDelta(t, tc.approxSeconds, got.Seconds(), 1.0,
 				"remainingBudget should be within 1s of the expected value")
 		})
 	}
 }
+
+func durPtr(d time.Duration) *time.Duration { return &d }

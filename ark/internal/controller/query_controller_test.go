@@ -550,6 +550,103 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			expectNoTransition("timeout-hitl-onthehouse", statusInputRequired)
 		})
 
+		It("gives a HITL-resumed query a fresh per-round budget when the round anchor is recent", func() {
+			// Per-round wall-SLO: even though creationTimestamp is well past
+			// spec.timeout, a freshly stamped round-anchor annotation resets
+			// the budget so the resumed round is not killed by pre-flight.
+			ctx := context.Background()
+			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			// Longer per-round budget so a "fresh" anchor is unambiguously non-elapsed.
+			query := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "timeout-hitl-fresh-anchor",
+					Namespace: "default",
+					Annotations: map[string]string{
+						roundAnchorAnnotation: time.Now().UTC().Format(time.RFC3339Nano),
+					},
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+					Timeout: &metav1.Duration{Duration: time.Minute},
+					TTL:     &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			Expect(query.Spec.SetInputString("hitl fresh anchor")).To(Succeed())
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			// Backdate creationTimestamp far past spec.timeout to prove the
+			// anchor annotation — not creationTimestamp — drives the budget.
+			// (Fake client accepts direct status.phase seeding; creationTimestamp
+			// is server-populated so we simulate the passage of time by using
+			// a 1-minute spec.timeout against a subsecond-old anchor.)
+			query.Status.Phase = statusQueued
+			query.Status.Response = &arkv1alpha1.Response{
+				Target: arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				Phase:  statusInputRequired,
+				A2A:    &arkv1alpha1.A2AMetadata{ContextID: "ctx-fresh", TaskID: "task-fresh"},
+			}
+			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, _ = r.handleQueryExecution(ctx, req, *query)
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).NotTo(Equal(statusError), "fresh round anchor must give the resumed round a full spec.timeout budget")
+			cond := findCompletedCondition(after)
+			if cond != nil {
+				Expect(cond.Reason).NotTo(Equal(reasonTimedOutInQueue), "no TimedOutInQueue for a resumed round with time left")
+			}
+		})
+
+		It("fails a HITL-resumed queued query when the per-round budget has elapsed", func() {
+			// The dual of the fresh-anchor test: if the round anchor itself
+			// is older than spec.timeout, the resumed round is over budget
+			// and pre-flight must fire. This is how a permanently saturated
+			// cluster eventually surfaces a queue-timeout post-resumption.
+			ctx := context.Background()
+			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			query := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "timeout-hitl-elapsed-anchor",
+					Namespace: "default",
+					Annotations: map[string]string{
+						roundAnchorAnnotation: time.Now().Add(-2 * time.Second).UTC().Format(time.RFC3339Nano),
+					},
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+					Timeout: &metav1.Duration{Duration: time.Millisecond},
+					TTL:     &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			Expect(query.Spec.SetInputString("hitl elapsed anchor")).To(Succeed())
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			query.Status.Phase = statusQueued
+			query.Status.Response = &arkv1alpha1.Response{
+				Target: arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				Phase:  statusInputRequired,
+				A2A:    &arkv1alpha1.A2AMetadata{ContextID: "ctx-elapsed", TaskID: "task-elapsed"},
+			}
+			Expect(k8sClient.Status().Update(ctx, query)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleQueryExecution(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal(statusError), "elapsed per-round anchor must trip pre-flight for a resumed queued query")
+			cond := findCompletedCondition(after)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal(reasonTimedOutInQueue))
+		})
+
 		It("does not re-transition an already terminal query even when budget has elapsed", func() {
 			ctx := context.Background()
 			r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
@@ -1209,5 +1306,91 @@ var _ = Describe("Query Controller handleInputRequiredPhase", func() {
 		Expect(updated.Status.Phase).To(Equal(statusRunning))
 		_, present := updated.Annotations[annotations.ApprovalCascadeCount]
 		Expect(present).To(BeFalse(), "annotation should be cleared after approval")
+	})
+
+	It("stamps a fresh round-anchor annotation on approval so the resumed round gets a per-round budget", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{Name: taskName, Namespace: "default"},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "completed",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalGranted",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		before := time.Now()
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, query)
+		Expect(err).NotTo(HaveOccurred())
+		after := time.Now()
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		stamp, present := updated.Annotations[roundAnchorAnnotation]
+		Expect(present).To(BeTrue(), "handleApprovedTask must stamp the round-anchor annotation")
+		parsed, err := time.Parse(time.RFC3339Nano, stamp)
+		Expect(err).NotTo(HaveOccurred(), "round-anchor must be RFC3339Nano so remainingBudget can parse it")
+		Expect(parsed).To(BeTemporally(">=", before.Add(-time.Second)))
+		Expect(parsed).To(BeTemporally("<=", after.Add(time.Second)))
+	})
+
+	It("stamps a fresh round-anchor annotation on a resumable denial", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{Name: taskName, Namespace: "default"},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		// Resumable denial: timeout-rejected is treated as a soft denial the
+		// agent can react to (same path as handleResumableDenial).
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "failed",
+			Error: "Approval timeout exceeded after 5m",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalTimeoutRejected",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		before := time.Now()
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, query)
+		Expect(err).NotTo(HaveOccurred())
+		after := time.Now()
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(statusRunning))
+		stamp, present := updated.Annotations[roundAnchorAnnotation]
+		Expect(present).To(BeTrue(), "handleResumableDenial must stamp the round-anchor annotation")
+		parsed, err := time.Parse(time.RFC3339Nano, stamp)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(BeTemporally(">=", before.Add(-time.Second)))
+		Expect(parsed).To(BeTemporally("<=", after.Add(time.Second)))
 	})
 })

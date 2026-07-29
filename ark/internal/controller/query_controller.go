@@ -85,6 +85,11 @@ const (
 	// callers without an explicit value get the same budget the apiserver's
 	// mutating admission would compute.
 	defaultQueryTimeout = 5 * time.Minute
+
+	// roundAnchorAnnotation stamps the start of the current pre-execution
+	// round used by remainingBudget. Re-stamped on HITL resumption so
+	// each round is bounded by a fresh spec.timeout.
+	roundAnchorAnnotation = "ark.mckinsey.com/round-anchor"
 )
 
 type QueryReconciler struct {
@@ -208,8 +213,9 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	// Pre-execution wall-SLO: fail if Ark hasn't started work within
-	// spec.timeout. See isPreExecutionPhase for the phase set.
+	// Pre-execution wall-SLO. Per-round: anchor is metadata.creationTimestamp
+	// for the initial round and re-stamped to now on HITL resumption, so
+	// each round gets a fresh spec.timeout budget for the pre-execution gap.
 	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
@@ -258,15 +264,34 @@ func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
 	return time.Until(anchor.Add(obj.Spec.TTL.Duration))
 }
 
-// remainingBudget is spec.timeout minus wall time since creation. Negative
-// values mean the deadline has already elapsed and the Query should be failed
-// with a TimedOut* reason before any further work is dispatched.
+// remainingBudget is spec.timeout minus wall time since the current round's
+// anchor. The anchor is metadata.creationTimestamp for the initial round and
+// re-stamped via the roundAnchorAnnotation on each HITL resumption, so a
+// resumed query gets a fresh budget for its pre-execution gap.
 func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 	timeout := defaultQueryTimeout
 	if obj.Spec.Timeout != nil {
 		timeout = obj.Spec.Timeout.Duration
 	}
-	return time.Until(obj.CreationTimestamp.Add(timeout))
+	anchor := obj.CreationTimestamp.Time
+	if s, ok := obj.Annotations[roundAnchorAnnotation]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			anchor = t
+		}
+	}
+	return time.Until(anchor.Add(timeout))
+}
+
+// stampRoundAnchor patches the round-anchor annotation to now, so
+// remainingBudget starts a fresh spec.timeout for the next pre-execution
+// round. Called at HITL resumption sites before flipping to running.
+func (r *QueryReconciler) stampRoundAnchor(ctx context.Context, obj *arkv1alpha1.Query) error {
+	patch := client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(
+		`{"metadata":{"annotations":{%q:%q}}}`,
+		roundAnchorAnnotation,
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)))
+	return r.Patch(ctx, obj, patch)
 }
 
 // preExecutionTimeoutMessage picks a phase-specific message for the pre-flight
@@ -372,6 +397,11 @@ func (r *QueryReconciler) handleApprovedTask(ctx context.Context, obj *arkv1alph
 	// flows aren't penalised by earlier denials in the chain.
 	if err := r.resetApprovalCascadeCount(ctx, obj); err != nil {
 		log.Error(err, "failed to reset approval cascade counter")
+	}
+
+	if err := r.stampRoundAnchor(ctx, obj); err != nil {
+		log.Error(err, "failed to stamp round anchor for resumed round")
+		return ctrl.Result{}, err
 	}
 
 	r.clearOperationCacheForResumption(ctx, obj, "task completed")
@@ -1361,6 +1391,11 @@ func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1a
 	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
 	if err := r.incrementApprovalCascadeCount(ctx, obj, count); err != nil {
 		log.Error(err, "failed to increment approval cascade counter")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.stampRoundAnchor(ctx, obj); err != nil {
+		log.Error(err, "failed to stamp round anchor for resumed round")
 		return ctrl.Result{}, err
 	}
 
