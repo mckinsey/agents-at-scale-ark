@@ -28,6 +28,8 @@ import (
 
 const defaultA2ADiscoveryTimeoutSeconds = 30
 
+const a2aSendBackstopTimeout = 30 * time.Minute
+
 var sharedA2ABaseTransport = &http.Transport{
 	MaxIdleConns:        100,
 	MaxIdleConnsPerHost: 10,
@@ -42,7 +44,7 @@ var (
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.discover" }),
 	)
 	sharedA2ASendClient = &http.Client{
-		Timeout:   5 * time.Minute,
+		Timeout:   a2aSendBackstopTimeout,
 		Transport: sharedA2ASendTransport,
 	}
 )
