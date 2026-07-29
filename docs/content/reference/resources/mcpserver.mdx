@@ -110,6 +110,20 @@ spec:
 
 The controller discovers tools from the server every `spec.pollInterval` and publishes the count to `status.toolCount`. See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
 
+## Transient error retry
+
+Tool calls that fail with a transient error — HTTP 408, 425, 429, or 5xx, plus connection-level failures — are retried with exponential backoff and jitter. A `Retry-After` header from the server sets the minimum delay for the next attempt, capped at the maximum backoff. Non-transient errors (auth failures, validation errors, application-level tool errors) fail immediately.
+
+Retries are bounded by attempt count and wall-clock budget, whichever hits first. Both are configured on the completions executor chart:
+
+```yaml
+env:
+  ARK_MCP_TOOL_CALL_MAX_ATTEMPTS: "3"
+  ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS: "30"
+```
+
+Retried attempts are counted in the `ark_mcp_tool_call_retries_total{result, server}` metric, exposed on the completions executor's `/metrics` endpoint.
+
 ## OAuth-protected servers
 
 Remote MCP servers that require OAuth (e.g. `https://mcp.notion.com/mcp`, GitHub Copilot MCP) respond to unauthenticated requests with `HTTP 401` and a `WWW-Authenticate: Bearer` challenge per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and the [MCP 2025-06-18 authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
