@@ -223,7 +223,7 @@ interface ViewToggleProps {
 
 function ViewToggle({ view, onChange }: Readonly<ViewToggleProps>) {
   return (
-    <div className="border-stroke-divider inline-flex items-center border">
+    <div className="border-stroke-divider bg-background inline-flex items-center border">
       <Button
         type="button"
         variant={view === 'diagram' ? 'default' : 'ghost'}
