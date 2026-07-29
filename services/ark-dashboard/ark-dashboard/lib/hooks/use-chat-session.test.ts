@@ -408,6 +408,156 @@ describe('useChatSession - Approval Handling', () => {
       expect(chatService.getQueryResult).toHaveBeenCalled();
     });
   });
+});
+
+describe('useChatSession - Conversation ID Continuity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(agentsService.getByName).mockResolvedValue(null);
+    globalThis.sessionStorage?.clear();
+  });
+
+  function contentChunkWithoutConversationId() {
+    return [
+      {
+        id: 'chatcmpl-1',
+        choices: [{ delta: { content: 'Hello' }, finish_reason: 'stop' }],
+      },
+    ];
+  }
+
+  function finalChunkWithConversationId(conversationId: string) {
+    return [
+      {
+        id: 'chatcmpl-final',
+        ark: {
+          completedQuery: {
+            metadata: { name: 'test-query' },
+            status: { conversationId },
+          },
+        },
+      },
+    ];
+  }
+
+  it('fetches conversationId via getQuery when the final stream chunk is missing', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'test-query-missing-final',
+      chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+    vi.mocked(chatService.getQuery).mockResolvedValueOnce({
+      status: { conversationId: 'conv-fallback' },
+    } as Awaited<ReturnType<typeof chatService.getQuery>>);
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    await waitFor(() => {
+      expect(chatService.getQuery).toHaveBeenCalledWith(
+        'test-query-missing-final',
+      );
+    });
+  });
+
+  it('passes the recovered conversationId to the next query, restoring continuity', async () => {
+    vi.mocked(chatService.startStreamChatResponse)
+      .mockResolvedValueOnce({
+        queryName: 'test-query-first',
+        chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+      })
+      .mockResolvedValueOnce({
+        queryName: 'test-query-second',
+        chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+      });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+    vi.mocked(chatService.getQuery).mockResolvedValue({
+      status: { conversationId: 'conv-fallback' },
+    } as Awaited<ReturnType<typeof chatService.getQuery>>);
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('first message');
+    });
+
+    await waitFor(() => {
+      expect(chatService.getQuery).toHaveBeenCalledWith('test-query-first');
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('second message');
+    });
+
+    await waitFor(() => {
+      expect(chatService.startStreamChatResponse).toHaveBeenCalledTimes(2);
+    });
+
+    const secondCallArgs = vi.mocked(chatService.startStreamChatResponse).mock
+      .calls[1];
+    expect(secondCallArgs[4]).toBe('conv-fallback');
+  });
+
+  it('does not call getQuery when the stream already provides a conversationId', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'test-query-has-final',
+      chunks: finalChunkWithConversationId(
+        'conv-from-stream',
+      ) as AsyncIterable<unknown>,
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing).toBe(false);
+    });
+
+    expect(chatService.getQuery).not.toHaveBeenCalled();
+  });
+
+  it('recovers gracefully when the getQuery fallback throws', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'test-query-throws',
+      chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+    vi.mocked(chatService.getQuery).mockRejectedValueOnce(
+      new Error('network error'),
+    );
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    await waitFor(() => {
+      expect(chatService.getQuery).toHaveBeenCalledWith('test-query-throws');
+    });
+
+    expect(result.current.error).toBeNull();
+  });
 
   describe('Approval Message Display', () => {
     it.skip('includes query name in approval message metadata', async () => {
