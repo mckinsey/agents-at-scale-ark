@@ -1421,4 +1421,61 @@ describe('PostgresSessionsStorage', () => {
       );
     });
   });
+  describe('schema constraints', () => {
+    const seedSession = async (): Promise<void> => {
+      await db()`
+        INSERT INTO sessions (session_id, name, expires_at)
+        VALUES ('sess-1', 'sess-1', now() + interval '1 hour')
+        ON CONFLICT DO NOTHING
+      `;
+    };
+    const insertQuery = async (
+      column: 'target_type' | 'phase',
+      value: string
+    ): Promise<void> => {
+      await db()`
+        INSERT INTO session_queries (session_id, query_id, target_type, phase)
+        VALUES (
+          'sess-1',
+          ${`q-${column}-${value}`},
+          ${column === 'target_type' ? value : 'running'},
+          ${column === 'phase' ? value : 'running'}
+        )
+      `;
+    };
+
+    test("accepts every target_type the Query CRD allows, 'model' included", async () => {
+      // The aggregate only branches on agent/team/tool, so it is tempting to
+      // constrain to those three - but the CRD's own enum is
+      // agent;team;model;tool, and a model-targeted query would then fail every
+      // event ingest with a constraint violation.
+      await seedSession();
+      for (const targetType of ['agent', 'team', 'model', 'tool']) {
+        await expect(
+          insertQuery('target_type', targetType)
+        ).resolves.toBeUndefined();
+      }
+    });
+
+    test('rejects a target_type outside that enum', async () => {
+      await seedSession();
+      await expect(insertQuery('target_type', 'spaceship')).rejects.toThrow(
+        /session_queries_target_type_check/
+      );
+    });
+
+    test('rejects a phase outside the QueryPhase union', async () => {
+      await seedSession();
+      await expect(insertQuery('phase', 'almost-done')).rejects.toThrow(
+        /session_queries_phase_check/
+      );
+    });
+
+    test('rejects a session status outside the elected three', async () => {
+      await seedSession();
+      await expect(
+        db()`UPDATE sessions SET status = 'grumpy' WHERE session_id = 'sess-1'`
+      ).rejects.toThrow(/sessions_status_check/);
+    });
+  });
 });

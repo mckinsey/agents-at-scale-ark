@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS sessions (
   session_id    TEXT        PRIMARY KEY,
   name          TEXT        NOT NULL,
-  status        TEXT        NOT NULL DEFAULT 'idle',
+  -- Elected by recalculateSessionStatus, which only ever produces these three.
+  status        TEXT        NOT NULL DEFAULT 'idle'
+                            CHECK (status IN ('active', 'idle', 'error')),
   error_count   INTEGER     NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_activity TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -27,8 +29,15 @@ CREATE TABLE IF NOT EXISTS session_queries (
   agent                         TEXT,
   team                          TEXT,
   tool                          TEXT,
-  target_type                   TEXT        NOT NULL DEFAULT 'agent',
-  phase                         TEXT        NOT NULL,
+  -- Mirrors the Query CRD's own enum (query_types.go: Enum=agent;team;model;tool).
+  -- 'model' is absent from ParticipantType and from everything the aggregate
+  -- branches on, but it is a valid target, so it has to be accepted here.
+  target_type                   TEXT        NOT NULL DEFAULT 'agent'
+                                CHECK (target_type IN ('agent', 'team', 'model', 'tool')),
+  -- Mirrors the QueryPhase union. 'unknown' has no producer today and is listed
+  -- so the constraint stays no narrower than the type it guards.
+  phase                         TEXT        NOT NULL
+                                CHECK (phase IN ('pending', 'running', 'done', 'error', 'canceled', 'unknown')),
   error                         TEXT,
   created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at                  TIMESTAMPTZ,

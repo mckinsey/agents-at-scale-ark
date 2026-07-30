@@ -11,9 +11,18 @@ export function createSessionsStorage(
   db?: Db
 ): SessionsStorage {
   if (config.backends.sessions === 'postgres') {
+    // The config schema already refuses SESSIONS_BACKEND=postgres without a
+    // DATABASE_URL, so this only fires for a config built by hand or in a test
+    // fixture that skipped validation. Without it the first write fails deep
+    // inside postgres.js instead of here.
+    if (!db) {
+      throw new Error(
+        'SESSIONS_BACKEND=postgres requires a Db, but none was passed to createSessionsStorage'
+      );
+    }
     return new PostgresSessionsStorage(
       logger.child({broker: 'postgres-sessions'}),
-      db!,
+      db,
       config.backends.sessionsVisibilityTtlSeconds
     );
   }
