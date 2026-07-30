@@ -231,6 +231,54 @@ jobs:
           artifact-folder: ark/unit-tests
           artifact-suffix: ark-unit
 
+  integration-test-postgresql:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          mock-llm-enabled: false
+
+      - name: Deploy PostgreSQL (ark-storage-dev)
+        run: |
+          helm upgrade --install ark-storage-dev charts/ark-storage-dev \
+            --namespace ark-system --create-namespace \
+            --wait --timeout=120s
+          kubectl -n ark-system wait --for=condition=ready \
+            pod -l app=ark-storage-dev --timeout=120s
+
+      - name: Run PostgreSQL integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ark
+          POSTGRES_PASSWORD: arkdev123
+        run: |
+          kubectl -n ark-system port-forward svc/ark-storage-dev 5432:5432 &
+          trap 'kill $! 2>/dev/null || true' EXIT
+          ready=false
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -q; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "PostgreSQL did not become ready in time"
+            exit 1
+          fi
+          cd ark && go test -tags integration ./internal/storage/postgresql/... -v -timeout 20m
+
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
