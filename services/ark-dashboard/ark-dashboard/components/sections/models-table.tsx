@@ -21,6 +21,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
@@ -66,9 +67,6 @@ const COL = {
   status: 'w-[120px]',
   action: 'w-[72px]',
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function ModelStatus({
   status,
