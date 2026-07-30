@@ -5,9 +5,9 @@ metadata:
 spec:
   description: >-
     End-to-end test for the ark-query WorkflowTemplate shipped in the
-    argo-workflows chart. Runs it against an agent target and a team target
-    asserting outputs on success, and forces a query error asserting the node
-    is Failed with outputs still readable.
+    argo-workflows chart. Runs it against an agent target, a team target and a
+    tool target asserting outputs on success, and forces a query error
+    asserting the node is Failed with outputs still readable.
   timeouts:
     apply: 60s
     assert: 120s
@@ -160,6 +160,70 @@ spec:
         apiVersion: argoproj.io/v1alpha1
         kind: Workflow
         name: ark-query-team
+
+  - name: tool-target-success
+    try:
+    - apply:
+        file: ../shared/mock-geocoding-api.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: mock-geocoding-api
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    - apply:
+        file: manifests/a04-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: geocoder
+    - apply:
+        file: manifests/wf-tool.yaml
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-tool
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - script:
+        timeout: 30s
+        content: |
+          set -e
+          kubectl -n "$NAMESPACE" get workflow ark-query-tool -o json > /tmp/wf-tool.json
+
+          PHASE=$(jq -r '.status.phase' /tmp/wf-tool.json)
+          echo "workflow phase: $PHASE"
+          [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
+
+          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-tool.json | head -1)
+          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-tool.json | head -1)
+          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-tool.json | head -1)
+          TARGET_TYPE=$(echo "$QUERY_JSON" | jq -r '.spec.target.type')
+
+          echo "response: $RESPONSE"
+          echo "query phase: $QUERY_PHASE"
+          echo "target type: $TARGET_TYPE"
+
+          [ "$QUERY_PHASE" = "done" ] || { echo "expected query phase done"; exit 1; }
+          [ "$TARGET_TYPE" = "tool" ] || { echo "expected target type tool"; exit 1; }
+          echo "$RESPONSE" | grep -q "New York" || { echo "missing tool response content"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-tool
 
   - name: error-target-node-failed
     try:
