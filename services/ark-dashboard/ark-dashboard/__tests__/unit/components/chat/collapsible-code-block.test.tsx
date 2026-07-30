@@ -177,5 +177,23 @@ describe('collapsible fenced code blocks', () => {
 
       expect(isBodyVisible(container)).toBe(true);
     });
+
+    it('keeps a block expanded across a re-render with unchanged content', () => {
+      const props = {
+        role: 'assistant' as const,
+        viewMode: 'markdown' as const,
+        content: '```yaml\nkey: value\n```',
+        defaultCodeCollapsed: true,
+        constrainWidth: true,
+      };
+      const { container, rerender } = render(<ChatMessage {...props} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /yaml/i }));
+      expect(isBodyVisible(container)).toBe(true);
+
+      rerender(<ChatMessage {...props} />);
+
+      expect(isBodyVisible(container)).toBe(true);
+    });
   });
 });
