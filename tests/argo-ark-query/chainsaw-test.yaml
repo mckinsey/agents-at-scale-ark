@@ -244,8 +244,7 @@ spec:
 
           RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-tool.json | head -1)
           QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-tool.json | head -1)
-          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-tool.json | head -1)
-          TARGET_TYPE=$(echo "$QUERY_JSON" | jq -r '.spec.target.type')
+          TARGET_TYPE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value | fromjson | .spec.target.type' /tmp/wf-tool.json | head -1)
 
           echo "response: $RESPONSE"
           echo "query phase: $QUERY_PHASE"
