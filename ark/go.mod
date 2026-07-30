@@ -16,7 +16,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/lib/pq v1.11.1
 	github.com/onsi/ginkgo/v2 v2.32.0
-	github.com/onsi/gomega v1.40.0
+	github.com/onsi/gomega v1.42.1
 	github.com/openai/openai-go v1.5.0
 	github.com/redis/go-redis/v9 v9.10.0
 	github.com/stretchr/testify v1.11.1
