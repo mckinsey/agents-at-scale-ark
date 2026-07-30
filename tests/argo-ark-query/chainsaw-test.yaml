@@ -242,7 +242,7 @@ spec:
           echo "workflow phase: $PHASE"
           [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
 
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-tool.json | head -1)
+          RESPONSE=$(jq -r 'first(.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value)' /tmp/wf-tool.json)
           QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-tool.json | head -1)
           TARGET_TYPE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value | fromjson | .spec.target.type' /tmp/wf-tool.json | head -1)
 
