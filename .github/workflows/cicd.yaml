@@ -263,7 +263,7 @@ jobs:
           POSTGRES_DB: ark
           POSTGRES_PASSWORD: arkdev123
         run: |
-          kubectl -n ark-system port-forward svc/ark-storage-dev 5432:5432 &
+          kubectl -n ark-system port-forward svc/ark-storage-dev 5432:5432 >/dev/null 2>&1 &
           trap 'kill $! 2>/dev/null || true' EXIT
           ready=false
           for i in $(seq 1 30); do
@@ -277,7 +277,14 @@ jobs:
             echo "PostgreSQL did not become ready in time"
             exit 1
           fi
-          cd ark && go test -tags integration ./internal/storage/postgresql/... -v -timeout 20m
+          cd ark && go test -tags integration ./internal/storage/postgresql/... -v -timeout 20m -json \
+            | tee /tmp/gotest.json \
+            | jq -r 'select(.Action=="output") | .Output' | grep -v '^$' || true
+          status=${PIPESTATUS[0]}
+          echo "::group::Test runtimes (slowest first)"
+          jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn
+          echo "::endgroup::"
+          exit "$status"
 
   build-and-test-services:
     runs-on: ubuntu-24.04
