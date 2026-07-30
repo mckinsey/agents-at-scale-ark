@@ -1,143 +1,189 @@
 'use client';
 
-import {
-  Bot,
-  Download,
-  Loader2,
-  Search,
-  Server,
-  Users,
-  Workflow,
-  Zap,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import type { ComponentType, SVGProps } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { PageHeader } from '@/components/common/page-header';
+import {
+  AccountTree,
+  DatabaseSearch,
+  Dns,
+  Group,
+  Memory,
+  PlugConnect,
+  SaveAlt,
+  SmartToy,
+} from '@/components/icons';
+import {
+  ResourceNoResults,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { ExportItem, ResourceExportData } from '@/lib/services/export';
+import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from '@/components/ui/sonner';
+import { Spinner } from '@/components/ui/spinner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  rowHoverOverlayClass,
+} from '@/components/ui/table';
+import { Tag } from '@/components/ui/tag';
+import { TagToggle } from '@/components/ui/tag-toggle';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import { useDelayedLoading } from '@/lib/hooks';
+import type {
+  ExportItem,
+  ResourceExportData,
+  ResourceType,
+} from '@/lib/services/export';
 import { exportService } from '@/lib/services/export';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
-type ResourceType = keyof ResourceExportData;
+type TabValue = ResourceType | 'all';
 
-interface ResourceSection {
-  type: ResourceType;
-  title: string;
-  description: string;
-  icon: React.ElementType;
+type ExportAction = 'selected' | 'all';
+
+interface ResourceMeta {
+  readonly type: ResourceType;
+  readonly label: string;
+  readonly typeLabel: string;
+  readonly icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
-const resourceSections: ResourceSection[] = [
-  {
-    type: 'agents',
-    title: 'Agents',
-    description: 'AI agent configurations and prompts',
-    icon: Bot,
-  },
-  {
-    type: 'teams',
-    title: 'Teams',
-    description: 'Team configurations and hierarchies',
-    icon: Users,
-  },
-  {
-    type: 'models',
-    title: 'Models',
-    description: 'Model configurations and parameters',
-    icon: Zap,
-  },
+const RESOURCES: readonly ResourceMeta[] = [
+  { type: 'agents', label: 'Agents', typeLabel: 'Agent', icon: SmartToy },
+  { type: 'teams', label: 'Teams', typeLabel: 'Team', icon: Group },
+  { type: 'models', label: 'Models', typeLabel: 'Model', icon: Memory },
   {
     type: 'queries',
-    title: 'Queries',
-    description: 'Query configurations and templates',
-    icon: Search,
+    label: 'Queries',
+    typeLabel: 'Query',
+    icon: DatabaseSearch,
   },
-  {
-    type: 'a2a',
-    title: 'A2A Servers',
-    description: 'Agent-to-Agent server configurations',
-    icon: Server,
-  },
+  { type: 'a2a', label: 'A2A Servers', typeLabel: 'A2A Server', icon: Dns },
   {
     type: 'mcpservers',
-    title: 'MCP Servers',
-    description: 'Model Context Protocol server configs',
-    icon: Server,
+    label: 'MCP Servers',
+    typeLabel: 'MCP Server',
+    icon: PlugConnect,
   },
   {
     type: 'workflows',
-    title: 'Workflows',
-    description: 'Workflow definitions and templates',
-    icon: Workflow,
+    label: 'Workflows',
+    typeLabel: 'Workflow',
+    icon: AccountTree,
   },
 ];
 
-// Helper function to get abbreviated title for mobile view
-const getAbbreviatedTitle = (type: ResourceType, title: string): string => {
-  switch (type) {
-    case 'workflows':
-      return 'Flows';
-    default:
-      return title.slice(0, 5);
-  }
-};
+const TAG_CLASSES =
+  'h-8 !px-2 bg-surface-bg-secondary text-fg-secondary ' +
+  'data-[state=on]:bg-fill-muted data-[state=on]:text-fg-primary ' +
+  'data-[state=on]:focus-visible:bg-fill-muted';
+
+const COL = {
+  select: 'w-12',
+  name: 'w-[240px]',
+  type: 'w-[160px]',
+} as const;
+
+interface ExportRow {
+  readonly meta: ResourceMeta;
+  readonly item: ExportItem;
+}
+
+function rowKey(row: ExportRow): string {
+  return `${row.meta.type}:${row.item.id}`;
+}
+
+interface ExportTableRowProps {
+  readonly row: ExportRow;
+  readonly selected: boolean;
+  readonly onToggle: (selected: boolean) => void;
+}
+
+function ExportTableRow({
+  row,
+  selected,
+  onToggle,
+}: Readonly<ExportTableRowProps>) {
+  const { meta, item } = row;
+  const Icon = meta.icon;
+
+  return (
+    <TableRow
+      selected={selected}
+      className="relative isolate cursor-pointer transition-colors"
+      onClick={() => onToggle(!selected)}>
+      <TableCell size="small" className={COL.select}>
+        <span aria-hidden className={rowHoverOverlayClass} />
+        <Checkbox
+          checked={selected}
+          onCheckedChange={checked => onToggle(checked === true)}
+          onClick={event => event.stopPropagation()}
+          aria-label={`Select ${item.name}`}
+        />
+      </TableCell>
+      <TableCell size="small" className={COL.name}>
+        <TruncatedTooltip label={item.name}>
+          <span className="text-fg-primary block truncate">{item.name}</span>
+        </TruncatedTooltip>
+      </TableCell>
+      <TableCell size="small">
+        {item.description ? (
+          <TruncatedTooltip label={item.description}>
+            <span className="text-fg-primary block truncate">
+              {item.description}
+            </span>
+          </TruncatedTooltip>
+        ) : (
+          <span className="text-fg-tertiary">—</span>
+        )}
+      </TableCell>
+      <TableCell size="small" className={COL.type}>
+        <Tag
+          variant="primary"
+          size="sm"
+          className="max-w-full gap-1 hover:no-underline">
+          <IconShell size="sm" variant="primary">
+            <Icon />
+          </IconShell>
+          <span className="truncate">{meta.typeLabel}</span>
+        </Tag>
+      </TableCell>
+    </TableRow>
+  );
+}
 
 export default function ExportPage() {
+  const { namespace } = useNamespace();
   const [resources, setResources] = useState<ResourceExportData>({});
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [selectedCount, setSelectedCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<ResourceType>('agents');
+  const [exportingAction, setExportingAction] = useState<ExportAction | null>(
+    null,
+  );
+  const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [lastExportTime, setLastExportTime] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const showLoading = useDelayedLoading(isLoading);
 
-  useEffect(() => {
-    loadResources();
-    // Load last export time from localStorage
-    exportService.getLastExportTime().then(lastTime => {
-      setLastExportTime(lastTime);
-    });
-  }, []);
-
-  useEffect(() => {
-    // Count selected items
-    let count = 0;
-    for (const items of Object.values(resources)) {
-      if (items) {
-        count += items.filter((item: ExportItem) => item.selected).length;
-      }
-    }
-    setSelectedCount(count);
-  }, [resources]);
-
-  const loadResources = async () => {
+  const loadResources = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await exportService.fetchAllResources();
-
-      // Initialize all items as unselected
-      const initializedData: ResourceExportData = {};
-      for (const [key, items] of Object.entries(data)) {
-        if (items && Array.isArray(items)) {
-          initializedData[key as ResourceType] = items.map(item => ({
-            ...item,
-            selected: false,
-          }));
-        }
-      }
-
-      setResources(initializedData);
+      setSelectedKeys(new Set());
+      const [data, lastTime] = await Promise.all([
+        exportService.fetchAllResources(),
+        exportService.getLastExportTime(),
+      ]);
+      setResources(data);
+      setLastExportTime(lastTime);
     } catch (error) {
       toast.error('Failed to load resources', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -145,31 +191,93 @@ export default function ExportPage() {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadResources();
+  }, [namespace, loadResources]);
+
+  const allRows = useMemo<ExportRow[]>(() => {
+    const rows: ExportRow[] = [];
+    for (const meta of RESOURCES) {
+      for (const item of resources[meta.type] ?? []) {
+        rows.push({ meta, item });
+      }
+    }
+    return rows;
+  }, [resources]);
+
+  const searchedRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return allRows;
+    }
+    return allRows.filter(
+      row =>
+        row.item.name.toLowerCase().includes(query) ||
+        (row.item.description?.toLowerCase().includes(query) ?? false),
+    );
+  }, [allRows, searchQuery]);
+
+  const visibleRows = useMemo(() => {
+    if (activeTab === 'all') {
+      return searchedRows;
+    }
+    return searchedRows.filter(row => row.meta.type === activeTab);
+  }, [searchedRows, activeTab]);
+
+  const tabCounts = useMemo(() => {
+    const counts = new Map<TabValue, number>(
+      RESOURCES.map(meta => [meta.type, 0]),
+    );
+    for (const row of searchedRows) {
+      counts.set(row.meta.type, (counts.get(row.meta.type) ?? 0) + 1);
+    }
+    counts.set('all', searchedRows.length);
+    return counts;
+  }, [searchedRows]);
+
+  const totalCount = allRows.length;
+  const selectedCount = selectedKeys.size;
+  const visibleSelectedCount = visibleRows.filter(row =>
+    selectedKeys.has(rowKey(row)),
+  ).length;
+
+  let headerChecked: boolean | 'indeterminate' = false;
+  if (visibleSelectedCount > 0) {
+    headerChecked =
+      visibleSelectedCount === visibleRows.length ? true : 'indeterminate';
+  }
+
+  const toggleKeys = (keys: readonly string[], selected: boolean) => {
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      for (const key of keys) {
+        if (selected) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
+      }
+      return next;
+    });
   };
 
-  const handleSelectAll = (type: ResourceType, checked: boolean) => {
-    setResources(prev => ({
-      ...prev,
-      [type]: prev[type]?.map(item => ({ ...item, selected: checked })),
-    }));
+  const buildSelection = (): ResourceExportData => {
+    const selection: ResourceExportData = {};
+    for (const row of allRows) {
+      if (!selectedKeys.has(rowKey(row))) {
+        continue;
+      }
+      const items = selection[row.meta.type] ?? [];
+      items.push({ ...row.item, selected: true });
+      selection[row.meta.type] = items;
+    }
+    return selection;
   };
 
-  const handleSelectItem = (
-    type: ResourceType,
-    itemId: string,
-    checked: boolean,
-  ) => {
-    setResources(prev => ({
-      ...prev,
-      [type]: prev[type]?.map(item =>
-        item.id === itemId ? { ...item, selected: checked } : item,
-      ),
-    }));
-  };
-
-  const handleExport = async (exportAll: boolean = false) => {
-    // Validate selection if not exporting all
-    if (!exportAll && selectedCount === 0) {
+  const handleExport = async (action: ExportAction) => {
+    if (action === 'selected' && selectedCount === 0) {
       toast.error('No resources selected', {
         description: 'Please select at least one resource to export',
       });
@@ -177,48 +285,35 @@ export default function ExportPage() {
     }
 
     try {
-      setIsExporting(true);
+      setExportingAction(action);
 
-      // Call appropriate export service method
-      if (exportAll) {
+      if (action === 'all') {
         await exportService.exportAll();
         toast.success('Export successful', {
           description: 'Successfully exported all resources',
         });
       } else {
-        await exportService.exportResources(resources);
+        await exportService.exportResources(buildSelection());
         toast.success('Export successful', {
           description: `Successfully exported ${selectedCount} resources`,
         });
       }
 
-      // Update last export time
-      exportService.getLastExportTime().then(time => setLastExportTime(time));
+      setLastExportTime(await exportService.getLastExportTime());
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
       });
     } finally {
-      setIsExporting(false);
+      setExportingAction(null);
     }
-  };
-
-  const getTotalCount = () => {
-    let total = 0;
-    for (const items of Object.values(resources)) {
-      if (items) {
-        total += items.length;
-      }
-    }
-    return total;
   };
 
   const formatLastExportTime = () => {
     if (!lastExportTime) {
       return 'Never';
     }
-    const date = new Date(lastExportTime);
-    return date.toLocaleDateString('en-US', {
+    return new Date(lastExportTime).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -227,201 +322,145 @@ export default function ExportPage() {
     });
   };
 
-  const renderResourceSection = (section: ResourceSection) => {
-    const allItems = resources[section.type] ?? [];
+  const activeTabLabel =
+    activeTab === 'all'
+      ? 'resources'
+      : (RESOURCES.find(meta => meta.type === activeTab)?.label ?? 'resources');
 
-    // Filter items based on search query
-    const items = searchQuery
-      ? allItems.filter(item =>
-          item.name.toLowerCase().includes(searchQuery.toLowerCase()),
-        )
-      : allItems;
-
-    const selectedItems = items.filter(item => item.selected);
-    const allSelected =
-      items.length > 0 && selectedItems.length === items.length;
-    const Icon = section.icon;
-
-    return (
-      <div key={section.type} className="space-y-4">
-        {items.length > 0 && (
-          <>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={checked =>
-                  handleSelectAll(section.type, !!checked)
-                }
-              />
-              <span className="text-sm">
-                Select all ({selectedItems.length} of {items.length})
-              </span>
-            </div>
-            <Separator className="my-4" />
-          </>
-        )}
-        <div>
-          {items.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No {section.title.toLowerCase()} found
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {items.map(item => (
-                <div
-                  key={item.id}
-                  className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-lg border p-2 sm:gap-3 sm:p-3"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() =>
-                    handleSelectItem(section.type, item.id, !item.selected)
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleSelectItem(section.type, item.id, !item.selected)
-                    }
-                  }}>
-                  <Checkbox
-                    checked={item.selected ?? false}
-                    onCheckedChange={checked =>
-                      handleSelectItem(section.type, item.id, !!checked)
-                    }
-                    className="h-3 w-3 sm:h-4 sm:w-4"
-                  />
-                  <Icon className="text-muted-foreground h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="flex-1 truncate text-xs sm:text-sm">
-                    {item.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  const totalCount = getTotalCount();
+  const noResultsMessage = searchQuery.trim()
+    ? 'No resources match your search.'
+    : `There are no ${activeTabLabel} to export.`;
 
   return (
-    <>
-      <PageHeader currentPage="Exports" />
-
-      <div className="flex flex-1 flex-col space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">Exports</h1>
-          <p className="text-muted-foreground mt-2 text-sm sm:text-base">
-            Export your Ark resources to YAML files for backup or version
-            control.
+    <div className="content-shell flex h-full w-full flex-col gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <IconShell size="default" variant="primary">
+              <SaveAlt />
+            </IconShell>
+            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
+              Exports
+            </h1>
+          </div>
+          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+            Export your Ark resources to YAML files
           </p>
         </div>
-
-        <Card>
-          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1.5">
-              <CardTitle>Select Resources to Export</CardTitle>
-              <CardDescription>
-                Choose specific resource to export individually or in groups
-              </CardDescription>
-            </div>
-            <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row">
-              <Button
-                onClick={() => handleExport(true)}
-                disabled={isExporting || totalCount === 0}
-                variant="outline"
-                className="w-full sm:w-auto">
-                {isExporting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                Export All ({totalCount})
-              </Button>
-              <Button
-                onClick={() => handleExport(false)}
-                disabled={isExporting || selectedCount === 0}
-                variant="default"
-                className="w-full sm:w-auto">
-                {isExporting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                Export Selected ({selectedCount})
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Separator className="mb-4" />
-            {lastExportTime && (
-              <div className="text-muted-foreground mb-4 text-sm">
-                Last export: {formatLastExportTime()}
-              </div>
-            )}
-            <div className="relative mb-4">
-              <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-              <Input
-                type="text"
-                placeholder="Search resources in current tab"
-                className="pl-9"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Tabs
-              value={activeTab}
-              onValueChange={value => setActiveTab(value as ResourceType)}>
-              <TabsList className="h-auto w-full flex-wrap justify-start gap-1 p-1">
-                {resourceSections.map(section => {
-                  const allItems = resources[section.type] ?? [];
-                  // Filter items based on search query
-                  const filteredItems = searchQuery
-                    ? allItems.filter(item =>
-                        item.name
-                          .toLowerCase()
-                          .includes(searchQuery.toLowerCase()),
-                      )
-                    : allItems;
-                  const Icon = section.icon;
-                  return (
-                    <TabsTrigger
-                      key={section.type}
-                      value={section.type}
-                      className="flex h-auto min-h-[32px] flex-shrink-0 items-center gap-1 px-2 py-1.5 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-                      <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden sm:inline">{section.title}</span>
-                      <span className="sm:hidden">
-                        {getAbbreviatedTitle(section.type, section.title)}
-                      </span>
-                      <span className="text-[10px] opacity-70 sm:text-xs">
-                        ({filteredItems.length})
-                      </span>
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-
-              {resourceSections.map(section => (
-                <TabsContent
-                  key={section.type}
-                  value={section.type}
-                  className="mt-4 space-y-4">
-                  {renderResourceSection(section)}
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            disabled={exportingAction !== null || selectedCount === 0}
+            onClick={() => handleExport('selected')}>
+            {exportingAction === 'selected' && <Spinner size="sm" />}
+            Export selected ({selectedCount})
+          </Button>
+          <Button
+            disabled={exportingAction !== null || totalCount === 0}
+            onClick={() => handleExport('all')}>
+            {exportingAction === 'all' && <Spinner size="sm" />}
+            Export all ({totalCount})
+          </Button>
+        </div>
       </div>
-    </>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+          {lastExportTime && (
+            <span className="text-fg-tertiary text-xs leading-4">
+              Last export: {formatLastExportTime()}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <TagToggle
+            size="default"
+            className={TAG_CLASSES}
+            pressed={activeTab === 'all'}
+            onPressedChange={pressed => {
+              if (pressed) {
+                setActiveTab('all');
+              }
+            }}>
+            All ({tabCounts.get('all') ?? 0})
+          </TagToggle>
+          {RESOURCES.map(meta => {
+            const Icon = meta.icon;
+            return (
+              <TagToggle
+                key={meta.type}
+                size="default"
+                className={TAG_CLASSES}
+                pressed={activeTab === meta.type}
+                onPressedChange={pressed => {
+                  if (pressed) {
+                    setActiveTab(meta.type);
+                  }
+                }}>
+                <IconShell
+                  size="sm"
+                  variant={activeTab === meta.type ? 'primary' : 'secondary'}>
+                  <Icon />
+                </IconShell>
+                {meta.label} ({tabCounts.get(meta.type) ?? 0})
+              </TagToggle>
+            );
+          })}
+        </div>
+      </div>
+
+      {showLoading && (
+        <div className="text-fg-secondary flex flex-1 items-center justify-center py-8">
+          Loading...
+        </div>
+      )}
+
+      {!isLoading && visibleRows.length === 0 && (
+        <ResourceNoResults icon={<SaveAlt />} message={noResultsMessage} />
+      )}
+
+      {!isLoading && visibleRows.length > 0 && (
+        <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+          <Table
+            aria-label="Exportable resources"
+            className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+            <TableHeader>
+              <TableRow>
+                <TableHead size="small" className={COL.select}>
+                  <Checkbox
+                    checked={headerChecked}
+                    onCheckedChange={checked =>
+                      toggleKeys(visibleRows.map(rowKey), checked === true)
+                    }
+                    aria-label="Select all resources"
+                  />
+                </TableHead>
+                <TableHead size="small" className={COL.name}>
+                  Name
+                </TableHead>
+                <TableHead size="small">Description</TableHead>
+                <TableHead size="small" className={COL.type}>
+                  Type
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleRows.map(row => {
+                const key = rowKey(row);
+                return (
+                  <ExportTableRow
+                    key={key}
+                    row={row}
+                    selected={selectedKeys.has(key)}
+                    onToggle={selected => toggleKeys([key], selected)}
+                  />
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      )}
+    </div>
   );
 }

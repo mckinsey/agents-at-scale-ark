@@ -44,6 +44,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
 import { filesService } from '@/lib/services/files';
@@ -57,9 +58,6 @@ import type { DirectoryItem, FileItem } from '@/lib/types/files';
 
 const FILE_GATEWAY_DOCS_URL =
   'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/';
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 const MENU_CONTENT_CLASS =
   'w-[211px] rounded-none border-0 bg-surface-bg-tertiary';
