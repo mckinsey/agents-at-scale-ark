@@ -40,6 +40,8 @@ export function parseWorkflowParameters(yamlText: string): WorkflowParameter[] {
       name: param.name,
       value: typeof param.value === 'string' ? param.value : undefined,
       default: typeof param.default === 'string' ? param.default : undefined,
+      description:
+        typeof param.description === 'string' ? param.description : undefined,
     });
   });
 

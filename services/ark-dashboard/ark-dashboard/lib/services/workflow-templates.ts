@@ -29,6 +29,7 @@ export interface WorkflowParameter {
   name: string;
   value?: string;
   default?: string;
+  description?: string;
 }
 
 export interface WorkflowSpec {
