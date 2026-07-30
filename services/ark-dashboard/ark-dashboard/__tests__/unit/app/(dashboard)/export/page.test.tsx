@@ -96,6 +96,22 @@ describe('ExportPage', () => {
     expect(screen.queryByText('Team Alpha')).not.toBeInTheDocument();
   });
 
+  it('should name the active resource type in the empty state', async () => {
+    const user = userEvent.setup();
+
+    render(<ExportPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Agent 1')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Queries (0)' }));
+
+    expect(
+      screen.getByText('There are no Queries to export.'),
+    ).toBeInTheDocument();
+  });
+
   it('should allow selecting and exporting resources', async () => {
     const user = userEvent.setup();
     vi.mocked(exportService.exportResources).mockResolvedValue(undefined);

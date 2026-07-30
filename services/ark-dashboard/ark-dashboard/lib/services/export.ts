@@ -69,6 +69,10 @@ export interface ExportHistoryResponse {
   export_count: number;
 }
 
+function currentNamespace(): string | undefined {
+  return apiClient.getDefaultParams().namespace;
+}
+
 // Export service
 export const exportService = {
   // Get last export timestamp from backend
@@ -131,6 +135,7 @@ export const exportService = {
         body: JSON.stringify({
           resource_types: resourceTypes,
           resource_ids: resourceIds,
+          namespace: currentNamespace(),
         }),
       },
     );
@@ -151,7 +156,7 @@ export const exportService = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ namespace: currentNamespace() }),
     });
 
     if (!response.ok) {

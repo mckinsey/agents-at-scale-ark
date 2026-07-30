@@ -322,9 +322,14 @@ export default function ExportPage() {
     });
   };
 
+  const activeTabLabel =
+    activeTab === 'all'
+      ? 'resources'
+      : (RESOURCES.find(meta => meta.type === activeTab)?.label ?? 'resources');
+
   const noResultsMessage = searchQuery.trim()
     ? 'No resources match your search.'
-    : 'There are no resources to export.';
+    : `There are no ${activeTabLabel} to export.`;
 
   return (
     <div className="content-shell flex h-full w-full flex-col gap-5">
