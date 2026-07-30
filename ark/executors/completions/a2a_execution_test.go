@@ -260,11 +260,14 @@ func TestWithA2AExecutionTimeout_PreservesCallerDeadline(t *testing.T) {
 
 	ctx, cancel, err := withA2AExecutionTimeout(callerCtx, &arkv1prealpha1.A2AServer{})
 	require.NoError(t, err)
-	defer cancel()
 
 	deadline, ok := ctx.Deadline()
 	require.True(t, ok)
 	assert.WithinDuration(t, time.Now().Add(20*time.Minute), deadline, time.Minute)
+
+	cancel()
+	require.Error(t, ctx.Err())
+	require.NoError(t, callerCtx.Err())
 }
 
 func TestWithA2AExecutionTimeout_InvalidServerTimeout(t *testing.T) {

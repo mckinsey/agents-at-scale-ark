@@ -167,7 +167,8 @@ func withA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AS
 		return nil, nil, err
 	}
 	if timeout <= 0 {
-		return ctx, func() {}, nil
+		ctx, cancel := context.WithCancel(ctx)
+		return ctx, cancel, nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
