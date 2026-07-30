@@ -1,3 +1,4 @@
+import type postgres from 'postgres';
 import {createLogger} from '@ark-broker/logging/logger.js';
 import type {ConversationSummary} from '../../sessions-broker.js';
 import {usePgContainer} from '../../../db/__tests__/testHelpers/pg-testcontainer.js';
@@ -948,6 +949,70 @@ describe('PostgresSessionsStorage', () => {
   });
 
   describe('concurrency', () => {
+    const LOCK_WAIT_TIMEOUT_MS = 10_000;
+    const GATE_MAX_HOLD_MS = 15_000;
+
+    /**
+     * Holds the session header's row lock until released. `locked` resolves once
+     * the lock is genuinely held, so writers can be queued behind it without a
+     * sleep standing in for that guarantee - the point of these tests is that
+     * the writers contend, and a sleep that expires early leaves them racing
+     * the gate instead, which passes without exercising anything.
+     */
+    function holdSessionHeader(
+      sessionId: string,
+      onRelease?: (sql: postgres.TransactionSql) => Promise<unknown>
+    ): {locked: Promise<void>; release: () => void; done: Promise<unknown>} {
+      let signalLocked!: () => void;
+      const locked = new Promise<void>((resolve) => {
+        signalLocked = resolve;
+      });
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      const done = db().begin(async (sql) => {
+        await sql`SELECT session_id FROM sessions WHERE session_id = ${sessionId} FOR UPDATE`;
+        signalLocked();
+        // A test that fails before releasing would otherwise leave this
+        // transaction holding a pooled connection for the rest of the file, and
+        // the next test to need one blocks instead of reporting the failure.
+        await Promise.race([released, sleep(GATE_MAX_HOLD_MS)]);
+        if (onRelease) await onRelease(sql);
+      });
+      // Keeps an unreleased gate from surfacing as an unhandled rejection; the
+      // promise handed back still rejects for whoever awaits it.
+      void done.catch(() => {});
+
+      return {locked, release, done};
+    }
+
+    /**
+     * Waits until `count` backends are parked on a lock, so the queue order
+     * behind the gate is known rather than assumed. Throws instead of returning
+     * quietly when the contention never appears, which is what stops these
+     * tests passing with the race window never reached.
+     */
+    async function waitForLockWaiters(count: number): Promise<void> {
+      const deadline = Date.now() + LOCK_WAIT_TIMEOUT_MS;
+      for (;;) {
+        const [row] = await db()<{waiting: string}[]>`
+          SELECT count(*) AS waiting FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND wait_event_type = 'Lock'
+            AND pid <> pg_backend_pid()
+        `;
+        if (Number(row!.waiting) >= count) return;
+        if (Date.now() > deadline) {
+          throw new Error(
+            `expected ${count} backend(s) waiting on a lock, saw ${row!.waiting}`
+          );
+        }
+        await sleep(10);
+      }
+    }
+
     test('concurrent events for two different queries in the same session both land without lost updates', async () => {
       await Promise.all(
         Array.from({length: 10}, (_, i) =>
@@ -1014,34 +1079,27 @@ describe('PostgresSessionsStorage', () => {
 
       // Hold the header so both writers are parked behind it, guaranteeing they
       // both got past that read. Without it the race is real but rarely lands.
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const gate = db().begin(async (sql) => {
-        await sql`SELECT session_id FROM sessions WHERE session_id = 'sess-1' FOR UPDATE`;
-        await held;
-      });
-      await sleep(100);
+      const gate = holdSessionHeader('sess-1');
+      await gate.locked;
 
-      // Staggered so the lock queue order is known: the writer carrying the
-      // metadata commits first, and the one behind it must not erase it.
+      // Queued in a known order: the writer carrying the metadata reaches the
+      // lock first, and the one behind it must not erase what it wrote.
       const first = storage.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         conversationId: 'conv-1',
         agent: 'agent-a',
       });
-      await sleep(100);
+      await waitForLockWaiters(1);
       const second = storage.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         _reason: 'QueryExecutionComplete',
       });
       const writers = Promise.all([first, second]);
-      await sleep(200);
-      release();
-      await gate;
+      await waitForLockWaiters(2);
+      gate.release();
+      await gate.done;
       await writers;
 
       const session = (await storage.getSession('sess-1'))!;
@@ -1093,16 +1151,11 @@ describe('PostgresSessionsStorage', () => {
       // and the gate deletes the row before releasing.
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'seed'});
 
-      let release!: () => void;
-      const parked = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const gate = db().begin(async (sql) => {
-        await sql`SELECT session_id FROM sessions WHERE session_id = 'sess-1' FOR UPDATE`;
-        await parked;
-        await sql`DELETE FROM sessions WHERE session_id = 'sess-1'`;
-      });
-      await sleep(100);
+      const gate = holdSessionHeader(
+        'sess-1',
+        (sql) => sql`DELETE FROM sessions WHERE session_id = 'sess-1'`
+      );
+      await gate.locked;
 
       const write = storage.applyEvent({
         sessionId: 'sess-1',
@@ -1110,9 +1163,9 @@ describe('PostgresSessionsStorage', () => {
         conversationId: 'conv-1',
         agent: 'agent-a',
       });
-      await sleep(200);
-      release();
-      await gate;
+      await waitForLockWaiters(1);
+      gate.release();
+      await gate.done;
 
       await expect(write).resolves.toBeUndefined();
 
