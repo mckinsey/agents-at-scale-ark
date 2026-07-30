@@ -414,3 +414,74 @@ func TestBuildMessagesFromA2AResponse(t *testing.T) {
 		assert.Equal(t, []string{"only"}, messageContents(buildMessagesFromA2AResponse(resp)))
 	})
 }
+
+func chunkRoles(chunks []interface{}) []string {
+	roles := make([]string, 0, len(chunks))
+	for _, c := range chunks {
+		cc, ok := c.(ChunkWithMetadata)
+		if !ok || len(cc.Choices) == 0 {
+			continue
+		}
+		roles = append(roles, cc.Choices[0].Delta.Role)
+	}
+	return roles
+}
+
+func TestStreamBlockingA2AResponse(t *testing.T) {
+	t.Run("streams each message as its own assistant chunk", func(t *testing.T) {
+		stream := &mockEventStream{}
+		resp := &arka2a.A2AResponse{Content: "first\nsecond", Messages: []string{"first", "second"}}
+
+		streamBlockingA2AResponse(context.Background(), stream, resp, "agent/test")
+
+		assert.Equal(t, []string{"first", "second"}, contentTexts(stream.chunks))
+		assert.Equal(t, []string{RoleAssistant, RoleAssistant}, chunkRoles(stream.chunks))
+		for _, c := range stream.chunks {
+			cc := c.(ChunkWithMetadata)
+			assert.Equal(t, finishReasonStop, cc.Choices[0].FinishReason)
+		}
+	})
+
+	t.Run("falls back to content when there are no messages", func(t *testing.T) {
+		stream := &mockEventStream{}
+		resp := &arka2a.A2AResponse{Content: "only answer"}
+
+		streamBlockingA2AResponse(context.Background(), stream, resp, "agent/test")
+
+		assert.Equal(t, []string{"only answer"}, contentTexts(stream.chunks))
+	})
+}
+
+func TestConsumeA2AStreamEventsTaskWithArtifacts(t *testing.T) {
+	result, _, err := streamEvents(t, &protocol.Task{
+		ID:        "task-1",
+		ContextID: "ctx-1",
+		Status:    protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateCompleted)},
+		Artifacts: []protocol.Artifact{
+			{ArtifactID: "a1", Name: strPtr("report"), Parts: []protocol.Part{protocol.NewTextPart("artifact answer")}},
+			{ArtifactID: "a2", Parts: []protocol.Part{protocol.NewFilePartWithBytes("data.bin", "application/octet-stream", "YmluYXJ5")}},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"artifact answer"}, result.A2AResponse.Messages, "text artifact kept, file artifact excluded")
+	assert.Equal(t, "artifact answer", result.A2AResponse.Content)
+	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
+}
+
+func TestConsumeA2AStreamEventsTaskArtifactsPreferredOverStatusMessage(t *testing.T) {
+	result, _, err := streamEvents(t, &protocol.Task{
+		ID:        "task-1",
+		ContextID: "ctx-1",
+		Status: protocol.TaskStatus{
+			State:   protocol.TaskState(arka2a.TaskStateCompleted),
+			Message: &protocol.Message{Parts: []protocol.Part{protocol.NewTextPart("status summary")}},
+		},
+		Artifacts: []protocol.Artifact{
+			{ArtifactID: "a1", Parts: []protocol.Part{protocol.NewTextPart("artifact answer")}},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"artifact answer"}, result.A2AResponse.Messages, "artifacts win over the terminal status message on a Task snapshot")
+}

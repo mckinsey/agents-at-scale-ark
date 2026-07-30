@@ -285,20 +285,6 @@ func extractAgentTextFromHistory(history []protocol.Message) string {
 	return text.String()
 }
 
-func ExtractTextFromArtifacts(artifacts []protocol.Artifact) string {
-	var text strings.Builder
-	for _, artifact := range artifacts {
-		artifactText := ExtractTextFromParts(artifact.Parts)
-		if artifactText != "" {
-			if text.Len() > 0 {
-				text.WriteString("\n")
-			}
-			text.WriteString(artifactText)
-		}
-	}
-	return text.String()
-}
-
 func TaskReplyTexts(task *protocol.Task) []string {
 	if texts := ArtifactTexts(task.Artifacts); len(texts) > 0 {
 		return texts

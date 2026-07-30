@@ -170,11 +170,11 @@ Your A2A server can reply with either a stateless `Message` or a stateful `Task`
 
 - **`Message`**: Ark reads the text parts of the message.
 - **`Task`**: Ark reads the final answer from, in order of precedence:
-  1. Agent messages in `history`
+  1. Text `artifacts` (`artifacts[].parts[].text`, or `TaskArtifactUpdateEvent` when streaming)
   2. The terminal `status.message` (or a final `TaskStatusUpdateEvent` when streaming)
-  3. Text `artifacts` (`artifacts[].parts[].text`, or `TaskArtifactUpdateEvent` when streaming)
+  3. Agent messages in `history`
 
-A completed `Task` that returns its output as a text artifact is the canonical A2A pattern (the spec states completed tasks should use artifacts to return generated output), and Ark picks it up. History and `status.message` are checked first, so agents that report results either way work unchanged.
+A completed `Task` that returns its output as a text artifact is the canonical A2A pattern (the spec states completed tasks should use artifacts to return generated output), so Ark checks artifacts first. The terminal `status.message` and `history` are used as fallbacks, so agents that report results either way work unchanged.
 
 Only text is extracted as the response. File and data parts are recorded on the `A2ATask` resource status for observability but are not returned as the query answer.
 
