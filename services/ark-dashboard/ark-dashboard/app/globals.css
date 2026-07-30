@@ -159,6 +159,9 @@
   --slate-900-opacity-60: #14172199;
   --slate-900-opacity-88: #141721e0;
 
+  /** Slate Utility Colors */
+  --color-slate-900: var(--slate-900);
+
   /** Brand Accents */
   --brand-accents-mckinsey-deep-blue: #051c2c;
   --brand-accents-mckinsey-electric-blue: #2251ff;
