@@ -273,6 +273,11 @@ export function recalculateSessionStatus(session: SessionEntry): void {
   if (hasActive) {
     session.status = 'active';
   } else {
+    // Strict `>`, so equal lastActivity keeps whichever query was iterated
+    // first, and that order belongs to the caller: insertion order in memory,
+    // ORDER BY created_at, query_id on Postgres. Those agree unless created_at
+    // ties exactly, where insertion order and query_id can disagree - so
+    // neither the SELECT ordering nor this reduce is safe to "simplify".
     const latestQuery = queries.reduce(
       (latest, q) =>
         new Date(q.lastActivity) > new Date(latest.lastActivity) ? q : latest,
