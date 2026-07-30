@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useState } from 'react';
 
 import { Database, SwapVert } from '@/components/icons';
 import {
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/combobox';
 import { IconShell } from '@/components/ui/icon-shell';
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
+import { Label } from '@/components/ui/label';
 import { Pagination } from '@/components/ui/pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -42,6 +43,9 @@ import { formatAge } from '@/lib/utils/time';
 import { MemoryDeleteActions } from './delete-memory';
 
 const ALL = 'all';
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
 
 const MEMORY_DOCS_URL =
   'https://mckinsey.github.io/agents-at-scale-ark/reference/resources/memory/';
@@ -89,12 +93,11 @@ function FilterCombobox({
   );
 
   const selected = items.find(item => item.value === value) ?? items[0];
+  const inputId = useId();
 
   return (
     <div className="flex w-48 flex-col gap-2">
-      <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
-        {label}
-      </span>
+      <Label htmlFor={inputId}>{label}</Label>
       <Combobox
         items={items}
         value={selected}
@@ -108,7 +111,7 @@ function FilterCombobox({
         }>
         <ComboboxAnchor>
           <InputGroup>
-            <ComboboxInput placeholder={allLabel} aria-label={label} />
+            <ComboboxInput id={inputId} placeholder={allLabel} />
             <InputGroupAddon align="inline-end">
               <ComboboxTrigger />
             </InputGroupAddon>
@@ -136,27 +139,30 @@ export function MemorySection() {
 
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
+  const readPositiveInt = (key: string, fallback: number) => {
+    const parsed = Number.parseInt(searchParams.get(key) ?? '', 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  };
+
+  const readFilter = (key: MemoryFilterParam) => {
+    const value = searchParams.get(key);
+    return value && value !== ALL ? value : undefined;
+  };
+
   const filters = {
-    page: parseInt(searchParams.get('page') || '1', 10),
-    limit: parseInt(searchParams.get('limit') || '10', 10),
-    memoryName: searchParams.get('memory') || undefined,
-    conversationId: searchParams.get('conversationId') || undefined,
-    queryId: searchParams.get('queryId') || undefined,
+    page: readPositiveInt('page', DEFAULT_PAGE),
+    limit: readPositiveInt('limit', DEFAULT_LIMIT),
+    memoryName: readFilter('memory'),
+    conversationId: readFilter('conversationId'),
+    queryId: readFilter('queryId'),
   };
 
   const memoryResources = useGetMemoryResources();
   const conversations = useGetConversations();
   const memoryMessages = useGetAllMemoryMessages({
-    memory:
-      filters.memoryName && filters.memoryName !== ALL
-        ? filters.memoryName
-        : undefined,
-    conversation:
-      filters.conversationId && filters.conversationId !== ALL
-        ? filters.conversationId
-        : undefined,
-    query:
-      filters.queryId && filters.queryId !== ALL ? filters.queryId : undefined,
+    memory: filters.memoryName,
+    conversation: filters.conversationId,
+    query: filters.queryId,
   });
 
   const memoryOptions = useMemo(
@@ -240,16 +246,15 @@ export function MemorySection() {
     key: MemoryFilterParam,
     value: string | undefined,
   ) => {
-    const effectiveValue = value === ALL ? undefined : value;
     updateUrlParams({
-      [key]: effectiveValue,
-      page: 1,
+      [key]: value === ALL ? undefined : value,
+      page: DEFAULT_PAGE,
     });
   };
 
   const clearFilters = () => {
     updateUrlParams({
-      page: 1,
+      page: DEFAULT_PAGE,
       limit: filters.limit,
       memory: undefined,
       conversationId: undefined,
@@ -264,14 +269,12 @@ export function MemorySection() {
   const handleItemsPerPageChange = (newLimit: number) => {
     updateUrlParams({
       limit: newLimit,
-      page: 1,
+      page: DEFAULT_PAGE,
     });
   };
 
   const hasActiveFilters = Boolean(
-    (filters.memoryName && filters.memoryName !== ALL) ||
-      (filters.conversationId && filters.conversationId !== ALL) ||
-      (filters.queryId && filters.queryId !== ALL),
+    filters.memoryName || filters.conversationId || filters.queryId,
   );
 
   const isLoading =
@@ -279,8 +282,9 @@ export function MemorySection() {
     conversations.isPending ||
     memoryMessages.isPending;
 
-  const selectedConversation = searchParams.get('conversationId');
-  const selectedQueryId = searchParams.get('queryId');
+  const selectedQuery = filters.queryId
+    ? availableQueries.find(query => query.queryId === filters.queryId)
+    : undefined;
 
   return (
     <div className="content-shell flex h-full w-full flex-col gap-5">
@@ -299,12 +303,8 @@ export function MemorySection() {
           </p>
         </div>
         <MemoryDeleteActions
-          selectedQuery={
-            selectedQueryId
-              ? availableQueries.find(q => q.queryId === selectedQueryId)
-              : undefined
-          }
-          selectedConversation={selectedConversation}
+          selectedQuery={selectedQuery}
+          selectedConversation={filters.conversationId}
           onSuccess={clearFilters}
         />
       </div>
@@ -384,7 +384,7 @@ export function MemorySection() {
                   <TableHead size="small" className={COL.added}>
                     <button
                       type="button"
-                      className="flex items-center gap-1 text-left"
+                      className="flex cursor-pointer items-center gap-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-stroke-status-focus"
                       onClick={() =>
                         setSortDirection(prev =>
                           prev === 'desc' ? 'asc' : 'desc',
