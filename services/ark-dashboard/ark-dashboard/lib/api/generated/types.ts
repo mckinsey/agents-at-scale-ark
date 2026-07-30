@@ -1685,8 +1685,10 @@ export interface paths {
          * Update Core Resource
          * @description Update (replace) a core Kubernetes resource by name.
          *
-         *     Reads the live object to reconcile its resourceVersion onto the submitted
-         *     body, then performs a replace (last-write-wins).
+         *     Honours a caller-supplied resourceVersion for optimistic concurrency; only
+         *     when the caller omits it do we inject the live object's resourceVersion so
+         *     the replace succeeds (last-write-wins convenience). The URL path name is
+         *     authoritative for the target resource.
          *
          *     Args:
          *         version: API version (e.g., 'v1')
@@ -1851,8 +1853,10 @@ export interface paths {
          * Update Grouped Resource
          * @description Update (replace) a grouped Kubernetes resource by name.
          *
-         *     Reads the live object to reconcile its resourceVersion onto the submitted
-         *     body, then performs a replace (last-write-wins).
+         *     Honours a caller-supplied resourceVersion for optimistic concurrency; only
+         *     when the caller omits it do we inject the live object's resourceVersion so
+         *     the replace succeeds (last-write-wins convenience). The URL path name is
+         *     authoritative for the target resource.
          *
          *     Args:
          *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
