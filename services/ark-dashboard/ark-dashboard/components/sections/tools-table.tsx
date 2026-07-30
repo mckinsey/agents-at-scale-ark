@@ -13,6 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
@@ -64,9 +65,6 @@ const COL = {
   type: 'w-[120px]',
   action: 'w-[100px]',
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 interface ToolTableRowProps {
   readonly tool: Tool;
