@@ -281,8 +281,8 @@ jobs:
             | tee /tmp/gotest.json \
             | jq -r 'select(.Action=="output") | .Output' | grep -v '^$' || true
           status=${PIPESTATUS[0]}
-          echo "::group::Test runtimes (slowest first)"
-          jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn
+          echo "::group::Test runtimes (top 10 slowest)"
+          jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn | head -10
           echo "::endgroup::"
           exit "$status"
 
