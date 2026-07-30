@@ -6,7 +6,6 @@ package postgresql
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -28,22 +27,7 @@ func rvInt(t *testing.T, s string) int64 {
 
 func newTestBackend(t *testing.T) *PostgreSQLBackend {
 	t.Helper()
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set")
-	}
-	port := 5432
-	if p := os.Getenv("POSTGRES_PORT"); p != "" {
-		fmt.Sscanf(p, "%d", &port)
-	}
-	backend, err := New(Config{
-		Host:     host,
-		Port:     port,
-		Database: "ark",
-		User:     "postgres",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}, &integrationMockConverter{})
+	backend, err := New(testConfig(t), &integrationMockConverter{})
 	if err != nil {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
