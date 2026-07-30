@@ -252,19 +252,22 @@ function ToolCallsOnlyMessage({
   toolCalls,
   isUser,
   className,
+  constrainWidth,
 }: Readonly<{
   toolCalls: ToolCallData[];
   isUser: boolean;
   className?: string;
+  constrainWidth?: boolean;
 }>) {
+  const alignClass = constrainWidth
+    ? 'w-full min-w-0'
+    : isUser
+      ? 'items-end'
+      : 'items-start';
   return (
     <div
       data-testid="chat-message"
-      className={cn(
-        'flex flex-col gap-2',
-        isUser ? 'items-end' : 'items-start',
-        className,
-      )}>
+      className={cn('flex flex-col gap-2', alignClass, className)}>
       {toolCalls.map(toolCall => (
         <ToolCall key={toolCall.id} toolCall={toolCall} />
       ))}
@@ -371,7 +374,10 @@ function StandardMessage({
   defaultCodeCollapsed?: boolean;
   constrainWidth?: boolean;
 }>) {
-  const markdownContent = renderMarkdown(content, { defaultCodeCollapsed });
+  const markdownContent = useMemo(
+    () => renderMarkdown(content, { defaultCodeCollapsed }),
+    [content, defaultCodeCollapsed],
+  );
   const { contentRef, needsExpansion, expandedWidth } = useContentExpansion(
     content,
     markdownContent,
@@ -422,7 +428,11 @@ function StandardMessage({
       )}
 
       {hasToolCalls && (
-        <div className="flex w-full max-w-[80%] flex-col gap-3">
+        <div
+          className={cn(
+            'flex w-full min-w-0 flex-col gap-3',
+            !constrainWidth && 'max-w-[80%]',
+          )}>
           {toolCalls.map(toolCall => (
             <ToolCall key={toolCall.id} toolCall={toolCall} />
           ))}
@@ -473,6 +483,7 @@ export function ChatMessage({
         toolCalls={toolCalls ?? []}
         isUser={isUser}
         className={className}
+        constrainWidth={constrainWidth}
       />
     );
   }
