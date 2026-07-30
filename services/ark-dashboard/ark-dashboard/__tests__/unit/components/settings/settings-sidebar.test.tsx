@@ -4,6 +4,7 @@ import { Provider, createStore } from 'jotai';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { storedIsMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import type { SettingPage } from '@/components/settings/settings-types';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
@@ -20,6 +21,7 @@ describe('SettingsSidebar', () => {
   const mockBack = vi.fn();
 
   beforeEach(() => {
+    localStorage.clear();
     store = createStore();
     vi.clearAllMocks();
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -48,6 +50,29 @@ describe('SettingsSidebar', () => {
     renderWithStore();
     expect(screen.getByText('Queries')).toBeInTheDocument();
     expect(screen.getByText('Experimental features')).toBeInTheDocument();
+  });
+
+  it('should hide Manage marketplace when the marketplace feature is disabled', () => {
+    renderWithStore();
+    expect(screen.queryByText('Manage marketplace')).not.toBeInTheDocument();
+  });
+
+  it('should show Manage marketplace when the marketplace feature is enabled', () => {
+    store.set(storedIsMarketplaceEnabledAtom, true);
+    renderWithStore();
+    expect(screen.getByText('Manage marketplace')).toBeInTheDocument();
+  });
+
+  it('should navigate to the marketplace settings page when Manage marketplace is clicked', async () => {
+    store.set(storedIsMarketplaceEnabledAtom, true);
+    const user = userEvent.setup();
+    renderWithStore();
+
+    await user.click(screen.getByText('Manage marketplace'));
+
+    expect(mockReplace).toHaveBeenCalledWith(
+      '/settings/manage-marketplace?namespace=demo',
+    );
   });
 
   it('should navigate to settings page preserving namespace when a menu item is clicked', async () => {
