@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -44,10 +45,51 @@ var (
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.discover" }),
 	)
 	sharedA2ASendClient = &http.Client{
-		Timeout:   a2aSendBackstopTimeout,
-		Transport: sharedA2ASendTransport,
+		Transport: &backstopTransport{
+			base:     sharedA2ASendTransport,
+			backstop: a2aSendBackstopTimeout,
+		},
 	}
 )
+
+// backstopTransport bounds requests that carry no deadline of their own. It is
+// deliberately not an http.Client.Timeout: that bounds every exchange
+// regardless of context, so it would cap a caller that asked for longer via
+// Query.spec.timeout or A2AServer.spec.timeout instead of backstopping one that
+// asked for nothing.
+type backstopTransport struct {
+	base     http.RoundTripper
+	backstop time.Duration
+}
+
+func (t *backstopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if _, hasDeadline := req.Context().Deadline(); hasDeadline {
+		return t.base.RoundTrip(req)
+	}
+
+	ctx, cancel := context.WithTimeout(req.Context(), t.backstop)
+	resp, err := t.base.RoundTrip(req.WithContext(ctx))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	// The deadline must outlive RoundTrip to cover the body read, so ownership
+	// of cancel transfers to the body.
+	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+type cancelOnCloseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelOnCloseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
 
 func getA2ADiscoveryTimeout() time.Duration {
 	if timeoutStr := os.Getenv("ARK_A2A_DISCOVERY_TIMEOUT"); timeoutStr != "" {
