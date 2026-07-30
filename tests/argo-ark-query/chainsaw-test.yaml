@@ -174,8 +174,47 @@ spec:
           condition:
             name: Available
             value: 'True'
-    - apply:
-        file: manifests/a04-tool.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: mock-geocoding-api
+    - script:
+        timeout: 30s
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+          kubectl run test-geocoding-ready --image=curlimages/curl --rm -i --restart=Never -n "$NAMESPACE" -- \
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/search?name=New+York&count=1"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: geocoder
+            namespace: $NAMESPACE
+          spec:
+            type: http
+            description: "Returns coordinates for the given city name."
+            inputSchema:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: City name to get coordinates for
+              required: ["city"]
+            http:
+              url: $MOCK_URL/v1/search?name={city}&count=1
+          EOF
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
