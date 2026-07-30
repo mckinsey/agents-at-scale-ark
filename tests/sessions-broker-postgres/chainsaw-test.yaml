@@ -129,11 +129,27 @@ spec:
             | tr -d ' \n')
           echo "sessions header (status,error_count,conversations): ${HEADER}"
           [ "${HEADER}" = "idle,0,2" ] || { echo "expected 'idle,0,2', got '${HEADER}'"; exit 1; }
+
+          # Counts alone would pass on a regression that produced the right
+          # number of conversations under the wrong identities - each
+          # conversation is named after its first agent, so the names are
+          # what pin agent-a and agent-b to their own conversations.
+          CONV_NAMES=$(bash ../shared/psql-query.sh \
+            "SELECT string_agg(c->>'name', ',' ORDER BY c->>'name') FROM sessions s, jsonb_array_elements(s.conversations) c WHERE s.session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "conversation names: ${CONV_NAMES}"
+          [ "${CONV_NAMES}" = "sessions-postgres-agent-a,sessions-postgres-agent-b" ] || { echo "expected 'sessions-postgres-agent-a,sessions-postgres-agent-b', got '${CONV_NAMES}'"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)
     catch:
     - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: verify-session-via-http
     try:
@@ -153,19 +169,25 @@ spec:
                   const b = JSON.parse(d);
                   const queryCount = Object.keys(b.queries || {}).length;
                   const convCount = (b.conversations || []).length;
-                  const participantCount = (b.participants || []).length;
-                  process.stdout.write([queryCount, convCount, participantCount, b.errorCount].join(','));
-                  process.exit(queryCount === 2 && convCount === 2 && participantCount === 2 && b.errorCount === 0 ? 0 : 1);
+                  const participants = (b.participants || []).map((p) => p.name).sort().join('+');
+                  process.stdout.write([queryCount, convCount, participants, b.errorCount].join(','));
+                  process.exit(queryCount === 2 && convCount === 2 && participants === 'sessions-postgres-agent-a+sessions-postgres-agent-b' && b.errorCount === 0 ? 0 : 1);
                 });
               }).on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
             ")
           echo "HTTP session (queries,conversations,participants,errorCount): ${RESULT}"
-          [ "${RESULT}" = "2,2,2,0" ] || { echo "expected '2,2,2,0', got '${RESULT}'"; exit 1; }
+          [ "${RESULT}" = "2,2,sessions-postgres-agent-a+sessions-postgres-agent-b,0" ] || { echo "expected '2,2,sessions-postgres-agent-a+sessions-postgres-agent-b,0', got '${RESULT}'"; exit 1; }
         env:
         - name: NAMESPACE
           value: ($namespace)
     catch:
     - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
     cleanup:
     - script:

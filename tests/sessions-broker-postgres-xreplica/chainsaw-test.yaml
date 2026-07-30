@@ -55,8 +55,7 @@ spec:
           kubectl -n $NAMESPACE get pods -o wide
           echo "=== Events ==="
           kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp'
-          echo "=== ark-broker logs ==="
-          kubectl -n $NAMESPACE logs -l app.kubernetes.io/name=ark-broker --all-containers --tail=200 || true
+          bash ../shared/dump-broker-logs.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -175,6 +174,12 @@ spec:
           value: ($namespace)
     catch:
     - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
     cleanup:
     - script:
