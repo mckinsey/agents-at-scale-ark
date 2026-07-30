@@ -76,6 +76,30 @@ extraEnv: {}
 certManager:
   enabled: true
 
+# Apiserver audit log, written as JSON to stdout. On by default. Produced in-process, so it
+# covers the direct service path too, which never transits the main kube-apiserver.
+audit:
+  enabled: true
+  # Catch-all level: None | Metadata | Request | RequestResponse. Request and
+  # RequestResponse include bodies, so Query `.spec.input` reaches your log pipeline.
+  level: Metadata
+  # Full audit.k8s.io/v1 Policy YAML. Overrides `level` and the default exclusions.
+  policy: ""
+
+# CEL ValidatingAdmissionPolicy enforcement — the supported enforcement point in apiserver
+# mode, since the kube-apiserver runs no webhook chain on aggregated resources.
+policy:
+  # false: start anyway if enforcement cannot be wired (older host, failed discovery), and
+  # log why. true: fail startup instead of serving unenforced.
+  required: false
+  # Extra RBAC for policies using `paramKind`; the plugin needs read access to the param
+  # resource or its informer never syncs. ConfigMaps/Secrets are already granted.
+  #   extraParamRules:
+  #     - apiGroups: ["mycorp.example.com"]
+  #       resources: ["policysettings"]
+  #       verbs: ["get", "list", "watch"]
+  extraParamRules: []
+
 networkPolicy:
   enabled: false
   extraIngressFrom: []

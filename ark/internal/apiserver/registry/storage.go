@@ -145,31 +145,52 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	return list, nil
 }
 
+// PrepareForCreate populates server-owned metadata (namespace, uid, creationTimestamp) so
+// that both Ark's referential validation and the generic admission chain see a formed
+// object. Idempotent. Name generation is excluded: it belongs in Create's retry loop.
+func PrepareForCreate(ctx context.Context, obj runtime.Object) error {
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("failed to access object metadata: %w", err)
+	}
+	if accessor.GetNamespace() == "" {
+		accessor.SetNamespace(getNamespace(ctx))
+	}
+	if accessor.GetUID() == "" {
+		accessor.SetUID(types.UID(uuid.New().String()))
+	}
+	if ts := accessor.GetCreationTimestamp(); ts.IsZero() {
+		accessor.SetCreationTimestamp(metav1.Now())
+	}
+	return nil
+}
+
 func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	start := time.Now()
-	if createValidation != nil {
-		if err := createValidation(ctx, obj); err != nil {
-			metrics.RecordStorageOperation("create", s.config.Kind, "validation_error")
-			return nil, err
-		}
-	}
 
-	namespace := getNamespace(ctx)
+	// Mirrors upstream registry.Store.Create, which runs rest.BeforeCreate before
+	// createValidation so admission sees a fully formed object.
+	if err := PrepareForCreate(ctx, obj); err != nil {
+		metrics.RecordStorageOperation("create", s.config.Kind, "error")
+		return nil, err
+	}
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		return nil, fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
-	if accessor.GetNamespace() == "" {
-		accessor.SetNamespace(namespace)
-	}
-	if accessor.GetUID() == "" {
-		accessor.SetUID(types.UID(uuid.New().String()))
-	}
-	ts := accessor.GetCreationTimestamp()
-	if ts.IsZero() {
-		accessor.SetCreationTimestamp(metav1.Now())
+	// `obj` is passed live, not copied: AdmissionStorage may run Ark's defaulting inside this
+	// callback and relies on mutating what gets persisted. See the matching note in Update.
+	admit := func() error {
+		if createValidation == nil {
+			return nil
+		}
+		if err := createValidation(ctx, obj); err != nil {
+			metrics.RecordStorageOperation("create", s.config.Kind, "validation_error")
+			return err
+		}
+		return nil
 	}
 
 	// Handle generateName: if name is empty but generateName is set, generate a unique name
@@ -179,6 +200,12 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
 			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
 			accessor.SetName(generatedName)
+
+			// Re-run per attempt: each produces a different name, which policy evaluates.
+			if err := admit(); err != nil {
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				return nil, err
+			}
 
 			sctx, cancel := storageContext(ctx)
 			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
@@ -200,6 +227,11 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
 		return nil, apierrors.NewServerTimeout(gr, "create", 1)
+	}
+
+	if err := admit(); err != nil {
+		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		return nil, err
 	}
 
 	sctx, cancel := storageContext(ctx)
@@ -255,6 +287,22 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		updatedAccessor.SetResourceVersion(existingAccessor.GetResourceVersion())
 	}
 
+	// Carry over server-owned identity the client cannot change; a PUT body omitting these
+	// would blank them, and hand admission below an object with empty uid/creationTimestamp.
+	// Mirrors upstream rest.BeforeUpdate.
+	if updatedAccessor.GetUID() == "" {
+		updatedAccessor.SetUID(existingAccessor.GetUID())
+	}
+	if ts := updatedAccessor.GetCreationTimestamp(); ts.IsZero() {
+		updatedAccessor.SetCreationTimestamp(existingAccessor.GetCreationTimestamp())
+	}
+	if updatedAccessor.GetNamespace() == "" {
+		updatedAccessor.SetNamespace(existingAccessor.GetNamespace())
+	}
+
+	// `updated` is passed live, not copied: AdmissionStorage runs Ark's defaulting inside this
+	// callback, so copying would silently drop those defaults. Upstream can copy because its
+	// defaulting lives in a separate Strategy.PrepareForUpdate step; decoupling is a follow-up.
 	if updateValidation != nil {
 		if err := updateValidation(ctx, updated, existing); err != nil {
 			metrics.RecordStorageOperation("update", s.config.Kind, "validation_error")

@@ -445,6 +445,35 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg.PostgresSSLRoot = os.Getenv("ARK_POSTGRES_SSL_ROOT_CERT")
 	cfg.PostgresSSLCert = os.Getenv("ARK_POSTGRES_SSL_CERT")
 	cfg.PostgresSSLKey = os.Getenv("ARK_POSTGRES_SSL_KEY")
+
+	// Audit defaults on; the chart wires the env explicitly. AuditLogPath "-" = stdout.
+	auditRequested := os.Getenv("ARK_APISERVER_AUDIT_ENABLED")
+	cfg.AuditEnabled = true
+	if auditRequested != "" {
+		enabled, err := strconv.ParseBool(auditRequested)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_AUDIT_ENABLED %q: %w", auditRequested, err)
+		}
+		cfg.AuditEnabled = enabled
+	}
+	cfg.AuditPolicyFile = os.Getenv("ARK_APISERVER_AUDIT_POLICY_FILE")
+	cfg.AuditLogPath = os.Getenv("ARK_APISERVER_AUDIT_LOG_PATH")
+	if cfg.AuditLogPath == "" {
+		cfg.AuditLogPath = "-"
+	}
+	// Audit records nothing without a policy file, so "on by default" only holds when one is
+	// configured. An explicit opt-in without one stays an error (see Server.applyAudit).
+	if auditRequested == "" && cfg.AuditPolicyFile == "" {
+		cfg.AuditEnabled = false
+	}
+
+	if v := os.Getenv("ARK_APISERVER_POLICY_REQUIRED"); v != "" {
+		required, err := strconv.ParseBool(v)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_POLICY_REQUIRED %q: %w", v, err)
+		}
+		cfg.PolicyRequired = required
+	}
 	return cfg, nil
 }
 
@@ -461,6 +490,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		os.Exit(1)
 	}
 	cfg.K8sClient = mgr.GetClient()
+	cfg.RestConfig = mgr.GetConfig()
 
 	server := apiserver.New(cfg)
 	if err := mgr.Add(server); err != nil {

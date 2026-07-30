@@ -25,6 +25,24 @@ With `certManager.enabled` (default `true`, requires cert-manager) the serving c
 
 `networkPolicy.enabled=true` adds an ingress policy for the serving and health ports; restrict serving-port sources with `networkPolicy.extraIngressFrom`.
 
+### Audit log
+
+`audit.enabled` (default `true`) makes the aggregated apiserver emit its own Kubernetes audit trail as JSON on stdout, collected like any other pod log. Because the records are produced in-process, they cover requests arriving over the **direct service path**, which never transits the main kube-apiserver. Audit does not depend on the host's Kubernetes version.
+
+A policy file is **mandatory** whenever audit is enabled — the upstream audit backend records nothing without one — so the apiserver refuses to start rather than report audit as active while emitting nothing. The chart always mounts one.
+
+- `audit.level` (default `Metadata`) sets the catch-all rule: `None`, `Metadata`, `Request` or `RequestResponse`. An unknown value is rejected at template time. `Request`/`RequestResponse` include request and response bodies, which for Ark means Query `.spec.input` and model output reach your log pipeline — treat that as a data classification decision.
+- `audit.policy` supplies a complete `audit.k8s.io/v1` Policy and overrides `audit.level` **and** the default exclusions; you then own the whole policy.
+
+The default policy emits one record per Ark API request (`omitStages: [RequestReceived]`) and drops health probes, metrics scrapes and discovery polls, which are continuous background traffic with no audit value.
+
+### Policy enforcement (ValidatingAdmissionPolicy)
+
+The main kube-apiserver does not run its webhook chain on aggregated resources, so Kyverno, OPA/Gatekeeper and any other `ValidatingWebhookConfiguration` **never fire** on `ark.mckinsey.com` resources. The supported enforcement point is a Kubernetes-native [`ValidatingAdmissionPolicy`](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/) (CEL), which this apiserver evaluates in-process — including on the direct service path. It requires the **host cluster at k8s ≥1.30**.
+
+- `policy.required` (default `false`) — when false the apiserver still starts if enforcement cannot be wired (older host, or a discovery probe that never succeeded) and logs the reason. Set it `true` where policy is a compliance control: startup then fails loudly instead of serving unenforced, which is otherwise visible only in the logs.
+- `policy.extraParamRules` — extra RBAC rules for policies that use `paramKind`. The plugin builds a dynamic informer per `paramKind` and the policy silently never matches if it cannot read that resource. ConfigMaps and Secrets are already covered by the parameter-resolution role, so ConfigMap-based params work out of the box; **any other `paramKind` needs a rule here.**
+
 ### Replication slot lifecycle
 
 The apiserver creates a **persistent** logical replication slot named `ark_cdc` on the configured PostgreSQL database to drive its watch stream. The slot survives apiserver pod restarts, which is what lets watchers resume from the last confirmed WAL position rather than missing events from the restart gap.

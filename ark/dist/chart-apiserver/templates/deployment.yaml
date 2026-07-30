@@ -49,11 +49,25 @@ spec:
             - name: ARK_APISERVER_TLS_KEY_FILE
               value: /etc/ark/apiserver-tls/tls.key
             {{- end }}
+            {{- if .Values.audit.enabled }}
+            - name: ARK_APISERVER_AUDIT_ENABLED
+              value: "true"
+            - name: ARK_APISERVER_AUDIT_LOG_PATH
+              value: "-"
+            # Mandatory when audit is enabled; the apiserver refuses to start without it.
+            - name: ARK_APISERVER_AUDIT_POLICY_FILE
+              value: /etc/ark/audit/policy.yaml
+            {{- else }}
+            - name: ARK_APISERVER_AUDIT_ENABLED
+              value: "false"
+            {{- end }}
+            - name: ARK_APISERVER_POLICY_REQUIRED
+              value: {{ .Values.policy.required | quote }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-          {{- if or .Values.certManager.enabled .Values.postgresql.sslSecretName }}
+          {{- if or .Values.certManager.enabled .Values.postgresql.sslSecretName .Values.audit.enabled }}
           volumeMounts:
             {{- if .Values.certManager.enabled }}
             - name: apiserver-tls
@@ -63,6 +77,11 @@ spec:
             {{- if .Values.postgresql.sslSecretName }}
             - name: postgres-tls
               mountPath: /etc/ark/postgres-tls
+              readOnly: true
+            {{- end }}
+            {{- if .Values.audit.enabled }}
+            - name: audit-policy
+              mountPath: /etc/ark/audit
               readOnly: true
             {{- end }}
           {{- end }}
@@ -81,7 +100,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
-      {{- if or .Values.certManager.enabled .Values.postgresql.sslSecretName }}
+      {{- if or .Values.certManager.enabled .Values.postgresql.sslSecretName .Values.audit.enabled }}
       volumes:
         {{- if .Values.certManager.enabled }}
         - name: apiserver-tls
@@ -93,5 +112,10 @@ spec:
           secret:
             secretName: {{ .Values.postgresql.sslSecretName }}
             defaultMode: 0640
+        {{- end }}
+        {{- if .Values.audit.enabled }}
+        - name: audit-policy
+          configMap:
+            name: ark-apiserver-audit-policy
         {{- end }}
       {{- end }}

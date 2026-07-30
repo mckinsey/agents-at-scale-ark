@@ -4,7 +4,12 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,9 +18,230 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes/fake"
+	clientrest "k8s.io/client-go/rest"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
+
+func TestValidatingAdmissionPolicyServed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		resources []*metav1.APIResourceList
+		want      bool
+	}{
+		{
+			name: "served (k8s >=1.30)",
+			resources: []*metav1.APIResourceList{{
+				GroupVersion: "admissionregistration.k8s.io/v1",
+				APIResources: []metav1.APIResource{
+					{Name: "validatingwebhookconfigurations"},
+					{Name: "validatingadmissionpolicies"},
+				},
+			}},
+			want: true,
+		},
+		{
+			name: "not served (older host: only webhook configs)",
+			resources: []*metav1.APIResourceList{{
+				GroupVersion: "admissionregistration.k8s.io/v1",
+				APIResources: []metav1.APIResource{
+					{Name: "validatingwebhookconfigurations"},
+				},
+			}},
+			want: false,
+		},
+		{
+			name:      "group version absent",
+			resources: nil,
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cs := fake.NewSimpleClientset()
+			cs.Resources = tt.resources
+			got, err := validatingAdmissionPolicyServed(cs.Discovery())
+			if err != nil {
+				t.Fatalf("validatingAdmissionPolicyServed() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("validatingAdmissionPolicyServed() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// errDiscovery fails a bounded number of times, then behaves like a healthy host — a host
+// apiserver briefly unreachable while the pod starts.
+type errDiscovery struct {
+	discovery.DiscoveryInterface
+	failures int
+	calls    int
+}
+
+func (e *errDiscovery) ServerResourcesForGroupVersion(gv string) (*metav1.APIResourceList, error) {
+	e.calls++
+	if e.calls <= e.failures {
+		return nil, errors.New("connection refused")
+	}
+	return &metav1.APIResourceList{
+		GroupVersion: gv,
+		APIResources: []metav1.APIResource{{Name: "validatingadmissionpolicies"}},
+	}, nil
+}
+
+// A transient failure must not be mistaken for an unsupported host: that silently disables
+// policy enforcement for the life of the process.
+func TestDiscoverPolicySupport_RetriesTransientFailure(t *testing.T) {
+	t.Parallel()
+
+	d := &errDiscovery{failures: 2}
+	served, err := discoverPolicySupport(context.Background(), d, 5, time.Millisecond)
+	if err != nil {
+		t.Fatalf("expected retry to succeed, got error: %v", err)
+	}
+	if !served {
+		t.Error("expected served=true after retries")
+	}
+	if d.calls != 3 {
+		t.Errorf("expected 3 discovery calls (2 failures + 1 success), got %d", d.calls)
+	}
+}
+
+// Must surface an error, not (false, nil) — the latter turns a network blip into a silent
+// policy bypass.
+func TestDiscoverPolicySupport_ExhaustedReturnsError(t *testing.T) {
+	t.Parallel()
+
+	d := &errDiscovery{failures: 99}
+	served, err := discoverPolicySupport(context.Background(), d, 3, time.Millisecond)
+	if err == nil {
+		t.Fatal("expected an error when discovery never succeeds, got nil")
+	}
+	if served {
+		t.Error("expected served=false when discovery never succeeds")
+	}
+	if d.calls != 3 {
+		t.Errorf("expected exactly 3 attempts, got %d", d.calls)
+	}
+}
+
+func TestApplyAudit(t *testing.T) {
+	t.Parallel()
+
+	policy := filepath.Join(t.TempDir(), "policy.yaml")
+	if err := os.WriteFile(policy, []byte("apiVersion: audit.k8s.io/v1\nkind: Policy\nrules:\n  - level: Metadata\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("enabled without a policy file is refused", func(t *testing.T) {
+		s := &Server{config: Config{AuditEnabled: true, AuditLogPath: "-"}}
+		err := s.applyAudit(genericapiserver.NewConfig(Codecs))
+		if err == nil {
+			t.Fatal("expected an error when audit is enabled with no policy file")
+		}
+		if !strings.Contains(err.Error(), "no audit records would be emitted") {
+			t.Errorf("error should explain the consequence, got: %v", err)
+		}
+	})
+
+	t.Run("enabled with a policy file wires a backend", func(t *testing.T) {
+		s := &Server{config: Config{AuditEnabled: true, AuditLogPath: "-", AuditPolicyFile: policy}}
+		cfg := genericapiserver.NewConfig(Codecs)
+		if err := s.applyAudit(cfg); err != nil {
+			t.Fatalf("applyAudit: %v", err)
+		}
+		if cfg.AuditBackend == nil {
+			t.Error("expected a non-nil AuditBackend")
+		}
+		if cfg.AuditPolicyRuleEvaluator == nil {
+			t.Error("expected a non-nil AuditPolicyRuleEvaluator")
+		}
+	})
+
+	t.Run("disabled is a no-op", func(t *testing.T) {
+		s := &Server{config: Config{AuditEnabled: false}}
+		cfg := genericapiserver.NewConfig(Codecs)
+		if err := s.applyAudit(cfg); err != nil {
+			t.Fatalf("applyAudit: %v", err)
+		}
+		if cfg.AuditBackend != nil {
+			t.Error("expected no AuditBackend when audit is disabled")
+		}
+	})
+}
+
+// Guards the auth-mode-'off' startup failure: the plugin refuses to initialise without an
+// authorizer, and nothing populates one in that mode.
+func TestApplyAdmission_SucceedsWithoutAnAuthorizer(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIResourceList","groupVersion":"admissionregistration.k8s.io/v1",` +
+			`"resources":[{"name":"validatingadmissionpolicies","namespaced":false,"kind":"ValidatingAdmissionPolicy","verbs":["list","watch"]}]}`))
+	}))
+	defer srv.Close()
+
+	s := &Server{config: Config{
+		RestConfig: &clientrest.Config{
+			Host:            srv.URL,
+			TLSClientConfig: clientrest.TLSClientConfig{Insecure: true},
+		},
+	}}
+
+	cfg := genericapiserver.NewConfig(Codecs)
+	if cfg.Authorization.Authorizer != nil {
+		t.Fatal("precondition: expected a nil Authorizer, as in auth mode 'off'")
+	}
+
+	inf, err := s.applyAdmission(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("applyAdmission must not fail when no authorizer is configured: %v", err)
+	}
+	if inf == nil {
+		t.Fatal("expected an informer factory when policy enforcement is wired")
+	}
+	if cfg.AdmissionControl == nil {
+		t.Error("expected AdmissionControl to be wired")
+	}
+	if cfg.Authorization.Authorizer == nil {
+		t.Error("expected an allow-all authorizer to have been supplied")
+	}
+}
+
+// PolicyRequired must fail loudly rather than start silently unenforced.
+func TestApplyAdmission_PolicyRequiredFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{config: Config{PolicyRequired: true}} // no RestConfig => cannot wire policy
+	_, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
+	if err == nil {
+		t.Fatal("expected startup to fail when policy is required but cannot be wired")
+	}
+	if !strings.Contains(err.Error(), "required") {
+		t.Errorf("error should say policy enforcement was required, got: %v", err)
+	}
+}
+
+func TestApplyAdmission_BestEffortSkipsWhenUnwirable(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{config: Config{PolicyRequired: false}} // no RestConfig
+	inf, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
+	if err != nil {
+		t.Fatalf("best-effort mode should not fail startup: %v", err)
+	}
+	if inf != nil {
+		t.Error("expected a nil informer factory when policy enforcement is skipped")
+	}
+}
 
 func TestNew_Defaults(t *testing.T) {
 	t.Parallel()
