@@ -5,6 +5,7 @@ import {createLogger} from '../src/logging/logger.js';
 import {SessionsBroker} from '../src/brokers/sessions-broker.js';
 import type {SessionsStorage} from '../src/brokers/sessions-broker.js';
 import {handleStreamingSessions} from '../src/http/routes/sessions/handlers.js';
+import {sleep} from '../src/brokers/sessions/__tests__/testHelpers/sleep.js';
 
 describe('sessions SSE error handling', () => {
   test('a failed session read is logged, not left as an unhandled rejection', async () => {
@@ -57,10 +58,10 @@ describe('sessions SSE error handling', () => {
         new SessionsBroker(storage),
         undefined
       );
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sleep(50);
 
       notify({sessionId: 'sess-1', queryName: 'query-1'});
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
       // streamSSE keeps a heartbeat running until the request closes.
       reqEmitter.emit('close');
     } finally {

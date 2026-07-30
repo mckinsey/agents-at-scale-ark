@@ -12,6 +12,7 @@ import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
 import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 import {usePgContainer} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
+import {sleep} from '../src/brokers/sessions/__tests__/testHelpers/sleep.js';
 
 jest.setTimeout(120_000);
 
@@ -51,12 +52,12 @@ async function watchSessions(
   } as unknown as Response;
 
   handleStreamingSessions(fakeReq, fakeRes, sessionsBroker, sessionId);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await sleep(100);
 
   await produce();
   // Give the NOTIFY round-trip through Postgres time to reach the
   // dedicated LISTEN connection on the watching replica's pool.
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await sleep(500);
 
   reqEmitter.emit('close');
 

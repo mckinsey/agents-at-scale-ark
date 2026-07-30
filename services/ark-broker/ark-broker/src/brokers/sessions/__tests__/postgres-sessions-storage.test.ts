@@ -1,6 +1,7 @@
 import {createLogger} from '@ark-broker/logging/logger.js';
 import type {ConversationSummary} from '../../sessions-broker.js';
 import {usePgContainer} from '../../../db/__tests__/testHelpers/pg-testcontainer.js';
+import {sleep} from './testHelpers/sleep.js';
 import {InMemorySessionsStorage} from '../in-memory-sessions-storage.js';
 import {PostgresSessionsStorage} from '../postgres-sessions-storage.js';
 
@@ -362,12 +363,12 @@ describe('PostgresSessionsStorage', () => {
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
       // Let applyEvent's own notification land before subscribing, so it
       // can't be mistaken for one fired by the applyMessage call below.
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
 
       const received: Array<{sessionId: string; queryName: string}> = [];
       storage.subscribe((data) => received.push(data));
       await storage.applyMessage('conv-abc', 'query-1');
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
 
       // The conversation list changed, so a watcher that was not told would
       // keep serving the previous one.
@@ -376,7 +377,7 @@ describe('PostgresSessionsStorage', () => {
       // ...but a message that changes nothing stays quiet.
       received.length = 0;
       await storage.applyMessage('conv-ignored', 'query-1');
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
       expect(received).toHaveLength(0);
     });
   });
@@ -408,7 +409,7 @@ describe('PostgresSessionsStorage', () => {
         conversationId: 'conv-expiring',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await sleep(1500);
 
       const result = await storage.getQueryByConversationId('conv-expiring');
       expect(result).toBeUndefined();
@@ -423,7 +424,7 @@ describe('PostgresSessionsStorage', () => {
     test('getSession returns undefined for an expired session', async () => {
       const shortLived = new PostgresSessionsStorage(silentLogger, db(), 1);
       await shortLived.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await sleep(1500);
 
       expect(await storage.getSession('sess-1')).toBeUndefined();
     });
@@ -691,7 +692,7 @@ describe('PostgresSessionsStorage', () => {
       storage.subscribe((data) => received.push(data));
 
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
 
       expect(received).toEqual([{sessionId: 'sess-1', queryName: 'query-1'}]);
     });
@@ -702,13 +703,13 @@ describe('PostgresSessionsStorage', () => {
       const unsub = storage.subscribe((data) => received.push(data));
 
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
       expect(received).toHaveLength(1);
 
       unsub();
 
       await storage.applyEvent({sessionId: 'sess-2', queryName: 'q2'});
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
       expect(received).toHaveLength(1);
     });
 
@@ -727,12 +728,12 @@ describe('PostgresSessionsStorage', () => {
       await storage.applyEvent(event, 5);
       // Let the first applyEvent's own notification land before subscribing,
       // so it can't be mistaken for one fired by the stale retry below.
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
 
       const received: Array<{sessionId: string; queryName: string}> = [];
       storage.subscribe((data) => received.push(data));
       await storage.applyEvent(event, 3);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
 
       expect(received).toHaveLength(0);
     });
@@ -981,7 +982,11 @@ describe('PostgresSessionsStorage', () => {
       expect(Object.keys(session.queries)).toHaveLength(N);
     });
 
-    test('concurrent events for the same query serialize instead of losing an update', async () => {
+    test('concurrent events for the same query on a cold session are serialized by the sessions primary key, not by the header lock', async () => {
+      // The session does not exist yet, so both transactions collide on the
+      // same speculative `sessions` row and Postgres serializes them there.
+      // This passes with the FOR UPDATE removed from lockHeader - it is the
+      // test below that exercises the lock.
       await Promise.all([
         storage.applyEvent({
           sessionId: 'sess-1',
@@ -1000,18 +1005,16 @@ describe('PostgresSessionsStorage', () => {
       expect(query.phase).toBe('done');
     });
 
-    test('the same, with the session header already committed', async () => {
-      // The test above only passes because the session does not exist yet: both
-      // transactions collide on the same speculative `sessions` row and Postgres
-      // serializes them for us. Once the header is committed, INSERT ... ON
-      // CONFLICT DO NOTHING takes no lock, and a SELECT ... FOR UPDATE on a
-      // query row that does not exist yet locks nothing either - so both
-      // transactions can read "no such query" before either has written one.
+    test('concurrent events for the same query serialize instead of losing an update once the session header is committed', async () => {
+      // Once the header is committed, INSERT ... ON CONFLICT DO NOTHING takes
+      // no lock, and a SELECT ... FOR UPDATE on a query row that does not exist
+      // yet locks nothing either - so both transactions can read "no such
+      // query" before either has written one.
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'seed'});
 
       // Hold the header so both writers are parked behind it, guaranteeing they
       // both got past that read. Without it the race is real but rarely lands.
-      let release = (): void => {};
+      let release!: () => void;
       const held = new Promise<void>((resolve) => {
         release = resolve;
       });
@@ -1019,7 +1022,7 @@ describe('PostgresSessionsStorage', () => {
         await sql`SELECT session_id FROM sessions WHERE session_id = 'sess-1' FOR UPDATE`;
         await held;
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
 
       // Staggered so the lock queue order is known: the writer carrying the
       // metadata commits first, and the one behind it must not erase it.
@@ -1029,14 +1032,14 @@ describe('PostgresSessionsStorage', () => {
         conversationId: 'conv-1',
         agent: 'agent-a',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
       const second = storage.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         _reason: 'QueryExecutionComplete',
       });
       const writers = Promise.all([first, second]);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
       release();
       await gate;
       await writers;
@@ -1090,7 +1093,7 @@ describe('PostgresSessionsStorage', () => {
       // and the gate deletes the row before releasing.
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'seed'});
 
-      let release = (): void => {};
+      let release!: () => void;
       const parked = new Promise<void>((resolve) => {
         release = resolve;
       });
@@ -1099,7 +1102,7 @@ describe('PostgresSessionsStorage', () => {
         await parked;
         await sql`DELETE FROM sessions WHERE session_id = 'sess-1'`;
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
 
       const write = storage.applyEvent({
         sessionId: 'sess-1',
@@ -1107,7 +1110,7 @@ describe('PostgresSessionsStorage', () => {
         conversationId: 'conv-1',
         agent: 'agent-a',
       });
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await sleep(200);
       release();
       await gate;
 
@@ -1173,10 +1176,10 @@ describe('PostgresSessionsStorage', () => {
         await backend.applyEvent(healthy);
         // The status election ties on equal lastActivity and keeps the first
         // query, and the in-memory backend applies both within one millisecond.
-        await new Promise((resolve) => setTimeout(resolve, 2));
+        await sleep(2);
         await backend.applyEvent(failed);
         expect((await backend.getSession('s'))!.status).toBe('error');
-        await new Promise((resolve) => setTimeout(resolve, 2));
+        await sleep(2);
         await backend.applyMessage('c1', 'healthy');
       }
 
@@ -1204,7 +1207,7 @@ describe('PostgresSessionsStorage', () => {
         },
         1
       );
-      await new Promise((resolve) => setTimeout(resolve, 2));
+      await sleep(2);
       await storage.applyEvent(
         {
           sessionId: 's',
@@ -1217,13 +1220,13 @@ describe('PostgresSessionsStorage', () => {
       );
       expect((await storage.getSession('s'))!.status).toBe('error');
 
-      await new Promise((resolve) => setTimeout(resolve, 2));
+      await sleep(2);
       await storage.applyMessage('c1', 'healthy');
 
       // A second replica applying an out-of-order event for the failed query:
       // its phase is denied, but its metadata merges, and that write refreshes
       // the header.
-      await new Promise((resolve) => setTimeout(resolve, 2));
+      await sleep(2);
       await storage.applyEvent(
         {
           sessionId: 's',
@@ -1259,7 +1262,7 @@ describe('PostgresSessionsStorage', () => {
       });
       const [before] = await readTimestamps();
 
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await sleep(5);
       await storage.applyMessage('c1', 'q1');
 
       const [after] = await readTimestamps();
