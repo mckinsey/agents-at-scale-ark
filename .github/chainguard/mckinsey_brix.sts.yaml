@@ -1,0 +1,8 @@
+issuer_pattern: "https://oidc\\.eks\\.us-east-1\\.amazonaws\\.com/id/(0343EFBE91601B0471F298347B631825|69CA5BB41EE4744DCD9B138E733269AF)"
+subject_pattern: system:serviceaccount:brixai:brixai-backend
+
+permissions:
+  contents: read
+  members: read
+  metadata: read
+  pull_requests: write
