@@ -120,6 +120,17 @@ func TestCallToolFailsFastOnNonTransient(t *testing.T) {
 	require.Equal(t, 1, server.toolCalls())
 }
 
+func TestCallToolFailsFastOnConnectionKillingStatus(t *testing.T) {
+	server := newFlakyMCPServer(t, -1, http.StatusRequestTimeout, "")
+	client := newRetryTestClient(t, server.URL, fastRetryConfig())
+
+	_, err := client.CallTool(context.Background(), echoParams())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "failed after")
+	require.Contains(t, err.Error(), "Request Timeout")
+	require.Equal(t, 1, server.toolCalls())
+}
+
 func TestCallToolSessionSurvivesTransientFailure(t *testing.T) {
 	server := newFlakyMCPServer(t, 0, http.StatusTooManyRequests, "")
 	client := newRetryTestClient(t, server.URL, fastRetryConfig())
@@ -174,21 +185,59 @@ func TestCallToolBudgetExhausted(t *testing.T) {
 	require.Equal(t, 1, server.toolCalls())
 }
 
-func TestCallToolRetryMetrics(t *testing.T) {
-	server := newFlakyMCPServer(t, 2, http.StatusTooManyRequests, "")
-	client, err := NewMCPClient(context.Background(), server.URL, nil, httpTransport, 5*time.Second, MCPSettings{},
-		WithToolCallRetry(fastRetryConfig()), WithServerName("test/metrics-server"))
+func newMetricsTestClient(t *testing.T, url, serverName string) *MCPClient {
+	t.Helper()
+	client, err := NewMCPClient(context.Background(), url, nil, httpTransport, 5*time.Second, MCPSettings{},
+		WithToolCallRetry(fastRetryConfig()), WithServerName(serverName))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Client.Close() })
+	return client
+}
 
-	successBefore := testutil.ToFloat64(toolCallRetries.WithLabelValues("success", "test/metrics-server"))
-	transientBefore := testutil.ToFloat64(toolCallRetries.WithLabelValues("transient_error", "test/metrics-server"))
+func retryMetric(result, server string) float64 {
+	return testutil.ToFloat64(toolCallRetries.WithLabelValues(result, server))
+}
 
-	_, err = client.CallTool(context.Background(), echoParams())
-	require.NoError(t, err)
+func TestCallToolRetryMetrics(t *testing.T) {
+	t.Run("flakyThenSuccess", func(t *testing.T) {
+		server := newFlakyMCPServer(t, 2, http.StatusTooManyRequests, "")
+		client := newMetricsTestClient(t, server.URL, "test/flaky-server")
 
-	require.Equal(t, successBefore+1, testutil.ToFloat64(toolCallRetries.WithLabelValues("success", "test/metrics-server")))
-	require.Equal(t, transientBefore+1, testutil.ToFloat64(toolCallRetries.WithLabelValues("transient_error", "test/metrics-server")))
+		transientBefore := retryMetric("transient_error", "test/flaky-server")
+		successBefore := retryMetric("success", "test/flaky-server")
+
+		_, err := client.CallTool(context.Background(), echoParams())
+		require.NoError(t, err)
+
+		require.Equal(t, transientBefore+2, retryMetric("transient_error", "test/flaky-server"))
+		require.Equal(t, successBefore+1, retryMetric("success", "test/flaky-server"))
+	})
+
+	t.Run("exhaustion", func(t *testing.T) {
+		server := newFlakyMCPServer(t, -1, http.StatusServiceUnavailable, "")
+		client := newMetricsTestClient(t, server.URL, "test/dead-server")
+
+		transientBefore := retryMetric("transient_error", "test/dead-server")
+		exhaustedBefore := retryMetric("exhausted", "test/dead-server")
+
+		_, err := client.CallTool(context.Background(), echoParams())
+		require.Error(t, err)
+
+		require.Equal(t, transientBefore+2, retryMetric("transient_error", "test/dead-server"))
+		require.Equal(t, exhaustedBefore+1, retryMetric("exhausted", "test/dead-server"))
+	})
+
+	t.Run("failFastNotCounted", func(t *testing.T) {
+		server := newFlakyMCPServer(t, -1, http.StatusBadRequest, "")
+		client := newMetricsTestClient(t, server.URL, "test/broken-server")
+
+		_, err := client.CallTool(context.Background(), echoParams())
+		require.Error(t, err)
+
+		for _, result := range []string{"transient_error", "success", "permanent_error", "exhausted"} {
+			require.Zero(t, retryMetric(result, "test/broken-server"), "result %s", result)
+		}
+	})
 }
 
 func TestCallToolHonorsRetryAfter(t *testing.T) {

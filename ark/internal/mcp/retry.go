@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -119,17 +118,20 @@ func (c *MCPClient) CallTool(ctx context.Context, params *mcpsdk.CallToolParams)
 			return result, nil
 		}
 
-		status, nextRetryAfter, captured := capture.take()
-		if !isRetryableToolCallError(err, status, captured) {
+		status, nextRetryAfter, _ := capture.take()
+		if !isRetryableToolCallError(err) {
 			recordRetryOutcome("permanent_error", label, attempts)
 			return nil, err
 		}
-		recordRetryOutcome("transient_error", label, attempts)
+		if attempts < cfg.MaxAttempts {
+			toolCallRetries.WithLabelValues("transient_error", label).Inc()
+		}
 		lastErr = err
 		retryAfter = nextRetryAfter
 		log.V(1).Info("retrying MCP tool call after transient error", "tool", params.Name, "attempt", attempts, "status", status, "error", err.Error())
 	}
 
+	toolCallRetries.WithLabelValues("exhausted", label).Inc()
 	return nil, fmt.Errorf("tool call %s failed after %d attempts: %w", params.Name, attempts, lastErr)
 }
 
@@ -171,12 +173,18 @@ func (c *transientCapture) take() (int, time.Duration, bool) {
 	return status, retryAfter, set
 }
 
+// isTransientHTTPStatus mirrors the SDK's transient set: the only statuses it
+// wraps in "rejected by transport" (-32005) without failing the connection.
 func isTransientHTTPStatus(status int) bool {
 	switch status {
-	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests:
+	case http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
 		return true
 	}
-	return status >= 500
+	return false
 }
 
 func parseRetryAfter(header string) (time.Duration, bool) {
@@ -212,40 +220,11 @@ func toolCallBackoff(attempt int, cfg RetryConfig, retryAfter time.Duration) tim
 	return delay
 }
 
-var transientStatusTexts = []string{
-	"Too Many Requests",
-	"Internal Server Error",
-	"Bad Gateway",
-	"Service Unavailable",
-	"Gateway Timeout",
-}
-
-func isRetryableToolCallError(err error, status int, captured bool) bool {
-	if err == nil {
-		return false
-	}
-	if captured {
-		return isTransientHTTPStatus(status)
-	}
-	if _, ok := IsUnauthorizedError(err); ok {
-		return false
-	}
-	if isRetryableError(err) {
-		return true
-	}
-	errStr := strings.ToLower(err.Error())
-	for _, pattern := range []string{"connection reset", "tls handshake timeout", "unexpected eof"} {
-		if strings.Contains(errStr, pattern) {
-			return true
-		}
-	}
+// isRetryableToolCallError reports whether the SDK marked the failure as
+// transport-rejected (-32005): a transient HTTP status or a request that never
+// reached the server. Every other failure either killed the connection or is an
+// application-level error, and retrying in place cannot succeed.
+func isRetryableToolCallError(err error) bool {
 	var wireErr *jsonrpc.Error
-	if errors.As(err, &wireErr) && wireErr.Code == jsonrpcCodeRejectedByTransport {
-		for _, text := range transientStatusTexts {
-			if strings.Contains(err.Error(), text) {
-				return true
-			}
-		}
-	}
-	return false
+	return errors.As(err, &wireErr) && wireErr.Code == jsonrpcCodeRejectedByTransport
 }

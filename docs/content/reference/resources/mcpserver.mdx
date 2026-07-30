@@ -112,7 +112,7 @@ The controller discovers tools from the server every `spec.pollInterval` and pub
 
 ## Transient error retry
 
-Tool calls that fail with a transient error — HTTP 408, 425, 429, or 5xx, plus connection-level failures — are retried with exponential backoff and jitter. A `Retry-After` header from the server sets the minimum delay for the next attempt, capped at the maximum backoff. Non-transient errors (auth failures, validation errors, application-level tool errors) fail immediately.
+Tool calls that fail with a transient error — HTTP 429, 500, 502, 503, 504, or a connection-level failure where the request never reached the server — are retried with exponential backoff and jitter. A `Retry-After` header from the server sets the minimum delay for the next attempt, capped at the maximum backoff. Every other failure (auth failures, validation errors, application-level tool errors, statuses that terminate the MCP session) fails immediately with the original error.
 
 Retries are bounded by attempt count and wall-clock budget, whichever hits first. Both are configured on the completions executor chart:
 
@@ -122,7 +122,7 @@ env:
   ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS: "30"
 ```
 
-Retried attempts are counted in the `ark_mcp_tool_call_retries_total{result, server}` metric, exposed on the completions executor's `/metrics` endpoint.
+Retry activity is counted in the `ark_mcp_tool_call_retries_total{result, server}` metric on the completions executor's `/metrics` endpoint: `transient_error` for each scheduled retry, then one terminal `success`, `permanent_error`, or `exhausted` per call that needed retries.
 
 ## OAuth-protected servers
 

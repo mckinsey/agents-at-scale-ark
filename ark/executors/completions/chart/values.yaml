@@ -85,9 +85,9 @@ podAnnotations: {}
 
 # Extra environment variables for the completions container.
 # ARK_MCP_TOOL_CALL_MAX_ATTEMPTS / ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS bound
-# the retry of transient MCP tool-call errors (HTTP 408/425/429/5xx, connection
-# drops). A tool call gives up after the attempt count or the wall-clock budget,
-# whichever hits first.
+# the retry of transient MCP tool-call errors (HTTP 429/500/502/503/504 and
+# requests that never reached the server). A tool call gives up after the
+# attempt count or the wall-clock budget, whichever hits first.
 env:
   ARK_MCP_TOOL_CALL_MAX_ATTEMPTS: "3"
   ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS: "30"

@@ -15,10 +15,10 @@ import (
 )
 
 func TestIsTransientHTTPStatus(t *testing.T) {
-	for _, code := range []int{408, 425, 429, 500, 502, 503, 504, 599} {
+	for _, code := range []int{429, 500, 502, 503, 504} {
 		require.True(t, isTransientHTTPStatus(code), "status %d should be transient", code)
 	}
-	for _, code := range []int{200, 204, 301, 400, 401, 403, 404, 409, 422} {
+	for _, code := range []int{200, 204, 301, 400, 401, 403, 404, 408, 409, 422, 425, 501, 520, 524, 599} {
 		require.False(t, isTransientHTTPStatus(code), "status %d should not be transient", code)
 	}
 }
@@ -138,35 +138,31 @@ func TestTransientCapture(t *testing.T) {
 	})
 }
 
-func rejectedTransportError(statusText string) error {
+func rejectedTransportError(detail string) error {
 	wireErr := &jsonrpc.Error{Code: -32005, Message: "rejected by transport"}
-	return fmt.Errorf("%w: sending \"tools/call\": %v", wireErr, statusText)
+	return fmt.Errorf("calling \"tools/call\": %w: sending \"tools/call\": %v", wireErr, detail)
 }
 
 func TestIsRetryableToolCallError(t *testing.T) {
 	tests := map[string]struct {
-		err      error
-		status   int
-		captured bool
-		want     bool
+		err  error
+		want bool
 	}{
-		"nil":                     {nil, 0, false, false},
-		"captured429":             {errors.New("anything"), http.StatusTooManyRequests, true, true},
-		"captured503":             {errors.New("anything"), http.StatusServiceUnavailable, true, true},
-		"unauthorized":            {&UnauthorizedError{URL: "http://x"}, 0, false, false},
-		"rejectedTooManyRequests": {rejectedTransportError("Too Many Requests"), 0, false, true},
-		"rejectedInternalError":   {rejectedTransportError("Internal Server Error"), 0, false, true},
-		"rejectedBadGateway":      {rejectedTransportError("Bad Gateway"), 0, false, true},
-		"rejectedUnrelated":       {rejectedTransportError("header failure"), 0, false, false},
-		"applicationError":        {fmt.Errorf("calling tool: %w", &jsonrpc.Error{Code: -32603, Message: "Internal error"}), 0, false, false},
-		"connectionReset":         {errors.New("read tcp 10.0.0.1:443: connection reset by peer"), 0, false, true},
-		"tlsHandshakeTimeout":     {errors.New("net/http: TLS handshake timeout"), 0, false, true},
-		"connectionRefused":       {errors.New("dial tcp: connection refused"), 0, false, true},
-		"validationError":         {errors.New("invalid tool arguments"), 0, false, false},
+		"nil":                       {nil, false},
+		"rejectedTooManyRequests":   {rejectedTransportError("Too Many Requests"), true},
+		"rejectedInternalError":     {rejectedTransportError("Internal Server Error"), true},
+		"rejectedConnectionRefused": {rejectedTransportError("dial tcp: connection refused"), true},
+		"rejectedEmptyStatusText":   {rejectedTransportError(""), true},
+		"applicationError":          {fmt.Errorf("calling tool: %w", &jsonrpc.Error{Code: -32603, Message: "Internal error"}), false},
+		"deadConnectionStatus":      {errors.New("sending \"tools/call\": Request Timeout"), false},
+		"clientClosing":             {errors.New("client is closing: sending \"tools/call\": Request Timeout"), false},
+		"bareNetworkError":          {errors.New("read tcp 10.0.0.1:443: connection reset by peer"), false},
+		"unauthorized":              {&UnauthorizedError{URL: "http://x"}, false},
+		"validationError":           {errors.New("invalid tool arguments"), false},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, isRetryableToolCallError(tc.err, tc.status, tc.captured))
+			require.Equal(t, tc.want, isRetryableToolCallError(tc.err))
 		})
 	}
 }
