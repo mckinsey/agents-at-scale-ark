@@ -19,7 +19,9 @@ func testConfig(t *testing.T) Config {
 	}
 	port := 5432
 	if p := os.Getenv("POSTGRES_PORT"); p != "" {
-		port, _ = strconv.Atoi(p)
+		if parsed, err := strconv.Atoi(p); err == nil {
+			port = parsed
+		}
 	}
 	user := os.Getenv("POSTGRES_USER")
 	if user == "" {
