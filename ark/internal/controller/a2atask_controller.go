@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -106,10 +107,14 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *A2ATaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return setupA2ATaskController(mgr, r)
+}
+
+func setupA2ATaskController(mgr ctrl.Manager, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.A2ATask{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(r)
+		Complete(rec)
 }
 
 // reconcileTTL deletes the task once it has outlived its TTL. Returns true when handled.
