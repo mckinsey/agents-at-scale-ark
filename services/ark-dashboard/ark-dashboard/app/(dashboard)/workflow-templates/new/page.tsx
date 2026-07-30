@@ -33,7 +33,7 @@ export default function NewWorkflowTemplatePage() {
   }
 
   return (
-    <div className="-m-10 flex min-h-0 flex-1 flex-col">
+    <div className="-mx-12 -mt-10 -mb-5 flex min-h-0 flex-1 flex-col">
       <WorkflowStudio
         mode="new"
         initialName={nameParam}
