@@ -48,6 +48,8 @@ export function ChatPanel({
     sendMessage,
     clearChat,
     messagesEndRef,
+    scrollContainerRef,
+    handleScroll,
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
@@ -103,7 +105,10 @@ export function ChatPanel({
 
   return (
     <>
-      <ScrollArea className="h-0 min-h-0 flex-1">
+      <ScrollArea
+        viewportRef={scrollContainerRef}
+        onViewportScroll={handleScroll}
+        className="h-0 min-h-0 flex-1">
         <div className="space-y-4 p-4">
           {missingParameters.length > 0 && (
             <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 rounded-full px-4 py-2">
