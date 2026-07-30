@@ -1,79 +1,180 @@
-apiVersion: argoproj.io/v1alpha1
-kind: WorkflowTemplate
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: ark-query
-  labels:
-    ark.mckinsey.com/dashboard-hidden: "true"
+  name: {{ .Release.Name }}-ark-query-template
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+data:
+  ark-query.yaml: |
+    apiVersion: argoproj.io/v1alpha1
+    kind: WorkflowTemplate
+    metadata:
+      name: ark-query
+      labels:
+        ark.mckinsey.com/dashboard-hidden: "true"
+      namespace: {{ .Release.Namespace }}
+      annotations:
+        workflows.argoproj.io/title: "Ark Query"
+        workflows.argoproj.io/description: |
+          Reusable building block that submits an Ark Query and returns its
+          structured outputs. Reference from a workflow step or task with
+          templateRef: {name: ark-query, template: query}.
+    spec:
+      templates:
+        - name: query
+          inputs:
+            parameters:
+              - name: target
+              - name: input
+              - name: timeout
+                value: "5m"
+              - name: ttl
+                value: ""
+              - name: parameters
+                value: "[]"
+              - name: session-id
+                value: ""
+              - name: memory
+                value: ""
+              - name: query-name
+                value: ""
+              - name: service-account
+                value: ""
+          outputs:
+            parameters:
+              - name: response
+                valueFrom:
+                  path: /tmp/response.txt
+              - name: query-json
+                valueFrom:
+                  path: /tmp/query.json
+              - name: phase
+                valueFrom:
+                  path: /tmp/phase.txt
+              - name: conversation-id
+                valueFrom:
+                  path: /tmp/conversation-id.txt
+          script:
+            image: alpine/k8s:1.28.13
+            command: [python3]
+            env:
+              - name: ARK_TARGET
+                value: {{ "{{inputs.parameters.target}}" | quote }}
+              - name: ARK_INPUT
+                value: {{ "{{inputs.parameters.input}}" | quote }}
+              - name: ARK_TIMEOUT
+                value: {{ "{{inputs.parameters.timeout}}" | quote }}
+              - name: ARK_TTL
+                value: {{ "{{inputs.parameters.ttl}}" | quote }}
+              - name: ARK_PARAMETERS
+                value: {{ "{{inputs.parameters.parameters}}" | quote }}
+              - name: ARK_SESSION_ID
+                value: {{ "{{inputs.parameters.session-id}}" | quote }}
+              - name: ARK_MEMORY
+                value: {{ "{{inputs.parameters.memory}}" | quote }}
+              - name: ARK_QUERY_NAME
+                value: {{ "{{inputs.parameters.query-name}}" | quote }}
+              - name: ARK_SERVICE_ACCOUNT
+                value: {{ "{{inputs.parameters.service-account}}" | quote }}
+              - name: ARK_WORKFLOW_NAME
+                value: {{ "{{workflow.name}}" | quote }}
+              - name: ARK_POD_NAME
+                value: {{ "{{pod.name}}" | quote }}
+            source: |
+{{ .Files.Get "files/ark-query.py" | indent 14 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-ark-query-hook
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-ark-query-hook
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: ["workflowtemplates"]
+  verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-ark-query-hook
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-ark-query-hook
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-ark-query-hook
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-apply-ark-query
   namespace: {{ .Release.Namespace }}
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "5"
-    helm.sh/hook-delete-policy: before-hook-creation
-    workflows.argoproj.io/title: "Ark Query"
-    workflows.argoproj.io/description: |
-      Reusable building block that submits an Ark Query and returns its
-      structured outputs. Reference from a workflow step or task with
-      templateRef: {name: ark-query, template: query}.
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
-  templates:
-    - name: query
-      inputs:
-        parameters:
-          - name: target
-          - name: input
-          - name: timeout
-            value: "5m"
-          - name: ttl
-            value: ""
-          - name: parameters
-            value: "[]"
-          - name: session-id
-            value: ""
-          - name: memory
-            value: ""
-          - name: query-name
-            value: ""
-          - name: service-account
-            value: ""
-      outputs:
-        parameters:
-          - name: response
-            valueFrom:
-              path: /tmp/response.txt
-          - name: query-json
-            valueFrom:
-              path: /tmp/query.json
-          - name: phase
-            valueFrom:
-              path: /tmp/phase.txt
-          - name: conversation-id
-            valueFrom:
-              path: /tmp/conversation-id.txt
-      script:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: {{ .Release.Name }}-ark-query-hook
+      restartPolicy: OnFailure
+      containers:
+      - name: apply-ark-query
         image: alpine/k8s:1.28.13
-        command: [python3]
-        env:
-          - name: ARK_TARGET
-            value: {{ "{{inputs.parameters.target}}" | quote }}
-          - name: ARK_INPUT
-            value: {{ "{{inputs.parameters.input}}" | quote }}
-          - name: ARK_TIMEOUT
-            value: {{ "{{inputs.parameters.timeout}}" | quote }}
-          - name: ARK_TTL
-            value: {{ "{{inputs.parameters.ttl}}" | quote }}
-          - name: ARK_PARAMETERS
-            value: {{ "{{inputs.parameters.parameters}}" | quote }}
-          - name: ARK_SESSION_ID
-            value: {{ "{{inputs.parameters.session-id}}" | quote }}
-          - name: ARK_MEMORY
-            value: {{ "{{inputs.parameters.memory}}" | quote }}
-          - name: ARK_QUERY_NAME
-            value: {{ "{{inputs.parameters.query-name}}" | quote }}
-          - name: ARK_SERVICE_ACCOUNT
-            value: {{ "{{inputs.parameters.service-account}}" | quote }}
-          - name: ARK_WORKFLOW_NAME
-            value: {{ "{{workflow.name}}" | quote }}
-          - name: ARK_POD_NAME
-            value: {{ "{{pod.name}}" | quote }}
-        source: |
-{{ .Files.Get "files/ark-query.py" | indent 10 }}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+            ephemeral-storage: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+            ephemeral-storage: 256Mi
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "Waiting for WorkflowTemplate CRD to be established..."
+          for i in $(seq 1 60); do
+            if kubectl apply -n {{ .Release.Namespace }} -f /manifests/ark-query.yaml; then
+              echo "ark-query WorkflowTemplate applied."
+              exit 0
+            fi
+            echo "WorkflowTemplate CRD not ready yet, retrying in 5s ($i/60)..."
+            sleep 5
+          done
+          echo "Timed out waiting for WorkflowTemplate CRD."
+          exit 1
+        volumeMounts:
+        - name: manifest
+          mountPath: /manifests
+      volumes:
+      - name: manifest
+        configMap:
+          name: {{ .Release.Name }}-ark-query-template

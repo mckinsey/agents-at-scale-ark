@@ -3,22 +3,16 @@
  * Contains common mapping logic used by both client and server export services
  */
 
-import type {
-  AgentListResponse,
-  ModelListResponse,
-  TeamListResponse,
-  QueryListResponse,
-  MCPServerListResponse,
-  A2AServerListResponse,
-  ResourceExportData,
-  ExportItem,
-} from '@/lib/services/export';
+import type { ResourceExportData, ExportItem } from '@/lib/services/export';
+import type { WorkflowTemplate } from '@/lib/services/workflow-templates';
+
+const ARGO_DESCRIPTION_ANNOTATION = 'workflows.argoproj.io/description';
 
 /**
  * Maps API response items to ExportItem format
  */
 function mapToExportItems(
-  items: Array<{ name?: string }> | undefined,
+  items: Array<{ name?: string; description?: string | null }> | undefined,
   type: string,
 ): ExportItem[] {
   if (!items) return [];
@@ -27,6 +21,7 @@ function mapToExportItems(
     id: item.name || '',
     name: item.name || '',
     type,
+    description: item.description || undefined,
   }));
 }
 
@@ -83,10 +78,14 @@ export function processResourceResponses(
   if (includeWorkflows && workflowTemplates) {
     if (workflowTemplates.status === 'fulfilled' && workflowTemplates.value) {
       // Workflow templates have a different structure
-      data.workflows = workflowTemplates.value.map((template: any) => ({
+      const templates: WorkflowTemplate[] = workflowTemplates.value;
+      data.workflows = templates.map(template => ({
         id: template.metadata.name || '',
         name: template.metadata.name || '',
         type: 'workflow',
+        description:
+          template.metadata.annotations?.[ARGO_DESCRIPTION_ANNOTATION] ||
+          undefined,
       }));
     }
   }

@@ -19,8 +19,11 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
 import {
   type ApiQueryParameter,
+  type ParameterRow,
+  type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
 import type {
@@ -124,13 +127,23 @@ interface UseChatSessionReturn {
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
+  handleScroll: () => void;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
   pollAfterApproval: () => Promise<void>;
-  requiredParameters: string[];
-  parameterValues: Record<string, string>;
-  setParameterValue: (name: string, value: string) => void;
+  parameterVariant: 'agent' | 'team';
+  hasParameters: boolean;
+  availableParameters: string[];
+  teamAgents: TeamAgentParameters[];
+  parameterRows: ParameterRow[];
+  addParameterRow: () => void;
+  setParameterRowName: (id: string, name: string) => void;
+  setParameterRowValue: (id: string, value: string) => void;
+  setParameterRowAgent: (id: string, agent: string) => void;
+  removeParameterRow: (id: string) => void;
+  canAddParameterRow: boolean;
   missingParameters: string[];
 }
 
@@ -161,6 +174,11 @@ export function useChatSession({
   const sessionId = chatSession.sessionId;
   const conversationId = (chatSession as { conversationId?: string })
     .conversationId;
+
+  const conversationIdRef = useRef<string | undefined>(conversationId);
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
@@ -227,8 +245,11 @@ export function useChatSession({
     [chatKey, setChatHistory],
   );
 
+  const lastQueryName = useRef('');
+
   const updateConversationId = useCallback(
     (newConversationId: string) => {
+      conversationIdRef.current = newConversationId;
       setChatHistory(prev => {
         const safePrev = prev || {};
         const currentSession = safePrev[chatKey];
@@ -242,6 +263,23 @@ export function useChatSession({
     [chatKey, setChatHistory],
   );
 
+  const ensureConversationId = useCallback(async () => {
+    if (conversationIdRef.current) return;
+    const queryName = lastQueryName.current;
+    if (!queryName) return;
+    try {
+      const fullQuery = await chatService.getQuery(queryName);
+      const fallbackConversationId = (
+        fullQuery?.status as { conversationId?: string } | undefined
+      )?.conversationId;
+      if (fallbackConversationId) {
+        updateConversationId(fallbackConversationId);
+      }
+    } catch (err) {
+      console.error('Failed to fetch conversationId fallback:', err);
+    }
+  }, [updateConversationId]);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
   const [isWaitingForApprovalResponse, setIsWaitingForApprovalResponse] =
@@ -251,20 +289,30 @@ export function useChatSession({
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll,
+    scrollToBottom,
+    resumeAutoScroll,
+  } = useStickyScroll();
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
-    requiredParameters,
-    values: parameterValues,
-    setValue: setParameterValue,
+    variant: parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    rows: parameterRows,
+    addRow: addParameterRow,
+    setRowName: setParameterRowName,
+    setRowValue: setParameterRowValue,
+    setRowAgent: setParameterRowAgent,
+    removeRow: removeParameterRow,
+    canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
   } = useAgentQueryParameters(name, type);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -275,7 +323,8 @@ export function useChatSession({
   }, []);
 
   useEffect(() => {
-    setTimeout(scrollToBottom, 100);
+    const id = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(id);
   }, [chatMessages, scrollToBottom]);
 
   const buildChatMessages = useCallback(
@@ -291,7 +340,6 @@ export function useChatSession({
     [],
   );
 
-  const lastQueryName = useRef('');
   const pendingApprovalQueryRef = useRef<{
     queryName: string;
     messageIndex: number;
@@ -918,14 +966,9 @@ export function useChatSession({
   const sendMessage = useCallback(
     async (userMessage: string) => {
       setError(null);
+      resumeAutoScroll();
 
       if (missingParameters.length > 0) {
-        const plural = missingParameters.length > 1;
-        setError(
-          `This agent needs the ${missingParameters.join(', ')} parameter${
-            plural ? 's' : ''
-          } — supply ${plural ? 'them' : 'it'} above, or use the Queries form to create the query.`,
-        );
         return;
       }
 
@@ -951,6 +994,7 @@ export function useChatSession({
       try {
         if (isChatStreamingEnabled) {
           await handleStreamChatResponse(userMessage, apiParameters);
+          await ensureConversationId();
         } else {
           await handlePollChatResponse(userMessage, apiParameters);
         }
@@ -987,11 +1031,13 @@ export function useChatSession({
       }
     },
     [
+      ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
       missingParameters,
       name,
+      resumeAutoScroll,
       toApiParameters,
       type,
       updateChatMessages,
@@ -1167,13 +1213,23 @@ export function useChatSession({
     sendMessage,
     clearChat,
     messagesEndRef,
+    scrollContainerRef,
+    handleScroll,
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,
     pollAfterApproval,
-    requiredParameters,
-    parameterValues,
-    setParameterValue,
+    parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    parameterRows,
+    addParameterRow,
+    setParameterRowName,
+    setParameterRowValue,
+    setParameterRowAgent,
+    removeParameterRow,
+    canAddParameterRow,
     missingParameters,
   };
 }

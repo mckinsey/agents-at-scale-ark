@@ -99,7 +99,8 @@ const defaultArkServices: ServiceCollection = {
   'ark-apiserver': {
     name: 'ark-apiserver',
     helmReleaseName: 'ark-apiserver',
-    description: 'Aggregated API server serving ark.mckinsey.com APIs from PostgreSQL',
+    description:
+      'Aggregated API server serving ark.mckinsey.com APIs from PostgreSQL',
     enabled: true,
     mandatory: true,
     category: 'core',
@@ -235,6 +236,30 @@ const defaultArkServices: ServiceCollection = {
     k8sServicePort: 8639,
     k8sDeploymentName: 'noah-mcp',
   },
+
+  'kubernetes-mcp-server': {
+    name: 'kubernetes-mcp-server',
+    helmReleaseName: 'kubernetes-mcp-server',
+    description:
+      'Read-only Kubernetes MCP server exposing cluster resources as tools',
+    enabled: true,
+    category: 'service',
+    chartPath: `${getMarketplaceRegistry()}/kubernetes-mcp-server`,
+    installArgs: [],
+    k8sServiceName: 'kubernetes-mcp-server',
+    k8sServicePort: 8080,
+    k8sDeploymentName: 'kubernetes-mcp-server',
+  },
+
+  'argo-make-author': {
+    name: 'argo-make-author',
+    helmReleaseName: 'argo-make-author',
+    description: 'Conversational Argo WorkflowTemplate authoring agent',
+    enabled: false,
+    category: 'service',
+    chartPath: `${getMarketplaceRegistry()}/argo-make-author`,
+    installArgs: [],
+  },
 };
 
 function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
@@ -270,7 +295,8 @@ export function getInstallableServices(
 
   for (const [key, service] of Object.entries(arkServices)) {
     if (!service.enabled || !service.chartPath) continue;
-    if (service.requiresBackend && service.requiresBackend !== backend) continue;
+    if (service.requiresBackend && service.requiresBackend !== backend)
+      continue;
     installable[key] = service;
   }
 
