@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	authorizationv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	clientrest "k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -127,6 +129,11 @@ type Config struct {
 	AuditLogPath    string
 	// PolicyRequired makes CEL enforcement a startup precondition rather than best-effort.
 	PolicyRequired bool
+	// PolicyDisabled skips CEL enforcement wiring entirely, so the apiserver never watches
+	// cluster-wide policy objects. Inverted from the chart's `policy.enabled` deliberately:
+	// the zero value must leave enforcement on, so a Config built without this field cannot
+	// end up silently unenforced.
+	PolicyDisabled bool
 }
 
 type Server struct {
@@ -368,6 +375,17 @@ func (s *Server) applyAudit(serverConfig *genericapiserver.Config) error {
 // the host cluster, so its informers and clients are built from RestConfig. Returns nil when
 // enforcement is not wired; PolicyRequired turns those cases into a startup error.
 func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiserver.Config) (informers.SharedInformerFactory, error) {
+	if s.config.PolicyDisabled {
+		// Contradictory rather than merely redundant: honouring either one silently discards
+		// the operator's other instruction, and this is the class of misconfiguration where
+		// guessing means serving unenforced.
+		if s.config.PolicyRequired {
+			return nil, fmt.Errorf("policy enforcement cannot be both disabled (policy.enabled=false) and required (policy.required=true); set at most one")
+		}
+		klog.Info("CEL policy enforcement disabled by configuration (policy.enabled=false); the apiserver will not watch cluster-wide policy objects — Ark in-process validation and audit remain active")
+		return nil, nil
+	}
+
 	if s.config.RestConfig == nil {
 		if s.config.PolicyRequired {
 			return nil, fmt.Errorf("policy enforcement is required but no host REST config is available to build the admission plugin's clients")
@@ -394,6 +412,14 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 			return nil, fmt.Errorf("policy enforcement is required but the host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30)")
 		}
 		klog.Warning("Host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30); CEL policy enforcement disabled — Ark in-process validation and audit remain active")
+		return nil, nil
+	}
+
+	if err := checkPolicyWatchPermissions(ctx, kubeClient.AuthorizationV1()); err != nil {
+		if s.config.PolicyRequired {
+			return nil, fmt.Errorf("policy enforcement is required but %w", err)
+		}
+		klog.Errorf("%v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active) — set policy.required=true to fail startup instead of continuing unenforced.", err)
 		return nil, nil
 	}
 
@@ -430,6 +456,51 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 
 	klog.Info("ValidatingAdmissionPolicy (CEL) enforcement enabled")
 	return admissionInformers, nil
+}
+
+// policyWatchResources are the watches the ValidatingAdmissionPolicy plugin's informers open
+// against the host cluster. All three are load-bearing: the plugin is not ready until both the
+// policy source and the namespace informer have synced, and an unready plugin does not degrade
+// — it holds each write in WaitForReady for up to 10s and then rejects it with Forbidden. So a
+// missing ClusterRoleBinding would otherwise surface as slow, opaque 403s on every write rather
+// than as the documented best-effort fallback.
+var policyWatchResources = []authorizationv1.ResourceAttributes{
+	{Group: "admissionregistration.k8s.io", Resource: "validatingadmissionpolicies", Verb: "watch"},
+	{Group: "admissionregistration.k8s.io", Resource: "validatingadmissionpolicybindings", Verb: "watch"},
+	{Group: "", Resource: "namespaces", Verb: "watch"},
+}
+
+// checkPolicyWatchPermissions confirms the apiserver's ServiceAccount can watch what the plugin
+// informers watch, so a missing grant lands on the same fallback as an unsupported host. The
+// review itself needs no extra RBAC: system:basic-user grants selfsubjectaccessreviews to every
+// authenticated identity. It only covers the grant existing now — a binding deleted later still
+// fails at request time, which is what policy.required is for.
+func checkPolicyWatchPermissions(ctx context.Context, c authorizationv1client.AuthorizationV1Interface) error {
+	for _, attrs := range policyWatchResources {
+		review := &authorizationv1.SelfSubjectAccessReview{
+			Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &attrs},
+		}
+		result, err := c.SelfSubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("could not verify permission to %s %s: %w", attrs.Verb, policyResourceLabel(attrs), err)
+		}
+		if !result.Status.Allowed {
+			reason := result.Status.Reason
+			if reason == "" {
+				reason = "not permitted by RBAC"
+			}
+			return fmt.Errorf("the apiserver ServiceAccount cannot %s %s (%s); the ark-apiserver-admission-policy ClusterRoleBinding is missing or was removed",
+				attrs.Verb, policyResourceLabel(attrs), reason)
+		}
+	}
+	return nil
+}
+
+func policyResourceLabel(a authorizationv1.ResourceAttributes) string {
+	if a.Group == "" {
+		return a.Resource
+	}
+	return a.Resource + "." + a.Group
 }
 
 const (

@@ -89,6 +89,7 @@ subjects:
   - kind: ServiceAccount
     name: {{ .Values.serviceAccountName }}
     namespace: {{ .Release.Namespace }}
+{{- if .Values.policy.enabled }}
 ---
 # The ValidatingAdmissionPolicy admission plugin watches policy objects from the
 # host kube-apiserver to enforce CEL policy on Ark resources in apiserver mode.
@@ -129,3 +130,4 @@ subjects:
   - kind: ServiceAccount
     name: {{ .Values.serviceAccountName }}
     namespace: {{ .Release.Namespace }}
+{{- end }}

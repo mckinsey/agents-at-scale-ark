@@ -19,6 +19,9 @@ spec:
       {{- if or (and $ssl.sslClientCertKey (not $ssl.sslClientKeyKey)) (and $ssl.sslClientKeyKey (not $ssl.sslClientCertKey)) }}
       {{- fail "postgresql.sslClientCertKey and postgresql.sslClientKeyKey must be set together for mutual TLS" }}
       {{- end }}
+      {{- if and .Values.policy.required (not .Values.policy.enabled) }}
+      {{- fail "policy.required=true conflicts with policy.enabled=false: enforcement cannot be both mandatory and switched off — the apiserver would refuse to start" }}
+      {{- end }}
       serviceAccountName: {{ .Values.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
@@ -61,6 +64,8 @@ spec:
             - name: ARK_APISERVER_AUDIT_ENABLED
               value: "false"
             {{- end }}
+            - name: ARK_APISERVER_POLICY_ENABLED
+              value: {{ .Values.policy.enabled | quote }}
             - name: ARK_APISERVER_POLICY_REQUIRED
               value: {{ .Values.policy.required | quote }}
             {{- range $key, $value := .Values.extraEnv }}

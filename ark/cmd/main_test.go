@@ -158,6 +158,7 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 		"ARK_APISERVER_AUDIT_POLICY_FILE",
 		"ARK_APISERVER_AUDIT_LOG_PATH",
 		"ARK_APISERVER_POLICY_REQUIRED",
+		"ARK_APISERVER_POLICY_ENABLED",
 	}
 
 	cases := []struct {
@@ -197,6 +198,22 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 			name:    "invalid policy required bool",
 			env:     map[string]string{"ARK_APISERVER_POLICY_REQUIRED": "sometimes"},
 			wantErr: "ARK_APISERVER_POLICY_REQUIRED",
+		},
+		{
+			// Enabled is the default, so only an explicit opt-out sets PolicyDisabled.
+			name: "policy enforcement can be switched off",
+			env:  map[string]string{"ARK_APISERVER_POLICY_ENABLED": "false"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", PolicyDisabled: true},
+		},
+		{
+			name: "policy enabled explicitly leaves enforcement wired",
+			env:  map[string]string{"ARK_APISERVER_POLICY_ENABLED": "true"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-"},
+		},
+		{
+			name:    "invalid policy enabled bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_ENABLED": "maybe"},
+			wantErr: "ARK_APISERVER_POLICY_ENABLED",
 		},
 		{
 			name: "every variable set",

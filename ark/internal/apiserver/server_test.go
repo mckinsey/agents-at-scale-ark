@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes/fake"
 	clientrest "k8s.io/client-go/rest"
+	k8stesting "k8s.io/client-go/testing"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
@@ -184,6 +186,11 @@ func TestApplyAdmission_SucceedsWithoutAnAuthorizer(t *testing.T) {
 
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "selfsubjectaccessreviews") {
+			_, _ = w.Write([]byte(`{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1",` +
+				`"status":{"allowed":true}}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"kind":"APIResourceList","groupVersion":"admissionregistration.k8s.io/v1",` +
 			`"resources":[{"name":"validatingadmissionpolicies","namespaced":false,"kind":"ValidatingAdmissionPolicy","verbs":["list","watch"]}]}`))
 	}))
@@ -240,6 +247,157 @@ func TestApplyAdmission_BestEffortSkipsWhenUnwirable(t *testing.T) {
 	}
 	if inf != nil {
 		t.Error("expected a nil informer factory when policy enforcement is skipped")
+	}
+}
+
+// policy.enabled=false must skip wiring before any host call, so an operator who opts out is
+// not left depending on discovery or RBAC succeeding.
+func TestApplyAdmission_DisabledSkipsWiringEntirely(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{config: Config{PolicyDisabled: true, RestConfig: &clientrest.Config{Host: "https://unreachable.invalid"}}}
+	cfg := genericapiserver.NewConfig(Codecs)
+	inf, err := s.applyAdmission(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("disabling policy must not fail startup: %v", err)
+	}
+	if inf != nil {
+		t.Error("expected a nil informer factory when policy enforcement is disabled")
+	}
+	if cfg.AdmissionControl != nil {
+		t.Error("expected no admission chain to be wired when policy enforcement is disabled")
+	}
+}
+
+// Disabled and required are contradictory; silently honouring either one would discard an
+// explicit instruction, and one of the two outcomes is "serving unenforced".
+func TestApplyAdmission_DisabledAndRequiredConflict(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{config: Config{PolicyDisabled: true, PolicyRequired: true}}
+	_, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
+	if err == nil {
+		t.Fatal("expected startup to fail when policy enforcement is both disabled and required")
+	}
+	for _, want := range []string{"disabled", "required"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+}
+
+func TestCheckPolicyWatchPermissions(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		allowed map[string]bool // resource -> allowed; absent means allowed
+		apiErr  error
+		wantErr string
+	}{
+		{
+			name: "all three watches granted",
+		},
+		{
+			name:    "policy watch denied names the binding",
+			allowed: map[string]bool{"validatingadmissionpolicies": false},
+			wantErr: "ark-apiserver-admission-policy",
+		},
+		{
+			// Easy to miss: bindings carry the namespaceSelector, so losing this watch alone
+			// still leaves the plugin unable to sync.
+			name:    "binding watch denied",
+			allowed: map[string]bool{"validatingadmissionpolicybindings": false},
+			wantErr: "validatingadmissionpolicybindings",
+		},
+		{
+			// The plugin's ready func needs the namespace informer too.
+			name:    "namespace watch denied",
+			allowed: map[string]bool{"namespaces": false},
+			wantErr: "namespaces",
+		},
+		{
+			name:    "review call failing is reported, not treated as allowed",
+			apiErr:  errors.New("connection refused"),
+			wantErr: "could not verify permission",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cs := fake.NewSimpleClientset()
+			cs.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if tc.apiErr != nil {
+					return true, nil, tc.apiErr
+				}
+				review := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				allowed, ok := tc.allowed[review.Spec.ResourceAttributes.Resource]
+				review.Status.Allowed = !ok || allowed
+				return true, review, nil
+			})
+
+			err := checkPolicyWatchPermissions(context.Background(), cs.AuthorizationV1())
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected the preflight to pass, got: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected the preflight to fail")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("error should mention %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+// A missing ClusterRoleBinding must land on the documented best-effort fallback rather than
+// leaving the plugin's informers unable to sync, which upstream turns into a 10s stall and a
+// Forbidden on every write.
+func TestApplyAdmission_MissingWatchRBACFallsBack(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "selfsubjectaccessreviews") {
+			_, _ = w.Write([]byte(`{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1",` +
+				`"status":{"allowed":false,"reason":"no RBAC policy matched"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"kind":"APIResourceList","groupVersion":"admissionregistration.k8s.io/v1",` +
+			`"resources":[{"name":"validatingadmissionpolicies","namespaced":false,"kind":"ValidatingAdmissionPolicy","verbs":["list","watch"]}]}`))
+	}))
+	defer srv.Close()
+
+	restCfg := &clientrest.Config{
+		Host:            srv.URL,
+		TLSClientConfig: clientrest.TLSClientConfig{Insecure: true},
+	}
+
+	s := &Server{config: Config{RestConfig: restCfg}}
+	cfg := genericapiserver.NewConfig(Codecs)
+	inf, err := s.applyAdmission(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("best-effort mode should not fail startup on missing watch RBAC: %v", err)
+	}
+	if inf != nil {
+		t.Error("expected a nil informer factory when the watches cannot be granted")
+	}
+	if cfg.AdmissionControl != nil {
+		t.Error("expected no admission chain, since its informers could never sync")
+	}
+
+	required := &Server{config: Config{RestConfig: restCfg, PolicyRequired: true}}
+	_, err = required.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
+	if err == nil {
+		t.Fatal("expected startup to fail on missing watch RBAC when policy is required")
+	}
+	if !strings.Contains(err.Error(), "required") {
+		t.Errorf("error should say policy enforcement was required, got: %v", err)
 	}
 }
 

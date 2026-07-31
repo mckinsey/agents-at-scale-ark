@@ -89,8 +89,13 @@ audit:
 # CEL ValidatingAdmissionPolicy enforcement — the supported enforcement point in apiserver
 # mode, since the kube-apiserver runs no webhook chain on aggregated resources.
 policy:
-  # false: start anyway if enforcement cannot be wired (older host, failed discovery), and
-  # log why. true: fail startup instead of serving unenforced.
+  # false: never wire CEL enforcement, and drop the cluster-wide policy/namespace watches and
+  # their RBAC. For deployments that do not want the apiserver reading cluster-scoped policy
+  # objects. Ark's in-process validation and audit are unaffected. Cannot combine with
+  # required=true.
+  enabled: true
+  # false: start anyway if enforcement cannot be wired (older host, failed discovery, missing
+  # RBAC), and log why. true: fail startup instead of serving unenforced.
   required: false
   # Extra RBAC for policies using `paramKind`; the plugin needs read access to the param
   # resource or its informer never syncs. ConfigMaps/Secrets are already granted.

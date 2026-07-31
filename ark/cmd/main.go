@@ -467,6 +467,16 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 		cfg.AuditEnabled = false
 	}
 
+	// Unset means enabled: enforcement is the default, and only an explicit opt-out removes
+	// the cluster-wide policy watches.
+	if v := os.Getenv("ARK_APISERVER_POLICY_ENABLED"); v != "" {
+		enabled, err := strconv.ParseBool(v)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_POLICY_ENABLED %q: %w", v, err)
+		}
+		cfg.PolicyDisabled = !enabled
+	}
+
 	if v := os.Getenv("ARK_APISERVER_POLICY_REQUIRED"); v != "" {
 		required, err := strconv.ParseBool(v)
 		if err != nil {
