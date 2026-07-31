@@ -48,7 +48,7 @@ const EMPTY_PAGE = { items: [], total: 0, hasMore: false };
 
 /** Serves the five `limit=1` probes; every other GET returns an empty page. */
 function mockFetch(probeItems: (url: string) => unknown[]) {
-  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+  const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
     if (url.includes('_t=')) {
       const items = probeItems(url);
