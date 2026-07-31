@@ -309,6 +309,7 @@ export class InMemorySessionsStorage implements SessionsStorage {
 
   async delete(): Promise<void> {
     this.store = {sessions: {}};
+    this.queryToSession.clear();
     return this.save();
   }
 

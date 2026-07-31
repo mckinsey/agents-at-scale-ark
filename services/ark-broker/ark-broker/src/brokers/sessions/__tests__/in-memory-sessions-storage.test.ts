@@ -403,6 +403,20 @@ describe('InMemorySessionsStorage', () => {
       const store = await storage.getAll();
       expect(Object.keys(store.sessions)).toHaveLength(0);
     });
+
+    test('clears the query index too, so purged mappings do not accumulate', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'q2'});
+
+      await storage.delete();
+
+      // Reads already miss after a purge, so the leak has no behaviour to
+      // assert on - the index is the only place it is visible.
+      const index = (
+        storage as unknown as {queryToSession: Map<string, string>}
+      ).queryToSession;
+      expect(index.size).toBe(0);
+    });
   });
 
   describe('subscribe', () => {
