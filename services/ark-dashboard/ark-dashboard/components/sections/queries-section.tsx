@@ -15,6 +15,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import {
   Tooltip,
@@ -47,9 +48,6 @@ const STATUS_CONFIG: Record<string, { label: string; dotClass: string }> = {
   queued: { label: 'Queued', dotClass: 'bg-status-warning' },
   canceled: { label: 'Canceled', dotClass: 'bg-fg-tertiary' },
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function getInputDisplayText(
   input: string | { role: string; content?: unknown }[] | undefined,
