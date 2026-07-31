@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsView } from '@/app/(dashboard)/broker/page';
 
@@ -29,7 +29,9 @@ class MockEventSource {
 beforeEach(() => {
   esInstances.length = 0;
   (global as unknown as { EventSource: unknown }).EventSource = MockEventSource;
-  global.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+  global.fetch = vi
+    .fn()
+    .mockResolvedValue({ ok: true }) as unknown as typeof fetch;
 });
 
 afterEach(() => {
@@ -55,7 +57,9 @@ describe('SessionsView', () => {
   it('opens EventSource with correct URL on mount', () => {
     render(<SessionsView memory="default" />);
     expect(esInstances).toHaveLength(1);
-    expect(latestES().url).toBe('http://localhost:3000/api/v1/broker/sessions?memory=default&watch=true');
+    expect(latestES().url).toBe(
+      'http://localhost:3000/api/v1/broker/sessions?memory=default&watch=true',
+    );
   });
 
   it('cleans up EventSource on unmount', () => {
@@ -151,9 +155,12 @@ describe('SessionsView', () => {
     await user.click(screen.getByRole('button', { name: /purge/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/broker/sessions?memory=default', {
-        method: 'DELETE',
-      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:3000/api/v1/broker/sessions?memory=default',
+        {
+          method: 'DELETE',
+        },
+      );
     });
     await waitFor(() => {
       expect(screen.getByText(/waiting for data/i)).toBeDefined();
@@ -181,17 +188,17 @@ describe('SessionsView', () => {
     });
   });
 
-  it('connection dot turns green on EventSource.onopen', async () => {
+  it('connection dot reflects connected state on EventSource.onopen', async () => {
     const { container } = render(<SessionsView memory="default" />);
     const dot = container.querySelector('span.rounded-full');
-    expect(dot?.className).toContain('bg-gray-300');
+    expect(dot?.className).toContain('bg-fg-disabled');
     act(() => {
       latestES().onopen?.();
     });
     await waitFor(() => {
-      expect(
-        container.querySelector('span.rounded-full')?.className,
-      ).toContain('bg-green-500');
+      expect(container.querySelector('span.rounded-full')?.className).toContain(
+        'bg-status-success',
+      );
     });
   });
 
@@ -210,23 +217,23 @@ describe('SessionsView', () => {
     expect(screen.getByText('no-activity-b')).toBeDefined();
   });
 
-  it('connection dot turns gray on EventSource.onerror', async () => {
+  it('connection dot reflects disconnected state on EventSource.onerror', async () => {
     const { container } = render(<SessionsView memory="default" />);
     act(() => {
       latestES().onopen?.();
     });
     await waitFor(() => {
-      expect(
-        container.querySelector('span.rounded-full')?.className,
-      ).toContain('bg-green-500');
+      expect(container.querySelector('span.rounded-full')?.className).toContain(
+        'bg-status-success',
+      );
     });
     act(() => {
       latestES().onerror?.();
     });
     await waitFor(() => {
-      expect(
-        container.querySelector('span.rounded-full')?.className,
-      ).toContain('bg-gray-300');
+      expect(container.querySelector('span.rounded-full')?.className).toContain(
+        'bg-fg-disabled',
+      );
     });
   });
 });
