@@ -196,37 +196,7 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	// Handle generateName: if name is empty but generateName is set, generate a unique name
 	// Retry on name collisions up to maxGenerateNameAttempts
 	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
-		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
-		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
-			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
-			accessor.SetName(generatedName)
-
-			// Re-run per attempt: each produces a different name, which policy evaluates.
-			if err := admit(); err != nil {
-				metrics.RecordStorageLatency("create", s.config.Kind, start)
-				return nil, err
-			}
-
-			sctx, cancel := storageContext(ctx)
-			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
-			cancel()
-
-			if err == nil {
-				metrics.RecordStorageOperation("create", s.config.Kind, "success")
-				metrics.RecordStorageLatency("create", s.config.Kind, start)
-				return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
-			}
-
-			if !errors.Is(err, storage.ErrAlreadyExists) {
-				metrics.RecordStorageLatency("create", s.config.Kind, start)
-				metrics.RecordStorageOperation("create", s.config.Kind, "error")
-				return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
-			}
-		}
-
-		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
-		metrics.RecordStorageLatency("create", s.config.Kind, start)
-		return nil, apierrors.NewServerTimeout(gr, "create", 1)
+		return s.createWithGeneratedName(ctx, obj, accessor, admit, start)
 	}
 
 	if err := admit(); err != nil {
@@ -250,6 +220,39 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	metrics.RecordStorageOperation("create", s.config.Kind, "success")
 	metrics.RecordStorageLatency("create", s.config.Kind, start)
 	return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+}
+
+// createWithGeneratedName resolves a generateName request. Each attempt picks a fresh name and
+// re-runs admission for it, since policy may key on the name; only a collision is retried.
+func (s *GenericStorage) createWithGeneratedName(ctx context.Context, obj runtime.Object, accessor metav1.Object, admit func() error, start time.Time) (runtime.Object, error) {
+	for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
+		accessor.SetName(names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName()))
+
+		if err := admit(); err != nil {
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			return nil, err
+		}
+
+		sctx, cancel := storageContext(ctx)
+		err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
+		cancel()
+
+		switch {
+		case err == nil:
+			metrics.RecordStorageOperation("create", s.config.Kind, "success")
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+		case !errors.Is(err, storage.ErrAlreadyExists):
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			metrics.RecordStorageOperation("create", s.config.Kind, "error")
+			return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
+		}
+	}
+
+	metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
+	metrics.RecordStorageLatency("create", s.config.Kind, start)
+	gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+	return nil, apierrors.NewServerTimeout(gr, "create", 1)
 }
 
 func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {

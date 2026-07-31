@@ -58,16 +58,20 @@ func (f *fakeBackend) Update(_ context.Context, kind, ns, name string, obj runti
 func (f *fakeBackend) List(context.Context, string, string, storage.ListOptions) ([]runtime.Object, string, error) {
 	return nil, "", nil
 }
+
 func (f *fakeBackend) UpdateStatus(context.Context, string, string, string, runtime.Object) error {
 	return nil
 }
+
 func (f *fakeBackend) Delete(_ context.Context, kind, ns, name string) error {
 	delete(f.objects, f.key(kind, ns, name))
 	return nil
 }
+
 func (f *fakeBackend) Watch(context.Context, string, string, storage.WatchOptions) (watch.Interface, error) {
 	return nil, nil
 }
+
 func (f *fakeBackend) GetResourceVersion(context.Context, string, string, string) (int64, error) {
 	return 1, nil
 }
@@ -94,15 +98,18 @@ func (l *nopLookup) GetConfigMap(_ context.Context, namespace, name string) (*co
 	return nil, fmt.Errorf("configmap %q not found", name)
 }
 
-func newAgentAdmissionStorage(backend storage.Backend) (*AdmissionStorage, *nopLookup) {
+// nsTeamA is the namespace the admission fixtures write into; several assertions turn on it
+// reaching the validator, since a policy keyed on namespace matches nothing when it is empty.
+const nsTeamA = "team-a"
+
+func newAgentAdmissionStorage(backend storage.Backend) *AdmissionStorage {
 	cfg := registry.ResourceConfig{
 		Kind: "Agent", Resource: "agents", SingularName: "agent",
 		NewFunc:     func() runtime.Object { return &arkv1alpha1.Agent{} },
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	lookup := &nopLookup{}
-	return NewAdmissionStorage(inner, validation.NewValidator(lookup)), lookup
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}))
 }
 
 func agent(name string) *arkv1alpha1.Agent {
@@ -128,8 +135,8 @@ func contextForNamespace(ns string) context.Context {
 func TestAdmissionStorage_Create_ForwardsAdmissionCallback(t *testing.T) {
 	t.Parallel()
 
-	s, _ := newAgentAdmissionStorage(newFakeBackend())
-	ctx := contextForNamespace("team-a")
+	s := newAgentAdmissionStorage(newFakeBackend())
+	ctx := contextForNamespace(nsTeamA)
 
 	called := 0
 	spy := rest.ValidateObjectFunc(func(_ context.Context, _ runtime.Object) error {
@@ -149,8 +156,8 @@ func TestAdmissionStorage_Create_RejectionBlocksTheWrite(t *testing.T) {
 	t.Parallel()
 
 	backend := newFakeBackend()
-	s, _ := newAgentAdmissionStorage(backend)
-	ctx := contextForNamespace("team-a")
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
 
 	denied := errors.New("denied by policy")
 	spy := rest.ValidateObjectFunc(func(_ context.Context, _ runtime.Object) error { return denied })
@@ -169,8 +176,8 @@ func TestAdmissionStorage_Create_RejectionBlocksTheWrite(t *testing.T) {
 func TestAdmissionStorage_Create_AdmissionSeesFullyFormedObject(t *testing.T) {
 	t.Parallel()
 
-	s, _ := newAgentAdmissionStorage(newFakeBackend())
-	ctx := contextForNamespace("team-a")
+	s := newAgentAdmissionStorage(newFakeBackend())
+	ctx := contextForNamespace(nsTeamA)
 
 	var seen metav1.Object
 	spy := rest.ValidateObjectFunc(func(_ context.Context, obj runtime.Object) error {
@@ -191,8 +198,8 @@ func TestAdmissionStorage_Create_AdmissionSeesFullyFormedObject(t *testing.T) {
 	if got := seen.GetName(); got != "a1" {
 		t.Errorf("name = %q, want %q", got, "a1")
 	}
-	if got := seen.GetNamespace(); got != "team-a" {
-		t.Errorf("namespace = %q, want %q (policies keyed on namespace match nothing when empty)", got, "team-a")
+	if got := seen.GetNamespace(); got != nsTeamA {
+		t.Errorf("namespace = %q, want %q (policies keyed on namespace match nothing when empty)", got, nsTeamA)
 	}
 	if seen.GetUID() == "" {
 		t.Error("uid is empty; a policy reading object.metadata.uid would match nothing")
@@ -207,8 +214,8 @@ func TestAdmissionStorage_Create_AdmissionSeesFullyFormedObject(t *testing.T) {
 func TestAdmissionStorage_Create_AdmissionSeesGeneratedName(t *testing.T) {
 	t.Parallel()
 
-	s, _ := newAgentAdmissionStorage(newFakeBackend())
-	ctx := contextForNamespace("team-a")
+	s := newAgentAdmissionStorage(newFakeBackend())
+	ctx := contextForNamespace(nsTeamA)
 
 	obj := agent("")
 	obj.GenerateName = "probe-"
@@ -243,8 +250,8 @@ func TestAdmissionStorage_Update_ForwardsAdmissionCallback(t *testing.T) {
 	t.Parallel()
 
 	backend := newFakeBackend()
-	s, _ := newAgentAdmissionStorage(backend)
-	ctx := contextForNamespace("team-a")
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
 
 	created, err := s.Create(ctx, agent("a1"), nil, &metav1.CreateOptions{})
 	if err != nil {
@@ -259,7 +266,7 @@ func TestAdmissionStorage_Update_ForwardsAdmissionCallback(t *testing.T) {
 	})
 
 	next := agent("a1")
-	next.Namespace = "team-a"
+	next.Namespace = nsTeamA
 	next.ResourceVersion = createdAcc.GetResourceVersion()
 	next.Spec.Prompt = "updated"
 
@@ -276,8 +283,8 @@ func TestAdmissionStorage_Update_AdmissionSeesPreservedIdentity(t *testing.T) {
 	t.Parallel()
 
 	backend := newFakeBackend()
-	s, _ := newAgentAdmissionStorage(backend)
-	ctx := contextForNamespace("team-a")
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
 
 	created, err := s.Create(ctx, agent("a1"), nil, &metav1.CreateOptions{})
 	if err != nil {
@@ -297,7 +304,7 @@ func TestAdmissionStorage_Update_AdmissionSeesPreservedIdentity(t *testing.T) {
 
 	// Deliberately omit uid and creationTimestamp, as a hand-written PUT would.
 	next := agent("a1")
-	next.Namespace = "team-a"
+	next.Namespace = nsTeamA
 	next.ResourceVersion = createdAcc.GetResourceVersion()
 
 	if _, _, err := s.Update(ctx, "a1", rest.DefaultUpdatedObjectInfo(next), nil, updateValidation, false, &metav1.UpdateOptions{}); err != nil {
@@ -318,7 +325,7 @@ func TestAdmissionStorage_Update_AdmissionSeesPreservedIdentity(t *testing.T) {
 func TestPrepareForCreate_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	ctx := contextForNamespace("team-a")
+	ctx := contextForNamespace(nsTeamA)
 	obj := agent("a1")
 
 	if err := registry.PrepareForCreate(ctx, obj); err != nil {
@@ -335,8 +342,8 @@ func TestPrepareForCreate_Idempotent(t *testing.T) {
 	if secondTS := obj.GetCreationTimestamp(); !secondTS.Equal(&firstTS) {
 		t.Error("creationTimestamp changed on second call")
 	}
-	if obj.GetNamespace() != "team-a" {
-		t.Errorf("namespace = %q, want team-a", obj.GetNamespace())
+	if obj.GetNamespace() != nsTeamA {
+		t.Errorf("namespace = %q, want %q", obj.GetNamespace(), nsTeamA)
 	}
 }
 
