@@ -63,7 +63,7 @@ flowchart LR
         broker["ark-broker<br/>streaming + memory"]
     end
 
-    postgres[("PostgreSQL<br/>persist messages")]
+    postgres[("PostgreSQL<br/>persist messages + events")]
     redis[("Redis<br/>stream chunks")]
 
     controller -->|"A2A · runs queries"| completions
