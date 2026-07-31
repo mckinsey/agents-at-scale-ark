@@ -70,17 +70,17 @@ function StreamPanel({
         <div className="flex items-center gap-2">
           <span className="headings-h4-regular text-fg-primary">{title}</span>
           <span
-            role="img"
-            aria-label={
-              isConnected
-                ? `${title} stream connected`
-                : `${title} stream disconnected`
-            }
+            aria-hidden
             className={cn(
               'size-2 rounded-full',
               isConnected ? 'bg-status-success' : 'bg-fg-disabled',
             )}
           />
+          <span className="sr-only">
+            {isConnected
+              ? `${title} stream connected`
+              : `${title} stream disconnected`}
+          </span>
         </div>
         <div className="flex items-center justify-end gap-5">
           <Button
