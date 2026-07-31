@@ -28,6 +28,25 @@ type Handler struct {
 	k8sClient client.Client
 	telemetry telemetry.Provider
 	eventing  eventing.Provider
+
+	// withShutdown links a request context to the server lifetime, returning a context that is
+	// cancelled when either the request ends or the server begins finalizing shutdown — so
+	// long-running executions (streams) stop and run their finalize path instead of being
+	// severed on process exit. Injected by NewServer (capturing the server context); when nil
+	// (e.g. a bare Handler in tests) the request context is used unchanged.
+	withShutdown func(context.Context) (context.Context, context.CancelFunc)
+}
+
+// mergeShutdown returns a child of reqCtx that is also cancelled when serverCtx is done,
+// so an in-flight execution reacts to server shutdown as well as client disconnect. The
+// returned cancel must be called to release resources.
+func mergeShutdown(reqCtx, serverCtx context.Context) (context.Context, context.CancelFunc) {
+	if serverCtx == nil {
+		return context.WithCancel(reqCtx)
+	}
+	ctx, cancel := context.WithCancel(reqCtx)
+	stop := context.AfterFunc(serverCtx, cancel)
+	return ctx, func() { stop(); cancel() }
 }
 
 type arkMetadata struct {
@@ -60,6 +79,12 @@ type executionState struct {
 	querySpan      telemetry.Span
 	targetSpan     telemetry.Span
 	isResumption   bool
+	// memoryUnavailable is true when the query carried a conversationId but no
+	// Memory backend was reachable, so history was silently dropped.
+	memoryUnavailable bool
+	// memoryDegraded is true when a Memory backend was reachable but reading the
+	// conversation history from it failed, so the query ran without prior context.
+	memoryDegraded bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -99,6 +124,17 @@ func (h *Handler) ProcessMessage(
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
+	// Link the request to the server lifetime so a shutdown finalizes in-flight work. Fall
+	// back to a plain cancellable context when no linker is injected (bare Handler in tests).
+	merge := h.withShutdown
+	if merge == nil {
+		merge = func(reqCtx context.Context) (context.Context, context.CancelFunc) {
+			return mergeShutdown(reqCtx, nil)
+		}
+	}
+	ctx, cancel := merge(ctx)
+	defer cancel()
+
 	query, target, err := h.resolveQueryAndTarget(ctx, message)
 	if err != nil {
 		return nil, err
@@ -266,10 +302,16 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		conversationId = httpMemory.GetConversationID()
 	}
 
+	_, isNoop := memory.(*NoopMemory)
+	memoryUnavailable := isNoop && conversationId != ""
+
 	memoryMessages, err := memory.GetMessages(ctx)
+	memoryDegraded := false
 	if err != nil {
-		log.Error(err, "failed to load memory messages, continuing without history")
+		log.Error(err, "failed to load memory messages, continuing without history",
+			"queryName", query.Name, "namespace", query.Namespace, "conversationId", conversationId)
 		memoryMessages = nil
+		memoryDegraded = true
 	}
 
 	eventStream, err := NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
@@ -294,6 +336,9 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		eventStream:    eventStream,
 		querySpan:      querySpan,
 		targetSpan:     targetSpan,
+
+		memoryUnavailable: memoryUnavailable,
+		memoryDegraded:    memoryDegraded,
 	}
 
 	return ctx, state, nil
@@ -516,6 +561,12 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 	}
 	if state.conversationId != "" {
 		responseMeta["conversationId"] = state.conversationId
+	}
+	if state.memoryUnavailable {
+		responseMeta["memoryUnavailable"] = true
+	}
+	if state.memoryDegraded {
+		responseMeta["memoryDegraded"] = true
 	}
 	if execResult != nil && execResult.A2AResponse != nil {
 		a2aMeta := map[string]string{}

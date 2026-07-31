@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
   usePathname: vi.fn(() => '/agents'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -61,7 +62,7 @@ describe('AgentForm', () => {
   });
 
   it('should render loading spinner when loading', () => {
-    const { container } = render(<AgentForm mode="create" />);
+    const { container } = render(<AgentForm mode="edit" />);
     expect(container.querySelector('.animate-spin')).toBeTruthy();
   });
 });

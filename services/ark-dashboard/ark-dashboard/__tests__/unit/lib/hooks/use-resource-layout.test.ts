@@ -3,15 +3,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   parseLayout,
-  useAgentsLayout,
   useResourceLayout,
-  useTeamsLayout,
   useWorkflowsLayout,
 } from '@/lib/hooks/use-resource-layout';
 
 const WORKFLOW_KEY = (ns: string) => `ark-dashboard:workflow-layout:${ns}`;
-const AGENTS_KEY = (ns: string) => `ark-dashboard:agents-layout:${ns}`;
-const TEAMS_KEY = (ns: string) => `ark-dashboard:teams-layout:${ns}`;
 
 describe('parseLayout', () => {
   it('returns an empty layout for non-objects', () => {
@@ -149,23 +145,5 @@ describe('wrapper hooks', () => {
     );
     const { result } = renderHook(() => useWorkflowsLayout('default'));
     expect(result.current.layout.ungroupedOrder).toEqual(['w1']);
-  });
-
-  it('useAgentsLayout uses the agents prefix', () => {
-    localStorage.setItem(
-      AGENTS_KEY('default'),
-      JSON.stringify({ sections: [], ungroupedOrder: ['alice'] }),
-    );
-    const { result } = renderHook(() => useAgentsLayout('default'));
-    expect(result.current.layout.ungroupedOrder).toEqual(['alice']);
-  });
-
-  it('useTeamsLayout uses the teams prefix', () => {
-    localStorage.setItem(
-      TEAMS_KEY('default'),
-      JSON.stringify({ sections: [], ungroupedOrder: ['red-team'] }),
-    );
-    const { result } = renderHook(() => useTeamsLayout('default'));
-    expect(result.current.layout.ungroupedOrder).toEqual(['red-team']);
   });
 });

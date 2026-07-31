@@ -16,6 +16,7 @@ import (
 
 // recordingAgentRecorder captures operation lifecycle calls for assertions.
 type recordingAgentRecorder struct {
+	starts    map[string]map[string]string
 	completes []string
 	fails     []string
 }
@@ -24,7 +25,11 @@ func (r *recordingAgentRecorder) InitializeQueryContext(ctx context.Context, _ *
 	return ctx
 }
 
-func (r *recordingAgentRecorder) Start(ctx context.Context, _, _ string, _ map[string]string) context.Context {
+func (r *recordingAgentRecorder) Start(ctx context.Context, operation, _ string, data map[string]string) context.Context {
+	if r.starts == nil {
+		r.starts = map[string]map[string]string{}
+	}
+	r.starts[operation] = data
 	return ctx
 }
 
@@ -434,4 +439,33 @@ func TestAgentExecute_ApprovalDoesNotEmitErrorEvent(t *testing.T) {
 	require.ErrorAs(t, err, &approvalErr, "Execute should propagate ApprovalRequiredError")
 	assert.Contains(t, rec.completes, "AgentExecution", "approval pause should emit a completion event")
 	assert.NotContains(t, rec.fails, "AgentExecution", "approval pause must not emit an error event")
+}
+
+// Must match the controller's emission (query_controller.go: target.Name).
+// Divergence lets the broker record two participant strings per agent under
+// event-order race, which the dashboard reads as a workflow conversation.
+func TestAgentExecute_EmitsBareAgentNameInOperationData(t *testing.T) {
+	provider := &mockChatProvider{
+		response: &openai.ChatCompletion{
+			ID:    "cmpl-1",
+			Model: "test-model",
+			Choices: []openai.ChatCompletionChoice{
+				{
+					Message:      openai.ChatCompletionMessage{Role: "assistant", Content: "hi"},
+					FinishReason: "stop",
+				},
+			},
+		},
+	}
+
+	rec := &recordingAgentRecorder{}
+	agent := newTestAgent("my-agent", provider)
+	agent.eventingRecorder = rec
+
+	_, err := agent.Execute(context.Background(), NewUserMessage("hello"), nil, nil, nil, ExecuteOptions{})
+	require.NoError(t, err)
+
+	data, ok := rec.starts["AgentExecution"]
+	require.True(t, ok, "AgentExecution Start event should have been recorded")
+	assert.Equal(t, "my-agent", data["agent"], "expected bare Name, not FullName")
 }

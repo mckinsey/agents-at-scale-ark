@@ -3,12 +3,19 @@
 import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
 
-import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
+import {
+  isExperimentalExecutionEngineEnabledAtom,
+  isMarketplaceEnabledAtom,
+} from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
 
-import { MANAGE_MARKETPLACE_KEY, type SettingPage, settingsSections } from './settings-types';
+import {
+  type ExperimentalSettingPage,
+  type SettingPage,
+  settingsSections,
+} from './settings-types';
 
 type SettingsSidebarProps = {
   activePage: SettingPage;
@@ -16,8 +23,23 @@ type SettingsSidebarProps = {
 
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   const { push, replace } = useNamespacedNavigation();
-  const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
+  const isExperimentalExecutionEngineEnabled = useAtomValue(
+    isExperimentalExecutionEngineEnabledAtom,
+  );
+  const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
+
+  const isExperimentalEnabled: Record<ExperimentalSettingPage, boolean> = {
+    'execution-engines': isExperimentalExecutionEngineEnabled,
+    'manage-marketplace': isMarketplaceEnabled,
+  };
+
+  const visibleSections = settingsSections.map(section => ({
+    ...section,
+    items: section.items.filter(
+      item => !item.experimental || isExperimentalEnabled[item.key],
+    ),
+  }));
 
   const handleSettingClick = (settingKey: SettingPage) => {
     replace(`/settings/${settingKey}`);
@@ -42,13 +64,15 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
       </div>
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-6">
-          {settingsSections.map(section => (
+          {visibleSections.map(section => (
             <div key={section.sectionKey} className="space-y-2">
-              <div className="text-sidebar-foreground px-2 text-xs">
-                {section.sectionLabel}
-              </div>
+              {section.sectionLabel && (
+                <div className="text-sidebar-foreground px-2 text-xs">
+                  {section.sectionLabel}
+                </div>
+              )}
               <div className="space-y-1 pl-2">
-                {section.items.filter(item => item.key !== MANAGE_MARKETPLACE_KEY || isMarketplaceEnabled).map(item => {
+                {section.items.map(item => {
                   const Icon = item.icon;
                   return (
                     <button

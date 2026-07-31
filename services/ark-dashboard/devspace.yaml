@@ -64,6 +64,15 @@ deployments:
             size: 2Gi
           - name: ark-dashboard-npm-cache
             size: 2Gi
+  # Local-dev only: bind the chart's marketplace-source-editor Role to ark-api-sa
+  # so marketplace source editing works in devspace (impersonation is off, so the
+  # service account is the effective identity). Not part of the chart — production
+  # binds the Role per user/namespace via impersonation instead.
+  marketplace-source-editor-dev-binding:
+    namespace: default
+    kubectl:
+      manifests:
+        - dev/marketplace-source-editor-binding.yaml
 
 dev:
   ark-dashboard:

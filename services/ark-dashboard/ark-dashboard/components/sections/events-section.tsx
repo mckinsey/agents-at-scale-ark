@@ -2,8 +2,6 @@
 
 import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -24,6 +22,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Event, eventsService } from '@/lib/services/events';
 
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '../ui/empty';
@@ -240,11 +239,11 @@ export function EventsSection({
   const getEventTypeBadge = (eventType: string) => {
     switch (eventType) {
       case 'Warning':
-        return <Badge variant="destructive">{eventType}</Badge>;
+        return <Badge variant="error">{eventType}</Badge>;
       case 'Normal':
-        return <Badge variant="secondary">{eventType}</Badge>;
+        return <Badge variant="alternative">{eventType}</Badge>;
       default:
-        return <Badge variant="outline">{eventType}</Badge>;
+        return <Badge outline>{eventType}</Badge>;
     }
   };
 
@@ -266,7 +265,7 @@ export function EventsSection({
       <div className="flex flex-wrap items-center gap-2 border-b pb-4">
         <Select
           value={type || 'all'}
-          onValueChange={value => handleFilterChange('type', value)}>
+          onValueChange={value => handleFilterChange('type', value as string)}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
@@ -282,7 +281,7 @@ export function EventsSection({
 
         <Select
           value={kind || 'all'}
-          onValueChange={value => handleFilterChange('kind', value)}>
+          onValueChange={value => handleFilterChange('kind', value as string)}>
           <SelectTrigger className="w-40">
             <SelectValue placeholder="Object Kind" />
           </SelectTrigger>
@@ -298,7 +297,7 @@ export function EventsSection({
 
         <Select
           value={name || 'all'}
-          onValueChange={value => handleFilterChange('name', value)}>
+          onValueChange={value => handleFilterChange('name', value as string)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Resource Name" />
           </SelectTrigger>

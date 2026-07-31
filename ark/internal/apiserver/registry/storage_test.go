@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/storage"
@@ -538,6 +539,80 @@ func TestGenericStorage_Delete_WithFinalizers_DeletionTimestampNotReset(t *testi
 	resultAgent := result.(*arkv1alpha1.Agent)
 	if !resultAgent.DeletionTimestamp.Equal(&original) {
 		t.Errorf("expected existing deletionTimestamp to be preserved, got %v", resultAgent.DeletionTimestamp)
+	}
+}
+
+func TestGenericStorage_Delete_PreconditionUIDMismatch(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.UID = types.UID("actual-uid")
+	backend.objects["Agent/default/test-agent"] = agent
+
+	staleUID := types.UID("stale-uid")
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &staleUID},
+	})
+	if !apierrors.IsConflict(err) {
+		t.Errorf("expected conflict error, got %T: %v", err, err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain when UID precondition fails")
+	}
+}
+
+func TestGenericStorage_Delete_PreconditionResourceVersionMismatch(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.ResourceVersion = "5"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	staleRV := "3"
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{ResourceVersion: &staleRV},
+	})
+	if !apierrors.IsConflict(err) {
+		t.Errorf("expected conflict error, got %T: %v", err, err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain when resourceVersion precondition fails")
+	}
+}
+
+func TestGenericStorage_Delete_PreconditionsMatch(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.UID = types.UID("actual-uid")
+	agent.ResourceVersion = "5"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	uid := types.UID("actual-uid")
+	rv := "5"
+	_, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv},
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if !deleted {
+		t.Error("expected deleted to be true when preconditions match")
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; ok {
+		t.Error("expected object to be removed when preconditions match")
 	}
 }
 

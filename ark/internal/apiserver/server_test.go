@@ -4,8 +4,10 @@ package apiserver
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +29,65 @@ func TestNew_Defaults(t *testing.T) {
 	}
 }
 
+func TestServer_LeaderElectionSplit(t *testing.T) {
+	t.Parallel()
+
+	s := New(Config{})
+	if s.NeedLeaderElection() {
+		t.Error("Server must serve on every replica: NeedLeaderElection() = true, want false")
+	}
+	if !s.WALConsumer().NeedLeaderElection() {
+		t.Error("WAL consumer must be single-instance: NeedLeaderElection() = false, want true")
+	}
+}
+
+func TestWALConsumer_StopsWhenBackendNeverReady(t *testing.T) {
+	t.Parallel()
+
+	s := New(Config{})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.WALConsumer().Start(ctx) }()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Start() = %v, want nil", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WAL consumer runnable did not stop on context cancellation")
+	}
+}
+
+func TestWALConsumer_StartsWhenBackendReady(t *testing.T) {
+	t.Parallel()
+
+	ready := make(chan struct{})
+	started := make(chan struct{})
+	w := &walConsumer{ready: ready, start: func() { close(started) }}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Start(ctx) }()
+
+	close(ready)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("StartWALConsumer was not called after backend became ready")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Start() = %v, want nil", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WAL consumer runnable did not stop after context cancellation")
+	}
+}
+
 func TestServer_Start_InvalidAuthMode(t *testing.T) {
 	t.Parallel()
 
@@ -37,6 +98,35 @@ func TestServer_Start_InvalidAuthMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "auth mode") {
 		t.Errorf("error = %q, want mention of auth mode", err.Error())
+	}
+}
+
+func TestServer_Start_PostgresUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	s := New(Config{
+		PostgresHost:    "127.0.0.1",
+		PostgresPort:    port,
+		PostgresDB:      "ark",
+		PostgresUser:    "ark",
+		PostgresPass:    "secret",
+		PostgresSSLRoot: "/etc/ark/postgres-tls/ca.crt",
+		PostgresSSLCert: "/etc/ark/postgres-tls/tls.crt",
+		PostgresSSLKey:  "/etc/ark/postgres-tls/tls.key",
+	})
+	err = s.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unreachable postgres")
+	}
+	if !strings.Contains(err.Error(), "PostgreSQL backend") {
+		t.Errorf("error = %q, want PostgreSQL backend failure", err.Error())
 	}
 }
 

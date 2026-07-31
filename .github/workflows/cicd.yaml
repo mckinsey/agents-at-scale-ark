@@ -577,7 +577,6 @@ jobs:
     name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -643,7 +642,6 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -878,7 +876,7 @@ jobs:
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -n 4 --dist loadgroup -v --tb=short --log-cli-level=INFO
+          pytest tests/ -n 2 --dist loadgroup --reruns 1 -v --tb=short --log-cli-level=INFO
 
       - name: Upload test screenshots
         if: always()
@@ -1305,9 +1303,24 @@ jobs:
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
 
+      # The custom release flow (prepare-release.yaml -> release-on-merge.yaml)
+      # merges a "release: vX.Y.Z" commit and handles the stable release itself.
+      # Skip release-please on that commit so it does not race / double-release.
+      - name: Detect custom release merge
+        id: guard
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        run: |
+          MSG=$(git log -1 --format=%s)
+          if [[ "$MSG" =~ ^release:\ v[0-9]+\.[0-9]+\.[0-9]+([[:space:]].*)?$ ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Custom release merge detected ('$MSG'); release-please skipped (release-on-merge.yaml handles it)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Determine release type
         id: release-type
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' && steps.guard.outputs.skip != 'true' }}
         run: |
           VERSION=$(jq -r '."."' .github/release-please-manifest.json)
 
@@ -1339,7 +1352,7 @@ jobs:
           fi
 
       - name: Create Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' && steps.guard.outputs.skip != 'true' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:

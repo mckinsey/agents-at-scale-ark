@@ -59,9 +59,6 @@ describe('dashboard-icons', () => {
       expect(
         AGENT_BUILDER_SECTIONS.find(s => s.key === 'teams'),
       ).toBeDefined();
-      expect(
-        AGENT_BUILDER_SECTIONS.find(s => s.key === 'queries'),
-      ).toBeDefined();
     });
 
     it('should filter monitoring sections correctly', () => {

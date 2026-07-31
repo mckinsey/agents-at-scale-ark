@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,6 +61,15 @@ const (
 	messageCleanupGracePeriod   = 5 * time.Minute
 	messageCleanupRetryInterval = 15 * time.Second
 
+	// queryExecutionFailedMsg is the log message emitted on every query error
+	// path; the stage field distinguishes where in dispatch the failure occurred.
+	queryExecutionFailedMsg = "query execution failed"
+
+	stageGetClient              = "get-client"
+	stageResolveTarget          = "resolve-target"
+	stageResolveDispatchAddress = "resolve-dispatch-address"
+	stageDispatch               = "dispatch"
+
 	// defaultCompletionsEngineName is the well-known name of the per-tenant
 	// completions ExecutionEngine. When a query has no explicitly named engine,
 	// the controller prefers an ExecutionEngine of this name in the query's
@@ -69,6 +79,10 @@ const (
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
 	queryCapacityRequeueDelay = 250 * time.Millisecond
+	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
+	// goroutine died so it converges to a terminal phase instead of stranding.
+	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
+	queryRunningSafetyRequeue = 30 * time.Second
 )
 
 type QueryReconciler struct {
@@ -207,13 +221,10 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	case statusInputRequired:
 		// Query is awaiting approval/input, check if A2ATask has completed
 		return r.handleInputRequiredPhase(ctx, &obj)
-	case statusProvisioning, statusRunning:
+	case statusProvisioning, statusRunning, statusQueued:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
-		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+		return r.handleRunningPhase(ctx, req, obj)
 	}
 }
 
@@ -239,13 +250,29 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	log := logf.FromContext(ctx)
 
 	if _, exists := r.operations.Load(req.NamespacedName); exists {
-		log.Info("Exists")
-		return ctrl.Result{}, nil
+		// Genuinely in-flight: don't spawn a second goroutine. Re-arm the safety
+		// net so that if this goroutine dies without reaching a terminal phase,
+		// a later reconcile finds no tracked op and recovers it.
+		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
 	if r.sem != nil && !r.sem.TryAcquire(1) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
+		if obj.Status.Phase != statusQueued {
+			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
+	}
+
+	if obj.Status.Phase != statusRunning {
+		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
+			if r.sem != nil {
+				r.sem.Release(1)
+			}
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Execution deadline is governed by Spec.Timeout, applied per-A2A-call in
@@ -255,7 +282,10 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
-	return ctrl.Result{}, nil
+	// Arm the safety net. On success the goroutine writes a terminal phase and
+	// the resulting watch event reconciles ahead of this timer; if it dies, this
+	// requeue is what brings the Query back for recovery.
+	return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 }
 
 func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *arkv1alpha1.Query) (ctrl.Result, error) {
@@ -346,6 +376,11 @@ func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *ark
 	return ctrl.Result{}, nil
 }
 
+func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage string) {
+	logf.FromContext(ctx).Error(err, queryExecutionFailedMsg,
+		"query", obj.Name, "namespace", obj.Namespace, "stage", stage)
+}
+
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
 
@@ -391,6 +426,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
+		logQueryError(opCtx, err, &obj, stageGetClient)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
@@ -402,11 +438,34 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
 	if rec := recover(); rec != nil {
-		logf.FromContext(ctx).Error(fmt.Errorf("query execution goroutine panic: %v", rec), "Query execution goroutine panicked")
+		logf.FromContext(ctx).Error(
+			fmt.Errorf("query execution goroutine panic: %v", rec),
+			"Query execution goroutine panicked",
+			"stack", string(debug.Stack()),
+		)
+		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
 	if r.sem != nil {
 		r.sem.Release(1)
+	}
+}
+
+// markQueryErroredAfterPanic sets the query status to error so it converges
+// instead of relying on the safety-net requeue to retry the panicking dispatch.
+func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) {
+	var q arkv1alpha1.Query
+	if err := r.Get(ctx, namespacedName, &q); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to fetch query after panic; leaving to safety-net requeue")
+		return
+	}
+	if q.Status.Response == nil {
+		q.Status.Response = &arkv1alpha1.Response{}
+	}
+	q.Status.Response.Phase = statusError
+	q.Status.Response.Content = fmt.Sprintf("query execution goroutine panicked: %v", rec)
+	if err := r.updateStatus(ctx, &q, statusError); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to mark query errored after panic; leaving to safety-net requeue")
 	}
 }
 
@@ -655,11 +714,13 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 }
 
 type engineResponseMeta struct {
-	TokenUsage     *arkv1alpha1.TokenUsage
-	ConversationId string
-	MessagesRaw    string
-	A2AContextID   string
-	A2ATaskID      string
+	TokenUsage        *arkv1alpha1.TokenUsage
+	ConversationId    string
+	MessagesRaw       string
+	A2AContextID      string
+	A2ATaskID         string
+	MemoryUnavailable bool
+	MemoryDegraded    bool
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -696,6 +757,14 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
 		responseMeta.ConversationId = convId
+	}
+
+	if memoryUnavailable, ok := arkMap["memoryUnavailable"].(bool); ok {
+		responseMeta.MemoryUnavailable = memoryUnavailable
+	}
+
+	if memoryDegraded, ok := arkMap["memoryDegraded"].(bool); ok {
+		responseMeta.MemoryDegraded = memoryDegraded
 	}
 
 	if messagesRaw, ok := arkMap["messages"]; ok {
@@ -864,6 +933,44 @@ func (r *QueryReconciler) setConditionCompleted(query *arkv1alpha1.Query, status
 	})
 }
 
+func (r *QueryReconciler) setConditionMemoryUnavailable(query *arkv1alpha1.Query, unavailable bool) {
+	status := metav1.ConditionFalse
+	reason := "MemoryReachable"
+	message := "Conversation history was available for this query"
+	if unavailable {
+		status = metav1.ConditionTrue
+		reason = "NoMemoryBackend"
+		message = "conversationId was set but no Memory backend was reachable; conversation history was disabled for this query"
+	}
+	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
+		Type:               string(arkv1alpha1.QueryMemoryUnavailable),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: query.Generation,
+	})
+}
+
+func (r *QueryReconciler) setConditionMemoryDegraded(query *arkv1alpha1.Query, degraded bool) {
+	status := metav1.ConditionFalse
+	reason := "MemoryHealthy"
+	message := "Conversation history was read from memory for this query"
+	if degraded {
+		status = metav1.ConditionTrue
+		reason = "GetMessagesFailed"
+		message = "failed to read conversation history from the memory backend; the query ran without prior context. See the MemoryGetMessagesError event for the underlying error"
+	}
+	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
+		Type:               string(arkv1alpha1.QueryMemoryDegraded),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: query.Generation,
+	})
+}
+
 func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Query, status string) error {
 	return r.updateStatusWithDuration(ctx, query, status, nil)
 }
@@ -872,6 +979,8 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	switch status {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
+	case statusQueued:
+		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryQueued", "Query is queued waiting for controller capacity")
 	case statusDone:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
@@ -914,7 +1023,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	return retry.OnError(retry.DefaultBackoff, isRetriableStatusUpdateErr, func() error {
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -935,12 +1044,26 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			if errors.IsNotFound(err) {
 				return nil
 			}
-			if !errors.IsConflict(err) {
+			if !isRetriableStatusUpdateErr(err) {
 				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 			}
 		}
 		return err
 	})
+}
+
+// isRetriableStatusUpdateErr reports whether a status write should be retried.
+// Beyond optimistic-lock conflicts, it covers the transient API-server errors
+// that arise under load (rolling upgrades, etcd leader election, API Priority &
+// Fairness throttling) — exactly when a dropped terminal write would silently
+// lose a query result.
+func isRetriableStatusUpdateErr(err error) bool {
+	return errors.IsConflict(err) ||
+		errors.IsServerTimeout(err) ||
+		errors.IsTimeout(err) ||
+		errors.IsTooManyRequests(err) ||
+		errors.IsInternalError(err) ||
+		errors.IsServiceUnavailable(err)
 }
 
 func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {
@@ -1324,6 +1447,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 	target, err := r.resolveTarget(opCtx, *obj, impersonatedClient)
 	if err != nil {
+		logQueryError(opCtx, err, obj, stageResolveTarget)
 		dispatchSpan.RecordError(err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve target: %v", err), err, nil)
 		return err
@@ -1335,6 +1459,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 	address, err := r.resolveDispatchAddress(opCtx, *target, obj.Namespace)
 	if err != nil {
+		logQueryError(opCtx, err, obj, stageResolveDispatchAddress)
 		dispatchSpan.RecordError(err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve dispatch address: %v", err), err, nil)
 		return err
@@ -1348,6 +1473,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
 			return err
 		}
+		logQueryError(opCtx, err, obj, stageDispatch)
 		dispatchSpan.RecordError(err)
 		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
@@ -1367,6 +1493,9 @@ func (r *QueryReconciler) handleQueryDispatch(
 		obj.Status.ConversationId = engineMeta.A2AContextID
 	}
 
+	r.setConditionMemoryUnavailable(obj, engineMeta.MemoryUnavailable)
+	r.setConditionMemoryDegraded(obj, engineMeta.MemoryDegraded)
+
 	queryStatus := r.determineQueryStatus(response)
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
 
@@ -1376,8 +1505,15 @@ func (r *QueryReconciler) handleQueryDispatch(
 	operationData := buildOperationData(target, queryInput)
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 
-	// Update status with duration
-	_ = r.updateStatusWithDuration(opCtx, obj, queryStatus, duration)
+	// Persist the terminal result. This is the only place .status.response,
+	// .status.tokenUsage and .status.duration are written, so a dropped error
+	// here silently loses the result. We surface it (the write itself already
+	// retries transient failures); we must not return it, or executeQueryAsync
+	// would flip this successful query to error.
+	if err := r.updateStatusWithDuration(opCtx, obj, queryStatus, duration); err != nil {
+		log.Error(err, "failed to persist terminal query status; query will be re-reconciled",
+			"query", obj.Name, "status", queryStatus)
+	}
 
 	return nil
 }
