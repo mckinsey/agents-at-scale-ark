@@ -37,7 +37,7 @@
     "@istanbuljs/load-nyc-config": {
       "js-yaml": "^3.15.0"
     },
-    "brace-expansion": ">=5.0.7",
+    "brace-expansion": ">=5.0.9",
     "ip-address": "^10.3.1",
     "jsonpath-plus": "^10.3.0",
     "tough-cookie": "^4.1.3",
