@@ -6,7 +6,7 @@ In-memory storage service with Server-Sent Events (SSE) streaming support for Ar
 
 - In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages and operation events stores
 - Completion chunks held in memory by default, optionally backed by Redis Streams for live streaming across broker replicas
-- Implements the [Memory API](/reference/resources/memory#memory-api-specification)
+- Implements the [Memory API](/reference/resources/memory#memory-http-api)
 - Supports [streaming queries](/developer-guide/queries/streaming)
 
 This service provides a basic but complete memory system for an Ark cluster, as well as offering the up-coming streaming APIs which enable real-time streaming responses to queries.
@@ -191,7 +191,7 @@ The other `DATABASE_*` variables (`DATABASE_POOL_MAX`, `DATABASE_CONNECT_TIMEOUT
 
 Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied.
 
-Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-api-specification), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
+Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-http-api), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
 ## Chunk backend (Redis)
 
