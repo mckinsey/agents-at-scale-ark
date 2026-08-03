@@ -1,415 +1,246 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import type { Agent } from '@/lib/services';
 
 const mockCopy = vi.fn();
+const mockGetAll = vi.fn();
 
 vi.mock('copy-to-clipboard', () => ({
-  default: vi.fn((text: string) => {
+  default: (text: string) => {
     mockCopy(text);
     return true;
-  }),
+  },
+}));
+
+vi.mock('@/lib/services', () => ({
+  agentsService: {
+    getAll: (...args: unknown[]) => mockGetAll(...args),
+  },
 }));
 
 const mockAgents: Agent[] = [
-  {
-    id: '1',
-    name: 'test-agent',
-    model: { name: 'gpt-4', vendor: 'OpenAI' },
-    description: 'Test agent description',
-    capabilities: [],
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: '2',
-    name: 'another-agent',
-    model: { name: 'claude-3', vendor: 'Anthropic' },
-    description: 'Another test agent',
-    capabilities: [],
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-  },
+  { id: '1', name: 'test-agent', description: 'Test agent' } as Agent,
+  { id: '2', name: 'another-agent', description: 'Another agent' } as Agent,
 ];
 
-describe('AgentsAPIDialog', () => {
-  const mockOnOpenChange = vi.fn();
+const mockOnOpenChange = vi.fn();
 
+const renderDialog = (open = true) =>
+  render(<AgentsAPIDialog open={open} onOpenChange={mockOnOpenChange} />);
+
+const renderLoaded = async () => {
+  const utils = renderDialog(true);
+  await screen.findByText(/"name": "test-agent"/);
+  return utils;
+};
+
+describe('AgentsAPIDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetAll.mockResolvedValue(mockAgents);
     Object.defineProperty(window, 'location', {
-      value: {
-        origin: 'http://localhost:3000',
-      },
-      writable: true,
+      configurable: true,
+      value: { origin: 'http://localhost:3000' },
     });
   });
 
-  afterEach(() => {
-    vi.clearAllTimers();
-  });
-
-  it('should render dialog when open', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('renders the dialog when open', async () => {
+    await renderLoaded();
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('API Access')).toBeInTheDocument();
     expect(
-      screen.getByText('Use the Query API to chat with your agents from external systems.')
+      screen.getByText(
+        'Use the Query API to chat with your agents from external systems.',
+      ),
     ).toBeInTheDocument();
   });
 
-  it('should not render dialog when closed', () => {
-    render(
-      <AgentsAPIDialog
-        open={false}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('does not render the dialog when closed', () => {
+    renderDialog(false);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockGetAll).not.toHaveBeenCalled();
   });
 
-  it('should render agent selector with default agent', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('fetches agents and selects the first one by default', async () => {
+    await renderLoaded();
 
-    const selector = screen.getByRole('combobox');
-    expect(selector).toBeInTheDocument();
-    expect(selector).toHaveTextContent('test-agent');
+    expect(mockGetAll).toHaveBeenCalled();
+    expect(screen.getByRole('combobox')).toHaveTextContent('test-agent');
   });
 
-  it('should display external endpoint by default', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('displays the external endpoint by default', async () => {
+    await renderLoaded();
 
-    const endpoint = screen.getByText('http://localhost:3000/api/v1/queries/');
-    expect(endpoint).toBeInTheDocument();
+    expect(
+      screen.getByText('http://localhost:3000/api/v1/queries/'),
+    ).toBeInTheDocument();
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
   });
 
-  it('should toggle between external and internal endpoints', async () => {
+  it('toggles between external and internal endpoints', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    const toggle = screen.getByRole('switch');
-    // Label always shows "Cluster internal" now
-    expect(screen.getByText('Cluster internal')).toBeInTheDocument();
-    expect(screen.getByText('http://localhost:3000/api/v1/queries/')).toBeInTheDocument();
+    expect(
+      screen.getByText('http://localhost:3000/api/v1/queries/'),
+    ).toBeInTheDocument();
 
-    await user.click(toggle);
+    await user.click(screen.getByRole('switch'));
 
-    // Label remains "Cluster internal" after toggle
-    expect(screen.getByText('Cluster internal')).toBeInTheDocument();
-    expect(screen.getByText('http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/')).toBeInTheDocument();
-
-    // Check for the namespace replacement instruction
-    const namespaceText = screen.getByText((content, element) => {
-      return content.includes('Replace') && content.includes('namespace') && content.includes('Ark is deployed');
-    });
-    expect(namespaceText).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        content =>
+          content.includes('Replace') &&
+          content.includes('namespace') &&
+          content.includes('Ark is deployed'),
+      ),
+    ).toBeInTheDocument();
   });
 
-  it('should copy endpoint to clipboard', async () => {
+  it('copies the endpoint to the clipboard', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
+    await renderLoaded();
+
+    const copyButton = screen.getByRole('button', { name: 'Copy endpoint' });
+    const initialIcon = copyButton.querySelector('path')?.getAttribute('d');
+
+    await user.click(copyButton);
+
+    expect(mockCopy).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/queries/',
     );
-
-    const copyButtons = screen.getAllByRole('button', { name: '' });
-    const endpointCopyButton = copyButtons[0];
-
-    await user.click(endpointCopyButton);
-
-    expect(mockCopy).toHaveBeenCalledWith('http://localhost:3000/api/v1/queries/');
-  });
-
-  it('should show check icon after copying endpoint', async () => {
-    const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
-
-    const copyButtons = screen.getAllByRole('button', { name: '' });
-    const endpointCopyButton = copyButtons[0];
-
-    expect(endpointCopyButton.querySelector('.lucide-copy')).toBeInTheDocument();
-
-    await user.click(endpointCopyButton);
-
     await waitFor(() => {
-      expect(endpointCopyButton.querySelector('.lucide-check')).toBeInTheDocument();
+      expect(copyButton.querySelector('path')?.getAttribute('d')).not.toBe(
+        initialIcon,
+      );
     });
   });
 
-  it('should render all code example tabs', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('renders all code example tabs', async () => {
+    await renderLoaded();
 
     expect(screen.getByRole('tab', { name: 'Python' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Go' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Bash' })).toBeInTheDocument();
   });
 
-  it('should display Python code by default', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('shows Python code with the selected agent by default', async () => {
+    await renderLoaded();
 
     expect(screen.getByText(/import requests/)).toBeInTheDocument();
-    expect(screen.getByText(/from requests.auth import HTTPBasicAuth/)).toBeInTheDocument();
     expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 
-  it('should switch between code examples', async () => {
+  it('switches between code examples', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    const goTab = screen.getByRole('tab', { name: 'Go' });
-    await user.click(goTab);
-
+    await user.click(screen.getByRole('tab', { name: 'Go' }));
     expect(screen.getByText(/package main/)).toBeInTheDocument();
     expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
 
-    const bashTab = screen.getByRole('tab', { name: 'Bash' });
-    await user.click(bashTab);
-
+    await user.click(screen.getByRole('tab', { name: 'Bash' }));
     expect(screen.getByText(/curl -X POST/)).toBeInTheDocument();
-    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 
-  it('should display correct default agent in code examples', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
-
-    expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
-  });
-
-  it('should copy code to clipboard', async () => {
+  it('copies the code for the active tab', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    const copyButtons = screen.getAllByRole('button', { name: '' });
-    const codeCopyButton = copyButtons[1];
-
-    await user.click(codeCopyButton);
+    await user.click(screen.getByRole('button', { name: 'Copy code' }));
 
     expect(mockCopy).toHaveBeenCalled();
-    const copiedText = mockCopy.mock.calls[0][0];
-    expect(copiedText).toContain('import requests');
-    expect(copiedText).toContain('"name": "test-agent"');
+    const copied = mockCopy.mock.calls[0][0];
+    expect(copied).toContain('import requests');
+    expect(copied).toContain('"name": "test-agent"');
   });
 
-  it('should show check icon after copying code', async () => {
+  it('copies the correct code after switching tabs', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    const copyButtons = screen.getAllByRole('button', { name: '' });
-    const codeCopyButton = copyButtons[1];
+    await user.click(screen.getByRole('tab', { name: 'Go' }));
+    await user.click(screen.getByRole('button', { name: 'Copy code' }));
 
-    expect(codeCopyButton.querySelector('.lucide-copy')).toBeInTheDocument();
-
-    await user.click(codeCopyButton);
-
-    await waitFor(() => {
-      expect(codeCopyButton.querySelector('.lucide-check')).toBeInTheDocument();
-    });
+    const copied = mockCopy.mock.calls[0][0];
+    expect(copied).toContain('package main');
+    expect(copied).toContain('"name": "test-agent"');
   });
 
-  it('should copy correct code for active tab', async () => {
+  it('reflects the internal endpoint in the code examples', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    const goTab = screen.getByRole('tab', { name: 'Go' });
-    await user.click(goTab);
-
-    const copyButtons = screen.getAllByRole('button', { name: '' });
-    const codeCopyButton = copyButtons[1];
-
-    await user.click(codeCopyButton);
-
-    const copiedText = mockCopy.mock.calls[0][0];
-    expect(copiedText).toContain('package main');
-    expect(copiedText).toContain('"name": "test-agent"');
-  });
-
-  it('should update endpoint when toggling internal mode', async () => {
-    const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
-
-    const toggle = screen.getByRole('switch');
-    await user.click(toggle);
-
-    const goTab = screen.getByRole('tab', { name: 'Go' });
-    await user.click(goTab);
+    await user.click(screen.getByRole('switch'));
+    await user.click(screen.getByRole('tab', { name: 'Go' }));
 
     const codeBlock = screen.getByText(/package main/).closest('pre');
-    expect(codeBlock?.textContent).toContain('http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/');
+    expect(codeBlock?.textContent).toContain(
+      'http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/',
+    );
   });
 
-  it('should call onOpenChange when dialog is closed', async () => {
+  it('calls onOpenChange when the dialog is closed', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    const closeButton = screen.getByRole('button', { name: /close/i });
-    await user.click(closeButton);
+    await user.click(screen.getByRole('button', { name: /close/i }));
 
     expect(mockOnOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('should handle empty agents array', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={[]}
-      />
-    );
+  it('handles an empty agents list', async () => {
+    mockGetAll.mockResolvedValue([]);
+    renderDialog(true);
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    const selector = screen.getByRole('combobox');
-    expect(selector).toBeInTheDocument();
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
-  it('should include all required fields in code examples', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('includes the required query fields in the code examples', async () => {
+    await renderLoaded();
 
-    const pythonCode = screen.getByText(/import requests/).closest('pre')?.textContent || '';
-
+    const pythonCode =
+      screen.getByText(/import requests/).closest('pre')?.textContent || '';
     expect(pythonCode).toContain('"name": "test-agent"');
     expect(pythonCode).toContain('"input"');
     expect(pythonCode).toContain('"type": "user"');
     expect(pythonCode).toContain('"target"');
   });
 
-  it('should include authentication examples in code', () => {
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+  it('includes the authentication examples in the code', async () => {
+    await renderLoaded();
 
-    const pythonCode = screen.getByText(/import requests/).closest('pre')?.textContent || '';
-
+    const pythonCode =
+      screen.getByText(/import requests/).closest('pre')?.textContent || '';
     expect(pythonCode).toContain('# Uncomment to use auth with key pair');
-    expect(pythonCode).toContain('# auth=HTTPBasicAuth(PUBLIC_KEY, SECRET_KEY)');
+    expect(pythonCode).toContain(
+      '# auth=HTTPBasicAuth(PUBLIC_KEY, SECRET_KEY)',
+    );
     expect(pythonCode).toContain('# Uncomment to use auth with bearer token');
     expect(pythonCode).toContain('# "Authorization": "Bearer YOUR_TOKEN_HERE"');
   });
 
-  it('should maintain agent name across tab changes', async () => {
+  it('keeps the selected agent across tab changes', async () => {
     const user = userEvent.setup();
-    render(
-      <AgentsAPIDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        agents={mockAgents}
-      />
-    );
+    await renderLoaded();
 
-    // Check Python tab (default)
     expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
 
-    // Switch to Go tab
-    const goTab = screen.getByRole('tab', { name: 'Go' });
-    await user.click(goTab);
+    await user.click(screen.getByRole('tab', { name: 'Go' }));
     expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
 
-    // Switch to Bash tab
-    const bashTab = screen.getByRole('tab', { name: 'Bash' });
-    await user.click(bashTab);
+    await user.click(screen.getByRole('tab', { name: 'Bash' }));
     expect(screen.getByText(/"name": "test-agent"/)).toBeInTheDocument();
   });
 });

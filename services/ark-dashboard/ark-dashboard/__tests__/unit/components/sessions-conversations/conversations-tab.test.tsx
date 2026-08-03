@@ -60,20 +60,22 @@ vi.mock('@/components/sessions-conversations/chat-input', () => ({
   ),
 }));
 
-vi.mock('@/components/sessions-conversations/new-conversation-dialog', () => ({
-  NewConversationDialog: ({ open, onSelectParticipant }: any) =>
-    open ? (
-      <div data-testid="new-conversation-dialog">
-        <button
-          data-testid="select-participant"
-          onClick={() =>
-            onSelectParticipant({ id: 'p1', name: 'test-agent', type: 'agent' })
-          }
-        >
-          Select
-        </button>
-      </div>
-    ) : null,
+vi.mock('@/components/sessions-conversations/new-conversation-panel', () => ({
+  NewConversationPanel: ({ onSelectParticipant, onCancel }: any) => (
+    <div data-testid="new-conversation-panel">
+      <button
+        data-testid="select-participant"
+        onClick={() =>
+          onSelectParticipant({ id: 'p1', name: 'test-agent', type: 'agent' })
+        }
+      >
+        Select
+      </button>
+      <button data-testid="cancel-panel" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('@/lib/utils/uuid', () => ({
@@ -249,7 +251,13 @@ describe('ConversationsTab', () => {
     expect(screen.getByTestId('conversation-id')).toHaveTextContent('conv-1');
   });
 
-  it('should show no selection state when no conversation selected', () => {
+  it('should show empty state when no conversations exist', () => {
+    // Mock empty conversations array
+    vi.mocked(useListConversations).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as any);
+
     render(
       <ConversationsTab
         sessionId="session-1"
@@ -258,11 +266,11 @@ describe('ConversationsTab', () => {
       />
     );
 
-    expect(screen.getByText('No participant selected')).toBeInTheDocument();
-    expect(screen.getByText('Create a conversation to start')).toBeInTheDocument();
+    // With no conversations, the Empty component shows
+    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
   });
 
-  it('should toggle sidebar collapse', async () => {
+  it('should open new conversation panel', async () => {
     const user = userEvent.setup();
 
     render(
@@ -273,42 +281,16 @@ describe('ConversationsTab', () => {
       />
     );
 
-    const collapseButton = screen.getByTitle('Collapse sidebar');
-    await user.click(collapseButton);
-
-    // Sidebar should be collapsed - "Conversations" header hidden
-    expect(screen.queryByText('Conversations')).not.toBeInTheDocument();
-
-    const expandButton = screen.getByTitle('Expand sidebar');
-    await user.click(expandButton);
-
-    // Sidebar should be expanded - "Conversations" header visible
-    expect(screen.getByText('Conversations')).toBeInTheDocument();
-  });
-
-  it('should open new conversation dialog', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
+    expect(screen.queryByTestId('new-conversation-panel')).not.toBeInTheDocument();
 
     // Find and click the Plus button (in the sidebar header)
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
-    await user.click(plusButton!);
-
-    expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('new-conversation-panel')).toBeInTheDocument();
   });
 
-  it('should create new conversation from dialog', async () => {
+  it('should create new conversation from panel', async () => {
     const user = userEvent.setup();
 
     render(
@@ -319,18 +301,16 @@ describe('ConversationsTab', () => {
       />
     );
 
-    // Open dialog
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-    await user.click(plusButton!);
+    // Open panel
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
     // Select participant
     await user.click(screen.getByTestId('select-participant'));
 
-    // Should create new conversation with generated UUID
+    // Should create new conversation with generated UUID and return to list view
     expect(screen.getByTestId('conv-generated-uuid')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-conversation-panel')).not.toBeInTheDocument();
   });
 
   it('should handle pending messages state', async () => {
@@ -455,7 +435,7 @@ describe('ConversationsTab', () => {
     expect(screen.getByTestId('conv-temp-conv')).toBeInTheDocument();
   });
 
-  it('should pass session participants to dialog', async () => {
+  it('should pass session participants to panel', async () => {
     const user = userEvent.setup();
 
     render(
@@ -466,14 +446,9 @@ describe('ConversationsTab', () => {
       />
     );
 
-    // The NewConversationDialog should receive session participants
-    // We can verify this by checking that the dialog can be opened
-    const buttons = screen.getAllByRole('button');
-    const plusButton = buttons.find((btn) =>
-      btn.querySelector('svg')?.classList.contains('lucide-plus')
-    );
-    await user.click(plusButton!);
+    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
+    await user.click(plusButton);
 
-    expect(screen.getByTestId('new-conversation-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('new-conversation-panel')).toBeInTheDocument();
   });
 });

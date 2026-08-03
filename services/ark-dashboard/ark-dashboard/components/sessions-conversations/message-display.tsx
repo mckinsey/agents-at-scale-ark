@@ -1,10 +1,10 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, memo, useEffect, useMemo, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
 import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
@@ -15,6 +15,9 @@ import type {
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 import type { ChatMessage } from '@/lib/types/chat-message';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { IconShell } from '@/components/ui/icon-shell';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
@@ -132,6 +135,7 @@ interface MessageContentProps {
   readonly isWaitingForNextMessage?: boolean;
   readonly onApprove?: () => Promise<void>;
   readonly onReject?: () => Promise<void>;
+  readonly endRef: RefObject<HTMLDivElement | null>;
 }
 
 const MessageContent = memo(function MessageContent({
@@ -148,13 +152,8 @@ const MessageContent = memo(function MessageContent({
   isWaitingForNextMessage = false,
   onApprove,
   onReject,
+  endRef,
 }: MessageContentProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingMessages]);
-
   const processedMessages =
     messages && messages.length > 0
       ? enhanceMessagesWithToolResults(messages)
@@ -265,7 +264,7 @@ const MessageContent = memo(function MessageContent({
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} />
       </>
     );
   }
@@ -296,6 +295,13 @@ export function MessageDisplay({
     sessionId,
     conversationId,
   );
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll,
+    scrollToBottom,
+    resumeAutoScroll,
+  } = useStickyScroll();
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
@@ -502,42 +508,64 @@ export function MessageDisplay({
     needsApproval,
   ]);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [
+    messages,
+    pendingMessages,
+    isProcessing,
+    isWaitingForNextMessage,
+    scrollToBottom,
+  ]);
+
+  useEffect(() => {
+    resumeAutoScroll();
+  }, [conversationId, resumeAutoScroll]);
+
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-border bg-muted border-b p-4">
-        <div className="flex items-center gap-2">
-          {getParticipantIcon(participantType, { size: '4' })}
-          <span className="font-semibold">
-            {stripNamespace(participantName)}
-          </span>
-          <Badge className="bg-muted/50 text-muted-foreground border-0 capitalize">
-            {participantType}
-          </Badge>
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-b border-stroke-tertiary bg-surface-bg-secondary px-5 py-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <IconShell size="sm" className="opacity-100">
+            {getParticipantIcon(participantType, { size: '4' })}
+          </IconShell>
+          <TruncatedTooltip label={stripNamespace(participantName)}>
+            <span className="block min-w-0 truncate text-base font-semibold leading-6 text-fg-primary">
+              {stripNamespace(participantName)}
+            </span>
+          </TruncatedTooltip>
+          <span className="shrink-0 text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        <MessageContent
-          isTemporary={isTemporary}
-          messages={messages}
-          pendingMessages={pendingMessages}
-          participantName={participantName}
-          isProcessing={isProcessing}
-          showToolCalls={showToolCalls}
-          queryName={effectiveQueryId || undefined}
-          queryNamespace={namespace}
-          approvalData={
-            needsApproval && approvalDetails ? approvalDetails : undefined
-          }
-          existingDecision={existingDecision}
-          isWaitingForNextMessage={isWaitingForNextMessage}
-          onApprove={handleApprove}
-          onReject={handleReject}
-        />
-      </div>
+      <ScrollArea
+        viewportRef={scrollContainerRef}
+        onViewportScroll={handleScroll}
+        className="flex-1 h-0 border-r border-stroke-divider">
+        <div className="space-y-4 p-4">
+          <MessageContent
+            isTemporary={isTemporary}
+            messages={messages}
+            pendingMessages={pendingMessages}
+            participantName={participantName}
+            isProcessing={isProcessing}
+            showToolCalls={showToolCalls}
+            queryName={effectiveQueryId || undefined}
+            queryNamespace={namespace}
+            approvalData={
+              needsApproval && approvalDetails ? approvalDetails : undefined
+            }
+            existingDecision={existingDecision}
+            isWaitingForNextMessage={isWaitingForNextMessage}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            endRef={messagesEndRef}
+          />
+        </div>
+      </ScrollArea>
     </div>
   );
 }

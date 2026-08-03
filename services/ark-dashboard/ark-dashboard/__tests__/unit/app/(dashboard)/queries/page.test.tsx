@@ -1,13 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import QueriesPage from '@/app/(dashboard)/queries/page';
 import { useListQueries } from '@/lib/services/queries-hooks';
 
 const mockReplace = vi.fn();
-const mockOpenAddEditor = vi.fn();
+const mockRefetch = vi.fn();
 let searchParamsStore = new URLSearchParams();
 
 vi.mock('next/navigation', () => ({
@@ -19,32 +18,11 @@ vi.mock('@/lib/services/queries-hooks', () => ({
   useListQueries: vi.fn(),
 }));
 
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: ({ actions }: { actions?: React.ReactNode }) => (
-    <div data-testid="page-header">{actions}</div>
+vi.mock('@/components/sections/queries-section', () => ({
+  QueriesSection: (props: { searchTerm: string }) => (
+    <div data-testid="queries-section" data-search-term={props.searchTerm} />
   ),
 }));
-
-vi.mock('@/components/sections/queries-section', () => {
-  const React = require('react');
-  return {
-    QueriesSection: React.forwardRef(
-      (
-        props: { searchTerm: string; onClearSearch: () => void },
-        ref: React.ForwardedRef<{ openAddEditor: () => void }>,
-      ) => {
-        if (ref && typeof ref === 'object') {
-          (ref as React.MutableRefObject<{ openAddEditor: () => void }>).current = {
-            openAddEditor: mockOpenAddEditor,
-          };
-        }
-        return (
-          <div data-testid="queries-section" data-search-term={props.searchTerm} />
-        );
-      },
-    ),
-  };
-});
 
 vi.mock('@/components/ui/pagination', () => ({
   Pagination: ({
@@ -76,34 +54,75 @@ function renderPage() {
   );
 }
 
+function mockQueries(overrides: Record<string, unknown> = {}) {
+  vi.mocked(useListQueries).mockReturnValue({
+    data: { items: [], count: 0, total: 5, page: 1, page_size: 25 },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    refetch: mockRefetch,
+    ...overrides,
+  } as unknown as ReturnType<typeof useListQueries>);
+}
+
 describe('QueriesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     searchParamsStore = new URLSearchParams();
-    vi.mocked(useListQueries).mockReturnValue({
+    mockQueries();
+  });
+
+  it('renders the "Query logs" header and subtitle', () => {
+    renderPage();
+
+    expect(screen.getByText(/^Query logs/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Monitor query activity, execution time, status, and errors',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders a Create query link to /query/new', () => {
+    renderPage();
+
+    const link = screen.getByRole('link', { name: /create query/i });
+    expect(link).toHaveAttribute('href', expect.stringContaining('/query/new'));
+  });
+
+  it('refetches when Refresh is clicked', () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the empty state when there are no queries and no search', () => {
+    mockQueries({
       data: { items: [], count: 0, total: 0, page: 1, page_size: 25 },
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-    } as any);
-  });
-
-  it('renders title with total count from data', () => {
-    vi.mocked(useListQueries).mockReturnValue({
-      data: { items: [], count: 0, total: 42, page: 1, page_size: 25 },
-    } as any);
+    });
 
     renderPage();
 
-    expect(screen.getByText('Queries (42)')).toBeInTheDocument();
+    expect(screen.getByText('No queries yet')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /learn more/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('queries-section')).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText('Search query text...'),
+    ).not.toBeInTheDocument();
   });
 
-  it('renders bare title when data is undefined', () => {
-    vi.mocked(useListQueries).mockReturnValue({ data: undefined } as any);
+  it('does not show the empty state while a search is active', () => {
+    searchParamsStore = new URLSearchParams('q=foo');
+    mockQueries({
+      data: { items: [], count: 0, total: 0, page: 1, page_size: 25 },
+    });
 
     renderPage();
 
-    expect(screen.getByText('Queries')).toBeInTheDocument();
+    expect(screen.queryByText('No queries yet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('queries-section')).toBeInTheDocument();
   });
 
   it('calls useListQueries with params parsed from URL', () => {
@@ -130,9 +149,9 @@ describe('QueriesPage', () => {
   });
 
   it('hides pagination when total <= pageSize', () => {
-    vi.mocked(useListQueries).mockReturnValue({
+    mockQueries({
       data: { items: [], count: 0, total: 10, page: 1, page_size: 25 },
-    } as any);
+    });
 
     renderPage();
 
@@ -140,9 +159,9 @@ describe('QueriesPage', () => {
   });
 
   it('shows pagination when total > pageSize', () => {
-    vi.mocked(useListQueries).mockReturnValue({
+    mockQueries({
       data: { items: [], count: 0, total: 100, page: 1, page_size: 25 },
-    } as any);
+    });
 
     renderPage();
 
@@ -152,20 +171,12 @@ describe('QueriesPage', () => {
     expect(pagination).toHaveAttribute('data-items-per-page', '10');
   });
 
-  it('has Create Query button in header that triggers section ref', async () => {
+  it('renders the search input when there are queries', () => {
     renderPage();
 
-    const btn = screen.getByRole('button', { name: /create query/i });
-    await userEvent.click(btn);
-
-    expect(mockOpenAddEditor).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders search input with placeholder', () => {
-    renderPage();
-
-    const input = screen.getByPlaceholderText('Search query text...');
-    expect(input).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('Search query text...'),
+    ).toBeInTheDocument();
   });
 
   it('seeds search input from URL ?q= param', () => {

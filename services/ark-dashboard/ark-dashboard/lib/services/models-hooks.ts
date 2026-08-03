@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import type { ModelUpdateRequest } from './models';
 import { modelsService } from './models';
@@ -24,10 +24,8 @@ export const useCreateModel = (props?: UseCreateModelProps) => {
 
   return useMutation({
     mutationFn: modelsService.create,
-    onSuccess: model => {
-      toast.success('Model Created', {
-        description: `Successfully created ${model.name}`,
-      });
+    onSuccess: () => {
+      toast.success('Model created successfully');
 
       queryClient.invalidateQueries({ queryKey: [GET_ALL_MODELS_QUERY_KEY] });
 
@@ -82,9 +80,7 @@ export const useUpdateModelById = () => {
       return modelsService.updateById(id, data);
     },
     onSuccess: model => {
-      toast.success('Model Updated', {
-        description: `Successfully updated ${model?.id}`,
-      });
+      toast.success('Model updated successfully');
 
       queryClient.invalidateQueries({ queryKey: [GET_ALL_MODELS_QUERY_KEY] });
       if (model?.id) {
