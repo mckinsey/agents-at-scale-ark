@@ -157,18 +157,18 @@ export function StreamRow({
 }: Readonly<StreamRowProps>) {
   return (
     <div className="w-full">
-      <div className="flex w-full min-w-0 items-center gap-2 p-2 pr-5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0"
-          aria-expanded={isExpanded}
-          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${label}`}
-          onClick={onToggle}>
-          <IconShell size="default" variant="secondary">
-            {isExpanded ? <ChevronDown /> : <ChevronRight />}
-          </IconShell>
-        </Button>
+      <Button
+        variant="ghost"
+        size="default"
+        className="h-auto w-full min-w-0 justify-start pr-5 text-left"
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${label}${
+          timestamp ? ` ${timestamp}` : ''
+        }`}
+        onClick={onToggle}>
+        <IconShell size="default" variant="secondary" className="shrink-0">
+          {isExpanded ? <ChevronDown /> : <ChevronRight />}
+        </IconShell>
         {timestamp && (
           <span className="label-regular-primary text-fg-secondary shrink-0">
             {timestamp}
@@ -179,7 +179,7 @@ export function StreamRow({
             {summary}
           </span>
         )}
-      </div>
+      </Button>
       {isExpanded && (
         <pre className="paragraph-code-text text-fg-secondary px-2 pb-2 pl-9 break-all whitespace-pre-wrap">
           {JSON.stringify(payload, null, 2)}
