@@ -177,7 +177,7 @@ To group several steps under one session for telemetry, set `session-id`. To let
         value: "shared-memory"       # shared history across steps
 ```
 
-See [Run queries → Multi-turn conversations](/user-guide/queries#multi-turn-conversations) for the underlying behaviour.
+See [Run queries → Multi-turn conversations](/user-guide/queries#multi-turn-conversations) for the underlying behaviour. `session-id` groups steps for telemetry only — it does not make them share history. To thread history across steps you need a shared `conversationId` (or a shared `memory`, as above); see [Query → Conversation ID vs session ID](/reference/resources/query#conversation-id-vs-session-id) for what each identifier does and when to set it.
 
 <Callout type="info">
 When you need control the template doesn't expose (e.g. an explicit `conversationId` or extra labels), submit a raw `Query` from a step instead: `kubectl apply` a `Query` CR, `kubectl wait --for=condition=Completed`, then read `.status.response.content`. The legacy [`fark`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/images/ark-tools/README.md) CLI (`fark <agent|team|model|tool> <name> "<message>"` in the `ark-tools` image) also still works for quick one-shot calls. Use **`fark`**, not `ark`, inside a workflow pod — the `ark` CLI port-forwards to `ark-api`, which the `argo-workflow` ServiceAccount can't do.
