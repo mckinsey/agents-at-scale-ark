@@ -109,7 +109,8 @@ The chart-provided `ark-query` `WorkflowTemplate` is the recommended way to call
 | `timeout` | No | `5m` | How long to wait for the Query to complete. |
 | `parameters` | No | `[]` | JSON array of `{name,value}` objects. |
 | `ttl` | No | (unset) | Time-to-live for the created Query. |
-| `session-id` | No | (unset) | Session ID to associate with the Query. |
+| `session-id` | No | `wf-<workflow-name>` | Session ID to associate with the Query. |
+| `conversation-id` | No | (random UUID) | Conversation ID for the Query; a new one is generated per step run if unset. |
 | `memory` | No | (unset) | Name of the Memory resource to use. |
 | `query-name` | No | (auto-generated) | Name for the created Query. |
 | `service-account` | No | (unset) | ServiceAccount the Query runs under. |
