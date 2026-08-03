@@ -419,7 +419,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
     await request(app).get('/conversations/missing-conv').expect(404);
   });
 
-  it('DELETE /messages purges every row without resetting the sequence', async () => {
+  it('DELETE /messages purges every row without resetting the Postgres sequence', async () => {
     await request(app)
       .post('/messages')
       .send({
