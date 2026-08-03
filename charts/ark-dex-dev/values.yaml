@@ -45,6 +45,19 @@ users:
     userID: ark-dev-viewer
     hash: "$2y$10$K7/2psZvb9qJRT06KLenuew5UeGlWadaDQr0HDfWTTssWk7bnpSei"
 
+# How long Dex keeps a refresh token stable. Inside this window Dex does not
+# rotate at all: repeated refreshes return the same token, so two concurrent
+# refreshes cannot leave one caller holding a dead one. The first refresh after
+# the window closes rotates, and the token it supersedes stays claimable for one
+# further window.
+#
+# Dex's default is 0, which rotates on every single use. Three minutes is a
+# development convenience: it also means the token rotates at most once every
+# three minutes and a leaked one stays replayable that long, so this is not a
+# value to carry into a real deployment.
+refreshTokens:
+  reuseInterval: "3m"
+
 rbac:
   create: true
   # Role installed by charts/ark-tenant, bound to the admin user on top of the
