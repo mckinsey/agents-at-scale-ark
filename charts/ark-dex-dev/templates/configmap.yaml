@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    app: {{ .Release.Name }}
+data:
+  # Dex serves under the issuer URL's path, so these endpoints live at
+  # /dex/auth, /dex/token and /dex/keys.
+  config.yaml: |
+    issuer: {{ .Values.issuer }}
+
+    # In-memory store: no PVC, no migrations. Refresh tokens are lost on restart,
+    # which for local development means logging in again.
+    storage:
+      type: memory
+
+    web:
+      http: 0.0.0.0:{{ .Values.service.port }}
+
+    oauth2:
+      # Skip the consent screen — one less click per login when switching users.
+      skipApprovalScreen: true
+
+    # No `session` block on purpose: without sessions Dex keeps no SSO cookie of
+    # its own, so every authorization request shows the login form again. That is
+    # what makes switching between the two users possible, given the dashboard
+    # cannot drive RP-initiated logout against Dex (no end_session_endpoint).
+    staticClients:
+      - id: {{ .Values.client.id }}
+        name: Ark Dashboard
+        secret: {{ .Values.client.secret }}
+        redirectURIs:
+          {{- toYaml .Values.client.redirectURIs | nindent 10 }}
+
+    enablePasswordDB: true
+    staticPasswords:
+      - email: {{ .Values.users.admin.email }}
+        hash: {{ .Values.users.admin.hash | quote }}
+        username: {{ .Values.users.admin.username }}
+        userID: {{ .Values.users.admin.userID }}
+      - email: {{ .Values.users.viewer.email }}
+        hash: {{ .Values.users.viewer.hash | quote }}
+        username: {{ .Values.users.viewer.username }}
+        userID: {{ .Values.users.viewer.userID }}
