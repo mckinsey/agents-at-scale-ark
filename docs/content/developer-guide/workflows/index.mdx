@@ -100,8 +100,28 @@ kubectl get workflowtemplate ark-query -n <your-argo-namespace>
 
 The chart-provided `ark-query` `WorkflowTemplate` is the recommended way to call Ark from a step. Reference it with `templateRef` — it submits an Ark `Query`, waits for completion, and exposes the result as step outputs, so you don't hand-write any `kubectl` or CLI plumbing:
 
-- **Inputs** — `target` (required, `type/name` where type is `agent`, `team`, `model`, or `tool`, e.g. `agent/weather-agent`) and `input` (required, the message). Optional: `timeout` (default `5m`), `ttl`, `parameters` (JSON array of `{name,value}`), `session-id`, `memory`, `query-name`, `service-account`.
-- **Outputs** — `response` (`.status.response.content`), `query-json` (the full Query object), `phase` (`done`/`error`), and `conversation-id`.
+**Inputs**
+
+| Parameter | Required | Default | Description |
+| --- | --- | --- | --- |
+| `target` | Yes | - | `type/name`, where type is `agent`, `team`, `model`, or `tool` (e.g. `agent/weather-agent`). |
+| `input` | Yes | - | The message to send to the target. |
+| `timeout` | No | `5m` | How long to wait for the Query to complete. |
+| `parameters` | No | `[]` | JSON array of `{name,value}` objects. |
+| `ttl` | No | (unset) | Time-to-live for the created Query. |
+| `session-id` | No | (unset) | Session ID to associate with the Query. |
+| `memory` | No | (unset) | Name of the Memory resource to use. |
+| `query-name` | No | (auto-generated) | Name for the created Query. |
+| `service-account` | No | (unset) | ServiceAccount the Query runs under. |
+
+**Outputs**
+
+| Output | Source | Description |
+| --- | --- | --- |
+| `response` | `.status.response.content` | The target's reply text. |
+| `query-json` | full Query object | The complete Query resource as JSON. |
+| `phase` | `.status.phase` | Final phase, either `done` or `error`. |
+| `conversation-id` | `.status.conversationId` | Conversation ID for the Query. |
 
 Steps need a ServiceAccount with RBAC to create Queries — the samples set `serviceAccountName: argo-workflow`, which the chart provisions. The `ark-query` template is namespace-scoped and must exist in the same namespace as your workflow; the chart installs it automatically (see [Adding the `ark-query` template](#adding-the-ark-query-template-to-an-existing-argo-installation) for standalone Argo installs). The examples below are Argo `step` snippets — drop them into a `WorkflowTemplate`'s `steps:` list.
 
