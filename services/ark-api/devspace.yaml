@@ -5,6 +5,16 @@ vars:
   ARK_API_CALLBACK_PORT:
     source: env
     default: "34780"
+  ENABLE_SSO:
+    source: env
+    default: false
+  # Must match the values of the same name in the root devspace.yaml.
+  SSO_DEX_HOST:
+    source: env
+    default: "dex.default.svc.cluster.local"
+  SSO_DEX_PORT:
+    source: env
+    default: "5556"
 
 images:
   ark-api:
@@ -71,6 +81,62 @@ deployments:
                 - DAC_OVERRIDE
         httpRoute:
           enabled: true
+
+profiles:
+  - name: sso
+    activation:
+      - vars:
+          ENABLE_SSO: true
+    patches:
+      # Helm replaces list values rather than merging them, so app.env has to
+      # restate the chart defaults it is not changing. Dropping them would
+      # silently disable the MCP auth endpoints and misreport the A2A agent card
+      # URLs, making SSO mode differ from open mode in ways unrelated to auth.
+      - op: add
+        path: deployments.ark-api.helm.values.app.env
+        value:
+          - name: CORS_ORIGINS
+            value: "*"
+          - name: AUTH_MODE
+            value: "sso"
+          - name: OIDC_ISSUER_URL
+            value: "http://${SSO_DEX_HOST}:${SSO_DEX_PORT}/dex"
+          # Dex sets the token's `aud` to the client id, so this is the Dex
+          # staticClient id from charts/ark-dex-dev.
+          - name: OIDC_APPLICATION_ID
+            value: "ark-dashboard"
+          # Set explicitly to skip OIDC discovery: the token validator is built
+          # while the auth middleware is constructed, and discovery failure there
+          # crash-loops the pod if Dex is not up yet. With the URL known up front
+          # no request is made until the first token arrives.
+          - name: OIDC_JWKS_URL
+            value: "http://${SSO_DEX_HOST}:${SSO_DEX_PORT}/dex/keys"
+          - name: PROXY_TIMEOUT
+            value: "10.0"
+          - name: ARK_A2A_AGENT_CARD_PORT
+            value: "8000"
+          - name: ARK_A2A_AGENT_CARD_HOST
+            value: "ark-api.127.0.0.1.nip.io"
+          - name: ARK_A2A_AGENT_CARD_PROTOCOL
+            value: "http"
+          - name: READ_ONLY_MODE
+            value: "false"
+          - name: ARK_API_PUBLIC_CALLBACK_URL
+            value: "http://127.0.0.1:${ARK_API_CALLBACK_PORT}/v1/mcp/auth/callback"
+          - name: ARK_API_DASHBOARD_URL
+            value: "http://dashboard.default.127.0.0.1.nip.io:8080"
+      # Apply RBAC to the logged-in user instead of ark-api-sa. Also grants the
+      # service account the cluster-scoped impersonate verb it needs to do so.
+      # Dex static passwords carry no groups claim, so groupsClaim resolves to an
+      # empty list and the bindings in charts/ark-dex-dev match on username.
+      - op: add
+        path: deployments.ark-api.helm.values.impersonation
+        value:
+          enabled: true
+          fallback: false
+          usernameClaim: email
+          groupsClaim: groups
+          prefix: ""
 
 dev:
   ark-api:
