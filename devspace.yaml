@@ -89,7 +89,7 @@ commands:
   sso-forward: |-
     kill $(lsof -ti :${SSO_DEX_PORT}) 2>/dev/null || true
     echo "Starting Dex port-forward on localhost:${SSO_DEX_PORT}..."
-    nohup kubectl port-forward service/dex ${SSO_DEX_PORT}:${SSO_DEX_PORT} > /dev/null 2>&1 &
+    nohup kubectl port-forward -n default service/dex ${SSO_DEX_PORT}:${SSO_DEX_PORT} > /dev/null 2>&1 &
     sleep 1
     PID=$(lsof -ti :${SSO_DEX_PORT})
     if [ -n "$PID" ]; then
