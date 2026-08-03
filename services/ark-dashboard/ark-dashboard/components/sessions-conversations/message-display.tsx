@@ -1,9 +1,10 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, memo, useEffect, useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
 import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
@@ -134,6 +135,7 @@ interface MessageContentProps {
   readonly isWaitingForNextMessage?: boolean;
   readonly onApprove?: () => Promise<void>;
   readonly onReject?: () => Promise<void>;
+  readonly endRef: RefObject<HTMLDivElement | null>;
 }
 
 const MessageContent = memo(function MessageContent({
@@ -150,13 +152,8 @@ const MessageContent = memo(function MessageContent({
   isWaitingForNextMessage = false,
   onApprove,
   onReject,
+  endRef,
 }: MessageContentProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingMessages]);
-
   const processedMessages =
     messages && messages.length > 0
       ? enhanceMessagesWithToolResults(messages)
@@ -267,7 +264,7 @@ const MessageContent = memo(function MessageContent({
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} />
       </>
     );
   }
@@ -298,6 +295,13 @@ export function MessageDisplay({
     sessionId,
     conversationId,
   );
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll,
+    scrollToBottom,
+    resumeAutoScroll,
+  } = useStickyScroll();
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
@@ -504,6 +508,20 @@ export function MessageDisplay({
     needsApproval,
   ]);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [
+    messages,
+    pendingMessages,
+    isProcessing,
+    isWaitingForNextMessage,
+    scrollToBottom,
+  ]);
+
+  useEffect(() => {
+    resumeAutoScroll();
+  }, [conversationId, resumeAutoScroll]);
+
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;
   }
@@ -523,7 +541,10 @@ export function MessageDisplay({
           <span className="shrink-0 text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
       </div>
-      <ScrollArea className="flex-1 h-0 border-r border-stroke-divider">
+      <ScrollArea
+        viewportRef={scrollContainerRef}
+        onViewportScroll={handleScroll}
+        className="flex-1 h-0 border-r border-stroke-divider">
         <div className="space-y-4 p-4">
           <MessageContent
             isTemporary={isTemporary}
@@ -541,6 +562,7 @@ export function MessageDisplay({
             isWaitingForNextMessage={isWaitingForNextMessage}
             onApprove={handleApprove}
             onReject={handleReject}
+            endRef={messagesEndRef}
           />
         </div>
       </ScrollArea>

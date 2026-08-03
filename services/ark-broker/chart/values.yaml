@@ -8,7 +8,7 @@ backends:
   event: memory
   chunk: memory
 
-# PostgreSQL connection — required when backends.message=postgres
+# PostgreSQL connection — required when backends.message=postgres or backends.event=postgres
 database:
   # Plain connection URL. Avoid in production — use urlSecretRef instead.
   url: ""
