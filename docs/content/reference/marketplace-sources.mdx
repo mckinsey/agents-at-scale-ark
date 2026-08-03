@@ -86,6 +86,17 @@ the permission probe
 (`GET /api/v1/namespaces/{namespace}/marketplace-sources/permissions`) reports
 `canEdit: true`.
 
+### Local development
+
+With impersonation disabled (`AUTH_MODE=open`, the devspace default) ark-api acts
+as its own service account, `ark-api-sa`, so that account is the effective
+identity behind every source write. The Role is unbound by default, so the
+probe reports `canEdit: false` and the add/edit/delete controls stay hidden. The
+ark-dashboard devspace config binds `marketplace-source-editor` to `ark-api-sa`
+(`services/ark-dashboard/dev/marketplace-source-editor-binding.yaml`) so the
+controls work out of the box under `devspace dev`. This binding is dev-only and
+is not part of the chart.
+
 ### Who may use an authenticated source
 
 Because ark-api reads a credential Secret under the requesting user's identity,

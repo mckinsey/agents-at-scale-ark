@@ -1,9 +1,10 @@
 'use client';
 
-import { Check, Copy, Download } from 'lucide-react';
 import { useState } from 'react';
 
+import { Check, ContentCopy, SaveAlt } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
 
 interface YamlViewerProps {
   readonly yaml: string;
@@ -46,18 +47,16 @@ export function YamlViewer({ yaml, fileName = 'resource' }: YamlViewerProps) {
   };
 
   return (
-    <div className="relative h-full">
+    <div className="absolute inset-0">
       <div className="absolute top-2 right-4 z-10 flex gap-1">
         <Button
           variant="ghost"
           size="sm"
           onClick={handleCopy}
           className="h-7 gap-1 px-2 text-xs">
-          {copied ? (
-            <Check className="h-3 w-3" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
+          <IconShell size="sm">
+            {copied ? <Check /> : <ContentCopy />}
+          </IconShell>
           {copied ? 'Copied' : 'Copy'}
         </Button>
         <Button
@@ -65,11 +64,13 @@ export function YamlViewer({ yaml, fileName = 'resource' }: YamlViewerProps) {
           size="sm"
           onClick={handleDownload}
           className="h-7 gap-1 px-2 text-xs">
-          <Download className="h-3 w-3" />
+          <IconShell size="sm">
+            <SaveAlt />
+          </IconShell>
           Download
         </Button>
       </div>
-      <pre className="bg-muted/30 h-full overflow-auto p-4 pt-10 font-mono text-xs">
+      <pre className="bg-muted/30 absolute inset-0 overflow-auto p-4 pt-10 font-mono text-xs">
         {yaml}
       </pre>
     </div>

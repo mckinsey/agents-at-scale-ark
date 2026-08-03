@@ -3,6 +3,7 @@ import re
 import time
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -18,14 +19,15 @@ class SessionsPage(BasePage):
     DIALOG_CANCEL_BUTTON = "[role='dialog'] button:has-text('Cancel')"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
-    CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
-    CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
+    CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
+    CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
     CHAT_TEXTAREA = "textarea[placeholder*='Message']"
-    USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
-    ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
+    USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
+    ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
-    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-medium"
-    NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
+    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-semibold"
+    NEW_CONVERSATION_PANEL = "[data-testid='new-conversation-panel']"
+    NEW_CONVERSATION_DIALOG = NEW_CONVERSATION_PANEL
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
@@ -65,8 +67,8 @@ class SessionsPage(BasePage):
             logger.info("Could not fill search input")
 
         participant_item = self.page.locator(
-            f"[role='dialog'] label:has-text('{participant_name}'), "
-            f"[role='dialog'] div.font-medium:has-text('{participant_name}')"
+            f"[role='dialog'] [data-testid='session-participant-option']:has-text('{participant_name}'), "
+            f"[role='dialog'] button[role='option']:has-text('{participant_name}')"
         ).first
         participant_item.wait_for(state="visible", timeout=10000)
         participant_item.click()
@@ -94,7 +96,7 @@ class SessionsPage(BasePage):
     def get_conversation_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(span:has-text('Conversations'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Conversations'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
@@ -105,10 +107,22 @@ class SessionsPage(BasePage):
             logger.warning("Could not get conversation count: %s", e)
         return 0
 
+    def wait_for_conversation_count_in_header(
+        self, min_count: int = 1, timeout_s: int = 30
+    ) -> int:
+        start = time.time()
+        count = 0
+        while time.time() - start < timeout_s:
+            count = self.get_conversation_count_from_header()
+            if count >= min_count:
+                return count
+            self.page.wait_for_timeout(1000)
+        return count
+
     def get_participants_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(span:has-text('Participants'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Targets'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
@@ -121,10 +135,10 @@ class SessionsPage(BasePage):
 
     def is_participant_shown_in_header(self, participant_name: str) -> bool:
         try:
-            badge = self.page.locator(
-                f"div.rounded-lg.bg-card span:has-text('{participant_name}')"
+            tag = self.page.locator(
+                f"[data-slot='tag']:has-text('{participant_name}')"
             ).first
-            return badge.is_visible(timeout=5000)
+            return tag.is_visible(timeout=5000)
         except Exception:
             return False
 
@@ -132,6 +146,7 @@ class SessionsPage(BasePage):
         initial_count = self.get_user_message_count()
         textarea = self.page.locator(self.CHAT_TEXTAREA).first
         textarea.wait_for(state="visible", timeout=10000)
+        expect(textarea).to_be_enabled(timeout=120000)
         textarea.click()
         textarea.fill(message)
         textarea.press("Enter")
@@ -148,6 +163,12 @@ class SessionsPage(BasePage):
                 count = self.page.locator(self.ASSISTANT_MESSAGE).count()
                 if count > initial_count:
                     self.page.wait_for_timeout(500)
+                    remaining_ms = max(1000, int((timeout_s - (time.time() - start)) * 1000))
+                    textarea = self.page.locator(self.CHAT_TEXTAREA).first
+                    try:
+                        expect(textarea).to_be_enabled(timeout=remaining_ms)
+                    except (AssertionError, PlaywrightTimeoutError):
+                        pass
                     return True
             except Exception:
                 pass
@@ -172,7 +193,7 @@ class SessionsPage(BasePage):
     def is_participant_in_conversation_sidebar(self, participant_name: str) -> bool:
         try:
             item = self.page.locator(
-                f"div.space-y-3 button span.font-medium:has-text('{participant_name}')"
+                f"[data-testid='conversation-item'] [data-testid='conversation-participant-name']:has-text('{participant_name}')"
             ).first
             return item.is_visible(timeout=5000)
         except Exception:
@@ -245,7 +266,7 @@ class SessionsPage(BasePage):
 
     def set_status_filter(self, status: str) -> None:
         trigger = self.page.locator(
-            "div.flex.flex-col.gap-1\\.5:has(span:has-text('Status')) button[role='combobox']"
+            "div.flex.flex-col.gap-2:has(span:has-text('Status')) button[role='combobox']"
         ).first
         trigger.wait_for(state="visible", timeout=5000)
         trigger.click()
@@ -259,19 +280,19 @@ class SessionsPage(BasePage):
         try:
             try:
                 self.page.wait_for_selector(
-                    "div.rounded-lg button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
+                    "button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
                     timeout=10000,
                 )
             except Exception:
                 pass
             rows = self.page.locator(
-                "div.rounded-lg button[type='button'][aria-pressed]"
+                "button[type='button'][aria-pressed]"
             )
             count = rows.count()
             if count > 0:
                 return count
             rows = self.page.locator(
-                "div.rounded-lg > button[type='button']"
+                "button[type='button'].grid"
             )
             return rows.count()
         except Exception as e:
@@ -319,9 +340,9 @@ class SessionsPage(BasePage):
                 f"button[type='button']:has-text('{session_id}')"
             ).first
             if row.is_visible(timeout=5000):
-                active_dot = row.locator("span.bg-blue-500")
-                idle_dot = row.locator("span.bg-gray-400")
-                error_dot = row.locator("span.bg-red-500")
+                active_dot = row.locator("span.bg-status-information")
+                idle_dot = row.locator("span.bg-fg-tertiary")
+                error_dot = row.locator("span.bg-status-error")
                 if active_dot.count() > 0:
                     return "active"
                 if idle_dot.count() > 0:
@@ -369,24 +390,34 @@ class SessionsPage(BasePage):
 
     def click_new_conversation_button(self) -> None:
         btn = self.page.locator(
-            "button:has(svg.lucide-plus), button[class*='size-6']:has(svg)"
+            "button[aria-label='Create new conversation']"
         ).first
         btn.wait_for(state="visible", timeout=8000)
         btn.click()
-        self.wait_for_modal_open()
+        self.page.locator(self.NEW_CONVERSATION_PANEL).first.wait_for(
+            state="visible", timeout=10000
+        )
+
+    def select_participant_in_panel(self, participant_name: str) -> None:
+        panel = self.NEW_CONVERSATION_PANEL
+        try:
+            search = self.page.locator(
+                f"{panel} input[aria-label='Search participants']"
+            ).first
+            if search.is_visible(timeout=2000):
+                search.fill(participant_name)
+        except PlaywrightTimeoutError:
+            logger.info("Could not fill panel search input")
+
+        item = self.page.locator(
+            f"{panel} button:has-text('{participant_name}')"
+        ).first
+        item.wait_for(state="visible", timeout=10000)
+        item.click()
 
     def confirm_new_conversation(self) -> None:
-        if not self.is_visible(self.NEW_CONVERSATION_DIALOG, timeout=2000):
-            return
-        btn = self.page.locator(
-            f"{self.NEW_CONVERSATION_DIALOG} button[type='submit'], "
-            f"{self.NEW_CONVERSATION_DIALOG} button:not(:has-text('Cancel'))"
-        ).first
-        try:
-            btn.wait_for(state="visible", timeout=5000)
-            btn.click(force=True)
-        except PlaywrightTimeoutError:
-            logger.warning("Could not find confirm button in new conversation dialog")
+        # No-op: the inline panel auto-closes on participant selection.
+        return
 
     def click_sort_header(self, field: str) -> None:
         try:

@@ -1,14 +1,14 @@
 'use client';
 
-import { RotateCcw, Send, Square } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
+import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
-import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
+import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Tooltip,
   TooltipContent,
@@ -18,6 +18,7 @@ import {
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
 import type { GraphEdge } from '@/lib/types/chat-message';
+import { cn } from '@/lib/utils';
 
 type ChatType = 'model' | 'team' | 'agent';
 
@@ -47,20 +48,35 @@ export function ChatPanel({
     sendMessage,
     clearChat,
     messagesEndRef,
+    scrollContainerRef,
+    handleScroll,
     tokenUsage,
     messageTokenUsage,
     cancelQuery,
     pollAfterApproval,
-    requiredParameters,
-    parameterValues,
-    setParameterValue,
+    parameterVariant,
+    hasParameters,
+    availableParameters,
+    teamAgents,
+    parameterRows,
+    addParameterRow,
+    setParameterRowName,
+    setParameterRowValue,
+    setParameterRowAgent,
+    removeParameterRow,
+    canAddParameterRow,
     missingParameters,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const switchId = useId();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const toolCallCount = messages.reduce(
+    (total, msg) =>
+      total + ('tool_calls' in msg && msg.tool_calls ? msg.tool_calls.length : 0),
+    0,
+  );
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -89,8 +105,22 @@ export function ChatPanel({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
-        <div className="space-y-4">
+      <ScrollArea
+        viewportRef={scrollContainerRef}
+        onViewportScroll={handleScroll}
+        className="h-0 min-h-0 flex-1">
+        <div className="space-y-4 p-4">
+          {missingParameters.length > 0 && (
+            <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 rounded-full px-4 py-2">
+              <IconShell className="text-status-information shrink-0">
+                <Info />
+              </IconShell>
+              <span className="text-sm">
+                This {type === 'team' ? 'team' : 'agent'} needs a value
+                definition before you can send a message. Please add it below.
+              </span>
+            </div>
+          )}
           <ChatMessageList
             messages={messages}
             type={type}
@@ -108,122 +138,182 @@ export function ChatPanel({
             pollAfterApproval={pollAfterApproval}
           />
         </div>
-      </div>
+      </ScrollArea>
 
-      <div className="flex-shrink-0 border-t">
-        {requiredParameters.length > 0 && (
+      <div className="border-stroke-divider flex-shrink-0 border-t">
+        {hasParameters && (
           <div className="px-4 pt-4">
-            <ChatParameterFields
-              requiredParameters={requiredParameters}
-              values={parameterValues}
-              onChange={setParameterValue}
-              disabled={isProcessing}
-            />
+            {parameterVariant === 'team' ? (
+              <ChatParameterFields
+                variant="team"
+                teamAgents={teamAgents}
+                rows={parameterRows}
+                onAddRow={addParameterRow}
+                onChangeAgent={setParameterRowAgent}
+                onChangeName={setParameterRowName}
+                onChangeValue={setParameterRowValue}
+                onRemoveRow={removeParameterRow}
+                canAddRow={canAddParameterRow}
+                disabled={isProcessing}
+              />
+            ) : (
+              <ChatParameterFields
+                variant="agent"
+                availableParameters={availableParameters}
+                rows={parameterRows}
+                onAddRow={addParameterRow}
+                onChangeName={setParameterRowName}
+                onChangeValue={setParameterRowValue}
+                onRemoveRow={removeParameterRow}
+                canAddRow={canAddParameterRow}
+                disabled={isProcessing}
+              />
+            )}
           </div>
         )}
-        <div className="flex gap-2 p-4">
-          <div className="relative flex-1">
-            <Input
-              ref={inputRef}
-              placeholder={
-                isProcessing ? 'Processing...' : 'Type your message...'
-              }
-              value={currentMessage}
-              onChange={e => setCurrentMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={isProcessing}
-            />
-          </div>
-          {isProcessing ? (
-            <Button
-              onClick={cancelQuery}
-              size="sm"
-              variant="destructive"
-              aria-label="Stop conversation">
-              <Square className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              onClick={handleSendMessage}
-              disabled={!currentMessage.trim() || missingParameters.length > 0}
-              size="sm"
-              variant="default"
-              aria-label="Send message">
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
+        <div className="flex flex-col gap-2 px-4 py-3">
+          <Textarea
+            ref={inputRef}
+            rows={1}
+            autoResize
+            maxRows={17}
+            placeholder={
+              isProcessing ? 'Processing...' : 'Type your message...'
+            }
+            value={currentMessage}
+            onChange={e => setCurrentMessage(e.target.value)}
+            onKeyDown={handleKeyPress}
+            disabled={isProcessing}
+            className="min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm font-normal leading-5 shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent placeholder:text-fg-tertiary"
+          />
 
-        <Separator />
-
-        <div className="px-4 py-2">
-          <div className="flex items-center gap-2">
-            <Switch
-              id={switchId}
-              checked={debugMode}
-              onCheckedChange={checked => {
-                setDebugMode(checked);
-                trackEvent({
-                  name: 'chat_debug_mode_toggled',
-                  properties: {
-                    enabled: checked,
-                    targetType: type,
-                    targetName: name,
-                  },
-                });
-              }}
-            />
-            <label
-              htmlFor={switchId}
-              className="text-muted-foreground cursor-pointer text-sm">
-              Show tool calls
-            </label>
-            {tokenUsage && tokenUsage.total_tokens > 0 && (
-              <TooltipProvider>
+          <TooltipProvider>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="text-muted-foreground ml-2 flex items-center gap-1 text-xs">
-                      <span className="font-mono">
-                        {tokenUsage.total_tokens.toLocaleString()} tokens
-                      </span>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="New chat"
+                      onClick={clearChat}
+                      disabled={isProcessing || messages.length === 0}>
+                      <IconShell size="sm" variant="secondary">
+                        <Autorenew />
+                      </IconShell>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>New chat</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-pressed={debugMode}
+                      aria-label={
+                        debugMode
+                          ? 'Disable tool calls'
+                          : 'Activate tool calls'
+                      }
+                      onClick={() => {
+                        const enabled = !debugMode;
+                        setDebugMode(enabled);
+                        trackEvent({
+                          name: 'chat_debug_mode_toggled',
+                          properties: {
+                            enabled,
+                            targetType: type,
+                            targetName: name,
+                          },
+                        });
+                      }}
+                      className="relative">
+                      <IconShell size="sm" variant="secondary">
+                        <Build />
+                      </IconShell>
+                      <span
+                        className={cn(
+                          'absolute -right-0.5 -top-0.5 size-2 rounded-full',
+                          debugMode ? 'bg-status-success' : 'bg-status-error',
+                        )}
+                      />
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <div className="space-y-1 text-xs">
-                      <div>
-                        Input (new):{' '}
-                        {Math.max(
-                          0,
-                          tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
-                        ).toLocaleString()}
-                      </div>
-                      {tokenUsage.cached_tokens > 0 && (
-                        <div>
-                          Cached: {tokenUsage.cached_tokens.toLocaleString()}
-                        </div>
-                      )}
-                      <div>
-                        Completion:{' '}
-                        {tokenUsage.completion_tokens.toLocaleString()}
-                      </div>
-                      <div className="border-t pt-1 font-medium">
-                        Total: {tokenUsage.total_tokens.toLocaleString()}
-                      </div>
-                    </div>
+                    {debugMode ? 'Disable tool calls' : 'Activate tool calls'}
                   </TooltipContent>
                 </Tooltip>
-              </TooltipProvider>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearChat}
-              className="ml-auto h-7 gap-1 px-2 text-xs"
-              disabled={isProcessing || messages.length === 0}>
-              <RotateCcw className="h-3 w-3" />
-              New Chat
-            </Button>
-          </div>
+
+                {toolCallCount > 0 && (
+                  <span className="text-fg-tertiary ml-1 font-mono text-xs">
+                    {toolCallCount.toLocaleString()} tool{' '}
+                    {toolCallCount === 1 ? 'call' : 'calls'}
+                  </span>
+                )}
+
+                {tokenUsage && tokenUsage.total_tokens > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-fg-tertiary ml-1 font-mono text-xs">
+                        {tokenUsage.total_tokens.toLocaleString()} tokens
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="space-y-1 text-xs">
+                        <div>
+                          Input (new):{' '}
+                          {Math.max(
+                            0,
+                            tokenUsage.prompt_tokens - tokenUsage.cached_tokens,
+                          ).toLocaleString()}
+                        </div>
+                        {tokenUsage.cached_tokens > 0 && (
+                          <div>
+                            Cached: {tokenUsage.cached_tokens.toLocaleString()}
+                          </div>
+                        )}
+                        <div>
+                          Completion:{' '}
+                          {tokenUsage.completion_tokens.toLocaleString()}
+                        </div>
+                        <div className="border-t pt-1 font-medium">
+                          Total: {tokenUsage.total_tokens.toLocaleString()}
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+
+              {isProcessing ? (
+                <Button
+                  onClick={cancelQuery}
+                  size="icon-sm"
+                  variant="destructive"
+                  aria-label="Stop conversation">
+                  <IconShell size="sm">
+                    <Stop />
+                  </IconShell>
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={
+                    !currentMessage.trim() || missingParameters.length > 0
+                  }
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Send message"
+                  className="bg-fill-active text-fg-primary-inverse hover:bg-fill-active/90 disabled:bg-surface-bg-tertiary disabled:text-fg-tertiary">
+                  <IconShell size="sm">
+                    <Send />
+                  </IconShell>
+                </Button>
+              )}
+            </div>
+          </TooltipProvider>
         </div>
       </div>
     </>

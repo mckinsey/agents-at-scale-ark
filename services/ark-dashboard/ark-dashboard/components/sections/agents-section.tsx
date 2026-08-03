@@ -1,226 +1,42 @@
 'use client';
 
-import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
-import { toast } from 'sonner';
+import { AgentsApiAccess } from '@/components/dialogs/agents-api-access';
+import { SmartToy } from '@/components/icons';
+import { AgentsTable } from '@/components/sections/agents-table';
+import { ResourceListSection } from '@/components/sections/resource-list-section';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { agentsService } from '@/lib/services';
+import { getOriginLabel } from '@/lib/utils/origin-icon';
 
-import { NamespacedLink } from '@/components/namespaced-link';
-import { AgentCard } from '@/components/cards';
-import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
-import { AgentRow } from '@/components/rows/agent-row';
-import {
-  SortableSectionedList,
-  type SortableSectionedListHandle,
-} from '@/components/sortable-sectioned-list';
-import { Button } from '@/components/ui/button';
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
-import { TrackedButton } from '@/components/ui/tracked-button';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useAgentsLayout, useDelayedLoading } from '@/lib/hooks';
-import { type Agent, agentsService } from '@/lib/services';
-import { useNamespace } from '@/providers/NamespaceProvider';
-
-const getAgentKey = (agent: Agent) => agent.name;
-
-interface AgentsSectionHandle {
-  openApiDialog: () => void;
-}
-
-export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
-  function AgentsSection({}, ref) {
-    const [agents, setAgents] = useState<Agent[]>([]);
-    const [apiDialogOpen, setApiDialogOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const showLoading = useDelayedLoading(loading);
-    const [showCompactView, setShowCompactView] = useState(false);
-    const { readOnlyMode, namespace } = useNamespace();
-    const { layout, setLayout } = useAgentsLayout(namespace);
-    const listRef = useRef<SortableSectionedListHandle>(null);
-
-    const viewOptions: ToggleOption[] = [
-      { id: 'compact', label: 'compact view', active: !showCompactView },
-      { id: 'card', label: 'card view', active: showCompactView },
-    ];
-
-    useImperativeHandle(ref, () => ({
-      openApiDialog: () => setApiDialogOpen(true),
-    }));
-
-    useEffect(() => {
-      const loadData = async () => {
-        setLoading(true);
-        try {
-          const agentsData = await agentsService.getAll();
-          setAgents(agentsData);
-        } catch (error) {
-          console.error('Failed to load data:', error);
-          toast.error('Failed to Load Data', {
-            description:
-              error instanceof Error
-                ? error.message
-                : 'An unexpected error occurred',
-          });
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      loadData();
-    }, [namespace]);
-
-    const handleDeleteAgent = async (id: string) => {
-      try {
-        const agent = agents.find(a => a.id === id);
-        if (!agent) {
-          throw new Error('Agent not found');
-        }
-        await agentsService.deleteById(id);
-        toast.success('Agent Deleted', {
-          description: `Successfully deleted ${agent.name}`,
-        });
-        const updatedAgents = await agentsService.getAll();
-        setAgents(updatedAgents);
-      } catch (error) {
-        toast.error('Failed to Delete Agent', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
+export function AgentsSection() {
+  return (
+    <ResourceListSection
+      icon={<SmartToy />}
+      title="Agents"
+      subtitle="Create and manage agents to automate tasks"
+      createHref="/agents/new"
+      createLabel="Create agent"
+      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
+      entityLabel="Agent"
+      entityPluralLabel="agents"
+      emptyTitle="No agents yet"
+      emptyDescription={
+        <>
+          <p className="mb-2">You haven&apos;t created any agents yet.</p>
+          <p>Get started by creating your first agent.</p>
+        </>
       }
-    };
-
-    if (showLoading) {
-      return (
-        <div className="flex h-full items-center justify-center">
-          <div className="py-8 text-center">Loading...</div>
-        </div>
-      );
-    }
-
-    if (agents.length === 0 && !loading) {
-      return (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <DASHBOARD_SECTIONS.agents.icon />
-            </EmptyMedia>
-            <EmptyTitle>No Agents Yet</EmptyTitle>
-            <EmptyDescription>
-              You haven&apos;t created any agents yet. Get started by creating
-              your first agent.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            {readOnlyMode ? (
-              <TrackedButton
-                trackingEvent="create_agent_clicked"
-                trackingProperties={{ source: 'empty_state' }}
-                disabled>
-                <Plus className="h-4 w-4" />
-                Create Agent
-              </TrackedButton>
-            ) : (
-              <TrackedButton
-                trackingEvent="create_agent_clicked"
-                trackingProperties={{ source: 'empty_state' }}
-                asChild>
-                <NamespacedLink href="/agents/new">
-                  <Plus className="h-4 w-4" />
-                  Create Agent
-                </NamespacedLink>
-              </TrackedButton>
-            )}
-          </EmptyContent>
-          <Button
-            variant="link"
-            asChild
-            className="text-muted-foreground"
-            size="sm">
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
-              target="_blank">
-              Learn More <ArrowUpRightIcon />
-            </a>
-          </Button>
-        </Empty>
-      );
-    }
-
-    return (
-      <>
-        <div className="flex h-full flex-col">
-          <div className="mt-3 flex items-center justify-between gap-2">
-            {!showCompactView ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => listRef.current?.openCreateGroup()}>
-                <Plus className="mr-1 h-4 w-4" />
-                Create Group
-              </Button>
-            ) : (
-              <div />
-            )}
-            <ToggleSwitch
-              options={viewOptions}
-              onChange={id => setShowCompactView(id === 'card')}
-            />
-          </div>
-
-          <main className="mt-4 flex-1 overflow-auto">
-            {showCompactView && (
-              <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
-                {agents.map(agent => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    onDelete={handleDeleteAgent}
-                  />
-                ))}
-              </div>
-            )}
-
-            {!showCompactView && (
-              <SortableSectionedList
-                ref={listRef}
-                items={agents}
-                getKey={getAgentKey}
-                layout={layout}
-                setLayout={setLayout}
-                itemNoun={{ singular: 'agent', plural: 'agents' }}
-                renderItem={(agent, { dragHandle }) => (
-                  <AgentRow
-                    agent={agent}
-                    onDelete={handleDeleteAgent}
-                    leading={dragHandle}
-                  />
-                )}
-              />
-            )}
-          </main>
-        </div>
-
-        <AgentsAPIDialog
-          open={apiDialogOpen}
-          onOpenChange={setApiDialogOpen}
-          agents={agents}
-        />
-      </>
-    );
-  },
-);
+      headerActions={<AgentsApiAccess />}
+      originFilter={{
+        label: 'Origin',
+        getValue: agent =>
+          getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]),
+      }}
+      loadItems={() => agentsService.getAll()}
+      deleteItem={id => agentsService.deleteById(id)}
+      renderTable={(agents, onDelete) => (
+        <AgentsTable agents={agents} onDelete={onDelete} />
+      )}
+    />
+  );
+}
