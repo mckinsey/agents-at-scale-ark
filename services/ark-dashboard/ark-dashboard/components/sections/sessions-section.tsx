@@ -1036,6 +1036,9 @@ export function SessionsSection() {
     }
 
     const queryString = params.toString();
+    if (queryString === searchParams.toString()) {
+      return;
+    }
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
   }, [
@@ -1117,7 +1120,7 @@ export function SessionsSection() {
 
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
-      const currentStatus = selectedWorkflowDetail.status.phase;
+      const currentStatus = selectedWorkflowDetail.status?.phase;
       const previousStatus = previousStatusRef.current;
 
       const isTerminalState =

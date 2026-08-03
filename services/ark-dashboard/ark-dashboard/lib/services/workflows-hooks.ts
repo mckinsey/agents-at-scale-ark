@@ -35,7 +35,7 @@ export function useWorkflows(
 export function useWorkflow(
   name: string,
   namespace: string = 'default',
-  refreshInterval: number = 2000,
+  refreshInterval: number = 5000,
 ) {
   const [workflow, setWorkflow] = useState<ArgoWorkflow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,9 +60,9 @@ export function useWorkflow(
           setLoading(false);
 
           const isTerminalState =
-            data.status.phase === 'Succeeded' ||
-            data.status.phase === 'Failed' ||
-            data.status.phase === 'Error';
+            data.status?.phase === 'Succeeded' ||
+            data.status?.phase === 'Failed' ||
+            data.status?.phase === 'Error';
 
           if (isTerminalState && intervalId) {
             clearInterval(intervalId);
@@ -85,9 +85,9 @@ export function useWorkflow(
 
       if (mounted && initialData) {
         const isTerminalState =
-          initialData.status.phase === 'Succeeded' ||
-          initialData.status.phase === 'Failed' ||
-          initialData.status.phase === 'Error';
+          initialData.status?.phase === 'Succeeded' ||
+          initialData.status?.phase === 'Failed' ||
+          initialData.status?.phase === 'Error';
 
         if (!isTerminalState) {
           intervalId = setInterval(fetchWorkflow, refreshInterval);

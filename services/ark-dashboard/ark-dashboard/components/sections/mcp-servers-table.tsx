@@ -27,6 +27,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import {
   Tooltip,
@@ -78,9 +79,6 @@ const COL = {
   status: 'w-[180px]',
   action: 'w-[72px]',
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function McpServerStatus({ server }: Readonly<{ server: MCPServer }>) {
   const authState = server.authorization?.state;
