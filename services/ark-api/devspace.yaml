@@ -97,8 +97,12 @@ profiles:
         value:
           - name: CORS_ORIGINS
             value: "*"
+          # The dashboard stays on sso: its GlobalProviders compares AUTH_MODE to
+          # the literal "sso", and that flag also gates the ContextProvider that
+          # loads the permissions driving the UI, so "hybrid" there would silently
+          # fall back to open-mode providers.
           - name: AUTH_MODE
-            value: "sso"
+            value: "hybrid"
           - name: OIDC_ISSUER_URL
             value: "http://${SSO_DEX_HOST}:${SSO_DEX_PORT}/dex"
           # Dex sets the token's `aud` to the client id, so this is the Dex
