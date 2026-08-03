@@ -1,0 +1,191 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: apiserver-third-party-webhooks
+  labels:
+    postgresql: "true"
+spec:
+  description: >
+    With policy.thirdPartyWebhooks enabled, ARK's aggregated apiserver runs the webhook
+    admission chain itself, so ValidatingWebhookConfiguration objects registered by
+    Kyverno, OPA/Gatekeeper and similar fire on ark.mckinsey.com resources — the primary
+    branch of #2684's first task, rather than the documented-alternative fallback.
+
+    The mechanism under test is "does the aggregated apiserver consult third-party webhook
+    configurations", so this uses a configuration pointing at a deliberately unreachable
+    service rather than installing a policy engine. That keeps the test hermetic and
+    deterministic: failurePolicy Fail must block the write, failurePolicy Ignore must let
+    it through, and removing the configuration must restore the baseline. A real
+    Gatekeeper constraint was verified against this build separately (see README).
+
+  steps:
+    - name: baseline-write-succeeds
+      description: No third-party webhook registered, so an Agent create is unimpeded.
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: tpw-baseline
+              spec:
+                prompt: "you are helpful"
+        - delete:
+            ref:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              name: tpw-baseline
+
+    - name: fail-policy-blocks-the-write
+      description: >
+        A ValidatingWebhookConfiguration matching Ark agents, pointing at a service that
+        does not exist, with failurePolicy Fail. If the apiserver consults third-party
+        webhook configurations the create must fail on the unreachable webhook. Before
+        this change it would succeed, because the plugins were disabled outright and the
+        main kube-apiserver does not run its webhook chain on aggregated resources.
+      try:
+        - apply:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingWebhookConfiguration
+              metadata:
+                name: tpw-unreachable-fail
+              webhooks:
+                - name: tpw-fail.example.com
+                  admissionReviewVersions: ["v1"]
+                  sideEffects: None
+                  failurePolicy: Fail
+                  timeoutSeconds: 5
+                  clientConfig:
+                    service:
+                      name: tpw-does-not-exist
+                      namespace: ($namespace)
+                      path: /validate
+                  rules:
+                    - operations: ["CREATE"]
+                      apiGroups: ["ark.mckinsey.com"]
+                      apiVersions: ["v1alpha1"]
+                      resources: ["agents"]
+                      scope: "*"
+        - script:
+            timeout: 180s
+            content: |
+              set -eu
+              # The configuration has to reach the apiserver's webhook-configuration
+              # informer before it can be enforced; poll rather than assume.
+              for i in $(seq 1 30); do
+                OUT=$(kubectl create -f - --namespace "$NAMESPACE" 2>&1 <<EOF || true
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                generateName: tpw-should-fail-
+              spec:
+                prompt: probe
+              EOF
+              )
+                case "$OUT" in
+                  *"tpw-fail.example.com"*|*"failed calling webhook"*)
+                    echo "PASS: the aggregated apiserver called the third-party webhook: $OUT"
+                    exit 0
+                    ;;
+                esac
+                sleep 2
+              done
+              echo "FAIL: Agent creates were never routed through the third-party webhook"
+              echo "last result: $OUT"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+      cleanup:
+        - script:
+            content: kubectl delete validatingwebhookconfiguration tpw-unreachable-fail --ignore-not-found
+
+    - name: ignore-policy-is-honoured
+      description: >
+        Same unreachable webhook at failurePolicy Ignore. The write must succeed, proving
+        the plugin applies real webhook semantics rather than blocking indiscriminately.
+      try:
+        - apply:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingWebhookConfiguration
+              metadata:
+                name: tpw-unreachable-ignore
+              webhooks:
+                - name: tpw-ignore.example.com
+                  admissionReviewVersions: ["v1"]
+                  sideEffects: None
+                  failurePolicy: Ignore
+                  timeoutSeconds: 5
+                  clientConfig:
+                    service:
+                      name: tpw-does-not-exist
+                      namespace: ($namespace)
+                      path: /validate
+                  rules:
+                    - operations: ["CREATE"]
+                      apiGroups: ["ark.mckinsey.com"]
+                      apiVersions: ["v1alpha1"]
+                      resources: ["agents"]
+                      scope: "*"
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: tpw-ignore-allowed
+              spec:
+                prompt: "you are helpful"
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: tpw-ignore-allowed
+      catch:
+        - events: {}
+      cleanup:
+        - script:
+            content: kubectl delete validatingwebhookconfiguration tpw-unreachable-ignore --ignore-not-found
+
+    - name: ark-own-validation-still-applies
+      description: >
+        Regression guard for the double-pass fix. The controller chart stops rendering
+        Ark's own webhook configurations on the postgresql backend, so Ark validation must
+        still come from the in-process storage path — not from a webhook.
+      try:
+        - script:
+            content: |
+              set -eu
+              OUT=$(kubectl create -f - --namespace "$NAMESPACE" 2>&1 <<EOF || true
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                generateName: tpw-bad-model-
+              spec:
+                type: openai
+                model:
+                  value: gpt-4
+                config:
+                  openai:
+                    baseUrl:
+                      value: "http://169.254.169.254/v1"
+              EOF
+              )
+              case "$OUT" in
+                *reated*)
+                  echo "FAIL: a Model with a private-IP baseUrl was accepted: $OUT"
+                  exit 1
+                  ;;
+                *)
+                  echo "PASS: Ark in-process validation rejected it: $OUT"
+                  ;;
+              esac
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
