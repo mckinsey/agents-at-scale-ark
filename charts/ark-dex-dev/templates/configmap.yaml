@@ -22,6 +22,12 @@ data:
       # Skip the consent screen — one less click per login when switching users.
       skipApprovalScreen: true
 
+    expiry:
+      refreshTokens:
+        # Window during which Dex keeps the refresh token stable instead of
+        # rotating it on every use.
+        reuseInterval: {{ .Values.refreshTokens.reuseInterval | quote }}
+
     # No `session` block on purpose: without sessions Dex keeps no SSO cookie of
     # its own, so every authorization request shows the login form again. That is
     # what makes switching between the two users possible, given the dashboard

@@ -52,6 +52,7 @@ which inside a pod is the pod itself.
 | `client.redirectURIs` | dashboard `/api/auth/callback/dex` | Must match the dashboard's `OIDC_PROVIDER_ID`, which fixes the callback path. |
 | `users.password` | `arkdev123` | Documentation only — the effective credentials are the bcrypt hashes below. |
 | `users.admin.hash` / `users.viewer.hash` | bcrypt of the above | Minimum bcrypt cost is 10. Regenerate with `htpasswd -bnBC 10 "" <password> \| tr -d ':\n'`. |
+| `refreshTokens.reuseInterval` | `3m` | Grace window in which a rotated refresh token is still accepted. Dex's default is `0`, meaning a rotated token dies immediately. |
 | `rbac.create` | `true` | Create the ClusterRoles and bindings for the two users. |
 | `rbac.bindArkTenantRole` | `true` | Also bind the admin to the `ark-tenant` Role, for secrets/configmaps/pods access. |
 
@@ -64,3 +65,13 @@ which inside a pod is the pod itself.
   exposes no `end_session_endpoint`, so the dashboard clears its own session cookies
   and logs a warning instead of driving RP-initiated logout.
 - Storage is in-memory: restarting the pod invalidates refresh tokens.
+- With `refreshTokens.reuseInterval` set, Dex does not rotate the refresh token on
+  every use. Inside the window repeated refreshes return the same token, and only
+  the first refresh after the window closes rotates; the token it supersedes then
+  stays claimable for one further window. That is what stops two concurrent
+  refreshes from leaving one caller with a dead token. The dashboard copes with
+  either behaviour — `lib/auth/token-manager.ts` overwrites the stored token only
+  when the response carries a new one.
+- Three minutes is a development convenience. It means the token rotates at most
+  once every three minutes and a leaked one stays replayable that long, so it is
+  not a value to carry into a real deployment.
