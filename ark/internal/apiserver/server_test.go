@@ -286,7 +286,7 @@ func TestApplyAdmission_DisabledAndRequiredConflict(t *testing.T) {
 	}
 }
 
-func TestCheckPolicyWatchPermissions(t *testing.T) {
+func TestCheckWatchPermissions(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -338,7 +338,7 @@ func TestCheckPolicyWatchPermissions(t *testing.T) {
 				return true, review, nil
 			})
 
-			err := checkPolicyWatchPermissions(context.Background(), cs.AuthorizationV1())
+			err := checkWatchPermissions(context.Background(), cs.AuthorizationV1(), policyWatchResources, "ark-apiserver-admission-policy")
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("expected the preflight to pass, got: %v", err)

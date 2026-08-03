@@ -68,6 +68,8 @@ spec:
               value: {{ .Values.policy.enabled | quote }}
             - name: ARK_APISERVER_POLICY_REQUIRED
               value: {{ .Values.policy.required | quote }}
+            - name: ARK_APISERVER_THIRD_PARTY_WEBHOOKS
+              value: {{ .Values.policy.thirdPartyWebhooks | quote }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}

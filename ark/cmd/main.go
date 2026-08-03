@@ -413,6 +413,22 @@ func runPostgresCleanup() {
 	setupLog.Info("postgres cleanup complete")
 }
 
+// envBool applies an optional boolean env var, leaving dst at its caller-set default when the
+// variable is unset. An unparseable value is an error rather than a silent fallback: these flags
+// decide whether admission enforcement runs at all.
+func envBool(name string, dst *bool) error {
+	v := os.Getenv(name)
+	if v == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s %q: %w", name, v, err)
+	}
+	*dst = parsed
+	return nil
+}
+
 func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg := apiserver.Config{}
 
@@ -469,20 +485,18 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 
 	// Unset means enabled: enforcement is the default, and only an explicit opt-out removes
 	// the cluster-wide policy watches.
-	if v := os.Getenv("ARK_APISERVER_POLICY_ENABLED"); v != "" {
-		enabled, err := strconv.ParseBool(v)
-		if err != nil {
-			return cfg, fmt.Errorf("invalid ARK_APISERVER_POLICY_ENABLED %q: %w", v, err)
-		}
-		cfg.PolicyDisabled = !enabled
+	policyEnabled := true
+	if err := envBool("ARK_APISERVER_POLICY_ENABLED", &policyEnabled); err != nil {
+		return cfg, err
 	}
+	cfg.PolicyDisabled = !policyEnabled
 
-	if v := os.Getenv("ARK_APISERVER_POLICY_REQUIRED"); v != "" {
-		required, err := strconv.ParseBool(v)
-		if err != nil {
-			return cfg, fmt.Errorf("invalid ARK_APISERVER_POLICY_REQUIRED %q: %w", v, err)
-		}
-		cfg.PolicyRequired = required
+	// Off unless asked for: enabling it puts a synchronous webhook call on every write.
+	if err := envBool("ARK_APISERVER_THIRD_PARTY_WEBHOOKS", &cfg.ThirdPartyWebhooks); err != nil {
+		return cfg, err
+	}
+	if err := envBool("ARK_APISERVER_POLICY_REQUIRED", &cfg.PolicyRequired); err != nil {
+		return cfg, err
 	}
 	return cfg, nil
 }

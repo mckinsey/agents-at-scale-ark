@@ -3,6 +3,7 @@
 package metrics
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,7 +51,35 @@ var (
 		},
 		[]string{"kind"},
 	)
+
+	// PolicyEnforcementActive is the signal an operator can alert on: enforcement lapsing is
+	// otherwise invisible, because the kubelet readiness probe watches controller-runtime's
+	// health server rather than the aggregated apiserver's own readyz, so a pod whose policy
+	// informers have stalled stays Ready. A GaugeFunc rather than a Gauge so it is sampled at
+	// scrape time and stays accurate on an idle apiserver.
+	PolicyEnforcementActive = prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "ark_apiserver_policy_enforcement_active",
+			Help: "1 when ValidatingAdmissionPolicy enforcement is wired and its informers have synced, 0 otherwise.",
+		},
+		func() float64 {
+			fn := policyReadyFn.Load()
+			if fn == nil || !(*fn)() {
+				return 0
+			}
+			return 1
+		},
+	)
 )
+
+// policyReadyFn is unset until admission wiring succeeds. Unset reads as 0, which is the honest
+// value both before startup completes and on every path where enforcement is never wired.
+var policyReadyFn atomic.Pointer[func() bool]
+
+// SetPolicyReadyFunc installs the check PolicyEnforcementActive samples. Safe to leave unset.
+func SetPolicyReadyFunc(fn func() bool) {
+	policyReadyFn.Store(&fn)
+}
 
 func init() {
 	prometheus.MustRegister(StorageOperations)
@@ -58,6 +87,7 @@ func init() {
 	prometheus.MustRegister(RequestsTotal)
 	prometheus.MustRegister(RequestDuration)
 	prometheus.MustRegister(ActiveResources)
+	prometheus.MustRegister(PolicyEnforcementActive)
 }
 
 func RecordStorageOperation(operation, kind, status string) {

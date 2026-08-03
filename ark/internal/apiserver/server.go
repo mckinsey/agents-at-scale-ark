@@ -32,6 +32,7 @@ import (
 	"k8s.io/klog/v2"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/apiserver/metrics"
 	"mckinsey.com/ark/internal/apiserver/registry"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
@@ -134,6 +135,12 @@ type Config struct {
 	// the zero value must leave enforcement on, so a Config built without this field cannot
 	// end up silently unenforced.
 	PolicyDisabled bool
+	// ThirdPartyWebhooks runs the webhook admission plugins, so ValidatingWebhookConfiguration
+	// and MutatingWebhookConfiguration objects — Kyverno, OPA/Gatekeeper — fire on Ark resources
+	// in apiserver mode, including on the direct service path. Off by default: it puts a
+	// synchronous call to every matching webhook on the write path, and Ark's own webhook
+	// configurations have to be suppressed first or Ark's validation runs twice.
+	ThirdPartyWebhooks bool
 }
 
 type Server struct {
@@ -374,15 +381,28 @@ func (s *Server) applyAudit(serverConfig *genericapiserver.Config) error {
 // applyAdmission wires the ValidatingAdmissionPolicy (CEL) plugin. Policy objects live in
 // the host cluster, so its informers and clients are built from RestConfig. Returns nil when
 // enforcement is not wired; PolicyRequired turns those cases into a startup error.
+// admissionPlan is what this apiserver will actually enforce, after config, host capability and
+// RBAC have each had a chance to veto. The two mechanisms are independent: CEL policy is
+// evaluated in-process, third-party webhooks are called out to, and losing one must not silently
+// take the other with it.
+type admissionPlan struct {
+	cel      bool
+	webhooks bool
+}
+
+func (p admissionPlan) any() bool { return p.cel || p.webhooks }
+
 func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiserver.Config) (informers.SharedInformerFactory, error) {
-	if s.config.PolicyDisabled {
-		// Contradictory rather than merely redundant: honouring either one silently discards
-		// the operator's other instruction, and this is the class of misconfiguration where
-		// guessing means serving unenforced.
-		if s.config.PolicyRequired {
-			return nil, fmt.Errorf("policy enforcement cannot be both disabled (policy.enabled=false) and required (policy.required=true); set at most one")
-		}
-		klog.Info("CEL policy enforcement disabled by configuration (policy.enabled=false); the apiserver will not watch cluster-wide policy objects — Ark in-process validation and audit remain active")
+	// Contradictory rather than merely redundant: honouring either one silently discards the
+	// operator's other instruction, and this is the class of misconfiguration where guessing
+	// means serving unenforced.
+	if s.config.PolicyDisabled && s.config.PolicyRequired {
+		return nil, fmt.Errorf("policy enforcement cannot be both disabled (policy.enabled=false) and required (policy.required=true); set at most one")
+	}
+
+	plan := admissionPlan{cel: !s.config.PolicyDisabled, webhooks: s.config.ThirdPartyWebhooks}
+	if !plan.any() {
+		klog.Info("Admission enforcement disabled by configuration (policy.enabled=false, policy.thirdPartyWebhooks=false); the apiserver will not watch cluster-wide policy or webhook objects — Ark in-process validation and audit remain active")
 		return nil, nil
 	}
 
@@ -390,7 +410,7 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 		if s.config.PolicyRequired {
 			return nil, fmt.Errorf("policy enforcement is required but no host REST config is available to build the admission plugin's clients")
 		}
-		klog.Warning("No host REST config available; CEL policy enforcement disabled — Ark in-process validation and audit remain active")
+		klog.Warning("No host REST config available; admission enforcement disabled — Ark in-process validation and audit remain active")
 		return nil, nil
 	}
 
@@ -399,27 +419,15 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 		return nil, fmt.Errorf("failed to build kube client for admission: %w", err)
 	}
 
-	served, err := discoverPolicySupport(ctx, kubeClient.Discovery(), policyDiscoveryAttempts, policyDiscoveryDelay)
-	switch {
-	case err != nil:
-		if s.config.PolicyRequired {
-			return nil, fmt.Errorf("policy enforcement is required but ValidatingAdmissionPolicy support could not be determined: %w", err)
+	if plan.cel {
+		if plan.cel, err = s.resolveCELSupport(ctx, kubeClient.Discovery()); err != nil {
+			return nil, err
 		}
-		klog.Errorf("Could not determine whether the host cluster serves ValidatingAdmissionPolicy: %v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active). This is a fallback after a failed discovery probe, not a version check — set policy.required=true to fail startup instead of continuing unenforced.", err)
-		return nil, nil
-	case !served:
-		if s.config.PolicyRequired {
-			return nil, fmt.Errorf("policy enforcement is required but the host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30)")
-		}
-		klog.Warning("Host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30); CEL policy enforcement disabled — Ark in-process validation and audit remain active")
-		return nil, nil
 	}
-
-	if err := checkPolicyWatchPermissions(ctx, kubeClient.AuthorizationV1()); err != nil {
-		if s.config.PolicyRequired {
-			return nil, fmt.Errorf("policy enforcement is required but %w", err)
-		}
-		klog.Errorf("%v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active) — set policy.required=true to fail startup instead of continuing unenforced.", err)
+	if plan, err = s.resolveWatchPermissions(ctx, kubeClient.AuthorizationV1(), plan); err != nil {
+		return nil, err
+	}
+	if !plan.any() {
 		return nil, nil
 	}
 
@@ -430,6 +438,12 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 
 	// The plugin refuses to initialise without an authorizer (it backs the `authorizer` CEL
 	// variable). Auth mode "off" leaves it nil, and Complete() has not run yet.
+	//
+	// Note the side effect: ApplyTo reads the authorizer from this same field, which is also the
+	// request-path authorizer. Setting it moves request handling from "authorization filter
+	// skipped entirely" to "filter runs and permits everything" — the same effective access, but
+	// it does silence the generic apiserver's own "Authorization is disabled" warning, so the
+	// klog line below is the only remaining signal that auth mode 'off' is in play.
 	if serverConfig.Authorization.Authorizer == nil {
 		klog.Warning("No authorizer configured (auth mode 'off'); admission policy will evaluate the authorizer CEL variable as allow-all")
 		serverConfig.Authorization.Authorizer = authorizerfactory.NewAlwaysAllowAuthorizer()
@@ -439,23 +453,103 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 	// ApplyTo needs a non-nil gate; Complete() would default it, but only later.
 	serverConfig.FeatureGate = utilfeature.DefaultFeatureGate
 
-	// The webhook plugins would call Ark's controller webhook (failurePolicy: Fail), which is
-	// not deployed in apiserver-only mode, and break every write. NamespaceLifecycle would
-	// judge namespace existence from this apiserver's own cache, duplicating what the host
-	// already enforces on the proxied path.
-	admissionOpts := genericoptions.NewAdmissionOptions()
-	admissionOpts.DisablePlugins = []string{
-		"NamespaceLifecycle",
-		"MutatingAdmissionWebhook",
-		"ValidatingAdmissionWebhook",
-		"MutatingAdmissionPolicy",
-	}
+	admissionOpts, policyGate := s.admissionOptionsFor(plan, admissionInformers)
 	if err := admissionOpts.ApplyTo(serverConfig, admissionInformers, kubeClient, dynClient, serverConfig.FeatureGate); err != nil {
 		return nil, fmt.Errorf("failed to apply admission options: %w", err)
 	}
 
-	klog.Info("ValidatingAdmissionPolicy (CEL) enforcement enabled")
+	if plan.cel {
+		metrics.SetPolicyReadyFunc(policyGate.ready)
+		klog.Info("ValidatingAdmissionPolicy (CEL) enforcement enabled")
+	}
+	if plan.webhooks {
+		// Ark's own webhook configurations must not be present in this mode or its validation
+		// runs twice; the controller chart stops rendering them when storage.backend is not etcd.
+		klog.Info("Third-party admission webhooks enabled; ValidatingWebhookConfiguration/MutatingWebhookConfiguration registered by Kyverno, OPA/Gatekeeper and similar now fire on Ark resources, including on the direct service path")
+	}
 	return admissionInformers, nil
+}
+
+// admissionOptionsFor selects the plugins for a plan and wraps them for best-effort degradation.
+// Also returns the CEL readiness gate, which backs the enforcement metric, or nil when CEL is off.
+func (s *Server) admissionOptionsFor(plan admissionPlan, admissionInformers informers.SharedInformerFactory) (*genericoptions.AdmissionOptions, *readinessGate) {
+	// NamespaceLifecycle would judge namespace existence from this apiserver's own cache,
+	// duplicating what the host already enforces on the proxied path. MutatingAdmissionPolicy is
+	// out of scope: Ark applies its own defaulting in the storage path.
+	opts := genericoptions.NewAdmissionOptions()
+	opts.DisablePlugins = []string{"NamespaceLifecycle", "MutatingAdmissionPolicy"}
+	if !plan.cel {
+		opts.DisablePlugins = append(opts.DisablePlugins, validatingAdmissionPolicyPlugin)
+	}
+	if !plan.webhooks {
+		opts.DisablePlugins = append(opts.DisablePlugins, mutatingAdmissionWebhookPlugin, validatingAdmissionWebhookPlugin)
+	}
+
+	// Build a gate only for what is actually wired. Constructing one registers its informers on
+	// the shared factory and Complete() starts everything registered, so a gate built for a
+	// disabled mechanism leaves a reflector retrying a Forbidden list for the life of the process.
+	var policyGate *readinessGate
+	gates := map[string]*readinessGate{}
+	if plan.cel {
+		policyGate = newPolicyReadinessGate(admissionInformers)
+		gates[validatingAdmissionPolicyPlugin] = policyGate
+	}
+	if plan.webhooks {
+		webhookGate := newWebhookReadinessGate(admissionInformers)
+		gates[validatingAdmissionWebhookPlugin] = webhookGate
+		gates[mutatingAdmissionWebhookPlugin] = webhookGate
+	}
+
+	// Best-effort mode short-circuits to allow when a plugin's informers have not synced; required
+	// mode leaves them unwrapped so they keep failing closed. Appended, not assigned:
+	// NewAdmissionOptions seeds Decorators with WithControllerMetrics.
+	if len(gates) > 0 && !s.config.PolicyRequired {
+		opts.Decorators = append(opts.Decorators, bestEffortDecorator(gates))
+	}
+	return opts, policyGate
+}
+
+// resolveCELSupport reports whether CEL policy can be wired, honouring PolicyRequired: a host
+// that cannot serve ValidatingAdmissionPolicy is a startup error when policy is required and a
+// logged fallback otherwise.
+func (s *Server) resolveCELSupport(ctx context.Context, d discovery.DiscoveryInterface) (bool, error) {
+	served, err := discoverPolicySupport(ctx, d, policyDiscoveryAttempts, policyDiscoveryDelay)
+	switch {
+	case err != nil:
+		if s.config.PolicyRequired {
+			return false, fmt.Errorf("policy enforcement is required but ValidatingAdmissionPolicy support could not be determined: %w", err)
+		}
+		klog.Errorf("Could not determine whether the host cluster serves ValidatingAdmissionPolicy: %v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active). This is a fallback after a failed discovery probe, not a version check — set policy.required=true to fail startup instead of continuing unenforced.", err)
+		return false, nil
+	case !served:
+		if s.config.PolicyRequired {
+			return false, fmt.Errorf("policy enforcement is required but the host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30)")
+		}
+		klog.Warning("Host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30); CEL policy enforcement disabled — Ark in-process validation and audit remain active")
+		return false, nil
+	}
+	return true, nil
+}
+
+// resolveWatchPermissions drops whichever mechanisms the ServiceAccount cannot watch for. Checked
+// separately so a missing grant for one does not silently disable the other.
+func (s *Server) resolveWatchPermissions(ctx context.Context, c authorizationv1client.AuthorizationV1Interface, plan admissionPlan) (admissionPlan, error) {
+	if plan.cel {
+		if err := checkWatchPermissions(ctx, c, policyWatchResources, "ark-apiserver-admission-policy"); err != nil {
+			if s.config.PolicyRequired {
+				return plan, fmt.Errorf("policy enforcement is required but %w", err)
+			}
+			klog.Errorf("%v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active) — set policy.required=true to fail startup instead of continuing unenforced.", err)
+			plan.cel = false
+		}
+	}
+	if plan.webhooks {
+		if err := checkWatchPermissions(ctx, c, webhookWatchResources, "ark-apiserver-admission-webhooks"); err != nil {
+			klog.Errorf("%v. Third-party admission webhooks are DISABLED for the lifetime of this process (Ark in-process validation and audit remain active).", err)
+			plan.webhooks = false
+		}
+	}
+	return plan, nil
 }
 
 // policyWatchResources are the watches the ValidatingAdmissionPolicy plugin's informers open
@@ -470,13 +564,23 @@ var policyWatchResources = []authorizationv1.ResourceAttributes{
 	{Group: "", Resource: "namespaces", Verb: "watch"},
 }
 
-// checkPolicyWatchPermissions confirms the apiserver's ServiceAccount can watch what the plugin
+// webhookWatchResources are the watches the MutatingAdmissionWebhook/ValidatingAdmissionWebhook
+// plugins open (admission/configuration/{mutating,validating}_webhook_manager.go). Same failure
+// shape as the policy watches: without them the managers never sync and every write stalls.
+var webhookWatchResources = []authorizationv1.ResourceAttributes{
+	{Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "watch"},
+	{Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "watch"},
+	// Webhook matching evaluates namespaceSelector, so this is load-bearing here as well.
+	{Group: "", Resource: "namespaces", Verb: "watch"},
+}
+
+// checkWatchPermissions confirms the apiserver's ServiceAccount can watch what a plugin's
 // informers watch, so a missing grant lands on the same fallback as an unsupported host. The
 // review itself needs no extra RBAC: system:basic-user grants selfsubjectaccessreviews to every
 // authenticated identity. It only covers the grant existing now — a binding deleted later still
 // fails at request time, which is what policy.required is for.
-func checkPolicyWatchPermissions(ctx context.Context, c authorizationv1client.AuthorizationV1Interface) error {
-	for _, attrs := range policyWatchResources {
+func checkWatchPermissions(ctx context.Context, c authorizationv1client.AuthorizationV1Interface, resources []authorizationv1.ResourceAttributes, boundBy string) error {
+	for _, attrs := range resources {
 		review := &authorizationv1.SelfSubjectAccessReview{
 			Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &attrs},
 		}
@@ -489,8 +593,8 @@ func checkPolicyWatchPermissions(ctx context.Context, c authorizationv1client.Au
 			if reason == "" {
 				reason = "not permitted by RBAC"
 			}
-			return fmt.Errorf("the apiserver ServiceAccount cannot %s %s (%s); the ark-apiserver-admission-policy ClusterRoleBinding is missing or was removed",
-				attrs.Verb, policyResourceLabel(attrs), reason)
+			return fmt.Errorf("the apiserver ServiceAccount cannot %s %s (%s); the %s ClusterRoleBinding is missing or was removed",
+				attrs.Verb, policyResourceLabel(attrs), reason, boundBy)
 		}
 	}
 	return nil

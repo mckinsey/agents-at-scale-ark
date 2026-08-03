@@ -83,6 +83,11 @@ audit:
   # Catch-all level: None | Metadata | Request | RequestResponse. Request and
   # RequestResponse include bodies, so Query `.spec.input` reaches your log pipeline.
   level: Metadata
+  # Reads (get/list/watch) by these users are dropped. The controller's reconcile loops poll
+  # continuously, so auditing their reads buries operator- and user-driven records without
+  # adding anything; their writes are still recorded. Set to [] to audit everything.
+  excludeReadsByUsers:
+    - system:serviceaccount:ark-system:ark-controller
   # Full audit.k8s.io/v1 Policy YAML. Overrides `level` and the default exclusions.
   policy: ""
 
@@ -97,6 +102,17 @@ policy:
   # false: start anyway if enforcement cannot be wired (older host, failed discovery, missing
   # RBAC), and log why. true: fail startup instead of serving unenforced.
   required: false
+  # true: run the webhook admission plugins, so ValidatingWebhookConfiguration and
+  # MutatingWebhookConfiguration objects registered by Kyverno, OPA/Gatekeeper and similar fire
+  # on Ark resources — including on the direct service path. Independent of `enabled`; either
+  # mechanism can run without the other.
+  #
+  # Off by default, because it changes the write path: every matching webhook becomes a
+  # synchronous call, and a webhook with failurePolicy=Fail couples Ark writes to that engine's
+  # availability. Requires the controller chart at storage.backend=postgresql, which stops
+  # rendering Ark's own webhook configurations — otherwise Ark's validation runs twice, once
+  # in-process and once over the webhook.
+  thirdPartyWebhooks: false
   # Extra RBAC for policies using `paramKind`; the plugin needs read access to the param
   # resource or its informer never syncs. ConfigMaps/Secrets are already granted.
   #   extraParamRules:

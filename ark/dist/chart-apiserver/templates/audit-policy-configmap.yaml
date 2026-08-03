@@ -32,6 +32,14 @@ data:
           - /version
           - /openapi*
           - /apis*
+      {{- with .Values.audit.excludeReadsByUsers }}
+      # Controller reconcile reads are continuous background traffic. Writes by the same
+      # identity still fall through to the catch-all below.
+      - level: None
+        users:
+          {{- toYaml . | nindent 10 }}
+        verbs: ["get", "list", "watch"]
+      {{- end }}
       # Only ark.mckinsey.com is served here, so this covers Ark operations on both the
       # proxied and direct service paths.
       - level: {{ .Values.audit.level }}

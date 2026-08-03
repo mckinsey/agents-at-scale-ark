@@ -515,6 +515,111 @@ func TestGenericStorage_Delete_WithFinalizers_SetsDeletionTimestamp(t *testing.T
 	}
 }
 
+// conflictingUpdateBackend rejects the first n Updates with a conflict, standing in for a
+// controller that reconciled the object between our read and our deletionTimestamp write.
+type conflictingUpdateBackend struct {
+	*mockBackend
+	failures int
+	updates  int
+}
+
+func (b *conflictingUpdateBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	b.updates++
+	if b.updates <= b.failures {
+		return storage.ErrConflict
+	}
+	return b.mockBackend.Update(ctx, kind, namespace, name, obj)
+}
+
+func newConflictingStorage(failures int) (*GenericStorage, *conflictingUpdateBackend) {
+	backend := &conflictingUpdateBackend{mockBackend: newMockBackend(), failures: failures}
+	config := ResourceConfig{
+		Kind:         "Agent",
+		Resource:     "agents",
+		SingularName: "agent",
+		NewFunc:      func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc:  func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+	return NewGenericStorage(backend, &mockConverter{}, config, nil), backend
+}
+
+// Admission now runs between the read and the deletionTimestamp write, so the window a
+// concurrent reconcile can land in is much wider than when the callback was a no-op. Delete has
+// no server-side conflict retry, so without this an actively reconciled resource surfaces a 409
+// the caller never used to see.
+func TestGenericStorage_Delete_RetriesDeletionTimestampOnConflict(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(1)
+	ctx := contextWithNamespace(testNS())
+
+	admissions := 0
+	validate := func(context.Context, runtime.Object) error {
+		admissions++
+		return nil
+	}
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, validate, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() should have retried past the conflict, got %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+	if backend.updates != 2 {
+		t.Errorf("backend updates = %d, want 2 (one conflict, one success)", backend.updates)
+	}
+	// The object changed under us, so policy must evaluate the version actually being marked.
+	if admissions != 2 {
+		t.Errorf("admission ran %d times, want 2 (re-run against the refreshed object)", admissions)
+	}
+	if resultAgent, ok := result.(*arkv1alpha1.Agent); !ok || resultAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be set on the returned object")
+	}
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	if stored.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be persisted after the retry")
+	}
+}
+
+func TestGenericStorage_Delete_GivesUpAfterRepeatedConflicts(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(maxDeleteConflictAttempts + 1)
+	ctx := contextWithNamespace(testNS())
+
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected a Conflict once retries are exhausted, got %v", err)
+	}
+	if backend.updates != maxDeleteConflictAttempts {
+		t.Errorf("backend updates = %d, want %d", backend.updates, maxDeleteConflictAttempts)
+	}
+}
+
+// A caller that supplied preconditions asked to be told about the conflict rather than have it
+// resolved, so that path must not retry.
+func TestGenericStorage_Delete_PreconditionsSuppressConflictRetry(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(maxDeleteConflictAttempts + 1)
+	ctx := contextWithNamespace(testNS())
+
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	uid := stored.UID
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &uid},
+	})
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected a Conflict, got %v", err)
+	}
+	if backend.updates != 1 {
+		t.Errorf("backend updates = %d, want 1 (no retry when preconditions are set)", backend.updates)
+	}
+}
+
 func TestGenericStorage_Delete_WithFinalizers_DeletionTimestampNotReset(t *testing.T) {
 	t.Parallel()
 	gs, backend := newTestStorage()

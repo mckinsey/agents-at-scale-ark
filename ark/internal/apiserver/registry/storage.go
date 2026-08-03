@@ -31,6 +31,11 @@ const (
 	columnTypeDate          = "date"
 	defaultNamespace        = "default"
 	maxGenerateNameAttempts = 100
+	// Delete stamps deletionTimestamp using the resourceVersion from the read that preceded it,
+	// and admission now runs inside that window — policy matching plus CEL, where the callback
+	// used to be a no-op. Delete gets no server-side conflict retry the way patch does, so a
+	// resource under active reconciliation would surface a 409 it never used to.
+	maxDeleteConflictAttempts = 5
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -378,16 +383,19 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	// removal happens in Update once the last finalizer is gone. This mirrors the
 	// behavior of the upstream Kubernetes API server.
 	if len(accessor.GetFinalizers()) > 0 {
-		if accessor.GetDeletionTimestamp() == nil {
-			now := metav1.NewTime(time.Now())
-			accessor.SetDeletionTimestamp(&now)
-			if err := s.backend.Update(sctx, s.config.Kind, namespace, name, existing); err != nil {
-				return nil, false, handleUpdateError(err, s.config, "delete", name, start)
-			}
+		// A caller that supplied preconditions asked to be told about the conflict rather than
+		// have it resolved, and those were checked against the first read only.
+		attempts := maxDeleteConflictAttempts
+		if options != nil && options.Preconditions != nil {
+			attempts = 1
+		}
+		marked, err := s.markForDeletion(ctx, sctx, namespace, name, existing, deleteValidation, attempts, start)
+		if err != nil {
+			return nil, false, err
 		}
 		metrics.RecordStorageOperation("delete", s.config.Kind, "pending_finalizers")
 		metrics.RecordStorageLatency("delete", s.config.Kind, start)
-		return existing, false, nil
+		return marked, false, nil
 	}
 
 	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
@@ -397,6 +405,64 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	metrics.RecordStorageOperation("delete", s.config.Kind, "success")
 	metrics.RecordStorageLatency("delete", s.config.Kind, start)
 	return existing, true, nil
+}
+
+// markForDeletion stamps deletionTimestamp so finalizers can run, retrying on a lost race. On
+// conflict it re-reads and re-runs admission before re-stamping, since the object changed and
+// policy must evaluate the version actually being marked. ctx carries the request (admission),
+// sctx the storage deadline.
+func (s *GenericStorage) markForDeletion(ctx, sctx context.Context, namespace, name string, obj runtime.Object, deleteValidation rest.ValidateObjectFunc, attempts int, start time.Time) (runtime.Object, error) {
+	for attempt := 0; ; attempt++ {
+		accessor, err := meta.Accessor(obj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access object metadata: %w", err)
+		}
+		// Already marked, either by the caller's earlier read or by whoever won the race; the
+		// first timestamp is the one that counts, so leave it alone.
+		if accessor.GetDeletionTimestamp() != nil {
+			return obj, nil
+		}
+
+		// Stamp a copy: a write that conflicts must not leave a deletionTimestamp behind on an
+		// object that was never persisted, since the next attempt would read it as already marked.
+		marked := obj.DeepCopyObject()
+		markedAccessor, err := meta.Accessor(marked)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access object metadata: %w", err)
+		}
+		now := metav1.NewTime(time.Now())
+		markedAccessor.SetDeletionTimestamp(&now)
+
+		err = s.backend.Update(sctx, s.config.Kind, namespace, name, marked)
+		if err == nil {
+			return marked, nil
+		}
+		if !errors.Is(err, storage.ErrConflict) || attempt >= attempts-1 {
+			return nil, handleUpdateError(err, s.config, "delete", name, start)
+		}
+
+		if obj, err = s.refreshForDeletion(ctx, sctx, namespace, name, deleteValidation); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// refreshForDeletion re-reads an object after a delete conflict and re-runs admission on it.
+func (s *GenericStorage) refreshForDeletion(ctx, sctx context.Context, namespace, name string, deleteValidation rest.ValidateObjectFunc) (runtime.Object, error) {
+	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	if err != nil {
+		// The winner of the race finished the delete outright.
+		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		return nil, apierrors.NewNotFound(gr, name)
+	}
+	if deleteValidation != nil {
+		if err := deleteValidation(ctx, obj); err != nil {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "validation_error")
+			return nil, err
+		}
+	}
+	return obj, nil
 }
 
 func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
