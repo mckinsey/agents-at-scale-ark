@@ -119,7 +119,7 @@ export function getAllNodesFlat(
 }
 
 export function getRootNodeId(workflow: ArgoWorkflow): string | null {
-  if (!workflow.status.nodes) return null;
+  if (!workflow.status?.nodes) return null;
   return workflow.metadata.name;
 }
 

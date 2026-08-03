@@ -175,7 +175,7 @@ A2A execution automatically respects query timeouts:
 1. **Query.spec.timeout** (default: 5 minutes) sets the overall time limit
 2. **A2AServer.spec.timeout** (optional) can reduce the timeout for specific A2A servers
 
-The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
+The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses. Values above 5 minutes take effect: the HTTP client that carries A2A requests keeps only a 30 minute backstop for callers that set no deadline of their own.
 
 ### Configuring A2AServer Timeout
 

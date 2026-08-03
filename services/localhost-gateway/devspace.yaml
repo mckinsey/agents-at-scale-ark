@@ -1,6 +1,11 @@
 # DevSpace configuration for localhost-gateway
 version: v2beta1
 
+vars:
+  GATEWAY_PORT:
+    source: env
+    default: "8080"
+
 pipelines:
   deploy: |-
     create_deployments --all
@@ -8,7 +13,7 @@ pipelines:
     create_deployments --all
 
     echo "Waiting for gateway to be ready to port-forward..."
-    until kubectl port-forward -n ark-system service/localhost-gateway-nginx 8080:80; do
+    until kubectl port-forward -n ark-system service/localhost-gateway-nginx ${GATEWAY_PORT}:80; do
       echo "Port-forwarding failed - gateway not ready yet. Retrying in 10s..."
       sleep 10
     done
@@ -42,4 +47,4 @@ dev:
     namespace: ark-system
     imageSelector: ghcr.io/nginx/nginx-gateway-fabric/nginx
     ports:
-    - port: 8080:80
+    - port: ${GATEWAY_PORT}:80
