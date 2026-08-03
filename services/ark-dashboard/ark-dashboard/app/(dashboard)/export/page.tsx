@@ -3,6 +3,7 @@
 import type { ComponentType, SVGProps } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import {
   AccountTree,
   DatabaseSearch,
@@ -333,36 +334,28 @@ export default function ExportPage() {
 
   return (
     <div className="content-shell flex h-full w-full flex-col gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <IconShell size="default" variant="primary">
-              <SaveAlt />
-            </IconShell>
-            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              Exports
-            </h1>
-          </div>
-          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            Export your Ark resources to YAML files
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            disabled={exportingAction !== null || selectedCount === 0}
-            onClick={() => handleExport('selected')}>
-            {exportingAction === 'selected' && <Spinner size="sm" />}
-            Export selected ({selectedCount})
-          </Button>
-          <Button
-            disabled={exportingAction !== null || totalCount === 0}
-            onClick={() => handleExport('all')}>
-            {exportingAction === 'all' && <Spinner size="sm" />}
-            Export all ({totalCount})
-          </Button>
-        </div>
-      </div>
+      <ResourcePageHeader
+        icon={<SaveAlt />}
+        title="Exports"
+        description="Export your Ark resources to YAML files"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              disabled={exportingAction !== null || selectedCount === 0}
+              onClick={() => handleExport('selected')}>
+              {exportingAction === 'selected' && <Spinner size="sm" />}
+              Export selected ({selectedCount})
+            </Button>
+            <Button
+              disabled={exportingAction !== null || totalCount === 0}
+              onClick={() => handleExport('all')}>
+              {exportingAction === 'all' && <Spinner size="sm" />}
+              Export all ({totalCount})
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">

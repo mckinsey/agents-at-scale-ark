@@ -88,8 +88,8 @@ describe('ChatInput', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'Activate tool calls' }),
-      ).toHaveAttribute('aria-pressed', 'false');
+        screen.getByRole('button', { name: 'Show tool calls' }),
+      ).not.toHaveAttribute('aria-pressed');
 
       rerender(
         <ChatInput
@@ -100,8 +100,8 @@ describe('ChatInput', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'Disable tool calls' }),
-      ).toHaveAttribute('aria-pressed', 'true');
+        screen.getByRole('button', { name: 'Hide tool calls' }),
+      ).not.toHaveAttribute('aria-pressed');
     });
 
     it('should call onShowToolCallsChange when the toggle is clicked', async () => {
@@ -116,7 +116,7 @@ describe('ChatInput', () => {
       );
 
       await user.click(
-        screen.getByRole('button', { name: 'Activate tool calls' }),
+        screen.getByRole('button', { name: 'Show tool calls' }),
       );
 
       expect(mockOnShowToolCallsChange).toHaveBeenCalledWith(true);

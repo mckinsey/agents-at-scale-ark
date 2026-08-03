@@ -4,10 +4,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { BrokenImage, ChevronDown, ChevronRight } from '@/components/icons';
-import { ResourceEmptyState } from '@/components/sections/resource-list-states';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import { FieldLabel, FieldSet } from '@/components/ui/field';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Label } from '@/components/ui/label';
 import {
@@ -21,7 +24,14 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiUrl } from '@/lib/api/config';
+import { DOCS_URLS } from '@/lib/constants/docs';
+import { useDelayedLoading } from '@/lib/hooks';
 import { useSSEStream } from '@/lib/hooks/use-sse-stream';
+import {
+  BROKER_STREAM_ENDPOINTS,
+  BROKER_STREAM_KEYS,
+  type BrokerStreamKey,
+} from '@/lib/services/broker-streams';
 import {
   BROKER_STREAM_PROBE_QUERY_KEY,
   useBrokerStreamProbe,
@@ -31,8 +41,17 @@ import { cn } from '@/lib/utils';
 import { type StreamEntry } from '@/lib/utils/sse-stream';
 
 const PURGE_PAGE_SIZE = 1000;
-const BROKER_MEMORY_DOCS_URL =
-  'https://mckinsey.github.io/agents-at-scale-ark/reference/resources/memory/';
+
+const BROKER_TABS: Record<
+  BrokerStreamKey,
+  { readonly tabLabel: string; readonly panelTitle: string }
+> = {
+  traces: { tabLabel: 'OTEL Traces', panelTitle: 'OTEL Traces' },
+  messages: { tabLabel: 'Messages', panelTitle: 'Messages' },
+  chunks: { tabLabel: 'LLM Chunks', panelTitle: 'LLM Chunks' },
+  events: { tabLabel: 'Events', panelTitle: 'Operation Events' },
+  sessions: { tabLabel: 'Sessions', panelTitle: 'Sessions' },
+};
 
 function trackPurge(streamType: string, memory: string) {
   trackEvent({
@@ -48,7 +67,7 @@ interface StreamPanelProps {
   readonly onAutoScrollChange: (next: boolean) => void;
   readonly onPurge: () => void;
   readonly containerRef: React.RefObject<HTMLDivElement | null>;
-  readonly banner?: React.ReactNode;
+  readonly error?: string | null;
   readonly children: React.ReactNode;
 }
 
@@ -59,13 +78,13 @@ function StreamPanel({
   onAutoScrollChange,
   onPurge,
   containerRef,
-  banner,
+  error,
   children,
 }: StreamPanelProps) {
   const switchId = useId();
 
   return (
-    <div className="border-stroke-divider flex flex-col gap-2 border p-5">
+    <div className="border-stroke-divider flex min-h-0 flex-1 flex-col gap-2 border p-5">
       <div className="flex w-full items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="headings-h4-regular text-fg-primary">{title}</span>
@@ -105,10 +124,16 @@ function StreamPanel({
           </div>
         </div>
       </div>
-      {banner}
+      {error && (
+        <div
+          role="alert"
+          className="border-status-error text-status-error label-regular-primary border p-2">
+          {error}
+        </div>
+      )}
       <div
         ref={containerRef}
-        className="flex max-h-[calc(100vh-300px)] w-full flex-col gap-2 overflow-y-auto">
+        className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-y-auto">
         {children}
       </div>
     </div>
@@ -174,15 +199,7 @@ function StreamView({
       onAutoScrollChange={setAutoScroll}
       onPurge={onPurge}
       containerRef={containerRef}
-      banner={
-        error ? (
-          <div
-            role="alert"
-            className="border-status-error text-status-error label-regular-primary border p-2">
-            {error}
-          </div>
-        ) : undefined
-      }>
+      error={error}>
       {entries.length === 0 ? (
         <StreamPlaceholder />
       ) : (
@@ -235,33 +252,81 @@ function StreamView({
   );
 }
 
+interface BrokerStreamTabProps {
+  readonly streamKey: Exclude<BrokerStreamKey, 'sessions'>;
+  readonly title: string;
+  readonly memory: string;
+  readonly onPurged: () => void;
+  readonly onEntriesPresentChange: (hasEntries: boolean) => void;
+}
+
+function BrokerStreamTab({
+  streamKey,
+  title,
+  memory,
+  onPurged,
+  onEntriesPresentChange,
+}: BrokerStreamTabProps) {
+  const stream = useSSEStream(BROKER_STREAM_ENDPOINTS[streamKey], memory, {
+    pageSize: PURGE_PAGE_SIZE,
+    fetchAllPages: true,
+    onPurge: onPurged,
+  });
+
+  const hasEntries = stream.entries.length > 0;
+
+  useEffect(() => {
+    onEntriesPresentChange(hasEntries);
+  }, [hasEntries, onEntriesPresentChange]);
+
+  return (
+    <StreamView
+      title={title}
+      entries={stream.entries}
+      isConnected={stream.isConnected}
+      isLoading={stream.isLoading}
+      hasMore={stream.hasMore}
+      error={stream.error}
+      onPurge={stream.purge}
+      onLoadMore={stream.loadMore}
+    />
+  );
+}
+
+interface BrokerSession {
+  readonly lastActivity?: string;
+}
+
 interface SessionsViewProps {
   readonly memory: string;
   readonly onPurged?: () => void;
 }
 
 export function SessionsView({ memory, onPurged }: SessionsViewProps) {
-  const [store, setStore] = useState<Record<string, unknown>>({});
+  const [sessions, setSessions] = useState<Record<string, BrokerSession>>({});
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [autoScroll, setAutoScroll] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setSessions({});
     const es = new EventSource(
       apiUrl(
         `/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}&watch=true`,
       ),
     );
-    const sessions: Record<string, unknown> = {};
 
     es.onopen = () => setIsConnected(true);
     es.onmessage = event => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.sessionId && data.session) {
-          sessions[data.sessionId] = data.session;
-          setStore({ sessions: { ...sessions } });
+        const data: { sessionId?: string; session?: BrokerSession } = JSON.parse(
+          event.data,
+        );
+        const { sessionId, session } = data;
+        if (sessionId && session) {
+          setSessions(prev => ({ ...prev, [sessionId]: session }));
         }
       } catch {
         console.error('Failed to parse session data:', event.data);
@@ -276,18 +341,13 @@ export function SessionsView({ memory, onPurged }: SessionsViewProps) {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
-  }, [store, autoScroll]);
+  }, [sessions, autoScroll]);
 
-  const sessions =
-    (store as { sessions?: Record<string, unknown> }).sessions || {};
-  const sessionIds = Object.keys(sessions).sort((a, b) => {
-    const aSession = sessions[a] as { lastActivity?: string };
-    const bSession = sessions[b] as { lastActivity?: string };
-    return (
-      new Date(bSession.lastActivity || 0).getTime() -
-      new Date(aSession.lastActivity || 0).getTime()
-    );
-  });
+  const sessionIds = Object.keys(sessions).sort(
+    (a, b) =>
+      new Date(sessions[b].lastActivity ?? 0).getTime() -
+      new Date(sessions[a].lastActivity ?? 0).getTime(),
+  );
 
   const toggleExpanded = (id: string) => {
     setExpandedIds(prev => {
@@ -300,16 +360,20 @@ export function SessionsView({ memory, onPurged }: SessionsViewProps) {
 
   const handlePurge = async () => {
     try {
-      await fetch(
+      const response = await fetch(
         apiUrl(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`),
         { method: 'DELETE' },
       );
-      setStore({ sessions: {} });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+      setSessions({});
+      setError(null);
       onPurged?.();
     } catch (e) {
-      toast.error('Failed to purge sessions', {
-        description: (e as Error).message,
-      });
+      const message = (e as Error).message;
+      setError(message);
+      toast.error('Failed to purge sessions', { description: message });
     }
   };
 
@@ -320,12 +384,14 @@ export function SessionsView({ memory, onPurged }: SessionsViewProps) {
       autoScroll={autoScroll}
       onAutoScrollChange={setAutoScroll}
       onPurge={handlePurge}
-      containerRef={containerRef}>
+      containerRef={containerRef}
+      error={error}>
       {sessionIds.length === 0 ? (
         <StreamPlaceholder />
       ) : (
         sessionIds.map(sid => {
           const isExpanded = expandedIds.has(sid);
+          const lastActivity = sessions[sid].lastActivity;
           return (
             <div key={sid} className="w-full">
               <div className="flex w-full min-w-0 items-center gap-2 p-2 pr-5">
@@ -341,12 +407,9 @@ export function SessionsView({ memory, onPurged }: SessionsViewProps) {
                     {isExpanded ? <ChevronDown /> : <ChevronRight />}
                   </IconShell>
                 </button>
-                {(sessions[sid] as { lastActivity?: string })?.lastActivity && (
+                {lastActivity && (
                   <span className="label-regular-primary text-fg-secondary shrink-0">
-                    {(
-                      sessions[sid] as { lastActivity?: string }
-                    ).lastActivity!.substring(0, 19)}
-                    Z
+                    {lastActivity.substring(0, 19)}Z
                   </span>
                 )}
                 <span className="label-regular-primary text-fg-tertiary min-w-0 flex-1 truncate">
@@ -371,7 +434,8 @@ export default function BrokerPage() {
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
   const [loading, setLoading] = useState(true);
   const [hasMemoriesError, setHasMemoriesError] = useState(false);
-  const [activeTab, setActiveTab] = useState('traces');
+  const [activeTab, setActiveTab] = useState<BrokerStreamKey>('traces');
+  const [hasLiveEntries, setHasLiveEntries] = useState(false);
   const queryClient = useQueryClient();
 
   const selectedMemoryRef = useRef(selectedMemory);
@@ -384,48 +448,21 @@ export default function BrokerPage() {
   }, [queryClient]);
 
   const handlePurged = useCallback(
-    (streamType: string) => {
+    (streamType: BrokerStreamKey) => {
       trackPurge(streamType, selectedMemory);
       reprobeStreams();
     },
     [selectedMemory, reprobeStreams],
   );
 
-  const traces = useSSEStream(
-    activeTab === 'traces' ? '/v1/broker/traces' : null,
-    selectedMemory,
-    {
-      pageSize: PURGE_PAGE_SIZE,
-      fetchAllPages: true,
-      onPurge: () => handlePurged('traces'),
-    },
+  const handleStreamPurged = useCallback(
+    () => handlePurged(activeTab),
+    [handlePurged, activeTab],
   );
-  const messages = useSSEStream(
-    activeTab === 'messages' ? '/v1/broker/messages' : null,
-    selectedMemory,
-    {
-      pageSize: PURGE_PAGE_SIZE,
-      fetchAllPages: true,
-      onPurge: () => handlePurged('messages'),
-    },
-  );
-  const chunks = useSSEStream(
-    activeTab === 'chunks' ? '/v1/broker/chunks' : null,
-    selectedMemory,
-    {
-      pageSize: PURGE_PAGE_SIZE,
-      fetchAllPages: true,
-      onPurge: () => handlePurged('chunks'),
-    },
-  );
-  const events = useSSEStream(
-    activeTab === 'events' ? '/v1/broker/events' : null,
-    selectedMemory,
-    {
-      pageSize: PURGE_PAGE_SIZE,
-      fetchAllPages: true,
-      onPurge: () => handlePurged('events'),
-    },
+
+  const handleSessionsPurged = useCallback(
+    () => handlePurged('sessions'),
+    [handlePurged],
   );
 
   useEffect(() => {
@@ -455,161 +492,127 @@ export default function BrokerPage() {
     enabled: !loading && hasMemories,
   });
 
-  const liveEntryCount =
-    traces.entries.length +
-    messages.entries.length +
-    chunks.entries.length +
-    events.entries.length;
+  const isResolving =
+    loading || (hasMemories && streamProbe.data === undefined);
+  const showLoading = useDelayedLoading(isResolving);
 
   const showEmptyState =
-    !loading &&
     !hasMemoriesError &&
-    liveEntryCount === 0 &&
-    (!hasMemories || streamProbe.data?.isEmpty === true);
+    !hasLiveEntries &&
+    (!hasMemories || streamProbe.data === 'empty');
 
   return (
     <div className="content-shell flex min-h-0 w-full flex-1 flex-col">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1">
-          <IconShell size="default" variant="primary">
-            <BrokenImage />
-          </IconShell>
-          <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-            Broker
-          </h1>
-        </div>
-        <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-          Manage communication between agents, tools, and workflows
-        </p>
+      <ResourcePageHeader
+        icon={<BrokenImage />}
+        title="Broker"
+        description="Manage communication between agents, tools, and workflows"
+      />
+
+      <div className="mt-5 flex items-center gap-2">
+        <Label
+          htmlFor="broker-memory"
+          className="label-regular-primary text-fg-primary">
+          Memory
+        </Label>
+        <Select
+          value={selectedMemory}
+          onValueChange={value => {
+            setSelectedMemory(value as string);
+            setHasLiveEntries(false);
+            trackEvent({
+              name: 'broker_memory_changed',
+              properties: { memoryName: value as string },
+            });
+          }}
+          disabled={loading || !hasMemories}>
+          <SelectTrigger id="broker-memory" className="w-[197px]">
+            <SelectValue
+              placeholder={loading ? 'Loading...' : 'Select memory'}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {memories.map(memory => (
+              <SelectItem key={memory.name} value={memory.name}>
+                {memory.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {showEmptyState ? (
+      {isResolving ? (
+        showLoading && (
+          <div className="mt-5 flex flex-1 items-center justify-center">
+            <span className="label-regular-primary text-fg-secondary">
+              Loading...
+            </span>
+          </div>
+        )
+      ) : showEmptyState ? (
         <ResourceEmptyState
           icon={<BrokenImage />}
-          title="No broker yet"
+          title="No stream records"
           description={
-            <>
-              <p className="mb-2">You haven&apos;t added any memory yet.</p>
-              <p>Get started to see memory.</p>
-            </>
+            hasMemories ? (
+              <>
+                <p className="mb-2">
+                  The broker has no records for {selectedMemory}.
+                </p>
+                <p>
+                  Run a query against this memory to see traces, messages, LLM
+                  chunks, events, and sessions.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mb-2">No memory resources found.</p>
+                <p>Add a memory and run a query to see broker records here.</p>
+              </>
+            )
           }
-          actions={
-            <a
-              href={BROKER_MEMORY_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer">
-              <Button variant="outline">Learn more</Button>
-            </a>
-          }
+          actions={<LearnMoreButton href={DOCS_URLS.observability} />}
         />
       ) : (
         <Tabs
           value={activeTab}
           size="lg"
           padded={false}
-          className="mt-5 flex-1"
+          className="mt-5 flex min-h-0 flex-1 flex-col"
           onValueChange={tab => {
-            setActiveTab(tab);
+            setActiveTab(tab as BrokerStreamKey);
             trackEvent({
               name: 'broker_tab_changed',
               properties: { tabName: tab },
             });
           }}>
           <div className="flex items-end gap-3">
-            <FieldSet className="gap-2">
-              <FieldLabel htmlFor="broker-memory">Memory</FieldLabel>
-              <Select
-                value={selectedMemory}
-                onValueChange={value => {
-                  setSelectedMemory(value as string);
-                  trackEvent({
-                    name: 'broker_memory_changed',
-                    properties: { memoryName: value as string },
-                  });
-                }}
-                disabled={loading}>
-                <SelectTrigger id="broker-memory" className="w-[197px]">
-                  <SelectValue
-                    placeholder={loading ? 'Loading...' : 'Select memory'}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {memories.map(memory => (
-                    <SelectItem key={memory.name} value={memory.name}>
-                      {memory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FieldSet>
             <TabsList className="w-fit">
-              <TabsTrigger size="sm" value="traces">
-                OTEL Traces
-              </TabsTrigger>
-              <TabsTrigger size="sm" value="messages">
-                Messages
-              </TabsTrigger>
-              <TabsTrigger size="sm" value="chunks">
-                LLM Chunks
-              </TabsTrigger>
-              <TabsTrigger size="sm" value="events">
-                Events
-              </TabsTrigger>
-              <TabsTrigger size="sm" value="sessions">
-                Sessions
-              </TabsTrigger>
+              {BROKER_STREAM_KEYS.map(key => (
+                <TabsTrigger key={key} size="sm" value={key}>
+                  {BROKER_TABS[key].tabLabel}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </div>
-          <TabsContent value="traces" className="flex-1">
-            <StreamView
-              title="OTEL Traces"
-              entries={traces.entries}
-              isConnected={traces.isConnected}
-              isLoading={traces.isLoading}
-              hasMore={traces.hasMore}
-              error={traces.error}
-              onPurge={traces.purge}
-              onLoadMore={traces.loadMore}
-            />
-          </TabsContent>
-          <TabsContent value="messages" className="flex-1">
-            <StreamView
-              title="Messages"
-              entries={messages.entries}
-              isConnected={messages.isConnected}
-              isLoading={messages.isLoading}
-              hasMore={messages.hasMore}
-              error={messages.error}
-              onPurge={messages.purge}
-              onLoadMore={messages.loadMore}
-            />
-          </TabsContent>
-          <TabsContent value="chunks" className="flex-1">
-            <StreamView
-              title="LLM Chunks"
-              entries={chunks.entries}
-              isConnected={chunks.isConnected}
-              isLoading={chunks.isLoading}
-              hasMore={chunks.hasMore}
-              error={chunks.error}
-              onPurge={chunks.purge}
-              onLoadMore={chunks.loadMore}
-            />
-          </TabsContent>
-          <TabsContent value="events" className="flex-1">
-            <StreamView
-              title="Operation Events"
-              entries={events.entries}
-              isConnected={events.isConnected}
-              isLoading={events.isLoading}
-              hasMore={events.hasMore}
-              error={events.error}
-              onPurge={events.purge}
-              onLoadMore={events.loadMore}
-            />
-          </TabsContent>
-          <TabsContent value="sessions" className="flex-1">
-            <SessionsView memory={selectedMemory} onPurged={reprobeStreams} />
+          <TabsContent
+            value={activeTab}
+            className="flex min-h-0 flex-1 flex-col">
+            {activeTab === 'sessions' ? (
+              <SessionsView
+                memory={selectedMemory}
+                onPurged={handleSessionsPurged}
+              />
+            ) : (
+              <BrokerStreamTab
+                key={`${activeTab}:${selectedMemory}`}
+                streamKey={activeTab}
+                title={BROKER_TABS[activeTab].panelTitle}
+                memory={selectedMemory}
+                onPurged={handleStreamPurged}
+                onEntriesPresentChange={setHasLiveEntries}
+              />
+            )}
           </TabsContent>
         </Tabs>
       )}

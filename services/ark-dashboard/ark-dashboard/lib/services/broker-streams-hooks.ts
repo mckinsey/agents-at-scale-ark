@@ -15,6 +15,6 @@ export const useBrokerStreamProbe = (
     queryFn: () => brokerStreamsService.probeAll(memory),
     enabled: (options?.enabled ?? true) && !!memory,
     refetchInterval: query =>
-      query.state.data?.hasRecords ? false : PROBE_REFETCH_MS,
+      query.state.data === 'has-records' ? false : PROBE_REFETCH_MS,
   });
 };

@@ -211,11 +211,8 @@ export function ChatPanel({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-pressed={debugMode}
                       aria-label={
-                        debugMode
-                          ? 'Disable tool calls'
-                          : 'Activate tool calls'
+                        debugMode ? 'Hide tool calls' : 'Show tool calls'
                       }
                       onClick={() => {
                         const enabled = !debugMode;
@@ -236,13 +233,13 @@ export function ChatPanel({
                       <span
                         className={cn(
                           'absolute -right-0.5 -top-0.5 size-2 rounded-full',
-                          debugMode ? 'bg-status-success' : 'bg-status-error',
+                          debugMode ? 'bg-status-success' : 'bg-fg-disabled',
                         )}
                       />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {debugMode ? 'Disable tool calls' : 'Activate tool calls'}
+                    {debugMode ? 'Hide tool calls' : 'Show tool calls'}
                   </TooltipContent>
                 </Tooltip>
 

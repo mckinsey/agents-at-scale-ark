@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsView } from '@/app/(dashboard)/broker/page';
 
+const toastError = vi.fn();
+
+vi.mock('sonner', () => ({
+  toast: { error: (...args: unknown[]) => toastError(...args) },
+}));
+
 type ESInstance = {
   url: string;
   onopen: ((ev?: unknown) => void) | null;
@@ -28,8 +34,9 @@ class MockEventSource {
 
 beforeEach(() => {
   esInstances.length = 0;
-  (global as unknown as { EventSource: unknown }).EventSource = MockEventSource;
-  global.fetch = vi
+  (globalThis as unknown as { EventSource: unknown }).EventSource =
+    MockEventSource;
+  globalThis.fetch = vi
     .fn()
     .mockResolvedValue({ ok: true }) as unknown as typeof fetch;
 });
@@ -155,7 +162,7 @@ describe('SessionsView', () => {
     await user.click(screen.getByRole('button', { name: /purge/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         'http://localhost:3000/api/v1/broker/sessions?memory=default',
         {
           method: 'DELETE',
@@ -168,13 +175,44 @@ describe('SessionsView', () => {
   });
 
   it('Purge swallows fetch errors', async () => {
-    global.fetch = vi
+    globalThis.fetch = vi
       .fn()
       .mockRejectedValue(new Error('network')) as unknown as typeof fetch;
     const user = userEvent.setup();
     render(<SessionsView memory="default" />);
     await user.click(screen.getByRole('button', { name: /purge/i }));
-    expect(global.fetch).toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalled();
+  });
+
+  it('keeps sessions and surfaces an error when purge is rejected by the API', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    }) as unknown as typeof fetch;
+    const user = userEvent.setup();
+    const onPurged = vi.fn();
+    render(<SessionsView memory="default" onPurged={onPurged} />);
+    emit({
+      sessionId: 'sess-1',
+      session: { lastActivity: '2025-01-01T12:00:00.000Z' },
+    });
+    await waitFor(() => screen.getByText('sess-1'));
+
+    await user.click(screen.getByRole('button', { name: /purge/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('500');
+    });
+    expect(screen.getByText('sess-1')).toBeDefined();
+    expect(screen.queryByText(/waiting for data/i)).toBeNull();
+    expect(onPurged).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(
+      'Failed to purge sessions',
+      expect.objectContaining({
+        description: '500 Internal Server Error',
+      }),
+    );
   });
 
   it('Auto-scroll toggle state changes', async () => {

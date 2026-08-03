@@ -17,46 +17,42 @@ export const BROKER_STREAM_KEYS = Object.keys(
   BROKER_STREAM_ENDPOINTS,
 ) as BrokerStreamKey[];
 
-export interface BrokerStreamProbe {
-  hasRecords: boolean;
-  isEmpty: boolean;
-}
+export type BrokerStreamProbe = 'empty' | 'has-records' | 'unknown';
 
 interface PaginatedProbePayload {
   items?: unknown[];
   total?: number;
 }
 
-async function countStream(
+async function probeStream(
   path: BrokerStreamPath,
   memory: string,
-): Promise<number | null> {
+): Promise<BrokerStreamProbe> {
   try {
     const response = await fetch(
-      apiUrl(
-        `/api${path}?memory=${encodeURIComponent(memory)}&limit=1&_t=${Date.now()}`,
-      ),
+      apiUrl(`/api${path}?memory=${encodeURIComponent(memory)}&limit=1`),
+      { cache: 'no-store' },
     );
-    if (!response.ok) return null;
+    if (!response.ok) return 'unknown';
     const data: PaginatedProbePayload = await response.json();
-    if (!Array.isArray(data.items)) return null;
-    return typeof data.total === 'number' ? data.total : data.items.length;
+    if (!Array.isArray(data.items)) return 'unknown';
+    const count =
+      typeof data.total === 'number' ? data.total : data.items.length;
+    return count > 0 ? 'has-records' : 'empty';
   } catch {
-    return null;
+    return 'unknown';
   }
 }
 
 export const brokerStreamsService = {
   async probeAll(memory: string): Promise<BrokerStreamProbe> {
-    const counts = await Promise.all(
+    const results = await Promise.all(
       BROKER_STREAM_KEYS.map(key =>
-        countStream(BROKER_STREAM_ENDPOINTS[key], memory),
+        probeStream(BROKER_STREAM_ENDPOINTS[key], memory),
       ),
     );
 
-    return {
-      hasRecords: counts.some(count => count !== null && count > 0),
-      isEmpty: counts.every(count => count === 0),
-    };
+    if (results.includes('has-records')) return 'has-records';
+    return results.every(result => result === 'empty') ? 'empty' : 'unknown';
   },
 };

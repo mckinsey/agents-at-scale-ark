@@ -50,7 +50,7 @@ const EMPTY_PAGE = { items: [], total: 0, hasMore: false };
 function mockFetch(probeItems: (url: string) => unknown[]) {
   const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
-    if (url.includes('_t=')) {
+    if (/limit=1$/.test(url)) {
       const items = probeItems(url);
       return Promise.resolve(
         jsonResponse({ items, total: items.length, hasMore: false }),
@@ -98,15 +98,29 @@ describe('BrokerPage', () => {
   it('renders the empty state when every stream is empty', async () => {
     renderPage();
 
-    expect(await screen.findByText('No broker yet')).toBeInTheDocument();
+    expect(await screen.findByText('No stream records')).toBeInTheDocument();
     expect(
-      screen.getByText(/You haven.t added any memory yet/),
+      screen.getByText(/The broker has no records for default/),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
       'href',
-      'https://mckinsey.github.io/agents-at-scale-ark/reference/resources/memory/',
+      'https://mckinsey.github.io/agents-at-scale-ark/developer-guide/observability/',
     );
     expect(screen.queryByRole('tab', { name: 'OTEL Traces' })).toBeNull();
+  });
+
+  it('keeps the memory selector reachable while the empty state is shown', async () => {
+    vi.mocked(memoriesService.getAll).mockResolvedValue([
+      { name: 'default' },
+      { name: 'other' },
+    ] as unknown as Awaited<ReturnType<typeof memoriesService.getAll>>);
+
+    renderPage();
+
+    // The selector must not be swallowed by the empty state, otherwise a
+    // memory that does hold records becomes unreachable.
+    expect(await screen.findByText('No stream records')).toBeInTheDocument();
+    expect(screen.getByLabelText('Memory')).toBeInTheDocument();
   });
 
   it('renders the empty state when no memory exists', async () => {
@@ -114,7 +128,20 @@ describe('BrokerPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('No broker yet')).toBeInTheDocument();
+    expect(await screen.findByText('No stream records')).toBeInTheDocument();
+  });
+
+  it('never flashes the stream panel while the probe is still resolving', async () => {
+    renderPage();
+
+    // Before memories and the probe settle the outcome is unknown, so neither
+    // the panel nor the empty state may be committed.
+    expect(screen.queryByText('Waiting for data...')).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'OTEL Traces' })).toBeNull();
+    expect(screen.queryByText('No stream records')).toBeNull();
+
+    expect(await screen.findByText('No stream records')).toBeInTheDocument();
+    expect(screen.queryByText('Waiting for data...')).toBeNull();
   });
 
   it('renders the tabs instead of the empty state when memories cannot be loaded', async () => {
@@ -125,7 +152,7 @@ describe('BrokerPage', () => {
     expect(
       await screen.findByRole('tab', { name: 'OTEL Traces' }),
     ).toBeInTheDocument();
-    expect(screen.queryByText('No broker yet')).toBeNull();
+    expect(screen.queryByText('No stream records')).toBeNull();
   });
 
   it('renders the stream panel once a stream holds a record', async () => {

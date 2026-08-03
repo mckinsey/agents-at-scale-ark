@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('brokerStreamsService.probeAll', () => {
-  it('probes every stream once with limit=1, the memory and a cache buster', async () => {
+  it('probes every stream once with limit=1, the memory and no caching', async () => {
     const fetchMock = mockFetch(() =>
       jsonResponse({ items: [], total: 0, hasMore: false }),
     );
@@ -44,7 +44,9 @@ describe('brokerStreamsService.probeAll', () => {
     for (const url of urls) {
       expect(url).toContain('memory=my-memory');
       expect(url).toContain('limit=1');
-      expect(url).toMatch(/_t=\d+/);
+    }
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1] as RequestInit | undefined)?.cache).toBe('no-store');
     }
     expect(urls.some(url => url.includes('/broker/traces'))).toBe(true);
     expect(urls.some(url => url.includes('/broker/messages'))).toBe(true);
@@ -56,10 +58,7 @@ describe('brokerStreamsService.probeAll', () => {
   it('reports empty when every stream returns no items', async () => {
     mockFetch(() => jsonResponse({ items: [], total: 0, hasMore: false }));
 
-    const probe = await brokerStreamsService.probeAll('default');
-
-    expect(probe.isEmpty).toBe(true);
-    expect(probe.hasRecords).toBe(false);
+    expect(await brokerStreamsService.probeAll('default')).toBe('empty');
   });
 
   it('reports records when a single stream returns an item', async () => {
@@ -73,19 +72,26 @@ describe('brokerStreamsService.probeAll', () => {
         : jsonResponse({ items: [], total: 0, hasMore: false }),
     );
 
-    const probe = await brokerStreamsService.probeAll('default');
-
-    expect(probe.hasRecords).toBe(true);
-    expect(probe.isEmpty).toBe(false);
+    expect(await brokerStreamsService.probeAll('default')).toBe('has-records');
   });
 
   it('falls back to items length when total is absent', async () => {
     mockFetch(() => jsonResponse({ items: [{ id: 'a' }], hasMore: false }));
 
-    const probe = await brokerStreamsService.probeAll('default');
+    expect(await brokerStreamsService.probeAll('default')).toBe('has-records');
+  });
 
-    expect(probe.hasRecords).toBe(true);
-    expect(probe.isEmpty).toBe(false);
+  it('reports records even when another stream is unreadable', async () => {
+    mockFetch(url => {
+      if (url.includes('/broker/sessions')) {
+        return jsonResponse({ error: { message: 'unavailable' } }, false, 503);
+      }
+      return url.includes('/broker/events')
+        ? jsonResponse({ items: [{ id: 'a' }], total: 1, hasMore: false })
+        : jsonResponse({ items: [], total: 0, hasMore: false });
+    });
+
+    expect(await brokerStreamsService.probeAll('default')).toBe('has-records');
   });
 
   it('treats an unreadable stream as unknown rather than empty', async () => {
@@ -95,10 +101,7 @@ describe('brokerStreamsService.probeAll', () => {
         : jsonResponse({ items: [], total: 0, hasMore: false }),
     );
 
-    const probe = await brokerStreamsService.probeAll('default');
-
-    expect(probe.isEmpty).toBe(false);
-    expect(probe.hasRecords).toBe(false);
+    expect(await brokerStreamsService.probeAll('default')).toBe('unknown');
   });
 
   it('treats a rejected request as unknown rather than empty', async () => {
@@ -106,18 +109,12 @@ describe('brokerStreamsService.probeAll', () => {
       Promise.reject(new Error('network down')),
     ) as unknown as typeof fetch;
 
-    const probe = await brokerStreamsService.probeAll('default');
-
-    expect(probe.isEmpty).toBe(false);
-    expect(probe.hasRecords).toBe(false);
+    expect(await brokerStreamsService.probeAll('default')).toBe('unknown');
   });
 
   it('treats a malformed payload as unknown rather than empty', async () => {
     mockFetch(() => jsonResponse({ sessions: {} }));
 
-    const probe = await brokerStreamsService.probeAll('default');
-
-    expect(probe.isEmpty).toBe(false);
-    expect(probe.hasRecords).toBe(false);
+    expect(await brokerStreamsService.probeAll('default')).toBe('unknown');
   });
 });
