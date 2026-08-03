@@ -24,11 +24,9 @@ export function ResourcePageHeader({
           <IconShell size="default" variant="primary">
             {icon}
           </IconShell>
-          <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-            {title}
-          </h1>
+          <h1 className="headings-h2-regular text-fg-primary">{title}</h1>
         </div>
-        <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
+        <p className="paragraph-regular-primary text-fg-secondary">
           {description}
         </p>
       </div>

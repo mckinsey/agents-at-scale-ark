@@ -211,6 +211,7 @@ export function ChatPanel({
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      aria-pressed={debugMode}
                       aria-label={
                         debugMode ? 'Hide tool calls' : 'Show tool calls'
                       }

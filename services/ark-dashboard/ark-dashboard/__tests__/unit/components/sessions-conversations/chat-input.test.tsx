@@ -89,7 +89,7 @@ describe('ChatInput', () => {
 
       expect(
         screen.getByRole('button', { name: 'Show tool calls' }),
-      ).not.toHaveAttribute('aria-pressed');
+      ).toHaveAttribute('aria-pressed', 'false');
 
       rerender(
         <ChatInput
@@ -101,7 +101,7 @@ describe('ChatInput', () => {
 
       expect(
         screen.getByRole('button', { name: 'Hide tool calls' }),
-      ).not.toHaveAttribute('aria-pressed');
+      ).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('should call onShowToolCallsChange when the toggle is clicked', async () => {

@@ -215,6 +215,7 @@ export function ChatInput({
               <Button
                 variant="ghost"
                 size="icon-sm"
+                aria-pressed={showToolCalls}
                 aria-label={
                   showToolCalls ? 'Hide tool calls' : 'Show tool calls'
                 }

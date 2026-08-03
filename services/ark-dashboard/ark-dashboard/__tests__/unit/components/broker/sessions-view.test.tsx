@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SessionsView } from '@/app/(dashboard)/broker/page';
+import { SessionsView } from '@/components/broker/sessions-view';
 
 const toastError = vi.fn();
 
