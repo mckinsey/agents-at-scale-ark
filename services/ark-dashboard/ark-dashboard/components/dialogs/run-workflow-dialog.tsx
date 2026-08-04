@@ -151,6 +151,11 @@ export function RunWorkflowDialog({
                 {parameters.map(param => (
                   <div key={param.name} className="grid gap-2">
                     <Label htmlFor={param.name}>{param.name}</Label>
+                    {param.description && (
+                      <p className="text-muted-foreground text-xs">
+                        {param.description}
+                      </p>
+                    )}
                     <Input
                       id={param.name}
                       value={paramValues[param.name] || ''}

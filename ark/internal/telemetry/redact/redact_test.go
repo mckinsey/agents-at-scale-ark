@@ -78,15 +78,15 @@ func TestRedactShapeTokens(t *testing.T) {
 	rep := strings.Repeat
 	tokens := []string{
 		"eyJ" + rep("a", 12) + ".eyJ" + rep("b", 12) + "." + rep("c", 20), // JWT
-		"sk-" + rep("A", 48),                                              // OpenAI/Anthropic
-		"ghp_" + rep("A", 36),                                             // GitHub
-		"github_pat_" + rep("A", 24),                                      // GitHub PAT
-		"AKIA" + rep("A", 16),                                             // AWS
-		"AIza" + rep("A", 35),                                             // Google
-		"xoxb-" + rep("A", 12),                                            // Slack
-		"sk_live_" + rep("A", 20),                                         // Stripe
+		"sk-" + rep("A", 48),         // OpenAI/Anthropic
+		"ghp_" + rep("A", 36),        // GitHub
+		"github_pat_" + rep("A", 24), // GitHub PAT
+		"AKIA" + rep("A", 16),        // AWS
+		"AIza" + rep("A", 35),        // Google
+		"xoxb-" + rep("A", 12),       // Slack
+		"sk_live_" + rep("A", 20),    // Stripe
 		"-----BEGIN RSA PRIVATE KEY-----\n" + rep("A", 24) + "\n-----END RSA PRIVATE KEY-----", // PEM
-		"00000000-0000-0000-0000-000000000000:" + rep("A", 24),                                // McKinsey Service Credential
+		"00000000-0000-0000-0000-000000000000:" + rep("A", 24),                                 // McKinsey Service Credential
 	}
 	for _, tok := range tokens {
 		got := Redact("lead " + tok + " trail")
