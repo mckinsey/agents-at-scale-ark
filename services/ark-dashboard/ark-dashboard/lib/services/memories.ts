@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
+import { fetchAllPages, fetchPage, type Page } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -20,22 +20,35 @@ export type MemoryUpdateRequest = components['schemas']['MemoryUpdateRequest'];
 // For UI compatibility, we'll map the API response to include an id field
 export type Memory = MemoryDetailResponse & { id: string };
 
+/**
+ * List-payload shape returned by `GET /memories`. Detail-only fields
+ * (config, status) require an explicit `getByName` call.
+ */
+export type MemoryListItem = MemoryResponse & { id: string };
+
 // CRUD Operations
 export const memoriesService = {
-  // Get all memories
-  async getAll(): Promise<Memory[]> {
-    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`);
-
-    // Map the response items to include id for UI compatibility
-    const memories = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each memory to get full data
-        const detailed = await memoriesService.getByName(item.name);
-        return detailed!;
-      }),
+  async getPage(
+    continueToken: string | null = null,
+  ): Promise<Page<MemoryListItem>> {
+    const page = await fetchPage<MemoryResponse>(
+      `/api/v1/memories`,
+      continueToken,
     );
+    return {
+      items: page.items.map(item => ({ ...item, id: item.name })),
+      continueToken: page.continueToken,
+    };
+  },
 
-    return memories;
+  /**
+   * Fetch every memory across all pages. Returns list-payload shape only —
+   * no per-memory detail fetch. Callers needing detail fields (config,
+   * status) must call `getByName` explicitly.
+   */
+  async getAll(): Promise<MemoryListItem[]> {
+    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`);
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single memory by name

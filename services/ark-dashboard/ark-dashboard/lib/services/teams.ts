@@ -1,6 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
+import { fetchAllPages, fetchPage, type Page } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -21,22 +21,33 @@ export type TeamMember = components['schemas']['TeamMember'];
 // For UI compatibility, we'll map the API response to include an id field
 export type Team = TeamDetailResponse & { id: string };
 
+/**
+ * List-payload shape returned by `GET /teams`. Uses `members_count`
+ * (not the full members array) and omits graph/selector; call
+ * `getByName` when detail-only fields are required.
+ */
+export type TeamListItem = TeamResponse & { id: string };
+
 // CRUD Operations
 export const teamsService = {
-  // Get all teams
-  async getAll(): Promise<Team[]> {
+  async getPage(
+    continueToken: string | null = null,
+  ): Promise<Page<TeamListItem>> {
+    const page = await fetchPage<TeamResponse>(`/api/v1/teams`, continueToken);
+    return {
+      items: page.items.map(item => ({ ...item, id: item.name })),
+      continueToken: page.continueToken,
+    };
+  },
+
+  /**
+   * Fetch every team across all pages. Returns list-payload shape only —
+   * no per-team detail fetch. Callers needing detail fields must call
+   * `getByName` explicitly.
+   */
+  async getAll(): Promise<TeamListItem[]> {
     const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`);
-
-    // Map the response items to include id for UI compatibility
-    const teams = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each team to get full data
-        const detailed = await teamsService.getByName(item.name);
-        return detailed!;
-      }),
-    );
-
-    return teams;
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single team by name

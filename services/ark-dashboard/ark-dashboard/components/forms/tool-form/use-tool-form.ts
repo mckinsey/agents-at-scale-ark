@@ -5,13 +5,9 @@ import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
 import { toast } from '@/components/ui/sonner';
-import {
-  type Agent,
-  type Team,
-  agentsService,
-  teamsService,
-  toolsService,
-} from '@/lib/services';
+import { agentsService, teamsService, toolsService } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
+import type { TeamListItem } from '@/lib/services/teams';
 import type { ToolDetail } from '@/lib/services/tools';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -56,8 +52,8 @@ export function useToolForm({
   const [loading, setLoading] = useState(isViewing);
   const [saving, setSaving] = useState(false);
   const [tool, setTool] = useState<ToolDetail | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
+  const [teams, setTeams] = useState<TeamListItem[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [teamsLoading, setTeamsLoading] = useState(false);
 

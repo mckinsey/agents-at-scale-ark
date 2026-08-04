@@ -20,7 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { Model } from '@/lib/services/models';
+import type { ModelListItem } from '@/lib/services/models';
 import type { Secret } from '@/lib/services/secrets';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -41,7 +41,7 @@ const COL = {
   action: 'w-[100px]',
 };
 
-function modelUsesSecret(model: Model, secretName: string): boolean {
+function modelUsesSecret(model: ModelListItem, secretName: string): boolean {
   const config = model.config;
   if (!config) {
     return false;
@@ -90,7 +90,9 @@ function SecretStatus({ inUse }: Readonly<{ inUse: boolean }>) {
   );
 }
 
-function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
+function ModelsInUse({
+  models,
+}: Readonly<{ models: readonly ModelListItem[] }>) {
   if (models.length === 0) {
     return <span className="text-fg-secondary text-sm leading-5">-</span>;
   }

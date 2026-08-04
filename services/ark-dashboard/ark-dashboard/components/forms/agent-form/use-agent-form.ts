@@ -15,9 +15,9 @@ import type {
   AgentTool,
   AgentUpdateRequest,
   ExecutionEngine,
-  Model,
   Tool,
 } from '@/lib/services';
+import type { ModelListItem } from '@/lib/services/models';
 import {
   agentsService,
   executionEnginesService,
@@ -55,7 +55,7 @@ export function useAgentForm({
   );
   const [saving, setSaving] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);

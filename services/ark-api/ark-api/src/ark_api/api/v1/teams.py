@@ -36,12 +36,14 @@ def team_to_response(team: dict) -> TeamResponse:
     metadata = team.get("metadata", {})
     spec = team.get("spec", {})
     status = team.get("status", {})
-    
-    # Count members if they exist
+
     members_count = None
     if spec.get("members"):
         members_count = len(spec["members"])
-    
+
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+
     return TeamResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
@@ -49,7 +51,8 @@ def team_to_response(team: dict) -> TeamResponse:
         strategy=spec.get("strategy"),
         members_count=members_count,
         loops=spec.get("loops", False) if spec.get("strategy") == "sequential" else None,
-        status=status.get("phase")
+        status=status.get("phase"),
+        available=availability,
     )
 
 

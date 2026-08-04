@@ -1,10 +1,11 @@
 import { AlertCircle } from 'lucide-react';
 
 import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
-import type { Agent, TeamMember } from '@/lib/services';
+import type { TeamMember } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 
 interface WarningsSectionProps {
-  agents: Agent[];
+  agents: AgentListItem[];
   selectedMembers: TeamMember[];
   strategy: string;
   enableTerminateTool?: boolean;

@@ -1,6 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient, APIError } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
+import { fetchAllPages, fetchPage, type Page } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Use the generated types from OpenAPI
@@ -9,6 +9,13 @@ export type AgentDetailResponse = components['schemas']['AgentDetailResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type AgentCreateRequest = components['schemas']['AgentCreateRequest'];
 export type AgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
+
+/**
+ * Shape returned by list endpoints (`GET /agents`). Carries only the fields
+ * ark-api includes in the list payload — use `getByName` when detail-only
+ * fields (tools, parameters, execution engine, …) are required.
+ */
+export type AgentListItem = AgentResponse & { id: string };
 
 // AgentTool interface to match the API response structure
 export interface AgentTool {
@@ -42,20 +49,31 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 
 // CRUD Operations
 export const agentsService = {
-  // Get all agents
-  async getAll(): Promise<Agent[]> {
-    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`);
-
-    // Map the response items to include id for UI compatibility
-    const agents = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each agent to get full data
-        const detailed = await agentsService.getByName(item.name);
-        return detailed!;
-      }),
+  /**
+   * Fetch one page of agents (server-side pagination). Prefer this over
+   * `getAll` for list UIs so we don't materialize every agent in memory.
+   */
+  async getPage(
+    continueToken: string | null = null,
+  ): Promise<Page<AgentListItem>> {
+    const page = await fetchPage<AgentResponse>(
+      `/api/v1/agents`,
+      continueToken,
     );
+    return {
+      items: page.items.map(item => ({ ...item, id: item.name })),
+      continueToken: page.continueToken,
+    };
+  },
 
-    return agents;
+  /**
+   * Fetch every agent across all pages. Returns list-payload shape only
+   * (no per-agent detail fetch) — callers that need detail fields must
+   * call `getByName` explicitly to avoid the N+1 fanout.
+   */
+  async getAll(): Promise<AgentListItem[]> {
+    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`);
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single agent by name

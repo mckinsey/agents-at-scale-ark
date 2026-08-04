@@ -44,6 +44,7 @@ class TeamResponse(BaseModel):
     members_count: Optional[int] = None
     loops: Optional[bool] = None
     status: Optional[str] = None
+    available: Optional[AvailabilityStatus] = None
 
 
 class TeamListResponse(PaginatedListResponse):

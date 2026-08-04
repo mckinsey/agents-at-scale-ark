@@ -21,11 +21,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { Agent, TeamMember } from '@/lib/services';
+import type { TeamMember } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 import { cn } from '@/lib/utils';
 
 interface MembersSectionProps {
-  agents: Agent[];
+  agents: AgentListItem[];
   selectedMembers: TeamMember[];
   unavailableMembers: TeamMember[];
   onMembersChange: (members: TeamMember[]) => void;
@@ -51,7 +52,7 @@ export function MembersSection({
   );
 
   const toggleMember = useCallback(
-    (agent: Agent) => {
+    (agent: AgentListItem) => {
       const exists = selectedMembers.some(m => m.name === agent.name);
       if (exists) {
         onMembersChange(selectedMembers.filter(m => m.name !== agent.name));

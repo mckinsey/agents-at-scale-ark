@@ -54,7 +54,8 @@ def agent_to_response(agent: dict) -> AgentResponse:
         model_ref=model_ref,
         prompt=spec.get("prompt"),
         available=availability,
-        annotations=metadata.get("annotations", {})
+        annotations=metadata.get("annotations", {}),
+        tools=spec.get("tools"),
     )
 
 SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')

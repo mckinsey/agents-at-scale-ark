@@ -18,12 +18,12 @@ import {
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
-import type { Team } from '@/lib/services';
+import type { TeamListItem } from '@/lib/services/teams';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface TeamsTableProps {
-  readonly teams: readonly Team[];
+  readonly teams: readonly TeamListItem[];
   readonly onDelete: (id: string) => void;
 }
 
@@ -42,7 +42,7 @@ const COL = {
 
 function TeamStatus({
   status,
-}: Readonly<{ status?: Team['available'] | null }>) {
+}: Readonly<{ status?: TeamListItem['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -56,7 +56,7 @@ function TeamStatus({
 }
 
 interface TeamTableRowProps {
-  readonly team: Team;
+  readonly team: TeamListItem;
   readonly onDelete: (id: string) => void;
 }
 
@@ -66,7 +66,7 @@ export function TeamTableRow({ team, onDelete }: Readonly<TeamTableRowProps>) {
   const { readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const memberCount = team.members?.length ?? 0;
+  const memberCount = team.members_count ?? 0;
   const memberLabel = memberCount === 1 ? 'member' : 'members';
   const strategyLabel =
     team.strategy === 'sequential' && team.loops

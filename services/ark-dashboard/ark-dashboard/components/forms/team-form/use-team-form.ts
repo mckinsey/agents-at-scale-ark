@@ -7,7 +7,8 @@ import * as z from 'zod';
 
 import { toast } from '@/components/ui/sonner';
 import type { components } from '@/lib/api/generated/types';
-import type { Agent, Team, TeamMember } from '@/lib/services';
+import type { Team, TeamMember } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 import { agentsService, teamsService } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -82,7 +83,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
   );
   const [saving, setSaving] = useState(false);
   const [team, setTeam] = useState<Team | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
   const [initialMembers, setInitialMembers] = useState<TeamMember[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);

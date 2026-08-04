@@ -2116,6 +2116,41 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][1]["members_count"], 1)
         self.assertEqual(data["items"][1]["status"], "pending")
 
+        # Neither team has Available conditions, so both are Unknown
+        self.assertEqual(data["items"][0]["available"], "Unknown")
+        self.assertEqual(data["items"][1]["available"], "Unknown")
+
+    @patch("ark_api.api.v1.teams.with_ark_client")
+    def test_list_teams_reports_availability_from_conditions(self, mock_ark_client):
+        """team_to_response derives `available` from the Available condition.
+
+        This lets the dashboard render team status without a second GET per team.
+        """
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        healthy = Mock()
+        healthy.to_dict.return_value = {
+            "metadata": {"name": "healthy", "namespace": "default"},
+            "spec": {"strategy": "sequential", "members": []},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        broken = Mock()
+        broken.to_dict.return_value = {
+            "metadata": {"name": "broken", "namespace": "default"},
+            "spec": {"strategy": "sequential", "members": []},
+            "status": {"conditions": [{"type": "Available", "status": "False"}]},
+        }
+
+        mock_client.teams.a_list_page = AsyncMock(return_value=_page([healthy, broken]))
+
+        response = self.client.get("/v1/teams?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"][0]["available"], "True")
+        self.assertEqual(data["items"][1]["available"], "False")
+
     @patch("ark_api.api.v1.teams.with_ark_client")
     def test_list_teams_empty(self, mock_ark_client):
         """Test listing teams when none exist in the namespace."""

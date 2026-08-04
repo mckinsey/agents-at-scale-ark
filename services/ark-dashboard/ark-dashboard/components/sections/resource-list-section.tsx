@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { Page } from '@/lib/api/pagination';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -50,6 +51,17 @@ export interface ResourceListFilter<T extends ResourceListItem> {
   readonly getValue: (item: T) => string;
 }
 
+/**
+ * Page loader contract: given the previous page's `continueToken` (or `null`
+ * for the first page), return the next page plus the token for the *next*
+ * call (or `null` to signal there are no more pages). Uses the shared
+ * `Page<T>` shape from `@/lib/api/pagination` so services can pass their
+ * `getPage` methods directly without an adapter.
+ */
+export type ResourceListPageLoader<T> = (
+  continueToken: string | null,
+) => Promise<Page<T>>;
+
 interface ResourceListSectionProps<T extends ResourceListItem> {
   /** Raw icon element (e.g. <Group />); wrapped in IconShell internally. */
   readonly icon: ReactNode;
@@ -67,7 +79,11 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly emptyDescription: ReactNode;
   readonly headerActions?: ReactNode;
   readonly originFilter?: ResourceListFilter<T>;
-  readonly loadItems: () => Promise<T[]>;
+  /**
+   * Fetch one page at a time. The section owns the accumulation and
+   * continuation-token lifecycle; sections just answer "give me the next page".
+   */
+  readonly loadPage: ResourceListPageLoader<T>;
   readonly deleteItem: (id: string) => Promise<unknown>;
   readonly renderTable: (
     items: T[],
@@ -90,20 +106,28 @@ export function ResourceListSection<T extends ResourceListItem>({
   emptyDescription,
   headerActions,
   originFilter,
-  loadItems,
+  loadPage,
   deleteItem,
   renderTable,
 }: ResourceListSectionProps<T>) {
   const [items, setItems] = useState<T[]>([]);
+  // `null` before the first successful load. After that: `string` if more
+  // pages remain, `null` again once we've reached the end.
+  const [continueToken, setContinueToken] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [originFilterValue, setOriginFilterValue] = useState('All');
   const showLoading = useDelayedLoading(loading);
   const { readOnlyMode, namespace } = useNamespace();
 
-  const loadItemsRef = useRef(loadItems);
-  loadItemsRef.current = loadItems;
+  const loadPageRef = useRef(loadPage);
+  loadPageRef.current = loadPage;
+
+  // Guards against overlapping auto-fetches when the user is typing quickly.
+  const autoFetchingRef = useRef(false);
 
   const originFilterOptions = useMemo(() => {
     if (!originFilter) return [];
@@ -135,7 +159,10 @@ export function ResourceListSection<T extends ResourceListItem>({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setItems(await loadItemsRef.current());
+      const page = await loadPageRef.current(null);
+      setItems(page.items);
+      setContinueToken(page.continueToken);
+      setHasMore(page.continueToken !== null);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Failed to Load Data', {
@@ -149,9 +176,75 @@ export function ResourceListSection<T extends ResourceListItem>({
     }
   }, []);
 
+  const loadMore = useCallback(async () => {
+    if (!continueToken || loadingMore) return null;
+    setLoadingMore(true);
+    try {
+      const page = await loadPageRef.current(continueToken);
+      setItems(prev => [...prev, ...page.items]);
+      setContinueToken(page.continueToken);
+      setHasMore(page.continueToken !== null);
+      return page;
+    } catch (error) {
+      console.error('Failed to load more:', error);
+      toast.error('Failed to Load More', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+      return null;
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [continueToken, loadingMore]);
+
   useEffect(() => {
     reload();
   }, [namespace, reload]);
+
+  // Search-with-pagination trade-off: filtering only works over items already
+  // loaded. When the user types with more pages available, walk the rest of
+  // the collection in the background so the filter reflects everything. This
+  // hits ark-api harder than the "load more" flow, but only when the user
+  // actively searches — the common browse case still paginates on demand.
+  useEffect(() => {
+    if (!searchQuery.trim() || !hasMore || autoFetchingRef.current) return;
+
+    let cancelled = false;
+    autoFetchingRef.current = true;
+
+    (async () => {
+      let token: string | null = continueToken;
+      try {
+        while (!cancelled && token) {
+          const page = await loadPageRef.current(token);
+          if (cancelled) return;
+          setItems(prev => [...prev, ...page.items]);
+          setContinueToken(page.continueToken);
+          setHasMore(page.continueToken !== null);
+          token = page.continueToken;
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to auto-load for search:', error);
+          toast.error('Search Incomplete', {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'Some results may be missing',
+          });
+        }
+      } finally {
+        autoFetchingRef.current = false;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      autoFetchingRef.current = false;
+    };
+  }, [searchQuery, hasMore, continueToken]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -161,12 +254,7 @@ export function ResourceListSection<T extends ResourceListItem>({
       }
       await deleteItem(id);
       toast.success(`${entityLabel} deleted successfully`);
-      setLoading(true);
-      try {
-        setItems(await loadItemsRef.current());
-      } finally {
-        setLoading(false);
-      }
+      await reload();
     } catch (error) {
       toast.error(`Failed to Delete ${entityLabel}`, {
         description:
@@ -195,7 +283,9 @@ export function ResourceListSection<T extends ResourceListItem>({
               {icon}
             </IconShell>
             <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              {showCount && items.length > 0 ? `${title} (${items.length})` : title}
+              {showCount && items.length > 0
+                ? `${title} (${items.length}${hasMore ? '+' : ''})`
+                : title}
             </h1>
           </div>
           <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
@@ -298,6 +388,19 @@ export function ResourceListSection<T extends ResourceListItem>({
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
               {renderTable(filteredItems, handleDelete, reload)}
+              {/* Hidden while searching: the effect above is already walking
+                  every remaining page in the background so the filter has
+                  the full set. */}
+              {hasMore && !searchQuery.trim() && (
+                <div className="flex justify-center py-4">
+                  <Button
+                    variant="outline"
+                    onClick={loadMore}
+                    disabled={loadingMore}>
+                    {loadingMore ? 'Loading…' : `Load more ${pluralLabel}`}
+                  </Button>
+                </div>
+              )}
             </ScrollArea>
           )}
         </div>

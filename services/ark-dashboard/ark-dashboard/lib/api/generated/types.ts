@@ -2698,6 +2698,8 @@ export interface components {
             namespace: string;
             /** Prompt */
             prompt?: string | null;
+            /** Tools */
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentSecretKeyRef
@@ -4642,6 +4644,7 @@ export interface components {
          * @description Team resource response model.
          */
         TeamResponse: {
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
             /** Loops */

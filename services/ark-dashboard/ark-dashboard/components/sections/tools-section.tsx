@@ -28,12 +28,12 @@ import {
 } from '@/components/ui/select';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
-  type Agent,
   type AgentTool,
   type Tool,
   agentsService,
   toolsService,
 } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const LEARN_MORE_URL =
@@ -52,7 +52,7 @@ const TYPE_ITEMS: ReadonlyArray<{ value: TypeFilter; label: string }> = [
 export function ToolsSection() {
   const { readOnlyMode, namespace } = useNamespace();
   const [tools, setTools] = useState<Tool[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const [searchQuery, setSearchQuery] = useState('');

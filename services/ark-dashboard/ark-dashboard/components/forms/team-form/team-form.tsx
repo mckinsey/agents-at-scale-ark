@@ -13,7 +13,7 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import type { Team } from '@/lib/services';
+import type { TeamListItem } from '@/lib/services/teams';
 import { teamsService } from '@/lib/services';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -31,7 +31,7 @@ import { useTeamForm } from './use-team-form';
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
-  const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [allTeams, setAllTeams] = useState<TeamListItem[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
 

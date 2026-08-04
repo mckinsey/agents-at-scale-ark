@@ -24,7 +24,7 @@ export function McpServersSection() {
           <p>Get started by adding your first MCP Server.</p>
         </>
       }
-      loadItems={() => mcpServersService.getAll()}
+      loadPage={token => mcpServersService.getPage(token)}
       deleteItem={id => mcpServersService.delete(id)}
       renderTable={(servers, onDelete, reload) => (
         <McpServersTable

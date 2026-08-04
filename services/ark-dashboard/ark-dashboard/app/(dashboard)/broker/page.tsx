@@ -21,7 +21,10 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { apiUrl } from '@/lib/api/config';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useSSEStream } from '@/lib/hooks/use-sse-stream';
-import { type Memory, memoriesService } from '@/lib/services/memories';
+import {
+  type MemoryListItem,
+  memoriesService,
+} from '@/lib/services/memories';
 import { type StreamEntry } from '@/lib/utils/sse-stream';
 
 const PURGE_PAGE_SIZE = 1000;
@@ -285,7 +288,7 @@ export function SessionsView({ memory }: { memory: string }) {
 }
 
 export default function BrokerPage() {
-  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memories, setMemories] = useState<MemoryListItem[]>([]);
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('traces');

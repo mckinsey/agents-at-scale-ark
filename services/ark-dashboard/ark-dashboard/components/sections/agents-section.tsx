@@ -32,7 +32,7 @@ export function AgentsSection() {
         getValue: agent =>
           getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]),
       }}
-      loadItems={() => agentsService.getAll()}
+      loadPage={token => agentsService.getPage(token)}
       deleteItem={id => agentsService.deleteById(id)}
       renderTable={(agents, onDelete) => (
         <AgentsTable agents={agents} onDelete={onDelete} />

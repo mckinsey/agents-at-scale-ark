@@ -1,6 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
+import { fetchAllPages, fetchPage, type Page } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 export type MCPServerResponse = components['schemas']['MCPServerResponse'];
@@ -59,23 +59,32 @@ export type ValueFrom = {
 
 // Service for MCP server operations
 export const mcpServersService = {
-  // Get all MCP servers in a namespace
+  /**
+   * Fetch one page of MCP servers (server-side pagination). Prefer this
+   * over `getAll` for list UIs so we don't materialize every server up
+   * front. Returns the list payload as-is — no per-item detail fetch.
+   */
+  async getPage(
+    continueToken: string | null = null,
+  ): Promise<Page<MCPServer>> {
+    const page = await fetchPage<MCPServerResponse>(
+      `/api/v1/mcp-servers`,
+      continueToken,
+    );
+    return {
+      items: page.items.map(item => ({ ...item, id: item.name })),
+      continueToken: page.continueToken,
+    };
+  },
+
+  /**
+   * Fetch every MCP server across all pages. Returns the list-payload
+   * shape only. Callers needing the extended detail response must call
+   * `get(name)` explicitly.
+   */
   async getAll(): Promise<MCPServer[]> {
     const items = await fetchAllPages<MCPServerResponse>(`/api/v1/mcp-servers`);
-
-    const mcpservers = await Promise.all(
-      items.map(async item => {
-        if (item.available !== 'True') {
-          const mcp = await mcpServersService.get(item.name);
-          item.available = mcp?.available;
-        }
-        return {
-          ...item,
-          id: item.name,
-        };
-      }),
-    );
-    return mcpservers;
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   async get(mcpServerName: string): Promise<MCPServerDetail | null> {

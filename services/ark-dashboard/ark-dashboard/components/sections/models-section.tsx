@@ -23,7 +23,7 @@ export function ModelsSection() {
           <p>Get started by adding your first model.</p>
         </>
       }
-      loadItems={() => modelsService.getAll()}
+      loadPage={token => modelsService.getPage(token)}
       deleteItem={id => modelsService.deleteById(id)}
       renderTable={(models, onDelete) => (
         <ModelsTable models={models} onDelete={onDelete} />

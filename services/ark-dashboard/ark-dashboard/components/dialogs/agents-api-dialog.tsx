@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { type Agent, agentsService } from '@/lib/services';
+import { agentsService } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 
 import { getBashSnippet } from './code-snippets/bash-snippet';
 import { getGoSnippet } from './code-snippets/go-snippet';
@@ -41,7 +42,7 @@ export function AgentsAPIDialog({
   open,
   onOpenChange,
 }: Readonly<AgentsAPIDialogProps>) {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [userSelectedAgent, setUserSelectedAgent] = useState<string | null>(

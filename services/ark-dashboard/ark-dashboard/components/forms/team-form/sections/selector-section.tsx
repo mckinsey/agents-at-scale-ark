@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { Agent } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 import { cn } from '@/lib/utils';
 
 import {
@@ -45,7 +45,7 @@ import {
 
 interface SelectorSectionProps {
   form: UseFormReturn<TeamFormValues>;
-  agents: Agent[];
+  agents: AgentListItem[];
   unavailableAgents: string[];
   disabled?: boolean;
 }

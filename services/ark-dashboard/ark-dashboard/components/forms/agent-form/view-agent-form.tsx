@@ -24,7 +24,8 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { type Agent, agentsService } from '@/lib/services';
+import { agentsService } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services/agents';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -43,7 +44,7 @@ export function ViewAgentForm({
 }: Readonly<AgentFormProps>) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
-  const [allAgents, setAllAgents] = useState<Agent[]>([]);
+  const [allAgents, setAllAgents] = useState<AgentListItem[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
   const [agentYaml, setAgentYaml] = useState('');

@@ -1,6 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
+import { fetchAllPages, fetchPage, type Page } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -20,22 +20,35 @@ export type ModelUpdateRequest = components['schemas']['ModelUpdateRequest'];
 // For UI compatibility, we'll map the API response to include an id field
 export type Model = ModelDetailResponse & { id: string };
 
+/**
+ * List-payload shape returned by `GET /models`. Detail-only fields
+ * (config, tokens, …) require an explicit `getByName` call.
+ */
+export type ModelListItem = ModelResponse & { id: string };
+
 // CRUD Operations
 export const modelsService = {
-  // Get all models
-  async getAll(): Promise<Model[]> {
-    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`);
-
-    // Map the response items to include id for UI compatibility
-    const models = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each model to get full data
-        const detailed = await modelsService.getByName(item.name);
-        return detailed!;
-      }),
+  async getPage(
+    continueToken: string | null = null,
+  ): Promise<Page<ModelListItem>> {
+    const page = await fetchPage<ModelResponse>(
+      `/api/v1/models`,
+      continueToken,
     );
+    return {
+      items: page.items.map(item => ({ ...item, id: item.name })),
+      continueToken: page.continueToken,
+    };
+  },
 
-    return models;
+  /**
+   * Fetch every model across all pages. Returns list-payload shape only —
+   * no per-model detail fetch. Callers needing detail fields must call
+   * `getByName` explicitly.
+   */
+  async getAll(): Promise<ModelListItem[]> {
+    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`);
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single model by name

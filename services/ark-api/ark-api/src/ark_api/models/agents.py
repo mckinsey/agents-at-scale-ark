@@ -116,6 +116,7 @@ class AgentResponse(BaseModel):
     prompt: Optional[str] = None
     available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
+    tools: Optional[List[AgentTool]] = None
 
 
 class AgentListResponse(PaginatedListResponse):

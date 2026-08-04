@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDelayedLoading } from '@/lib/hooks';
-import { type Model, modelsService } from '@/lib/services';
+import { modelsService } from '@/lib/services';
+import type { ModelListItem } from '@/lib/services/models';
 import {
   useCreateSecret,
   useDeleteSecret,
@@ -28,7 +29,7 @@ const LEARN_MORE_URL = 'https://mckinsey.github.io/agents-at-scale-ark/';
 
 export function SecretsSection() {
   const { readOnlyMode, namespace } = useNamespace();
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [secretEditorOpen, setSecretEditorOpen] = useState(false);
   const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
