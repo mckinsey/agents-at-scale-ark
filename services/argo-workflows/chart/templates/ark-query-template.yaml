@@ -37,6 +37,8 @@ data:
                 value: "[]"
               - name: session-id
                 value: ""
+              - name: conversation-id
+                value: ""
               - name: memory
                 value: ""
               - name: query-name
@@ -73,6 +75,8 @@ data:
                 value: {{ "{{inputs.parameters.parameters}}" | quote }}
               - name: ARK_SESSION_ID
                 value: {{ "{{inputs.parameters.session-id}}" | quote }}
+              - name: ARK_CONVERSATION_ID
+                value: {{ "{{inputs.parameters.conversation-id}}" | quote }}
               - name: ARK_MEMORY
                 value: {{ "{{inputs.parameters.memory}}" | quote }}
               - name: ARK_QUERY_NAME

@@ -71,7 +71,7 @@ export function FlowRow({
   };
 
   return (
-    <div className="bg-card hover:bg-accent/5 relative flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
+    <div className="bg-card hover:bg-accent/5 border-stroke-tertiary relative flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
       <NamespacedLink
         href={`/workflow-templates/${flow.id}`}
         className="absolute inset-0 z-0"

@@ -35,7 +35,7 @@ spec:
             name: a2a-credentials
             key: token
   pollInterval: 1m                            # how often to poll the server; default '1m'
-  timeout: 5m                                 # A2A agent execution timeout; default '5m'
+  timeout: 5m                                 # A2A agent execution timeout; inherits Query.spec.timeout when unset
 ```
 
 ## Fields
@@ -46,7 +46,7 @@ spec:
 | `spec.headers[]` | list of `Header` | no | HTTP headers sent on every request to the server, typically for authentication. Each entry has a `name` and a `value` that is inline or sourced via `valueFrom` (`secretKeyRef`, `configMapKeyRef`, or `queryParameterRef`). |
 | `spec.description` | string | no | Human-readable description of the server. Propagated onto the Agent resources Ark creates. |
 | `spec.pollInterval` | duration | no | How often the controller polls the server for updates. Default `1m`. |
-| `spec.timeout` | duration | no | Timeout for A2A agent execution (`30s`, `5m`, `1h`). Default `5m`. |
+| `spec.timeout` | duration | no | Timeout for A2A agent execution (`30s`, `5m`, `1h`). When unset, execution inherits the deadline from [`Query.spec.timeout`](/reference/resources/query#timeout), falling back to `5m` if the caller set no deadline. |
 
 ## Discovery and created agents
 

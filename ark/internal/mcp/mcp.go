@@ -231,6 +231,25 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcpsdk.Client, url str
 	return session, nil
 }
 
+// attemptMCPConnectionWithin bounds connection establishment by deadlineCtx
+// without tying the resulting session's lifetime to it. Passing deadlineCtx
+// straight to Connect would break SSE: SSEClientTransport binds its long-lived
+// hanging GET to the connect context, so cancelling it severs an established
+// session. Only cancel the connect context when the handshake fails.
+func attemptMCPConnectionWithin(ctx, deadlineCtx context.Context, mcpClient *mcpsdk.Client, url string, headers map[string]string, transportType string) (*mcpsdk.ClientSession, error) {
+	connectCtx, cancelConnect := context.WithCancel(ctx)
+	stopDeadlineWatch := context.AfterFunc(deadlineCtx, cancelConnect)
+
+	session, err := attemptMCPConnection(connectCtx, mcpClient, url, headers, transportType)
+	stopDeadlineWatch()
+	if err != nil {
+		cancelConnect()
+		return nil, err
+	}
+
+	return session, nil
+}
+
 func createMCPClientWithRetry(ctx context.Context, url string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
 	mcpClient := createHTTPClient()
 
@@ -246,7 +265,7 @@ func createMCPClientWithRetry(ctx context.Context, url string, headers map[strin
 			}
 		}
 
-		session, err := attemptMCPConnection(ctx, mcpClient, url, headers, transportType)
+		session, err := attemptMCPConnectionWithin(ctx, retryCtx, mcpClient, url, headers, transportType)
 		if err == nil {
 			return &MCPClient{
 				URL:     url,

@@ -13,6 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
@@ -40,9 +41,6 @@ const COL = {
   status: 'w-[120px]',
   action: 'w-[100px]',
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function AgentStatus({
   status,

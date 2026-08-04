@@ -23,6 +23,9 @@ describe('exportService', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockCreateObjectURL.mockReturnValue('blob:http://example.com/123');
+    vi.mocked(apiClient.getDefaultParams).mockReturnValue({
+      namespace: 'test-namespace',
+    });
   });
 
   describe('Core functionality', () => {
@@ -91,12 +94,35 @@ describe('exportService', () => {
               agents: ['agent-1'],
               teams: ['team-1'],
             },
+            namespace: 'test-namespace',
           }),
         })
       );
 
       expect(clickSpy).toHaveBeenCalled();
       expect(removeSpy).toHaveBeenCalled();
+    });
+
+    it('should send the current namespace when exporting all resources', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['test data'])),
+      });
+
+      const mockLink = document.createElement('a');
+      vi.spyOn(mockLink, 'click').mockImplementation(() => {});
+      vi.spyOn(mockLink, 'remove').mockImplementation(() => {});
+      vi.spyOn(document, 'createElement').mockReturnValue(mockLink);
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink);
+
+      await exportService.exportAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/export/resources'),
+        expect.objectContaining({
+          body: JSON.stringify({ namespace: 'test-namespace' }),
+        })
+      );
     });
 
     it('should handle export errors gracefully', async () => {
