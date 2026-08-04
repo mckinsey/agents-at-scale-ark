@@ -49,7 +49,7 @@ database:
   sessionsVisibilityTtlSeconds: 2592000
 
   # Expired-row reaper: physically deletes rows past expires_at.
-  # Interval between runs in seconds; 0 disables the reaper.
+  # Interval between runs in seconds; 0 disables the reaper. Max 2147483 (~24 days).
   reapIntervalSeconds: 3600
   # Rows deleted per DELETE statement while draining a backlog.
   reapBatchSize: 10000

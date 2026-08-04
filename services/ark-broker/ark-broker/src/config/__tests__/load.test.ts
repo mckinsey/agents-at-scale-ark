@@ -161,6 +161,12 @@ describe('loadConfig', () => {
       expect(cfg.database.reapBatchSize).toBe(500);
     });
 
+    it('rejects ROW_REAP_INTERVAL_SECONDS above the Node timer range', () => {
+      expect(() =>
+        loadConfig({ROW_REAP_INTERVAL_SECONDS: '2592000'})
+      ).toThrow();
+    });
+
     it('accepts ROW_REAP_INTERVAL_SECONDS=0 to disable reaping', () => {
       const cfg = loadConfig({ROW_REAP_INTERVAL_SECONDS: '0'});
 

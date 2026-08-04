@@ -51,7 +51,7 @@ BROKER_MESSAGE_BACKEND=postgres BROKER_EVENT_BACKEND=postgres BROKER_SESSIONS_BA
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
 | `EVENT_VISIBILITY_TTL_SECONDS` | `2592000` | Default event TTL (30 days) |
 | `SESSIONS_VISIBILITY_TTL_SECONDS` | `2592000` | Session TTL (30 days), slid forward on each event or message. Must be >= the message and event TTLs. |
-| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. |
+| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. Max `2147483` (~24 days). |
 | `ROW_REAP_BATCH_SIZE` | `10000` | Rows deleted per `DELETE` statement while the reaper drains a backlog |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL queries at debug level (SQL text + param count, never values) |
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate file. When set, the broker passes it to the Postgres driver for server certificate verification. Set automatically by the Helm chart when `database.tls.enabled=true`. |

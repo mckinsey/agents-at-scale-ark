@@ -138,7 +138,7 @@ Key environment variables:
 | `DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
-| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. |
+| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. Max `2147483` (~24 days). |
 | `ROW_REAP_BATCH_SIZE` | `10000` | Rows deleted per `DELETE` statement while the reaper drains a backlog |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL at debug level (SQL text + parameter count, never values) |
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate. When set, the broker reads the file and passes it to the Postgres driver for server certificate verification (`sslmode=verify-full`). Set automatically by the Helm chart when `database.tls.enabled=true`. |
