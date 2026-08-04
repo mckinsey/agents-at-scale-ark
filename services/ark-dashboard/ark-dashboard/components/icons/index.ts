@@ -58,6 +58,7 @@ export { PlayArrow } from './play-arrow';
 export { PlaylistAddCheck } from './playlist-add-check';
 export { PlugConnect } from './plug-connect';
 export { Plus } from './plus';
+export { Poll } from './poll';
 export { RestartAlt } from './restart-alt';
 export { SaveAlt } from './save-alt';
 export { Schedule } from './schedule';
