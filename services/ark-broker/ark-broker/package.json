@@ -74,9 +74,9 @@
     "node": ">=22.0.0"
   },
   "overrides": {
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.3.1",
     "@istanbuljs/load-nyc-config": {
-      "js-yaml": "^3.15.0"
+      "js-yaml": "^3.15.1"
     },
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",

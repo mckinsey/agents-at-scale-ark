@@ -45,7 +45,7 @@ Run whichever you prefer in a shell with `kubectl` configured against the target
 
 The default `marketplace.json` only lists items maintained by the Ark team. To browse items from another team or vendor, register their manifest URL as an additional source.
 
-### Step 1: enable the feature
+### Enable the feature
 
 Adding sources is gated behind an experimental flag. Open **Settings → Experimental Features** and turn on **Marketplace** ("Enables adding 3rd party Marketplaces from settings").
 
@@ -53,13 +53,20 @@ Adding sources is gated behind an experimental flag. Open **Settings → Experim
 
 A new **Manage marketplace** entry appears in the Settings sidebar.
 
-### Step 2: add the source
+### Add the source
 
 Open **Settings → Manage marketplace**. The default Ark marketplace appears at the top with its canonical URL pinned.
 
 ![Manage marketplace screen with the default Ark source](/marketplace/sources.png)
 
-Click **Add new marketplace** to register a new one. This example adds a **public** source — leave **Authentication** on **None**; the authenticated case is covered right after, in [Add an authenticated source](#add-an-authenticated-source).
+Click **Add new marketplace** to register a new one. The **Marketplace JSON URL** field opens with a mode toggle — **Custom URL** or **Azure DevOps**. Pick whichever matches how your manifest is hosted:
+
+- **Custom URL** — any HTTPS manifest URL, public or authenticated (GitHub raw, GitHub Enterprise Server, artifact stores, etc.). See [Custom URL](#custom-url).
+- **Azure DevOps** — a preset for Azure DevOps Repos that builds the fetch URL from repo details instead of a free-text URL. See [Azure DevOps](#azure-devops).
+
+#### Custom URL
+
+This example adds a **public** source — leave **Authentication** on **None**; the authenticated case is covered right after, in [Add an authenticated source](#add-an-authenticated-source).
 
 ![Add new marketplace form for a public source](/marketplace/add-source.png)
 
@@ -69,6 +76,30 @@ Click **Add new marketplace** to register a new one. This example adds a **publi
 | **Display name** | Optional label shown in the sidebar and item cards. Defaults to the `marketplace` field inside the manifest. |
 | **Authentication** | Leave on **None** for a public manifest — ark-api fetches it with no `Authorization` header, and the **Token** field stays empty. For a private source, see [Add an authenticated source](#add-an-authenticated-source) below. |
 
+#### Azure DevOps
+
+Azure DevOps Repos has no "Raw" file URL, so **Custom URL** mode would otherwise require hand-building the Items API URL yourself. Switching the **Marketplace JSON URL** toggle to **Azure DevOps** replaces the free-text field with the repo details and builds that URL for you:
+
+| Field | Notes |
+| --- | --- |
+| **Organization** | The Azure DevOps organization name, from `https://dev.azure.com/<org>/...`. |
+| **Project** | The project name within the organization. |
+| **Repository** | The Git repository name within the project. |
+| **Branch** | Defaults to `main`. Change it to target a different branch. |
+| **Path** | Defaults to `/marketplace.json`. Change it if the manifest lives elsewhere in the repo. |
+
+As you fill in **Organization**, **Project**, and **Repository**, the dashboard shows a read-only **Generated URL** preview of the raw-fetch URL it will submit, URL-encoded for you. Selecting **Azure DevOps** mode also auto-selects the **HTTP Basic (Azure DevOps)** authentication scheme, since Azure DevOps Repos requires a credential even for the manifest fetch — paste your PAT into the **Token** field and hit **Add**.
+
+**Example.** Suppose you have a private Azure DevOps repository as illustrated below:
+
+![Private Azure DevOps repository](/marketplace/azure-ado-hierarchy.png)
+
+You can add it as a marketplace source by filling in the form as shown below. The path to the marketplace manifest is `/marketplace.json` in this example, but it could be any other path in the repository:
+
+![Add new marketplace form in Azure DevOps mode with generated URL preview](/marketplace/azure-devops-source.png)
+
+#### Save the source
+
 Hit **Add**. The dashboard checks the URL format, then sends the source to ark-api, which validates the URL and saves it to the namespace's `marketplace-sources` ConfigMap. 
 (For an authenticated source, ark-api also test-fetches the manifest with the credential before saving — see [Add an authenticated source](#add-an-authenticated-source).) 
 On the next reload of the Marketplace tab you'll see the new items alongside the defaults.
@@ -77,15 +108,13 @@ The **Refresh Data** button at the top of the Manage marketplace page re-pulls e
 
 ### Add an authenticated source
 
-If the manifest sits behind authentication — a private GitHub/GHES repo, an Azure DevOps repo, or an authenticated artifact store — the **Add new marketplace** form exposes an **Authentication** selector and a **Token** field:
+If the manifest sits behind authentication — a private GitHub/GHES repo, an Azure DevOps repo, or an authenticated artifact store — the **Add new marketplace** form exposes an **Authentication** selector and a **Token** field alongside the URL fields described above:
 
 ![Add new marketplace form with an authentication scheme and token](/marketplace/auth-source.png)
 
 | Field | What it does |
 | --- | --- |
-| **Marketplace JSON URL** | Required. HTTPS URL of the manifest. |
-| **Display name** | Optional label shown in the sidebar and item cards. |
-| **Authentication** | How ark-api authenticates the fetch. **None** — public source, no header. **Bearer / token** — sends `Authorization: Bearer <token>`; use for GitHub raw, GitHub Enterprise, and most artifact stores (Artifactory, Nexus, Harbor). **HTTP Basic (Azure DevOps)** — sends `Authorization: Basic …` with an empty username and the token as the password, the format Azure DevOps Repos expects. |
+| **Authentication** | Public source — select **None**. GitHub raw, GitHub Enterprise, or an artifact store (Artifactory, Nexus, Harbor) — select **Bearer / token**. Azure DevOps Repos — select **HTTP Basic (Azure DevOps)**. |
 | **Token** | The credential for the chosen scheme. Sent once on save, masked in the field, validated against the manifest before the source is saved, and never displayed again. |
 
 Pick the scheme your host expects — **Bearer / token** for GitHub-style hosts, **HTTP Basic** for Azure DevOps — paste the token, and hit **Add**. ark-api stores the token in a Kubernetes Secret and attaches the header server-side, so the browser never holds it. For who is allowed to use a shared authenticated source and the security model, see [Authenticated sources](#authenticated-sources).
@@ -95,13 +124,7 @@ Pick the scheme your host expects — **Bearer / token** for GitHub-style hosts,
 The URL must return the raw manifest bytes, not an HTML file-viewer page.
 
 - **GitHub** — open the file and click **Raw**, then copy the address: `https://raw.githubusercontent.com/<org>/<repo>/<branch>/marketplace.json` (private repos need a **Bearer / token** credential).
-- **Azure DevOps Repos** — there is no "Raw" button. Use the Items API, which returns raw content when you pass `$format=text`:
-
-  ```
-  https://dev.azure.com/<org>/<project>/_apis/git/repositories/<repo>/items?path=/marketplace.json&api-version=7.1&$format=text
-  ```
-
-  Without `$format=text` the endpoint returns file *metadata* instead of the manifest. For a non-default branch, append `&versionDescriptor.version=<branch>&versionDescriptor.versionType=branch`. Use **HTTP Basic** auth with a PAT scoped to **Code: Read**.
+- **Azure DevOps Repos** — there is no "Raw" button. Don't build the URL by hand — use the [Azure DevOps](#azure-devops) mode: enter the organization, project, repository, branch, and path, and the dashboard builds and URL-encodes the fetch URL for you, with a preview before you save. Use a PAT scoped to **Code: Read**; the **Azure DevOps** mode auto-selects **HTTP Basic** auth for you.
 
 ## `marketplace.json` schema
 

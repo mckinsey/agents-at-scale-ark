@@ -1,10 +1,10 @@
 'use client';
 
-import { ExternalLink } from 'lucide-react';
+import { OpenInNew } from '@/components/icons';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
 interface WorkflowLinkProps {
-  workflowName: string;
+  readonly workflowName: string;
 }
 
 export function WorkflowLink({ workflowName }: WorkflowLinkProps) {
@@ -14,13 +14,13 @@ export function WorkflowLink({ workflowName }: WorkflowLinkProps) {
   return (
     <a
       href={sessionsUrl}
-      className="inline-flex items-center gap-1 underline"
+      className="paragraph-regular-primary-link text-fg-secondary inline-flex items-center gap-1"
       onClick={e => {
         e.preventDefault();
         push(sessionsUrl);
       }}>
       {workflowName}
-      <ExternalLink className="h-3 w-3" />
+      <OpenInNew className="size-4" />
     </a>
   );
 }

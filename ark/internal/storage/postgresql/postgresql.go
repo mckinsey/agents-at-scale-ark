@@ -189,6 +189,11 @@ func quoteConnValue(v string) string {
 	return "'" + connValueEscaper.Replace(v) + "'"
 }
 
+const (
+	connectTimeoutSeconds = 10
+	startupPingTimeout    = 30 * time.Second
+)
+
 func buildConnString(cfg Config) string {
 	parts := []string{
 		"host=" + quoteConnValue(cfg.Host),
@@ -197,6 +202,7 @@ func buildConnString(cfg Config) string {
 		"password=" + quoteConnValue(cfg.Password),
 		"dbname=" + quoteConnValue(cfg.Database),
 		"sslmode=" + quoteConnValue(cfg.SSLMode),
+		fmt.Sprintf("connect_timeout=%d", connectTimeoutSeconds),
 	}
 	if cfg.SSLRootCert != "" {
 		parts = append(parts, "sslrootcert="+quoteConnValue(cfg.SSLRootCert))
@@ -236,7 +242,9 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 
-	if err := db.Ping(); err != nil {
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), startupPingTimeout)
+	defer cancelPing()
+	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -912,6 +920,10 @@ func (p *PostgreSQLBackend) GetResourceVersion(ctx context.Context, kind, namesp
 func (p *PostgreSQLBackend) Close() error {
 	p.cancel()
 	return p.db.Close()
+}
+
+func (p *PostgreSQLBackend) Ping(ctx context.Context) error {
+	return p.db.PingContext(ctx)
 }
 
 func nullTimePtr(t sql.NullTime) *time.Time {
