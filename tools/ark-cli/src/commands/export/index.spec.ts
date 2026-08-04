@@ -1,5 +1,6 @@
 import {vi} from 'vitest';
 import {Command} from 'commander';
+import yaml from 'yaml';
 
 const mockExeca = vi.fn() as any;
 vi.mock('execa', () => ({
@@ -7,8 +8,10 @@ vi.mock('execa', () => ({
 }));
 
 const mockWriteFile = vi.fn() as any;
+const mockChmod = vi.fn() as any;
 vi.mock('fs/promises', () => ({
   writeFile: mockWriteFile,
+  chmod: mockChmod,
 }));
 
 const mockOutput = {
@@ -27,7 +30,7 @@ const _mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
 
 const mockKubectlGetResponse = {
   apiVersion: 'v1',
-  items: [{spec: 'foo'}],
+  items: [{metadata: {name: 'test-resource'}, spec: 'foo'}],
   kind: 'List',
   metadata: {
     resourceVersion: '',
@@ -198,6 +201,237 @@ describe('export command', () => {
     );
 
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('should remove cluster-managed state from exported resources', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Agent',
+            metadata: {
+              name: 'test-agent',
+              namespace: 'default',
+              labels: {app: 'test'},
+              annotations: {
+                'kubectl.kubernetes.io/last-applied-configuration': '{}',
+                note: 'keep-me',
+              },
+              resourceVersion: '10',
+              uid: 'source-uid',
+              generation: 3,
+              creationTimestamp: '2026-01-01T00:00:00Z',
+              managedFields: [{manager: 'controller'}],
+              selfLink: '/apis/ark.mckinsey.com/v1alpha1/agents/test-agent',
+              deletionTimestamp: '2026-01-02T00:00:00Z',
+              deletionGracePeriodSeconds: 30,
+              ownerReferences: [{name: 'source-owner', uid: 'owner-uid'}],
+              finalizers: ['ark.mckinsey.com/finalizer'],
+            },
+            spec: {prompt: '', enabled: false, maxTurns: 0},
+            status: {phase: 'Ready'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+    mockChmod.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'agents',
+      '-o',
+      'test.yaml',
+    ]);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    const exported = yaml.parse(yamlContent);
+
+    expect(exported).toEqual({
+      apiVersion: 'ark.mckinsey.com/v1alpha1',
+      kind: 'Agent',
+      metadata: {
+        name: 'test-agent',
+        namespace: 'default',
+        labels: {app: 'test'},
+        annotations: {note: 'keep-me'},
+      },
+      spec: {prompt: '', enabled: false, maxTurns: 0},
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      'test.yaml',
+      expect.any(String),
+      {encoding: 'utf-8', mode: 0o600}
+    );
+    expect(mockChmod).toHaveBeenCalledWith('test.yaml', 0o600);
+  });
+
+  it('should remove annotations when only last-applied remains', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Agent',
+            metadata: {
+              name: 'test-agent',
+              annotations: {
+                'kubectl.kubernetes.io/last-applied-configuration': '{}',
+              },
+            },
+            spec: {prompt: 'test'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-t', 'agents']);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    expect(yaml.parse(yamlContent).metadata).toEqual({name: 'test-agent'});
+  });
+
+  it('should exclude system secrets and retain application secrets', async () => {
+    const secretNames = [
+      'sh.helm.release.v1.ark-api.v1',
+      'helm-type-only',
+      'sh.helm.release.v1.application.v1',
+      'service-account-token',
+      'application-tls',
+    ];
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[0]},
+            type: 'helm.sh/release.v1',
+            data: {release: 'encoded-release'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[1]},
+            type: 'helm.sh/release.v1',
+            data: {key: 'retained'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[2]},
+            type: 'Opaque',
+            stringData: {token: 'retained'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[3]},
+            type: 'kubernetes.io/service-account-token',
+            data: {token: 'encoded-token'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[4]},
+            type: 'kubernetes.io/tls',
+            immutable: true,
+            data: {'tls.crt': 'certificate', 'tls.key': 'private-key'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'secrets',
+      '-o',
+      'secrets.yaml',
+    ]);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    const exported = yaml
+      .parseAllDocuments(yamlContent)
+      .map((document) => document.toJSON());
+
+    expect(exported.map((resource) => resource.metadata.name)).toEqual([
+      secretNames[1],
+      secretNames[2],
+      secretNames[4],
+    ]);
+    expect(exported[1]).toMatchObject({
+      type: 'Opaque',
+      stringData: {token: 'retained'},
+    });
+    expect(exported[2]).toMatchObject({
+      type: 'kubernetes.io/tls',
+      immutable: true,
+      data: {'tls.crt': 'certificate', 'tls.key': 'private-key'},
+    });
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 2 system-managed secrets'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 3 resources to secrets.yaml'
+    );
+
+    const outputMessages = [
+      ...mockOutput.info.mock.calls,
+      ...mockOutput.success.mock.calls,
+      ...mockOutput.warning.mock.calls,
+    ]
+      .flat()
+      .join(' ');
+    for (const secretName of secretNames) {
+      expect(outputMessages).not.toContain(secretName);
+    }
+  });
+
+  it('should not write output when all resources are excluded', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: 'default-token'},
+            type: 'kubernetes.io/service-account-token',
+            data: {token: 'encoded-token'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+    mockChmod.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'secrets',
+      '-o',
+      'existing.yaml',
+    ]);
+
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockChmod).not.toHaveBeenCalled();
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 1 system-managed secret'
+    );
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'no resources found to export'
+    );
   });
 
   it('fails if kubectl get fails for a resource type', async () => {

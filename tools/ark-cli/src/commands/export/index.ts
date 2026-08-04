@@ -17,11 +17,76 @@ const RESOURCE_ORDER = [
   'a2aservers',
 ];
 
+const SERVER_MANAGED_METADATA_FIELDS = [
+  'resourceVersion',
+  'uid',
+  'generation',
+  'creationTimestamp',
+  'managedFields',
+  'selfLink',
+  'deletionTimestamp',
+  'deletionGracePeriodSeconds',
+  'ownerReferences',
+  'finalizers',
+];
+
+const LAST_APPLIED_ANNOTATION =
+  'kubectl.kubernetes.io/last-applied-configuration';
+
+interface ExportResource {
+  apiVersion?: string;
+  kind?: string;
+  type?: string;
+  metadata: {
+    name: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 interface ExportOptions {
   output?: string;
   namespace?: string;
   types?: string;
   labels?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeResource(resource: ExportResource): ExportResource {
+  const sanitized = {...resource};
+  delete sanitized.status;
+
+  const metadata = {...resource.metadata};
+  for (const field of SERVER_MANAGED_METADATA_FIELDS) {
+    delete metadata[field];
+  }
+
+  if (isRecord(metadata.annotations)) {
+    const annotations = {...metadata.annotations};
+    delete annotations[LAST_APPLIED_ANNOTATION];
+
+    if (Object.keys(annotations).length === 0) {
+      delete metadata.annotations;
+    } else {
+      metadata.annotations = annotations;
+    }
+  }
+
+  sanitized.metadata = metadata;
+  return sanitized;
+}
+
+function isExcludedSecret(resource: ExportResource): boolean {
+  const isHelmRelease =
+    resource.type === 'helm.sh/release.v1' &&
+    resource.metadata.name.startsWith('sh.helm.release.v1.');
+
+  return (
+    isHelmRelease || resource.type === 'kubernetes.io/service-account-token'
+  );
 }
 
 async function exportResources(options: ExportOptions, config: ArkConfig) {
@@ -39,8 +104,9 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
 
     output.info(`exporting ark resources to ${outputPath}...`);
 
-    const allResources: unknown[] = [];
+    const allResources: ExportResource[] = [];
     let allResourceCount = 0;
+    let excludedResourceCount = 0;
 
     for (const resourceType of resourceTypes) {
       if (!RESOURCE_ORDER.includes(resourceType)) {
@@ -49,7 +115,7 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       }
 
       output.info(`fetching ${resourceType}...`);
-      const resources = await listResources(resourceType, {
+      const resources = await listResources<ExportResource>(resourceType, {
         namespace: options.namespace,
         labels: options.labels,
       });
@@ -57,9 +123,22 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       const resourceCount = resources.length;
       if (resources.length > 0) {
         output.success(`found ${resourceCount} ${resourceType}`);
-        allResources.push(...resources);
-        allResourceCount += resourceCount;
+        const exportableResources =
+          resourceType === 'secrets'
+            ? resources.filter((resource) => !isExcludedSecret(resource))
+            : resources;
+
+        excludedResourceCount += resourceCount - exportableResources.length;
+        allResources.push(...exportableResources.map(sanitizeResource));
+        allResourceCount += exportableResources.length;
       }
+    }
+
+    if (excludedResourceCount > 0) {
+      const secretLabel = excludedResourceCount === 1 ? 'secret' : 'secrets';
+      output.info(
+        `excluded ${excludedResourceCount} system-managed ${secretLabel}`
+      );
     }
 
     if (allResourceCount === 0) {
@@ -71,7 +150,11 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       .map((resource) => yaml.stringify(resource))
       .join('\n---\n');
 
-    await fs.writeFile(outputPath, yamlContent, 'utf-8');
+    await fs.writeFile(outputPath, yamlContent, {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
+    await fs.chmod(outputPath, 0o600);
 
     output.success(`exported ${allResourceCount} resources to ${outputPath}`);
   } catch (error) {

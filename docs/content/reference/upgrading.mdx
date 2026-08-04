@@ -50,7 +50,7 @@ To move resources to a new cluster, use `ark export` on the source and `ark impo
 ark export -o ark-export.yaml
 ```
 
-This captures Ark CRD instances for: `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, `a2aservers`.
+This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records and service account token Secrets.
 
 Useful flags:
 
@@ -82,8 +82,10 @@ ark import ark-export.yaml --upsert
 `--upsert` is opt-in on purpose: the default keeps erroring on conflicts so a stray import can't silently overwrite resources on a shared cluster. On completion it prints a summary of how many resources were created, configured, and unchanged.
 
 <Callout type="warning">
-`--upsert` re-applies the exported YAML as-is. `ark export` captures live objects verbatim (including `metadata.resourceVersion`), so if a resource has changed on the destination since the file was written — Ark controllers bump `resourceVersion` on every status update — `kubectl apply` can reject it with a `Conflict`. Re-export immediately before importing to minimise drift. A cleaner, portable export is tracked in [#2794](https://github.com/mckinsey/agents-at-scale-ark/issues/2794).
+`--upsert` applies the desired state in the export and can overwrite existing specs and application Secret values. Immutable-field changes, admission policies, and concurrent user updates can still make an import fail.
 </Callout>
+
+Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
 ## v0.1.63
 
