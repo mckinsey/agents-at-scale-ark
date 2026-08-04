@@ -22,10 +22,13 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.targetPort | quote }}
+        prometheus.io/path: /metrics
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
     spec:
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       serviceAccountName: {{ include "ark-completions.serviceAccountName" . }}
@@ -47,6 +50,10 @@ spec:
             value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"
+          {{- range $key, $value := .Values.env }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+          {{- end }}
           {{- if .Values.namespaceScopedDiscovery }}
           # Per-tenant pods are authorized by a namespaced Role, which cannot
           # satisfy the cluster-wide List that broker/target discovery does by

@@ -144,6 +144,44 @@ describe('ManageMarketplaceSettings', () => {
     expect(screen.getByText(/credential is required/i)).toBeInTheDocument();
   });
 
+  it('builds and submits an Azure DevOps URL from the preset fields', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    render(<ManageMarketplaceSettings />);
+
+    await user.click(screen.getByRole('button', { name: /add new marketplace/i }));
+    await user.click(screen.getByRole('button', { name: /^azure devops$/i }));
+
+    await user.type(screen.getByLabelText(/organization/i), 'my-org');
+    await user.type(screen.getByLabelText(/^project$/i), 'my-project');
+    await user.type(screen.getByLabelText(/repository/i), 'my-repo');
+    await user.type(screen.getByPlaceholderText('Sent once on save; never displayed again'), 'pat-123');
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).toHaveBeenCalledTimes(1);
+    const body = createMutate.mock.calls[0][0];
+    expect(body.url).toBe(
+      'https://dev.azure.com/my-org/my-project/_apis/git/repositories/my-repo/items' +
+        '?path=/marketplace.json&api-version=7.1&$format=text' +
+        '&versionDescriptor.version=main&versionDescriptor.versionType=branch',
+    );
+    expect(body.auth).toEqual({ scheme: 'basic', credential: 'pat-123' });
+  });
+
+  it('blocks submission of an incomplete Azure DevOps preset', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    render(<ManageMarketplaceSettings />);
+
+    await user.click(screen.getByRole('button', { name: /add new marketplace/i }));
+    await user.click(screen.getByRole('button', { name: /^azure devops$/i }));
+    await user.type(screen.getByLabelText(/organization/i), 'my-org');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).not.toHaveBeenCalled();
+  });
+
   it('shows a credential badge without revealing the stored value', () => {
     vi.mocked(useMarketplaceSources).mockReturnValue({
       data: [

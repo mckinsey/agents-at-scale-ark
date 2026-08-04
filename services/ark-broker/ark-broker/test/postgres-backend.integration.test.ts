@@ -319,6 +319,171 @@ describeIntegration('postgres backend — HTTP integration', () => {
     expect(res.body.items[0].query_id).toBe('keep-q');
   });
 
+  it('DELETE /conversations/:conversationId/queries/:queryId/messages removes only rows in that conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-1',
+        query_id: 'scoped-q',
+        messages: ['a'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-1',
+        query_id: 'other-q',
+        messages: ['b'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-2',
+        query_id: 'scoped-q',
+        messages: ['c'],
+      })
+      .expect(200);
+
+    await request(app)
+      .delete('/conversations/scoped-conv-1/queries/scoped-q/messages')
+      .expect(200);
+
+    const res = await request(app).get('/messages').expect(200);
+    expect(
+      res.body.items.map(
+        (item: {conversation_id: string; query_id: string}) =>
+          `${item.conversation_id}/${item.query_id}`
+      )
+    ).toEqual(['scoped-conv-1/other-q', 'scoped-conv-2/scoped-q']);
+  });
+
+  it('GET /conversations lists each conversation once across several messages', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'list-conv-1',
+        query_id: 'q1',
+        messages: ['a', 'b'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'list-conv-1', query_id: 'q2', messages: ['c']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'list-conv-2', query_id: 'q3', messages: ['d']})
+      .expect(200);
+
+    const res = await request(app).get('/conversations').expect(200);
+
+    expect([...res.body.conversations].sort()).toEqual([
+      'list-conv-1',
+      'list-conv-2',
+    ]);
+  });
+
+  it('GET /conversations/:conversationId returns only that conversation, in sequence order', async () => {
+    const first = {role: 'user', content: 'first'};
+    const second = {role: 'assistant', content: 'second'};
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'detail-conv',
+        query_id: 'q1',
+        messages: [first, second],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'other-conv',
+        query_id: 'q2',
+        messages: [{role: 'user', content: 'other'}],
+      })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/conversations/detail-conv')
+      .expect(200);
+
+    expect(res.body.conversation_id).toBe('detail-conv');
+    expect(
+      res.body.messages.map((item: {message: unknown}) => item.message)
+    ).toEqual([first, second]);
+    expect(
+      res.body.messages.map((item: {sequence: number}) => item.sequence)
+    ).toEqual([1, 2]);
+
+    await request(app).get('/conversations/missing-conv').expect(404);
+  });
+
+  it('DELETE /messages purges every row without resetting the Postgres sequence', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'purge-conv',
+        query_id: 'q1',
+        messages: ['a', 'b'],
+      })
+      .expect(200);
+
+    const deleteRes = await request(app).delete('/messages').expect(200);
+    expect(deleteRes.body.message).toBe('Memory purged');
+
+    const emptyRes = await request(app).get('/messages').expect(200);
+    expect(emptyRes.body.items).toEqual([]);
+
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'purge-conv', query_id: 'q2', messages: ['c']})
+      .expect(200);
+
+    const afterRes = await request(app).get('/messages').expect(200);
+    expect(afterRes.body.items).toHaveLength(1);
+    expect(afterRes.body.items[0].sequence).toBe(3);
+  });
+
+  it('DELETE /conversations/:conversationId removes only that conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'drop-conv', query_id: 'q1', messages: ['a']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'keep-conv', query_id: 'q2', messages: ['b']})
+      .expect(200);
+
+    await request(app).delete('/conversations/drop-conv').expect(200);
+
+    const res = await request(app).get('/messages').expect(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].conversation_id).toBe('keep-conv');
+
+    await request(app).get('/conversations/drop-conv').expect(404);
+  });
+
+  it('DELETE /conversations purges every conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'wipe-conv-1', query_id: 'q1', messages: ['a']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'wipe-conv-2', query_id: 'q2', messages: ['b']})
+      .expect(200);
+
+    const deleteRes = await request(app).delete('/conversations').expect(200);
+    expect(deleteRes.body.message).toBe('All conversations deleted');
+
+    const listRes = await request(app).get('/conversations').expect(200);
+    expect(listRes.body.conversations).toEqual([]);
+
+    const messagesRes = await request(app).get('/messages').expect(200);
+    expect(messagesRes.body.items).toEqual([]);
+  });
+
   it('GET /memory-status aggregates per-conversation counts via a single query', async () => {
     await request(app)
       .post('/messages')
