@@ -159,6 +159,9 @@
   --slate-900-opacity-60: #14172199;
   --slate-900-opacity-88: #141721e0;
 
+  /** Slate Utility Colors */
+  --color-slate-900: var(--slate-900);
+
   /** Brand Accents */
   --brand-accents-mckinsey-deep-blue: #051c2c;
   --brand-accents-mckinsey-electric-blue: #2251ff;
@@ -772,3 +775,16 @@
     @apply font-sans text-xs leading-4 font-semibold tracking-[-0.012px] underline;
   }
 }
+
+.yaml-tok-key { color: var(--color-tags-accent-primary-indigo); }
+.yaml-tok-str { color: var(--color-tags-accent-primary-emerald); }
+.yaml-tok-num, .yaml-tok-bool { color: var(--color-tags-accent-primary-amber); }
+.yaml-tok-comment { color: var(--color-fg-tertiary); font-style: italic; }
+.yaml-tok-punc { color: var(--color-fg-secondary); }
+.yaml-tok-val { color: var(--color-fg-primary); }
+.yaml-err-line { display: inline-block; min-width: 100%; background: color-mix(in srgb, var(--color-status-error) 18%, transparent); text-decoration: underline wavy var(--color-status-error); text-underline-offset: 3px; }
+
+.md-tok-heading { color: var(--color-tags-accent-primary-indigo); }
+.md-tok-code { color: var(--color-tags-accent-primary-emerald); }
+.md-tok-link { color: var(--color-tags-accent-primary-blue); }
+.md-tok-punc { color: var(--color-fg-secondary); }
