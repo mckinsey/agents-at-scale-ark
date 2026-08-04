@@ -4,6 +4,6 @@ import { WorkflowLink } from '@/components/common/workflow-link';
 
 export function showWorkflowStartedToast(workflowName: string) {
   toast.success('Workflow started', {
-    description: <WorkflowLink workflowName={workflowName} />,
+    action: <WorkflowLink workflowName={workflowName} />,
   });
 }

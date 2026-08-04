@@ -206,7 +206,7 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 	return &ToolRegistry{
 		tools:             make(map[string]ToolDefinition),
 		executors:         make(map[string]ToolExecutor),
-		mcpPool:           arkmcp.NewMCPClientPool(),
+		mcpPool:           arkmcp.NewMCPClientPool(arkmcp.WithToolCallRetry(mcpToolCallRetryConfig())),
 		mcpSettings:       mcpSettings,
 		telemetryRecorder: telemetryRecorder,
 		eventingRecorder:  eventingRecorder,
