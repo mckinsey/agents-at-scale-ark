@@ -213,7 +213,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
         mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
+        mock_secret.data = {"token": "placeholder"}
 
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
@@ -266,7 +266,6 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
         mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
 
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
