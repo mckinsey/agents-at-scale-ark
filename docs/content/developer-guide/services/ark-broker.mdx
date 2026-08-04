@@ -49,6 +49,36 @@ Environment variables:
 
 The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.
 
+## Heap sizing
+
+V8 sizes its default heap from the host's memory rather than the container limit, so on a large node it may pick a cap unrelated to the memory the pod was actually given. Where that cap lands below the limit, the broker exhausts its heap and exits with `FATAL ERROR: Ineffective mark-compacts near heap limit` while the container still has headroom — a Node-initiated exit, not a Linux OOMKill.
+
+The chart sets `NODE_OPTIONS=--max-old-space-size=...` from `app.resources.limits.memory`, taking the lesser of 85% and `limit - 128Mi` — 870MB at the 1024Mi default. The margin is deliberate: the flag caps only the old space, V8's total heap ceiling lands roughly 24MB above it, and non-heap memory (native buffers, sockets, protobuf parsing) sits above that, so a larger value trades a clean V8 heap limit for a kernel OOMKill. Because that 24MB is a fixed addition rather than a proportion, the `limit - 128Mi` term is what keeps small limits safe; at 128Mi and below no value leaves useful headroom and `NODE_OPTIONS` is omitted. Raising the limit raises the heap with it:
+
+```bash
+helm upgrade --install ark-broker services/ark-broker/chart \
+  --set app.resources.limits.memory=2Gi
+```
+
+Set `app.nodeOptions` to override the computed value. If `app.resources.limits.memory` is unset, `NODE_OPTIONS` is not emitted and V8 falls back to its own default.
+
+Heap pressure scales with the in-memory stores, so `limits.maxMessages`, `limits.maxChunks`, `limits.maxSpans` and `limits.maxEvents` are the other lever. Moving messages to Postgres or chunks to Redis takes those stores off the heap; traces and sessions stay in memory regardless.
+
+## Metrics
+
+The broker exposes Prometheus metrics at `GET /metrics` on the service port:
+
+| Metric | Description |
+|--------|-------------|
+| `broker_messages_count` | Messages in the in-process message cache |
+| `broker_chunks_count` | Completion chunks in the in-process chunk cache |
+| `broker_spans_count` | OTEL spans in the in-process trace cache |
+| `broker_events_count` | Operation events in the in-process event cache |
+
+A gauge is registered only for stores actually held in the heap — with `MESSAGE_BACKEND=postgres`, `broker_messages_count` is absent rather than reported as zero.
+
+Standard Node process metrics are included, notably `process_resident_memory_bytes` and `nodejs_heap_size_used_bytes`. Comparing the cache gauges against heap usage shows which store is consuming the heap before it fills.
+
 ## Message backend (Postgres)
 
 By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. This section covers the messages store; operation events have their own Postgres opt-in (see [Event backend (Postgres)](#event-backend-postgres)) and completion chunks can opt in to Redis (see [Chunk backend (Redis)](#chunk-backend-redis)), while traces and sessions remain in memory (or file-based, as above).
