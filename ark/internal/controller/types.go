@@ -8,6 +8,7 @@ const (
 	statusPending       = "pending"
 	statusProvisioning  = "provisioning"
 	statusRunning       = "running"
+	statusQueued        = "queued"
 	statusInputRequired = "input-required"
 	statusDone          = "done"
 	statusError         = "error"

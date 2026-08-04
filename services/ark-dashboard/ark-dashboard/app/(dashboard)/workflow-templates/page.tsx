@@ -1,29 +1,90 @@
 'use client';
 
+import { useRef, useState } from 'react';
+
 import { PageHeader } from '@/components/common/page-header';
-import { WorkflowTemplatesSection } from '@/components/sections/workflow-templates-section';
+import { Plus } from '@/components/icons';
+import {
+  NameWorkflowDialog,
+  type NameWorkflowValues,
+} from '@/components/dialogs/name-workflow-dialog';
+import {
+  WorkflowTemplatesSection,
+  type WorkflowTemplatesSectionHandle,
+} from '@/components/sections/workflow-templates-section';
+import { Button } from '@/components/ui/button';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
-import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-access';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function WorkflowTemplatesPage() {
-  const { data: workflows } = useGetAllWorkflowTemplates();
+  const { push } = useNamespacedNavigation();
+  const { readOnlyMode } = useNamespace();
+  const { canCreate } = useWorkflowTemplateAccess();
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  const [argoInstalled, setArgoInstalled] = useState(true);
+  const sectionRef = useRef<WorkflowTemplatesSectionHandle>(null);
 
-  const pageTitle = workflows
-    ? `Workflow Templates (${workflows.length})`
-    : 'Workflow Templates';
+  const showCreate = canCreate && !readOnlyMode && argoInstalled;
+
+  const handleConfirmName = ({
+    name,
+    title,
+    description,
+  }: NameWorkflowValues) => {
+    setShowNameDialog(false);
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    const descriptionParam = description
+      ? `&description=${encodeURIComponent(description)}`
+      : '';
+    push(
+      `/workflow-templates/new?name=${encodeURIComponent(name)}${titleParam}${descriptionParam}`,
+    );
+  };
 
   return (
     <>
       <PageHeader
         breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Workflow Templates"
+        actions={
+          <div className="flex items-center gap-2">
+            {!readOnlyMode && argoInstalled && (
+              <Button
+                variant="outline"
+                data-testid="workflow-add-group"
+                onClick={() => sectionRef.current?.openCreateGroup()}>
+                <Plus className="h-4 w-4" />
+                Add group
+              </Button>
+            )}
+            {showCreate && (
+              <Button onClick={() => setShowNameDialog(true)}>
+                <Plus className="h-4 w-4" />
+                Create workflow template
+              </Button>
+            )}
+          </div>
+        }
       />
       <div className="flex flex-1 flex-col">
         <div className="">
-          <h1 className="text-xl">{pageTitle}</h1>
+          <h1 className="text-xl">Workflow Templates</h1>
+          <p className="text-fg-secondary text-sm">
+            Automate complex processes with agentic orchestration
+          </p>
         </div>
-        <WorkflowTemplatesSection />
+        <WorkflowTemplatesSection
+          ref={sectionRef}
+          onArgoInstalledChange={setArgoInstalled}
+        />
       </div>
+      <NameWorkflowDialog
+        open={showNameDialog}
+        onOpenChange={setShowNameDialog}
+        onConfirm={handleConfirmName}
+      />
     </>
   );
 }

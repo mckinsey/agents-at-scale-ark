@@ -439,7 +439,8 @@ export function mapArgoWorkflowToSession(
 ): MappedWorkflowSession {
   const workflowName = workflow.metadata.name;
   const rootNodeId = workflowName;
-  const nodes = workflow.status.nodes || {};
+  const status = workflow.status;
+  const nodes = status?.nodes || {};
   const rootNode = nodes[rootNodeId];
   const workflowNamespace = workflow.metadata.namespace;
 
@@ -506,13 +507,10 @@ export function mapArgoWorkflowToSession(
     id: workflowName,
     name: workflowName,
     type: 'workflow',
-    status: mapArgoPhaseToStatus(workflow.status.phase),
-    startedAt: workflow.status.startedAt || workflow.metadata.creationTimestamp,
-    finishedAt: workflow.status.finishedAt,
-    duration: calculateDuration(
-      workflow.status.startedAt,
-      workflow.status.finishedAt,
-    ),
+    status: mapArgoPhaseToStatus(status?.phase ?? 'Pending'),
+    startedAt: status?.startedAt || workflow.metadata.creationTimestamp,
+    finishedAt: status?.finishedAt,
+    duration: calculateDuration(status?.startedAt, status?.finishedAt),
     steps,
     namespace: workflow.metadata.namespace,
     uid: workflow.metadata.uid,

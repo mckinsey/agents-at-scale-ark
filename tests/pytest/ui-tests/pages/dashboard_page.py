@@ -32,12 +32,12 @@ class DashboardPage(BasePage):
     
     def navigate_to_dashboard(self) -> None:
         if self.base_url not in self.page.url:
-            self.page.goto(self.base_url)
+            self.page.goto(self.base_url, wait_until="domcontentloaded")
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_element(self.MAIN_CONTENT)
     
     def navigate_to_section(self, section: str) -> None:
-        self.page.goto(f"{self.base_url}/{section}")
+        self.page.goto(f"{self.base_url}/{section}", wait_until="domcontentloaded")
         self.wait_for_load_state("domcontentloaded")
     
     def expand_agent_builder(self) -> None:

@@ -7,7 +7,7 @@ description: The ark-broker HTTP API for messages, chunks, traces, events, and s
 
 The `ark-broker` service is an event bus that captures the runtime data a query produces: chat **messages**, streaming **chunks**, OTEL **traces**, controller **events**, and materialized **sessions**. The Ark controller and executors write to it during a query; the dashboard and `ark-api` read from it to render live output, conversation history, and telemetry.
 
-Storage defaults to in-memory, with pluggable persistent backends selected via environment variables: messages can be backed by PostgreSQL (`MESSAGE_BACKEND=postgres`, `DATABASE_URL`) and chunks by Redis (`CHUNK_BACKEND=redis`, `REDIS_URL`). With a persistent backend configured, that data survives pod restarts.
+Storage defaults to in-memory, with pluggable persistent backends selected via environment variables: messages and operation events can be backed by PostgreSQL (`MESSAGE_BACKEND=postgres` / `EVENT_BACKEND=postgres`, sharing one `DATABASE_URL`) and chunks by Redis (`CHUNK_BACKEND=redis`, `REDIS_URL`). With a persistent backend configured, that data survives pod restarts.
 
 This page documents the broker's HTTP API directly. `ark-api` also re-exposes read access to the same data under `/v1/broker/*` — see the [Ark API](/reference/ark-apis#broker-data) reference.
 
