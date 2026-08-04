@@ -51,6 +51,12 @@ export const envSchema = z
       .int()
       .positive()
       .default(2592000),
+    ROW_REAP_INTERVAL_SECONDS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(3600),
+    ROW_REAP_BATCH_SIZE: z.coerce.number().int().positive().default(10000),
     DATABASE_DEBUG_QUERIES: z
       .string()
       .default('false')

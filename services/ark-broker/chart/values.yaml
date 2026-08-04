@@ -47,6 +47,13 @@ database:
   # Must be >= both of the above: a session is the index into its messages
   # and events, so hiding it first would strand data that is still retained.
   sessionsVisibilityTtlSeconds: 2592000
+
+  # Expired-row reaper: physically deletes rows past expires_at.
+  # Interval between runs in seconds; 0 disables the reaper.
+  reapIntervalSeconds: 3600
+  # Rows deleted per DELETE statement while draining a backlog.
+  reapBatchSize: 10000
+
   debugQueries: false
 
 # Redis connection — required when backends.chunk=redis

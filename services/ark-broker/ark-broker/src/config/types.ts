@@ -56,6 +56,8 @@ export type DatabaseConfig = Readonly<{
   statementTimeoutMs: number;
   debugQueries: boolean;
   sslRootCertPath?: string;
+  reapIntervalSeconds: number;
+  reapBatchSize: number;
 }>;
 
 export type RedisConfig = Readonly<{
