@@ -11,7 +11,7 @@ import type {
   TeamResponse,
   MCPServerResponse,
   QueryListResponse,
-  A2AServerListResponse,
+  A2AServerResponse,
   ResourceExportData,
 } from '@/lib/services/export';
 import {
@@ -37,7 +37,9 @@ export const exportServiceServer = {
         items => ({ items }),
       ),
       serverApiClient.get<QueryListResponse>('/v1/queries'),
-      serverApiClient.get<A2AServerListResponse>('/v1/a2a-servers'),
+      fetchAllPages<A2AServerResponse>('/v1/a2a-servers', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
       fetchAllPages<MCPServerResponse>('/v1/mcp-servers', {}, serverApiClient).then(
         items => ({ items }),
       ),
