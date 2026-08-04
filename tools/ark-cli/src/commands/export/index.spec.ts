@@ -8,10 +8,8 @@ vi.mock('execa', () => ({
 }));
 
 const mockWriteFile = vi.fn() as any;
-const mockChmod = vi.fn() as any;
 vi.mock('fs/promises', () => ({
   writeFile: mockWriteFile,
-  chmod: mockChmod,
 }));
 
 const mockOutput = {
@@ -236,7 +234,6 @@ describe('export command', () => {
       }),
     });
     mockWriteFile.mockResolvedValue(undefined);
-    mockChmod.mockResolvedValue(undefined);
 
     const command = createExportCommand(mockConfig);
     await command.parseAsync([
@@ -265,9 +262,8 @@ describe('export command', () => {
     expect(mockWriteFile).toHaveBeenCalledWith(
       'test.yaml',
       expect.any(String),
-      {encoding: 'utf-8', mode: 0o600}
+      'utf-8'
     );
-    expect(mockChmod).toHaveBeenCalledWith('test.yaml', 0o600);
   });
 
   it('should remove annotations when only last-applied remains', async () => {
@@ -412,7 +408,6 @@ describe('export command', () => {
       }),
     });
     mockWriteFile.mockResolvedValue(undefined);
-    mockChmod.mockResolvedValue(undefined);
 
     const command = createExportCommand(mockConfig);
     await command.parseAsync([
@@ -425,7 +420,6 @@ describe('export command', () => {
     ]);
 
     expect(mockWriteFile).not.toHaveBeenCalled();
-    expect(mockChmod).not.toHaveBeenCalled();
     expect(mockOutput.info).toHaveBeenCalledWith(
       'excluded 1 system-managed secret'
     );

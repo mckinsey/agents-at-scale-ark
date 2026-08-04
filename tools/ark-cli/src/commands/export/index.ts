@@ -150,11 +150,7 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       .map((resource) => yaml.stringify(resource))
       .join('\n---\n');
 
-    await fs.writeFile(outputPath, yamlContent, {
-      encoding: 'utf-8',
-      mode: 0o600,
-    });
-    await fs.chmod(outputPath, 0o600);
+    await fs.writeFile(outputPath, yamlContent, 'utf-8');
 
     output.success(`exported ${allResourceCount} resources to ${outputPath}`);
   } catch (error) {
