@@ -36,7 +36,7 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 		log.Info("Error parsing tool arguments", "ToolCall", call)
 	}
 
-	response, err := m.MCPClient.Client.CallTool(ctx, &mcpsdk.CallToolParams{
+	response, err := m.MCPClient.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name:      m.ToolName,
 		Arguments: arguments,
 	})
