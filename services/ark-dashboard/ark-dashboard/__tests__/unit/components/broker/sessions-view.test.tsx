@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -53,6 +53,12 @@ function emit(data: unknown) {
   act(() => {
     latestES().onmessage?.({ data: JSON.stringify(data) });
   });
+}
+
+async function purge(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /purge/i }));
+  const dialog = await screen.findByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: /^purge$/i }));
 }
 
 describe('SessionsView', () => {
@@ -159,7 +165,7 @@ describe('SessionsView', () => {
     });
     await waitFor(() => screen.getByText('sess-1'));
 
-    await user.click(screen.getByRole('button', { name: /purge/i }));
+    await purge(user);
 
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -174,13 +180,30 @@ describe('SessionsView', () => {
     });
   });
 
+  it('does not purge when the confirmation dialog is cancelled', async () => {
+    const user = userEvent.setup();
+    render(<SessionsView memory="default" />);
+    emit({
+      sessionId: 'sess-1',
+      session: { lastActivity: '2025-01-01T12:00:00.000Z' },
+    });
+    await waitFor(() => screen.getByText('sess-1'));
+
+    await user.click(screen.getByRole('button', { name: /purge/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(screen.getByText('sess-1')).toBeDefined();
+  });
+
   it('Purge swallows fetch errors', async () => {
     globalThis.fetch = vi
       .fn()
       .mockRejectedValue(new Error('network')) as unknown as typeof fetch;
     const user = userEvent.setup();
     render(<SessionsView memory="default" />);
-    await user.click(screen.getByRole('button', { name: /purge/i }));
+    await purge(user);
     expect(globalThis.fetch).toHaveBeenCalled();
   });
 
@@ -199,7 +222,7 @@ describe('SessionsView', () => {
     });
     await waitFor(() => screen.getByText('sess-1'));
 
-    await user.click(screen.getByRole('button', { name: /purge/i }));
+    await purge(user);
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('500');

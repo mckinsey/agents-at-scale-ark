@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -29,16 +29,28 @@ export function SessionsView({
   const [sessions, setSessions] = useState<Record<string, BrokerSession>>({});
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const sessionIds = useMemo(
+    () =>
+      Object.keys(sessions).sort(
+        (a, b) =>
+          new Date(sessions[b].lastActivity ?? 0).getTime() -
+          new Date(sessions[a].lastActivity ?? 0).getTime(),
+      ),
+    [sessions],
+  );
+
   const {
     autoScroll,
     setAutoScroll,
     expandedIds,
     toggleExpanded,
     containerRef,
-  } = useStreamPanelState(sessions);
+  } = useStreamPanelState(sessionIds[0], sessionIds.length);
 
   useEffect(() => {
     setSessions({});
+    setError(null);
     const es = new EventSource(
       apiUrl(
         `/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}&watch=true`,
@@ -64,12 +76,6 @@ export function SessionsView({
     return () => es.close();
   }, [memory]);
 
-  const sessionIds = Object.keys(sessions).sort(
-    (a, b) =>
-      new Date(sessions[b].lastActivity ?? 0).getTime() -
-      new Date(sessions[a].lastActivity ?? 0).getTime(),
-  );
-
   const handlePurge = async () => {
     try {
       const response = await fetch(
@@ -83,7 +89,7 @@ export function SessionsView({
       setError(null);
       onPurged?.();
     } catch (e) {
-      const message = (e as Error).message;
+      const message = e instanceof Error ? e.message : 'Unexpected error';
       setError(message);
       toast.error('Failed to purge sessions', { description: message });
     }
@@ -106,9 +112,10 @@ export function SessionsView({
           return (
             <StreamRow
               key={sid}
+              rowId={sid}
               label="session"
               isExpanded={expandedIds.has(sid)}
-              onToggle={() => toggleExpanded(sid)}
+              onToggle={toggleExpanded}
               timestamp={
                 lastActivity ? `${lastActivity.substring(0, 19)}Z` : undefined
               }

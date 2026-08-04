@@ -3,19 +3,23 @@ import type { paths } from '@/lib/api/generated/types';
 
 type BrokerStreamPath = Extract<keyof paths, `/v1/broker/${string}`>;
 
+export const BROKER_STREAM_KEYS = [
+  'traces',
+  'messages',
+  'chunks',
+  'events',
+  'sessions',
+] as const;
+
+export type BrokerStreamKey = (typeof BROKER_STREAM_KEYS)[number];
+
 export const BROKER_STREAM_ENDPOINTS = {
   traces: '/v1/broker/traces',
   messages: '/v1/broker/messages',
   chunks: '/v1/broker/chunks',
   events: '/v1/broker/events',
   sessions: '/v1/broker/sessions',
-} as const satisfies Record<string, BrokerStreamPath>;
-
-export type BrokerStreamKey = keyof typeof BROKER_STREAM_ENDPOINTS;
-
-export const BROKER_STREAM_KEYS = Object.keys(
-  BROKER_STREAM_ENDPOINTS,
-) as BrokerStreamKey[];
+} as const satisfies Record<BrokerStreamKey, BrokerStreamPath>;
 
 export type BrokerStreamProbe = 'empty' | 'has-records' | 'unknown';
 

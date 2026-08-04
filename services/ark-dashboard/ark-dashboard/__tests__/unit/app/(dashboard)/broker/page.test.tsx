@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +12,10 @@ vi.mock('@/lib/services/memories', () => ({
 
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({ namespace: 'default' }),
 }));
 
 type ESInstance = {
@@ -223,6 +227,8 @@ describe('BrokerPage', () => {
     await screen.findByRole('tab', { name: 'OTEL Traces' });
 
     await user.click(screen.getByRole('button', { name: 'Purge' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Purge' }));
 
     await waitFor(() => {
       const deleteCall = fetchMock.mock.calls.find(

@@ -34,6 +34,7 @@ import {
   useBrokerStreamProbe,
 } from '@/lib/services/broker-streams-hooks';
 import { type Memory, memoriesService } from '@/lib/services/memories';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const STREAM_PAGE_SIZE = 1000;
 
@@ -105,6 +106,7 @@ export default function BrokerPage() {
   const [activeTab, setActiveTab] = useState<BrokerStreamKey>('traces');
   const [hasLiveEntries, setHasLiveEntries] = useState(false);
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   const selectedMemoryRef = useRef(selectedMemory);
   selectedMemoryRef.current = selectedMemory;
@@ -132,9 +134,12 @@ export default function BrokerPage() {
   );
 
   useEffect(() => {
+    let isStale = false;
     async function fetchMemories() {
+      setLoading(true);
       try {
         const data = await memoriesService.getAll();
+        if (isStale) return;
         setMemories(data);
         setHasMemoriesError(false);
         if (
@@ -144,14 +149,18 @@ export default function BrokerPage() {
           setSelectedMemory(data[0].name);
         }
       } catch (err) {
+        if (isStale) return;
         setHasMemoriesError(true);
         console.error('Failed to fetch memories:', err);
       } finally {
-        setLoading(false);
+        if (!isStale) setLoading(false);
       }
     }
     fetchMemories();
-  }, []);
+    return () => {
+      isStale = true;
+    };
+  }, [namespace]);
 
   const hasMemories = memories.length > 0;
   const streamProbe = useBrokerStreamProbe(selectedMemory, {
@@ -208,15 +217,14 @@ export default function BrokerPage() {
         </Select>
       </div>
 
-      {isResolving ? (
-        showLoading && (
-          <div className="mt-5 flex flex-1 items-center justify-center">
-            <span className="label-regular-primary text-fg-secondary">
-              Loading...
-            </span>
-          </div>
-        )
-      ) : showEmptyState ? (
+      {isResolving && showLoading && (
+        <div className="mt-5 flex flex-1 items-center justify-center">
+          <span className="label-regular-primary text-fg-secondary">
+            Loading...
+          </span>
+        </div>
+      )}
+      {!isResolving && showEmptyState && (
         <ResourceEmptyState
           icon={<BrokenImage />}
           title="No stream records"
@@ -240,7 +248,8 @@ export default function BrokerPage() {
           }
           actions={<LearnMoreButton href={DOCS_URLS.observability} />}
         />
-      ) : (
+      )}
+      {!isResolving && !showEmptyState && (
         <Tabs
           value={activeTab}
           size="lg"

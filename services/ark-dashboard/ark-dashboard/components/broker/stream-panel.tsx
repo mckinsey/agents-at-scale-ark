@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  memo,
   type ReactNode,
   useCallback,
   useEffect,
@@ -9,6 +10,7 @@ import {
   useState,
 } from 'react';
 
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -16,16 +18,28 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
-export function useStreamPanelState(scrollTrigger: unknown) {
+export function useStreamPanelState(
+  topRowId: string | undefined,
+  rowCount: number,
+) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
+  const previousRowCountRef = useRef(rowCount);
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
-  }, [scrollTrigger, autoScroll]);
+  }, [topRowId, rowCount, autoScroll]);
+
+  useEffect(() => {
+    const hasShrunk = rowCount < previousRowCountRef.current;
+    previousRowCountRef.current = rowCount;
+    if (hasShrunk) {
+      setExpandedIds(prev => (prev.size > 0 ? new Set() : prev));
+    }
+  }, [rowCount]);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds(prev => {
@@ -70,6 +84,7 @@ export function StreamPanel({
   children,
 }: Readonly<StreamPanelProps>) {
   const switchId = useId();
+  const [isPurgeDialogOpen, setIsPurgeDialogOpen] = useState(false);
 
   return (
     <div className="border-stroke-divider flex min-h-0 flex-1 flex-col gap-2 border p-5">
@@ -94,9 +109,17 @@ export function StreamPanel({
             variant="outline"
             size="sm"
             className="text-fg-secondary border-[0.5px]"
-            onClick={onPurge}>
+            onClick={() => setIsPurgeDialogOpen(true)}>
             Purge
           </Button>
+          <ConfirmationDialog
+            open={isPurgeDialogOpen}
+            onOpenChange={setIsPurgeDialogOpen}
+            title={`Purge ${title}?`}
+            description={`This permanently deletes every ${title} record held by the broker for this memory. This cannot be undone.`}
+            confirmText="Purge"
+            onConfirm={onPurge}
+          />
           <div className="flex items-center gap-3">
             <Switch
               id={switchId}
@@ -137,17 +160,19 @@ export function StreamPlaceholder() {
 }
 
 interface StreamRowProps {
+  readonly rowId: string;
   /** Noun used to build the expander's accessible name, e.g. "entry". */
   readonly label: string;
   readonly isExpanded: boolean;
-  readonly onToggle: () => void;
+  readonly onToggle: (rowId: string) => void;
   readonly timestamp?: string;
   /** Inline preview beside the timestamp; omit to hide. */
   readonly summary?: ReactNode;
   readonly payload: unknown;
 }
 
-export function StreamRow({
+export const StreamRow = memo(function StreamRow({
+  rowId,
   label,
   isExpanded,
   onToggle,
@@ -165,7 +190,7 @@ export function StreamRow({
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${label}${
           timestamp ? ` ${timestamp}` : ''
         }`}
-        onClick={onToggle}>
+        onClick={() => onToggle(rowId)}>
         <IconShell size="default" variant="secondary" className="shrink-0">
           {isExpanded ? <ChevronDown /> : <ChevronRight />}
         </IconShell>
@@ -187,4 +212,4 @@ export function StreamRow({
       )}
     </div>
   );
-}
+});

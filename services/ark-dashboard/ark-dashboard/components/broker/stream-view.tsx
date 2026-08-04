@@ -9,6 +9,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { type StreamEntry } from '@/lib/utils/sse-stream';
 
+const summaryCache = new WeakMap<object, string>();
+
+function summarise(data: unknown): string {
+  if (data === null || typeof data !== 'object') {
+    return JSON.stringify(data);
+  }
+  const cached = summaryCache.get(data);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const summary = JSON.stringify(data);
+  summaryCache.set(data, summary);
+  return summary;
+}
+
 interface StreamViewProps {
   readonly title: string;
   readonly entries: StreamEntry[];
@@ -36,7 +51,7 @@ export function StreamView({
     expandedIds,
     toggleExpanded,
     containerRef,
-  } = useStreamPanelState(entries);
+  } = useStreamPanelState(entries[0]?.id, entries.length);
 
   return (
     <StreamPanel
@@ -56,11 +71,12 @@ export function StreamView({
             return (
               <StreamRow
                 key={entry.id}
+                rowId={entry.id}
                 label="entry"
                 isExpanded={isExpanded}
-                onToggle={() => toggleExpanded(entry.id)}
+                onToggle={toggleExpanded}
                 timestamp={entry.timestamp}
-                summary={isExpanded ? undefined : JSON.stringify(entry.data)}
+                summary={isExpanded ? undefined : summarise(entry.data)}
                 payload={entry.data}
               />
             );
