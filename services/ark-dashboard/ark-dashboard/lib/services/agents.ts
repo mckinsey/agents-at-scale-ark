@@ -1,14 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, APIError } from '@/lib/api/client';
 import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
-
-// Helper type for axios errors
-interface AxiosError extends Error {
-  response?: {
-    status: number;
-  };
-}
 
 // Use the generated types from OpenAPI
 export type AgentResponse = components['schemas']['AgentResponse'];
@@ -76,7 +69,7 @@ export const agentsService = {
         id: response.name, // Use name as id for UI compatibility
       };
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (error instanceof APIError && error.status === 404) {
         return null;
       }
       throw error;
@@ -133,7 +126,7 @@ export const agentsService = {
         id: response.name,
       };
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (error instanceof APIError && error.status === 404) {
         return null;
       }
       throw error;
@@ -162,7 +155,7 @@ export const agentsService = {
 
       return true;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (error instanceof APIError && error.status === 404) {
         return false;
       }
       throw error;

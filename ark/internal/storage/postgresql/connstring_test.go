@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/lib/pq"
 )
 
 func TestNew_UnreachableDatabase(t *testing.T) {
@@ -35,7 +37,7 @@ func TestBuildConnString(t *testing.T) {
 		{
 			name:     "mode only",
 			cfg:      Config{Host: "db", Port: 5432, User: "ark", Password: "pw", Database: "ark", SSLMode: "require"},
-			contains: []string{"host='db'", "port=5432", "sslmode='require'"},
+			contains: []string{"host='db'", "port=5432", "sslmode='require'", "connect_timeout=10"},
 			absent:   []string{"sslrootcert=", "sslcert=", "sslkey="},
 		},
 		{
@@ -73,6 +75,19 @@ func TestBuildConnString(t *testing.T) {
 				if strings.Contains(got, no) {
 					t.Errorf("conn string %q should not contain %q", got, no)
 				}
+			}
+		})
+	}
+}
+
+func TestBuildConnStringParsesWithSpecialCharPassword(t *testing.T) {
+	passwords := []string{"p@ss w0rd", "has'quote", "back\\slash", "with=equals", "tab\tinside"}
+	for _, pw := range passwords {
+		t.Run(pw, func(t *testing.T) {
+			cfg := Config{Host: "db", Port: 5432, User: "ark", Password: pw, Database: "ark", SSLMode: "require"}
+			connStr := buildConnString(cfg)
+			if _, err := pq.NewConnector(connStr); err != nil {
+				t.Fatalf("DSN %q failed to parse: %v", connStr, err)
 			}
 		})
 	}
