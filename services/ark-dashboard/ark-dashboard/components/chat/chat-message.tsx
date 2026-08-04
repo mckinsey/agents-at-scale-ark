@@ -37,6 +37,8 @@ interface ChatMessageProps {
   approvalRequest?: ToolApprovalRequest;
   namespace?: string;
   pollAfterApproval?: () => Promise<void>;
+  defaultCodeCollapsed?: boolean;
+  constrainWidth?: boolean;
 }
 
 type ApprovalDecision = 'approved' | 'rejected';
@@ -250,19 +252,22 @@ function ToolCallsOnlyMessage({
   toolCalls,
   isUser,
   className,
+  constrainWidth,
 }: Readonly<{
   toolCalls: ToolCallData[];
   isUser: boolean;
   className?: string;
+  constrainWidth?: boolean;
 }>) {
+  const alignClass = constrainWidth
+    ? 'w-full min-w-0'
+    : isUser
+      ? 'items-end'
+      : 'items-start';
   return (
     <div
       data-testid="chat-message"
-      className={cn(
-        'flex flex-col gap-2',
-        isUser ? 'items-end' : 'items-start',
-        className,
-      )}>
+      className={cn('flex flex-col gap-2', alignClass, className)}>
       {toolCalls.map(toolCall => (
         <ToolCall key={toolCall.id} toolCall={toolCall} />
       ))}
@@ -354,6 +359,8 @@ function StandardMessage({
   queryName,
   toolCalls,
   className,
+  defaultCodeCollapsed,
+  constrainWidth,
 }: Readonly<{
   isUser: boolean;
   isFailed: boolean;
@@ -364,19 +371,30 @@ function StandardMessage({
   queryName?: string;
   toolCalls?: ToolCallData[];
   className?: string;
+  defaultCodeCollapsed?: boolean;
+  constrainWidth?: boolean;
 }>) {
-  const markdownContent = renderMarkdown(content);
+  const markdownContent = useMemo(
+    () => renderMarkdown(content, { defaultCodeCollapsed }),
+    [content, defaultCodeCollapsed],
+  );
   const { contentRef, needsExpansion, expandedWidth } = useContentExpansion(
     content,
     markdownContent,
   );
 
+  const shouldExpand = !constrainWidth && needsExpansion;
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
   const alignClass = isUser ? 'items-end' : 'items-start';
-  const bubbleWidthClass = needsExpansion ? '' : 'max-w-[80%]';
+  let bubbleWidthClass = 'max-w-[80%]';
+  if (shouldExpand) {
+    bubbleWidthClass = '';
+  } else if (constrainWidth && !isUser) {
+    bubbleWidthClass = 'w-full';
+  }
   const bubbleStyle =
-    needsExpansion && expandedWidth
+    shouldExpand && expandedWidth
       ? { minWidth: `${expandedWidth}px` }
       : undefined;
 
@@ -410,7 +428,11 @@ function StandardMessage({
       )}
 
       {hasToolCalls && (
-        <div className="flex w-full max-w-[80%] flex-col gap-3">
+        <div
+          className={cn(
+            'flex w-full min-w-0 flex-col gap-3',
+            !constrainWidth && 'max-w-[80%]',
+          )}>
           {toolCalls.map(toolCall => (
             <ToolCall key={toolCall.id} toolCall={toolCall} />
           ))}
@@ -433,6 +455,8 @@ export function ChatMessage({
   approvalRequest,
   namespace = 'default',
   pollAfterApproval,
+  defaultCodeCollapsed,
+  constrainWidth,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -459,6 +483,7 @@ export function ChatMessage({
         toolCalls={toolCalls ?? []}
         isUser={isUser}
         className={className}
+        constrainWidth={constrainWidth}
       />
     );
   }
@@ -474,6 +499,8 @@ export function ChatMessage({
       queryName={queryName}
       toolCalls={toolCalls}
       className={className}
+      defaultCodeCollapsed={defaultCodeCollapsed}
+      constrainWidth={constrainWidth}
     />
   );
 }
