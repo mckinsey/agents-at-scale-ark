@@ -20,7 +20,7 @@ from ...models.teams import (
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
 
 @router.get("", response_model=TeamListResponse)
 @handle_k8s_errors(operation="list", resource_type="team")
-async def list_teams(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
+async def list_teams(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> TeamListResponse:
     """
     List a page of Team CRs in a namespace.
 

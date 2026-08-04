@@ -29,7 +29,7 @@ from ...models.models import (
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
+async def list_models(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
     """
     List a page of Model CRs in a namespace.
 

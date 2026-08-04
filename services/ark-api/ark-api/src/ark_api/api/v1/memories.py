@@ -25,7 +25,7 @@ from ...utils.memory_client import (
 )
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ def memory_to_detail_response(memory) -> MemoryDetailResponse:
 
 @router.get("", response_model=MemoryListResponse)
 @handle_k8s_errors(operation="list", resource_type="memory")
-async def list_memories(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryListResponse:
+async def list_memories(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryListResponse:
     """List a page of memories in a namespace."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         page = await client.memories.a_list_page(

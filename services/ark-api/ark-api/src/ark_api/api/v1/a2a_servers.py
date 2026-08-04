@@ -20,7 +20,7 @@ from ...models.a2a_servers import (
 )
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def a2a_server_to_detail_response(a2a_server: dict) -> A2AServerDetailResponse:
 
 @router.get("", response_model=A2AServerListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a server")
-async def list_a2a_servers(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerListResponse:
+async def list_a2a_servers(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerListResponse:
     """
     List a page of A2AServer CRs in a namespace.
 

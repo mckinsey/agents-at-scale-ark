@@ -10,23 +10,21 @@ MAX_PAGE_LIMIT = 1000
 
 @dataclass
 class PaginationParams:
-    """Resolved pagination inputs for a Kubernetes server-side list page."""
-    limit: int
-    continue_token: Optional[str]
+    """Cursor-pagination query params (``?limit=`` and ``?continue=``).
 
+    Used directly as a FastAPI dependency: ``pagination: PaginationParams = Depends(PaginationParams)``.
+    FastAPI inspects the generated ``__init__`` and picks up the ``Query(...)``
+    defaults as query-parameter declarations, so no factory function is needed.
+    """
 
-def pagination_params(
     limit: int = Query(
         DEFAULT_PAGE_LIMIT,
         ge=1,
         le=MAX_PAGE_LIMIT,
         description="Maximum number of items to return per page",
-    ),
+    )
     continue_token: Optional[str] = Query(
         None,
         alias="continue",
         description="Continuation token returned by the previous page",
-    ),
-) -> PaginationParams:
-    """FastAPI dependency exposing ``?limit=`` and ``?continue=`` consistently."""
-    return PaginationParams(limit=limit, continue_token=continue_token)
+    )

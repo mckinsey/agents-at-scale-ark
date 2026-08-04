@@ -20,7 +20,7 @@ from ...models.tools import (
 )
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def tool_to_detail_response(tool: dict) -> ToolDetailResponse:
 
 @router.get("", response_model=ToolListResponse)
 @handle_k8s_errors(operation="list", resource_type="tool")
-async def list_tools(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
+async def list_tools(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
     """
     List a page of Tool CRs in a namespace.
 

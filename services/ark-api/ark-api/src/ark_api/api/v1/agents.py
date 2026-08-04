@@ -22,7 +22,7 @@ from ...models.agents import (
 from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
 
 @router.get("", response_model=AgentListResponse)
 @handle_k8s_errors(operation="list", resource_type="agent")
-async def list_agents(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
+async def list_agents(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
     """
     List a page of Agent CRs in a namespace.
 

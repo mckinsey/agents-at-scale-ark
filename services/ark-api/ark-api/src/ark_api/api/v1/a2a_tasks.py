@@ -26,7 +26,7 @@ from ...models.a2a_tasks import (
 )
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
-from .pagination import PaginationParams, pagination_params
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
 
 @router.get("", response_model=A2ATaskListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a task")
-async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(pagination_params), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
+async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
     """
     List a page of A2ATask CRs in a namespace.
 
