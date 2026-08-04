@@ -731,3 +731,139 @@ func TestScheme_StrategicMergePatch(t *testing.T) {
 		})
 	}
 }
+
+// A cancelled context must abort the retry loop rather than sit through the remaining delays, and
+// must report the cancellation rather than return (false, nil) — which would read as "the host
+// does not support policy" and disable enforcement for the life of the process.
+func TestDiscoverPolicySupport_ContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	d := &errDiscovery{failures: 99}
+	served, err := discoverPolicySupport(ctx, d, 5, time.Hour)
+	if err == nil {
+		t.Fatal("expected an error when the context is cancelled mid-retry, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected the cancellation to be wrapped, got: %v", err)
+	}
+	if served {
+		t.Error("expected served=false when discovery was cancelled")
+	}
+	if d.calls != 1 {
+		t.Errorf("expected the loop to stop after the first attempt, got %d calls", d.calls)
+	}
+}
+
+// resolveCELSupport is where "cannot determine support" turns into either a startup failure or a
+// process that serves unenforced. Both outcomes are correct for their config and neither may be
+// reached by the other's config, so each combination is pinned.
+func TestResolveCELSupport(t *testing.T) {
+	t.Parallel()
+
+	// Discovery that answers, but from a host that does not serve the resource (pre-1.30).
+	unsupported := fake.NewSimpleClientset()
+	unsupported.Resources = []*metav1.APIResourceList{{
+		GroupVersion: "admissionregistration.k8s.io/v1",
+		APIResources: []metav1.APIResource{{Name: "validatingwebhookconfigurations"}},
+	}}
+
+	supported := fake.NewSimpleClientset()
+	supported.Resources = []*metav1.APIResourceList{{
+		GroupVersion: "admissionregistration.k8s.io/v1",
+		APIResources: []metav1.APIResource{{Name: "validatingadmissionpolicies"}},
+	}}
+
+	cases := []struct {
+		name string
+		// cancel makes discovery unresolvable, the (false, err) case, without waiting out the
+		// real retry delays.
+		cancel         bool
+		discovery      discovery.DiscoveryInterface
+		policyRequired bool
+		wantCEL        bool
+		wantErr        string
+	}{
+		{
+			name:      "undeterminable and not required falls back to unenforced",
+			cancel:    true,
+			discovery: &errDiscovery{failures: 99},
+			wantCEL:   false,
+		},
+		{
+			// The distinction the retry loop exists to preserve: a failed probe is not a version
+			// check, so with policy required it must fail startup rather than guess.
+			name:           "undeterminable and required fails startup",
+			cancel:         true,
+			discovery:      &errDiscovery{failures: 99},
+			policyRequired: true,
+			wantErr:        "could not be determined",
+		},
+		{
+			name:      "unsupported host and not required falls back to unenforced",
+			discovery: unsupported.Discovery(),
+			wantCEL:   false,
+		},
+		{
+			name:           "unsupported host and required fails startup",
+			discovery:      unsupported.Discovery(),
+			policyRequired: true,
+			wantErr:        "does not serve ValidatingAdmissionPolicy",
+		},
+		{
+			name:      "supported host enables CEL",
+			discovery: supported.Discovery(),
+			wantCEL:   true,
+		},
+		{
+			name:           "supported host enables CEL when required",
+			discovery:      supported.Discovery(),
+			policyRequired: true,
+			wantCEL:        true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tc.cancel {
+				cancel()
+			}
+
+			s := &Server{config: Config{PolicyRequired: tc.policyRequired}}
+			cel, err := s.resolveCELSupport(ctx, tc.discovery)
+
+			if tc.wantErr != "" {
+				assertFailsClosed(t, cel, err, tc.wantErr)
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected the apiserver to keep starting, got error: %v", err)
+			}
+			if cel != tc.wantCEL {
+				t.Errorf("cel = %v, want %v", cel, tc.wantCEL)
+			}
+		})
+	}
+}
+
+// assertFailsClosed pins the PolicyRequired outcome: a startup error naming the reason, and no
+// claim that CEL is enabled alongside it.
+func assertFailsClosed(t *testing.T, cel bool, err error, wantErr string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("expected startup to fail with %q, got nil", wantErr)
+	}
+	if !strings.Contains(err.Error(), wantErr) {
+		t.Errorf("error = %v, want it to mention %q", err, wantErr)
+	}
+	if cel {
+		t.Error("expected cel=false alongside an error")
+	}
+}

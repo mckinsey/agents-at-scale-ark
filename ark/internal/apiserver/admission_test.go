@@ -102,6 +102,9 @@ func (l *nopLookup) GetConfigMap(_ context.Context, namespace, name string) (*co
 // reaching the validator, since a policy keyed on namespace matches nothing when it is empty.
 const nsTeamA = "team-a"
 
+// updatedPrompt is the spec change the update fixtures write, used to confirm the write landed.
+const updatedPrompt = "updated"
+
 func newAgentAdmissionStorage(backend storage.Backend) *AdmissionStorage {
 	cfg := registry.ResourceConfig{
 		Kind: "Agent", Resource: "agents", SingularName: "agent",
@@ -268,7 +271,7 @@ func TestAdmissionStorage_Update_ForwardsAdmissionCallback(t *testing.T) {
 	next := agent("a1")
 	next.Namespace = nsTeamA
 	next.ResourceVersion = createdAcc.GetResourceVersion()
-	next.Spec.Prompt = "updated"
+	next.Spec.Prompt = updatedPrompt
 
 	if _, _, err := s.Update(ctx, "a1", rest.DefaultUpdatedObjectInfo(next), nil, updateValidation, false, &metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("update: %v", err)
@@ -359,5 +362,148 @@ func TestPrepareForCreate_DoesNotOverrideExplicitNamespace(t *testing.T) {
 	}
 	if obj.GetNamespace() != "explicit" {
 		t.Errorf("namespace = %q, want %q", obj.GetNamespace(), "explicit")
+	}
+}
+
+// agentWithUnsupportedTool fails Ark's own validator, so it exercises the paths where admission
+// is refused before the generic chain is consulted.
+func agentWithUnsupportedTool(name string) *arkv1alpha1.Agent {
+	a := agent(name)
+	a.Spec.Tools = []arkv1alpha1.AgentTool{{Type: "not-a-tool-type", Name: "t1"}}
+	return a
+}
+
+// An upsert (PUT to a name that does not exist) is a create, and must be admitted as one. The
+// create branch inside GenericStorage.Update receives the createValidation argument, so dropping
+// it here would leave apply-style writes unenforced while ordinary POSTs stayed enforced.
+func TestAdmissionStorage_Update_UpsertRunsAdmissionOnTheCreate(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
+
+	var seen metav1.Object
+	createValidation := rest.ValidateObjectFunc(func(_ context.Context, obj runtime.Object) error {
+		a, err := meta.Accessor(obj)
+		if err != nil {
+			return err
+		}
+		seen = a
+		return nil
+	})
+
+	updateCalled := 0
+	updateValidation := rest.ValidateObjectUpdateFunc(func(_ context.Context, _, _ runtime.Object) error {
+		updateCalled++
+		return nil
+	})
+
+	_, created, err := s.Update(ctx, "fresh", rest.DefaultUpdatedObjectInfo(agent("fresh")), createValidation, updateValidation, true, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if !created {
+		t.Fatal("expected the upsert to report a create")
+	}
+	if seen == nil {
+		t.Fatal("create admission callback was never invoked on the upsert path")
+	}
+	if seen.GetNamespace() != nsTeamA || seen.GetUID() == "" {
+		t.Errorf("admission saw an unformed object (namespace=%q uid=%q)", seen.GetNamespace(), seen.GetUID())
+	}
+	if updateCalled != 0 {
+		t.Errorf("update admission callback ran %d times on a create", updateCalled)
+	}
+}
+
+// Ark's validator runs before the generic chain, and its rejection must stop the write outright
+// rather than fall through to admission.
+func TestAdmissionStorage_Update_UpsertRejectedByArkValidation(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
+
+	createCalled := 0
+	createValidation := rest.ValidateObjectFunc(func(_ context.Context, _ runtime.Object) error {
+		createCalled++
+		return nil
+	})
+
+	_, _, err := s.Update(ctx, "fresh", rest.DefaultUpdatedObjectInfo(agentWithUnsupportedTool("fresh")), createValidation, nil, true, &metav1.UpdateOptions{})
+	if err == nil {
+		t.Fatal("expected Ark validation to reject the upsert")
+	}
+	if createCalled != 0 {
+		t.Errorf("generic admission ran %d times after Ark validation already rejected", createCalled)
+	}
+	if len(backend.objects) != 0 {
+		t.Errorf("expected nothing persisted after a rejection, got %d objects", len(backend.objects))
+	}
+}
+
+func TestAdmissionStorage_Update_RejectedByArkValidation(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
+
+	created, err := s.Create(ctx, agent("a1"), nil, &metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+	createdAcc, _ := meta.Accessor(created)
+
+	updateCalled := 0
+	updateValidation := rest.ValidateObjectUpdateFunc(func(_ context.Context, _, _ runtime.Object) error {
+		updateCalled++
+		return nil
+	})
+
+	next := agentWithUnsupportedTool("a1")
+	next.Namespace = nsTeamA
+	next.ResourceVersion = createdAcc.GetResourceVersion()
+
+	if _, _, err := s.Update(ctx, "a1", rest.DefaultUpdatedObjectInfo(next), nil, updateValidation, false, &metav1.UpdateOptions{}); err == nil {
+		t.Fatal("expected Ark validation to reject the update")
+	}
+	if updateCalled != 0 {
+		t.Errorf("generic admission ran %d times after Ark validation already rejected", updateCalled)
+	}
+}
+
+// The generic admission callback is optional -- subresource and internal writes pass nil. A nil
+// callback must admit rather than panic or refuse.
+func TestAdmissionStorage_Update_NilAdmissionCallbackAdmits(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	s := newAgentAdmissionStorage(backend)
+	ctx := contextForNamespace(nsTeamA)
+
+	created, err := s.Create(ctx, agent("a1"), nil, &metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+	createdAcc, _ := meta.Accessor(created)
+
+	next := agent("a1")
+	next.Namespace = nsTeamA
+	next.ResourceVersion = createdAcc.GetResourceVersion()
+	next.Spec.Prompt = updatedPrompt
+
+	out, _, err := s.Update(ctx, "a1", rest.DefaultUpdatedObjectInfo(next), nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("update with a nil admission callback: %v", err)
+	}
+	stored, ok := out.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("unexpected type %T", out)
+	}
+	if stored.Spec.Prompt != updatedPrompt {
+		t.Errorf("prompt = %q, want %q", stored.Spec.Prompt, updatedPrompt)
 	}
 }
