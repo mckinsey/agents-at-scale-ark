@@ -321,7 +321,16 @@ describe('export command', () => {
           {
             apiVersion: 'v1',
             kind: 'Secret',
-            metadata: {name: secretNames[2]},
+            metadata: {
+              name: secretNames[2],
+              resourceVersion: '42',
+              uid: 'secret-uid',
+              creationTimestamp: '2026-01-01T00:00:00Z',
+              managedFields: [{manager: 'controller'}],
+              annotations: {
+                'kubectl.kubernetes.io/last-applied-configuration': '{}',
+              },
+            },
             type: 'Opaque',
             stringData: {token: 'retained'},
           },
@@ -366,9 +375,11 @@ describe('export command', () => {
       secretNames[4],
     ]);
     expect(exported[1]).toMatchObject({
+      metadata: {name: secretNames[2]},
       type: 'Opaque',
       stringData: {token: 'retained'},
     });
+    expect(exported[1].metadata).toEqual({name: secretNames[2]});
     expect(exported[2]).toMatchObject({
       type: 'kubernetes.io/tls',
       immutable: true,
