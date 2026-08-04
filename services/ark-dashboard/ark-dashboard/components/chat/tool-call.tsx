@@ -91,7 +91,7 @@ function TreeVariant({
   const containerBg = isFailed ? 'bg-status-error/10 rounded-md px-2 py-1' : '';
 
   return (
-    <div className={cn('relative pl-6 text-sm', containerBg, className)}>
+    <div className={cn('relative min-w-0 pl-6 text-sm', containerBg, className)}>
       <div className={cn('absolute left-0 top-0 h-[18px] w-px', lineColor)}></div>
       <div className={cn('absolute left-0 top-[18px] h-px w-4', lineColor)}></div>
       <div className="flex items-center gap-2 py-1.5 pl-2">
@@ -153,7 +153,7 @@ function CardVariant({
   return (
     <div
       className={cn(
-        'border p-3 text-sm',
+        'min-w-0 border p-3 text-sm',
         isFailed
           ? 'bg-status-error/10 border-stroke-status-error'
           : 'bg-surface-bg-secondary border-stroke-divider',

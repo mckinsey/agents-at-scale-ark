@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { CollapsibleCodeBlock } from '@/components/chat/collapsible-code-block';
+
 // Initialize mermaid
 if (typeof window !== 'undefined') {
   mermaid.initialize({
@@ -20,7 +22,11 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const renderMarkdown = (content: string) => {
+export const renderMarkdown = (
+  content: string,
+  options?: { defaultCodeCollapsed?: boolean },
+) => {
+  const defaultCodeCollapsed = options?.defaultCodeCollapsed ?? false;
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -80,6 +86,7 @@ export const renderMarkdown = (content: string) => {
             {children}
           </em>
         ),
+        pre: ({ children }) => <>{children}</>,
         code: props => {
           const { className, children } = props;
           const inline = !className?.includes('language-');
@@ -93,20 +100,20 @@ export const renderMarkdown = (content: string) => {
           }
 
           if (!inline) {
+            const language = match ? match[1] : 'text';
             return (
-              <div className="my-4 overflow-hidden rounded-md bg-gray-900 dark:bg-gray-800">
-                <pre className="overflow-x-auto p-4 text-sm text-gray-100">
-                  <code className={className} {...props}>
-                    {children}
-                  </code>
-                </pre>
-              </div>
+              <CollapsibleCodeBlock
+                language={language}
+                className={className}
+                defaultCollapsed={defaultCodeCollapsed}>
+                {children}
+              </CollapsibleCodeBlock>
             );
           }
 
           return (
             <code
-              className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800"
+              className="bg-current/10 px-1 py-0.5 font-mono text-xs"
               {...props}>
               {children}
             </code>
@@ -176,7 +183,7 @@ export const renderMarkdown = (content: string) => {
   );
 };
 
-const MermaidCode = ({ content }: { content: string }) => {
+const MermaidCode = ({ content }: Readonly<{ content: string }>) => {
   const [showMermaidPreview, setShowMermaidPreview] = useState(false);
 
   return (
@@ -213,7 +220,7 @@ const MermaidCode = ({ content }: { content: string }) => {
   );
 };
 
-const MermaidDiagram = ({ content }: { content: string }) => {
+const MermaidDiagram = ({ content }: Readonly<{ content: string }>) => {
   const [diagram, setDiagram] = useState<string | boolean>(true);
 
   useEffect(() => {

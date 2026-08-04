@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
 
+import { useNavigationGuardContext } from '@/lib/hooks/use-navigation-guard';
+
 type NavigationOptions = Parameters<ReturnType<typeof useRouter>['push']>[1];
 
 function buildFullPath(path: string, searchParams: URLSearchParams | null): string {
@@ -23,29 +25,42 @@ function buildFullPath(path: string, searchParams: URLSearchParams | null): stri
 export function useNamespacedNavigation() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const guard = useNavigationGuardContext();
 
   const push = useCallback(
     (path: string, options?: NavigationOptions) => {
       const fullPath = buildFullPath(path, searchParams);
-      if (options) {
-        router.push(fullPath, options);
-      } else {
-        router.push(fullPath);
+      const doNav = () => {
+        if (options) {
+          router.push(fullPath, options);
+        } else {
+          router.push(fullPath);
+        }
+      };
+      if (guard.requestNavigation(doNav)) {
+        return;
       }
+      doNav();
     },
-    [router, searchParams],
+    [router, searchParams, guard],
   );
 
   const replace = useCallback(
     (path: string, options?: NavigationOptions) => {
       const fullPath = buildFullPath(path, searchParams);
-      if (options) {
-        router.replace(fullPath, options);
-      } else {
-        router.replace(fullPath);
+      const doNav = () => {
+        if (options) {
+          router.replace(fullPath, options);
+        } else {
+          router.replace(fullPath);
+        }
+      };
+      if (guard.requestNavigation(doNav)) {
+        return;
       }
+      doNav();
     },
-    [router, searchParams],
+    [router, searchParams, guard],
   );
 
   return { push, replace };
