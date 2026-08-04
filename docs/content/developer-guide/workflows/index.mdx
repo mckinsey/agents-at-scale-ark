@@ -7,7 +7,7 @@ import { Callout } from 'nextra/components'
 
 # Workflows
 
-> **Workflows in Ark are [Argo Workflows](https://argoproj.github.io/workflows/).** Ark does **not** ship its own workflow engine — there's no native "Ark workflow" CRD and no drag-and-drop workflow builder. You author Argo `WorkflowTemplate` / `Workflow` YAML, and each step calls Ark by submitting a `Query` against an agent, team, model, or tool — usually by referencing the chart-provided `ark-query` template. Ark provides Helm charts and this reusable template to make those calls easy.
+> **Workflows in Ark are [Argo Workflows](https://argoproj.github.io/workflows/).** Ark does **not** ship its own workflow engine — there's no native "Ark workflow" CRD and no drag-and-drop workflow builder. You author Argo `WorkflowTemplate` / `Workflow` YAML, and steps that need to interact with Ark Agents, Teams, Models and Tools do so by submitting a `Query` — usually by referencing the chart-provided `ark-query` template. Ark provides Helm charts and this reusable template to make those calls easy.
 
 ## Why Argo?
 
@@ -81,7 +81,7 @@ kubectl get tenant   # check Minio tenant status
 
 ### Adding the `ark-query` template to an existing Argo installation
 
-The Ark `argo-workflows` chart ships a reusable `ark-query` `WorkflowTemplate`, a canonical building block that submits an Ark `Query` and returns its structured outputs, referenced from a step with `templateRef: {name: ark-query, template: query}`. The chart installs it automatically, so the steps above already give you everything. If you run your **own** Argo Workflows (installed separately from the Ark chart), add just this template by rendering it from the chart and applying it into the namespace where your workflows run:
+The Ark `argo-workflows` chart ships a reusable `ark-query` `WorkflowTemplate`, a canonical building block that submits an Ark `Query` and returns its structured outputs. This can be referenced with `templateRef: {name: ark-query, template: query}`. The chart installs it automatically, so the steps above already give you everything. If you run your **own** Argo Workflows (installed separately from the Ark chart), add just this template by rendering it from the chart and applying it into the namespace where your workflows run:
 
 ```bash
 helm template argo-workflows \
@@ -98,7 +98,7 @@ kubectl get workflowtemplate ark-query -n <your-argo-namespace>
 
 ## How a step calls Ark
 
-The chart-provided `ark-query` `WorkflowTemplate` is the recommended way to call Ark from a step. Reference it with `templateRef` — it submits an Ark `Query`, waits for completion, and exposes the result as step outputs, so you don't hand-write any `kubectl` or CLI plumbing:
+The chart-provided `ark-query` `WorkflowTemplate` is the recommended way to call Ark from a step. Reference it with `templateRef` — it submits an Ark `Query`, waits for completion, and exposes the result as parameter outputs, so you don't hand-write any `kubectl` or CLI plumbing:
 
 **Inputs**
 
