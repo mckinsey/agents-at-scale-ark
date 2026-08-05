@@ -73,6 +73,34 @@ type TokenSecretReference struct {
 	ClientSecretKey string `json:"clientSecretKey,omitempty"`
 }
 
+// Default Secret keys for TokenSecretReference. These mirror the
+// +kubebuilder:default markers above, which cannot reference constants.
+const (
+	DefaultAccessTokenKey  = "access_token"
+	DefaultRefreshTokenKey = "refresh_token"
+	DefaultExpiresAtKey    = "expires_at"
+	DefaultClientIDKey     = "client_id"
+	DefaultClientSecretKey = "client_secret"
+)
+
+// ResolvedAccessTokenKey returns the Secret key holding the access token. The
+// empty-value fallback matters for clients that bypass CRD defaulting, such as
+// the fake client used in unit tests.
+func (r TokenSecretReference) ResolvedAccessTokenKey() string {
+	if r.AccessTokenKey == "" {
+		return DefaultAccessTokenKey
+	}
+	return r.AccessTokenKey
+}
+
+// ResolvedExpiresAtKey returns the Secret key holding the token expiry.
+func (r TokenSecretReference) ResolvedExpiresAtKey() string {
+	if r.ExpiresAtKey == "" {
+		return DefaultExpiresAtKey
+	}
+	return r.ExpiresAtKey
+}
+
 // MCPServerAuthorizationState enumerates the observable authorization
 // states of an MCP server. An empty value (the absence of the
 // `authorization` sub-resource) means authorization is not required.

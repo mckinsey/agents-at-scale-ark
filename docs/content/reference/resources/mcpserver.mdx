@@ -54,7 +54,7 @@ spec:
 | `spec.timeout` | duration | no | Maximum duration for MCP tool calls to this server (`30s`, `5m`, `10m`). Defaults to `30s`. Raise it for long-running operations. |
 | `spec.pollInterval` | duration | no | How often the controller re-discovers tools from the server. Defaults to `1m`. |
 | `spec.headers[]` | list | no | HTTP headers added to requests to the server. Each entry has a `name` and a `value` (either a literal `value` or `valueFrom` — `secretKeyRef`, `configMapKeyRef`, `queryParameterRef`). |
-| `spec.authorization` | object | no | OAuth configuration for servers protected per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728). When unset, the controller does not attempt to inject `Authorization` headers. |
+| `spec.authorization` | object | no | OAuth configuration for servers protected per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728). When set, the resolved access token is injected as `Authorization: Bearer` on both tool discovery and tool calls — see [Header precedence](#header-precedence). When unset, Ark does not inject `Authorization` headers. |
 | `spec.authorization.tokenSecretRef` | object | yes (within `authorization`) | References the Secret holding OAuth tokens and client credentials. The Secret **must** exist in the same namespace as the MCPServer. |
 | `spec.authorization.tokenSecretRef.name` | string | yes | Name of the Secret. |
 | `spec.authorization.tokenSecretRef.accessTokenKey` | string | no | Secret key holding the access token. Defaults to `access_token`. |
@@ -166,6 +166,20 @@ shell    True        1
 | `Required` | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. A 401 from an authorized server (expiry, revocation, refresh failure) also collapses back to `Required` and emits a `TokenRejected` event. |
 | `Authorized` | The controller successfully listed tools using a Bearer token resolved from `spec.authorization.tokenSecretRef`. |
 | `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. The CLI cannot drive an OAuth flow against this server. |
+
+### Header precedence
+
+The access token from `spec.authorization.tokenSecretRef` authorizes both paths: the controller's tool discovery, and the tool calls an agent makes at query time. `status.authorization.state: Authorized` therefore means agents can call the server's tools, not just list them.
+
+Headers merge with this precedence (last wins):
+
+```
+spec.headers  <  spec.authorization  <  Agent.spec.overrides  <  Query.spec.overrides
+```
+
+So the resolved bearer replaces an `Authorization` entry in `spec.headers`, and an Agent or Query [override](/user-guide/overrides) replaces the bearer for that run. See [User authorised MCP servers](/tutorials/user-authorised-mcp-servers) for the per-user pattern.
+
+Both the Secret named by `tokenSecretRef` and any Secret or ConfigMap referenced from `spec.headers` are read from the **MCPServer's** namespace, not the caller's.
 
 ### Prerequisites
 
