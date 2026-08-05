@@ -4,9 +4,9 @@ import { Callout } from 'nextra/components'
 
 In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
 
-- In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages store
+- In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages and operation events stores
 - Completion chunks held in memory by default, optionally backed by Redis Streams for live streaming across broker replicas
-- Implements the [Memory API](/reference/resources/memory#memory-api-specification)
+- Implements the [Memory API](/reference/resources/memory#memory-http-api)
 - Supports [streaming queries](/developer-guide/queries/streaming)
 
 This service provides a basic but complete memory system for an Ark cluster, as well as offering the up-coming streaming APIs which enable real-time streaming responses to queries.
@@ -51,7 +51,7 @@ The Helm chart can optionally configure a persistent volume for data storage by 
 
 ## Message backend (Postgres)
 
-By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. Only the messages store is affected — chunks, traces, events, and sessions remain in memory (or file-based, as above).
+By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. This section covers the messages store; operation events have their own Postgres opt-in (see [Event backend (Postgres)](#event-backend-postgres)) and completion chunks can opt in to Redis (see [Chunk backend (Redis)](#chunk-backend-redis)), while traces and sessions remain in memory (or file-based, as above).
 
 This is separate from the controller's [PostgreSQL storage backend](/operations-guide/postgres-storage-backend), which stores Ark resources (CRDs) via the aggregated API server. The two use different databases and serve different purposes.
 
@@ -87,8 +87,6 @@ Key environment variables:
 Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
 
 Messages are also removed when their originating `Query` is deleted: the controller issues `DELETE /queries/{queryId}/messages`, which hard-deletes every message for that query across all conversations. On the Postgres backend this is a single indexed delete. This complements the TTL above — TTL is time-based, this is triggered by the Query's removal. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
-
-Operation events are cleaned up the same way, but through a separate path: events aren't part of the [Memory API](/reference/resources/memory#memory-api-specification), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID.
 
 See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
 
@@ -161,9 +159,43 @@ database:
 
 `urlSecretRef` takes priority over `database.url` and applies to both the broker container and the migrate init container.
 
+## Event backend (Postgres)
+
+Operation events — the controller lifecycle events emitted as a query executes (`QueryExecutionStart`, `LLMCallComplete`, and so on) — are kept in memory by default. The **events** store can opt in to Postgres so they survive pod restarts, independently of the messages store.
+
+The event backend shares the same `DATABASE_URL`, connection pool, and `migrate/migrate` init container as the [Message backend](#message-backend-postgres): the `events` and `messages` tables live in one schema. You can enable either backend on its own or both together.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  event: postgres        # combine with `message: postgres` to persist both
+
+database:
+  url: "postgres://user:password@host:5432/ark_broker"
+```
+
+<Callout type="warning">
+  The same multi-tenant caveat as the messages store applies: the `events` table has no per-tenant row separation (no `tenant_id` column, no row-level security). Each broker release must use its own database (or schema), and never share a `DATABASE_URL` across brokers of different tenants. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EVENT_BACKEND` | `memory` | Event storage backend: `memory` or `postgres` |
+| `DATABASE_URL` | — | Postgres connection string. Required when `EVENT_BACKEND=postgres`. Shared with the message backend. |
+| `EVENT_VISIBILITY_TTL_SECONDS` | `2592000` | Default event TTL (30 days) |
+
+The other `DATABASE_*` variables (`DATABASE_POOL_MAX`, `DATABASE_CONNECT_TIMEOUT_MS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_DEBUG_QUERIES`, `DATABASE_SSL_ROOT_CERT_PATH`) are shared with the message backend — see the table above. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
+
+Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied.
+
+Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-http-api), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
+
 ## Chunk backend (Redis)
 
-By default the broker holds completion chunks in process memory, served from a single replica. The **chunks** store can opt in to Redis Streams so that chunks produced by one broker replica can be streamed live to a client whose SSE connection landed on another replica. Only the chunks store is affected — messages (unless on Postgres), traces, events, and sessions remain in memory (or file-based, as above).
+By default the broker holds completion chunks in process memory, served from a single replica. The **chunks** store can opt in to Redis Streams so that chunks produced by one broker replica can be streamed live to a client whose SSE connection landed on another replica. Only the chunks store is affected — messages and operation events (unless on Postgres), traces, and sessions remain in memory (or file-based, as above).
 
 Each query gets its own Redis Stream key (`{prefix}:chunks:{queryId}`), plus a capped global key (`{prefix}:chunks:all`) backing the paginated and watch endpoints. Live tail uses `XREAD BLOCK` so chunks arrive cross-replica.
 

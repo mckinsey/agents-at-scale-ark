@@ -1041,14 +1041,14 @@ jobs:
 
       - name: Install CLI test dependencies
         run: |
-          pip install -r tests/pytest/ui-tests/requirements.txt
+          pip install -r tests/pytest/cli-tests/requirements.txt
 
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO -m "not executor"
 
       - name: Upload CLI test logs
         if: always()
@@ -1068,6 +1068,100 @@ jobs:
         with:
           name: cluster-logs-cli-${{ github.sha }}
           path: /tmp/cluster-logs
+          retention-days: 7
+
+  e2e-executor-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Install mock-llm
+        run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/cli-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install executor test dependencies
+        run: |
+          pip install -r tests/pytest/cli-tests/requirements.txt
+
+      - name: Deploy executor-openai-responses
+        run: |
+          helm upgrade --install executor-openai-responses \
+            oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
+            --version 0.1.3 \
+            --namespace default \
+            --set app.image.pullPolicy=Always \
+            --wait \
+            --timeout=5m
+          kubectl set env deployment/executor-openai-responses \
+            -n default \
+            OPENAI_API_KEY="mock-api-key" \
+            OPENAI_BASE_URL="http://mock-llm.default.svc.cluster.local:6556/v1"
+          kubectl rollout status deployment/executor-openai-responses \
+            -n default --timeout=2m
+
+      - name: Diagnose executor pod
+        run: |
+          echo "=== Executor pod env vars ==="
+          kubectl exec -n default deployment/executor-openai-responses -- env | grep -E "OPENAI|HOST|PORT" || true
+          echo "=== Executor pod logs ==="
+          kubectl logs -n default deployment/executor-openai-responses --tail=50 || true
+
+      - name: Port-forward executor service
+        run: |
+          kubectl port-forward -n default svc/executor-openai-responses 18080:8000 &
+          sleep 3
+
+      - name: Run executor E2E tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          EXECUTOR_URL: http://localhost:18080/execute
+        run: |
+          cd tests/pytest/cli-tests/tests
+          pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
+
+      - name: Upload executor test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-test-logs-${{ github.sha }}
+          path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs-executor
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-executor-${{ github.sha }}
+          path: /tmp/cluster-logs-executor
           retention-days: 7
 
   build-charts:
