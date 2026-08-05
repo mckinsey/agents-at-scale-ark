@@ -31,17 +31,15 @@ describe('StudioExperimentalNotice', () => {
     ).toBeInTheDocument();
   });
 
-  it('links to the Argo Workflows and Argo Make docs', () => {
+  it('links to the Argo Workflows docs', () => {
     render(<StudioExperimentalNotice onDismiss={vi.fn()} />);
 
-    const workflowsLink = screen.getByTestId(
-      'studio-experimental-notice-docs-workflows',
-    );
-    const argoMakeLink = screen.getByTestId(
-      'studio-experimental-notice-docs-argo-make',
-    );
-    expect(workflowsLink).toHaveAttribute('href', ARGO_WORKFLOWS_DOCS_URL);
-    expect(argoMakeLink).toHaveAttribute('href', ARGO_WORKFLOWS_DOCS_URL);
+    expect(
+      screen.getByTestId('studio-experimental-notice-docs-workflows'),
+    ).toHaveAttribute('href', ARGO_WORKFLOWS_DOCS_URL);
+    expect(
+      screen.queryByTestId('studio-experimental-notice-docs-argo-make'),
+    ).toBeNull();
   });
 
   it('calls onDismiss when the dismiss control is clicked', () => {

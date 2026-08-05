@@ -23,26 +23,15 @@ export function StudioExperimentalNotice({
         <p className="text-fg-secondary text-sm">
           Use with caution and review generated workflows before running them.
         </p>
-        <div className="flex flex-col items-center gap-1">
-          <a
-            href={ARGO_WORKFLOWS_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            data-testid="studio-experimental-notice-docs-workflows"
-            className="text-fg-secondary hover:text-fg-primary inline-flex items-center gap-1 text-sm underline">
-            Learn about Argo Workflows
-            <OpenInNew className="h-3.5 w-3.5" />
-          </a>
-          <a
-            href={ARGO_WORKFLOWS_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            data-testid="studio-experimental-notice-docs-argo-make"
-            className="text-fg-secondary hover:text-fg-primary inline-flex items-center gap-1 text-sm underline">
-            Learn about Argo Make
-            <OpenInNew className="h-3.5 w-3.5" />
-          </a>
-        </div>
+        <a
+          href={ARGO_WORKFLOWS_DOCS_URL}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="studio-experimental-notice-docs-workflows"
+          className="text-fg-secondary hover:text-fg-primary inline-flex items-center gap-1 text-sm underline">
+          Learn about Argo Workflows
+          <OpenInNew className="h-3.5 w-3.5" />
+        </a>
         <Button
           type="button"
           variant="outline"
