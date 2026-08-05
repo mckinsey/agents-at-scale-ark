@@ -43,6 +43,7 @@ func TestDropReplicationArtifacts_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
+	defer func() { _ = backend.Close() }()
 	backend.StartWALConsumer()
 
 	deadline := time.Now().Add(15 * time.Second)
