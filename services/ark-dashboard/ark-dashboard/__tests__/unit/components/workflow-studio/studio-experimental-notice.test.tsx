@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioExperimentalNotice } from '@/components/workflow-studio/studio-experimental-notice';
 import { useExperimentalNotice } from '@/components/workflow-studio/use-experimental-notice';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 
 function Harness() {
   const notice = useExperimentalNotice();
@@ -28,6 +29,19 @@ describe('StudioExperimentalNotice', () => {
     expect(
       screen.getByTestId('studio-experimental-notice-dismiss'),
     ).toBeInTheDocument();
+  });
+
+  it('links to the Argo Workflows and Argo Make docs', () => {
+    render(<StudioExperimentalNotice onDismiss={vi.fn()} />);
+
+    const workflowsLink = screen.getByTestId(
+      'studio-experimental-notice-docs-workflows',
+    );
+    const argoMakeLink = screen.getByTestId(
+      'studio-experimental-notice-docs-argo-make',
+    );
+    expect(workflowsLink).toHaveAttribute('href', ARGO_WORKFLOWS_DOCS_URL);
+    expect(argoMakeLink).toHaveAttribute('href', ARGO_WORKFLOWS_DOCS_URL);
   });
 
   it('calls onDismiss when the dismiss control is clicked', () => {
