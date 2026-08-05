@@ -1,0 +1,198 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: sessions-broker-postgres
+  labels:
+    postgresql: "true"
+spec:
+  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations and errorCount aggregated on it; GET /sessions/:id returns the same shape over HTTP, participants included
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-queries
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a00-broker-config.yaml
+    - apply:
+        file: manifests/a00-memory.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a01-agent-a.yaml
+    - apply:
+        file: manifests/a01-agent-b.yaml
+    - apply:
+        file: manifests/a02-query-1.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: sessions-postgres-query-1
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - apply:
+        file: manifests/a03-query-2.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: sessions-postgres-query-2
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: sessions-postgres-query-1
+          status:
+            phase: done
+            (response != null): true
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: sessions-postgres-query-2
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: sessions-postgres-query-1
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: sessions-postgres-query-2
+
+  - name: verify-session-in-postgres
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          SESSION_ID="e2e-sessions-broker-postgres"
+          QUERY_COUNT=""
+          # Two queries share one session, so their events serialize on the
+          # same header row (by design - see PostgresSessionsStorage). Under
+          # a busy CI runner, with the shared postgresql-matrix Postgres
+          # instance also taking writes from every other postgresql-labelled
+          # test running concurrently, draining that backlog can take longer
+          # than a quick local run ever does - give it real margin rather
+          # than a tight retry budget tuned against an idle cluster.
+          for i in $(seq 1 40); do
+            QUERY_COUNT=$(bash ../shared/psql-query.sh \
+              "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
+              | tr -d ' \n')
+            [ "${QUERY_COUNT}" = "2" ] && break
+            sleep 1
+          done
+          echo "done session_queries rows: ${QUERY_COUNT}"
+          [ "${QUERY_COUNT}" = "2" ] || { echo "expected 2 done session_queries rows, got ${QUERY_COUNT}"; exit 1; }
+
+          HEADER=$(bash ../shared/psql-query.sh \
+            "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) FROM sessions WHERE session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "sessions header (status,error_count,conversations): ${HEADER}"
+          [ "${HEADER}" = "idle,0,2" ] || { echo "expected 'idle,0,2', got '${HEADER}'"; exit 1; }
+
+          # Counts alone would pass on a regression that produced the right
+          # number of conversations under the wrong identities - each
+          # conversation is named after its first agent, so the names are
+          # what pin agent-a and agent-b to their own conversations.
+          CONV_NAMES=$(bash ../shared/psql-query.sh \
+            "SELECT string_agg(c->>'name', ',' ORDER BY c->>'name') FROM sessions s, jsonb_array_elements(s.conversations) c WHERE s.session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "conversation names: ${CONV_NAMES}"
+          [ "${CONV_NAMES}" = "sessions-postgres-agent-a,sessions-postgres-agent-b" ] || { echo "expected 'sessions-postgres-agent-a,sessions-postgres-agent-b', got '${CONV_NAMES}'"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-session-via-http
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          BROKER_DATA=$(kubectl get configmap ark-config-broker -n "$NAMESPACE" -o json | jq -r '.data.serviceRef')
+          BROKER_NS=$(echo "$BROKER_DATA" | grep '^namespace:' | sed 's/^namespace:[[:space:]]*//' | tr -d '"' | tr -d ' ')
+          BROKER_NS=${BROKER_NS:-$NAMESPACE}
+          RESULT=$(kubectl exec -n "$BROKER_NS" deployment/ark-broker -- \
+            node -e "
+              const h = require('http');
+              h.get('http://localhost:8080/sessions/e2e-sessions-broker-postgres', (r) => {
+                let d = '';
+                r.on('data', (c) => { d += c; });
+                r.on('end', () => {
+                  const b = JSON.parse(d);
+                  const queryCount = Object.keys(b.queries || {}).length;
+                  const convCount = (b.conversations || []).length;
+                  const participants = (b.participants || []).map((p) => p.name).sort().join('+');
+                  process.stdout.write([queryCount, convCount, participants, b.errorCount].join(','));
+                  process.exit(queryCount === 2 && convCount === 2 && participants === 'sessions-postgres-agent-a+sessions-postgres-agent-b' && b.errorCount === 0 ? 0 : 1);
+                });
+              }).on('error', (e) => { process.stderr.write(e.message); process.exit(1); });
+            ")
+          echo "HTTP session (queries,conversations,participants,errorCount): ${RESULT}"
+          [ "${RESULT}" = "2,2,sessions-postgres-agent-a+sessions-postgres-agent-b,0" ] || { echo "expected '2,2,sessions-postgres-agent-a+sessions-postgres-agent-b,0', got '${RESULT}'"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
