@@ -21,7 +21,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
 
   router.get<Record<string, string>, unknown, unknown, GetSessionsQueryRaw>(
     '/',
-    (req, res) => {
+    async (req, res) => {
       const parse = getSessionsQuerySchema.safeParse(req.query);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id, 'query');
@@ -38,9 +38,9 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
         const hasPaginationParams = req.query['limit'] || req.query['cursor'];
 
         if (hasPaginationParams) {
-          handlePaginatedSessions(req, res, sessionsBroker, query);
+          await handlePaginatedSessions(req, res, sessionsBroker, query);
         } else {
-          const store = sessionsBroker.getAll();
+          const store = await sessionsBroker.getAll();
           res.json(store);
         }
       } catch (error) {
@@ -54,10 +54,10 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     }
   );
 
-  router.get<{session_id: string}>('/:session_id', (req, res) => {
+  router.get<{session_id: string}>('/:session_id', async (req, res) => {
     try {
       const {session_id} = req.params;
-      const session = sessionsBroker.getSession(session_id);
+      const session = await sessionsBroker.getSession(session_id);
       if (!session) {
         res.status(404).json({
           error: {
@@ -77,7 +77,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
 
   router.post<Record<string, string>, unknown, PostSessionEventBody>(
     '/',
-    (req, res) => {
+    async (req, res) => {
       const parse = postSessionEventBodySchema.safeParse(req.body);
       if (!parse.success) {
         sendValidationError(res, parse.error, req.id);
@@ -86,8 +86,8 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       const data: PostSessionEventBody = parse.data;
 
       try {
-        sessionsBroker.applyEvent(data as unknown as SessionEventData);
-        sessionsBroker.save();
+        await sessionsBroker.applyEvent(data as unknown as SessionEventData);
+        await sessionsBroker.save();
         res.status(201).json({status: 'success'});
       } catch (error) {
         req.log.error({err: error}, 'failed to ingest');
@@ -96,9 +96,9 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     }
   );
 
-  router.delete('/', (req, res) => {
+  router.delete('/', async (req, res) => {
     try {
-      sessionsBroker.delete();
+      await sessionsBroker.delete();
       res.json({status: 'success', message: 'Sessions purged'});
     } catch (error) {
       req.log.error({err: error}, 'purge failed');

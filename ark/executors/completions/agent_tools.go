@@ -156,6 +156,12 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		timeout = parsedTimeout
 	}
 
+	toolCallTimeout, err := arkmcp.ParseToolCallTimeout(mcpServerCRD.Spec.ToolCallTimeout)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "ignoring invalid MCPServer spec.toolCallTimeout; tool calls will inherit the query execution budget",
+			"mcpServer", mcpServerKey.String(), "tool", tool.Name)
+	}
+
 	mcpClient, err := mcpPool.GetOrCreateClient(
 		ctx,
 		arkmcp.MCPClientConfig{
@@ -165,6 +171,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 			Headers:         headers,
 			Transport:       mcpServerCRD.Spec.Transport,
 			Timeout:         timeout,
+			ToolCallTimeout: toolCallTimeout,
 		},
 		mcpSettings,
 	)
