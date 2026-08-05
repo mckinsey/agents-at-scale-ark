@@ -283,7 +283,8 @@ jobs:
           # so a compile failure or test failure would be reported as a green job -
           # exactly the silent no-op this job exists to prevent.
           status=0
-          (cd ark && go test -tags integration ./internal/storage/postgresql/... -timeout 20m -json) \
+          (cd ark && go test -tags integration ./internal/storage/postgresql/... -timeout 20m \
+            -coverprofile=cover.out -covermode=atomic -json) \
             > /tmp/gotest.json || status=$?
           jq -r 'select(.Action=="output") | .Output' /tmp/gotest.json | grep -v '^$' || true
           echo "::group::Test runtimes (top 10 slowest)"
@@ -299,6 +300,21 @@ jobs:
             exit 1
           fi
           exit "$status"
+
+      - name: Install gcov2lcov
+        run: go install github.com/jandelgado/gcov2lcov@latest
+
+      - name: Generate LCOV from integration coverage
+        run: |
+          mkdir -p ark/integration-tests
+          cp ark/cover.out ark/integration-tests/
+          cd ark && gcov2lcov -infile integration-tests/cover.out -outfile integration-tests/lcov.info
+
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: ark/integration-tests/
+          artifact-folder: ark/integration-tests
+          artifact-suffix: ark-integration-postgres
 
       - name: Upload test output
         if: always()
