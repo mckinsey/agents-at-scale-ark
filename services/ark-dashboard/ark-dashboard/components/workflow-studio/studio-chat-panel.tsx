@@ -102,6 +102,8 @@ export function StudioChatPanel({
   const notInstalled = !unverifiable && (agentMissing || mcpMissing);
   const installedNotReady =
     !unverifiable && !notInstalled && (agentNotReady || mcpNotReady);
+  const showExperimentalNotice = noticeBlocking && !unverifiable;
+  const showGate = unverifiable || (notInstalled && !showExperimentalNotice);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -125,7 +127,7 @@ export function StudioChatPanel({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {(unverifiable || notInstalled) && (
+      {showGate && (
         <StudioChatGate
           agentMissing={agentMissing}
           agentNotReady={agentNotReady}
@@ -135,7 +137,11 @@ export function StudioChatPanel({
         />
       )}
 
-      {installedNotReady && (
+      {showExperimentalNotice && (
+        <StudioExperimentalNotice onDismiss={experimentalNotice.dismiss} />
+      )}
+
+      {installedNotReady && !showExperimentalNotice && (
         <StudioChatDisabledBanner
           agentNotReady={agentNotReady}
           mcpNotReady={mcpNotReady}
@@ -187,9 +193,7 @@ export function StudioChatPanel({
         className={`border-stroke-divider shrink-0 border-t p-4 ${
           installedNotReady ? 'opacity-50' : ''
         }`}>
-        {noticeBlocking ? (
-          <StudioExperimentalNotice onDismiss={experimentalNotice.dismiss} />
-        ) : chat.composerLocked ? (
+        {chat.composerLocked ? (
           <div
             className="bg-fill-muted/40 border-stroke-divider border p-2"
             data-testid="studio-composer-lock">

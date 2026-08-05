@@ -116,6 +116,35 @@ describe('WorkflowStudio author-agent gate', () => {
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
+  it('shows the experimental notice before the install gate on first use', async () => {
+    window.localStorage.removeItem(EXPERIMENTAL_NOTICE_STORAGE_KEY);
+    preflightMock.mockResolvedValue({
+      agentPresent: false,
+      agentReady: false,
+      mcpServerPresent: true,
+      mcpServerReady: true,
+      unverifiable: false,
+    });
+
+    render(<WorkflowStudio mode="new" initialName="wf" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('studio-experimental-notice'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('studio-chat-gate')).toBeNull();
+
+    fireEvent.click(
+      screen.getByTestId('studio-experimental-notice-dismiss'),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('studio-experimental-notice')).toBeNull();
+  });
+
   it('shows the disabled banner linking to the agent when the agent is present but not ready', async () => {
     preflightMock.mockResolvedValue({
       agentPresent: true,

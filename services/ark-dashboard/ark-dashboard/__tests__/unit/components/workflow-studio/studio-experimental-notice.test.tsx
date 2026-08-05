@@ -18,20 +18,23 @@ describe('StudioExperimentalNotice', () => {
     window.localStorage.clear();
   });
 
-  it('renders the experimental warning copy', () => {
+  it('renders the experimental warning copy and dismiss control', () => {
     const onDismiss = vi.fn();
     render(<StudioExperimentalNotice onDismiss={onDismiss} />);
 
     const notice = screen.getByTestId('studio-experimental-notice');
     expect(notice).toHaveTextContent('Argo Make is experimental');
-    expect(notice).toHaveTextContent('Click to dismiss');
+    expect(notice).toHaveTextContent('Use with caution');
+    expect(
+      screen.getByTestId('studio-experimental-notice-dismiss'),
+    ).toBeInTheDocument();
   });
 
-  it('calls onDismiss when the notice is clicked', () => {
+  it('calls onDismiss when the dismiss control is clicked', () => {
     const onDismiss = vi.fn();
     render(<StudioExperimentalNotice onDismiss={onDismiss} />);
 
-    fireEvent.click(screen.getByTestId('studio-experimental-notice'));
+    fireEvent.click(screen.getByTestId('studio-experimental-notice-dismiss'));
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
@@ -45,7 +48,7 @@ describe('StudioExperimentalNotice', () => {
       ).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByTestId('studio-experimental-notice'));
+    fireEvent.click(screen.getByTestId('studio-experimental-notice-dismiss'));
 
     expect(
       screen.queryByTestId('studio-experimental-notice'),

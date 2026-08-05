@@ -608,11 +608,13 @@ describe('StudioChatPanel', () => {
       expect(
         await screen.findByTestId('studio-experimental-notice'),
       ).toBeInTheDocument();
-      expect(screen.queryByTestId('studio-chat-input')).toBeNull();
-      expect(screen.queryByTestId('studio-chat-send')).toBeNull();
+      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
       expect(screen.getByTestId('studio-chat-suggestion-0')).toBeDisabled();
 
-      fireEvent.click(screen.getByTestId('studio-experimental-notice'));
+      fireEvent.click(
+        screen.getByTestId('studio-experimental-notice-dismiss'),
+      );
 
       await waitFor(() =>
         expect(
