@@ -478,25 +478,52 @@ describe('MarketplacePage', () => {
           'Marketplace item "does-not-exist" not found'
         );
       });
+      expect(
+        screen.getByPlaceholderText('Search marketplace...')
+      ).toHaveValue('');
     });
 
-    it('jumps to the page holding the item named in the URL', async () => {
+    it('searches for the item named in the URL', async () => {
+      setItemQueryParam('mcp-1');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Search marketplace...')
+        ).toHaveValue('Test MCP');
+      });
+      expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'Test MCP' })
+      );
+    });
+
+    it('shows the first page of results for the searched item', async () => {
       setItemQueryParam('item-8');
       mockUseGetMarketplaceItems.mockReturnValue({
         data: {
-          items: Array.from({ length: 15 }, (_, i) => ({
-            id: `item-${i}`,
-            name: `Item ${i}`,
-            description: `Description ${i}`,
-            category: 'agents',
-            type: 'agent',
-            version: '1.0.0',
-            status: 'available',
-            author: 'Test',
-            icon: '🤖',
-            featured: false,
-          })),
-          total: 15,
+          items: [
+            {
+              id: 'item-8',
+              name: 'Item 8',
+              description: 'Description 8',
+              category: 'agents',
+              type: 'agent',
+              version: '1.0.0',
+              status: 'available',
+              author: 'Test',
+              icon: '🤖',
+              featured: false,
+            },
+          ],
+          total: 1,
           page: 1,
           pageSize: 10,
         },
@@ -509,12 +536,14 @@ describe('MarketplacePage', () => {
       renderWithProviders(<MarketplacePage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+        expect(screen.getByTestId('marketplace-item-item-8')).toHaveAttribute(
+          'data-auto-open-install',
+          'true'
+        );
       });
-      expect(screen.getByTestId('marketplace-item-item-8')).toHaveAttribute(
-        'data-auto-open-install',
-        'true'
-      );
+      expect(
+        screen.getByPlaceholderText('Search marketplace...')
+      ).toHaveValue('Item 8');
     });
   });
 });

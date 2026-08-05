@@ -95,19 +95,22 @@ export default function MarketplacePage() {
     }
     requestedItemHandled.current = true;
 
-    const index = data.items.findIndex(item => item.id === requestedItemId);
-    if (index === -1) {
+    const item = data.items.find(
+      candidate => candidate.id === requestedItemId,
+    );
+    if (!item) {
       toast.error(`Marketplace item "${requestedItemId}" not found`);
       return;
     }
 
-    setCurrentPage(Math.floor(index / itemsPerPage) + 1);
+    setSearchQuery(item.name);
+    setCurrentPage(1);
+    setFilters(prev => ({ ...prev, search: item.name }));
 
-    const item = data.items[index];
     if (item.status !== 'installed' && item.type !== 'demo') {
       setAutoOpenItemId(item.id);
     }
-  }, [data, requestedItemId, itemsPerPage]);
+  }, [data, requestedItemId]);
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
