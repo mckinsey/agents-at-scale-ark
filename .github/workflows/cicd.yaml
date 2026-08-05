@@ -233,6 +233,7 @@ jobs:
 
   integration-test-postgresql:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
@@ -298,6 +299,14 @@ jobs:
             exit 1
           fi
           exit "$status"
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-integration-gotest-json
+          path: /tmp/gotest.json
+          if-no-files-found: warn
 
   build-and-test-services:
     runs-on: ubuntu-24.04
