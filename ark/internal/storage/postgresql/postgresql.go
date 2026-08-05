@@ -863,6 +863,17 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		return nil, err
 	}
 
+	// resourceVersion resume semantics: "" and "0" ("Start at Any") replay all
+	// current state then stream; a concrete RV ("Start at Exact") delivers only
+	// deltas after it, rather than re-adding every object on reconnect. See #2680.
+	var startRV int64
+	if opts.ResourceVersion != "" && opts.ResourceVersion != "0" {
+		startRV, err = strconv.ParseInt(opts.ResourceVersion, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
+		}
+	}
+
 	w := &postgresWatcher{
 		outCh:      make(chan watch.Event, 100),
 		inputCh:    make(chan *changeRow, 256),
@@ -874,7 +885,9 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		ctx:        ctx,
 		done:       make(chan struct{}),
 		seenRVs:    make(map[string]int64),
+		startRV:    startRV,
 	}
+	w.lastSeenRV.Store(startRV)
 
 	// The broadcaster is a shared per-kind singleton that outlives any single
 	// Watch request; its relist deliberately uses the backend lifetime context
@@ -1043,6 +1056,13 @@ type postgresWatcher struct {
 	stopped    atomic.Bool
 	closed     sync.Once
 	lastSeenRV atomic.Int64
+	// startRV is the client-supplied resume point: the initial relist emits only
+	// rows with resource_version > startRV. Zero means replay all current state.
+	startRV int64
+	// firstRelistDone flips true after the first successful relist. Until then the
+	// relist floors strictly at startRV (the resume boundary is exact, and seenRVs
+	// is empty so the lookback window would re-emit already-seen rows as Added).
+	firstRelistDone atomic.Bool
 	// behind is set by the broadcaster when this watcher's inputCh is full and a row
 	// was dropped; run() then does a private catch-up relist to recover it.
 	behind          atomic.Bool
@@ -1130,6 +1150,12 @@ func (w *postgresWatcher) recoverIfBehind() {
 // seenRVs and deep-copied so the broadcaster's shared object is never mutated.
 // Returns false if the watcher is shutting down.
 func (w *postgresWatcher) forwardRow(row *changeRow) bool {
+	// The shared broadcaster fans out its whole relist window to every subscriber;
+	// a resuming watcher must drop anything at or below its resume point rather than
+	// re-emit state the client already has.
+	if row.rv <= w.startRV {
+		return true
+	}
 	uidNew := !w.hasSeenUID(row.uid)
 	if w.markSeen(row.uid, row.rv) {
 		return true
@@ -1226,10 +1252,18 @@ func (w *postgresWatcher) pruneSeen() {
 }
 
 func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
-	const lookback int64 = 500
-	queryFromRV := w.lastSeenRV.Load() - lookback
-	if queryFromRV < 0 {
-		queryFromRV = 0
+	var queryFromRV int64
+	if w.firstRelistDone.Load() {
+		// Steady-state relist: look back to catch rows whose txn was still
+		// in-flight near the cursor tip; seenRVs dedups the overlap. Never dip
+		// below startRV — the client already has everything up to its resume point.
+		const lookback int64 = 500
+		if queryFromRV = w.lastSeenRV.Load() - lookback; queryFromRV < w.startRV {
+			queryFromRV = w.startRV
+		}
+	} else {
+		// Resume/initial relist: the boundary is exact, so no lookback.
+		queryFromRV = w.startRV
 	}
 
 	query := `
@@ -1329,5 +1363,6 @@ func (w *postgresWatcher) relist() error {
 		return err
 	}
 	w.pruneSeen()
+	w.firstRelistDone.Store(true)
 	return nil
 }

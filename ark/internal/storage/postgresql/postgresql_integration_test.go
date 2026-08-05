@@ -886,3 +886,113 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 		t.Errorf("after re-sending existing DT: generation = %d, want 3 (no bump)", g)
 	}
 }
+
+// TestWatchResumeFromResourceVersion_Integration asserts item 1 of #2680: a watch
+// opened with a concrete resourceVersion delivers only deltas after it, instead of
+// replaying every existing object as Added on every (re)connect.
+func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+
+	cfg := Config{
+		Host:     host,
+		Port:     5432,
+		Database: "ark",
+		User:     "ark",
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "ResumeTestResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+
+	mkObj := func(name, uid string) *integrationTestObject {
+		obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+		obj.Metadata.Name = name
+		obj.Metadata.Namespace = testNS
+		obj.Metadata.UID = uid
+		obj.Spec = map[string]interface{}{"k": "v"}
+		return obj
+	}
+
+	// Baseline: three objects that exist BEFORE the watch is opened.
+	preexisting := []string{"resume-1", "resume-2", "resume-3"}
+	for i, name := range preexisting {
+		if err := backend.Create(ctx, testKind, testNS, name, mkObj(name, fmt.Sprintf("uid-%d", i+1))); err != nil {
+			t.Fatalf("Create %s failed: %v", name, err)
+		}
+	}
+
+	var baselineRV int64
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(resource_version), 0) FROM resources WHERE kind = $1 AND namespace = $2",
+		testKind, testNS).Scan(&baselineRV); err != nil {
+		t.Fatalf("read baseline resourceVersion: %v", err)
+	}
+
+	// Resume from the baseline: the three pre-existing objects must NOT be replayed.
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(baselineRV, 10),
+	})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(500 * time.Millisecond)
+
+	// A single change after the resume point — the only event we expect to see.
+	const deltaName = "resume-4"
+	if err := backend.Create(ctx, testKind, testNS, deltaName, mkObj(deltaName, "uid-4")); err != nil {
+		t.Fatalf("Create %s failed: %v", deltaName, err)
+	}
+
+	// Relist emits in resource_version ASC order, so any replay of the pre-existing
+	// objects would arrive before the delta. Collecting until the delta lands is
+	// therefore sufficient to prove they were (not) replayed.
+	deadline := time.After(10 * time.Second)
+	seen := map[string]bool{}
+	gotDelta := false
+	for !gotDelta {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before delta arrived")
+			}
+			if ev.Type == watch.Bookmark {
+				continue
+			}
+			obj, _ := ev.Object.(*integrationTestObject)
+			if obj == nil {
+				continue
+			}
+			seen[obj.Metadata.Name] = true
+			if obj.Metadata.Name == deltaName {
+				gotDelta = true
+			}
+		case <-deadline:
+			t.Fatal("timeout waiting for delta event after resume")
+		}
+	}
+
+	for _, name := range preexisting {
+		if seen[name] {
+			t.Errorf("resume from resourceVersion=%d replayed pre-existing object %q; expected only deltas", baselineRV, name)
+		}
+	}
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+}
