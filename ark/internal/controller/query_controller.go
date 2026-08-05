@@ -85,11 +85,6 @@ const (
 	// callers without an explicit value get the same budget the apiserver's
 	// mutating admission would compute.
 	defaultQueryTimeout = 5 * time.Minute
-
-	// roundAnchorAnnotation stamps the start of the current pre-execution
-	// round used by remainingBudget. Re-stamped on HITL resumption so
-	// each round is bounded by a fresh spec.timeout.
-	roundAnchorAnnotation = "ark.mckinsey.com/round-anchor"
 )
 
 type QueryReconciler struct {
@@ -264,7 +259,7 @@ func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
 
 // remainingBudget is spec.timeout minus wall time since the current round's
 // anchor. The anchor is metadata.creationTimestamp for the initial round and
-// re-stamped via the roundAnchorAnnotation on each HITL resumption, so a
+// re-stamped via annotations.RoundAnchor on each HITL resumption, so a
 // resumed query gets a fresh budget for its pre-execution gap.
 func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 	timeout := defaultQueryTimeout
@@ -272,7 +267,7 @@ func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 		timeout = obj.Spec.Timeout.Duration
 	}
 	anchor := obj.CreationTimestamp.Time
-	if s, ok := obj.Annotations[roundAnchorAnnotation]; ok {
+	if s, ok := obj.Annotations[annotations.RoundAnchor]; ok {
 		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 			anchor = t
 		}
@@ -283,7 +278,7 @@ func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
 func (r *QueryReconciler) stampRoundAnchor(ctx context.Context, obj *arkv1alpha1.Query) error {
 	patch := client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(
 		`{"metadata":{"annotations":{%q:%q}}}`,
-		roundAnchorAnnotation,
+		annotations.RoundAnchor,
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)))
 	return r.Patch(ctx, obj, patch)
@@ -1085,15 +1080,25 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 }
 
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
+	// This reconcile holds the freshest Response/TokenUsage/ConversationId in
+	// memory; the refetch inside mutateStatus would drop them, so re-apply the
+	// snapshot onto the refetched object before writing.
+	saved := savedQueryStatus{
+		response:       query.Status.Response,
+		tokenUsage:     query.Status.TokenUsage,
+		conversationId: query.Status.ConversationId,
+	}
 	// Do NOT clear A2A taskID when transitioning from input-required to running.
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
-	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) {
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		saved.restoreOnto(q)
 		q.Status.Phase = status
 		r.setConditionForPhase(q, status)
 		if duration != nil {
 			q.Status.Duration = duration
 		}
+		return true
 	}, "status="+status)
 }
 
@@ -1102,17 +1107,22 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 // into Status.Response.Content so it renders in the same slot as executor
 // errors (chat UI, dashboard, kubectl describe). Idempotent on terminal.
 func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1alpha1.Query, reason, message string) error {
-	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) {
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
 		if isTerminalPhase(q.Status.Phase) {
-			return
+			// A completing executor won the race. Decline the write entirely so
+			// mutateStatus does not persist a snapshot that would regress the
+			// done query's Response/TokenUsage.
+			return false
 		}
 		q.Status.Phase = statusError
 		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
 
 		// Overwrite Content/Phase with the timeout signal; preserve Target,
-		// Raw, and A2A metadata from any prior partial-exec Response so the
-		// A2ATask correlation (taskID/contextID) and raw payload survive for
-		// downstream observers.
+		// Raw, and A2A metadata so the A2ATask correlation (taskID/contextID)
+		// and raw payload survive. Read from the refetched object: it holds the
+		// last persisted status, whereas the caller's Response may be an
+		// in-memory, unpersisted A2A-less error scratch value set by the
+		// dispatch error path that would drop the correlation.
 		target := arkv1alpha1.QueryTarget{}
 		var raw string
 		var a2a *arkv1alpha1.A2AMetadata
@@ -1131,22 +1141,20 @@ func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1al
 			Phase:   statusError,
 			A2A:     a2a,
 		}
+		return true
 	}, "timeout reason="+reason)
 }
 
 // mutateStatus is the shared retry-and-fetch shell used by updateStatus and
-// failQueryOnTimeout. It fetches the latest Query, preserves response/token
-// fields via savedQueryStatus, runs the caller-supplied mutator against the
-// refetched object, then persists via Status().Update with retry-on-conflict
-// semantics. logCtx is used only in error log lines to identify the writer.
-func (r *QueryReconciler) mutateStatus(ctx context.Context, query *arkv1alpha1.Query, mutate func(*arkv1alpha1.Query), logCtx string) error {
+// failQueryOnTimeout. It fetches the latest Query, runs the caller-supplied
+// mutator against the refetched object, then persists via Status().Update with
+// retry-on-conflict semantics. The mutator returns false to decline the write,
+// leaving the refetched object untouched (used to skip clobbering a query that
+// a concurrent writer already moved to a terminal phase). Callers own which
+// fields to preserve across the refetch. logCtx identifies the writer in logs.
+func (r *QueryReconciler) mutateStatus(ctx context.Context, query *arkv1alpha1.Query, mutate func(*arkv1alpha1.Query) bool, logCtx string) error {
 	if ctx.Err() != nil {
 		return nil
-	}
-	saved := savedQueryStatus{
-		response:       query.Status.Response,
-		tokenUsage:     query.Status.TokenUsage,
-		conversationId: query.Status.ConversationId,
 	}
 	return retry.OnError(retry.DefaultBackoff, isRetriableStatusUpdateErr, func() error {
 		if ctx.Err() != nil {
@@ -1158,8 +1166,9 @@ func (r *QueryReconciler) mutateStatus(ctx context.Context, query *arkv1alpha1.Q
 			}
 			return err
 		}
-		saved.restoreOnto(query)
-		mutate(query)
+		if !mutate(query) {
+			return nil
+		}
 		err := r.Status().Update(ctx, query)
 		if err != nil {
 			if errors.IsNotFound(err) {

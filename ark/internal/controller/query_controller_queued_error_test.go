@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 )
 
 // The two error paths added by the queued-phase change (queued-write fail,
@@ -205,7 +206,7 @@ func TestRemainingBudget(t *testing.T) {
 			}
 			if tc.anchorAgo != nil {
 				meta.Annotations = map[string]string{
-					roundAnchorAnnotation: time.Now().Add(-*tc.anchorAgo).UTC().Format(time.RFC3339Nano),
+					annotations.RoundAnchor: time.Now().Add(-*tc.anchorAgo).UTC().Format(time.RFC3339Nano),
 				}
 			}
 			q := &arkv1alpha1.Query{
@@ -226,3 +227,87 @@ func TestRemainingBudget(t *testing.T) {
 }
 
 func durPtr(d time.Duration) *time.Duration { return &d }
+
+// A TimedOutInExecution transition reached via the real dispatch error path
+// must still retain the A2A correlation and raw payload. handleQueryDispatch
+// replaces the in-memory Response with an unpersisted, A2A-less error response
+// before returning; failQueryOnTimeout must derive Target/Raw/A2A from the
+// last persisted status, not that scratch value.
+func TestFailQueryOnTimeout_PreservesA2AThroughDispatchErrorPath(t *testing.T) {
+	q := newTestQueryForHandleRunningPhaseError("timeout-dispatch-a2a")
+	q.Status.Response = &arkv1alpha1.Response{
+		Target:  arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+		Content: "awaiting approval",
+		Raw:     `{"partial":"payload"}`,
+		Phase:   statusInputRequired,
+		A2A:     &arkv1alpha1.A2AMetadata{ContextID: "ctx-real", TaskID: "task-real"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+		WithObjects(q).
+		WithStatusSubresource(&arkv1alpha1.Query{}).
+		Build()
+	require.NoError(t, c.Status().Update(context.Background(), q))
+
+	r := &QueryReconciler{Client: c, Scheme: c.Scheme()}
+
+	// Mimic the dispatch error branch: the local object's Response is replaced
+	// with an A2A-less error response before failQueryOnTimeout runs.
+	local := q.DeepCopy()
+	local.Status.Response = createErrorResponse(*local.Spec.Target, context.DeadlineExceeded)
+	require.NoError(t, r.failQueryOnTimeout(context.Background(), local,
+		reasonTimedOutInExecution, "Query timed out during execution"))
+
+	after := &arkv1alpha1.Query{}
+	require.NoError(t, c.Get(context.Background(),
+		types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, after))
+	require.NotNil(t, after.Status.Response)
+	assert.Equal(t, statusError, after.Status.Phase)
+	assert.Equal(t, "Query timed out during execution", after.Status.Response.Content)
+	assert.Equal(t, `{"partial":"payload"}`, after.Status.Response.Raw,
+		"raw payload from the last persisted round must survive")
+	require.NotNil(t, after.Status.Response.A2A,
+		"A2A correlation from the last persisted round must survive the dispatch error path")
+	assert.Equal(t, "task-real", after.Status.Response.A2A.TaskID)
+	assert.Equal(t, "ctx-real", after.Status.Response.A2A.ContextID)
+}
+
+// When a concurrent writer has already moved the query to a terminal phase,
+// failQueryOnTimeout must decline the write entirely rather than persist a
+// stale snapshot that regresses the completed query's TokenUsage/Response.
+func TestFailQueryOnTimeout_DeclinesWriteWhenAlreadyTerminal(t *testing.T) {
+	name := "timeout-terminal-race"
+	cluster := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec:       arkv1alpha1.QuerySpec{Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"}},
+		Status: arkv1alpha1.QueryStatus{
+			Phase:      statusDone,
+			TokenUsage: arkv1alpha1.TokenUsage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
+			Response:   &arkv1alpha1.Response{Content: "final answer", Phase: statusDone},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+		WithObjects(cluster).
+		WithStatusSubresource(&arkv1alpha1.Query{}).
+		Build()
+	require.NoError(t, c.Status().Update(context.Background(), cluster))
+
+	r := &QueryReconciler{Client: c, Scheme: c.Scheme()}
+
+	// Stale in-memory snapshot the timeout writer holds: still queued, no tokens.
+	stale := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Status:     arkv1alpha1.QueryStatus{Phase: statusQueued},
+	}
+	require.NoError(t, r.failQueryOnTimeout(context.Background(), stale,
+		reasonTimedOutInQueue, "timed out in queue"))
+
+	after := &arkv1alpha1.Query{}
+	require.NoError(t, c.Get(context.Background(),
+		types.NamespacedName{Name: name, Namespace: "default"}, after))
+	assert.Equal(t, statusDone, after.Status.Phase, "terminal phase must survive the losing write")
+	assert.Equal(t, "final answer", after.Status.Response.Content)
+	assert.Equal(t, int64(150), after.Status.TokenUsage.TotalTokens,
+		"token usage of the completed query must not be regressed by the losing timeout write")
+}

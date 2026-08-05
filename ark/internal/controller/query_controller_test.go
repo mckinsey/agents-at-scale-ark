@@ -62,7 +62,7 @@ func (b *timeoutQueryBuilder) withAnchorAgo(d time.Duration) *timeoutQueryBuilde
 	if b.q.Annotations == nil {
 		b.q.Annotations = map[string]string{}
 	}
-	b.q.Annotations[roundAnchorAnnotation] = time.Now().Add(-d).UTC().Format(time.RFC3339Nano)
+	b.q.Annotations[annotations.RoundAnchor] = time.Now().Add(-d).UTC().Format(time.RFC3339Nano)
 	return b
 }
 
@@ -1255,7 +1255,7 @@ var _ = Describe("Query Controller handleInputRequiredPhase", func() {
 
 		updated := &arkv1alpha1.Query{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
-		stamp, present := updated.Annotations[roundAnchorAnnotation]
+		stamp, present := updated.Annotations[annotations.RoundAnchor]
 		Expect(present).To(BeTrue(), "handleApprovedTask must stamp the round-anchor annotation")
 		parsed, err := time.Parse(time.RFC3339Nano, stamp)
 		Expect(err).NotTo(HaveOccurred(), "round-anchor must be RFC3339Nano so remainingBudget can parse it")
@@ -1300,7 +1300,7 @@ var _ = Describe("Query Controller handleInputRequiredPhase", func() {
 		updated := &arkv1alpha1.Query{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
 		Expect(updated.Status.Phase).To(Equal(statusRunning))
-		stamp, present := updated.Annotations[roundAnchorAnnotation]
+		stamp, present := updated.Annotations[annotations.RoundAnchor]
 		Expect(present).To(BeTrue(), "handleResumableDenial must stamp the round-anchor annotation")
 		parsed, err := time.Parse(time.RFC3339Nano, stamp)
 		Expect(err).NotTo(HaveOccurred())
