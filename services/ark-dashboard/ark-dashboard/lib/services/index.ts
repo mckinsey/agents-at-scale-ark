@@ -36,6 +36,13 @@ export { toolsService, type Tool } from './tools';
 export { queriesService } from './queries';
 export { secretsService, type Secret } from './secrets';
 export {
+  configurationsService,
+  type Configuration,
+  type ConfigurationCreateRequest,
+  type ConfigurationDetailResponse,
+  type ConfigurationUpdateRequest,
+} from './configurations';
+export {
   chatService,
   type ChatMessage,
   type ChatSession,

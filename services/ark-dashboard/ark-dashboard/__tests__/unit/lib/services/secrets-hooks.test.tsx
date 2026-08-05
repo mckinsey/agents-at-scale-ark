@@ -163,6 +163,7 @@ describe('secrets-hooks', () => {
       expect(secretsService.create).toHaveBeenCalledWith(
         'test-secret',
         'password123',
+        {},
       );
       expect(toast.success).toHaveBeenCalledWith('Secret created successfully');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
@@ -257,6 +258,7 @@ describe('secrets-hooks', () => {
       expect(secretsService.update).toHaveBeenCalledWith(
         'updated-secret',
         'newpassword123',
+        {},
       );
       expect(toast.success).toHaveBeenCalledWith('Secret updated successfully');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);

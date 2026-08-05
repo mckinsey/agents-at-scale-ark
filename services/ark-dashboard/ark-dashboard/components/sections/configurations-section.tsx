@@ -1,94 +1,81 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { Shield } from '@/components/icons';
+import { Tune } from '@/components/icons';
+import { ConfigurationsTable } from '@/components/sections/configurations-table';
 import {
   ResourceEmptyState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
-import { SecretsTable } from '@/components/sections/secrets-table';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { type Model, modelsService } from '@/lib/services';
-import type { SecretListItem } from '@/lib/services/secrets';
+import type { Configuration } from '@/lib/services/configurations';
 import {
-  useDeleteSecret,
-  useGetAllSecrets,
-} from '@/lib/services/secrets-hooks';
+  useDeleteConfiguration,
+  useGetAllConfigurations,
+} from '@/lib/services/configurations-hooks';
+import { displayName } from '@/lib/utils/resource-display';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const LEARN_MORE_URL = 'https://mckinsey.github.io/agents-at-scale-ark/';
 
-export function SecretsSection() {
-  const { readOnlyMode, namespace } = useNamespace();
+export function ConfigurationsSection() {
+  const { readOnlyMode } = useNamespace();
   const { push } = useNamespacedNavigation();
-  const [models, setModels] = useState<Model[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: secrets = [], isLoading: secretsLoading } = useGetAllSecrets();
+  const { data: configurations = [], isLoading } = useGetAllConfigurations();
+  const deleteConfiguration = useDeleteConfiguration();
 
-  const deleteSecretMutation = useDeleteSecret();
+  const showLoading = useDelayedLoading(isLoading);
 
-  const showLoading = useDelayedLoading(secretsLoading);
-
-  useEffect(() => {
-    const loadModels = async () => {
-      try {
-        setModels(await modelsService.getAll());
-      } catch (error) {
-        console.error('Failed to load models:', error);
-      }
-    };
-
-    loadModels();
-  }, [namespace]);
-
-  const filteredSecrets = useMemo(() => {
+  const filteredConfigurations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) {
-      return secrets;
+      return configurations;
     }
-    return secrets.filter(secret => {
+    return configurations.filter(configuration => {
       const haystack = [
-        secret.name,
-        secret.alias ?? '',
-        secret.description ?? '',
-        ...(secret.labels ?? []),
+        configuration.name,
+        configuration.alias ?? '',
+        configuration.description ?? '',
+        configuration.value ?? '',
+        ...(configuration.labels ?? []),
       ]
         .join(' ')
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [secrets, searchQuery]);
+  }, [configurations, searchQuery]);
 
   const handleAdd = useCallback(() => {
-    push('/secrets/new');
+    push('/configurations/new');
   }, [push]);
 
   const handleEdit = useCallback(
-    (secret: SecretListItem) => {
-      push(`/secrets/${encodeURIComponent(secret.name)}`);
+    (configuration: Configuration) => {
+      push(`/configurations/${encodeURIComponent(configuration.name)}`);
     },
     [push],
   );
 
-  const handleDeleteSecret = useCallback(
+  const handleDelete = useCallback(
     (id: string) => {
-      const secret = secrets.find(s => s.id === id);
-      if (!secret) {
+      const configuration = configurations.find(item => item.id === id);
+      if (!configuration) {
         return;
       }
-      deleteSecretMutation.mutate(secret.name);
+      deleteConfiguration.mutate(configuration.name);
     },
-    [deleteSecretMutation, secrets],
+    [configurations, deleteConfiguration],
   );
 
-  const isEmpty = !secretsLoading && secrets.length === 0;
+  const isEmpty = !isLoading && configurations.length === 0;
 
   return (
     <div className="content-shell flex h-full w-full flex-col">
@@ -96,19 +83,19 @@ export function SecretsSection() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1">
             <IconShell size="default" variant="primary">
-              <Shield className="size-full" />
+              <Tune className="size-full" />
             </IconShell>
             <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              Secrets
+              Configurations
             </h1>
           </div>
           <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            Create and manage secrets for models and services
+            Create and manage configuration values for agents and services
           </p>
         </div>
         {!isEmpty && (
           <Button onClick={handleAdd} disabled={readOnlyMode}>
-            Add secret
+            Add configuration
           </Button>
         )}
       </div>
@@ -120,18 +107,20 @@ export function SecretsSection() {
       )}
       {!showLoading && isEmpty && (
         <ResourceEmptyState
-          icon={<Shield className="size-full" />}
-          title="No secrets yet"
+          icon={<Tune className="size-full" />}
+          title="No configurations yet"
           description={
             <>
-              <p className="mb-2">You haven&apos;t added any secrets yet.</p>
-              <p>Get started by adding your first secret.</p>
+              <p className="mb-2">
+                You haven&apos;t added any configurations yet.
+              </p>
+              <p>Get started by adding your first configuration.</p>
             </>
           }
           actions={
             <>
               <Button onClick={handleAdd} disabled={readOnlyMode}>
-                Add secret
+                Add configuration
               </Button>
               <a href={LEARN_MORE_URL} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline">Learn more</Button>
@@ -146,18 +135,17 @@ export function SecretsSection() {
             <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
           </div>
 
-          {filteredSecrets.length === 0 ? (
+          {filteredConfigurations.length === 0 ? (
             <ResourceNoResults
-              icon={<Shield className="size-full" />}
-              message="No secrets match your search."
+              icon={<Tune className="size-full" />}
+              message="No configurations match your search."
             />
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-              <SecretsTable
-                secrets={filteredSecrets}
-                models={models}
+              <ConfigurationsTable
+                configurations={filteredConfigurations}
                 onEdit={handleEdit}
-                onDelete={handleDeleteSecret}
+                onDelete={handleDelete}
               />
             </ScrollArea>
           )}

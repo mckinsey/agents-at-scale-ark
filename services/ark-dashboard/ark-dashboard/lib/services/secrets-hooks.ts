@@ -4,7 +4,16 @@ import { toast } from '@/components/ui/sonner';
 import { APIError } from '@/lib/api/client';
 
 import { secretsService } from './secrets';
-import type { Secret, SecretDetailResponse } from './secrets';
+import type {
+  SecretDetailResponse,
+  SecretListItem,
+  SecretMetadata,
+} from './secrets';
+
+interface SecretMutationVariables extends SecretMetadata {
+  name: string;
+  password: string;
+}
 
 export const GET_ALL_SECRETS_QUERY_KEY = 'get-all-secrets';
 export const GET_SECRET_QUERY_KEY = 'get-secret';
@@ -36,8 +45,12 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
 
   return useMutation({
     mutationKey: [CREATE_SECRET_MUTATION_KEY],
-    mutationFn: ({ name, password }: { name: string; password: string }) => {
-      return secretsService.create(name, password);
+    mutationFn: ({
+      name,
+      password,
+      ...metadata
+    }: SecretMutationVariables) => {
+      return secretsService.create(name, password, metadata);
     },
     onMutate: async newSecret => {
       // Cancel any outgoing refetches
@@ -46,15 +59,20 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         queryKey: [GET_ALL_SECRETS_QUERY_KEY],
       });
       // Snapshot the previous value
-      const previousTodos: Secret[] | undefined = queryClient.getQueryData([
-        GET_ALL_SECRETS_QUERY_KEY,
-      ]);
+      const previousTodos: SecretListItem[] | undefined =
+        queryClient.getQueryData([GET_ALL_SECRETS_QUERY_KEY]);
       // Optimistically update to the new value
       queryClient.setQueryData(
         [GET_ALL_SECRETS_QUERY_KEY],
-        (old: Secret[] | undefined): Secret[] => [
+        (old: SecretListItem[] | undefined): SecretListItem[] => [
           ...(old ?? []),
-          { id: newSecret.name, name: newSecret.name },
+          {
+            id: newSecret.name,
+            name: newSecret.name,
+            description: newSecret.description,
+            alias: newSecret.alias,
+            labels: newSecret.labels,
+          },
         ],
       );
       // Return a result with the snapshotted value
@@ -105,8 +123,12 @@ export const useUpdateSecret = (props: UseUpdateSecretProps) => {
 
   return useMutation({
     mutationKey: [UPDATE_SECRET_MUTATION_KEY],
-    mutationFn: ({ name, password }: { name: string; password: string }) => {
-      return secretsService.update(name, password);
+    mutationFn: ({
+      name,
+      password,
+      ...metadata
+    }: SecretMutationVariables) => {
+      return secretsService.update(name, password, metadata);
     },
     onSuccess: data => {
       toast.success('Secret updated successfully');
@@ -130,8 +152,11 @@ export const useUpdateSecret = (props: UseUpdateSecretProps) => {
         description: getMessage(),
       });
     },
-    onSettled: () => {
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: [GET_ALL_SECRETS_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [GET_SECRET_QUERY_KEY, variables.name],
+      });
     },
   });
 };

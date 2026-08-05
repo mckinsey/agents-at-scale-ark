@@ -4,6 +4,8 @@ import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Edit, Trash } from '@/components/icons';
+import { AliasedNameCell } from '@/components/sections/aliased-name-cell';
+import { LabelTags } from '@/components/sections/label-tags';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
   Table,
@@ -21,23 +23,25 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { Model } from '@/lib/services/models';
-import type { Secret } from '@/lib/services/secrets';
+import type { SecretListItem } from '@/lib/services/secrets';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface SecretsTableProps {
-  readonly secrets: readonly Secret[];
+  readonly secrets: readonly SecretListItem[];
   readonly models: readonly Model[];
-  readonly onEdit: (secret: Secret) => void;
+  readonly onEdit: (secret: SecretListItem) => void;
   readonly onDelete: (id: string) => void;
 }
 
 const MAX_VISIBLE_MODELS = 3;
 
 const COL = {
-  name: 'w-[280px]',
-  usedBy: 'w-[120px]',
-  status: 'w-[140px]',
+  name: 'w-[220px]',
+  description: 'w-[220px]',
+  labels: 'w-[180px]',
+  usedBy: 'w-[100px]',
+  status: 'w-[130px]',
   action: 'w-[100px]',
 };
 
@@ -131,9 +135,9 @@ function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
 }
 
 interface SecretTableRowProps {
-  readonly secret: Secret;
+  readonly secret: SecretListItem;
   readonly models: readonly Model[];
-  readonly onEdit: (secret: Secret) => void;
+  readonly onEdit: (secret: SecretListItem) => void;
   readonly onDelete: (id: string) => void;
 }
 
@@ -151,15 +155,24 @@ function SecretTableRow({
   );
   const usageCount = usingModels.length;
   const isInUse = usageCount > 0;
+  const description = secret.description?.trim();
 
   return (
     <>
       <TableRow className="relative isolate transition-colors">
         <TableCell size="small">
           <span aria-hidden className={rowHoverOverlayClass} />
-          <span className="text-fg-primary block truncate" title={secret.name}>
-            {secret.name}
+          <AliasedNameCell resource={secret} />
+        </TableCell>
+        <TableCell size="small" className={COL.description}>
+          <span
+            className="text-fg-secondary block truncate"
+            title={description}>
+            {description || '-'}
           </span>
+        </TableCell>
+        <TableCell size="small" className={COL.labels}>
+          <LabelTags labels={secret.labels ?? []} />
         </TableCell>
         <TableCell size="small" className={COL.usedBy}>
           <span className="text-fg-secondary block truncate">
@@ -221,6 +234,12 @@ export function SecretsTable({
         <TableRow>
           <TableHead size="small" className={COL.name}>
             Name
+          </TableHead>
+          <TableHead size="small" className={COL.description}>
+            Description
+          </TableHead>
+          <TableHead size="small" className={COL.labels}>
+            Labels
           </TableHead>
           <TableHead size="small" className={COL.usedBy}>
             Used by
