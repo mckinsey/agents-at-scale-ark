@@ -277,13 +277,26 @@ jobs:
             echo "PostgreSQL did not become ready in time"
             exit 1
           fi
-          cd ark && go test -tags integration ./internal/storage/postgresql/... -v -timeout 20m -json \
-            | tee /tmp/gotest.json \
-            | jq -r 'select(.Action=="output") | .Output' | grep -v '^$' || true
-          status=${PIPESTATUS[0]}
+          # Capture the -json stream to a file and read go's exit code directly.
+          # Piping into a formatter that ends in `|| true` resets PIPESTATUS to (0),
+          # so a compile failure or test failure would be reported as a green job -
+          # exactly the silent no-op this job exists to prevent.
+          status=0
+          (cd ark && go test -tags integration ./internal/storage/postgresql/... -timeout 20m -json) \
+            > /tmp/gotest.json || status=$?
+          jq -r 'select(.Action=="output") | .Output' /tmp/gotest.json | grep -v '^$' || true
           echo "::group::Test runtimes (top 10 slowest)"
           jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn | head -10
           echo "::endgroup::"
+          # This job provisions Postgres, so no test in this package should skip.
+          # A skip means the suite never really ran (unset/renamed env var,
+          # unreachable DB, build-tag mistake) and green would be a lie - fail loud.
+          skipped=$(jq -r 'select(.Action=="skip" and .Test) | .Test' /tmp/gotest.json)
+          if [ -n "$skipped" ]; then
+            echo "::error::Integration tests skipped despite Postgres being provisioned:"
+            echo "$skipped"
+            exit 1
+          fi
           exit "$status"
 
   build-and-test-services:
