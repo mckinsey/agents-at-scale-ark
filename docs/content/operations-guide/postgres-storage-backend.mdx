@@ -44,6 +44,10 @@ max_replication_slots >= 1
 max_wal_senders       >= 1
 ```
 
+### Minimum version
+
+The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, both introduced in **PostgreSQL 10**, which is the hard minimum. Run a currently-supported major (**14 or newer**) in production.
+
 A user/role with permission to:
 
 - `CREATE TABLE`, `CREATE INDEX`, `CREATE PUBLICATION` on the target database
@@ -59,6 +63,15 @@ For managed services:
 | Aiven / Neon | Logical replication is on by default. |
 
 The connection settings the chart accepts are listed in [`ark/dist/chart-apiserver/values.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/dist/chart-apiserver/values.yaml).
+
+### Connection pooling and PgBouncer
+
+The apiserver holds a dedicated logical replication connection for its watch stream in addition to its regular query pool. Route only the **query** traffic through an external pooler, and keep the replication connection direct:
+
+- **PgBouncer in transaction or statement pooling mode is incompatible with logical replication.** The replication connection must reach Postgres directly (or through a session-pooling/`session` mode pooler — for PgBouncer this requires version 1.21.0 or newer, which added replication-connection passthrough; older versions reject the replication protocol even in session mode). Point `ARK_POSTGRES_HOST` at a direct endpoint, or run a separate session-mode pooler for the apiserver.
+- Managed poolers (RDS Proxy, Cloud SQL connectors) have the same constraint — replication slots require a session-scoped connection.
+
+The apiserver already pools its own query connections (`MaxOpenConns` defaults to 40); an external transaction-pooling layer in front of the query path is optional and must not carry the replication connection.
 
 ## Schema and replication slot
 
