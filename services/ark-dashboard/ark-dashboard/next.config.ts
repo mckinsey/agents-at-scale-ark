@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['dashboard.default.127.0.0.1.nip.io', '127.0.0.1.nip.io'],
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, './'),
+  turbopack: {
+    root: __dirname,
+  },
   basePath: process.env.ARK_DASHBOARD_BASE_PATH || '',
   assetPrefix: process.env.ARK_DASHBOARD_ASSET_PREFIX || '',
   async redirects() {
