@@ -416,6 +416,7 @@ collected:
 }
 
 func TestWatch_CrossReplicaDelivery(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
@@ -472,10 +473,11 @@ drained:
 
 	t.Logf("Created %d resources on replica A, waiting for replica B watcher...", count)
 
-	// Replica B has no WAL consumer; its only signal is the broadcaster's 120s
-	// safety-net relist, so the deadline must exceed one tick.
+	// Replica B has no WAL consumer; its only signal is the broadcaster's
+	// safety-net relist (shortened via withFastRelist), so the deadline must
+	// exceed one tick.
 	received := 0
-	deadline := time.After(150 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for received < count {
 		select {
 		case ev := <-w.ResultChan():
@@ -498,6 +500,7 @@ timeout:
 }
 
 func TestWatch_CrossReplicaBurst(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
@@ -557,7 +560,7 @@ drained2:
 	t.Logf("Created %d/%d resources on replica A, waiting for replica B...", actual, count)
 
 	seen := make(map[string]bool)
-	deadline := time.After(150 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for len(seen) < actual {
 		select {
 		case ev := <-w.ResultChan():
@@ -588,6 +591,7 @@ timeout2:
 }
 
 func TestWatch_CrossReplicaDelete(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
@@ -631,7 +635,7 @@ func TestWatch_CrossReplicaDelete(t *testing.T) {
 	}
 
 	gotDelete := false
-	deadline := time.After(150 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case ev := <-w.ResultChan():

@@ -9,7 +9,19 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 )
+
+// withFastRelist shortens the broadcaster relist ticker for the duration of a
+// test. Cross-replica tests rely on the safety-net relist (replica B has no WAL
+// consumer), which defaults to 120s; overriding it keeps those tests fast.
+// Safe because integration tests run sequentially (no t.Parallel).
+func withFastRelist(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := relistInterval
+	relistInterval = d
+	t.Cleanup(func() { relistInterval = old })
+}
 
 func testConfig(t *testing.T) Config {
 	t.Helper()
