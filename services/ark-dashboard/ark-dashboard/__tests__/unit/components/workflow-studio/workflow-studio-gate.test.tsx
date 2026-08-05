@@ -109,7 +109,7 @@ describe('WorkflowStudio author-agent gate', () => {
     );
     expect(
       screen.getByTestId('studio-gate-agent-marketplace-link'),
-    ).toHaveAttribute('href', '/marketplace');
+    ).toHaveAttribute('href', '/marketplace?item=argo-make-author');
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
@@ -154,7 +154,7 @@ describe('WorkflowStudio author-agent gate', () => {
     );
     expect(
       screen.getByTestId('studio-gate-mcp-marketplace-link'),
-    ).toHaveAttribute('href', '/marketplace');
+    ).toHaveAttribute('href', '/marketplace?item=kubernetes-mcp-server');
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
   });
 
@@ -372,7 +372,7 @@ describe('StudioChatGate', () => {
     );
 
     const link = screen.getByTestId('studio-gate-agent-marketplace-link');
-    expect(link).toHaveAttribute('href', '/marketplace');
+    expect(link).toHaveAttribute('href', '/marketplace?item=argo-make-author');
   });
 
   it('links to the marketplace when the MCP server is missing', () => {
@@ -387,7 +387,10 @@ describe('StudioChatGate', () => {
     );
 
     const link = screen.getByTestId('studio-gate-mcp-marketplace-link');
-    expect(link).toHaveAttribute('href', '/marketplace');
+    expect(link).toHaveAttribute(
+      'href',
+      '/marketplace?item=kubernetes-mcp-server',
+    );
   });
 
   it('links to the MCP server page when it is present but not ready', () => {
