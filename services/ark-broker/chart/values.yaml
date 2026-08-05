@@ -2,10 +2,14 @@
 
 # Message backend: memory (default) or postgres
 # Event backend: memory (default) or postgres
+# Sessions backend: memory (default) or postgres — postgres requires
+# backends.message and backends.event to also be postgres, since sessions
+# are materialized from both
 # Chunk backend: memory (default) or redis
 backends:
   message: memory
   event: memory
+  sessions: memory
   chunk: memory
 
 # PostgreSQL connection — required when backends.message=postgres or backends.event=postgres
@@ -39,6 +43,9 @@ database:
   statementTimeoutMs: 30000
   messageVisibilityTtlSeconds: 2592000
   eventVisibilityTtlSeconds: 2592000
+  # Must be >= both of the above: a session is the index into its messages
+  # and events, so hiding it first would strand data that is still retained.
+  sessionsVisibilityTtlSeconds: 2592000
   debugQueries: false
 
 # Redis connection — required when backends.chunk=redis
