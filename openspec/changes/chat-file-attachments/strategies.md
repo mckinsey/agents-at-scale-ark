@@ -83,6 +83,19 @@ Upload the file once to the provider, store only the returned `file_id` plus met
   - **The sharp edge:** because we deliberately never keep the bytes, expiry here is **irreversible**. Once the provider drops the file we cannot re-upload it, and the attachment is permanently unreadable for the rest of the conversation. Strategies 2 and 3 can always re-hydrate from our own copy; strategy 5 cannot.
 - **Good for:** OpenAI / Azure / Anthropic-direct, where it gives the ideal behaviour, as long as the chosen TTL comfortably exceeds a conversation's life.
 
+### 6. Agent tool-call retrieval via the file-gateway MCP toolset - RULED OUT
+
+Leave the bytes in the file-gateway and, instead of forwarding them, extend the gateway's MCP toolset so the agent can call a tool to fetch a file's content on demand.
+
+**Not viable for this use case.** The problem is which channel the bytes come back through, and what the model does with them.
+
+- **Tool results are text.** A tool call returns through the tool-result channel, and in Chat Completions a tool-role message's content is a plain string. There is no image content part in a tool result on that API, so the only thing the tool can hand back is text.
+- **base64-as-text is the worst of both worlds.** If the tool returns the file base64-encoded as a string, it lands in a text field - which is exactly the case where base64 *does* cost context tokens (a ~1 MB image becomes well over a million characters of tokenized text), and the vision encoder never sees it, because the encoder only runs on structured image parts, not on text. So the model pays a catastrophic token bill for a blob it still cannot actually look at.
+- **Text extraction is RAG, not vision.** A tool that returns extracted PDF text (or an OCR/caption of an image) works, but it is a different feature: it gives the model a lossy text summary, not the pixels. That does not satisfy "send this image/PDF to the agent"; charts, layout, handwriting, and anything visual are gone.
+- **The one narrow exception does not generalise and is worse.** The MCP spec and the Anthropic Messages API do allow image blocks inside a `tool_result`. But making that work needs the *same* multi-part forwarding plumbing as the direct-attachment strategies, so it saves nothing; it fails on OpenAI Chat Completions and on Bedrock, where tool results stay text-only; and it is worse UX, because the model has to decide to call a tool before it can see an attachment the user already, obviously, attached.
+
+Net: tool-call retrieval relocates the transport problem into a channel that is either text-only (token-catastrophic and non-visual) or, in its one image-capable form, needs the very plumbing it was meant to avoid while covering fewer providers. It is not a shortcut around forwarding the bytes.
+
 ## Expiration - what holds across every remaining strategy
 
 Whichever store wins, the same four things are true, so they belong in the spec once rather than per strategy.
