@@ -20,6 +20,8 @@ import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { PromptEditorDialog } from './prompt-editor-dialog';
 import { StudioChatDisabledBanner } from './studio-chat-disabled-banner';
 import { StudioChatGate } from './studio-chat-gate';
+import { StudioExperimentalNotice } from './studio-experimental-notice';
+import { useExperimentalNotice } from './use-experimental-notice';
 import { type UseStudioChatReturn } from './use-studio-chat';
 
 const SUGGESTION_PROMPTS = [
@@ -93,6 +95,7 @@ export function StudioChatPanel({
   unverifiable,
 }: Readonly<StudioChatPanelProps>) {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const experimentalNotice = useExperimentalNotice();
   const composerDisabled = chat.composerDisabled || gated;
   const inputDisabled = chat.inputDisabled || gated;
   const notInstalled = !unverifiable && (agentMissing || mcpMissing);
@@ -136,6 +139,12 @@ export function StudioChatPanel({
           agentNotReady={agentNotReady}
           mcpNotReady={mcpNotReady}
         />
+      )}
+
+      {experimentalNotice.visible && (
+        <div className="shrink-0 p-4 pb-0">
+          <StudioExperimentalNotice onDismiss={experimentalNotice.dismiss} />
+        </div>
       )}
 
       <div
