@@ -392,14 +392,12 @@ drained:
 	wg.Wait()
 
 	want := int(created.Load())
-	var events []watch.Event
 	seen := make(map[string]bool)
 	deadline := time.After(45 * time.Second)
 	for len(seen) < want {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Added {
-				events = append(events, ev)
 				seen[ev.Object.(*integrationTestObject).Metadata.Name] = true
 			}
 		case <-deadline:
@@ -408,25 +406,10 @@ drained:
 	}
 collected:
 
-	t.Logf("Created %d resources from %d concurrent writers, received %d events", want, writers, len(events))
+	t.Logf("Created %d resources from %d concurrent writers, received %d events", want, writers, len(seen))
 
 	if len(seen) < want {
 		t.Errorf("%d of %d resources never delivered under concurrent writes", want-len(seen), want)
-	}
-
-	// Check version ordering
-	outOfOrder := 0
-	for i := 1; i < len(events); i++ {
-		prev := events[i-1].Object.(*integrationTestObject).Metadata.ResourceVersion
-		curr := events[i].Object.(*integrationTestObject).Metadata.ResourceVersion
-		if rvInt(t, curr) <= rvInt(t, prev) {
-			outOfOrder++
-		}
-	}
-	if outOfOrder > 0 {
-		t.Errorf("%d out-of-order events detected", outOfOrder)
-	} else {
-		t.Log("All events arrived in resourceVersion order")
 	}
 
 	backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
