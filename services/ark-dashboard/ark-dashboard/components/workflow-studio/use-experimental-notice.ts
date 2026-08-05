@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-const STORAGE_KEY = 'ark-dashboard:argo-make-experimental-acknowledged';
+export const EXPERIMENTAL_NOTICE_STORAGE_KEY =
+  'ark-dashboard:argo-make-experimental-acknowledged';
 
 export interface UseExperimentalNoticeResult {
   visible: boolean;
@@ -17,7 +18,7 @@ export function useExperimentalNotice(): UseExperimentalNoticeResult {
       return;
     }
     try {
-      if (!window.localStorage.getItem(STORAGE_KEY)) {
+      if (!window.localStorage.getItem(EXPERIMENTAL_NOTICE_STORAGE_KEY)) {
         setVisible(true);
       }
     } catch {
@@ -31,7 +32,7 @@ export function useExperimentalNotice(): UseExperimentalNoticeResult {
       return;
     }
     try {
-      window.localStorage.setItem(STORAGE_KEY, 'true');
+      window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
     } catch {
       // Storage disabled; state still reflects the dismissal.
     }

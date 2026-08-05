@@ -96,8 +96,9 @@ export function StudioChatPanel({
 }: Readonly<StudioChatPanelProps>) {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const experimentalNotice = useExperimentalNotice();
-  const composerDisabled = chat.composerDisabled || gated;
-  const inputDisabled = chat.inputDisabled || gated;
+  const noticeBlocking = experimentalNotice.visible;
+  const composerDisabled = chat.composerDisabled || gated || noticeBlocking;
+  const inputDisabled = chat.inputDisabled || gated || noticeBlocking;
   const notInstalled = !unverifiable && (agentMissing || mcpMissing);
   const installedNotReady =
     !unverifiable && !notInstalled && (agentNotReady || mcpNotReady);
@@ -139,12 +140,6 @@ export function StudioChatPanel({
           agentNotReady={agentNotReady}
           mcpNotReady={mcpNotReady}
         />
-      )}
-
-      {experimentalNotice.visible && (
-        <div className="shrink-0 p-4 pb-0">
-          <StudioExperimentalNotice onDismiss={experimentalNotice.dismiss} />
-        </div>
       )}
 
       <div
@@ -192,7 +187,9 @@ export function StudioChatPanel({
         className={`border-stroke-divider shrink-0 border-t p-4 ${
           installedNotReady ? 'opacity-50' : ''
         }`}>
-        {chat.composerLocked ? (
+        {noticeBlocking ? (
+          <StudioExperimentalNotice onDismiss={experimentalNotice.dismiss} />
+        ) : chat.composerLocked ? (
           <div
             className="bg-fill-muted/40 border-stroke-divider border p-2"
             data-testid="studio-composer-lock">

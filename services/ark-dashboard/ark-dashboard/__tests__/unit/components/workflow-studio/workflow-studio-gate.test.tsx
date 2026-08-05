@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatGate } from '@/components/workflow-studio/studio-chat-gate';
+import { EXPERIMENTAL_NOTICE_STORAGE_KEY } from '@/components/workflow-studio/use-experimental-notice';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
@@ -90,6 +91,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   currentNamespace = 'default';
   preflightMock.mockResolvedValue(present);
+  window.localStorage.clear();
+  window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
 });
 
 describe('WorkflowStudio author-agent gate', () => {
