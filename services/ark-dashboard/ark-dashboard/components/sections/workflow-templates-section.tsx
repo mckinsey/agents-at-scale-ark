@@ -1,10 +1,18 @@
 'use client';
 
-import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
+import { ArrowOutward } from '@/components/icons';
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
+import { WorkflowTemplatesNotInstalled } from '@/components/sections/workflow-templates-not-installed';
 import {
   SortableSectionedList,
   type SortableSectionedListHandle,
@@ -21,6 +29,7 @@ import {
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading, useWorkflowsLayout } from '@/lib/hooks';
 import {
+  isArgoNotInstalledError,
   type WorkflowTemplate,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
@@ -41,26 +50,47 @@ function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
 
 const getTemplateKey = (template: WorkflowTemplate) => template.metadata.name;
 
-export function WorkflowTemplatesSection() {
+export interface WorkflowTemplatesSectionHandle {
+  openCreateGroup: () => void;
+}
+
+export interface WorkflowTemplatesSectionProps {
+  onArgoInstalledChange?: (installed: boolean) => void;
+}
+
+export const WorkflowTemplatesSection = forwardRef<
+  WorkflowTemplatesSectionHandle,
+  WorkflowTemplatesSectionProps
+>(function WorkflowTemplatesSection({ onArgoInstalledChange }, ref) {
   const { namespace, readOnlyMode } = useNamespace();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+  const [argoInstalled, setArgoInstalled] = useState(true);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const { layout, setLayout } = useWorkflowsLayout(namespace);
   const listRef = useRef<SortableSectionedListHandle>(null);
+
+  useImperativeHandle(ref, () => ({
+    openCreateGroup: () => listRef.current?.openCreateGroup(),
+  }));
 
   const fetchFlows = useCallback(async () => {
     try {
       setLoading(true);
       const fetchedTemplates = await workflowTemplatesService.list();
       setTemplates(fetchedTemplates);
+      setArgoInstalled(true);
+      onArgoInstalledChange?.(true);
     } catch (error) {
       console.error('Failed to fetch workflow templates:', error);
       setTemplates([]);
+      const installed = !isArgoNotInstalledError(error);
+      setArgoInstalled(installed);
+      onArgoInstalledChange?.(installed);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onArgoInstalledChange]);
 
   useEffect(() => {
     fetchFlows();
@@ -122,6 +152,10 @@ export function WorkflowTemplatesSection() {
     );
   }
 
+  if (!argoInstalled && !loading) {
+    return <WorkflowTemplatesNotInstalled />;
+  }
+
   if (templates.length === 0 && !loading) {
     const WorkflowIcon = DASHBOARD_SECTIONS['workflow-templates'].icon;
     return (
@@ -141,12 +175,12 @@ export function WorkflowTemplatesSection() {
         <Button
           variant="ghost"
           asChild
-          className="text-muted-foreground"
+          className="text-fg-secondary"
           size="sm">
           <a
             href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/workflows/"
             target="_blank">
-            Learn how to create Workflow Templates <ArrowUpRightIcon />
+            Learn how to create Workflow Templates <ArrowOutward />
           </a>
         </Button>
       </Empty>
@@ -156,15 +190,6 @@ export function WorkflowTemplatesSection() {
   return (
     <div className="flex h-full flex-col">
       <main className="mt-4 flex-1 overflow-auto">
-        <div className="mb-4 flex">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => listRef.current?.openCreateGroup()}>
-            <Plus className="mr-1 h-4 w-4" />
-            Create Group
-          </Button>
-        </div>
         <SortableSectionedList
           ref={listRef}
           items={templates}
@@ -186,4 +211,4 @@ export function WorkflowTemplatesSection() {
       </main>
     </div>
   );
-}
+});
