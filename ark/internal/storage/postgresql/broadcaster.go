@@ -131,14 +131,13 @@ func (b *kindBroadcaster) run() {
 // namespace/label SQL filters (those become in-memory predicates at fan-out) and
 // once per kind rather than once per watcher.
 func (b *kindBroadcaster) relist() {
-	const lookback int64 = 500
 	// relistQueryTimeout bounds a single relist query. run() calls relist()
 	// inline on one goroutine, so an unbounded query would stall fan-out to
 	// every subscriber of this kind; the deadline caps that blast radius.
 	// Generous relative to the 120s safety-net tick, so it only trips a query
 	// that is genuinely hung rather than merely large.
 	const relistQueryTimeout = 30 * time.Second
-	from := b.lastSeenRV.Load() - lookback
+	from := b.lastSeenRV.Load() - relistLookbackRVs
 	if from < 0 {
 		from = 0
 	}

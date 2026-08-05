@@ -29,6 +29,12 @@ import (
 
 const jsonNull = "null"
 
+// relistLookbackRVs is how far below the relist cursor a re-query reaches to catch
+// rows whose txn committed out of resource_version order (BIGSERIAL assigns rv at
+// statement time, visibility follows commit time); seenRVs dedups the overlap.
+// Shared by the per-watcher relist and the per-kind broadcaster so they can't drift.
+const relistLookbackRVs int64 = 500
+
 // fieldPredicate is a validated (column, op, value) triple derived from a client-
 // supplied field selector. columns come from supportedFieldColumns (never client
 // input), so composing SQL by concatenating column and op is safe from injection.
@@ -1257,8 +1263,7 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 		// Steady-state relist: look back to catch rows whose txn was still
 		// in-flight near the cursor tip; seenRVs dedups the overlap. Never dip
 		// below startRV — the client already has everything up to its resume point.
-		const lookback int64 = 500
-		if queryFromRV = w.lastSeenRV.Load() - lookback; queryFromRV < w.startRV {
+		if queryFromRV = w.lastSeenRV.Load() - relistLookbackRVs; queryFromRV < w.startRV {
 			queryFromRV = w.startRV
 		}
 	} else {
