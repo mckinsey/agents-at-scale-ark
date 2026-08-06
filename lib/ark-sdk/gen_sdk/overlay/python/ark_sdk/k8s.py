@@ -14,6 +14,7 @@ from kubernetes import client as sync_client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 
+from ark_sdk.annotations import filter_ark_annotations
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ class SecretClient:
                 secret_list.append({
                     "name": secret.metadata.name,
                     "id": str(secret.metadata.uid),
-                    "annotations": secret.metadata.annotations or {}
+                    "annotations": filter_ark_annotations(secret.metadata.annotations)
                 })
             
             return {
@@ -231,7 +232,7 @@ class SecretClient:
                 "id": str(created_secret.metadata.uid),
                 "type": created_secret.type,
                 "secret_length": self.calculate_secret_length(validated_data),
-                "annotations": created_secret.metadata.annotations
+                "annotations": filter_ark_annotations(created_secret.metadata.annotations)
             }
     
     async def get_secret(self, name: str):
@@ -251,7 +252,7 @@ class SecretClient:
                 "type": secret.type,
                 "secret_length": self.calculate_secret_length(secret.data or {}),
                 "keys": sorted((secret.data or {}).keys()),
-                "annotations": secret.metadata.annotations
+                "annotations": filter_ark_annotations(secret.metadata.annotations)
             }
 
     async def get_secret_value(self, name: str, key: str):
@@ -301,7 +302,7 @@ class SecretClient:
                 "id": str(updated_secret.metadata.uid),
                 "type": updated_secret.type,
                 "secret_length": self.calculate_secret_length(validated_data),
-                "annotations": updated_secret.metadata.annotations
+                "annotations": filter_ark_annotations(updated_secret.metadata.annotations)
             }
     
     async def delete_secret(self, name: str) -> bool:
