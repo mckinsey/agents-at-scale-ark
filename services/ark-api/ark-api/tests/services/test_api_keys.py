@@ -611,6 +611,59 @@ class TestAPIKeyOwnershipScoping(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         mock_api_instance.patch_namespaced_secret.assert_called_once()
 
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_get_api_key_by_public_key_reports_created_by(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00",
+                "createdBy": "alice@example.com"
+            })
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(b"hash").decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.service.get_api_key_by_public_key("pk-ark-test")
+        self.assertEqual(result["created_by"], "alice@example.com")
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_get_api_key_by_public_key_reports_no_creator_for_legacy_key(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00"
+            })
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(b"hash").decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.service.get_api_key_by_public_key("pk-ark-test")
+        self.assertIsNone(result["created_by"])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -199,7 +199,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     public_key, secret_key = credentials
 
                     api_key_data = await self.api_key_service.verify_api_key(public_key, secret_key)
-                    if api_key_data:
+                    gate_requires_owner = self.impersonation_settings.enabled and auth_mode == AuthMode.HYBRID
+                    if api_key_data and not (gate_requires_owner and api_key_data.get("created_by") is None):
                         auth_success = True
                         logger.debug(f"Basic auth successful for key: {public_key} in namespace {self.api_key_service.namespace}")
                         request.state.api_key = api_key_data

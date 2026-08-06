@@ -339,6 +339,8 @@ curl -X POST http://localhost:8000/v1/api-keys \
 
 **Note:** When impersonation is enabled (`AUTH_MODE=hybrid` or `sso`), creating an API key requires the same permission your identity would need to create a Secret directly in the namespace. This is checked with a `SelfSubjectAccessReview` against the requesting user, the same mechanism used elsewhere in the API.
 
+> **Breaking change:** In `AUTH_MODE=hybrid` deployments with impersonation enabled, API keys created before this authorization check was introduced have no recorded creator and will no longer authenticate. Recreate any such key through the endpoint above so it is minted under an identity with permission to create Secrets in the namespace, and update the credentials wherever the old key was in use. Deployments that don't combine `hybrid` mode with impersonation are unaffected.
+
 ### Using API Keys
 
 API keys use HTTP Basic Authentication where:
@@ -422,6 +424,7 @@ DELETE /v1/api-keys/{public_key}
 - **Usage Signal**: Successful API-key authentication updates `last_used_at` for monitoring and audit review
 - **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
 - **Creation Authorization**: With impersonation enabled, creating an API key requires the same permission as creating a Secret in the namespace, and listing/revoking keys is scoped to their creator
+- **Legacy Key Rejection**: In `hybrid` mode with impersonation enabled, keys with no recorded creator (minted before this authorization check existed) are rejected at authentication — see the breaking-change note above
 - **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
 
 ## Security Features

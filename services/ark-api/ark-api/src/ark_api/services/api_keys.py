@@ -405,7 +405,8 @@ class APIKeyService:
                 "secret_key_hash": secret_key_hash,
                 "is_active": is_active,
                 "expires_at": expires_at,
-                "secret_name": secret_name
+                "secret_name": secret_name,
+                "created_by": metadata.get("created_by")
             }
             
         except client.rest.ApiException as e:
