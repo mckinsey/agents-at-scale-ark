@@ -18,24 +18,40 @@ from ark_api.api.v1.api_keys import authorize_api_key_creation
 from ark_api.models.auth import UserIdentity
 
 
-@asynccontextmanager
-async def _fake_api_client(impersonation=None):
-    yield MagicMock()
+def _patch_ssar(can_create=None, side_effect=None):
+    """Patches the SSAR call chain and records what was actually sent.
 
-
-def _patch_ssar(can_create):
+    Returns (stack, impersonation_calls, review_calls): the impersonation
+    config passed to get_impersonating_api_client, and the
+    V1SelfSubjectAccessReview bodies passed to create_self_subject_access_review,
+    in call order.
+    """
     stack = ExitStack()
+    impersonation_calls = []
+    review_calls = []
+
+    @asynccontextmanager
+    async def fake_get_impersonating_api_client(impersonation=None):
+        impersonation_calls.append(impersonation)
+        yield MagicMock()
+
     stack.enter_context(
-        patch("ark_api.api.v1.api_keys.get_impersonating_api_client", _fake_api_client)
+        patch("ark_api.api.v1.api_keys.get_impersonating_api_client", fake_get_impersonating_api_client)
     )
+
     mock_auth = MagicMock()
-    mock_auth.create_self_subject_access_review = AsyncMock(
-        return_value=SimpleNamespace(status=SimpleNamespace(allowed=can_create))
-    )
+    if side_effect is not None:
+        mock_auth.create_self_subject_access_review = AsyncMock(side_effect=side_effect)
+    else:
+        async def _create_review(review):
+            review_calls.append(review)
+            return SimpleNamespace(status=SimpleNamespace(allowed=can_create))
+
+        mock_auth.create_self_subject_access_review = AsyncMock(side_effect=_create_review)
     stack.enter_context(
         patch("ark_api.api.v1.api_keys.client.AuthorizationV1Api", return_value=mock_auth)
     )
-    return stack
+    return stack, impersonation_calls, review_calls
 
 
 def _raise_no_identity():
@@ -390,12 +406,24 @@ class TestAPIKeyCreationAuthorization(unittest.TestCase):
         mock_response.name = "Test Key"
         mock_service.create_api_key = AsyncMock(return_value=mock_response)
 
-        with _patch_ssar(can_create=True):
+        stack, impersonation_calls, review_calls = _patch_ssar(can_create=True)
+        with stack:
             response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
 
         self.assertEqual(response.status_code, 201)
         mock_service.create_api_key.assert_called_once()
         self.assertEqual(mock_service.create_api_key.call_args[1]["created_by"], "alice@example.com")
+
+        # The SSAR must be evaluated as the requesting user, not the ark-api
+        # service account -- otherwise the probe always says "allowed".
+        self.assertEqual(len(impersonation_calls), 1)
+        self.assertEqual(impersonation_calls[0].username, "alice@example.com")
+        self.assertEqual(impersonation_calls[0].groups, ["viewers"])
+
+        self.assertEqual(len(review_calls), 1)
+        attrs = review_calls[0].spec.resource_attributes
+        self.assertEqual(attrs.verb, "create")
+        self.assertEqual(attrs.resource, "secrets")
 
     @patch('ark_api.api.v1.api_keys.APIKeyService')
     def test_gate_active_unauthorized_owner_denies_creation(self, mock_service_class):
@@ -408,7 +436,27 @@ class TestAPIKeyCreationAuthorization(unittest.TestCase):
         mock_service_class.return_value = mock_service
         mock_service.create_api_key = AsyncMock()
 
-        with _patch_ssar(can_create=False):
+        stack, impersonation_calls, _ = _patch_ssar(can_create=False)
+        with stack:
+            response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
+
+        self.assertEqual(response.status_code, 403)
+        mock_service.create_api_key.assert_not_called()
+        self.assertEqual(impersonation_calls[0].username, "alice@example.com")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_gate_active_ssar_probe_error_denies_creation(self, mock_service_class):
+        """A probe failure must deny, not silently allow -- fail closed."""
+        self.app.dependency_overrides[require_api_key_owner] = (
+            lambda: UserIdentity(username="alice@example.com", groups=["viewers"])
+        )
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_api_key = AsyncMock()
+
+        stack, _, _ = _patch_ssar(side_effect=Exception("apiserver unreachable"))
+        with stack:
             response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
 
         self.assertEqual(response.status_code, 403)
