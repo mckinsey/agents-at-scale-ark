@@ -97,6 +97,16 @@ def _read_token_secret_ref(mcp_server):
     return spec.authorization.token_secret_ref
 
 
+def _is_machine_managed(mcp_dict: dict) -> bool:
+    """Whether the controller mints this server's token itself.
+
+    Read from the raw dict rather than the typed model so this keeps
+    working before the generated SDK picks up clientCredentials.
+    """
+    authorization = (mcp_dict.get("spec") or {}).get("authorization") or {}
+    return bool(authorization.get("clientCredentials"))
+
+
 def _get_available_condition_message(mcp_server) -> Optional[str]:
     status = mcp_server.status
     if not status or not status.conditions:
@@ -154,6 +164,16 @@ async def start_mcp_auth(
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
         ns = (mcp_dict.get("metadata") or {}).get("namespace") or namespace
+
+        if _is_machine_managed(mcp_dict):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "MCPServer uses spec.authorization.clientCredentials; the "
+                    "controller mints and renews its token directly. There is "
+                    "no interactive flow to start."
+                ),
+            )
 
         authorization = _read_authorization_status(mcp_server)
         if not authorization:

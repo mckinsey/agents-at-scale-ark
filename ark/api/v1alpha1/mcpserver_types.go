@@ -43,6 +43,95 @@ type MCPServerAuthorizationSpec struct {
 	// namespace as the MCPServer.
 	// +kubebuilder:validation:Required
 	TokenSecretRef TokenSecretReference `json:"tokenSecretRef"`
+
+	// ClientCredentials enables controller-managed machine-to-machine
+	// token acquisition. When set, the controller mints and renews the
+	// access token written to TokenSecretRef; no interactive browser
+	// flow is offered for this server.
+	// +kubebuilder:validation:Optional
+	ClientCredentials *ClientCredentialsSpec `json:"clientCredentials,omitempty"`
+}
+
+// ClientCredentialsSpec configures OAuth 2.0 `client_credentials`
+// (RFC 6749 §4.4) token acquisition for an authorization server that has
+// pre-registered Ark as a client. Registration is out-of-band: the MCP
+// OAuth Client Credentials Extension does not permit dynamic client
+// registration in the machine flow.
+//
+// This describes how a token is obtained. TokenSecretRef describes where
+// it is written, and its name stays stable across renewals.
+type ClientCredentialsSpec struct {
+	// ClientID is the OAuth client identifier the authorization server
+	// assigned to Ark during out-of-band registration.
+	// +kubebuilder:validation:Required
+	ClientID string `json:"clientID"`
+
+	// Scopes are requested in the token request. When empty, the
+	// authorization server's default scopes for the client apply.
+	// +kubebuilder:validation:Optional
+	Scopes []string `json:"scopes,omitempty"`
+
+	// Resource is the RFC 8707 resource indicator sent with the token
+	// request. Normally taken from discovered RFC 9728 metadata; set it
+	// explicitly only as an interoperability override.
+	// +kubebuilder:validation:Optional
+	Resource string `json:"resource,omitempty"`
+
+	// TokenEndpoint is the authorization server's token endpoint.
+	// Normally taken from discovered RFC 8414 metadata; setting it
+	// explicitly also skips the discovery round-trip on cold start.
+	// +kubebuilder:validation:Optional
+	TokenEndpoint string `json:"tokenEndpoint,omitempty"`
+
+	// ClientAuthentication selects how Ark authenticates itself to the
+	// token endpoint.
+	// +kubebuilder:validation:Required
+	ClientAuthentication ClientAuthenticationSpec `json:"clientAuthentication"`
+}
+
+// ClientAuthenticationSpec selects a client authentication method. Only
+// private_key_jwt is supported; further methods become additional
+// optional members.
+type ClientAuthenticationSpec struct {
+	// PrivateKeyJWT authenticates with a signed JWT assertion
+	// (RFC 7523 §2.2).
+	// +kubebuilder:validation:Required
+	PrivateKeyJWT PrivateKeyJWTSpec `json:"privateKeyJWT"`
+}
+
+// PrivateKeyJWTSpec configures RFC 7523 client authentication. The
+// authorization server verifies the assertion against a public key
+// registered for ClientID out-of-band.
+type PrivateKeyJWTSpec struct {
+	// SecretKeyRef points at the PEM-encoded private signing key. This
+	// is sensitive input: it is never copied into the token Secret,
+	// status, events, logs, metrics, or traces.
+	// +kubebuilder:validation:Required
+	SecretKeyRef SigningKeySecretKeyRef `json:"secretKeyRef"`
+
+	// Algorithm is the JWS algorithm used to sign the assertion. It MUST
+	// appear in the authorization server's
+	// `token_endpoint_auth_signing_alg_values_supported`.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=ES256;ES384;ES512;RS256;RS384;RS512;PS256;PS384;PS512
+	// +kubebuilder:default="ES256"
+	Algorithm string `json:"algorithm,omitempty"`
+
+	// KeyID is the `kid` JOSE header stamped on the assertion, letting
+	// the authorization server select among several registered keys.
+	// +kubebuilder:validation:Optional
+	KeyID string `json:"keyID,omitempty"`
+}
+
+// SigningKeySecretKeyRef names the Secret and key holding the private
+// signing key, in the same namespace as the MCPServer.
+type SigningKeySecretKeyRef struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="private.pem"
+	Key string `json:"key,omitempty"`
 }
 
 // TokenSecretReference points at a Secret and names the keys inside it
@@ -145,6 +234,19 @@ type MCPServerAuthorizationStatus struct {
 	// authorization server supports (RFC 8414 `grant_types_supported`).
 	// +kubebuilder:validation:Optional
 	GrantTypesSupported []string `json:"grantTypesSupported,omitempty"`
+
+	// TokenEndpointAuthMethodsSupported is the set of client
+	// authentication methods the token endpoint accepts (RFC 8414
+	// `token_endpoint_auth_methods_supported`). The client-credentials
+	// path requires `private_key_jwt` to appear here.
+	// +kubebuilder:validation:Optional
+	TokenEndpointAuthMethodsSupported []string `json:"tokenEndpointAuthMethodsSupported,omitempty"`
+
+	// TokenEndpointAuthSigningAlgValuesSupported is the set of JWS
+	// algorithms the token endpoint accepts for signed client assertions
+	// (RFC 8414 `token_endpoint_auth_signing_alg_values_supported`).
+	// +kubebuilder:validation:Optional
+	TokenEndpointAuthSigningAlgValuesSupported []string `json:"tokenEndpointAuthSigningAlgValuesSupported,omitempty"`
 
 	// RegistrationEndpoint is the RFC 7591 dynamic client registration
 	// endpoint, when the authorization server supports it.

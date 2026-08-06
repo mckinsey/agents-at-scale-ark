@@ -139,6 +139,32 @@ function DisabledAuthMenuItem({
   );
 }
 
+// Disabled Re-authenticate / Sign out for servers whose token the
+// controller mints itself via clientCredentials. There is no browser
+// flow to run, so the distinct tooltip explains why rather than
+// implying auth is unnecessary.
+function MachineManagedAuthMenuItem({
+  icon,
+  label,
+}: Readonly<{ icon: ReactNode; label: string }>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="block">
+          <DropdownMenuItem disabled>
+            {icon}
+            {label}
+          </DropdownMenuItem>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        This MCP uses client credentials — Ark obtains and renews its
+        token automatically
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 interface McpServerTableRowProps {
   readonly server: MCPServer;
   readonly onDelete: (id: string) => void;
@@ -201,6 +227,22 @@ function McpServerTableRow({
   };
 
   const renderAuthMenuItems = () => {
+    // The controller mints and renews this server's token itself, so
+    // there is no interactive flow to offer.
+    if (server.authorization?.machineManaged) {
+      return (
+        <>
+          <MachineManagedAuthMenuItem
+            icon={<Autorenew className="size-4" />}
+            label="Re-authenticate"
+          />
+          <MachineManagedAuthMenuItem
+            icon={<Logout className="size-4" />}
+            label="Sign out"
+          />
+        </>
+      );
+    }
     if (authState === 'Required') {
       return (
         <DropdownMenuItem

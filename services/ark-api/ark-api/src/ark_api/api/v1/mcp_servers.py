@@ -36,7 +36,7 @@ VERSION = "v1alpha1"
 
 
 def _build_authorization(
-    status: dict, annotations: Optional[dict]
+    status: dict, annotations: Optional[dict], spec: dict
 ) -> Optional[MCPServerAuthorization]:
     """Build the authorization block from status.authorization and annotations.
 
@@ -47,12 +47,14 @@ def _build_authorization(
     if not authorization:
         return None
     annotations = annotations or {}
+    spec_authorization = (spec or {}).get("authorization") or {}
     return MCPServerAuthorization(
         state=authorization.get("state"),
         resourceName=authorization.get("resourceName"),
         expiresAt=authorization.get("expiresAt"),
         authorizedBy=annotations.get(ANNOTATION_AUTHORIZED_BY),
         authorizedAt=annotations.get(ANNOTATION_AUTHORIZED_AT),
+        machineManaged=bool(spec_authorization.get("clientCredentials")),
     )
 
 def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
@@ -80,7 +82,7 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         transport=spec.get("transport"),
         available=availability,
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations")),
+        authorization=_build_authorization(status, metadata.get("annotations"), spec),
     )
 
 
@@ -105,7 +107,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
         address=status.get("resolvedAddress"),
         transport=spec.get("transport"),
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations")),
+        authorization=_build_authorization(status, metadata.get("annotations"), spec),
     )
 
 
