@@ -20,6 +20,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const testClientID = "ark-client"
+
 func newTestKey(t *testing.T) (*ecdsa.PrivateKey, []byte) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -117,8 +119,8 @@ func TestBuildAssertionClaims(t *testing.T) {
 	if !ok {
 		t.Fatalf("claims are %T, want jwt.MapClaims", parsed.Claims)
 	}
-	if claims["iss"] != "ark-client" || claims["sub"] != "ark-client" {
-		t.Errorf("iss/sub = %v/%v, want ark-client for both", claims["iss"], claims["sub"])
+	if claims["iss"] != testClientID || claims["sub"] != testClientID {
+		t.Errorf("iss/sub = %v/%v, want %s for both", claims["iss"], claims["sub"], testClientID)
 	}
 	if claims["jti"] == nil || claims["jti"] == "" {
 		t.Error("jti must be present")
@@ -258,6 +260,39 @@ func TestRequestTokenRoundTrip(t *testing.T) {
 	}
 	if got := form.Get("scope"); got != "mcp:read mcp:tools" {
 		t.Errorf("scope = %q, want space-delimited", got)
+	}
+}
+
+// client_id is OPTIONAL under RFC 7521 §4.2 when the assertion identifies
+// the client, but Entra and some Keycloak setups require it and answer a
+// bare invalid_client when it is absent. Pin that we always send it.
+func TestRequestTokenSendsClientID(t *testing.T) {
+	key, keyPEM := newTestKey(t)
+	srv, form := tokenServer(t, &key.PublicKey, 3600)
+
+	assertion, err := BuildAssertion(AssertionParams{
+		ClientID: "ark-client", TokenEndpoint: srv.URL, Algorithm: "ES256", PrivateKeyPEM: keyPEM,
+	})
+	if err != nil {
+		t.Fatalf("BuildAssertion: %v", err)
+	}
+	if _, err := RequestToken(context.Background(), TokenRequestParams{
+		TokenEndpoint: srv.URL, ClientID: "ark-client", Assertion: assertion,
+	}); err != nil {
+		t.Fatalf("RequestToken: %v", err)
+	}
+
+	if got := form.Get("client_id"); got != testClientID {
+		t.Errorf("client_id = %q, want %s", got, testClientID)
+	}
+	// RFC 7521 §4.2: when present it must identify the same client as the
+	// assertion's iss/sub.
+	claims := jwt.MapClaims{}
+	if _, _, err := jwt.NewParser().ParseUnverified(form.Get("client_assertion"), claims); err != nil {
+		t.Fatalf("parse assertion: %v", err)
+	}
+	if claims["iss"] != form.Get("client_id") {
+		t.Errorf("client_id %q disagrees with assertion iss %v", form.Get("client_id"), claims["iss"])
 	}
 }
 

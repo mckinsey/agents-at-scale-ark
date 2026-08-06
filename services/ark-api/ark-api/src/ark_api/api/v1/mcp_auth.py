@@ -602,6 +602,21 @@ async def logout_mcp_auth(
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
         ns = (mcp_dict.get("metadata") or {}).get("namespace") or namespace
+
+        # There is no session to end for a machine identity — the
+        # controller simply mints again. Worse, delete_secret would remove
+        # the Secret the controller owns; until the next reconcile,
+        # discovery 401s and every Tool for this server is deleted.
+        if _is_machine_managed(mcp_dict):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "MCPServer uses spec.authorization.clientCredentials; the "
+                    "controller owns its token Secret and will mint again. "
+                    "There is no interactive session to sign out of."
+                ),
+            )
+
         token_ref = _read_token_secret_ref(mcp_server)
         if not token_ref or not token_ref.name:
             await strip_mcpserver_auth_annotations(ark_client, mcp_server_name)

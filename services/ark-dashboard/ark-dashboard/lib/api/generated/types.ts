@@ -3558,7 +3558,7 @@ export interface components {
              * Machinemanaged
              * @default false
              */
-            machineManaged?: boolean;
+            machineManaged: boolean;
             /** Resourcename */
             resourceName?: string | null;
             /** State */

@@ -19,7 +19,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
@@ -77,7 +79,7 @@ type MCPServerReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=mcpservers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 
@@ -151,7 +153,19 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		return ctrl.Result{}, err
 	}
 
-	authMaterial = r.ensureToken(ctx, &mcpServer, authMaterial)
+	authMaterial, acqErr := r.ensureToken(ctx, &mcpServer, authMaterial)
+	if acqErr != nil && !hasUsableToken(authMaterial) {
+		return r.reconcileConditionsTokenAcquisitionFailed(ctx, &mcpServer, acqErr)
+	}
+	if acqErr != nil {
+		// Renewal failed but the current token has not expired. Carry on
+		// with it and retry on the ordinary poll, per the requirement to
+		// retain a still-valid token across an acquisition failure.
+		logf.FromContext(ctx).Info("token renewal failed; continuing with the existing token",
+			"server", mcpServer.Name, "error", acqErr.Error())
+		r.Eventing.MCPServerRecorder().TokenAcquisitionFailed(ctx, &mcpServer,
+			fmt.Sprintf("renewal failed, continuing with the existing token: %v", acqErr))
+	}
 
 	mcpClient, err := r.createMCPClient(ctx, &mcpServer, authMaterial)
 	if err != nil {
@@ -181,6 +195,11 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
+	if acqErr != nil {
+		// Do not schedule an early renewal retry against a failing
+		// authorization server; fall back to the ordinary poll.
+		return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, nil)
+	}
 	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, authMaterial)
 }
 
@@ -768,9 +787,86 @@ func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runt
 	return &runtime.RawExtension{Raw: bytes}
 }
 
+// Field indexes mapping a Secret name back to the MCPServers that
+// reference it. Indexes rather than a List-and-filter so a Secret event
+// does not scan every MCPServer in the namespace.
+const (
+	indexTokenSecretRef = ".spec.authorization.tokenSecretRef.name"
+	indexSigningKeyRef  = ".spec.authorization.clientCredentials.clientAuthentication.privateKeyJWT.secretKeyRef.name"
+)
+
+func mcpServerTokenSecretIndexer(obj client.Object) []string {
+	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
+	if !ok || mcpServer.Spec.Authorization == nil {
+		return nil
+	}
+	if name := mcpServer.Spec.Authorization.TokenSecretRef.Name; name != "" {
+		return []string{name}
+	}
+	return nil
+}
+
+func mcpServerSigningKeyIndexer(obj client.Object) []string {
+	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
+	if !ok || mcpServer.Spec.Authorization == nil || mcpServer.Spec.Authorization.ClientCredentials == nil {
+		return nil
+	}
+	pkjwt := mcpServer.Spec.Authorization.ClientCredentials.ClientAuthentication.PrivateKeyJWT
+	if pkjwt == nil || pkjwt.SecretKeyRef.Name == "" {
+		return nil
+	}
+	return []string{pkjwt.SecretKeyRef.Name}
+}
+
+// findMCPServersForSecret enqueues every MCPServer that names this Secret
+// as either its token output or its signing-key input.
+//
+// This is the primary signal for Secret changes — a rotated signing key
+// or an out-of-band token edit is picked up immediately rather than at
+// the next poll. Expiry is not a Secret change and cannot arrive this
+// way, so the renewal requeue remains the mechanism for that.
+func (r *MCPServerReconciler) findMCPServersForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	seen := map[types.NamespacedName]struct{}{}
+	var requests []reconcile.Request
+
+	for _, index := range []string{indexTokenSecretRef, indexSigningKeyRef} {
+		var list arkv1alpha1.MCPServerList
+		if err := r.List(ctx, &list,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{index: obj.GetName()},
+		); err != nil {
+			logf.FromContext(ctx).Error(err, "mapping Secret to MCPServers",
+				"index", index, "secret", obj.GetName(), "namespace", obj.GetNamespace())
+			continue
+		}
+		for i := range list.Items {
+			nn := types.NamespacedName{Name: list.Items[i].Name, Namespace: list.Items[i].Namespace}
+			if _, dup := seen[nn]; dup {
+				continue
+			}
+			seen[nn] = struct{}{}
+			requests = append(requests, reconcile.Request{NamespacedName: nn})
+		}
+	}
+	return requests
+}
+
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	indexes := map[string]client.IndexerFunc{
+		indexTokenSecretRef: mcpServerTokenSecretIndexer,
+		indexSigningKeyRef:  mcpServerSigningKeyIndexer,
+	}
+	for field, indexer := range indexes {
+		if err := mgr.GetFieldIndexer().IndexField(
+			context.Background(), &arkv1alpha1.MCPServer{}, field, indexer,
+		); err != nil {
+			return err
+		}
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.MCPServer{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.findMCPServersForSecret)).
 		Named("mcpserver").
 		Complete(r)
 }

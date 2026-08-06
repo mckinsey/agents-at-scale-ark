@@ -3,6 +3,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 
@@ -50,7 +51,13 @@ func validateClientCredentials(auth *arkv1alpha1.MCPServerAuthorizationSpec) err
 	if strings.TrimSpace(cc.ClientID) == "" {
 		return fmt.Errorf("authorization.clientCredentials.clientID must not be empty")
 	}
-	if strings.TrimSpace(cc.ClientAuthentication.PrivateKeyJWT.SecretKeyRef.Name) == "" {
+	// The CRD's CEL rule enforces exactly-one-of; this covers the member
+	// being present but blank, which OpenAPI cannot express.
+	pkjwt := cc.ClientAuthentication.PrivateKeyJWT
+	if pkjwt == nil {
+		return fmt.Errorf("authorization.clientCredentials.clientAuthentication must set exactly one method")
+	}
+	if strings.TrimSpace(pkjwt.SecretKeyRef.Name) == "" {
 		return fmt.Errorf("authorization.clientCredentials.clientAuthentication.privateKeyJWT.secretKeyRef.name must not be empty")
 	}
 
@@ -69,13 +76,40 @@ func validateClientCredentials(auth *arkv1alpha1.MCPServerAuthorizationSpec) err
 		if err != nil {
 			return fmt.Errorf("authorization.clientCredentials.%s is not a valid URL: %w", o.field, err)
 		}
-		if u.Scheme != schemeHTTPS && u.Scheme != schemeHTTP {
-			return fmt.Errorf("authorization.clientCredentials.%s must be an http or https URL, got scheme %q", o.field, u.Scheme)
-		}
 		if u.Host == "" {
 			return fmt.Errorf("authorization.clientCredentials.%s must include a host", o.field)
+		}
+		// The client assertion is a credential in flight. Anyone on-path
+		// who captures it inside its 60s window can replay it and receive
+		// an access token as this client, unless the authorization server
+		// enforces jti replay protection — which cannot be assumed. The
+		// issued token then returns over the same cleartext channel, so a
+		// plaintext endpoint exposes both halves.
+		//
+		// OAuth 2.1 and MCP Authorization both require HTTPS here, with
+		// loopback exempted for development.
+		if u.Scheme != schemeHTTPS && !isLoopbackHost(u.Hostname()) {
+			return fmt.Errorf(
+				"authorization.clientCredentials.%s must use https (got %q); plaintext is permitted only for loopback addresses",
+				o.field, o.value)
+		}
+		if u.Scheme != schemeHTTPS && u.Scheme != schemeHTTP {
+			return fmt.Errorf("authorization.clientCredentials.%s must be an http or https URL, got scheme %q", o.field, u.Scheme)
 		}
 	}
 
 	return nil
+}
+
+// isLoopbackHost reports whether host is a loopback address or the
+// literal "localhost", matching the development carve-out OAuth 2.1 and
+// the MCP authorization spec allow.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }

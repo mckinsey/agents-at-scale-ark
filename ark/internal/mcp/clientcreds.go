@@ -4,6 +4,18 @@
 // private_key_jwt client authentication (RFC 7523 §2.2), as profiled by
 // the MCP OAuth Client Credentials Extension.
 //
+// Implemented against modelcontextprotocol/ext-auth@ce15435. That
+// extension is a draft and is still moving — ext-auth#9 rewrites the
+// client-secret text — so the revision is pinned here rather than
+// tracking main. Re-read the diff against this commit before claiming
+// conformance to a later revision.
+//
+// Deliberate deviations from that revision:
+//
+//   - client_id is always sent alongside client_assertion. The extension
+//     leaves it OPTIONAL (RFC 7521 §4.2); some servers require it, and
+//     sending it is inert where they do not.
+//
 // These are pure functions over an authorization server's RFC 8414
 // metadata: no Kubernetes types, no I/O beyond the token request itself.
 package mcp
@@ -183,6 +195,7 @@ type TokenResponse struct {
 // TokenRequestParams describes a client_credentials token request.
 type TokenRequestParams struct {
 	TokenEndpoint string
+	ClientID      string
 	Assertion     string
 	Resource      string
 	Scopes        []string
@@ -219,6 +232,16 @@ func RequestToken(ctx context.Context, p TokenRequestParams) (*TokenResponse, er
 	form.Set("grant_type", GrantTypeClientCredentials)
 	form.Set("client_assertion_type", ClientAssertionTypeJWTBearer)
 	form.Set("client_assertion", p.Assertion)
+
+	// RFC 7521 §4.2 makes client_id OPTIONAL when the assertion's iss/sub
+	// already identify the client, and requires it to match when present.
+	// Send it regardless: Microsoft Entra's certificate-credentials flow
+	// documents it as required, and a server that wants it replies with a
+	// bare invalid_client naming no missing parameter — painful to debug.
+	// Inert where the server ignores it.
+	if p.ClientID != "" {
+		form.Set("client_id", p.ClientID)
+	}
 	if p.Resource != "" {
 		form.Set("resource", p.Resource)
 	}

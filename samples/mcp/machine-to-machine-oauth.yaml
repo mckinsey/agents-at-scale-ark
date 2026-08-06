@@ -4,6 +4,10 @@
 # client_credentials with private_key_jwt (RFC 7523). No browser, no
 # human, no `ark mcp auth login`.
 #
+# Implements the MCP OAuth Client Credentials Extension at
+# modelcontextprotocol/ext-auth@ce15435. That extension is a draft, so
+# the revision is pinned; behaviour may differ from later revisions.
+#
 # PREREQUISITE — the authorization server MUST already have Ark
 # registered as a client. There is no dynamic registration in this flow.
 # Out of band, an administrator on the counterparty's side must:

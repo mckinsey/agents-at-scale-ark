@@ -5,12 +5,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -25,6 +27,10 @@ import (
 // pollInterval defaults to 1m, so the controller normally wakes at least
 // once inside this window regardless of the requeue.
 const tokenRenewalSkew = 60 * time.Second
+
+// renewalJitterDivisor bounds the random subtraction applied to the
+// renewal delay: up to 1/renewalJitterDivisor of the remaining wait.
+const renewalJitterDivisor = 10
 
 // isMachineManaged reports whether the controller mints this server's
 // token itself, rather than waiting for ark-api to write one after a
@@ -42,27 +48,37 @@ func isMachineManaged(mcpServer *arkv1alpha1.MCPServer) bool {
 // valid this returns early, so a reconcile triggered by the controller's
 // own Secret write cannot mint again.
 //
-// Returns the material the caller should use for this reconcile.
-// Acquisition failures are surfaced as conditions and events rather than
-// reconcile errors: an unreachable authorization server should not spin
-// the work queue.
-func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial) *authorizationMaterial {
+// Returns the material the caller should use, and an error describing an
+// acquisition failure. A returned error is not a reconcile error — an
+// unreachable authorization server should not spin the work queue — but
+// the caller must decide whether the remaining material is still usable.
+//
+// Deferring because discovery has not run yet is not a failure and
+// returns a nil error.
+func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial) (*authorizationMaterial, error) {
 	if !isMachineManaged(mcpServer) || material == nil {
-		return material
+		return material, nil
 	}
 	if !tokenNeedsRenewal(material) {
-		return material
+		return material, nil
 	}
 
 	log := logf.FromContext(ctx)
 	cc := mcpServer.Spec.Authorization.ClientCredentials
+
+	pkjwt := cc.ClientAuthentication.PrivateKeyJWT
+	if pkjwt == nil {
+		// Admission enforces exactly-one-of, so this is only reachable on
+		// an object written before the CEL rule existed.
+		return material, fmt.Errorf("authorization.clientCredentials.clientAuthentication has no method set")
+	}
 
 	tokenEndpoint := resolveTokenEndpoint(mcpServer)
 	if tokenEndpoint == "" {
 		// Discovery has not run yet. The existing 401 path populates
 		// status.authorization and the next reconcile has what it needs.
 		log.Info("client credentials configured but no token endpoint known yet; deferring to discovery", "server", mcpServer.Name)
-		return material
+		return material, nil
 	}
 
 	if mcpServer.Status.Authorization == nil {
@@ -71,53 +87,59 @@ func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1a
 		// so validating now would report a spurious failure on the first
 		// reconcile. Defer instead — the 401 path populates them.
 		log.Info("client credentials configured but discovery has not run yet; deferring acquisition", "server", mcpServer.Name)
-		return material
+		return material, nil
 	}
 
 	if err := arkmcp.ValidateASCapabilities(capabilitiesFromStatus(mcpServer), cc.ClientAuthentication.PrivateKeyJWT.Algorithm); err != nil {
-		r.failTokenAcquisition(ctx, mcpServer, err.Error())
-		return material
+		return material, err
 	}
 
 	keyPEM, err := r.readSigningKey(ctx, mcpServer)
 	if err != nil {
-		r.failTokenAcquisition(ctx, mcpServer, err.Error())
-		return material
+		return material, err
 	}
 
 	assertion, err := arkmcp.BuildAssertion(arkmcp.AssertionParams{
 		ClientID:      cc.ClientID,
 		TokenEndpoint: tokenEndpoint,
-		Algorithm:     cc.ClientAuthentication.PrivateKeyJWT.Algorithm,
-		KeyID:         cc.ClientAuthentication.PrivateKeyJWT.KeyID,
+		Algorithm:     pkjwt.Algorithm,
+		KeyID:         pkjwt.KeyID,
 		PrivateKeyPEM: keyPEM,
 	})
 	if err != nil {
-		r.failTokenAcquisition(ctx, mcpServer, fmt.Sprintf("building client assertion: %v", err))
-		return material
+		return material, fmt.Errorf("building client assertion: %w", err)
 	}
 
 	tr, err := arkmcp.RequestToken(ctx, arkmcp.TokenRequestParams{
 		TokenEndpoint: tokenEndpoint,
+		ClientID:      cc.ClientID,
 		Assertion:     assertion,
 		Resource:      resolveTokenResource(mcpServer),
 		Scopes:        cc.Scopes,
 		Timeout:       parseTimeout(mcpServer.Spec.Timeout),
 	})
 	if err != nil {
-		r.failTokenAcquisition(ctx, mcpServer, fmt.Sprintf("token request failed: %v", err))
-		return material
+		return material, fmt.Errorf("token request failed: %w", err)
 	}
 
+	// expires_in is attacker- or bug-controlled input. Above ~292 years
+	// the multiplication overflows int64 and yields a negative duration,
+	// putting expiresAt in the past and re-minting on every reconcile.
+	// Clamp to something no legitimate access token exceeds.
+	const maxExpiresIn = int64(10 * 365 * 24 * 3600)
 	var expiresAt *metav1.Time
 	if tr.ExpiresIn > 0 {
-		t := metav1.NewTime(time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second))
+		seconds := min(tr.ExpiresIn, maxExpiresIn)
+		if seconds != tr.ExpiresIn {
+			log.Info("authorization server returned an implausible expires_in; clamping",
+				"server", mcpServer.Name, "expiresIn", tr.ExpiresIn, "clampedTo", seconds)
+		}
+		t := metav1.NewTime(time.Now().Add(time.Duration(seconds) * time.Second))
 		expiresAt = &t
 	}
 
 	if err := r.writeTokenSecret(ctx, mcpServer, tr.AccessToken, expiresAt); err != nil {
-		r.failTokenAcquisition(ctx, mcpServer, fmt.Sprintf("writing token secret: %v", err))
-		return material
+		return material, fmt.Errorf("writing token secret: %w", err)
 	}
 
 	expiryField := "none"
@@ -138,7 +160,20 @@ func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1a
 		accessToken: tr.AccessToken,
 		expiresAt:   expiresAt,
 		secretName:  material.secretName,
+	}, nil
+}
+
+// hasUsableToken reports whether material carries a token that has not
+// already expired. A token inside the renewal skew is still usable — the
+// skew is headroom, not an expiry.
+func hasUsableToken(material *authorizationMaterial) bool {
+	if material == nil || material.accessToken == "" {
+		return false
 	}
+	if material.expiresAt == nil {
+		return true
+	}
+	return time.Now().Before(material.expiresAt.Time)
 }
 
 // tokenNeedsRenewal reports whether the current material is missing a
@@ -195,7 +230,11 @@ func capabilitiesFromStatus(mcpServer *arkv1alpha1.MCPServer) arkmcp.ASCapabilit
 // manager never caches Secrets. The key material is returned to the
 // caller and never stored on the MCPServer.
 func (r *MCPServerReconciler) readSigningKey(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) ([]byte, error) {
-	ref := mcpServer.Spec.Authorization.ClientCredentials.ClientAuthentication.PrivateKeyJWT.SecretKeyRef
+	pkjwt := mcpServer.Spec.Authorization.ClientCredentials.ClientAuthentication.PrivateKeyJWT
+	if pkjwt == nil {
+		return nil, fmt.Errorf("authorization.clientCredentials.clientAuthentication has no method set")
+	}
+	ref := pkjwt.SecretKeyRef
 	key := ref.Key
 	if key == "" {
 		key = "private.pem"
@@ -272,20 +311,44 @@ func applyTokenData(secret *corev1.Secret, accessKey, expiresKey, accessToken st
 	}
 }
 
-// failTokenAcquisition records an acquisition failure without disturbing
-// status.authorization.state — a missing signing key or an
-// unadvertised capability is not the same as the browser flow's
-// Required, and conflating them would tell the dashboard to offer an
-// authorize button that cannot work.
-func (r *MCPServerReconciler) failTokenAcquisition(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, reason string) {
+// reconcileConditionsTokenAcquisitionFailed terminates the reconcile when
+// no usable token could be obtained.
+//
+// Connecting anyway would present no credential and earn a 401, and the
+// 401 handler would overwrite this reason with AuthorizationRequired —
+// telling the dashboard to offer an authorize button that cannot fix a
+// missing signing key. Short-circuiting is what keeps the two failure
+// modes distinguishable.
+//
+// status.authorization.state is deliberately left alone: an acquisition
+// failure says nothing about whether the server requires authorization.
+func (r *MCPServerReconciler) reconcileConditionsTokenAcquisitionFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, cause error) (ctrl.Result, error) {
+	reason := cause.Error()
 	logf.FromContext(ctx).Info("token acquisition failed", "server", mcpServer.Name, "reason", reason)
-	r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonTokenAcquisitionFailed, reason)
-	r.Eventing.MCPServerRecorder().TokenAcquisitionFailed(ctx, mcpServer, reason)
+
+	mcpServer.Status.ToolCount = 0
+	changed1 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonTokenAcquisitionFailed, reason)
+	changed2 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonTokenAcquisitionFailed, "Cannot attempt tool discovery without a token")
+	if changed1 || changed2 {
+		r.Eventing.MCPServerRecorder().TokenAcquisitionFailed(ctx, mcpServer, reason)
+		if err := r.updateStatus(ctx, mcpServer); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Back off to the poll interval rather than the renewal timer. An
+	// expired token would otherwise floor the requeue at one second and
+	// retry against a failing authorization server every second.
+	return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 }
 
 // tokenRenewalRequeue returns the interval after which the controller
 // should wake to renew, bounded by the configured poll interval. A
 // token with no recorded expiry falls back to the poll interval.
+//
+// Callers must not use this after a failed acquisition: a token already
+// inside the skew floors the result at one second, which against a
+// failing authorization server becomes a retry every second.
 func tokenRenewalRequeue(mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial) time.Duration {
 	poll := getPollInterval(mcpServer.Spec.PollInterval)
 	if mcpServer.Spec.Authorization == nil || mcpServer.Spec.Authorization.ClientCredentials == nil {
@@ -296,6 +359,17 @@ func tokenRenewalRequeue(mcpServer *arkv1alpha1.MCPServer, material *authorizati
 	}
 
 	untilRenewal := time.Until(material.expiresAt.Time) - tokenRenewalSkew
+
+	// Disperse the herd. A fixed authorization-server policy hands every
+	// client the same TTL, so servers minted in the same moment — an
+	// operator applying a bundle, or the controller restarting and
+	// reconciling everything at once — compute an identical renewal
+	// instant and then re-synchronise on every cycle thereafter. Skew is
+	// headroom before expiry; jitter is what stops the burst.
+	if untilRenewal > 0 {
+		untilRenewal -= rand.N(untilRenewal/renewalJitterDivisor + 1)
+	}
+
 	if untilRenewal < time.Second {
 		untilRenewal = time.Second
 	}

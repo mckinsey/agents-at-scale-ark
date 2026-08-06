@@ -48,6 +48,11 @@ type MCPServerAuthorizationSpec struct {
 	// token acquisition. When set, the controller mints and renews the
 	// access token written to TokenSecretRef; no interactive browser
 	// flow is offered for this server.
+	//
+	// Implements the MCP OAuth Client Credentials Extension at
+	// modelcontextprotocol/ext-auth@ce15435. That extension is a draft
+	// and still changing, so the revision is pinned rather than tracking
+	// main; behaviour may differ from later revisions.
 	// +kubebuilder:validation:Optional
 	ClientCredentials *ClientCredentialsSpec `json:"clientCredentials,omitempty"`
 }
@@ -60,6 +65,10 @@ type MCPServerAuthorizationSpec struct {
 //
 // This describes how a token is obtained. TokenSecretRef describes where
 // it is written, and its name stays stable across renewals.
+//
+// Implemented against the MCP OAuth Client Credentials Extension at
+// modelcontextprotocol/ext-auth@ce15435. The extension is a draft and is
+// still changing, so the revision is pinned rather than tracking main.
 type ClientCredentialsSpec struct {
 	// ClientID is the OAuth client identifier the authorization server
 	// assigned to Ark during out-of-band registration.
@@ -78,8 +87,11 @@ type ClientCredentialsSpec struct {
 	Resource string `json:"resource,omitempty"`
 
 	// TokenEndpoint is the authorization server's token endpoint.
-	// Normally taken from discovered RFC 8414 metadata; setting it
-	// explicitly also skips the discovery round-trip on cold start.
+	// Normally taken from discovered RFC 8414 metadata; set it explicitly
+	// only as an interoperability override. Discovery still runs either
+	// way — it is driven by the server's 401 challenge, not by this field
+	// — and the advertised capabilities it returns are still validated.
+	// Must be https, or a loopback address for development.
 	// +kubebuilder:validation:Optional
 	TokenEndpoint string `json:"tokenEndpoint,omitempty"`
 
@@ -89,14 +101,19 @@ type ClientCredentialsSpec struct {
 	ClientAuthentication ClientAuthenticationSpec `json:"clientAuthentication"`
 }
 
-// ClientAuthenticationSpec selects a client authentication method. Only
-// private_key_jwt is supported; further methods become additional
-// optional members.
+// ClientAuthenticationSpec selects a client authentication method.
+//
+// A discriminated union: exactly one member must be set. Only
+// privateKeyJWT exists today, but it is a pointer with a CEL constraint
+// so that adding serviceAccountToken or workloadIdentity later is
+// additive. Declaring it required and non-pointer would make every
+// future variant a breaking change to this field.
+// +kubebuilder:validation:XValidation:rule="[has(self.privateKeyJWT)].exists_one(x, x)",message="exactly one client authentication method must be set"
 type ClientAuthenticationSpec struct {
 	// PrivateKeyJWT authenticates with a signed JWT assertion
 	// (RFC 7523 §2.2).
-	// +kubebuilder:validation:Required
-	PrivateKeyJWT PrivateKeyJWTSpec `json:"privateKeyJWT"`
+	// +kubebuilder:validation:Optional
+	PrivateKeyJWT *PrivateKeyJWTSpec `json:"privateKeyJWT,omitempty"`
 }
 
 // PrivateKeyJWTSpec configures RFC 7523 client authentication. The

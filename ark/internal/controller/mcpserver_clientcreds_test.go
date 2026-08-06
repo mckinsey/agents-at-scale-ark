@@ -40,6 +40,10 @@ type machineMCPServer struct {
 	*httptest.Server
 	mints      *atomic.Int32
 	privateKey []byte
+	// tokenEndpointDown makes /token return 503, simulating an
+	// authorization server that becomes unreachable after a successful
+	// mint.
+	tokenEndpointDown *atomic.Bool
 }
 
 // newMachineMCPServer is an MCP server protected by its own
@@ -63,6 +67,7 @@ func newMachineMCPServer(opts machineMCPOpts) *machineMCPServer {
 	var issued atomic.Value
 	issued.Store("")
 	mints := &atomic.Int32{}
+	down := &atomic.Bool{}
 
 	mux := http.NewServeMux()
 
@@ -123,6 +128,11 @@ func newMachineMCPServer(opts machineMCPOpts) *machineMCPServer {
 	})
 
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		if down.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":"temporarily_unavailable"}`))
+			return
+		}
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
 			return
@@ -146,7 +156,9 @@ func newMachineMCPServer(opts machineMCPOpts) *machineMCPServer {
 		})
 	})
 
-	return &machineMCPServer{Server: httptest.NewServer(mux), mints: mints, privateKey: keyPEM}
+	return &machineMCPServer{
+		Server: httptest.NewServer(mux), mints: mints, privateKey: keyPEM, tokenEndpointDown: down,
+	}
 }
 
 // createMachineMCPServer wires a signing-key Secret, an empty token
@@ -176,7 +188,7 @@ func createMachineMCPServer(ctx context.Context, name, mcpURL string, keyPEM []b
 					ClientID: "ark-client",
 					Scopes:   []string{"mcp:tools"},
 					ClientAuthentication: arkv1alpha1.ClientAuthenticationSpec{
-						PrivateKeyJWT: arkv1alpha1.PrivateKeyJWTSpec{
+						PrivateKeyJWT: &arkv1alpha1.PrivateKeyJWTSpec{
 							SecretKeyRef: arkv1alpha1.SigningKeySecretKeyRef{
 								Name: keySecretName,
 								Key:  "private.pem",
@@ -314,6 +326,7 @@ var _ = Describe("MCPServer Controller — client_credentials token acquisition"
 		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
 		Expect(avail).NotTo(BeNil())
 		Expect(avail.Status).To(Equal(metav1.ConditionFalse))
+		Expect(avail.Reason).To(Equal(MCPServerReasonTokenAcquisitionFailed))
 	})
 
 	It("reports TokenAcquisitionFailed when the signing key Secret is missing", func() {
@@ -332,7 +345,7 @@ var _ = Describe("MCPServer Controller — client_credentials token acquisition"
 					ClientCredentials: &arkv1alpha1.ClientCredentialsSpec{
 						ClientID: "ark-client",
 						ClientAuthentication: arkv1alpha1.ClientAuthenticationSpec{
-							PrivateKeyJWT: arkv1alpha1.PrivateKeyJWTSpec{
+							PrivateKeyJWT: &arkv1alpha1.PrivateKeyJWTSpec{
 								SecretKeyRef: arkv1alpha1.SigningKeySecretKeyRef{
 									Name: "does-not-exist",
 									Key:  "private.pem",
@@ -357,5 +370,47 @@ var _ = Describe("MCPServer Controller — client_credentials token acquisition"
 		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
 		Expect(avail).NotTo(BeNil())
 		Expect(avail.Status).To(Equal(metav1.ConditionFalse))
+		Expect(avail.Reason).To(Equal(MCPServerReasonTokenAcquisitionFailed))
+	})
+
+	It("keeps using a still-valid token when renewal fails", func() {
+		srv := newMachineMCPServer(machineMCPOpts{advertiseClientCredentials: true})
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-cc-renewal-fails"
+		tokenSecretName := createMachineMCPServer(ctx, name, srv.URL+"/mcp", srv.privateKey)
+
+		r := newMachineReconciler()
+		Expect(reconcileUntilStable(ctx, r, nn(name))).To(Succeed())
+
+		before := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, nn(tokenSecretName), before)).To(Succeed())
+		originalToken := string(before.Data["access_token"])
+
+		// Move expiry inside the skew so renewal is attempted, but leave
+		// the token itself unexpired, then take the AS down.
+		Eventually(func() error {
+			secret := &corev1.Secret{}
+			if err := k8sClient.Get(ctx, nn(tokenSecretName), secret); err != nil {
+				return err
+			}
+			secret.Data["expires_at"] = []byte(time.Now().Add(30 * time.Second).UTC().Format(time.RFC3339))
+			return k8sClient.Update(ctx, secret)
+		}, "5s", "100ms").Should(Succeed())
+		srv.tokenEndpointDown.Store(true)
+
+		Expect(reconcileUntilStable(ctx, r, nn(name))).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, nn(name), out)).To(Succeed())
+		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
+		Expect(avail).NotTo(BeNil())
+		Expect(avail.Status).To(Equal(metav1.ConditionTrue),
+			"a still-valid token must survive a failed renewal rather than failing the server")
+
+		after := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, nn(tokenSecretName), after)).To(Succeed())
+		Expect(string(after.Data["access_token"])).To(Equal(originalToken),
+			"the existing token must not be discarded when renewal fails")
 	})
 })

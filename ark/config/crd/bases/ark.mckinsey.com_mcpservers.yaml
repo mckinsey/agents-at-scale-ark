@@ -155,6 +155,11 @@ spec:
                       token acquisition. When set, the controller mints and renews the
                       access token written to TokenSecretRef; no interactive browser
                       flow is offered for this server.
+
+                      Implements the MCP OAuth Client Credentials Extension at
+                      modelcontextprotocol/ext-auth@ce15435. That extension is a draft
+                      and still changing, so the revision is pinned rather than tracking
+                      main; behaviour may differ from later revisions.
                     properties:
                       clientAuthentication:
                         description: |-
@@ -205,9 +210,11 @@ spec:
                             required:
                             - secretKeyRef
                             type: object
-                        required:
-                        - privateKeyJWT
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one client authentication method must be
+                            set
+                          rule: '[has(self.privateKeyJWT)].exists_one(x, x)'
                       clientID:
                         description: |-
                           ClientID is the OAuth client identifier the authorization server
@@ -229,8 +236,11 @@ spec:
                       tokenEndpoint:
                         description: |-
                           TokenEndpoint is the authorization server's token endpoint.
-                          Normally taken from discovered RFC 8414 metadata; setting it
-                          explicitly also skips the discovery round-trip on cold start.
+                          Normally taken from discovered RFC 8414 metadata; set it explicitly
+                          only as an interoperability override. Discovery still runs either
+                          way — it is driven by the server's 401 challenge, not by this field
+                          — and the advertised capabilities it returns are still validated.
+                          Must be https, or a loopback address for development.
                         type: string
                     required:
                     - clientAuthentication
