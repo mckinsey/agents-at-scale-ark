@@ -28,7 +28,7 @@ def require_api_key_owner(request: Request) -> Optional[UserIdentity]:
         return None
 
     identity = getattr(request.state, "user_identity", None)
-    if identity is None:
+    if identity is None or not identity.username:
         raise HTTPException(
             status_code=403,
             detail="API key management requires an authenticated user identity",

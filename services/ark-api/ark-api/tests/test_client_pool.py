@@ -196,6 +196,21 @@ class TestRequireApiKeyOwner(unittest.TestCase):
                 require_api_key_owner(request)
         self.assertEqual(ctx.exception.status_code, 403)
 
+    def test_hybrid_with_blank_username_raises(self):
+        import os
+        from fastapi import HTTPException
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username="", groups=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            with self.assertRaises(HTTPException) as ctx:
+                require_api_key_owner(request)
+        self.assertEqual(ctx.exception.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

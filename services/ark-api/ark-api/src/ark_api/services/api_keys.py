@@ -174,7 +174,7 @@ class APIKeyService:
             metadata["lastUsedAt"] = self._format_datetime(last_used_at)
         if deleted_at:
             metadata["deletedAt"] = self._format_datetime(deleted_at)
-        if created_by:
+        if created_by is not None:
             metadata["createdBy"] = created_by
 
         return json.dumps(metadata)
