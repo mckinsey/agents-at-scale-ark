@@ -70,11 +70,14 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <BrokerPage />
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <BrokerPage />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 function emitTrace(data: unknown) {
@@ -155,6 +158,94 @@ describe('BrokerPage', () => {
 
     expect(
       await screen.findByRole('tab', { name: 'OTEL Traces' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No stream records')).toBeNull();
+  });
+
+  it('surfaces the broker as unavailable when a probe cannot be read', async () => {
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/broker/sessions')) {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({}),
+        } as unknown as Response);
+      }
+      return Promise.resolve(jsonResponse(EMPTY_PAGE));
+    }) as unknown as typeof fetch;
+
+    renderPage();
+
+    expect(await screen.findByText('Broker unavailable')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not read broker records for default/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'OTEL Traces' })).toBeNull();
+    expect(screen.queryByText('No stream records')).toBeNull();
+  });
+
+  it('re-probes when the unavailable state is retried', async () => {
+    const user = userEvent.setup();
+    let isBrokerDown = true;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (isBrokerDown) {
+        if (url.includes('/broker/sessions')) {
+          return Promise.resolve({
+            ok: false,
+            status: 503,
+            json: () => Promise.resolve({}),
+          } as unknown as Response);
+        }
+        return Promise.resolve(jsonResponse(EMPTY_PAGE));
+      }
+      if (/limit=1$/.test(url)) {
+        return Promise.resolve(
+          jsonResponse({ items: [{ id: 'e1' }], total: 1, hasMore: false }),
+        );
+      }
+      return Promise.resolve(jsonResponse(EMPTY_PAGE));
+    }) as unknown as typeof fetch;
+
+    renderPage();
+    await screen.findByText('Broker unavailable');
+
+    isBrokerDown = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(
+      await screen.findByRole('tab', { name: 'OTEL Traces' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Broker unavailable')).toBeNull();
+  });
+
+  it('keeps the tabs mounted when the probe empties while a stream is live', async () => {
+    mockFetch(url => (url.includes('/broker/events') ? [{ id: 'e1' }] : []));
+    const { queryClient } = renderPage();
+    await screen.findByRole('tab', { name: 'OTEL Traces' });
+    await waitFor(() => {
+      expect(esInstances.some(es => es.url.includes('/broker/traces'))).toBe(
+        true,
+      );
+    });
+
+    emitTrace({ timestamp: '2026-07-31T10:00:00.000Z', traceId: 'trace-1' });
+
+    // The probe only samples the five streams; a live SSE entry in the mounted
+    // tab must keep the panel from being replaced by the empty state mid-stream.
+    act(() => {
+      queryClient.setQueryData(['broker-stream-probe', 'default'], 'empty');
+    });
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(['broker-stream-probe', 'default'])).toBe(
+        'empty',
+      );
+    });
+    expect(
+      screen.getByRole('tab', { name: 'OTEL Traces' }),
     ).toBeInTheDocument();
     expect(screen.queryByText('No stream records')).toBeNull();
   });

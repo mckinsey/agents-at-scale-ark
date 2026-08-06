@@ -11,6 +11,7 @@ import {
   LearnMoreButton,
   ResourceEmptyState,
 } from '@/components/sections/resource-list-states';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -51,6 +52,47 @@ const BROKER_TABS: Record<
 
 function panelTitleFor(key: BrokerStreamKey) {
   return BROKER_TABS[key].panelTitle ?? BROKER_TABS[key].label;
+}
+
+type EmptyStateKind = 'no-memories' | 'no-records' | 'unavailable';
+
+function getEmptyStateContent(kind: EmptyStateKind, memory: string) {
+  if (kind === 'unavailable') {
+    return {
+      title: 'Broker unavailable',
+      description: (
+        <>
+          <p className="mb-2">Could not read broker records for {memory}.</p>
+          <p>Check that the broker service is running, then retry.</p>
+        </>
+      ),
+    };
+  }
+
+  if (kind === 'no-memories') {
+    return {
+      title: 'No stream records',
+      description: (
+        <>
+          <p className="mb-2">No memory resources found.</p>
+          <p>Add a memory and run a query to see broker records here.</p>
+        </>
+      ),
+    };
+  }
+
+  return {
+    title: 'No stream records',
+    description: (
+      <>
+        <p className="mb-2">The broker has no records for {memory}.</p>
+        <p>
+          Run a query against this memory to see traces, messages, LLM chunks,
+          events, and sessions.
+        </p>
+      </>
+    ),
+  };
 }
 
 interface BrokerStreamTabProps {
@@ -171,10 +213,19 @@ export default function BrokerPage() {
     loading || (hasMemories && streamProbe.data === undefined);
   const showLoading = useDelayedLoading(isResolving);
 
+  const isBrokerUnreachable = hasMemories && streamProbe.data === 'unknown';
+
   const showEmptyState =
     !hasMemoriesError &&
     !hasLiveEntries &&
-    (!hasMemories || streamProbe.data === 'empty');
+    (!hasMemories || streamProbe.data === 'empty' || isBrokerUnreachable);
+
+  let emptyStateKind: EmptyStateKind = 'no-records';
+  if (isBrokerUnreachable) emptyStateKind = 'unavailable';
+  else if (!hasMemories) emptyStateKind = 'no-memories';
+
+  const { title: emptyStateTitle, description: emptyStateDescription } =
+    getEmptyStateContent(emptyStateKind, selectedMemory);
 
   return (
     <div className="content-shell flex min-h-0 w-full flex-1 flex-col">
@@ -195,7 +246,6 @@ export default function BrokerPage() {
           onValueChange={value => {
             const memoryName = String(value);
             setSelectedMemory(memoryName);
-            setHasLiveEntries(false);
             trackEvent({
               name: 'broker_memory_changed',
               properties: { memoryName },
@@ -227,26 +277,22 @@ export default function BrokerPage() {
       {!isResolving && showEmptyState && (
         <ResourceEmptyState
           icon={<BrokenImage />}
-          title="No stream records"
-          description={
-            hasMemories ? (
-              <>
-                <p className="mb-2">
-                  The broker has no records for {selectedMemory}.
-                </p>
-                <p>
-                  Run a query against this memory to see traces, messages, LLM
-                  chunks, events, and sessions.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="mb-2">No memory resources found.</p>
-                <p>Add a memory and run a query to see broker records here.</p>
-              </>
-            )
+          title={emptyStateTitle}
+          description={emptyStateDescription}
+          actions={
+            <>
+              {isBrokerUnreachable && (
+                <Button
+                  disabled={streamProbe.isFetching}
+                  onClick={() => {
+                    streamProbe.refetch();
+                  }}>
+                  Retry
+                </Button>
+              )}
+              <LearnMoreButton href={DOCS_URLS.observability} />
+            </>
           }
-          actions={<LearnMoreButton href={DOCS_URLS.observability} />}
         />
       )}
       {!isResolving && !showEmptyState && (
