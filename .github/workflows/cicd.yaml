@@ -231,6 +231,99 @@ jobs:
           artifact-folder: ark/unit-tests
           artifact-suffix: ark-unit
 
+  integration-test-postgresql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          mock-llm-enabled: false
+
+      - name: Deploy PostgreSQL (ark-storage-dev)
+        run: |
+          helm upgrade --install ark-storage-dev charts/ark-storage-dev \
+            --namespace ark-system --create-namespace \
+            --wait --timeout=120s
+          kubectl -n ark-system wait --for=condition=ready \
+            pod -l app=ark-storage-dev --timeout=120s
+
+      - name: Run PostgreSQL integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ark
+          POSTGRES_PASSWORD: arkdev123
+        run: |
+          kubectl -n ark-system port-forward svc/ark-storage-dev 5432:5432 >/dev/null 2>&1 &
+          trap 'kill $! 2>/dev/null || true' EXIT
+          ready=false
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -q; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "PostgreSQL did not become ready in time"
+            exit 1
+          fi
+          # Capture the -json stream to a file and read go's exit code directly.
+          # Piping into a formatter that ends in `|| true` resets PIPESTATUS to (0),
+          # so a compile failure or test failure would be reported as a green job -
+          # exactly the silent no-op this job exists to prevent.
+          status=0
+          (cd ark && go test -tags integration ./internal/storage/postgresql/... -timeout 20m \
+            -coverprofile=cover.out -covermode=atomic -json) \
+            > /tmp/gotest.json || status=$?
+          jq -r 'select(.Action=="output") | .Output' /tmp/gotest.json | grep -v '^$' || true
+          echo "::group::Test runtimes (top 10 slowest)"
+          jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn | head -10
+          echo "::endgroup::"
+          # This job provisions Postgres, so no test in this package should skip.
+          # A skip means the suite never really ran (unset/renamed env var,
+          # unreachable DB, build-tag mistake) and green would be a lie - fail loud.
+          skipped=$(jq -r 'select(.Action=="skip" and .Test) | .Test' /tmp/gotest.json)
+          if [ -n "$skipped" ]; then
+            echo "::error::Integration tests skipped despite Postgres being provisioned:"
+            echo "$skipped"
+            exit 1
+          fi
+          exit "$status"
+
+      - name: Install gcov2lcov
+        run: go install github.com/jandelgado/gcov2lcov@latest
+
+      - name: Generate LCOV from integration coverage
+        run: |
+          mkdir -p ark/integration-tests
+          cp ark/cover.out ark/integration-tests/
+          cd ark && gcov2lcov -infile integration-tests/cover.out -outfile integration-tests/lcov.info
+
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: ark/integration-tests/
+          artifact-folder: ark/integration-tests
+          artifact-suffix: ark-integration-postgres
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-integration-gotest-json
+          path: /tmp/gotest.json
+          if-no-files-found: warn
+
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
@@ -1207,6 +1300,7 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
+        integration-test-postgresql,
         build-charts,
         build-ark-cli,
       ]
@@ -1284,6 +1378,7 @@ jobs:
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
+        integration-test-postgresql,
         build-charts,
         build-ark-cli,
       ]
