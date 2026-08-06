@@ -806,19 +806,7 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 // opened with a concrete resourceVersion delivers only deltas after it, instead of
 // replaying every existing object as Added on every (re)connect.
 func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
