@@ -621,8 +621,13 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 
 	timeout := parseTimeout(mcpServer.Spec.Timeout)
 
+	toolCallTimeout, err := arkmcp.ParseToolCallTimeout(mcpServer.Spec.ToolCallTimeout)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "ignoring invalid MCPServer spec.toolCallTimeout", "mcpServer", mcpServer.Name)
+	}
+
 	// MCP settings are not needed for listing tools, etc.
-	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{})
+	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{}, arkmcp.WithToolCallTimeout(toolCallTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}

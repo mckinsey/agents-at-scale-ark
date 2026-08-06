@@ -359,9 +359,18 @@ spec:
               timeout:
                 default: 30s
                 description: |-
-                  Timeout specifies the maximum duration for MCP tool calls to this server.
-                  Use this to support long-running operations (e.g., "5m", "10m", "30m").
+                  Timeout bounds establishing the connection to this server, including the
+                  connection retry window. It does not bound individual tool calls once the
+                  connection is established - use toolCallTimeout for that.
                   Defaults to "30s" if not specified.
+                type: string
+              toolCallTimeout:
+                description: |-
+                  ToolCallTimeout bounds each individual tool call to this server
+                  (e.g., "30s", "5m", "10m"). Use this to support long-running operations.
+                  When unset, a tool call is bounded only by the execution budget of the
+                  query that triggered it.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                 type: string
               transport:
                 default: http
