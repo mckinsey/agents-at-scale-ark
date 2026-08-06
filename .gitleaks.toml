@@ -11,7 +11,8 @@ keywords = ["sk-ark-"]
 tags = ["ark", "api-key", "secret"]
 
 [allowlist]
-description = "Credential-redaction test fixtures contain intentional sample tokens used to exercise the redactor; they are not real secrets."
+description = "Test fixtures contain intentional sample tokens used to exercise redaction or filtering logic; they are not real secrets."
 paths = [
   '''ark/internal/telemetry/redact/testdata/credential-redaction\.json''',
+  '''lib/ark-sdk/gen_sdk/overlay/python/test_overlay/test_secret_client\.py''',
 ]
