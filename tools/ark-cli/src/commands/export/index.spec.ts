@@ -404,6 +404,190 @@ describe('export command', () => {
     }
   });
 
+  it('should exclude controller-managed children and retain their parents', async () => {
+    mockExeca
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Tool',
+              metadata: {
+                name: 'managed-tool-by-label',
+                labels: {'mcp/server': 'test-mcp'},
+              },
+              spec: {type: 'mcp'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Tool',
+              metadata: {
+                name: 'managed-tool-by-owner',
+                ownerReferences: [
+                  {
+                    apiVersion: 'ark.mckinsey.com/v1alpha1',
+                    kind: 'MCPServer',
+                    name: 'test-mcp',
+                    uid: 'mcp-uid',
+                  },
+                ],
+              },
+              spec: {type: 'mcp'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Tool',
+              metadata: {name: 'user-tool'},
+              spec: {type: 'http'},
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Agent',
+              metadata: {
+                name: 'managed-agent-by-label',
+                labels: {'a2a/server': 'test-a2a'},
+              },
+              spec: {prompt: 'managed'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Agent',
+              metadata: {
+                name: 'managed-agent-by-owner',
+                ownerReferences: [
+                  {
+                    apiVersion: 'ark.mckinsey.com/v1prealpha1',
+                    kind: 'A2AServer',
+                    name: 'test-a2a',
+                    uid: 'a2a-uid',
+                  },
+                ],
+              },
+              spec: {prompt: 'managed'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Agent',
+              metadata: {name: 'user-agent'},
+              spec: {prompt: 'user'},
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'MCPServer',
+              metadata: {name: 'test-mcp'},
+              spec: {transport: 'http'},
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1prealpha1',
+              kind: 'A2AServer',
+              metadata: {name: 'test-a2a'},
+              spec: {description: 'test'},
+            },
+          ],
+        }),
+      });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'a2aservers,tools,mcpservers,agents',
+      '-o',
+      'managed-resources.yaml',
+    ]);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    const exported = yaml
+      .parseAllDocuments(yamlContent)
+      .map((document) => document.toJSON());
+
+    expect(exported.map((resource) => resource.metadata.name)).toEqual([
+      'user-tool',
+      'user-agent',
+      'test-mcp',
+      'test-a2a',
+    ]);
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 4 controller-managed resources'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 4 resources to managed-resources.yaml'
+    );
+  });
+
+  it('should not write output when all resources are controller-managed', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Tool',
+            metadata: {
+              name: 'managed-tool-by-label',
+              labels: {'mcp/server': 'test-mcp'},
+            },
+            spec: {type: 'mcp'},
+          },
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Tool',
+            metadata: {
+              name: 'managed-tool-by-owner',
+              ownerReferences: [
+                {
+                  apiVersion: 'ark.mckinsey.com/v1alpha1',
+                  kind: 'MCPServer',
+                  name: 'test-mcp',
+                  uid: 'mcp-uid',
+                },
+              ],
+            },
+            spec: {type: 'mcp'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'tools',
+      '-o',
+      'managed-tools.yaml',
+    ]);
+
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 2 controller-managed resources'
+    );
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'no resources found to export'
+    );
+  });
+
   it('should not write output when all resources are excluded', async () => {
     mockExeca.mockResolvedValue({
       stdout: JSON.stringify({

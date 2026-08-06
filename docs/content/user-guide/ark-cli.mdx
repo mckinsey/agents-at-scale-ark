@@ -196,7 +196,7 @@ ark import backup.yaml --upsert                  # create or update (kubectl app
 `ark export` includes application `Secret` resources with their data (base64-encoded, not encrypted). It omits Helm release records and service account token Secrets. Treat export files as sensitive and don't commit them.
 </Callout>
 
-Exported YAML contains desired state only. Ark removes Kubernetes runtime metadata, status, ownership references, and finalizers so the file can be applied to another cluster.
+Exported YAML contains desired state only. Ark removes Kubernetes runtime metadata, status, ownership references, and finalizers so the file can be applied to another cluster. Controller-generated Tools and Agents are omitted; imported MCPServer and A2AServer resources regenerate them with ownership from the destination cluster.
 
 ### Marketplace
 

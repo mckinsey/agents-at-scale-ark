@@ -50,7 +50,7 @@ To move resources to a new cluster, use `ark export` on the source and `ark impo
 ark export -o ark-export.yaml
 ```
 
-This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records and service account token Secrets.
+This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records, service account token Secrets, MCPServer-generated Tools, and A2AServer-generated Agents. The destination controllers regenerate those child resources with valid ownership.
 
 Useful flags:
 
