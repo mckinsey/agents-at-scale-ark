@@ -24,7 +24,7 @@ One existing partial solution: `lib/utils/session-params.ts` is a hand-rolled de
 - Adding a namespace switcher. The dead surface is removed, not replaced.
 - Persisting the namespace in a cookie, `localStorage`, or `sessionStorage`
 - Changing how screens hold their own filter/pagination state
-- Threading the namespace into react-query keys (see `dashboard-namespace-query-keys`)
+- Threading the namespace into react-query keys (see `dashboard-explicit-namespace`, PR #3125)
 - Touching the same-page filter navigations in `events-section`, `sessions-section`, `memory-section`, or `queries/page.tsx` — these build their own params and bypass the helpers
 
 ## Decisions
