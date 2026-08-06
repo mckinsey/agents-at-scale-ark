@@ -37,4 +37,4 @@ def require_api_key_owner(request: Request) -> Optional[UserIdentity]:
             status_code=403,
             detail="API key management requires an authenticated user identity",
         )
-    return identity
+    return UserIdentity(username=identity.username.strip(), groups=identity.groups)
