@@ -11,7 +11,7 @@ The second is worse than it appears: the dashboard has no namespace switcher. `s
 
 - Add an app-scoped param allowlist (`APP_SCOPED_PARAMS = ['namespace']`) and a single `buildScopedPath` helper, replacing four duplicated copies of merge-all in `namespaced-link.tsx`, `use-namespaced-navigation.ts`, `app-sidebar.tsx`, and `NamespaceProvider.tsx`
 - Scope param propagation by pathname: navigation within the same pathname keeps all params (the screen owns its own URL state); navigation to a different pathname keeps only app-scoped params, plus whatever the target href names explicitly
-- `NamespaceProvider` writes the resolved namespace into the URL once `/v1/context` returns, using an idempotent `window.history.replaceState`
+- `NamespaceProvider` writes the resolved namespace into the URL once `/v1/context` returns, using an idempotent `window.history.replaceState` with a query-only relative URL, which keeps the configured `ARK_DASHBOARD_BASE_PATH` prefix intact for per-tenant deployments
 - `NamespaceProvider` derives the namespace during render instead of mirroring it into `useState('default')` and syncing via effect
 - Remove unused provider surface: `setNamespace`, `createNamespace`, `availableNamespaces`, and the `createQueryString` helper that only `setNamespace` called
 - Route the cross-page call at `sessions/[session_id]/page.tsx:46` through the scoped helper, superseding `buildUrlWithoutNewSessionParams` for that use
@@ -26,6 +26,8 @@ The second is worse than it appears: the dashboard has no namespace switcher. `s
 ### Modified Capabilities
 
 None. No existing spec in `openspec/specs/` covers URL parameter handling.
+
+`dashboard-runtime-basepath` is adjacent but unchanged: its *"Prefixed in-app navigation"* requirement already obliges the dashboard to keep the configured prefix, and the namespace write-back introduced here must satisfy it. That obligation is honoured in `url-param-scoping`'s base-path scenarios and in design decision 3 — no requirement of `dashboard-runtime-basepath` is altered.
 
 ## Impact
 

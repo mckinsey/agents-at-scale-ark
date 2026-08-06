@@ -69,6 +69,20 @@ The documented caveat is that Server Components do not observe the change. **Ver
 
 This constraint must hold for the write-back to keep working. A future Server Component that reads `namespace` from `searchParams` would silently receive a stale value.
 
+**The write-back URL is query-only, so it keeps the base path.** `replaceState` is the native History API — unlike `next/link` and the router, it does not apply the configured `basePath`. The router pathname is no help either: `usePathname()` returns the base-path-stripped value, so under `ARK_DASHBOARD_BASE_PATH=/tenant-a` the browser sits at `/tenant-a` while `usePathname()` reports `/`, and a URL built as `` `${pathname}?${params}` `` becomes `/?namespace=…` with the tenant prefix gone. `replaceState` does not navigate, so nothing breaks on screen — but the address bar now holds a URL that a refresh, a bookmark, or a paste resolves outside the tenant's subtree, which is exactly what `dashboard-runtime-basepath` (*"Prefixed in-app navigation"*) forbids.
+
+Write the query alone and let the browser resolve it against the current URL:
+
+```js
+const params = new URLSearchParams(searchParams.toString());
+params.set('namespace', resolved);
+window.history.replaceState(null, '', `?${params}`);
+```
+
+`new URL('?namespace=x', 'https://host/tenant-a/agents')` is `https://host/tenant-a/agents?namespace=x`. This holds for both the address bar and the router's own canonical URL, which Next computes with the same relative resolution. It is also the form Next's own `pushState` example uses, and it needs no `NEXT_PUBLIC_BASE_PATH` read — which matters, because that variable and `ARK_DASHBOARD_BASE_PATH` have to be set to the same value by hand (`services/ark-dashboard/README.md`). Prefixing `window.location.pathname` explicitly is equivalent and also correct; it is simply more code for the same result.
+
+**The prefixed pathname must not reach decision 2.** `buildScopedPath` compares the target pathname against the current one, and both sides are unprefixed today — `usePathname()` is stripped, and hrefs are authored as `/agents`. Feeding it `window.location.pathname` instead would compare `/agents` against `/tenant-a/agents`, so same-screen filter changes would be misread as cross-screen and drop the screen's params. The base path belongs in the write-back URL only; every other navigation in this change goes through `router.push`/`replace` or `next/link`, which apply it automatically.
+
 ### 4. Derive the namespace during render
 
 Replace `useState<string>('default')` plus a syncing effect with a value derived during render from the URL and the resolved context.
@@ -100,6 +114,8 @@ This is in scope rather than deferred because `createQueryString` is the fourth 
 ## Risks / Trade-offs
 
 **Write-back loops.** `replaceState` updates `useSearchParams`, which re-runs the effect that called it. → Guard on equality: do nothing when the URL already names the active namespace. Covered by the "Synchronisation settles" scenario.
+
+**The write-back drops the base path.** A root-absolute URL passed to `replaceState` silently discards the tenant prefix, and it fails quietly — the page keeps working, only refresh and copy-paste break. This codebase has hit the same class of bug three times already: `lib/auth/signout.ts:5-7`, `middleware.ts:36-43`, and `middleware.ts:66-73`. → Query-only write-back per decision 3, asserted by the base-path scenarios in the spec.
 
 **A future Server Component reads `namespace`.** It would not observe `replaceState` updates. → Recorded in decision 3; the constraint belongs in a code comment at the write-back site.
 

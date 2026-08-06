@@ -79,6 +79,11 @@ Once the active namespace has been resolved, the URL SHALL contain it. This appl
 - **WHEN** a user copies the current URL and another user with the same access opens it
 - **THEN** the second user sees the same namespace as the first
 
+#### Scenario: Namespace synchronisation preserves the configured base path
+
+- **WHEN** the dashboard is deployed under a non-empty base path and the resolved namespace is written into the URL
+- **THEN** the resulting URL keeps the base path prefix, so a refresh or a copy of that URL reaches the same deployment
+
 ### Requirement: An unreachable namespace is corrected in the URL
 
 When the namespace requested in the URL cannot be used, the dashboard SHALL notify the user and SHALL replace it in the URL with the namespace actually in use, so the URL never disagrees with what is displayed.
@@ -87,6 +92,11 @@ When the namespace requested in the URL cannot be used, the dashboard SHALL noti
 
 - **WHEN** the user opens a URL naming a namespace they cannot access
 - **THEN** the dashboard reports that the namespace is unavailable, uses the fallback namespace, and the URL shows the fallback
+
+#### Scenario: Correcting an unreachable namespace preserves the configured base path
+
+- **WHEN** the dashboard is deployed under a non-empty base path and an unreachable namespace is replaced with the fallback in the URL
+- **THEN** the corrected URL keeps the base path prefix
 
 ### Requirement: Namespace synchronisation does not disrupt browser history
 
