@@ -102,8 +102,12 @@ func (b *kindBroadcaster) unsubscribe(w *postgresWatcher) {
 	broadcasterActiveWatchers.WithLabelValues(b.kind).Set(float64(n))
 }
 
+// relistInterval is the safety-net cadence for the per-kind relist ticker. A var,
+// not a const, so integration tests can shorten it; production keeps 120s.
+var relistInterval = 120 * time.Second
+
 func (b *kindBroadcaster) run() {
-	relistTicker := time.NewTicker(120 * time.Second)
+	relistTicker := time.NewTicker(relistInterval)
 	defer relistTicker.Stop()
 
 	// Prime the cursor at the current max rv so the first relist fans out only

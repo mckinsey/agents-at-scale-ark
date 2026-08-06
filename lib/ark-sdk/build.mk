@@ -12,7 +12,7 @@ ARK_SDK_WHEEL_NAME := ark_sdk-$(ARK_SDK_PEP440_VERSION)-py3-none-any.whl
 ARK_SDK_WHL := $(ARK_SDK_OUT)/py-sdk/dist/$(ARK_SDK_WHEEL_NAME)
 ARK_SDK_CRD_FILES := $(wildcard ark/config/crd/bases/ark*.yaml)
 ARK_SDK_OPENAPI := $(ARK_SDK_OUT)/ark_schema.json
-ARK_SDK_OVERLAY_FILES := $(wildcard $(ARK_SDK_LIB_DIR)/gen_sdk/overlay/python/ark_sdk/*.py)
+ARK_SDK_OVERLAY_FILES := $(shell find $(ARK_SDK_LIB_DIR)/gen_sdk/overlay/python/ark_sdk -name '*.py')
 
 # Pre-calculate all stamp paths
 ARK_SDK_STAMP_BUILD := $(ARK_SDK_OUT)/stamp-build
