@@ -216,8 +216,12 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByRole('option', { name: 'agent-1' })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: 'agent-2' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'agent-1' }),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'agent-2' }),
+      ).toBeInTheDocument();
     });
 
     it('should include a None (Unset) option', async () => {
@@ -226,7 +230,9 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByRole('option', { name: 'None (Unset)' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'None (Unset)' }),
+      ).toBeInTheDocument();
     });
 
     it('should be disabled when form is disabled', () => {
@@ -276,7 +282,9 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByRole('option', { name: 'missing-agent (Unavailable)' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'missing-agent (Unavailable)' }),
+      ).toBeInTheDocument();
     });
 
     it('should not show the (Unavailable) option when the selected agent is available', async () => {
@@ -290,6 +298,7 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
+      await screen.findByRole('option', { name: 'agent-1' });
       expect(screen.queryByText(/Unavailable/)).not.toBeInTheDocument();
     });
   });
