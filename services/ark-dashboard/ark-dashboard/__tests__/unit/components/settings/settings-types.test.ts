@@ -11,11 +11,12 @@ describe('settingsSections', () => {
     const settings = settingsSections.find(s => s.sectionKey === 'settings');
     expect(settings).toBeDefined();
     expect(settings!.sectionLabel).toBe('');
-    expect(settings!.items).toHaveLength(3);
+    expect(settings!.items).toHaveLength(4);
     expect(settings!.items.map(i => i.key)).toEqual([
       'queries',
       'experimental-features',
       'execution-engines',
+      'manage-marketplace',
     ]);
   });
 
@@ -26,6 +27,15 @@ describe('settingsSections', () => {
     );
     expect(executionEngines).toBeDefined();
     expect(executionEngines!.experimental).toBe(true);
+  });
+
+  it('should mark manage-marketplace as experimental', () => {
+    const settings = settingsSections.find(s => s.sectionKey === 'settings');
+    const manageMarketplace = settings!.items.find(
+      i => i.key === 'manage-marketplace',
+    );
+    expect(manageMarketplace).toBeDefined();
+    expect(manageMarketplace!.experimental).toBe(true);
   });
 
   it('should have icons for all items', () => {

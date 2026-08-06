@@ -3,12 +3,19 @@
 import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
 
-import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
+import {
+  isExperimentalExecutionEngineEnabledAtom,
+  isMarketplaceEnabledAtom,
+} from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
 
-import { type SettingPage, settingsSections } from './settings-types';
+import {
+  type ExperimentalSettingPage,
+  type SettingPage,
+  settingsSections,
+} from './settings-types';
 
 type SettingsSidebarProps = {
   activePage: SettingPage;
@@ -20,9 +27,11 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
   );
+  const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
 
-  const isExperimentalEnabled: Record<string, boolean> = {
+  const isExperimentalEnabled: Record<ExperimentalSettingPage, boolean> = {
     'execution-engines': isExperimentalExecutionEngineEnabled,
+    'manage-marketplace': isMarketplaceEnabled,
   };
 
   const visibleSections = settingsSections.map(section => ({

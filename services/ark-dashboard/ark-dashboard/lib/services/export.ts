@@ -33,6 +33,7 @@ export interface ExportItem {
   id: string;
   name: string;
   type: string;
+  description?: string;
   selected?: boolean;
 }
 
@@ -66,6 +67,10 @@ export interface ExportRequest {
 export interface ExportHistoryResponse {
   last_export: string | null;
   export_count: number;
+}
+
+function currentNamespace(): string | undefined {
+  return apiClient.getDefaultParams().namespace;
 }
 
 // Export service
@@ -130,6 +135,7 @@ export const exportService = {
         body: JSON.stringify({
           resource_types: resourceTypes,
           resource_ids: resourceIds,
+          namespace: currentNamespace(),
         }),
       },
     );
@@ -150,7 +156,7 @@ export const exportService = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ namespace: currentNamespace() }),
     });
 
     if (!response.ok) {

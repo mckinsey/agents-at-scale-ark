@@ -129,7 +129,7 @@ export function Pagination({
             <SelectTrigger className="h-8 w-20">
               <SelectValue placeholder={itemsPerPage.toString()} />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent collisionAvoidance={{ side: 'flip', align: 'shift' }}>
               {itemsPerPageOptions.map(option => (
                 <SelectItem key={option} value={option.toString()}>
                   {option}

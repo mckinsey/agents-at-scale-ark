@@ -17,6 +17,13 @@ _NIP_URL = "http://ark-api.default.127.0.0.1.nip.io:8080"
 _PORT_BASE = 18080
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "executor: end-to-end tests for the executor-openai-responses service",
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def ark_api_url(request):
     """Resolve a reachable ark-api base URL and expose it via ARK_API_URL.
@@ -56,8 +63,11 @@ def ark_api_url(request):
         if _health_ok(url):
             break
     else:
-        proc.terminate()
-        pytest.exit(f"ark-api port-forward on :{port} did not become healthy in 20s", returncode=1)
+        logger.warning(
+            "ark-api port-forward on :%d did not become healthy in 20s (worker=%s); "
+            "tests requiring ark-api will fail against %s",
+            port, worker_id, url,
+        )
 
     os.environ["ARK_API_URL"] = url
     yield url
@@ -71,7 +81,7 @@ def ark_api_url(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mock_llm_model(request):
+def mock_llm_model():
     result = subprocess.run(
         ["kubectl", "apply", "-f", str(MOCK_LLM_MODEL_YAML)],
         capture_output=True, text=True
@@ -80,17 +90,18 @@ def mock_llm_model(request):
         logger.warning("kubectl apply mock-llm-model failed (rc=%d): %s %s",
                        result.returncode, result.stdout.strip(), result.stderr.strip())
 
-    subprocess.run(
-        ["kubectl", "wait", "--for=condition=ModelAvailable",
-         f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=60s"],
-        check=True
-    )
+    mock_llm_present = subprocess.run(
+        ["kubectl", "get", "deployment", "mock-llm", "-n", "default"],
+        capture_output=True
+    ).returncode == 0
+
+    if mock_llm_present:
+        subprocess.run(
+            ["kubectl", "wait", "--for=condition=ModelAvailable",
+             f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=180s"],
+            check=True
+        )
+    else:
+        logger.warning("mock-llm deployment not found — skipping ModelAvailable wait")
 
     yield MOCK_LLM_MODEL_NAME
-
-    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
-    if worker_id == "master":
-        subprocess.run(
-            ["kubectl", "delete", "-f", str(MOCK_LLM_MODEL_YAML), "--ignore-not-found"],
-            capture_output=True
-        )
