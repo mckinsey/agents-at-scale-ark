@@ -498,8 +498,8 @@ For production, run two replicas and enable the disruption budget:
 How multiple replicas behave:
 
 - **API serving is active-active.** Every replica serves reads and writes directly against Postgres; the Service load-balances across them. Killing any one pod leaves the APIService available.
-- **The watch stream is single-consumer by design.** Only the replica holding the `ark-apiserver-leader` lease runs the WAL consumer that drives real-time watch events (the logical replication slot admits one connection; the slot's `active` flag is a backstop even without the lease). Non-leader replicas do not touch the slot.
-- **Watches served by non-leader replicas are relist-bound.** Without the WAL stream, a non-leader refreshes its watchers on a periodic relist (up to ~120 seconds stale). Controllers tolerate this — informers resync — but if consistently low watch latency matters, keep a single replica and accept the SPOF trade-off, or route watch-heavy clients through the kubectl path.
+- **The WAL stream is single-consumer by design.** Only the replica holding the `ark-apiserver-leader` lease runs the WAL consumer (the logical replication slot admits one connection; the slot's `active` flag is a backstop even without the lease). Non-leader replicas do not touch the slot.
+- **Cross-replica watch delivery is `pg_notify`-driven.** Every write emits a `pg_notify` on the `ark_resource_change` channel after commit, and every replica holds a `LISTEN` connection that wakes its watchers immediately — typically well under a second, regardless of which replica took the write. The notification carries only the resource kind; watchers are refreshed from the `resources` table, so a dropped notification delays delivery instead of losing it. The periodic relist (~120 seconds) remains as the backstop.
 - **Failover:** if the leader dies, a surviving replica acquires the lease (roughly the 15s lease duration) and starts the WAL consumer; the slot position is persistent, so no events are lost across the handover.
 
 ## Backups and restore
