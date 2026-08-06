@@ -36,12 +36,16 @@ export type EventBackend = 'memory' | 'postgres';
 
 export type ChunkBackend = 'memory' | 'redis';
 
+export type SessionsBackend = 'memory' | 'postgres';
+
 export type BackendsConfig = Readonly<{
   message: MessageBackend;
   messageVisibilityTtlSeconds: number;
   event: EventBackend;
   eventVisibilityTtlSeconds: number;
   chunk: ChunkBackend;
+  sessions: SessionsBackend;
+  sessionsVisibilityTtlSeconds: number;
 }>;
 
 export type DatabaseConfig = Readonly<{
