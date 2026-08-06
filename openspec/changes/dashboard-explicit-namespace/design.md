@@ -4,9 +4,9 @@ See proposal.md — Why. The relevant shape of the current code:
 
 ```
 NamespaceProvider
-  useEffect(() => {
-    apiClient.setDefaultParam('namespace', currentNamespace)       // :57
-    filesApiClient.setDefaultParam('namespace', currentNamespace)  // :58
+  useEffect(() => {                                                // the "default params" effect
+    apiClient.setDefaultParam('namespace', currentNamespace)
+    filesApiClient.setDefaultParam('namespace', currentNamespace)
   }, [currentNamespace])
 
 ApiClient
@@ -80,7 +80,11 @@ Keeping the singleton and only adding namespaces to keys is cheaper but not corr
 
 ### 4. `enabled` gates on the namespace, not on a resolution flag
 
-`enabled: Boolean(namespace)` matches the marketplace pattern and follows directly from `dashboard-url-param-contract` deriving the namespace during render: unresolved is represented by the absence of a value, so the gate needs no separate flag.
+`enabled: Boolean(namespace)` matches the marketplace pattern and reads naturally once `dashboard-url-param-contract` derives the namespace during render: unresolved is the absence of a value, so the gate needs no separate flag.
+
+**This only holds if the derived namespace is falsy until it resolves, and that is a requirement this change places on `dashboard-url-param-contract`, not something it already promises.** That change states only that consumers gate on `isNamespaceResolved`; it does not say what `namespace` holds beforehand. Today the value is `useState<string>('default')` — always truthy — which is why the four `enabled: Boolean(namespace)` gates already in `marketplace-hooks.ts` never actually block anything. If the namespace resolves to a placeholder rather than an empty value, every gate here is dead on arrival and the "requests are deferred" requirement has nothing behind it. Confirm the falsy-until-resolved behaviour when #3124 lands (task 1.2); if it does not hold, gate on `isNamespaceResolved` instead.
+
+What defers requests **today** is neither gate: `app/(dashboard)/layout.tsx` and `app/(settings)/layout.tsx` render a spinner instead of their children until `isNamespaceResolved`. That protection stays, and it is why the present code is not visibly broken on first load — but it is layout-level and does not cover a namespace that changes while a screen is mounted, which is the case this change has to be correct for.
 
 **Alternative considered**: `enabled: isNamespaceResolved`. Equivalent in effect, but it reintroduces a second source of truth for the same fact.
 
@@ -96,7 +100,7 @@ The mechanical risk is a missed call site — a service function that gains a na
 
 **A namespaced key is added to genuinely cluster-scoped data.** Would cause unnecessary refetching and cache duplication. → Classify each of the 66 keys before editing; `namespaces-hooks.ts`'s `GET_ALL_NAMESPACES_QUERY_KEY` is the known cluster-scoped case and stays unkeyed.
 
-**Merge conflicts with `dashboard-url-param-contract`.** Both change `providers/NamespaceProvider.tsx`. → Land PR #3124 first; this change deletes the effect that one has already rewritten.
+**Merge conflicts with `dashboard-url-param-contract`.** Both change `providers/NamespaceProvider.tsx`, though in different places: that change rewrites the namespace derivation and removes the dead `setNamespace`/`createQueryString`/`availableNamespaces` surface, while this one deletes the default-params effect, which that change leaves alone. → Land PR #3124 first. Not because it removes anything this change needs removed, but because it alters the value every migrated call site will be written against; doing it the other way round means rewriting those call sites twice. Expect the default-params effect to have moved by then — locate it by name, not by line number.
 
 **Migration is wide enough to hide a mistake in review.** 142 call sites is more than a reviewer can meaningfully check by eye. → Group commits by hook file so each is reviewable on its own, and rely on the type checker rather than inspection for completeness.
 

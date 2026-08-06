@@ -1,14 +1,15 @@
 ## 1. Prerequisites
 
-- [ ] 1.1 Confirm `dashboard-url-param-contract` (PR #3124) is merged, so the namespace is derived during render and the provider effect this change deletes has already been rewritten
-- [ ] 1.2 Add a test asserting that `invalidateQueries({ queryKey: [CONSTANT] })` refreshes an entry keyed `[CONSTANT, namespace]` under `@tanstack/react-query` v5; if it fails, stop and revise the design before migrating
-- [ ] 1.3 Classify all 66 query keys as namespaced or cluster-scoped; record the cluster-scoped exceptions, starting with `GET_ALL_NAMESPACES_QUERY_KEY` in `namespaces-hooks.ts`
+- [ ] 1.1 Confirm `dashboard-url-param-contract` (PR #3124) is merged, so the namespace is derived during render rather than seeded from `useState('default')`
+- [ ] 1.2 Confirm the derived namespace is falsy until it resolves, which is what `enabled: Boolean(namespace)` relies on (design decision 4). If it resolves to a placeholder instead, stop and switch the gate to `isNamespaceResolved` before migrating — otherwise every gate added by this change is a no-op
+- [ ] 1.3 Add a test asserting that `invalidateQueries({ queryKey: [CONSTANT] })` refreshes an entry keyed `[CONSTANT, namespace]` under `@tanstack/react-query` v5; if it fails, stop and revise the design before migrating
+- [ ] 1.4 Classify all 66 query keys as namespaced or cluster-scoped; record the cluster-scoped exceptions, starting with `GET_ALL_NAMESPACES_QUERY_KEY` in `namespaces-hooks.ts`
 
 ## 2. Remove the Ambient Namespace
 
 - [ ] 2.1 Delete `setDefaultParam`, `getDefaultParams`, and `defaultParams` from `lib/api/client.ts`, including the merges at lines 46 and 225
 - [ ] 2.2 Apply the same removal to `lib/api/files-client.ts`
-- [ ] 2.3 Delete the effect at `providers/NamespaceProvider.tsx:57-58` that writes the namespace into both clients
+- [ ] 2.3 Delete the effect in `providers/NamespaceProvider.tsx` that calls `apiClient.setDefaultParam('namespace', ...)` and `filesApiClient.setDefaultParam('namespace', ...)` — locate it by those calls, since #3124 shifts the line numbers
 - [ ] 2.4 Run the type checker and capture the resulting list of call sites — this is the migration's work list and its completeness check
 
 ## 3. Migrate Hooks and Services
