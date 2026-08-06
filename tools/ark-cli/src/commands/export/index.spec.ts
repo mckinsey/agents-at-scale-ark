@@ -548,22 +548,6 @@ describe('export command', () => {
             },
             spec: {type: 'mcp'},
           },
-          {
-            apiVersion: 'ark.mckinsey.com/v1alpha1',
-            kind: 'Tool',
-            metadata: {
-              name: 'managed-tool-by-owner',
-              ownerReferences: [
-                {
-                  apiVersion: 'ark.mckinsey.com/v1alpha1',
-                  kind: 'MCPServer',
-                  name: 'test-mcp',
-                  uid: 'mcp-uid',
-                },
-              ],
-            },
-            spec: {type: 'mcp'},
-          },
         ],
       }),
     });
@@ -581,7 +565,7 @@ describe('export command', () => {
 
     expect(mockWriteFile).not.toHaveBeenCalled();
     expect(mockOutput.info).toHaveBeenCalledWith(
-      'excluded 2 controller-managed resources'
+      'excluded 1 controller-managed resource'
     );
     expect(mockOutput.warning).toHaveBeenCalledWith(
       'no resources found to export'
@@ -617,6 +601,20 @@ describe('export command', () => {
     expect(mockWriteFile).not.toHaveBeenCalled();
     expect(mockOutput.info).toHaveBeenCalledWith(
       'excluded 1 system-managed secret'
+    );
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'no resources found to export'
+    );
+  });
+
+  it('should warn and skip unknown resource types', async () => {
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-t', 'unknown']);
+
+    expect(mockExeca).not.toHaveBeenCalled();
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'unknown resource type: unknown, skipping'
     );
     expect(mockOutput.warning).toHaveBeenCalledWith(
       'no resources found to export'
