@@ -2,13 +2,44 @@
 
 import os
 import unittest
-from unittest.mock import Mock, patch, AsyncMock
+from contextlib import ExitStack, asynccontextmanager
+from types import SimpleNamespace
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from datetime import datetime, timezone, timedelta
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 # Set environment variable to skip authentication before importing the app
 from ark_api.auth.constants import AuthMode
 os.environ["AUTH_MODE"] = AuthMode.OPEN
+
+from ark_api.auth.dependencies import require_api_key_owner
+from ark_api.api.v1.api_keys import authorize_api_key_creation
+from ark_api.models.auth import UserIdentity
+
+
+@asynccontextmanager
+async def _fake_api_client(impersonation=None):
+    yield MagicMock()
+
+
+def _patch_ssar(can_create):
+    stack = ExitStack()
+    stack.enter_context(
+        patch("ark_api.api.v1.api_keys.get_impersonating_api_client", _fake_api_client)
+    )
+    mock_auth = MagicMock()
+    mock_auth.create_self_subject_access_review = AsyncMock(
+        return_value=SimpleNamespace(status=SimpleNamespace(allowed=can_create))
+    )
+    stack.enter_context(
+        patch("ark_api.api.v1.api_keys.client.AuthorizationV1Api", return_value=mock_auth)
+    )
+    return stack
+
+
+def _raise_no_identity():
+    raise HTTPException(status_code=403, detail="API key management requires an authenticated user identity")
 
 
 class TestAPIKeyEndpoints(unittest.TestCase):
@@ -234,7 +265,7 @@ class TestAPIKeyEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         
         # Verify service was called correctly
-        mock_service.delete_api_key.assert_called_once_with(public_key)
+        mock_service.delete_api_key.assert_called_once_with(public_key, created_by=None)
     
     @patch('ark_api.api.v1.api_keys.APIKeyService')
     def test_delete_api_key_not_found(self, mock_service_class):
@@ -303,6 +334,144 @@ class TestAPIKeyEndpoints(unittest.TestCase):
                     # Other invalid keys should reach the service layer and return 404
                     # The actual validation happens in the service layer
                     self.assertIn(response.status_code, [404, 500])
+
+
+class TestAPIKeyCreationAuthorization(unittest.TestCase):
+    """Test cases for the create_api_key authorization gate and ownership scoping."""
+
+    def setUp(self):
+        from ark_api.main import app
+        self.app = app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self.app.dependency_overrides.clear()
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_gate_inactive_allows_creation(self, mock_service_class):
+        self.app.dependency_overrides[require_api_key_owner] = lambda: None
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        now = datetime.now(timezone.utc)
+        mock_response = Mock(
+            id="test-id", public_key="pk-ark-test",
+            secret_key="sk-ark-test", created_at=now, expires_at=None
+        )
+        mock_response.name = "Test Key"
+        mock_service.create_api_key = AsyncMock(return_value=mock_response)
+
+        response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
+
+        self.assertEqual(response.status_code, 201)
+        mock_service.create_api_key.assert_called_once()
+        self.assertIsNone(mock_service.create_api_key.call_args[1]["created_by"])
+
+    def test_gate_active_no_identity_denies_before_route_body(self):
+        self.app.dependency_overrides[require_api_key_owner] = _raise_no_identity
+
+        response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
+
+        self.assertEqual(response.status_code, 403)
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_gate_active_authorized_owner_allows_creation(self, mock_service_class):
+        self.app.dependency_overrides[require_api_key_owner] = (
+            lambda: UserIdentity(username="alice@example.com", groups=["viewers"])
+        )
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        now = datetime.now(timezone.utc)
+        mock_response = Mock(
+            id="test-id", public_key="pk-ark-test",
+            secret_key="sk-ark-test", created_at=now, expires_at=None
+        )
+        mock_response.name = "Test Key"
+        mock_service.create_api_key = AsyncMock(return_value=mock_response)
+
+        with _patch_ssar(can_create=True):
+            response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
+
+        self.assertEqual(response.status_code, 201)
+        mock_service.create_api_key.assert_called_once()
+        self.assertEqual(mock_service.create_api_key.call_args[1]["created_by"], "alice@example.com")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_gate_active_unauthorized_owner_denies_creation(self, mock_service_class):
+        """The identity denied `secrets:create` cannot obtain that access by minting a key."""
+        self.app.dependency_overrides[require_api_key_owner] = (
+            lambda: UserIdentity(username="alice@example.com", groups=["viewers"])
+        )
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_api_key = AsyncMock()
+
+        with _patch_ssar(can_create=False):
+            response = self.client.post("/v1/api-keys", json={"name": "Test Key"})
+
+        self.assertEqual(response.status_code, 403)
+        mock_service.create_api_key.assert_not_called()
+
+
+class TestAPIKeyListDeleteScoping(unittest.TestCase):
+    """Test cases for creator-scoped list/delete."""
+
+    def setUp(self):
+        from ark_api.main import app
+        self.app = app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self.app.dependency_overrides.clear()
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_list_scoped_to_owner_when_gate_active(self, mock_service_class):
+        self.app.dependency_overrides[require_api_key_owner] = (
+            lambda: UserIdentity(username="alice@example.com", groups=[])
+        )
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_list_response = Mock(items=[], count=0)
+        mock_service.list_api_keys = AsyncMock(return_value=mock_list_response)
+
+        response = self.client.get("/v1/api-keys")
+
+        self.assertEqual(response.status_code, 200)
+        mock_service.list_api_keys.assert_called_once_with(created_by="alice@example.com")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_list_unscoped_when_gate_inactive(self, mock_service_class):
+        self.app.dependency_overrides[require_api_key_owner] = lambda: None
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_list_response = Mock(items=[], count=0)
+        mock_service.list_api_keys = AsyncMock(return_value=mock_list_response)
+
+        response = self.client.get("/v1/api-keys")
+
+        self.assertEqual(response.status_code, 200)
+        mock_service.list_api_keys.assert_called_once_with(created_by=None)
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_delete_scoped_to_owner_when_gate_active(self, mock_service_class):
+        self.app.dependency_overrides[require_api_key_owner] = (
+            lambda: UserIdentity(username="bob@example.com", groups=[])
+        )
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.delete_api_key = AsyncMock(return_value=False)
+
+        response = self.client.delete("/v1/api-keys/pk-ark-someone-elses-key")
+
+        self.assertEqual(response.status_code, 404)
+        mock_service.delete_api_key.assert_called_once_with(
+            "pk-ark-someone-elses-key", created_by="bob@example.com"
+        )
 
 
 if __name__ == '__main__':
