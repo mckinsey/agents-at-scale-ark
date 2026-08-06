@@ -191,6 +191,7 @@ type PostgreSQLBackend struct {
 	// reject too-old resume points without a DB round-trip.
 	cachedPurgeFloor atomic.Int64
 	walOnce          sync.Once
+	notifyOnce       sync.Once
 }
 
 var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
@@ -590,6 +591,7 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
 
+	p.notifyResourceChange(ctx, kind)
 	return nil
 }
 
@@ -932,6 +934,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		return storage.ErrNotFound
 	}
 
+	p.notifyResourceChange(ctx, kind)
 	return nil
 }
 
@@ -992,6 +995,7 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 		return storage.ErrNotFound
 	}
 
+	p.notifyResourceChange(ctx, kind)
 	return nil
 }
 
@@ -1010,6 +1014,7 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 		return storage.ErrNotFound
 	}
 
+	p.notifyResourceChange(ctx, kind)
 	return nil
 }
 
