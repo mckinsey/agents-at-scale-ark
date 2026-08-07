@@ -1,22 +1,13 @@
-import { FlatCompat } from '@eslint/eslintrc';
+import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
+import nextTypescript from 'eslint-config-next/typescript';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import unusedImports from 'eslint-plugin-unused-imports';
 import { globalIgnores } from 'eslint/config';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const __filename = fileURLToPath(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
 
 const eslintConfig = [
   globalIgnores(['**/generated/']),
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
   {
     plugins: {
       'unused-imports': unusedImports,

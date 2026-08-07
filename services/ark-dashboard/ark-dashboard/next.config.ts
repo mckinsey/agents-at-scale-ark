@@ -1,12 +1,14 @@
 import type { NextConfig } from 'next';
-import path from 'path';
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['dashboard.default.127.0.0.1.nip.io', '127.0.0.1.nip.io'],
   output: 'standalone',
-  outputFileTracingRoot: path.join(__dirname, './'),
+  outputFileTracingRoot: __dirname,
   turbopack: {
     root: __dirname,
+  },
+  typescript: {
+    tsconfigPath: 'tsconfig.build.json',
   },
   basePath: process.env.ARK_DASHBOARD_BASE_PATH || '',
   assetPrefix: process.env.ARK_DASHBOARD_ASSET_PREFIX || '',
