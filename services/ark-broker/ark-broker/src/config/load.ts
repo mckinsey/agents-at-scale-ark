@@ -30,6 +30,8 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       event: parsed.EVENT_BACKEND,
       eventVisibilityTtlSeconds: parsed.EVENT_VISIBILITY_TTL_SECONDS,
       chunk: parsed.CHUNK_BACKEND,
+      sessions: parsed.SESSIONS_BACKEND,
+      sessionsVisibilityTtlSeconds: parsed.SESSIONS_VISIBILITY_TTL_SECONDS,
     }),
     database: Object.freeze({
       url: parsed.DATABASE_URL,

@@ -12,6 +12,7 @@ export { BarChart } from './bar-chart';
 export { Bedrock } from './bedrock';
 export { Bedtime } from './bedtime';
 export { Bolt } from './bolt';
+export { BrokenImage } from './broken-image';
 export { BugReport } from './bug-report';
 export { Build } from './build';
 export { CalendarMonth } from './calendar-month';

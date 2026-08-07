@@ -21,6 +21,8 @@ describe('loadConfig', () => {
     expect(cfg.backends.message).toBe('memory');
     expect(cfg.backends.messageVisibilityTtlSeconds).toBe(2592000);
     expect(cfg.backends.chunk).toBe('memory');
+    expect(cfg.backends.sessions).toBe('memory');
+    expect(cfg.backends.sessionsVisibilityTtlSeconds).toBe(2592000);
     expect(cfg.database.url).toBeUndefined();
     expect(cfg.database.poolMax).toBe(10);
     expect(cfg.database.connectTimeoutMs).toBe(10000);
@@ -149,6 +151,87 @@ describe('loadConfig', () => {
       });
 
       expect(cfg.backends.messageVisibilityTtlSeconds).toBe(3600);
+    });
+  });
+
+  describe('SESSIONS_BACKEND=postgres', () => {
+    const postgresDeps = {
+      MESSAGE_BACKEND: 'postgres',
+      EVENT_BACKEND: 'postgres',
+      DATABASE_URL: 'postgres://localhost:5432/broker',
+    };
+
+    it('accepts postgres backend when message and event are also postgres', () => {
+      const cfg = loadConfig({
+        ...postgresDeps,
+        SESSIONS_BACKEND: 'postgres',
+      });
+
+      expect(cfg.backends.sessions).toBe('postgres');
+    });
+
+    it('rejects postgres backend without DATABASE_URL', () => {
+      expect(() =>
+        loadConfig({
+          MESSAGE_BACKEND: 'postgres',
+          EVENT_BACKEND: 'postgres',
+          SESSIONS_BACKEND: 'postgres',
+        })
+      ).toThrow();
+    });
+
+    it('rejects postgres backend when MESSAGE_BACKEND is not postgres', () => {
+      expect(() =>
+        loadConfig({
+          EVENT_BACKEND: 'postgres',
+          DATABASE_URL: 'postgres://localhost:5432/broker',
+          SESSIONS_BACKEND: 'postgres',
+        })
+      ).toThrow();
+    });
+
+    it('rejects postgres backend when EVENT_BACKEND is not postgres', () => {
+      expect(() =>
+        loadConfig({
+          MESSAGE_BACKEND: 'postgres',
+          DATABASE_URL: 'postgres://localhost:5432/broker',
+          SESSIONS_BACKEND: 'postgres',
+        })
+      ).toThrow();
+    });
+
+    it('honors SESSIONS_VISIBILITY_TTL_SECONDS when it covers message and event TTLs', () => {
+      const cfg = loadConfig({
+        ...postgresDeps,
+        SESSIONS_BACKEND: 'postgres',
+        SESSIONS_VISIBILITY_TTL_SECONDS: '3600',
+        MESSAGE_VISIBILITY_TTL_SECONDS: '3600',
+        EVENT_VISIBILITY_TTL_SECONDS: '1800',
+      });
+
+      expect(cfg.backends.sessionsVisibilityTtlSeconds).toBe(3600);
+    });
+
+    it('rejects a sessions TTL shorter than the message TTL', () => {
+      expect(() =>
+        loadConfig({
+          ...postgresDeps,
+          SESSIONS_BACKEND: 'postgres',
+          SESSIONS_VISIBILITY_TTL_SECONDS: '1000',
+          MESSAGE_VISIBILITY_TTL_SECONDS: '3600',
+        })
+      ).toThrow();
+    });
+
+    it('rejects a sessions TTL shorter than the event TTL', () => {
+      expect(() =>
+        loadConfig({
+          ...postgresDeps,
+          SESSIONS_BACKEND: 'postgres',
+          SESSIONS_VISIBILITY_TTL_SECONDS: '1000',
+          EVENT_VISIBILITY_TTL_SECONDS: '3600',
+        })
+      ).toThrow();
     });
   });
 
