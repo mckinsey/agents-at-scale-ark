@@ -1,8 +1,14 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SessionsView } from '@/app/(dashboard)/broker/page';
+import { SessionsView } from '@/components/broker/sessions-view';
+
+const toastError = vi.fn();
+
+vi.mock('sonner', () => ({
+  toast: { error: (...args: unknown[]) => toastError(...args) },
+}));
 
 type ESInstance = {
   url: string;
@@ -28,8 +34,11 @@ class MockEventSource {
 
 beforeEach(() => {
   esInstances.length = 0;
-  (global as unknown as { EventSource: unknown }).EventSource = MockEventSource;
-  global.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+  (globalThis as unknown as { EventSource: unknown }).EventSource =
+    MockEventSource;
+  globalThis.fetch = vi
+    .fn()
+    .mockResolvedValue({ ok: true }) as unknown as typeof fetch;
 });
 
 afterEach(() => {
@@ -46,6 +55,12 @@ function emit(data: unknown) {
   });
 }
 
+async function purge(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /purge/i }));
+  const dialog = await screen.findByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: /^purge$/i }));
+}
+
 describe('SessionsView', () => {
   it('renders Waiting for data... initially', () => {
     render(<SessionsView memory="default" />);
@@ -55,7 +70,9 @@ describe('SessionsView', () => {
   it('opens EventSource with correct URL on mount', () => {
     render(<SessionsView memory="default" />);
     expect(esInstances).toHaveLength(1);
-    expect(latestES().url).toBe('http://localhost:3000/api/v1/broker/sessions?memory=default&watch=true');
+    expect(latestES().url).toBe(
+      'http://localhost:3000/api/v1/broker/sessions?memory=default&watch=true',
+    );
   });
 
   it('cleans up EventSource on unmount', () => {
@@ -148,26 +165,77 @@ describe('SessionsView', () => {
     });
     await waitFor(() => screen.getByText('sess-1'));
 
-    await user.click(screen.getByRole('button', { name: /purge/i }));
+    await purge(user);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/v1/broker/sessions?memory=default', {
-        method: 'DELETE',
-      });
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'http://localhost:3000/api/v1/broker/sessions?memory=default',
+        {
+          method: 'DELETE',
+        },
+      );
     });
     await waitFor(() => {
       expect(screen.getByText(/waiting for data/i)).toBeDefined();
     });
   });
 
+  it('does not purge when the confirmation dialog is cancelled', async () => {
+    const user = userEvent.setup();
+    render(<SessionsView memory="default" />);
+    emit({
+      sessionId: 'sess-1',
+      session: { lastActivity: '2025-01-01T12:00:00.000Z' },
+    });
+    await waitFor(() => screen.getByText('sess-1'));
+
+    await user.click(screen.getByRole('button', { name: /purge/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(screen.getByText('sess-1')).toBeDefined();
+  });
+
   it('Purge swallows fetch errors', async () => {
-    global.fetch = vi
+    globalThis.fetch = vi
       .fn()
       .mockRejectedValue(new Error('network')) as unknown as typeof fetch;
     const user = userEvent.setup();
     render(<SessionsView memory="default" />);
-    await user.click(screen.getByRole('button', { name: /purge/i }));
-    expect(global.fetch).toHaveBeenCalled();
+    await purge(user);
+    expect(globalThis.fetch).toHaveBeenCalled();
+  });
+
+  it('keeps sessions and surfaces an error when purge is rejected by the API', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    }) as unknown as typeof fetch;
+    const user = userEvent.setup();
+    const onPurged = vi.fn();
+    render(<SessionsView memory="default" onPurged={onPurged} />);
+    emit({
+      sessionId: 'sess-1',
+      session: { lastActivity: '2025-01-01T12:00:00.000Z' },
+    });
+    await waitFor(() => screen.getByText('sess-1'));
+
+    await purge(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('500');
+    });
+    expect(screen.getByText('sess-1')).toBeDefined();
+    expect(screen.queryByText(/waiting for data/i)).toBeNull();
+    expect(onPurged).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(
+      'Failed to purge sessions',
+      expect.objectContaining({
+        description: '500 Internal Server Error',
+      }),
+    );
   });
 
   it('Auto-scroll toggle state changes', async () => {
@@ -181,17 +249,17 @@ describe('SessionsView', () => {
     });
   });
 
-  it('connection dot turns green on EventSource.onopen', async () => {
+  it('connection dot reflects connected state on EventSource.onopen', async () => {
     const { container } = render(<SessionsView memory="default" />);
     const dot = container.querySelector('span.rounded-full');
-    expect(dot?.className).toContain('bg-gray-300');
+    expect(dot?.className).toContain('bg-fg-disabled');
     act(() => {
       latestES().onopen?.();
     });
     await waitFor(() => {
-      expect(
-        container.querySelector('span.rounded-full')?.className,
-      ).toContain('bg-green-500');
+      expect(container.querySelector('span.rounded-full')?.className).toContain(
+        'bg-status-success',
+      );
     });
   });
 
@@ -210,23 +278,23 @@ describe('SessionsView', () => {
     expect(screen.getByText('no-activity-b')).toBeDefined();
   });
 
-  it('connection dot turns gray on EventSource.onerror', async () => {
+  it('connection dot reflects disconnected state on EventSource.onerror', async () => {
     const { container } = render(<SessionsView memory="default" />);
     act(() => {
       latestES().onopen?.();
     });
     await waitFor(() => {
-      expect(
-        container.querySelector('span.rounded-full')?.className,
-      ).toContain('bg-green-500');
+      expect(container.querySelector('span.rounded-full')?.className).toContain(
+        'bg-status-success',
+      );
     });
     act(() => {
       latestES().onerror?.();
     });
     await waitFor(() => {
-      expect(
-        container.querySelector('span.rounded-full')?.className,
-      ).toContain('bg-gray-300');
+      expect(container.querySelector('span.rounded-full')?.className).toContain(
+        'bg-fg-disabled',
+      );
     });
   });
 });
