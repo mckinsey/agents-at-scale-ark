@@ -52,6 +52,29 @@ expect_arg() {
     return 0
 }
 
+# expect_no_arg <name> <unexpected-substr> <set-args...>
+expect_no_arg() {
+    local name="$1"
+    local unexpected="$2"
+    shift 2
+    local output
+    if ! output=$(render "$@" 2>&1); then
+        echo -e "${RED}FAIL${NC} $name"
+        echo -e "${YELLOW}  helm template failed:${NC}"
+        echo "$output" | sed 's/^/    /'
+        FAILED=$((FAILED + 1))
+        return 0
+    fi
+    if echo "$output" | grep -qF -- "$unexpected"; then
+        echo -e "${RED}FAIL${NC} $name"
+        echo -e "${YELLOW}  did not expect to find:${NC} $unexpected"
+        FAILED=$((FAILED + 1))
+    else
+        echo -e "${GREEN}OK${NC}   $name (absent: $unexpected)"
+    fi
+    return 0
+}
+
 echo "Validating chart value rendering for $MANAGER_TEMPLATE..."
 
 # Defaults from values.yaml.
@@ -73,6 +96,16 @@ expect_arg "override maxConcurrentQueries=0" \
 expect_arg "override maxConcurrentReconciles=0" \
     '"--max-concurrent-reconciles=0"' \
     --set controllerManager.maxConcurrentReconciles=0
+
+# Metrics serving cert: wired only when metrics + cert-manager are both enabled,
+# so the ServiceMonitor can verify the endpoint's TLS instead of hitting a
+# self-signed localhost cert (see issue #2597). Must be absent without
+# cert-manager, or the manager crashes on a missing cert path.
+expect_arg "default metrics-cert-path" \
+    '"--metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs"'
+expect_no_arg "no metrics-cert-path when certmanager disabled" \
+    '--metrics-cert-path' \
+    --set certmanager.enable=false
 
 echo ""
 if [[ "$FAILED" -eq 0 ]]; then
