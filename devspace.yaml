@@ -158,12 +158,27 @@ pipelines:
       # can be created, otherwise Helm will get x509 errors calling the webhook TLS endpoint.
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
       kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
-      # Wait for cainjector to populate the webhook's CABundle field. Only needed on first
-      # install — once the selfsigned-issuer exists it persists across re-deploys (see
-      # ark/dist/chart/templates/certmanager/certificate.yaml for why).
-      if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
-        echo "Waiting for cert-manager webhook CABundle..."
-        until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      # Probe the admission webhook end-to-end before deploying any charts that
+      # create cert-manager resources. A populated CABundle only means cainjector
+      # patched the config — it does NOT mean the webhook pod is already serving
+      # TLS that chains to that CA. Deploying into that gap is what caused the
+      # first-deploy "x509: certificate signed by unknown authority" failures. A
+      # server-side dry-run exercises the real admission path, so once it succeeds
+      # the subsequent chart deploys are safe. Cheap when cert-manager is already
+      # up (passes on the first try), so it runs unconditionally.
+      echo "Waiting for cert-manager webhook to accept admission requests..."
+      webhook_ready=false
+      probe='apiVersion: cert-manager.io/v1\nkind: Issuer\nmetadata:\n  name: webhook-readiness-probe\n  namespace: cert-manager\nspec:\n  selfSigned: {}\n'
+      for i in $(seq 1 60); do
+        if printf "${probe}" | kubectl apply --dry-run=server -f - > /dev/null 2>&1; then
+          webhook_ready=true
+          break
+        fi
+        sleep 2
+      done
+      if [ "${webhook_ready}" != "true" ]; then
+        echo "cert-manager webhook did not become ready in time" >&2
+        exit 1
       fi
     fi
 
@@ -188,6 +203,24 @@ pipelines:
         kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
       else
         kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+        # apiservice Available only means the aggregation layer can reach the backend.
+        # On a cold start the embedded apiserver restarts once (while it waits for
+        # postgres), and during that flap the aggregated discovery omits the Tool kind,
+        # so helm fails with "no matches for kind Tool ... ensure CRDs are installed
+        # first". Probe the discovery document until Tool is actually served.
+        echo "Waiting for Tool API to be served by the embedded apiserver..."
+        tool_served=false
+        for i in $(seq 1 90); do
+          if kubectl get --raw /apis/ark.mckinsey.com/v1alpha1 2>/dev/null | grep -q '"name":"tools"'; then
+            tool_served=true
+            break
+          fi
+          sleep 2
+        done
+        if [ "${tool_served}" != "true" ]; then
+          echo "embedded apiserver did not serve the Tool API in time" >&2
+          exit 1
+        fi
       fi
       create_deployments ark-tenant
     fi
@@ -227,12 +260,27 @@ pipelines:
       # can be created, otherwise Helm will get x509 errors calling the webhook TLS endpoint.
       kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=120s
       kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=120s
-      # Wait for cainjector to populate the webhook's CABundle field. Only needed on first
-      # install — once the selfsigned-issuer exists it persists across re-deploys (see
-      # ark/dist/chart/templates/certmanager/certificate.yaml for why).
-      if ! kubectl get issuer selfsigned-issuer -n ark-system > /dev/null 2>&1; then
-        echo "Waiting for cert-manager webhook CABundle..."
-        until kubectl get mutatingwebhookconfiguration cert-manager-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; do sleep 2; done
+      # Probe the admission webhook end-to-end before deploying any charts that
+      # create cert-manager resources. A populated CABundle only means cainjector
+      # patched the config — it does NOT mean the webhook pod is already serving
+      # TLS that chains to that CA. Deploying into that gap is what caused the
+      # first-deploy "x509: certificate signed by unknown authority" failures. A
+      # server-side dry-run exercises the real admission path, so once it succeeds
+      # the subsequent chart deploys are safe. Cheap when cert-manager is already
+      # up (passes on the first try), so it runs unconditionally.
+      echo "Waiting for cert-manager webhook to accept admission requests..."
+      webhook_ready=false
+      probe='apiVersion: cert-manager.io/v1\nkind: Issuer\nmetadata:\n  name: webhook-readiness-probe\n  namespace: cert-manager\nspec:\n  selfSigned: {}\n'
+      for i in $(seq 1 60); do
+        if printf "${probe}" | kubectl apply --dry-run=server -f - > /dev/null 2>&1; then
+          webhook_ready=true
+          break
+        fi
+        sleep 2
+      done
+      if [ "${webhook_ready}" != "true" ]; then
+        echo "cert-manager webhook did not become ready in time" >&2
+        exit 1
       fi
     fi
 
@@ -257,6 +305,24 @@ pipelines:
         kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
       else
         kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+        # apiservice Available only means the aggregation layer can reach the backend.
+        # On a cold start the embedded apiserver restarts once (while it waits for
+        # postgres), and during that flap the aggregated discovery omits the Tool kind,
+        # so helm fails with "no matches for kind Tool ... ensure CRDs are installed
+        # first". Probe the discovery document until Tool is actually served.
+        echo "Waiting for Tool API to be served by the embedded apiserver..."
+        tool_served=false
+        for i in $(seq 1 90); do
+          if kubectl get --raw /apis/ark.mckinsey.com/v1alpha1 2>/dev/null | grep -q '"name":"tools"'; then
+            tool_served=true
+            break
+          fi
+          sleep 2
+        done
+        if [ "${tool_served}" != "true" ]; then
+          echo "embedded apiserver did not serve the Tool API in time" >&2
+          exit 1
+        fi
       fi
       create_deployments ark-tenant
     fi
