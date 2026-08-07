@@ -1001,9 +1001,9 @@ If options are still detaching after this, the likely cause is a parent componen
 
 ## PostgreSQL Broker Tests
 
-Tests labeled `postgresql: "true"` run in the `storage-backend: postgresql` CI matrix, where the broker uses Postgres for both messages and events (`backends.message=postgres`, `backends.event=postgres`). This means broker messages and events are persisted in the `messages` and `events` tables of the `ark-storage-dev` Postgres instance in `ark-system`.
+Tests labeled `postgresql: "true"` run in the `storage-backend: postgresql` CI matrix, where the broker uses Postgres for messages, events, and sessions (`backends.message=postgres`, `backends.event=postgres`, `backends.sessions=postgres`). This means broker messages, events, and sessions are persisted in the `messages`, `events`, `sessions`, and `session_queries` tables of the `ark-storage-dev` Postgres instance in `ark-system`.
 
-Use this label when a test needs to verify broker message/event persistence, `expires_at`, or other Postgres-specific behavior.
+Use this label when a test needs to verify broker message/event/session persistence, `expires_at`, or other Postgres-specific behavior.
 
 ### Querying Postgres from a chainsaw test
 
