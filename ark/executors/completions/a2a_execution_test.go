@@ -389,6 +389,79 @@ func TestEffectiveIdleTimeout_ServerTimeoutLonger(t *testing.T) {
 	assert.Equal(t, defaultA2AStreamIdleTimeout, effectiveIdleTimeout(a2aServer))
 }
 
+func TestResolveA2AExecutionTimeout_ServerTimeoutWins(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		Spec: arkv1prealpha1.A2AServerSpec{Timeout: "30m"},
+	}
+
+	timeout, err := resolveA2AExecutionTimeout(context.Background(), a2aServer)
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Minute, timeout)
+}
+
+func TestResolveA2AExecutionTimeout_InvalidServerTimeout(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		Spec: arkv1prealpha1.A2AServerSpec{Timeout: "not-a-duration"},
+	}
+
+	_, err := resolveA2AExecutionTimeout(context.Background(), a2aServer)
+	require.Error(t, err)
+}
+
+func TestResolveA2AExecutionTimeout_InheritsCallerDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
+
+	timeout, err := resolveA2AExecutionTimeout(ctx, &arkv1prealpha1.A2AServer{})
+	require.NoError(t, err)
+	assert.Zero(t, timeout)
+}
+
+func TestResolveA2AExecutionTimeout_DefaultsWhenNoDeadline(t *testing.T) {
+	timeout, err := resolveA2AExecutionTimeout(context.Background(), &arkv1prealpha1.A2AServer{})
+	require.NoError(t, err)
+	assert.Equal(t, defaultA2AExecutionTimeout, timeout)
+}
+
+func TestWithA2AExecutionTimeout_AppliesServerTimeout(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		Spec: arkv1prealpha1.A2AServerSpec{Timeout: "30m"},
+	}
+
+	ctx, cancel, err := withA2AExecutionTimeout(context.Background(), a2aServer)
+	require.NoError(t, err)
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	assert.WithinDuration(t, time.Now().Add(30*time.Minute), deadline, time.Minute)
+}
+
+func TestWithA2AExecutionTimeout_PreservesCallerDeadline(t *testing.T) {
+	callerCtx, callerCancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer callerCancel()
+
+	ctx, cancel, err := withA2AExecutionTimeout(callerCtx, &arkv1prealpha1.A2AServer{})
+	require.NoError(t, err)
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	assert.WithinDuration(t, time.Now().Add(20*time.Minute), deadline, time.Minute)
+
+	cancel()
+	require.Error(t, ctx.Err())
+	require.NoError(t, callerCtx.Err())
+}
+
+func TestWithA2AExecutionTimeout_InvalidServerTimeout(t *testing.T) {
+	a2aServer := &arkv1prealpha1.A2AServer{
+		Spec: arkv1prealpha1.A2AServerSpec{Timeout: "not-a-duration"},
+	}
+
+	_, _, err := withA2AExecutionTimeout(context.Background(), a2aServer)
+	require.Error(t, err)
+}
+
 func TestStreamContentChunkSkipsEmpty(t *testing.T) {
 	ctx := context.Background()
 	stream := &mockEventStream{}

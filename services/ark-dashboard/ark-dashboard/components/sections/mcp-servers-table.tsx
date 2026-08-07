@@ -27,14 +27,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useMcpAuthCompletion } from '@/lib/hooks/use-mcp-auth-completion';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { useMcpAuthCompletion } from '@/lib/hooks/use-mcp-auth-completion';
 import type { MCPServer } from '@/lib/services/mcp-servers';
 import {
   useLogoutMcpAuth,
@@ -60,27 +62,22 @@ const AVAILABILITY_CONFIG = {
 } as const;
 
 // Maps backend MCP authorization.state to the Status column labels + dot colors.
-const AUTH_STATUS_CONFIG: Record<
-  string,
-  { label: string; dotClass: string }
-> = {
-  Authorized: { label: 'Authorized', dotClass: 'bg-status-success' },
-  Required: { label: 'Unauthenticated', dotClass: 'bg-status-error' },
-  DiscoveryFailed: { label: 'Error', dotClass: 'bg-status-error' },
-};
+const AUTH_STATUS_CONFIG: Record<string, { label: string; dotClass: string }> =
+  {
+    Authorized: { label: 'Authorized', dotClass: 'bg-status-success' },
+    Required: { label: 'Unauthenticated', dotClass: 'bg-status-error' },
+    DiscoveryFailed: { label: 'Error', dotClass: 'bg-status-error' },
+  };
 
 const COL = {
-  name: 'w-[260px]',
-  address: 'w-[320px]',
-  transport: 'w-[160px]',
-  tools: 'w-[100px]',
-  expires: 'w-[200px]',
-  status: 'w-[180px]',
-  action: 'w-[72px]',
+  name: 'w-[140px]',
+  address: 'w-[170px]',
+  transport: 'w-[80px]',
+  tools: 'w-[80px]',
+  expires: 'w-[194px]',
+  status: 'w-[170px]',
+  action: 'w-[40px]',
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function McpServerStatus({ server }: Readonly<{ server: MCPServer }>) {
   const authState = server.authorization?.state;
@@ -88,11 +85,13 @@ function McpServerStatus({ server }: Readonly<{ server: MCPServer }>) {
   const config =
     authConfig ?? AVAILABILITY_CONFIG[server.available ?? 'Unknown'];
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className={cn('size-2 rounded-full', config.dotClass)} />
-      <span className="label-regular-primary text-fg-primary">
-        {config.label}
-      </span>
+    <span className="inline-flex w-full min-w-0 items-center gap-2">
+      <span className={cn('size-2 shrink-0 rounded-full', config.dotClass)} />
+      <TruncatedTooltip label={config.label}>
+        <span className="label-regular-primary text-fg-primary block truncate">
+          {config.label}
+        </span>
+      </TruncatedTooltip>
     </span>
   );
 }
@@ -103,8 +102,9 @@ function McpServerExpires({ server }: Readonly<{ server: MCPServer }>) {
     return <span className="text-fg-primary">—</span>;
   }
   const nearExpiry = isNearExpiry(authorization.expiresAt);
+  const expiry = formatExpiry(authorization.expiresAt);
   return (
-    <span className="text-fg-primary inline-flex items-center gap-1.5">
+    <span className="text-fg-primary inline-flex w-full min-w-0 items-center gap-1.5">
       {nearExpiry && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -113,7 +113,9 @@ function McpServerExpires({ server }: Readonly<{ server: MCPServer }>) {
           <TooltipContent>Expiring soon</TooltipContent>
         </Tooltip>
       )}
-      <span className="truncate">{formatExpiry(authorization.expiresAt)}</span>
+      <TruncatedTooltip label={expiry}>
+        <span className="block truncate">{expiry}</span>
+      </TruncatedTooltip>
     </span>
   );
 }
@@ -250,36 +252,34 @@ function McpServerTableRow({
       <TableRow className="relative isolate cursor-pointer transition-colors">
         <TableCell size="small">
           <span aria-hidden className={rowHoverOverlayClass} />
-          <NamespacedLink
-            href={`/mcp/${encodeURIComponent(server.id)}/update`}
-            title={server.name}
-            className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
-            {server.name}
-          </NamespacedLink>
+          <TruncatedTooltip label={server.name}>
+            <NamespacedLink
+              href={`/mcp/${encodeURIComponent(server.id)}/update`}
+              className="text-fg-primary block w-full truncate after:absolute after:inset-0 after:content-['']">
+              {server.name}
+            </NamespacedLink>
+          </TruncatedTooltip>
         </TableCell>
         <OriginCell origin={server.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
         <TableCell size="small" className={cn(COL.address, 'relative z-10')}>
           {server.address ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-fg-primary block truncate">
-                  {server.address}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-[420px] break-all">
+            <TruncatedTooltip
+              label={server.address}
+              contentClassName="max-w-[420px] break-all">
+              <span className="text-fg-primary block w-full truncate">
                 {server.address}
-              </TooltipContent>
-            </Tooltip>
+              </span>
+            </TruncatedTooltip>
           ) : (
             <span className="text-fg-primary">—</span>
           )}
         </TableCell>
         <TableCell size="small" className={COL.transport}>
-          <span
-            className="text-fg-primary block truncate"
-            title={server.transport ?? ''}>
-            {server.transport ?? '—'}
-          </span>
+          <TruncatedTooltip label={server.transport ?? '—'}>
+            <span className="text-fg-primary block w-full truncate">
+              {server.transport ?? '—'}
+            </span>
+          </TruncatedTooltip>
         </TableCell>
         <TableCell size="small" className={COL.tools}>
           <span className="text-fg-primary block truncate">

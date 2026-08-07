@@ -231,6 +231,99 @@ jobs:
           artifact-folder: ark/unit-tests
           artifact-suffix: ark-unit
 
+  integration-test-postgresql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          mock-llm-enabled: false
+
+      - name: Deploy PostgreSQL (ark-storage-dev)
+        run: |
+          helm upgrade --install ark-storage-dev charts/ark-storage-dev \
+            --namespace ark-system --create-namespace \
+            --wait --timeout=120s
+          kubectl -n ark-system wait --for=condition=ready \
+            pod -l app=ark-storage-dev --timeout=120s
+
+      - name: Run PostgreSQL integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ark
+          POSTGRES_PASSWORD: arkdev123
+        run: |
+          kubectl -n ark-system port-forward svc/ark-storage-dev 5432:5432 >/dev/null 2>&1 &
+          trap 'kill $! 2>/dev/null || true' EXIT
+          ready=false
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -q; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "PostgreSQL did not become ready in time"
+            exit 1
+          fi
+          # Capture the -json stream to a file and read go's exit code directly.
+          # Piping into a formatter that ends in `|| true` resets PIPESTATUS to (0),
+          # so a compile failure or test failure would be reported as a green job -
+          # exactly the silent no-op this job exists to prevent.
+          status=0
+          (cd ark && go test -tags integration ./internal/storage/postgresql/... -timeout 20m \
+            -coverprofile=cover.out -covermode=atomic -json) \
+            > /tmp/gotest.json || status=$?
+          jq -r 'select(.Action=="output") | .Output' /tmp/gotest.json | grep -v '^$' || true
+          echo "::group::Test runtimes (top 10 slowest)"
+          jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn | head -10
+          echo "::endgroup::"
+          # This job provisions Postgres, so no test in this package should skip.
+          # A skip means the suite never really ran (unset/renamed env var,
+          # unreachable DB, build-tag mistake) and green would be a lie - fail loud.
+          skipped=$(jq -r 'select(.Action=="skip" and .Test) | .Test' /tmp/gotest.json)
+          if [ -n "$skipped" ]; then
+            echo "::error::Integration tests skipped despite Postgres being provisioned:"
+            echo "$skipped"
+            exit 1
+          fi
+          exit "$status"
+
+      - name: Install gcov2lcov
+        run: go install github.com/jandelgado/gcov2lcov@latest
+
+      - name: Generate LCOV from integration coverage
+        run: |
+          mkdir -p ark/integration-tests
+          cp ark/cover.out ark/integration-tests/
+          cd ark && gcov2lcov -infile integration-tests/cover.out -outfile integration-tests/lcov.info
+
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: ark/integration-tests/
+          artifact-folder: ark/integration-tests
+          artifact-suffix: ark-integration-postgres
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-integration-gotest-json
+          path: /tmp/gotest.json
+          if-no-files-found: warn
+
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
@@ -577,7 +670,6 @@ jobs:
     name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -643,7 +735,6 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -988,14 +1079,14 @@ jobs:
 
       - name: Install CLI test dependencies
         run: |
-          pip install -r tests/pytest/ui-tests/requirements.txt
+          pip install -r tests/pytest/cli-tests/requirements.txt
 
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO -m "not executor"
 
       - name: Upload CLI test logs
         if: always()
@@ -1015,6 +1106,100 @@ jobs:
         with:
           name: cluster-logs-cli-${{ github.sha }}
           path: /tmp/cluster-logs
+          retention-days: 7
+
+  e2e-executor-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Install mock-llm
+        run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/cli-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install executor test dependencies
+        run: |
+          pip install -r tests/pytest/cli-tests/requirements.txt
+
+      - name: Deploy executor-openai-responses
+        run: |
+          helm upgrade --install executor-openai-responses \
+            oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
+            --version 0.1.3 \
+            --namespace default \
+            --set app.image.pullPolicy=Always \
+            --wait \
+            --timeout=5m
+          kubectl set env deployment/executor-openai-responses \
+            -n default \
+            OPENAI_API_KEY="mock-api-key" \
+            OPENAI_BASE_URL="http://mock-llm.default.svc.cluster.local:6556/v1"
+          kubectl rollout status deployment/executor-openai-responses \
+            -n default --timeout=2m
+
+      - name: Diagnose executor pod
+        run: |
+          echo "=== Executor pod env vars ==="
+          kubectl exec -n default deployment/executor-openai-responses -- env | grep -E "OPENAI|HOST|PORT" || true
+          echo "=== Executor pod logs ==="
+          kubectl logs -n default deployment/executor-openai-responses --tail=50 || true
+
+      - name: Port-forward executor service
+        run: |
+          kubectl port-forward -n default svc/executor-openai-responses 18080:8000 &
+          sleep 3
+
+      - name: Run executor E2E tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          EXECUTOR_URL: http://localhost:18080/execute
+        run: |
+          cd tests/pytest/cli-tests/tests
+          pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
+
+      - name: Upload executor test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-test-logs-${{ github.sha }}
+          path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs-executor
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-executor-${{ github.sha }}
+          path: /tmp/cluster-logs-executor
           retention-days: 7
 
   build-charts:
@@ -1115,6 +1300,7 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
+        integration-test-postgresql,
         build-charts,
         build-ark-cli,
       ]
@@ -1192,6 +1378,7 @@ jobs:
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
+        integration-test-postgresql,
         build-charts,
         build-ark-cli,
       ]

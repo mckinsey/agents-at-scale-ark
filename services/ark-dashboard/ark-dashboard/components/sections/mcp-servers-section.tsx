@@ -3,6 +3,7 @@
 import { PlugConnect } from '@/components/icons';
 import { McpServersTable } from '@/components/sections/mcp-servers-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { mcpServersService } from '@/lib/services';
 
 export function McpServersSection() {
@@ -14,7 +15,7 @@ export function McpServersSection() {
       subtitle="Add and manage all your MCPs"
       createHref="/mcp/new"
       createLabel="Add MCP"
-      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/"
+      learnMoreUrl={DOCS_URLS.tools}
       entityLabel="MCP Server"
       entityPluralLabel="MCP servers"
       emptyTitle="No MCP Servers Yet"

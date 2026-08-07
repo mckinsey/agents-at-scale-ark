@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 
 FILES = {
     "query": "/tmp/query.json",  # NOSONAR - single-app container, no other users share /tmp
@@ -88,6 +89,8 @@ def main(): # NOSONAR - main function of a script.
     if os.environ["ARK_TTL"]:
         spec["ttl"] = os.environ["ARK_TTL"]
     spec["sessionId"] = os.environ["ARK_SESSION_ID"] or "wf-" + workflow
+    conversation_id = os.environ["ARK_CONVERSATION_ID"] or str(uuid.uuid4())
+    spec["conversationId"] = conversation_id
     if os.environ["ARK_MEMORY"]:
         spec["memory"] = {"name": os.environ["ARK_MEMORY"]}
     if os.environ["ARK_SERVICE_ACCOUNT"]:
@@ -132,7 +135,7 @@ def main(): # NOSONAR - main function of a script.
 
     write_file("phase", phase)
     write_file("response", (status.get("response") or {}).get("content", ""))
-    write_file("conversation", status.get("conversationId", ""))
+    write_file("conversation", conversation_id)
 
     if phase == "done":
         print("Query " + query_name + " completed: done")

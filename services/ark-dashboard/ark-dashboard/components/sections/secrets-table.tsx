@@ -12,6 +12,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { Tag } from '@/components/ui/tag';
 import {
@@ -39,9 +40,6 @@ const COL = {
   status: 'w-[140px]',
   action: 'w-[100px]',
 };
-
-const rowHoverOverlayClass =
-  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
 
 function modelUsesSecret(model: Model, secretName: string): boolean {
   const config = model.config;

@@ -57,15 +57,11 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	if a2aServer.Spec.Timeout != "" {
-		timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
-		}
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+	ctx, cancel, err := withA2AExecutionTimeout(ctx, &a2aServer)
+	if err != nil {
+		return nil, err
 	}
+	defer cancel()
 
 	content := ""
 	if userInput.OfUser != nil && userInput.OfUser.Content.OfString.Value != "" {
@@ -206,6 +202,36 @@ func newA2AStreamContext(response *arka2a.A2AResponse, eventStream EventStreamIn
 		namespace:    namespace,
 		queryName:    queryName,
 	}
+}
+
+const defaultA2AExecutionTimeout = 5 * time.Minute
+
+func resolveA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) (time.Duration, error) {
+	if a2aServer != nil && a2aServer.Spec.Timeout != "" {
+		timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
+		}
+		return timeout, nil
+	}
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return 0, nil
+	}
+	return defaultA2AExecutionTimeout, nil
+}
+
+func withA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) (context.Context, context.CancelFunc, error) {
+	timeout, err := resolveA2AExecutionTimeout(ctx, a2aServer)
+	if err != nil {
+		return nil, nil, err
+	}
+	if timeout <= 0 {
+		ctx, cancel := context.WithCancel(ctx)
+		return ctx, cancel, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	return ctx, cancel, nil
 }
 
 var defaultA2AStreamIdleTimeout = 8 * time.Minute

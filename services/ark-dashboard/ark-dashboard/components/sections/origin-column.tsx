@@ -6,9 +6,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { getOriginLabel } from '@/lib/utils/origin-icon';
 
-const ORIGIN_COL = 'w-[160px]';
+const ORIGIN_COL = 'w-[80px]';
 
 interface OriginColumnHeaderProps {
   readonly tooltip: string;
@@ -44,11 +45,12 @@ interface OriginCellProps {
 }
 
 export function OriginCell({ origin }: Readonly<OriginCellProps>) {
+  const label = getOriginLabel(origin);
   return (
-    <TableCell size="small">
-      <span className="text-fg-primary block truncate">
-        {getOriginLabel(origin)}
-      </span>
+    <TableCell size="small" className={ORIGIN_COL}>
+      <TruncatedTooltip label={label}>
+        <span className="text-fg-primary block w-full truncate">{label}</span>
+      </TruncatedTooltip>
     </TableCell>
   );
 }

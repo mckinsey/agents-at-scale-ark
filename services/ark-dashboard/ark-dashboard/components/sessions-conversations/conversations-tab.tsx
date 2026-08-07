@@ -20,6 +20,9 @@ import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { generateUUID } from '@/lib/utils/uuid';
 
+type PendingMessage = { role: 'user'; content: string; timestamp: string };
+const EMPTY_PENDING_MESSAGES: PendingMessage[] = [];
+
 interface Props {
   readonly sessionId: string;
   readonly initialParticipant?: {
@@ -233,7 +236,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                   conversationId={selectedConversationId}
                   sessionId={sessionId}
                   conversation={selectedConversation}
-                  pendingMessages={pendingMessagesMap[selectedConversationId] || []}
+                  pendingMessages={pendingMessagesMap[selectedConversationId] || EMPTY_PENDING_MESSAGES}
                   onClearPending={() => handleClearPendingMessages(selectedConversationId)}
                   isProcessing={processingStateMap[selectedConversationId] || false}
                   showToolCalls={showToolCalls}
