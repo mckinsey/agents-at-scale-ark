@@ -7,9 +7,6 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
-  typescript: {
-    tsconfigPath: 'tsconfig.build.json',
-  },
   basePath: process.env.ARK_DASHBOARD_BASE_PATH || '',
   assetPrefix: process.env.ARK_DASHBOARD_ASSET_PREFIX || '',
   async redirects() {

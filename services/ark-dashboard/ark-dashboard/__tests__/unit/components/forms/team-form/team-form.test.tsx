@@ -50,6 +50,7 @@ vi.mock('@/components/forms/team-form/use-team-form', () => ({
 }));
 
 import { TeamForm } from '@/components/forms/team-form/team-form';
+import { TeamFormMode } from '@/components/forms/team-form/types';
 
 describe('TeamForm', () => {
   beforeEach(() => {
@@ -57,7 +58,7 @@ describe('TeamForm', () => {
   });
 
   it('should render loading spinner when loading', () => {
-    const { container } = render(<TeamForm mode="create" />);
+    const { container } = render(<TeamForm mode={TeamFormMode.CREATE} />);
     expect(container.querySelector('.animate-spin')).toBeTruthy();
   });
 });

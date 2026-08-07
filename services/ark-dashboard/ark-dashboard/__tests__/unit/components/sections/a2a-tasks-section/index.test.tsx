@@ -1,11 +1,9 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  AppRouterContext,
-  type AppRouterInstance,
-} from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { mockAppRouter } from '@/__tests__/helpers/app-router';
 import { A2ATasksSection } from '@/components/sections/a2a-tasks-section';
 import { useListA2ATasks } from '@/lib/services/a2a-tasks-hooks';
 
@@ -14,14 +12,7 @@ vi.mock('@/lib/services/a2a-tasks-hooks');
 const mockPush = vi.fn();
 
 const MockRouter = ({ children }: { children: React.ReactNode }) => {
-  const mockRouter: AppRouterInstance = {
-    back: vi.fn(),
-    forward: vi.fn(),
-    push: mockPush,
-    replace: vi.fn(),
-    refresh: vi.fn(),
-    prefetch: vi.fn(),
-  };
+  const mockRouter = mockAppRouter({ push: mockPush });
 
   return (
     <AppRouterContext.Provider value={mockRouter}>

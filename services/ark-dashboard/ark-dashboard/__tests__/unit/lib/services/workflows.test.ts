@@ -346,10 +346,21 @@ describe('workflow utility functions', () => {
 
   describe('getRootNodeId', () => {
     it('should return workflow name as root node id', () => {
-      const workflow = {
-        metadata: { name: 'my-workflow', namespace: 'default' },
-        status: { nodes: { 'node-1': { id: 'node-1' } } },
-      } as ArgoWorkflow;
+      const workflow: ArgoWorkflow = {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'Workflow',
+        metadata: {
+          name: 'my-workflow',
+          namespace: 'default',
+          creationTimestamp: '2024-01-01T00:00:00Z',
+          uid: 'workflow-uid',
+        },
+        spec: {},
+        status: {
+          phase: 'Succeeded',
+          nodes: { 'node-1': { id: 'node-1' } as ArgoNodeStatus },
+        },
+      };
 
       const result = getRootNodeId(workflow);
       expect(result).toBe('my-workflow');

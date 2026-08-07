@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { APIError } from '@/lib/api/client';
-import { agentsService } from '@/lib/services/agents';
+import { agentsService, type Agent } from '@/lib/services/agents';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
-import { mcpServersService } from '@/lib/services/mcp-servers';
+import {
+  mcpServersService,
+  type MCPServerDetail,
+} from '@/lib/services/mcp-servers';
 
 vi.mock('@/lib/services/agents', () => ({
   agentsService: {
@@ -17,7 +20,7 @@ vi.mock('@/lib/services/mcp-servers', () => ({
   },
 }));
 
-const readyAgent = {
+const readyAgent: Agent = {
   id: 'argo-make-author',
   name: 'argo-make-author',
   namespace: 'default',
@@ -25,9 +28,11 @@ const readyAgent = {
   available: 'True',
 };
 
-const readyMcpServer = {
+const readyMcpServer: MCPServerDetail = {
   id: 'kubernetes-mcp-server',
   name: 'kubernetes-mcp-server',
+  namespace: 'default',
+  headers: null,
   available: 'True',
 };
 

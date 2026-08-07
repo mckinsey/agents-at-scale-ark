@@ -68,7 +68,9 @@ function mockSpawnFailure(error: Error) {
   });
 }
 
-function createRequest(url: string, options?: RequestInit) {
+type NextRequestInit = ConstructorParameters<typeof NextRequest>[1];
+
+function createRequest(url: string, options?: NextRequestInit) {
   const parsed = new URL(url, 'http://localhost');
   if (!parsed.searchParams.has('namespace')) {
     parsed.searchParams.set('namespace', 'team-a');

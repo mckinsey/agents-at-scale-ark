@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
+import { lastListSessionsParams } from '@/__tests__/helpers/list-sessions-params';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import { useGetEvents } from '@/lib/services/logs-hooks';
 import { logsService } from '@/lib/services/logs';
@@ -87,8 +88,7 @@ describe('Pagination Edge Cases', () => {
       await user.click(screen.getByText('Active'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
         expect(lastCall.cursor).toBe(0);
         expect(lastCall.status).toBe('active');
       });
@@ -116,8 +116,7 @@ describe('Pagination Edge Cases', () => {
       await user.click(screen.getByTestId('pagination-next'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
         expect(lastCall.cursor).toBe(20);
       });
 
@@ -125,8 +124,7 @@ describe('Pagination Edge Cases', () => {
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
         expect(lastCall.cursor).toBe(0);
         expect(lastCall.sort).toBe('name');
       });

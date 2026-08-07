@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider as JotaiProvider } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { mockAppRouter } from '@/__tests__/helpers/app-router';
 import { render, screen } from '@testing-library/react';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -115,7 +117,7 @@ describe('AppSidebar - Navigation', () => {
   it('should preserve query parameters when navigating', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
     Object.defineProperty(window, 'location', {
       value: { search: '?namespace=test-ns&foo=bar' },
@@ -135,7 +137,7 @@ describe('AppSidebar - Navigation', () => {
   it('should navigate without query string when no params exist', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
     Object.defineProperty(window, 'location', {
       value: { search: '' },
@@ -197,7 +199,7 @@ describe('AppSidebar - Files Section', () => {
   it('should navigate to /secrets when Secrets is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
     const user = userEvent.setup();
 
@@ -227,7 +229,7 @@ describe('AppSidebar - Files Section', () => {
   it('should navigate to /api-keys when API keys is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
     const user = userEvent.setup();
 
@@ -245,7 +247,7 @@ describe('AppSidebar - Files Section', () => {
   it('should display namespace name when available', async () => {
     const { useNamespace } = await import('@/providers/NamespaceProvider');
     vi.mocked(useNamespace).mockReturnValue({
-      availableNamespaces: [{ name: 'test-namespace' }],
+      availableNamespaces: [{ name: 'test-namespace', id: 1 }],
       createNamespace: vi.fn(),
       isPending: false,
       namespace: 'test-namespace',
@@ -276,7 +278,7 @@ describe('AppSidebar - General Group', () => {
   it('should navigate to /memory when Memory is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
     const user = userEvent.setup();
 
@@ -298,7 +300,7 @@ describe('AppSidebar - General Group', () => {
   it('should navigate to /marketplace when Marketplace is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
     const user = userEvent.setup();
 

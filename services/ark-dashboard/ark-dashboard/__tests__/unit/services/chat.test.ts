@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { queryDetail } from '@/__tests__/helpers/query-fixtures';
 import { apiClient } from '@/lib/api/client';
-import type { QueryDetailResponse } from '@/lib/services/chat';
 import { chatService } from '@/lib/services/chat';
 
 vi.mock('@/lib/api/client', () => ({
@@ -34,12 +34,10 @@ describe('chatService', () => {
 
   describe('createQuery', () => {
     it('should create a query with normalized target type', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'test-query',
-        type: 'user',
-        input: 'test input',
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValue(mockResponse);
 
@@ -60,12 +58,10 @@ describe('chatService', () => {
     });
 
     it('should handle query without target', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'test-query',
-        type: 'user',
-        input: 'test input',
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValue(mockResponse);
 
@@ -86,12 +82,11 @@ describe('chatService', () => {
 
   describe('getQuery', () => {
     it('should return query detail', async () => {
-      const mockQuery: QueryDetailResponse = {
+      const mockQuery = queryDetail({
         name: 'query-123',
-        type: 'user',
         input: 'test',
         status: { phase: 'done' },
-      };
+      });
 
       vi.mocked(apiClient.get).mockResolvedValue(mockQuery);
 
@@ -142,12 +137,11 @@ describe('chatService', () => {
 
   describe('updateQuery', () => {
     it('should update query', async () => {
-      const mockUpdated: QueryDetailResponse = {
+      const mockUpdated = queryDetail({
         name: 'query-123',
-        type: 'user',
         input: 'updated input',
         status: { phase: 'done' },
-      };
+      });
 
       vi.mocked(apiClient.put).mockResolvedValue(mockUpdated);
 
@@ -217,11 +211,12 @@ describe('chatService', () => {
 
   describe('submitChatQuery', () => {
     beforeEach(() => {
-      vi.mocked(apiClient.post).mockResolvedValue({
-        name: 'chat-query-test-uuid-123',
-        type: 'user',
-        status: { phase: 'pending' },
-      } as QueryDetailResponse);
+      vi.mocked(apiClient.post).mockResolvedValue(
+        queryDetail({
+          name: 'chat-query-test-uuid-123',
+          status: { phase: 'pending' },
+        }),
+      );
     });
 
     it('should submit chat query with string input', async () => {

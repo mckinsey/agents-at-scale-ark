@@ -20,8 +20,10 @@ function renderChatMessageList(
     type: 'agent',
     debugMode: true,
     isProcessing: false,
+    isWaitingForApprovalResponse: false,
     error: null,
     messagesEndRef: createRef<HTMLDivElement>(),
+    pollAfterApproval: vi.fn(),
     ...props,
   };
   return render(<ChatMessageList {...defaults} />);

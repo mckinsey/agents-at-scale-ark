@@ -236,6 +236,7 @@ describe('TeamEditor', () => {
         namespace: 'default',
         description: 'Selector team',
         strategy: 'selector',
+        loops: false,
         members: [{ name: 'test-agent-1', type: 'agent' as const }],
         selector: { agent: 'test-agent-1' },
       };
@@ -258,6 +259,7 @@ describe('TeamEditor', () => {
         namespace: 'default',
         description: 'Selector team',
         strategy: 'selector',
+        loops: false,
         members: [{ name: 'test-agent-1', type: 'agent' as const }],
         selector: { agent: 'test-agent-1', selectorPrompt: customPrompt },
       };
@@ -280,6 +282,7 @@ describe('TeamEditor', () => {
       namespace: 'default',
       description: 'Existing team description',
       strategy: 'sequential',
+      loops: false,
       members: [{ name: 'test-agent-1', type: 'agent' as const }],
     };
 

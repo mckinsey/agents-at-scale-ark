@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { agentsService } from '@/lib/services/agents'
 import { apiClient, APIError } from '@/lib/api/client'
-import type { AgentDetailResponse, AgentListResponse } from '@/lib/services/agents'
+import type {
+  AgentCreateRequest,
+  AgentDetailResponse,
+  AgentListResponse,
+} from '@/lib/services/agents'
 
 // Mock the API client, keeping the real APIError so instanceof checks work
 vi.mock('@/lib/api/client', async importOriginal => {
@@ -20,12 +24,13 @@ vi.mock('@/lib/api/client', async importOriginal => {
 describe('agentsService', () => {
   const mockAgent: AgentDetailResponse = {
     name: 'test-agent',
-    displayName: 'Test Agent',
+    namespace: 'default',
+    isA2A: false,
     description: 'A test agent',
-    model: { name: 'gpt-4', displayName: 'GPT-4' },
+    modelRef: { name: 'gpt-4' },
     tools: [],
-    systemPrompt: 'You are a helpful assistant',
-    parameters: {},
+    prompt: 'You are a helpful assistant',
+    parameters: [],
   }
 
   beforeEach(() => {
@@ -35,9 +40,10 @@ describe('agentsService', () => {
   describe('getAll', () => {
     it('should fetch all agents and add id field', async () => {
       const mockListResponse: AgentListResponse = {
+        count: 2,
         items: [
-          { name: 'agent1', displayName: 'Agent 1' },
-          { name: 'agent2', displayName: 'Agent 2' },
+          { name: 'agent1', namespace: 'default' },
+          { name: 'agent2', namespace: 'default' },
         ],
       }
 
@@ -116,10 +122,10 @@ describe('agentsService', () => {
 
   describe('create', () => {
     it('should create agent and add id field', async () => {
-      const createRequest = {
+      const createRequest: AgentCreateRequest = {
         name: 'new-agent',
-        displayName: 'New Agent',
-        model: { name: 'gpt-4' },
+        description: 'New Agent',
+        modelRef: { name: 'gpt-4' },
       }
 
       vi.mocked(apiClient.post).mockResolvedValueOnce({
@@ -142,11 +148,11 @@ describe('agentsService', () => {
 
   describe('update', () => {
     it('should update agent and return with id field', async () => {
-      const updates = { displayName: 'Updated Agent' }
+      const updates = { description: 'Updated Agent' }
       
       vi.mocked(apiClient.put).mockResolvedValueOnce({
         ...mockAgent,
-        displayName: 'Updated Agent',
+        description: 'Updated Agent',
       })
 
       const result = await agentsService.update('test-agent', updates)
@@ -157,7 +163,7 @@ describe('agentsService', () => {
       )
       expect(result).toMatchObject({
         id: 'test-agent',
-        displayName: 'Updated Agent',
+        description: 'Updated Agent',
       })
     })
 
@@ -173,7 +179,7 @@ describe('agentsService', () => {
 
   describe('updateById', () => {
     it('should convert ID to string and call update', async () => {
-      const updates = { displayName: 'Updated' }
+      const updates = { description: 'Updated' }
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockAgent)
 
       await agentsService.updateById(123, updates)
