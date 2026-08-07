@@ -362,7 +362,7 @@ class TestAPIKeyEndpoints(unittest.TestCase):
 
         # Assert response
         self.assertEqual(response.status_code, 204)
-        mock_service_instance.delete_api_key.assert_called_once_with("pk_test_123")
+        mock_service_instance.delete_api_key.assert_called_once_with("pk_test_123", created_by=None)
 
     @patch("ark_api.api.v1.api_keys.APIKeyService")
     def test_delete_api_key_not_found(self, mock_api_key_service):

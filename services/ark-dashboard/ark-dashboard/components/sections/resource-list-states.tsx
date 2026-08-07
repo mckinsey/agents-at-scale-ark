@@ -1,9 +1,28 @@
 import type { ReactNode } from 'react';
 
 import { Search } from '@/components/icons';
+import { Button, wrapTextNodes } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+
+interface LearnMoreButtonProps {
+  readonly href: string;
+  readonly label?: string;
+}
+
+export function LearnMoreButton({
+  href,
+  label = 'Learn more',
+}: Readonly<LearnMoreButtonProps>) {
+  return (
+    <Button asChild variant="outline">
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {wrapTextNodes(label)}
+      </a>
+    </Button>
+  );
+}
 
 interface ResourceSearchInputProps {
   readonly value: string;
