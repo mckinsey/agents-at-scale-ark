@@ -4,6 +4,7 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel, field_validator
 
 from ..annotations import filter_ark_annotations
+from ..labels import validate_tag
 
 
 class NamespaceResponse(BaseModel):
@@ -71,3 +72,59 @@ class SecretDetailResponse(BaseModel):
     @classmethod
     def _filter_annotations(cls, value: Optional[Dict[str, str]]) -> Dict[str, str]:
         return filter_ark_annotations(value)
+
+
+class ConfigurationResponse(BaseModel):
+    """Configuration response model."""
+    name: str
+    id: str
+    value: Optional[str] = None
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    tags: List[str] = []
+
+
+class ConfigurationListResponse(BaseModel):
+    """List of configurations response model."""
+    items: List[ConfigurationResponse]
+    count: int
+
+
+class ConfigurationCreateRequest(BaseModel):
+    """Request model for creating a configuration."""
+    name: str
+    value: str
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    tags: List[str] = []
+
+    @field_validator("tags")
+    @classmethod
+    def _validate_tags(cls, value: List[str]) -> List[str]:
+        return [validate_tag(tag) for tag in value]
+
+
+class ConfigurationUpdateRequest(BaseModel):
+    """Request model for updating a configuration."""
+    value: str
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    tags: List[str] = []
+
+    @field_validator("tags")
+    @classmethod
+    def _validate_tags(cls, value: List[str]) -> List[str]:
+        return [validate_tag(tag) for tag in value]
+
+
+class ConfigurationReference(BaseModel):
+    """A resource that reads a configuration."""
+    kind: str
+    name: str
+    field: str
+
+
+class ConfigurationReferenceListResponse(BaseModel):
+    """Resources that read a configuration."""
+    items: List[ConfigurationReference]
+    count: int
