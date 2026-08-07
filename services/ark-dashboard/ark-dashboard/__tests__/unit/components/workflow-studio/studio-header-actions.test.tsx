@@ -152,16 +152,20 @@ describe('StudioHeaderActions', () => {
 
     expect(
       screen.getByTestId('studio-activity-link-total').getAttribute('href'),
-    ).toBe('/sessions?workflowTemplateName=existing-workflow');
+    ).toBe('/workflow-runs?workflowTemplateName=existing-workflow');
     expect(
       screen.getByTestId('studio-activity-link-succeeded').getAttribute('href'),
-    ).toBe('/sessions?workflowTemplateName=existing-workflow&status=succeeded');
+    ).toBe(
+      '/workflow-runs?workflowTemplateName=existing-workflow&status=succeeded',
+    );
     expect(
       screen.getByTestId('studio-activity-link-running').getAttribute('href'),
-    ).toBe('/sessions?workflowTemplateName=existing-workflow&status=running');
+    ).toBe(
+      '/workflow-runs?workflowTemplateName=existing-workflow&status=running',
+    );
     expect(
       screen.getByTestId('studio-activity-link-failed').getAttribute('href'),
-    ).toBe('/sessions?workflowTemplateName=existing-workflow&status=failed');
+    ).toBe('/workflow-runs?workflowTemplateName=existing-workflow&status=failed');
   });
 
   it('populates the activity badge on mount without opening the popover', async () => {

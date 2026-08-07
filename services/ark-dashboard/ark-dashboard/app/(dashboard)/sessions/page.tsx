@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
-export default function SessionsConversationsPage() {
+export default function SessionsPage() {
   const { push } = useNamespacedNavigation();
   const [dialogOpen, setDialogOpen] = useState(false);
 

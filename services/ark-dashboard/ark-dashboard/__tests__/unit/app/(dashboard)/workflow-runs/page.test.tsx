@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import SessionsPage from '@/app/(dashboard)/workflow-runs/page';
+import WorkflowRunsPage from '@/app/(dashboard)/workflow-runs/page';
 
 const mockUseSearchParams = vi.fn();
 
@@ -36,7 +36,7 @@ const queryClient = new QueryClient({
   },
 });
 
-describe('SessionsPage', () => {
+describe('WorkflowRunsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseWorkflows.mockReturnValue({ workflows: [] });
@@ -49,7 +49,7 @@ describe('SessionsPage', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionsPage />
+        <WorkflowRunsPage />
       </QueryClientProvider>,
     );
 
@@ -63,7 +63,7 @@ describe('SessionsPage', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionsPage />
+        <WorkflowRunsPage />
       </QueryClientProvider>,
     );
 
@@ -77,7 +77,7 @@ describe('SessionsPage', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionsPage />
+        <WorkflowRunsPage />
       </QueryClientProvider>,
     );
 

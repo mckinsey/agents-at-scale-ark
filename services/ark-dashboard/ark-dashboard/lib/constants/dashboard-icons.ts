@@ -41,7 +41,7 @@ export interface DashboardSection {
   enablerFeature?: string;
 }
 
-export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
+export const DASHBOARD_SECTIONS = {
   // Configurations - order: Agents, Teams, Models, Secrets
   agents: {
     key: 'agents',

@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { WorkflowStats } from '@/lib/services/workflow-templates';
+import { buildWorkflowRunsUrl } from '@/lib/utils/workflow';
 
 interface Props {
   templateName: string;
@@ -26,16 +27,6 @@ interface StatLinkProps {
   label: string;
   value: number;
   colorClass?: string;
-}
-
-function getSessionsUrl(templateName: string, status?: string) {
-  const params = new URLSearchParams({
-    workflowTemplateName: templateName,
-  });
-  if (status) {
-    params.set('status', status);
-  }
-  return `/workflow-runs?${params}`;
 }
 
 function StatLink({
@@ -88,27 +79,27 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
         ) : stats ? (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatLink
-              href={getSessionsUrl(templateName)}
+              href={buildWorkflowRunsUrl(templateName)}
               icon={BarChart3}
               label="Total"
               value={stats.total}
             />
             <StatLink
-              href={getSessionsUrl(templateName, 'succeeded')}
+              href={buildWorkflowRunsUrl(templateName, 'succeeded')}
               icon={CheckCircle2}
               label="Succeeded"
               value={stats.succeeded}
               colorClass="text-green-700 dark:text-green-500"
             />
             <StatLink
-              href={getSessionsUrl(templateName, 'running')}
+              href={buildWorkflowRunsUrl(templateName, 'running')}
               icon={Clock}
               label="Running"
               value={stats.running}
               colorClass="text-blue-600 dark:text-blue-400"
             />
             <StatLink
-              href={getSessionsUrl(templateName, 'failed')}
+              href={buildWorkflowRunsUrl(templateName, 'failed')}
               icon={XCircle}
               label="Failed"
               value={stats.failed}

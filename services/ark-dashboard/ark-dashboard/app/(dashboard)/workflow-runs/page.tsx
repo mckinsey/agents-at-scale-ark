@@ -8,7 +8,7 @@ import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
 import { useWorkflows } from '@/lib/services/workflows-hooks';
 
-export default function SessionsPage() {
+export default function WorkflowRunsPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const { workflows } = useWorkflows(namespace);

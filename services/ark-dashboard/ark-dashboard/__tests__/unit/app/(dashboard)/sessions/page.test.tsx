@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import SessionHistoryPage from '@/app/(dashboard)/sessions/page';
+import SessionsPage from '@/app/(dashboard)/sessions/page';
 
 const mockPush = vi.fn();
 
@@ -45,7 +45,7 @@ const queryClient = new QueryClient({
   },
 });
 
-describe('SessionHistoryPage', () => {
+describe('SessionsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -53,7 +53,7 @@ describe('SessionHistoryPage', () => {
   it('should render page header and sessions table', () => {
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionHistoryPage />
+        <SessionsPage />
       </QueryClientProvider>,
     );
 
@@ -62,14 +62,15 @@ describe('SessionHistoryPage', () => {
   });
 
   it('should use namespaced navigation when selecting a session', async () => {
+    const user = userEvent.setup();
+
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionHistoryPage />
+        <SessionsPage />
       </QueryClientProvider>,
     );
 
-    const selectButton = screen.getByTestId('select-session-btn');
-    selectButton.click();
+    await user.click(screen.getByTestId('select-session-btn'));
 
     expect(mockPush).toHaveBeenCalledWith('/sessions/test-session-123');
   });
@@ -77,7 +78,7 @@ describe('SessionHistoryPage', () => {
   it('should render the page title', () => {
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionHistoryPage />
+        <SessionsPage />
       </QueryClientProvider>,
     );
 
@@ -89,7 +90,7 @@ describe('SessionHistoryPage', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <SessionHistoryPage />
+        <SessionsPage />
       </QueryClientProvider>,
     );
 

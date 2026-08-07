@@ -24,6 +24,7 @@ import {
   type WorkflowStats,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
+import { buildWorkflowRunsUrl } from '@/lib/utils/workflow';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const ARGO_BASE_URL =
@@ -103,14 +104,6 @@ export function StudioHeaderActions({
 
   const notPersistedTip = 'Save the workflow first';
   const totalRuns = stats?.total ?? 0;
-
-  const runsHref = (status?: string) => {
-    const params = new URLSearchParams({ workflowTemplateName: workflowName });
-    if (status) {
-      params.set('status', status);
-    }
-    return `/sessions?${params.toString()}`;
-  };
 
   const activityStats: {
     key: string;
@@ -216,7 +209,7 @@ export function StudioHeaderActions({
                 {activityStats.map(stat => (
                   <NamespacedLink
                     key={stat.key}
-                    href={runsHref(stat.status)}
+                    href={buildWorkflowRunsUrl(workflowName, stat.status)}
                     onClick={() => setActivityOpen(false)}
                     className="hover:bg-fill-subtle flex flex-col p-1 transition-colors"
                     data-testid={`studio-activity-link-${stat.key}`}>
