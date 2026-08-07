@@ -17,11 +17,114 @@ const RESOURCE_ORDER = [
   'a2aservers',
 ];
 
+const SERVER_MANAGED_METADATA_FIELDS = [
+  'resourceVersion',
+  'uid',
+  'generation',
+  'creationTimestamp',
+  'managedFields',
+  'selfLink',
+  'deletionTimestamp',
+  'deletionGracePeriodSeconds',
+  'ownerReferences',
+  'finalizers',
+];
+
+const LAST_APPLIED_ANNOTATION =
+  'kubectl.kubernetes.io/last-applied-configuration';
+
+interface ExportResource {
+  apiVersion?: string;
+  kind?: string;
+  type?: string;
+  metadata: {
+    name: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 interface ExportOptions {
   output?: string;
   namespace?: string;
   types?: string;
   labels?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeResource(resource: ExportResource): ExportResource {
+  const sanitized = {...resource};
+  delete sanitized.status;
+
+  const metadata = {...resource.metadata};
+  for (const field of SERVER_MANAGED_METADATA_FIELDS) {
+    delete metadata[field];
+  }
+
+  if (isRecord(metadata.annotations)) {
+    const annotations = {...metadata.annotations};
+    delete annotations[LAST_APPLIED_ANNOTATION];
+
+    if (Object.keys(annotations).length === 0) {
+      delete metadata.annotations;
+    } else {
+      metadata.annotations = annotations;
+    }
+  }
+
+  sanitized.metadata = metadata;
+  return sanitized;
+}
+
+function isExcludedSecret(resource: ExportResource): boolean {
+  const isHelmRelease =
+    resource.type === 'helm.sh/release.v1' &&
+    resource.metadata.name.startsWith('sh.helm.release.v1.');
+
+  return (
+    isHelmRelease || resource.type === 'kubernetes.io/service-account-token'
+  );
+}
+
+function hasOwnerReference(
+  resource: ExportResource,
+  ownerKind: string
+): boolean {
+  return (
+    Array.isArray(resource.metadata.ownerReferences) &&
+    resource.metadata.ownerReferences.some(
+      (ownerReference) =>
+        isRecord(ownerReference) && ownerReference.kind === ownerKind
+    )
+  );
+}
+
+function isControllerManagedResource(
+  resourceType: string,
+  resource: ExportResource
+): boolean {
+  const labels = isRecord(resource.metadata.labels)
+    ? resource.metadata.labels
+    : {};
+
+  if (resourceType === 'tools') {
+    return (
+      typeof labels['mcp/server'] === 'string' ||
+      hasOwnerReference(resource, 'MCPServer')
+    );
+  }
+
+  if (resourceType === 'agents') {
+    return (
+      typeof labels['a2a/server'] === 'string' ||
+      hasOwnerReference(resource, 'A2AServer')
+    );
+  }
+
+  return false;
 }
 
 async function exportResources(options: ExportOptions, config: ArkConfig) {
@@ -39,8 +142,10 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
 
     output.info(`exporting ark resources to ${outputPath}...`);
 
-    const allResources: unknown[] = [];
+    const allResources: ExportResource[] = [];
     let allResourceCount = 0;
+    let excludedSecretCount = 0;
+    let excludedManagedResourceCount = 0;
 
     for (const resourceType of resourceTypes) {
       if (!RESOURCE_ORDER.includes(resourceType)) {
@@ -49,7 +154,7 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       }
 
       output.info(`fetching ${resourceType}...`);
-      const resources = await listResources(resourceType, {
+      const resources = await listResources<ExportResource>(resourceType, {
         namespace: options.namespace,
         labels: options.labels,
       });
@@ -57,9 +162,38 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       const resourceCount = resources.length;
       if (resources.length > 0) {
         output.success(`found ${resourceCount} ${resourceType}`);
-        allResources.push(...resources);
-        allResourceCount += resourceCount;
+        let exportableResources =
+          resourceType === 'secrets'
+            ? resources.filter((resource) => !isExcludedSecret(resource))
+            : resources;
+
+        excludedSecretCount += resourceCount - exportableResources.length;
+
+        const resourceCountAfterSecretFiltering = exportableResources.length;
+        exportableResources = exportableResources.filter(
+          (resource) => !isControllerManagedResource(resourceType, resource)
+        );
+        excludedManagedResourceCount +=
+          resourceCountAfterSecretFiltering - exportableResources.length;
+
+        allResources.push(...exportableResources.map(sanitizeResource));
+        allResourceCount += exportableResources.length;
       }
+    }
+
+    if (excludedSecretCount > 0) {
+      const secretLabel = excludedSecretCount === 1 ? 'secret' : 'secrets';
+      output.info(
+        `excluded ${excludedSecretCount} system-managed ${secretLabel}`
+      );
+    }
+
+    if (excludedManagedResourceCount > 0) {
+      const resourceLabel =
+        excludedManagedResourceCount === 1 ? 'resource' : 'resources';
+      output.info(
+        `excluded ${excludedManagedResourceCount} controller-managed ${resourceLabel}`
+      );
     }
 
     if (allResourceCount === 0) {
