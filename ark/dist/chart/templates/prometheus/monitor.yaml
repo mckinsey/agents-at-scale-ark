@@ -1,5 +1,5 @@
 # To integrate with Prometheus.
-{{- if .Values.prometheus.enable }}
+{{- if and .Values.prometheus.enable (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
