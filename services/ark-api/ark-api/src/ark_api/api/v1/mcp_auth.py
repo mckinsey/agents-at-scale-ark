@@ -124,7 +124,6 @@ def _build_authorization_url(
 )
 @handle_k8s_errors(operation="start auth", resource_type="mcp_server")
 async def start_mcp_auth(
-    request: Request,
     mcp_server_name: str,
     body: AuthStartRequest,
     namespace: Optional[str] = Query(
@@ -449,6 +448,7 @@ async def mcp_auth_callback(
             ),
         )
         await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
+        await strip_mcpserver_auth_annotations(ark_client, flow.server_name)
 
     if use_redirect:
         return _dashboard_success_redirect(

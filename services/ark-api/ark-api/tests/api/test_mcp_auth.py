@@ -390,6 +390,39 @@ class TestAuthCallback(_AuthBase):
         mock_write.assert_awaited_once()
         mock_mark.assert_awaited_once()
 
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.write_token_secret", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_success_strips_legacy_identity_annotations(
+        self, mock_read_flow, mock_exchange, _mock_write, _mock_mark, mock_strip
+    ):
+        from ark_api.services.mcp_auth_persistence import FlowState
+        from ark_api.services.oauth_token import TokenResponse
+
+        mock_read_flow.return_value = FlowState(
+            auth_id="aid", state_param="st1", verifier="v" * 64,
+            status="pending", message="", expires_at="2030-01-01T00:00:00Z",
+            token_expires_at="",
+            server_name="notion-mcp", namespace="default",
+            client_id="cid", client_secret="csec",
+            secret_name="notion-mcp-tokens",
+        )
+        mock_exchange.return_value = TokenResponse(
+            access_token="at", refresh_token="rt", expires_in=3600, raw={}
+        )
+
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "default.st1", "code": "the-code"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        mock_strip.assert_awaited_once()
+        self.assertEqual(mock_strip.call_args.args[1], "notion-mcp")
+
     @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
     def test_unknown_state_returns_400_html(self, mock_read_flow):
         mock_read_flow.return_value = None
