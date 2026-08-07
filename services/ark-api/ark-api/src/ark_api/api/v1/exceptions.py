@@ -6,6 +6,7 @@ from typing import Callable, Any
 
 from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
+from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 from kubernetes.client.exceptions import ApiException as SyncApiException
 
 from ...auth.impersonation_config import ImpersonationSettings
@@ -123,7 +124,15 @@ def handle_k8s_errors(
                     status_code=e.status,
                     detail=_extract_error_detail(e)
                 )
-                
+
+            except ResourceNotFoundError as e:
+                kind = kwargs.get("kind", resource_type)
+                logger.error(f"Failed to {operation} {resource_type}: resource type '{kind}' not available in cluster: {e}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Resource type '{kind}' is not available in the cluster (CRD not installed)"
+                )
+
             except HTTPException:
                 # Re-raise HTTP exceptions as-is
                 raise
