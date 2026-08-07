@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { namespacesService } from './namespaces';
@@ -11,6 +16,11 @@ export const useGetContext = (namespace?: string, enabled = true) => {
     queryKey: [GET_CONTEXT_QUERY_KEY, namespace],
     queryFn: () => namespacesService.getContext(namespace),
     enabled,
+    // NamespaceProvider writes the resolved namespace back into the URL, which
+    // changes this key. Without a placeholder the refetch would blank `data`,
+    // flip `isNamespaceResolved` back to false, and unmount the dashboard
+    // behind its loading gate on every page load.
+    placeholderData: keepPreviousData,
   });
 };
 
