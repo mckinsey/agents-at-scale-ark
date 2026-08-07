@@ -3,6 +3,7 @@
 import { Memory } from '@/components/icons';
 import { ModelsTable } from '@/components/sections/models-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { modelsService } from '@/lib/services';
 
 export function ModelsSection() {
@@ -13,7 +14,7 @@ export function ModelsSection() {
       subtitle="Add and manage all your models"
       createHref="/models/new"
       createLabel="Add model"
-      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/models/"
+      learnMoreUrl={DOCS_URLS.models}
       entityLabel="Model"
       entityPluralLabel="models"
       emptyTitle="No models yet"
