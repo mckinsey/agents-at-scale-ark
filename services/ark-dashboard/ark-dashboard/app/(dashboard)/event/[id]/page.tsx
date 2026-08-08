@@ -9,6 +9,7 @@ import {
   DetailRow,
   DetailSectionCard,
 } from '@/components/common/detail-card';
+import { EventTypeIndicator } from '@/components/common/event-type-indicator';
 import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,6 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
-import { cn } from '@/lib/utils';
 
 function formatTimestamp(timestamp: string | undefined | null) {
   if (!timestamp) return '—';
@@ -24,17 +24,6 @@ function formatTimestamp(timestamp: string | undefined | null) {
     return new Date(timestamp).toLocaleString();
   } catch {
     return timestamp;
-  }
-}
-
-function eventTypeClassName(type: string | undefined | null) {
-  switch (type?.toLowerCase()) {
-    case 'warning':
-      return 'text-status-error';
-    case 'normal':
-      return 'text-status-success';
-    default:
-      return 'text-fg-primary';
   }
 }
 
@@ -147,8 +136,8 @@ function EventDetailContent() {
               />
               <DetailRow
                 label="Type"
-                value={event.type ?? '—'}
-                valueClassName={cn('truncate', eventTypeClassName(event.type))}
+                value={<EventTypeIndicator type={event.type} />}
+                valueClassName="min-w-0"
                 tooltip="Event type: Normal (informational) or Warning (error/issue)"
               />
               <DetailRow

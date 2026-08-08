@@ -4,8 +4,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { EventTypeIndicator } from '@/components/common/event-type-indicator';
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
-import { Autorenew, Poll } from '@/components/icons';
+import { Autorenew, Poll, Warning } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -46,7 +48,7 @@ const COL = {
   object: 'w-[220px]',
   subobject: 'w-[130px]',
   source: 'w-[150px]',
-  message: 'min-w-[240px]',
+  message: 'w-auto',
   count: 'w-[80px]',
 };
 
@@ -78,24 +80,52 @@ function EventsFilter({
   onChange,
   className,
 }: Readonly<EventsFilterProps>) {
+  const items = [
+    { value: ALL, label: allLabel },
+    ...options.map(option => ({ value: option, label: option })),
+  ];
+
   return (
     <div className={cn('flex w-48 flex-col gap-2', className)}>
       <span className="label-regular-primary text-fg-secondary">{label}</span>
-      <Select value={value} onValueChange={next => onChange(String(next))}>
+      <Select
+        items={items}
+        value={value}
+        onValueChange={next => onChange(String(next))}>
         <SelectTrigger className="w-full">
           <SelectValue placeholder={allLabel} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>
-            <SelectItemText>{allLabel}</SelectItemText>
-          </SelectItem>
-          {options.map(option => (
-            <SelectItem key={option} value={option}>
-              <SelectItemText>{option}</SelectItemText>
+          {items.map(item => (
+            <SelectItem key={item.value} value={item.value}>
+              <SelectItemText>{item.label}</SelectItemText>
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+const SKELETON_ROWS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+function EventsTableSkeleton() {
+  return (
+    <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+      <div className="flex flex-none items-end gap-3">
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-9 w-48" />
+        <Skeleton className="h-9 w-48" />
+        <Skeleton className="h-9 w-48" />
+      </div>
+      <div
+        className="flex flex-col gap-1 pt-2"
+        aria-busy="true"
+        aria-label="Loading events">
+        {SKELETON_ROWS.map(row => (
+          <Skeleton key={row} className="h-10 w-full" />
+        ))}
+      </div>
     </div>
   );
 }
@@ -121,6 +151,7 @@ export function EventsSection({
   const [availableKinds, setAvailableKinds] = useState<string[]>([]);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [totalEvents, setTotalEvents] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Track last loaded filters to prevent double loading
   const lastLoadedFilters = useRef<string>('');
@@ -129,6 +160,7 @@ export function EventsSection({
   const loadEvents = useCallback(
     async (showRefreshing = false) => {
       if (showRefreshing) setRefreshing(true);
+      setLoadError(null);
 
       try {
         // Build filters from current URL params
@@ -172,12 +204,12 @@ export function EventsSection({
         }
       } catch (error) {
         console.error('Failed to load events:', error);
-        toast.error('Failed to Load Events', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
+        const description =
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred';
+        setLoadError(description);
+        toast.error('Failed to Load Events', { description });
       } finally {
         setLoading(false);
         if (showRefreshing) setRefreshing(false);
@@ -277,14 +309,16 @@ export function EventsSection({
     const now = new Date();
     const eventTime = new Date(timestamp);
     const diffMs = now.getTime() - eventTime.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffDays > 0) return `${diffDays}d`;
-    if (diffHours > 0) return `${diffHours}h`;
-    if (diffMins > 0) return `${diffMins}m`;
-    return 'now';
+    if (diffDays > 0) return `${diffDays}d ago`;
+    if (diffHours > 0) return `${diffHours}h ago`;
+    if (diffMins > 0) return `${diffMins}m ago`;
+    if (diffSecs > 0) return `${diffSecs}s ago`;
+    return 'just now';
   };
 
   const handleRowClick = (event: Event, target: EventTarget | null) => {
@@ -297,36 +331,40 @@ export function EventsSection({
 
   const totalPages = Math.max(1, Math.ceil(totalEvents / limit));
   const hasFilters = Boolean(type || kind || name);
-  const isEmpty = !loading && events.length === 0 && !hasFilters;
+  const showSkeleton = loading || (refreshing && events.length === 0);
+  const isEmpty =
+    !showSkeleton &&
+    !loadError &&
+    events.length === 0 &&
+    totalEvents === 0 &&
+    !hasFilters;
+
+  const refreshButton = (
+    <Button
+      variant="outline"
+      onClick={() => loadEvents(true)}
+      disabled={refreshing}>
+      <IconShell size="sm">
+        <Autorenew className={cn(refreshing && 'animate-spin')} />
+      </IconShell>
+      Refresh
+    </Button>
+  );
 
   const header = (
     <ResourcePageHeader
       icon={<Poll />}
       title={totalCount !== undefined ? `Events (${totalCount})` : 'Events'}
       description="Track platform operational activity across the ecosystem"
-      actions={
-        !isEmpty && (
-          <Button
-            variant="outline"
-            onClick={() => loadEvents(true)}
-            disabled={refreshing}>
-            <IconShell size="sm">
-              <Autorenew className={cn(refreshing && 'animate-spin')} />
-            </IconShell>
-            Refresh
-          </Button>
-        )
-      }
+      actions={!isEmpty && refreshButton}
     />
   );
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <div className="content-shell flex h-full w-full flex-col">
         {header}
-        <div className="mt-5 flex flex-1 items-center justify-center">
-          <div className="py-8 text-center">Loading...</div>
-        </div>
+        <EventsTableSkeleton />
       </div>
     );
   }
@@ -382,14 +420,33 @@ export function EventsSection({
           </Button>
         </div>
 
+        {loadError && (
+          <div
+            role="alert"
+            className="border-status-error/30 bg-status-error/10 flex flex-none items-start gap-2 border px-3 py-2">
+            <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
+              <Warning />
+            </IconShell>
+            <p className="label-regular-primary text-fg-error">
+              Couldn&apos;t refresh events: {loadError}
+            </p>
+          </div>
+        )}
+
         {events.length === 0 ? (
-          <ResourceNoResults
-            icon={<Poll />}
-            message="No events match your filters."
-          />
+          !loadError && (
+            <ResourceNoResults
+              icon={<Poll />}
+              message={
+                hasFilters
+                  ? 'No events match your filters.'
+                  : 'No events on this page.'
+              }
+            />
+          )
         ) : (
           <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-            <Table>
+            <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
               <TableHeader>
                 <TableRow>
                   <TableHead size="small" className={COL.added}>
@@ -424,6 +481,7 @@ export function EventsSection({
                   const source = event.sourceHost
                     ? `${event.sourceComponent} (${event.sourceHost})`
                     : event.sourceComponent;
+                  const age = formatAge(event.lastTimestamp);
                   return (
                     <TableRow
                       key={event.name}
@@ -435,15 +493,13 @@ export function EventsSection({
                         <span aria-hidden className={rowHoverOverlayClass} />
                         <NamespacedLink
                           href={`/event/${encodeURIComponent(event.name)}`}
-                          aria-label={`${event.reason} on ${object}`}
+                          aria-label={`${age} — ${event.reason} on ${object}`}
                           className="text-fg-primary block w-full truncate">
-                          {formatAge(event.lastTimestamp)}
+                          {age}
                         </NamespacedLink>
                       </TableCell>
                       <TableCell size="small" className={COL.type}>
-                        <span className="text-fg-primary block truncate">
-                          {event.type}
-                        </span>
+                        <EventTypeIndicator type={event.type} />
                       </TableCell>
                       <TableCell size="small" className={COL.reason}>
                         <TruncatedTooltip label={event.reason}>
@@ -499,13 +555,15 @@ export function EventsSection({
           </ScrollArea>
         )}
 
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          itemsPerPage={limit}
-          onPageChange={handlePageChange}
-          onItemsPerPageChange={handleItemsPerPageChange}
-        />
+        {totalEvents > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            itemsPerPage={limit}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        )}
       </div>
     </div>
   );
