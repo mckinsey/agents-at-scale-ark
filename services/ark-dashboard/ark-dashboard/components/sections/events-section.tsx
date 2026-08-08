@@ -325,7 +325,7 @@ export function EventsSection({
     // Let the row's own link handle its clicks, and never navigate out from
     // under someone who is selecting message text.
     if (target instanceof HTMLElement && target.closest('a')) return;
-    if (window.getSelection()?.toString()) return;
+    if (globalThis.getSelection()?.toString()) return;
     namespacedPush(`/event/${encodeURIComponent(event.name)}`);
   };
 
@@ -354,7 +354,7 @@ export function EventsSection({
   const header = (
     <ResourcePageHeader
       icon={<Poll />}
-      title={totalCount !== undefined ? `Events (${totalCount})` : 'Events'}
+      title={totalCount === undefined ? 'Events' : `Events (${totalCount})`}
       description="Track platform operational activity across the ecosystem"
       actions={!isEmpty && refreshButton}
     />
