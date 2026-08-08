@@ -99,7 +99,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   // Keep the URL agreeing with the namespace actually in use, so a refresh, a
   // bookmark, or a shared link resolves to the same namespace.
   //
-  // The replacement URL is query-only and relative on purpose. window.history
+  // The replacement URL is query-only and relative on purpose. globalThis.history
   // is the native History API, so it does not apply the configured base path
   // the way next/link and the router do, and usePathname() returns the
   // base-path-stripped value. Building `${pathname}?${params}` would therefore
@@ -118,7 +118,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('namespace', namespace);
-    window.history.replaceState(null, '', `?${params.toString()}`);
+    globalThis.history.replaceState(null, '', `?${params.toString()}`);
   }, [isNamespaceResolved, namespace, searchParams]);
 
   // Guarded on the requested namespace differing from the resolved one: the
