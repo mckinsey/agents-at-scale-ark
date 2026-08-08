@@ -3,8 +3,10 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useId, useMemo, useState } from 'react';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Database, SwapVert } from '@/components/icons';
 import {
+  LearnMoreButton,
   ResourceEmptyState,
   ResourceNoResults,
 } from '@/components/sections/resource-list-states';
@@ -33,6 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import {
   useGetAllMemoryMessages,
   useGetConversations,
@@ -46,9 +49,6 @@ const ALL = 'all';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
-
-const MEMORY_DOCS_URL =
-  'https://mckinsey.github.io/agents-at-scale-ark/reference/resources/memory/';
 
 const COL = {
   added: 'w-[120px]',
@@ -288,26 +288,19 @@ export function MemorySection() {
 
   return (
     <div className="content-shell flex h-full w-full flex-col gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1" data-testid="page-header">
-          <div className="flex items-center gap-1">
-            <IconShell size="default" variant="primary">
-              <Database />
-            </IconShell>
-            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              Memory
-            </h1>
-          </div>
-          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            Manage persistent memory, context, and agent knowledge
-          </p>
-        </div>
-        <MemoryDeleteActions
-          selectedQuery={selectedQuery}
-          selectedConversation={filters.conversationId}
-          onSuccess={clearFilters}
-        />
-      </div>
+      <ResourcePageHeader
+        icon={<Database />}
+        title="Memory"
+        description="Manage persistent memory, context, and agent knowledge"
+        testId="page-header"
+        actions={
+          <MemoryDeleteActions
+            selectedQuery={selectedQuery}
+            selectedConversation={filters.conversationId}
+            onSuccess={clearFilters}
+          />
+        }
+      />
 
       <div className="flex flex-wrap items-end gap-3">
         <FilterCombobox
@@ -365,11 +358,7 @@ export function MemorySection() {
               <p>Get started to see memory.</p>
             </>
           }
-          actions={
-            <a href={MEMORY_DOCS_URL} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline">Learn more</Button>
-            </a>
-          }
+          actions={<LearnMoreButton href={DOCS_URLS.memory} />}
         />
       )}
 

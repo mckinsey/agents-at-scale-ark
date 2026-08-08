@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -72,19 +71,7 @@ func (m *integrationMockConverter) APIVersion(kind string) string {
 }
 
 func TestOptimisticConcurrency_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -183,19 +170,7 @@ func TestOptimisticConcurrency_Integration(t *testing.T) {
 }
 
 func TestOptimisticConcurrency_Status_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -283,19 +258,7 @@ func TestOptimisticConcurrency_Status_Integration(t *testing.T) {
 }
 
 func TestCreateAlreadyExists_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -343,19 +306,7 @@ func TestCreateAlreadyExists_Integration(t *testing.T) {
 }
 
 func TestWatchAddedForFirstSeenUID_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -456,19 +407,7 @@ func (t *gracefulDeleteTestObject) DeepCopyObject() runtime.Object {
 }
 
 func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -567,19 +506,7 @@ func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T)
 // commit-order race by holding an INSERT in-flight across page 1 and asserting
 // its row does not leak below the cursor once it commits.
 func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -731,19 +658,7 @@ func decodeCursorForTest(token string) (int64, error) {
 }
 
 func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
