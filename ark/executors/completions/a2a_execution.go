@@ -231,6 +231,10 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				consumeA2ATaskEvent(ctx, k8sClient, result, sc, a2aServer)
 			case *protocol.TaskStatusUpdateEvent:
 				if consumeA2AStatusUpdateEvent(ctx, result, sc) {
+					state := string(result.Status.State)
+					if state == arka2a.TaskStateFailed || state == arka2a.TaskStateRejected {
+						return nil, fmt.Errorf("a2a task failed with state: %s", state)
+					}
 					return buildA2AStreamResult(&content, &response), nil
 				}
 			case *protocol.TaskArtifactUpdateEvent:
