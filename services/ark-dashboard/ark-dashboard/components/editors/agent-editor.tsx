@@ -123,7 +123,7 @@ export function AgentEditor({
       const loadTools = async () => {
         setToolsLoading(true);
         try {
-          const tools = await toolsService.getAll();
+          const tools = await toolsService.getAll(namespace);
           const missingTools = agent?.tools?.filter(
             agentTool => !tools.some(t => t.name === agentTool.name),
           ) as Tool[];
@@ -139,7 +139,7 @@ export function AgentEditor({
       };
       loadTools();
     }
-  }, [open, agent?.tools]);
+  }, [namespace, open, agent?.tools]);
 
   useEffect(() => {
     if (agent) {
@@ -157,7 +157,7 @@ export function AgentEditor({
       setSelectedTools([]);
       setIsPromptExpanded(false);
     }
-  }, [open, agent, form]);
+  }, [namespace, open, agent, form]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (agent) {

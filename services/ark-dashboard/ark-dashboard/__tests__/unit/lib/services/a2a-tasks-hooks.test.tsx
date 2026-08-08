@@ -6,6 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
 import { useA2ATask, useListA2ATasks } from '@/lib/services/a2a-tasks-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/a2a-tasks', () => ({
   a2aTasksService: {
     getAll: vi.fn(),
@@ -77,7 +86,7 @@ describe('a2a-tasks hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(mockTask);
-      expect(a2aTasksService.get).toHaveBeenCalledWith('task-1');
+      expect(a2aTasksService.get).toHaveBeenCalledWith('default', 'task-1');
     });
 
     it('should handle errors', async () => {

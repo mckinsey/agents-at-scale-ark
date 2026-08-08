@@ -46,10 +46,10 @@ describe('a2aTasksService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse);
 
-      const result = await a2aTasksService.getAll();
+      const result = await a2aTasksService.getAll('default');
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks', { params: { namespace: 'default' } });
 
       expect(result).toHaveLength(2);
       expect(result[0]).toMatchObject({
@@ -88,10 +88,10 @@ describe('a2aTasksService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockTask);
 
-      const result = await a2aTasksService.get('task-1');
+      const result = await a2aTasksService.get('default', 'task-1');
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1', { params: { namespace: 'default' } });
 
       expect(result).toMatchObject({
         id: 'task-1',

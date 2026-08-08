@@ -92,11 +92,11 @@ export function useAgentForm({
         ) {
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
-              agentsService.getByName(agentName),
-              modelsService.getAll(),
-              toolsService.getAll(),
+              agentsService.getByName(namespace, agentName),
+              modelsService.getAll(namespace),
+              toolsService.getAll(namespace),
               isExperimentalExecutionEngineEnabled
-                ? executionEnginesService.getAll()
+                ? executionEnginesService.getAll(namespace)
                 : Promise.resolve([]),
             ]);
 
@@ -133,10 +133,10 @@ export function useAgentForm({
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
-            modelsService.getAll(),
-            toolsService.getAll(),
+            modelsService.getAll(namespace),
+            toolsService.getAll(namespace),
             isExperimentalExecutionEngineEnabled
-              ? executionEnginesService.getAll()
+              ? executionEnginesService.getAll(namespace)
               : Promise.resolve([]),
           ]);
           setModels(modelsData);
@@ -196,7 +196,7 @@ export function useAgentForm({
             parameters: mapParametersToApi(),
           };
 
-          await agentsService.create(createData);
+          await agentsService.create(namespace, createData);
           queryClient.invalidateQueries({
             queryKey: [GET_ALL_AGENTS_QUERY_KEY],
           });
@@ -224,7 +224,7 @@ export function useAgentForm({
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
           };
 
-          await agentsService.update(agent.name, updateData);
+          await agentsService.update(namespace, agent.name, updateData);
           toast.success('Agent updated successfully');
 
           form.reset(values);

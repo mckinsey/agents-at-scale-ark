@@ -109,7 +109,7 @@ describe('useWorkflow', () => {
     const error = new Error('failed to fetch workflow');
     vi.mocked(workflowsService.get).mockRejectedValue(error);
 
-    const { result, unmount } = renderHook(() => useWorkflow('wf-1'));
+    const { result, unmount } = renderHook(() => useWorkflow('default', 'wf-1'));
 
     await waitFor(() => expect(result.current.error).toBe(error));
 

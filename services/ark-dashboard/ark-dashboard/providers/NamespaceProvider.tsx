@@ -5,8 +5,6 @@ import type { PropsWithChildren } from 'react';
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient } from '@/lib/api/client';
-import { filesApiClient } from '@/lib/api/files-client';
 import { useGetContext } from '@/lib/services/namespaces-hooks';
 
 interface NamespaceContext {
@@ -87,14 +85,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   const { namespace, isNamespaceResolved, readOnlyMode, fallbackReason } =
     resolution;
-
-  useEffect(() => {
-    if (!isNamespaceResolved) {
-      return;
-    }
-    apiClient.setDefaultParam('namespace', namespace);
-    filesApiClient.setDefaultParam('namespace', namespace);
-  }, [isNamespaceResolved, namespace]);
 
   // Keep the URL agreeing with the namespace actually in use, so a refresh, a
   // bookmark, or a shared link resolves to the same namespace.

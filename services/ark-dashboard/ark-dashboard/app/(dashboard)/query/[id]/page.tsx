@@ -599,7 +599,7 @@ function QueryDetailContent() {
         }),
       };
 
-      const savedQuery = await queriesService.create(queryData);
+      const savedQuery = await queriesService.create(namespace, queryData);
 
       toast('Query Executed', {
         description: `Query "${savedQuery.name}" has been created and is now executing.`,
@@ -647,11 +647,11 @@ function QueryDetailContent() {
         setMemoriesLoading(true);
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(),
-            modelsService.getAll(),
-            teamsService.getAll(),
-            toolsService.getAll(),
-            memoriesService.getAll(),
+            agentsService.getAll(namespace),
+            modelsService.getAll(namespace),
+            teamsService.getAll(namespace),
+            toolsService.getAll(namespace),
+            memoriesService.getAll(namespace),
           ]);
 
           const targets = [
@@ -691,7 +691,7 @@ function QueryDetailContent() {
 
     const loadQuery = async () => {
       try {
-        const queryData = await queriesService.get(queryId);
+        const queryData = await queriesService.get(namespace, queryId);
         setQuery(queryData as TypedQueryDetailResponse);
 
         // Load existing parameters
@@ -728,26 +728,26 @@ function QueryDetailContent() {
     if (query?.target?.type === 'tool') {
       const toolName = query.target.name;
       toolsService
-        .getDetail(toolName)
+        .getDetail(namespace, toolName)
         .then(setToolSchema)
         .catch(() => setToolSchema(null)); // Silent failure
     } else {
       setToolSchema(null);
     }
-  }, [query?.target]);
+  }, [namespace, query?.target]);
 
   // Fetch agent details when target is an agent (for AC2: agent-required params)
   useEffect(() => {
     if (query?.target?.type === 'agent') {
       const agentName = query.target.name;
       agentsService
-        .getByName(agentName)
+        .getByName(namespace, agentName)
         .then(setSelectedAgentDetails)
         .catch(() => setSelectedAgentDetails(null));
     } else {
       setSelectedAgentDetails(null);
     }
-  }, [query?.target]);
+  }, [namespace, query?.target]);
 
   // Extract agent-required query parameters
   const agentRequiredParams = useMemo(

@@ -11,6 +11,7 @@ import {
   type WorkflowTemplateSaveMode,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export type WorkflowStudioMode = 'new' | 'edit';
 export type WorkflowStudioView = 'diagram' | 'yaml';
@@ -121,6 +122,7 @@ export function useWorkflowStudio({
   initialTitle,
   initialDescription,
 }: UseWorkflowStudioOptions): WorkflowStudioState {
+  const { namespace } = useNamespace();
   const { push, replace } = useNamespacedNavigation();
 
   const [workflowName, setWorkflowName] = useState<string>(initialName ?? '');
@@ -151,7 +153,7 @@ export function useWorkflowStudio({
     let cancelled = false;
     setLoading(true);
     workflowTemplatesService
-      .getYaml(initialName)
+      .getYaml(namespace, initialName)
       .then(fetched => {
         if (cancelled) {
           return;
@@ -176,7 +178,7 @@ export function useWorkflowStudio({
     return () => {
       cancelled = true;
     };
-  }, [mode, initialName]);
+  }, [namespace, mode, initialName]);
 
   useEffect(() => {
     if (!draftYaml.trim()) {
@@ -282,7 +284,7 @@ export function useWorkflowStudio({
     ) => {
       setSaving(true);
       try {
-        await workflowTemplatesService.save(stamped, saveMode);
+        await workflowTemplatesService.save(namespace, stamped, saveMode);
         setLastSavedYaml(draftYaml);
         setHandEdited(false);
         toast.success('Workflow saved', {
@@ -313,7 +315,10 @@ export function useWorkflowStudio({
     if (mode === 'new') {
       let exists = false;
       try {
-        exists = await workflowTemplatesService.nameExists(workflowName);
+        exists = await workflowTemplatesService.nameExists(
+          namespace,
+          workflowName,
+        );
       } catch (error) {
         toast.error('Failed to save workflow', {
           description: errorMessage(error),
@@ -329,7 +334,7 @@ export function useWorkflowStudio({
       return;
     }
     await performSave(stamped, 'update', workflowName, false);
-  }, [draftYaml, building, saving, stampYaml, workflowName, mode, performSave]);
+  }, [namespace, draftYaml, building, saving, stampYaml, workflowName, mode, performSave]);
 
   const confirmOverwrite = useCallback(async () => {
     const stamped = pendingYaml.current;

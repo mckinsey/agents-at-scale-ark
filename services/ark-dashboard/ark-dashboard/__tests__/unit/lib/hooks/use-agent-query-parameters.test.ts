@@ -3,6 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAgentQueryParameters } from '@/lib/hooks/use-agent-query-parameters';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
 
@@ -51,7 +60,7 @@ describe('useAgentQueryParameters', () => {
     );
 
     await waitFor(() => {
-      expect(mockGetByName).toHaveBeenCalledWith('param-test-agent');
+      expect(mockGetByName).toHaveBeenCalledWith('default', 'param-test-agent');
     });
   });
 
@@ -201,7 +210,7 @@ describe('useAgentQueryParameters', () => {
 
     it('unions query parameters across member agents and ignores nested teams', async () => {
       mockTeamGetByName.mockResolvedValue(team);
-      mockGetByName.mockImplementation((name: string) =>
+      mockGetByName.mockImplementation((_namespace: string, name: string) =>
         Promise.resolve(
           name === 'agent-1'
             ? agentParams(['topic', 'region'])
@@ -222,12 +231,12 @@ describe('useAgentQueryParameters', () => {
       expect(result.current.variant).toBe('team');
       expect(result.current.hasParameters).toBe(true);
       // nested team member is not expanded into an agent fetch
-      expect(mockGetByName).not.toHaveBeenCalledWith('nested-team');
+      expect(mockGetByName).not.toHaveBeenCalledWith('default', 'nested-team');
     });
 
     it('allows three variable slots and reports them all missing until filled', async () => {
       mockTeamGetByName.mockResolvedValue(team);
-      mockGetByName.mockImplementation((name: string) =>
+      mockGetByName.mockImplementation((_namespace: string, name: string) =>
         Promise.resolve(
           name === 'agent-1'
             ? agentParams(['topic', 'region'])
@@ -255,7 +264,7 @@ describe('useAgentQueryParameters', () => {
 
     it('resets the variable when the row agent changes to one without it', async () => {
       mockTeamGetByName.mockResolvedValue(team);
-      mockGetByName.mockImplementation((name: string) =>
+      mockGetByName.mockImplementation((_namespace: string, name: string) =>
         Promise.resolve(
           name === 'agent-1'
             ? agentParams(['topic', 'region'])

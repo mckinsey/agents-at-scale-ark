@@ -4,10 +4,7 @@ import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
 import { type WorkflowFilters, workflowsService } from './workflows';
 
-export function useWorkflows(
-  namespace: string = 'default',
-  filters?: WorkflowFilters,
-) {
+export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -33,8 +30,8 @@ export function useWorkflows(
 }
 
 export function useWorkflow(
+  namespace: string,
   name: string,
-  namespace: string = 'default',
   refreshInterval: number = 5000,
 ) {
   const [workflow, setWorkflow] = useState<ArgoWorkflow | null>(null);
@@ -53,7 +50,7 @@ export function useWorkflow(
 
     const fetchWorkflow = async () => {
       try {
-        const data = await workflowsService.get(name, namespace);
+        const data = await workflowsService.get(namespace, name);
         if (mounted) {
           setWorkflow(data);
           setError(null);

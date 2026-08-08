@@ -23,9 +23,6 @@ describe('exportService', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockCreateObjectURL.mockReturnValue('blob:http://example.com/123');
-    vi.mocked(apiClient.getDefaultParams).mockReturnValue({
-      namespace: 'test-namespace',
-    });
   });
 
   describe('Core functionality', () => {
@@ -50,7 +47,7 @@ describe('exportService', () => {
         { metadata: { name: 'workflow-1' } },
       ] as any);
 
-      const result = await exportService.fetchAllResources();
+      const result = await exportService.fetchAllResources('test-namespace');
 
       expect(result.agents).toHaveLength(2);
       expect(result.teams).toHaveLength(1);
@@ -83,7 +80,7 @@ describe('exportService', () => {
       vi.spyOn(document, 'createElement').mockReturnValue(mockLink);
       vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink);
 
-      await exportService.exportResources(selectedItems);
+      await exportService.exportResources('test-namespace', selectedItems);
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/v1/export/resources'),
@@ -115,7 +112,7 @@ describe('exportService', () => {
       vi.spyOn(document, 'createElement').mockReturnValue(mockLink);
       vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink);
 
-      await exportService.exportAll();
+      await exportService.exportAll('test-namespace');
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/v1/export/resources'),
@@ -135,7 +132,7 @@ describe('exportService', () => {
         statusText: 'Internal Server Error',
       });
 
-      await expect(exportService.exportResources(selectedItems)).rejects.toThrow(
+      await expect(exportService.exportResources('test-namespace', selectedItems)).rejects.toThrow(
         'Export failed: Internal Server Error'
       );
     });
@@ -145,7 +142,7 @@ describe('exportService', () => {
         agents: [{ id: 'agent-1', name: 'agent-1', type: 'agent', selected: false }],
       };
 
-      await expect(exportService.exportResources(selectedItems)).rejects.toThrow(
+      await expect(exportService.exportResources('test-namespace', selectedItems)).rejects.toThrow(
         'No resources selected for export'
       );
     });
@@ -156,7 +153,7 @@ describe('exportService', () => {
         export_count: 5,
       });
 
-      const result = await exportService.getLastExportTime();
+      const result = await exportService.getLastExportTime('test-namespace');
       expect(result).toBe('2024-01-15T12:00:00Z');
     });
   });

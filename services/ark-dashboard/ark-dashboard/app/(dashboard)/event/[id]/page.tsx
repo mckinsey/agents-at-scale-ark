@@ -17,6 +17,7 @@ import {
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 // Reusable styles for table field headings
 const FIELD_HEADING_STYLES =
@@ -118,6 +119,7 @@ function EventTypeField({ label, value, tooltip }: EventFieldProps) {
 }
 
 function EventDetailContent() {
+  const { namespace } = useNamespace();
   const params = useParams();
   const router = useRouter();
   const eventId = params.id as string;
@@ -133,7 +135,7 @@ function EventDetailContent() {
   useEffect(() => {
     const loadEvent = async () => {
       try {
-        const eventData = await eventsService.get(eventId);
+        const eventData = await eventsService.get(namespace, eventId);
         setEvent(eventData);
       } catch (error) {
         toast.error('Failed to Load Event', {
@@ -148,7 +150,7 @@ function EventDetailContent() {
     };
 
     loadEvent();
-  }, [eventId]);
+  }, [namespace, eventId]);
 
   if (loading) {
     return (

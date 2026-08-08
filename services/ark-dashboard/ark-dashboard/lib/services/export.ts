@@ -69,17 +69,14 @@ export interface ExportHistoryResponse {
   export_count: number;
 }
 
-function currentNamespace(): string | undefined {
-  return apiClient.getDefaultParams().namespace;
-}
-
 // Export service
 export const exportService = {
   // Get last export timestamp from backend
-  async getLastExportTime(): Promise<string | null> {
+  async getLastExportTime(namespace: string): Promise<string | null> {
     try {
       const response = await apiClient.get<ExportHistoryResponse>(
         '/api/v1/export/last-export-time',
+        { params: { namespace } },
       );
       return response.last_export;
     } catch (error) {
@@ -89,22 +86,26 @@ export const exportService = {
   },
 
   // Fetch all resources for export selection
-  async fetchAllResources(): Promise<ResourceExportData> {
+  async fetchAllResources(namespace: string): Promise<ResourceExportData> {
+    const params = { namespace };
     const results = await Promise.allSettled([
-      apiClient.get<AgentListResponse>('/api/v1/agents'),
-      apiClient.get<TeamListResponse>('/api/v1/teams'),
-      apiClient.get<ModelListResponse>('/api/v1/models'),
-      apiClient.get<QueryListResponse>('/api/v1/queries'),
-      apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers'),
-      apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
-      workflowTemplatesService.list(),
+      apiClient.get<AgentListResponse>('/api/v1/agents', { params }),
+      apiClient.get<TeamListResponse>('/api/v1/teams', { params }),
+      apiClient.get<ModelListResponse>('/api/v1/models', { params }),
+      apiClient.get<QueryListResponse>('/api/v1/queries', { params }),
+      apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers', { params }),
+      apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers', { params }),
+      workflowTemplatesService.list(namespace),
     ]);
 
     return processResourceResponses(results, true);
   },
 
   // Export selected resources using new backend endpoint
-  async exportResources(selectedItems: ResourceExportData): Promise<void> {
+  async exportResources(
+    namespace: string,
+    selectedItems: ResourceExportData,
+  ): Promise<void> {
     // Build request for backend
     const resourceTypes: ResourceType[] = [];
     const resourceIds: Record<string, string[]> = {};
@@ -135,7 +136,7 @@ export const exportService = {
         body: JSON.stringify({
           resource_types: resourceTypes,
           resource_ids: resourceIds,
-          namespace: currentNamespace(),
+          namespace,
         }),
       },
     );
@@ -149,14 +150,14 @@ export const exportService = {
   },
 
   // Export all resources using the unified export endpoint
-  async exportAll(): Promise<void> {
+  async exportAll(namespace: string): Promise<void> {
     // Call backend export endpoint without resource_types to export all
     const response = await fetch(apiUrl('/api/v1/export/resources'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ namespace: currentNamespace() }),
+      body: JSON.stringify({ namespace }),
     });
 
     if (!response.ok) {

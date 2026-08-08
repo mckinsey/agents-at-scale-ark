@@ -23,18 +23,21 @@ export type A2ATask = A2ATaskDetailResponse & {
 };
 
 export const a2aTasksService = {
-  async getAll(): Promise<A2ATask[]> {
-    const response =
-      await apiClient.get<A2ATaskListResponse>('/api/v1/a2a-tasks');
+  async getAll(namespace: string): Promise<A2ATask[]> {
+    const response = await apiClient.get<A2ATaskListResponse>(
+      '/api/v1/a2a-tasks',
+      { params: { namespace } },
+    );
 
     return response.items.map(item => ({
       ...item,
       id: item.name,
     })) as A2ATask[];
   },
-  async get(id: string): Promise<A2ATaskDetailResponse> {
+  async get(namespace: string, id: string): Promise<A2ATaskDetailResponse> {
     const response = await apiClient.get<A2ATaskDetailResponse>(
       `/api/v1/a2a-tasks/${id}`,
+      { params: { namespace } },
     );
     return {
       ...response,

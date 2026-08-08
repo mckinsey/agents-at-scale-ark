@@ -26,6 +26,7 @@ import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Event, eventsService } from '@/lib/services/events';
 
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '../ui/empty';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface EventsSectionProps {
   readonly page: number;
@@ -42,6 +43,7 @@ export function EventsSection({
   kind,
   name,
 }: EventsSectionProps) {
+  const { namespace } = useNamespace();
   const router = useRouter();
   const { push: namespacedPush } = useNamespacedNavigation();
   const pathname = usePathname();
@@ -75,10 +77,10 @@ export function EventsSection({
         };
 
         // Always load filter options from ALL events to get complete lists
-        const filterOptions = await eventsService.getAllFilterOptions();
+        const filterOptions = await eventsService.getAllFilterOptions(namespace);
 
         // Then load filtered events based on current filters
-        const eventsData = await eventsService.getAll(filters);
+        const eventsData = await eventsService.getAll(namespace, filters);
 
         setEvents(eventsData.items);
         setTotalEvents(eventsData.total);
@@ -90,7 +92,7 @@ export function EventsSection({
         // If a kind is selected, filter names to only show names from that kind
         if (kind) {
           // Need to get all events to properly filter names by kind
-          const allEventsData = await eventsService.getAll({
+          const allEventsData = await eventsService.getAll(namespace, {
             kind: kind,
             limit: 1000, // Get more events to find all names for this kind
           });

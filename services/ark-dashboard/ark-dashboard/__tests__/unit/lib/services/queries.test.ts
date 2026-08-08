@@ -31,9 +31,9 @@ describe('queriesService.list', () => {
       page_size: 25,
     });
 
-    await queriesService.list();
+    await queriesService.list('default');
 
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries', { params: { namespace: 'default' } });
   });
 
   it('includes page and page_size in the query string', async () => {
@@ -45,11 +45,10 @@ describe('queriesService.list', () => {
       page_size: 50,
     });
 
-    await queriesService.list({ page: 3, pageSize: 50 });
+    await queriesService.list('default', { page: 3, pageSize: 50 });
 
     expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/v1/queries?page=3&page_size=50',
-    );
+      '/api/v1/queries?page=3&page_size=50', { params: { namespace: 'default' } });
   });
 
   it('includes search in the query string when provided', async () => {
@@ -61,11 +60,10 @@ describe('queriesService.list', () => {
       page_size: 25,
     });
 
-    await queriesService.list({ search: 'hello' });
+    await queriesService.list('default', { search: 'hello' });
 
     expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/v1/queries?search=hello',
-    );
+      '/api/v1/queries?search=hello', { params: { namespace: 'default' } });
   });
 
   it('omits search when empty string', async () => {
@@ -77,9 +75,9 @@ describe('queriesService.list', () => {
       page_size: 25,
     });
 
-    await queriesService.list({ page: 2, search: '' });
+    await queriesService.list('default', { page: 2, search: '' });
 
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries?page=2');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries?page=2', { params: { namespace: 'default' } });
   });
 
   it('combines all three params correctly', async () => {
@@ -91,11 +89,10 @@ describe('queriesService.list', () => {
       page_size: 25,
     });
 
-    await queriesService.list({ page: 2, pageSize: 15, search: 'foo bar' });
+    await queriesService.list('default', { page: 2, pageSize: 15, search: 'foo bar' });
 
     expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/v1/queries?page=2&page_size=15&search=foo+bar',
-    );
+      '/api/v1/queries?page=2&page_size=15&search=foo+bar', { params: { namespace: 'default' } });
   });
 
   it('returns the response from the API client', async () => {
@@ -108,7 +105,7 @@ describe('queriesService.list', () => {
     };
     vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
 
-    const result = await queriesService.list({ page: 2, pageSize: 10 });
+    const result = await queriesService.list('default', { page: 2, pageSize: 10 });
 
     expect(result).toEqual(mockResponse);
   });
@@ -122,9 +119,9 @@ describe('queriesService.list', () => {
       page_size: 25,
     });
 
-    await queriesService.list({ pageSize: 0 });
+    await queriesService.list('default', { pageSize: 0 });
 
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries?page_size=0');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries?page_size=0', { params: { namespace: 'default' } });
   });
 });
 
@@ -140,9 +137,9 @@ describe('queriesService.get', () => {
       input: 'hi',
     });
 
-    await queriesService.get('q-1');
+    await queriesService.get('default', 'q-1');
 
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries/q-1');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries/q-1', { params: { namespace: 'default' } });
   });
 });
 
@@ -154,9 +151,9 @@ describe('queriesService.delete', () => {
   it('calls DELETE /api/v1/queries/:name', async () => {
     vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
 
-    await queriesService.delete('q-1');
+    await queriesService.delete('default', 'q-1');
 
-    expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/queries/q-1');
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/queries/q-1', { params: { namespace: 'default' } });
   });
 });
 
@@ -172,10 +169,9 @@ describe('queriesService.cancel', () => {
       input: 'hi',
     });
 
-    await queriesService.cancel('q-1');
+    await queriesService.cancel('default', 'q-1');
 
     expect(apiClient.patch).toHaveBeenCalledWith(
-      '/api/v1/queries/q-1/cancel',
-    );
+      '/api/v1/queries/q-1/cancel', undefined, { params: { namespace: 'default' } });
   });
 });
