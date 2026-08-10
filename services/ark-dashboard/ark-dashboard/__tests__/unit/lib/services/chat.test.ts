@@ -17,6 +17,12 @@ vi.mock('@/lib/api/client', () => ({
   },
 }));
 
+// Mock apiUrl with a non-empty base path so we can assert the chunk stream
+// honours the tenant prefix (regression: raw fetch used to drop it).
+vi.mock('@/lib/api/config', () => ({
+  apiUrl: vi.fn((path: string) => `/tenant-a${path}`),
+}));
+
 // Mock crypto.randomUUID
 Object.defineProperty(global, 'crypto', {
   value: {
@@ -106,7 +112,8 @@ describe('chatService', () => {
         'session-123',
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
         expect.objectContaining({
           name: 'chat-query-mock-uuid',
           type: 'user',
@@ -137,7 +144,8 @@ describe('chatService', () => {
         true,
       );
 
-      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`,
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
         expect.objectContaining({
           type: 'user',
           input: 'Hello',
@@ -168,9 +176,60 @@ describe('chatService', () => {
         'session-123',
       );
 
-      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<string, unknown>;
+      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       expect(callArgs.metadata).toBeUndefined();
       expect(result).toEqual(mockResponse);
+    });
+
+    it('should forward parameters when provided', async () => {
+      const mockResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: 'Hello',
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
+
+      await chatService.submitChatQuery(
+        'Hello',
+        'agent',
+        'test-agent',
+        'session-123',
+        undefined,
+        undefined,
+        undefined,
+        [{ name: 'agent_name', value: 'Alice' }],
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({
+          parameters: [{ name: 'agent_name', value: 'Alice' }],
+        }),
+      );
+    });
+
+    it('should omit parameters when none are provided', async () => {
+      const mockResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: 'Hello',
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
+
+      await chatService.submitChatQuery('Hello', 'agent', 'test-agent');
+
+      const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(callArgs.parameters).toBeUndefined();
     });
   });
 
@@ -211,6 +270,26 @@ describe('chatService', () => {
 
       expect(result).toEqual({
         status: 'running',
+        terminal: false,
+        response: 'No response',
+      });
+    });
+
+    it('should return non-terminal status for queued query', async () => {
+      const mockQuery: QueryDetailResponse = {
+        name: 'test-query',
+        input: 'Test',
+        status: {
+          phase: 'queued',
+        },
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
+
+      const result = await chatService.getQueryResult('test-query');
+
+      expect(result).toEqual({
+        status: 'queued',
         terminal: false,
         response: 'No response',
       });
@@ -601,6 +680,42 @@ describe('chatService', () => {
 
       await expect(generator.next()).rejects.toThrow(
         'No response body available for streaming',
+      );
+    });
+
+    it('prefixes the chunk stream URL with the tenant base path', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      } as unknown as QueryDetailResponse;
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      const fetchMock = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockResolvedValueOnce({ done: true }),
+            releaseLock: vi.fn(),
+          }),
+        },
+      });
+      global.fetch = fetchMock;
+
+      const generator = chatService.streamChatResponse(
+        messages,
+        'agent',
+        'test-agent',
+        'session-123',
+      );
+      await generator.next();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/tenant-a\/api\/v1\/broker\/chunks\?/),
+        expect.anything(),
       );
     });
   });

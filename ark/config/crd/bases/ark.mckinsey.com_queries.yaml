@@ -384,7 +384,10 @@ spec:
                 description: Timeout for query execution (e.g., "30s", "5m", "1h")
                 type: string
               ttl:
-                default: 720h
+                description: |-
+                  Time to retain Query after completion.
+                  Default is resolved by the mutating webhook from ArkConfig/default
+                  (spec.queryTTL), falling back to 720h when ArkConfig is absent.
                 type: string
               type:
                 default: user
@@ -463,7 +466,10 @@ spec:
                 default: pending
                 enum:
                 - pending
+                - provisioning
                 - running
+                - queued
+                - input-required
                 - error
                 - done
                 - canceled
@@ -511,6 +517,9 @@ spec:
                 type: object
               tokenUsage:
                 properties:
+                  cachedTokens:
+                    format: int64
+                    type: integer
                   completionTokens:
                     format: int64
                     type: integer

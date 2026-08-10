@@ -3,9 +3,12 @@ import logging
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.conversations import ConversationResponse, ConversationListResponse
 from ...utils.memory_client import (
@@ -27,11 +30,13 @@ VERSION = "v1alpha1"
 @router.get("", response_model=ConversationListResponse)
 @handle_k8s_errors(operation="list", resource_type="conversations")
 async def list_conversations(
+    request: Request,
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
-    memory: Optional[str] = Query(None, description="Filter by memory name")
+    memory: Optional[str] = Query(None, description="Filter by memory name"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> ConversationListResponse:
     """List all conversations in a namespace, optionally filtered by memory."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory_dicts = await get_all_memory_resources(client, memory)
 
         all_conversations = []
@@ -75,11 +80,13 @@ async def list_conversations(
 @router.delete("/{conversation_id}")
 @handle_k8s_errors(operation="delete", resource_type="conversation")
 async def delete_conversation(
+    request: Request,
     conversation_id: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> dict:
     """Delete a specific conversation and all its messages."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         # Process all memory services to ensure conversation is removed from all potential locations
         memory_dicts = await get_all_memory_resources(client)
 
@@ -130,10 +137,12 @@ async def delete_conversation(
 @router.delete("")
 @handle_k8s_errors(operation="delete", resource_type="conversations")
 async def delete_all_conversations(
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    request: Request,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> dict:
     """Delete all conversations and their messages."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         # Process all memory services to ensure complete cleanup across the namespace
         memory_dicts = await get_all_memory_resources(client)
 
@@ -181,12 +190,14 @@ async def delete_all_conversations(
 @router.delete("/{conversation_id}/queries/{query_id}/messages")
 @handle_k8s_errors(operation="delete", resource_type="query_messages")
 async def delete_query_messages(
+    request: Request,
     conversation_id: str,
     query_id: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> dict:
     """Delete messages for a specific query within a conversation."""
-    async with with_ark_client(namespace, VERSION) as client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         # Process all memory services to ensure query messages are removed from all potential locations
         memory_dicts = await get_all_memory_resources(client)
 

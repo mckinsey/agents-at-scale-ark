@@ -1,0 +1,51 @@
+name: OpenSpec Flow — Handle Failure
+description: >
+  Posts a failure comment on an issue and flips the label to LABEL_FAILED.
+  Removes current-label (failure is best-effort), adds LABEL_FAILED, then
+  posts a comment with AGENT_COMMENT_MARKER header and REENGAGE_FOOTER.
+  LABEL_FAILED, AGENT_COMMENT_MARKER, and REENGAGE_FOOTER must be set in the
+  workflow-level env block.
+
+inputs:
+  gh-token:
+    description: GitHub token with issues write permission
+    required: true
+  repo:
+    description: Repository in owner/name format
+    required: true
+  issue-number:
+    description: Issue or PR number to post the failure comment on
+    required: true
+  run-url:
+    description: URL of the current Actions run (for the "View logs" link)
+    required: true
+  current-label:
+    description: The label currently on the issue that should be removed
+    required: true
+  message:
+    description: Failure message line to include in the comment body
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Post failure comment and flip to failed label
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+        RUN_URL: ${{ inputs.run-url }}
+        CURRENT_LABEL: ${{ inputs.current-label }}
+        MESSAGE: ${{ inputs.message }}
+      run: |
+        gh issue edit "$ISSUE_NUMBER" --repo "$REPO" \
+          --remove-label "$CURRENT_LABEL" --add-label "$LABEL_FAILED" || true
+        {
+          echo "$AGENT_COMMENT_MARKER"
+          echo "> $MESSAGE"
+          echo ""
+          echo "---"
+          echo "$REENGAGE_FOOTER"
+        } > /tmp/comment.md
+        gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file /tmp/comment.md

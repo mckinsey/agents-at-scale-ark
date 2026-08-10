@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api/client';
-import { API_CONFIG } from '@/lib/api/config';
+import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import {
@@ -33,6 +33,7 @@ export interface ExportItem {
   id: string;
   name: string;
   type: string;
+  description?: string;
   selected?: boolean;
 }
 
@@ -66,6 +67,10 @@ export interface ExportRequest {
 export interface ExportHistoryResponse {
   last_export: string | null;
   export_count: number;
+}
+
+function currentNamespace(): string | undefined {
+  return apiClient.getDefaultParams().namespace;
 }
 
 // Export service
@@ -121,7 +126,7 @@ export const exportService = {
 
     // Call backend export endpoint using fetch directly for blob response
     const response = await fetch(
-      `${API_CONFIG.baseURL}/api/v1/export/resources`,
+      apiUrl('/api/v1/export/resources'),
       {
         method: 'POST',
         headers: {
@@ -130,6 +135,7 @@ export const exportService = {
         body: JSON.stringify({
           resource_types: resourceTypes,
           resource_ids: resourceIds,
+          namespace: currentNamespace(),
         }),
       },
     );
@@ -145,12 +151,12 @@ export const exportService = {
   // Export all resources using the unified export endpoint
   async exportAll(): Promise<void> {
     // Call backend export endpoint without resource_types to export all
-    const response = await fetch(`${API_CONFIG.baseURL}/api/v1/export/resources`, {
+    const response = await fetch(apiUrl('/api/v1/export/resources'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ namespace: currentNamespace() }),
     });
 
     if (!response.ok) {

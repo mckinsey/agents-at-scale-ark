@@ -45,14 +45,13 @@ runs:
         sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
         sudo chmod +x /usr/local/bin/yq
         curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-        curl -sS https://webinstall.dev/k9s | bash
         export PATH="$HOME/.local/bin:$PATH"
         sudo apt-get update && sudo apt-get install -y gettext
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '24.x'
+        node-version: "24"
 
     - name: Configure K3s registry authentication
       if: ${{ inputs.is-fork-pr == 'false' }}
@@ -76,7 +75,6 @@ runs:
       with:
         metrics-enabled: false
         traefik-enabled: false
-        k3s-channel: latest
 
     - name: Install Ark CLI
       shell: bash
@@ -160,17 +158,6 @@ runs:
           --wait-for-ready=15m
 
         ark status
-
-    - name: Wait for Ark to be fully ready
-      shell: bash
-      run: |
-        echo "Waiting for Ark controller to be ready..."
-
-        # Simple wait for controller to be available (via ark status)
-        # This is sufficient for the validating webhook to work
-        kubectl wait --for=condition=available deployment/ark-controller -n ark-system --timeout=5m
-
-        echo "✓ Ark controller is ready"
 
     - name: Create default model
       shell: bash

@@ -6,7 +6,9 @@ import (
 	"github.com/openai/openai-go"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/telemetry"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 type mockTeamMember struct {
@@ -30,7 +32,7 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
-func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	return &ExecutionResult{}, nil
 }
 
@@ -38,15 +40,27 @@ type mockSelectorAgent struct {
 	returnName              string
 	returnEmpty             bool
 	returnTerminateResponse string
+	returnError             error
 	capturedHistory         []Message
+	capturedOptions         ExecuteOptions
+	executeCalls            int
+	tools                   *ToolRegistry
 }
 
 func newMockSelectorAgent() *mockSelectorAgent {
-	return &mockSelectorAgent{returnName: "selected"}
+	return &mockSelectorAgent{
+		returnName: "selected",
+		tools:      NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 }
 
-func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (m *mockSelectorAgent) Execute(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	m.capturedHistory = history
+	m.capturedOptions = opts
+	m.executeCalls++
+	if m.returnError != nil {
+		return nil, m.returnError
+	}
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
 	}
@@ -68,17 +82,39 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
 		return &ExecutionResult{
 			Messages: []Message{assistantMsg, toolMsg},
-		}, &TerminateTeamWithResponse{Response: m.returnTerminateResponse}
+			Signal:   &TerminateSignal{},
+		}, nil
 	}
 	return &ExecutionResult{
 		Messages: []Message{
 			NewAssistantMessage(m.returnName),
 		},
+		Signal: &SelectionMadeSignal{SelectedName: m.returnName},
 	}, nil
 }
 
 func (m *mockSelectorAgent) FullName() string {
 	return "mock-selector"
+}
+
+func (m *mockSelectorAgent) GetToolRegistry() *ToolRegistry {
+	return m.tools
+}
+
+type mockSelectorAgentNoTool struct {
+	tools *ToolRegistry
+}
+
+func (m *mockSelectorAgentNoTool) Execute(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+	return &ExecutionResult{Messages: []Message{NewAssistantMessage("I pick researcher")}}, nil
+}
+
+func (m *mockSelectorAgentNoTool) FullName() string {
+	return "mock-selector-no-tool"
+}
+
+func (m *mockSelectorAgentNoTool) GetToolRegistry() *ToolRegistry {
+	return m.tools
 }
 
 type mockTelemetrySpan struct {
@@ -122,6 +158,7 @@ type mockTeamRecorder struct {
 	lastMemberName         string
 	lastMemberType         string
 	lastOutputMessageCount int
+	lastOutput             string
 }
 
 func (m *mockTeamRecorder) StartTeamExecution(ctx context.Context, teamName, namespace, strategy string, memberCount, maxTurns int) (context.Context, telemetry.Span) {
@@ -136,9 +173,10 @@ func (m *mockTeamRecorder) StartTurn(ctx context.Context, turn int, memberName, 
 	return ctx, &mockTelemetrySpan{}
 }
 
-func (m *mockTeamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
+func (m *mockTeamRecorder) RecordTurnOutput(span telemetry.Span, output string, messageCount int) {
 	m.recordOutputCalled = true
 	m.lastOutputMessageCount = messageCount
+	m.lastOutput = output
 }
 
 func (m *mockTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
@@ -179,6 +217,11 @@ func (m *mockEventingRecorder) Complete(ctx context.Context, operation, message 
 	m.lastMessage = message
 }
 
+func (m *mockEventingRecorder) Cancel(ctx context.Context, operation, message string, data map[string]string) {
+	m.lastOperation = operation
+	m.lastMessage = message
+}
+
 func (m *mockEventingRecorder) Fail(ctx context.Context, operation, message string, err error, data map[string]string) {
 	m.failCalled = true
 	m.lastOperation = operation
@@ -191,7 +234,7 @@ func (m *mockEventingRecorder) StartTokenCollection(ctx context.Context) context
 	return ctx
 }
 
-func (m *mockEventingRecorder) AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens int64) {
+func (m *mockEventingRecorder) AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens, cachedTokens int64) {
 }
 
 func (m *mockEventingRecorder) AddTokenUsage(ctx context.Context, usage arkv1alpha1.TokenUsage) {}

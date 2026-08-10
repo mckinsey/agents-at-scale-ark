@@ -11,9 +11,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import { PageHeader } from '@/components/common/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,11 @@ export default function MarketplaceDetailPage() {
   const { data: item, isPending, error } = useGetMarketplaceItemById(id);
   const installMutation = useInstallMarketplaceItem();
   const uninstallMutation = useUninstallMarketplaceItem();
+  const [uninstallCommand, setUninstallCommand] = useState<{
+    open: boolean;
+    helmCommand?: string;
+    name?: string;
+  }>({ open: false });
 
   useEffect(() => {
     if (error) {
@@ -53,7 +59,21 @@ export default function MarketplaceDetailPage() {
   };
 
   const handleUninstall = () => {
-    uninstallMutation.mutate(id);
+    uninstallMutation.mutateAsync(id).then(
+      result => {
+        if (result && typeof result === 'object' && 'status' in result) {
+          const data = result as Record<string, unknown>;
+          if (data.status === 'command') {
+            setUninstallCommand({
+              open: true,
+              helmCommand: data.helmCommand as string | undefined,
+              name: (data.name as string | undefined) || item?.name,
+            });
+          }
+        }
+      },
+      () => undefined,
+    );
   };
 
   const getCategoryColor = (category: string) => {
@@ -136,14 +156,14 @@ export default function MarketplaceDetailPage() {
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <Badge
-                      variant="secondary"
+                      variant="alternative"
                       className={getCategoryColor(item.category)}>
                       {item.category.replace('-', ' ')}
                     </Badge>
-                    <Badge variant="outline">{item.type}</Badge>
+                    <Badge outline>{item.type}</Badge>
                     {item.featured && (
                       <Badge
-                        variant="secondary"
+                        variant="warning"
                         className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400">
                         Featured
                       </Badge>
@@ -199,7 +219,7 @@ export default function MarketplaceDetailPage() {
                     <CardContent>
                       <div className="flex flex-wrap gap-2">
                         {item.tags.map(tag => (
-                          <Badge key={tag} variant="secondary">
+                          <Badge key={tag} variant="alternative">
                             {tag}
                           </Badge>
                         ))}
@@ -254,7 +274,7 @@ export default function MarketplaceDetailPage() {
                         {item.changelog.map((entry, index) => (
                           <div key={index}>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline">{entry.version}</Badge>
+                              <Badge outline>{entry.version}</Badge>
                               <span className="text-muted-foreground text-sm">
                                 {entry.date}
                               </span>
@@ -305,24 +325,26 @@ export default function MarketplaceDetailPage() {
                     </Button>
                   )}
 
-                  {item.status === 'installed' && item.uis && item.uis.length > 0 && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        {item.uis.map((ui) => (
-                          <Button
-                            key={ui.url}
-                            variant="outline"
-                            className="w-full justify-start"
-                            onClick={() => window.open(ui.url, '_blank')}>
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            {ui.label}
-                            <ExternalLink className="ml-auto h-3 w-3" />
-                          </Button>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  {item.status === 'installed' &&
+                    item.uis &&
+                    item.uis.length > 0 && (
+                      <>
+                        <Separator />
+                        <div className="space-y-2">
+                          {item.uis.map(ui => (
+                            <Button
+                              key={ui.url}
+                              variant="outline"
+                              className="w-full justify-start"
+                              onClick={() => window.open(ui.url, '_blank')}>
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              {ui.label}
+                              <ExternalLink className="ml-auto h-3 w-3" />
+                            </Button>
+                          ))}
+                        </div>
+                      </>
+                    )}
 
                   <Separator />
 
@@ -394,6 +416,17 @@ export default function MarketplaceDetailPage() {
             </Card>
           </div>
         </div>
+
+        <MarketplaceCommandDialog
+          open={uninstallCommand.open}
+          onOpenChange={open => setUninstallCommand(s => ({ ...s, open }))}
+          command={{
+            helmCommand: uninstallCommand.helmCommand,
+            name: uninstallCommand.name,
+          }}
+          itemName={item.name}
+          action="uninstall"
+        />
       </main>
     </div>
   );

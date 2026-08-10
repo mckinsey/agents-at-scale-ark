@@ -1,0 +1,40 @@
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "Paris"
+            },
+            "finish_reason": "stop"
+          }],
+          "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 1,
+            "total_tokens": 21
+          }
+        }

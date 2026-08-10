@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -58,6 +59,82 @@ func TestOperationTracker_InitializeQueryContext_NoSessionID(t *testing.T) {
 	qd := ot.GetQueryDetails(ctx)
 	assert.NotNil(t, qd)
 	assert.Equal(t, "test-uid", qd.SessionID)
+}
+
+func TestOperationTracker_InitializeQueryContext_ConversationIDFromSpec(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			SessionId:      "session-123",
+			ConversationId: "conv-from-spec",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+
+	qd := ot.GetQueryDetails(ctx)
+	assert.NotNil(t, qd)
+	assert.Equal(t, "conv-from-spec", qd.ConversationID)
+}
+
+func TestOperationTracker_InitializeQueryContext_ConversationIDStatusPrecedence(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			ConversationId: "conv-from-spec",
+		},
+		Status: arkv1alpha1.QueryStatus{
+			ConversationId: "conv-from-status",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+
+	qd := ot.GetQueryDetails(ctx)
+	assert.NotNil(t, qd)
+	assert.Equal(t, "conv-from-status", qd.ConversationID)
+}
+
+func TestOperationTracker_Start_ConversationIDFromSpecInEventData(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			SessionId:      "session-123",
+			ConversationId: "conv-from-spec",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+	_ = ot.Start(ctx, "TestOperation", "Starting test operation", nil)
+
+	events := emitter.GetEvents()
+	assert.Equal(t, 1, len(events))
+
+	data, ok := (*events[0].Data).(map[string]string)
+	assert.True(t, ok)
+	assert.Equal(t, "session-123", data["sessionId"])
+	assert.Equal(t, "conv-from-spec", data["conversationId"])
 }
 
 func TestOperationTracker_GetQueryDetails_NoContext(t *testing.T) {
@@ -179,6 +256,52 @@ func TestOperationTracker_Complete_NoQueryContext(t *testing.T) {
 	assert.Equal(t, 0, emitter.EventCount())
 }
 
+func TestOperationTracker_Cancel(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			SessionId: "session-123",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+	ctx = ot.Start(ctx, "TestOperation", "Starting test operation", nil)
+
+	time.Sleep(10 * time.Millisecond)
+
+	ot.Cancel(ctx, "TestOperation", "Canceled test operation", nil)
+
+	events := emitter.GetEvents()
+	assert.Equal(t, 2, len(events))
+	event := events[1]
+	assert.Equal(t, query, event.Object)
+	assert.Equal(t, "TestOperationCanceled", event.Reason)
+	assert.Contains(t, event.Message, "Canceled test operation")
+
+	assert.NotNil(t, event.Data)
+	data, ok := (*event.Data).(map[string]string)
+	assert.True(t, ok)
+	assert.NotContains(t, data, "error")
+	assert.Contains(t, data, "durationMs")
+	assert.Contains(t, data, "timestamp")
+}
+
+func TestOperationTracker_Cancel_NoQueryContext(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	ot.Cancel(context.Background(), "TestOperation", "Canceled test operation", nil)
+
+	assert.Equal(t, 0, emitter.EventCount())
+}
+
 func TestOperationTracker_Fail(t *testing.T) {
 	emitter := mock.NewMockEventEmitter()
 	ot := NewOperationTracker(emitter)
@@ -219,6 +342,38 @@ func TestOperationTracker_Fail(t *testing.T) {
 	assert.Equal(t, "test error", data["error"])
 	assert.Contains(t, data, "durationMs")
 	assert.Contains(t, data, "timestamp")
+}
+
+func TestOperationTracker_Fail_ContextCanceled_DelegatesToCancel(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			SessionId: "session-123",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+	ctx = ot.Start(ctx, "TestOperation", "Starting test operation", nil)
+
+	wrappedErr := fmt.Errorf("agent execution failed: %w", context.Canceled)
+	ot.Fail(ctx, "TestOperation", "Failed test operation", wrappedErr, nil)
+
+	events := emitter.GetEvents()
+	assert.Equal(t, 2, len(events))
+	event := events[1]
+	assert.Equal(t, "TestOperationCanceled", event.Reason)
+	assert.Contains(t, event.Message, "Failed test operation")
+
+	data, ok := (*event.Data).(map[string]string)
+	assert.True(t, ok)
+	assert.NotContains(t, data, "error")
 }
 
 func TestOperationTracker_Fail_NoQueryContext(t *testing.T) {

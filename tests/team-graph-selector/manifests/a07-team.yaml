@@ -25,7 +25,7 @@ spec:
       Roles: {{.Roles}}
       Conversation history: {{.History}}
       
-      Respond with ONLY the name of the member you want to select next.
+      Use the select-next-speaker tool to make your selection.
 
   graph:
     edges:

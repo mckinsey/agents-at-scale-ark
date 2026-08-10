@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/apiserver/pkg/storage/names"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
@@ -26,8 +28,9 @@ import (
 )
 
 const (
-	columnTypeDate   = "date"
-	defaultNamespace = "default"
+	columnTypeDate          = "date"
+	defaultNamespace        = "default"
+	maxGenerateNameAttempts = 100
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -124,6 +127,9 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
+		if errors.Is(err, storage.ErrInvalidRequest) {
+			return nil, apierrors.NewBadRequest(err.Error())
+		}
 		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
 	}
 
@@ -166,11 +172,46 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		accessor.SetCreationTimestamp(metav1.Now())
 	}
 
+	// Handle generateName: if name is empty but generateName is set, generate a unique name
+	// Retry on name collisions up to maxGenerateNameAttempts
+	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
+			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
+			accessor.SetName(generatedName)
+
+			sctx, cancel := storageContext(ctx)
+			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
+			cancel()
+
+			if err == nil {
+				metrics.RecordStorageOperation("create", s.config.Kind, "success")
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+			}
+
+			if !errors.Is(err, storage.ErrAlreadyExists) {
+				metrics.RecordStorageLatency("create", s.config.Kind, start)
+				metrics.RecordStorageOperation("create", s.config.Kind, "error")
+				return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
+			}
+		}
+
+		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
+		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		return nil, apierrors.NewServerTimeout(gr, "create", 1)
+	}
+
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	if err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
-		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		if errors.Is(err, storage.ErrAlreadyExists) {
+			metrics.RecordStorageOperation("create", s.config.Kind, "already_exists")
+			return nil, apierrors.NewAlreadyExists(gr, accessor.GetName())
+		}
+		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
 	}
 
@@ -205,6 +246,15 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		return nil, false, fmt.Errorf("failed to get updated object: %w", err)
 	}
 
+	// Preserve resourceVersion from existing object if patch didn't include it.
+	// kubectl strategic merge patches may send resourceVersion: null, but PostgreSQL
+	// backend requires a non-zero resourceVersion for optimistic concurrency control.
+	existingAccessor, _ := meta.Accessor(existing)
+	updatedAccessor, _ := meta.Accessor(updated)
+	if updatedAccessor.GetResourceVersion() == "" && existingAccessor.GetResourceVersion() != "" {
+		updatedAccessor.SetResourceVersion(existingAccessor.GetResourceVersion())
+	}
+
 	if updateValidation != nil {
 		if err := updateValidation(ctx, updated, existing); err != nil {
 			metrics.RecordStorageOperation("update", s.config.Kind, "validation_error")
@@ -214,6 +264,17 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 
 	if err := s.backend.Update(sctx, s.config.Kind, namespace, name, updated); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "update", name, start)
+	}
+
+	// Finish a graceful deletion: once a terminating object (deletionTimestamp set)
+	// has no finalizers left, perform the actual removal now.
+	if updatedAccessor.GetDeletionTimestamp() != nil && len(updatedAccessor.GetFinalizers()) == 0 {
+		if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
+			return nil, false, handleUpdateError(err, s.config, "delete", name, start)
+		}
+		metrics.RecordStorageOperation("update", s.config.Kind, "finalized_delete")
+		metrics.RecordStorageLatency("update", s.config.Kind, start)
+		return updated, false, nil
 	}
 
 	metrics.RecordStorageOperation("update", s.config.Kind, "success")
@@ -241,6 +302,43 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 		}
 	}
 
+	accessor, err := meta.Accessor(existing)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
+	}
+
+	if options != nil && options.Preconditions != nil {
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		pc := options.Preconditions
+		if pc.UID != nil && *pc.UID != accessor.GetUID() {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(gr, name,
+				fmt.Errorf("the UID in the precondition (%v) does not match the UID in record (%v)", *pc.UID, accessor.GetUID()))
+		}
+		if pc.ResourceVersion != nil && *pc.ResourceVersion != accessor.GetResourceVersion() {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(gr, name,
+				fmt.Errorf("the ResourceVersion in the precondition (%v) does not match the ResourceVersion in record (%v)", *pc.ResourceVersion, accessor.GetResourceVersion()))
+		}
+	}
+
+	// Graceful deletion: an object with finalizers is not removed yet. Mark it by
+	// setting deletionTimestamp so controllers can run their finalizers; the actual
+	// removal happens in Update once the last finalizer is gone. This mirrors the
+	// behavior of the upstream Kubernetes API server.
+	if len(accessor.GetFinalizers()) > 0 {
+		if accessor.GetDeletionTimestamp() == nil {
+			now := metav1.NewTime(time.Now())
+			accessor.SetDeletionTimestamp(&now)
+			if err := s.backend.Update(sctx, s.config.Kind, namespace, name, existing); err != nil {
+				return nil, false, handleUpdateError(err, s.config, "delete", name, start)
+			}
+		}
+		metrics.RecordStorageOperation("delete", s.config.Kind, "pending_finalizers")
+		metrics.RecordStorageLatency("delete", s.config.Kind, start)
+		return existing, false, nil
+	}
+
 	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "delete", name, start)
 	}
@@ -263,7 +361,14 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 		opts.ResourceVersion = options.ResourceVersion
 	}
 
-	return s.backend.Watch(ctx, s.config.Kind, namespace, opts)
+	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidRequest) {
+			return nil, apierrors.NewBadRequest(err.Error())
+		}
+		return nil, err
+	}
+	return watcher, nil
 }
 
 func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions runtime.Object) (*metav1.Table, error) {
@@ -276,9 +381,19 @@ func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions r
 		for _, item := range items {
 			table.Rows = append(table.Rows, s.objectToTableRow(item))
 		}
+		// Propagate list metadata so paginating clients (kubectl defaults to
+		// Table output) can read metadata.continue and fetch subsequent pages.
+		if listMeta, err := meta.ListAccessor(obj); err == nil {
+			table.ResourceVersion = listMeta.GetResourceVersion()
+			table.Continue = listMeta.GetContinue()
+			table.RemainingItemCount = listMeta.GetRemainingItemCount()
+		}
 		return table, nil
 	}
 
+	if objMeta, err := meta.Accessor(obj); err == nil {
+		table.ResourceVersion = objMeta.GetResourceVersion()
+	}
 	table.Rows = append(table.Rows, s.objectToTableRow(obj))
 	return table, nil
 }
@@ -353,15 +468,27 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	if err != nil {
 		return fmt.Errorf("failed to access list metadata: %w", err)
 	}
-	var maxRV string
+	// Compute the list's resourceVersion numerically. Lexicographic string max
+	// mis-orders across digit-count boundaries (e.g. "9" > "10"), which yields
+	// a lower-than-true list RV and breaks the list→watch handoff (the client
+	// then resumes watch from a stale point).
+	var maxRV uint64
 	for _, obj := range objects {
-		if objMeta, err := meta.Accessor(obj); err == nil {
-			if rv := objMeta.GetResourceVersion(); rv > maxRV {
-				maxRV = rv
-			}
+		objMeta, err := meta.Accessor(obj)
+		if err != nil {
+			continue
+		}
+		n, err := strconv.ParseUint(objMeta.GetResourceVersion(), 10, 64)
+		if err != nil {
+			continue
+		}
+		if n > maxRV {
+			maxRV = n
 		}
 	}
-	accessor.SetResourceVersion(maxRV)
+	if maxRV > 0 {
+		accessor.SetResourceVersion(strconv.FormatUint(maxRV, 10))
+	}
 	if continueToken != "" {
 		accessor.SetContinue(continueToken)
 	}

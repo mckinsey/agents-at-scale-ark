@@ -32,7 +32,7 @@ spec:
       annotations:
         workflows.argoproj.io/description: "Generate a sample file and save as artifact"
     script:
-      image: alpine:latest
+      image: alpine:3.22
       command: [sh]
       source: |
         set -e
@@ -57,7 +57,7 @@ spec:
       - name: input-file
         path: /tmp/input.txt
     script:
-      image: alpine:latest
+      image: alpine:3.22
       command: [sh]
       source: |
         set -e

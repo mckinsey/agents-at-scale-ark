@@ -1,10 +1,28 @@
 import request from 'supertest';
-import app from '../src/server.js';
+import {loadConfig} from '../src/config/index.js';
+import {createLogger} from '../src/logging/logger.js';
+import {buildApp} from '../src/server.js';
+import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
+import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
+import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
+
+const config = loadConfig({});
+const logger = createLogger({level: 'silent', pretty: false});
+const {app} = buildApp({
+  config,
+  logger,
+  version: 'test',
+  messageStream: createMessageStream(config, logger),
+  chunkStream: createChunkStream(config, logger),
+  eventStream: createEventStream(config, logger),
+  sessionsStorage: createSessionsStorage(config, logger),
+});
 
 describe('Stream Timeout', () => {
   test('should send SSE error event with [DONE] on timeout', async () => {
     const response = await request(app)
-      .get('/stream/nonexistent-query?wait-for-query=1')  // 1 second timeout
+      .get('/stream/nonexistent-query?wait-for-query=1') // 1 second timeout
       .set('Accept', 'text/event-stream');
 
     expect(response.status).toBe(200);
@@ -12,11 +30,13 @@ describe('Stream Timeout', () => {
 
     // Should contain error event with streaming timeout message
     expect(response.text).toContain('data: {"error":{');
-    expect(response.text).toContain('Request timeout waiting for streaming query response');
+    expect(response.text).toContain(
+      'Request timeout waiting for streaming query response'
+    );
     expect(response.text).toContain('"type":"timeout_error"');
     expect(response.text).toContain('"code":"timeout"');
 
     // Must end with [DONE] marker
     expect(response.text).toContain('data: [DONE]');
-  }, 10000);  // 10 second jest timeout
+  }, 10000); // 10 second jest timeout
 });

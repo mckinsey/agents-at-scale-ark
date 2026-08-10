@@ -25,7 +25,9 @@ inputs:
   k3s-version:
     description: K3S version (https://github.com/rancher/k3s/releases)
     required: false
-    default: ""
+    # Pinned to avoid intermittent failures resolving the "stable" channel via
+    # update.k3s.io, which the upstream install script does not handle gracefully.
+    default: "v1.35.5+k3s1"
   k3s-channel:
     description: K3S channel (https://update.k3s.io/v1-release/channels)
     required: false
@@ -103,6 +105,118 @@ runs:
     #       https://github.com/k3s-io/k3s/issues/5633
     #       and https://github.com/jupyterhub/action-k3s-helm/issues/59.
     #
+    # Cache k3s binary + sha256sum.txt per (os, arch, version). Split
+    # restore/save so save happens right after verify, not at end-of-job:
+    # a red e2e still warms the cache.
+    - name: Restore k3s binary from cache
+      id: k3s-cache
+      if: inputs.k3s-version != ''
+      uses: actions/cache/restore@v4
+      with:
+        path: /tmp/k3s-bin
+        key: k3s-${{ runner.os }}-${{ runner.arch }}-${{ inputs.k3s-version }}
+
+    # --max-time bounds each curl call so a silent peer can't hang for the
+    # ~10 min TCP keepalive; --retry-all-errors handles blips within that.
+    # sha256sum.txt is fetched once so a flake on it doesn't force a
+    # 70MB re-download.
+    - name: Download k3s binary (cache miss)
+      if: inputs.k3s-version != '' && steps.k3s-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        case "${{ runner.arch }}" in
+          X64)   bin_suffix=""       hash_suffix="amd64" ;;
+          ARM64) bin_suffix="-arm64" hash_suffix="arm64" ;;
+          ARM)   bin_suffix="-armhf" hash_suffix="arm"   ;;
+          *) echo "unsupported arch ${{ runner.arch }}"; exit 1 ;;
+        esac
+        ver="${{ inputs.k3s-version }}"
+        base="https://github.com/k3s-io/k3s/releases/download/${ver}"
+        mkdir -p /tmp/k3s-bin
+
+        for attempt in 1 2 3; do
+          if curl -fL --connect-timeout 10 --max-time 30 \
+               --retry 3 --retry-all-errors \
+               -o /tmp/k3s-bin/sha256sum.txt \
+               "${base}/sha256sum-${hash_suffix}.txt"; then
+            break
+          fi
+          echo "sha256sum.txt download attempt ${attempt}/3 failed"
+          if [ "$attempt" -eq 3 ]; then exit 1; fi
+        done
+
+        expected=$(awk -v f="k3s${bin_suffix}" '$2==f {print $1}' /tmp/k3s-bin/sha256sum.txt | head -n1)
+        if [ -z "${expected}" ]; then
+          echo "no sha256 entry for k3s${bin_suffix} in sha256sum.txt"
+          exit 1
+        fi
+
+        for attempt in 1 2 3; do
+          if curl -fL --connect-timeout 10 --max-time 90 \
+               --retry 3 --retry-all-errors \
+               -o /tmp/k3s-bin/k3s \
+               "${base}/k3s${bin_suffix}"; then
+            if echo "${expected}  /tmp/k3s-bin/k3s" | sha256sum -c -; then
+              break
+            fi
+            echo "k3s sha256 verification failed on attempt ${attempt}/3"
+          fi
+          echo "k3s download attempt ${attempt}/3 failed"
+          if [ "$attempt" -eq 3 ]; then exit 1; fi
+        done
+      shell: bash
+
+    # Runs on cache hit too, so a corrupted cache can't reach /usr/local/bin.
+    - name: Verify k3s binary sha256
+      if: inputs.k3s-version != ''
+      run: |
+        set -euo pipefail
+        case "${{ runner.arch }}" in
+          X64)   bin_suffix="" ;;
+          ARM64) bin_suffix="-arm64" ;;
+          ARM)   bin_suffix="-armhf" ;;
+          *) echo "unsupported arch ${{ runner.arch }}"; exit 1 ;;
+        esac
+        expected=$(awk -v f="k3s${bin_suffix}" '$2==f {print $1}' /tmp/k3s-bin/sha256sum.txt | head -n1)
+        if [ -z "${expected}" ]; then
+          echo "no sha256 entry for k3s${bin_suffix} in sha256sum.txt"
+          exit 1
+        fi
+        echo "${expected}  /tmp/k3s-bin/k3s" | sha256sum -c -
+      shell: bash
+
+    - name: Save k3s binary to cache
+      if: inputs.k3s-version != '' && steps.k3s-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: /tmp/k3s-bin
+        key: k3s-${{ runner.os }}-${{ runner.arch }}-${{ inputs.k3s-version }}
+
+    - name: Stage cached k3s binary
+      if: inputs.k3s-version != ''
+      run: sudo install -m 0755 /tmp/k3s-bin/k3s /usr/local/bin/k3s
+      shell: bash
+
+    # Route docker.io pulls through mirror.gcr.io. Without this, calico-node's
+    # sandbox image (rancher/mirrored-pause) is on the CNI-install critical
+    # path with zero retry budget: a single DockerHub timeout leaves /opt/cni/bin
+    # empty and every subsequent pod fails with `plugin "bridge" not found`.
+    # k3s reads this file when containerd starts, so it must land before install.
+    - name: Configure docker.io registry mirror
+      run: |
+        set -euo pipefail
+        sudo mkdir -p /etc/rancher/k3s
+        tmp=$(mktemp)
+        if sudo test -f /etc/rancher/k3s/registries.yaml; then
+          sudo cat /etc/rancher/k3s/registries.yaml > "$tmp"
+        else
+          echo '{}' > "$tmp"
+        fi
+        yq -i '.mirrors["docker.io"].endpoint = ["https://mirror.gcr.io", "https://registry-1.docker.io"]' "$tmp"
+        sudo install -m 0644 "$tmp" /etc/rancher/k3s/registries.yaml
+        rm -f "$tmp"
+      shell: bash
+
     - name: Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}
       run: |
         echo "::group::Setup k3s ${{ inputs.k3s-version }}${{ inputs.k3s-channel }}"
@@ -125,14 +239,38 @@ runs:
         if [[ "${{ inputs.extra-setup-args }}" != *--egress-selector-mode* ]]; then
           default_extra_setup_args=--egress-selector-mode=disabled
         fi
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${{ inputs.k3s-version }}" INSTALL_K3S_CHANNEL="${{ inputs.k3s-channel }}" sh -s - \
-          ${k3s_disable_metrics} \
-          ${k3s_disable_traefik} \
-          --disable-network-policy \
-          --flannel-backend=none \
-          ${k3s_docker} \
-          ${{ inputs.extra-setup-args }} \
-          ${default_extra_setup_args}
+        # Skip the install script's binary download when we've already staged
+        # one (which is the only path here, since k3s-version is required for
+        # the cache key). Fall back to letting the script download if the
+        # caller passed a channel instead of a pinned version.
+        if [[ -n "${{ inputs.k3s-version }}" ]]; then
+          skip_download_env="INSTALL_K3S_SKIP_DOWNLOAD=true"
+        fi
+        # Fetch the install script first so we can retry it independently from
+        # piping it straight into sh - which previously masked all errors from
+        # the inner curl behind a single opaque exit code.
+        for attempt in 1 2 3; do
+          if curl -fL --connect-timeout 10 --max-time 60 \
+               --retry 3 --retry-all-errors \
+               -o /tmp/k3s-install.sh https://get.k3s.io; then
+            if env INSTALL_K3S_VERSION="${{ inputs.k3s-version }}" \
+                   INSTALL_K3S_CHANNEL="${{ inputs.k3s-channel }}" \
+                   ${skip_download_env:-} \
+                 sh /tmp/k3s-install.sh \
+                   ${k3s_disable_metrics} \
+                   ${k3s_disable_traefik} \
+                   --disable-network-policy \
+                   --flannel-backend=none \
+                   ${k3s_docker} \
+                   ${{ inputs.extra-setup-args }} \
+                   ${default_extra_setup_args}; then
+              break
+            fi
+          fi
+          echo "k3s install attempt ${attempt}/3 failed; sleeping"
+          if [ "$attempt" -eq 3 ]; then exit 1; fi
+          sleep $((attempt * 10))
+        done
         echo "::endgroup::"
       shell: bash
 
@@ -146,6 +284,65 @@ runs:
         sudo cat /etc/rancher/k3s/k3s.yaml > "$HOME/.kube/config"
         chmod 600 "$HOME/.kube/config"
         echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+        echo "::endgroup::"
+      shell: bash
+
+    # The install script returns as soon as `systemctl start k3s` returns,
+    # which is well before the apiserver has bound :6443 on a cold runner
+    # (60-90s is typical with --docker). Wait for reachability before probing
+    # anything auth-related, so a slow apiserver start doesn't look like an
+    # RBAC race in the failure diagnostics.
+    - name: Wait for k3s apiserver reachable
+      run: |
+        echo "::group::Wait for k3s apiserver reachable"
+        for attempt in $(seq 1 60); do
+          if kubectl get --raw /livez >/dev/null 2>&1; then
+            echo "k3s apiserver reachable (attempt $attempt/60)"
+            break
+          fi
+          echo "Waiting for k3s apiserver (attempt $attempt/60)..."
+          sleep 3
+          if [ "$attempt" -eq 60 ]; then
+            echo "Timed out waiting for k3s apiserver"
+            echo "--- systemctl status k3s ---"
+            sudo systemctl status k3s --no-pager || true
+            echo "--- journalctl -u k3s (last 5 min) ---"
+            sudo journalctl -u k3s --no-pager --since "5 minutes ago" --lines=200 || true
+            exit 1
+          fi
+        done
+        echo "::endgroup::"
+      shell: bash
+
+    # Wait for k3s to finish creating the bootstrap RBAC the cloud-controller
+    # manager needs before we apply anything on top of it. If we don't, the
+    # cloud-controller can race against its own rolebinding, hit a 403 reading
+    # kube-system/extension-apiserver-authentication, treat that as fatal, and
+    # take the rest of k3s down with it mid-calico-rollout. Symptom: calico-node
+    # never goes ready and every follow-up kubectl call returns "connection to
+    # 127.0.0.1:6443 was refused".
+    - name: Wait for k3s bootstrap RBAC
+      run: |
+        echo "::group::Wait for k3s bootstrap RBAC"
+        # Probe the actual auth chain (rolebinding + configmap + apiserver
+        # cache) instead of pattern-matching resource names; the rolebinding
+        # the cloud-controller uses has been renamed across k3s versions.
+        for attempt in $(seq 1 24); do
+          if kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+               --as=k3s-cloud-controller-manager >/dev/null 2>&1; then
+            echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
+            break
+          fi
+          echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          sleep 2
+          if [ "$attempt" -eq 24 ]; then
+            echo "Timed out waiting for k3s bootstrap RBAC"
+            kubectl -n kube-system get rolebinding,configmap || true
+            kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+              --as=k3s-cloud-controller-manager -v=6 || true
+            exit 1
+          fi
+        done
         echo "::endgroup::"
       shell: bash
 
@@ -213,17 +410,38 @@ runs:
 
     - name: Wait for calico, coredns, metrics server, traefik
       run: |
-        echo "::group::Wait for daemonset/calico-node"
-        kubectl rollout status --watch --timeout=5m daemonset/calico-node -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout() {
+          local kind="$1" name="$2"
+          echo "::group::Wait for $kind/$name"
+          for attempt in $(seq 1 36); do
+            if kubectl rollout status --timeout=30s "$kind/$name" -n kube-system 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for $name (attempt $attempt/36)..."
+            sleep 5
+            if [ "$attempt" -eq 36 ]; then
+              echo "Timed out waiting for $name"
+              echo "--- pod status ---"
+              kubectl get pods -n kube-system -o wide || true
+              echo "--- $name describe ---"
+              kubectl describe "$kind/$name" -n kube-system || true
+              echo "--- $name pod describe ---"
+              kubectl describe pods -l k8s-app="$name" -n kube-system || true
+              echo "--- $name pod logs (all containers) ---"
+              kubectl logs -l k8s-app="$name" -n kube-system --all-containers=true --tail=50 || true
+              echo "--- node memory ---"
+              free -h || true
+              echo "--- k3s service logs ---"
+              sudo journalctl -u k3s --no-pager --since "10 minutes ago" --lines=50 || true
+              kubectl rollout status --timeout=30s "$kind/$name" -n kube-system
+            fi
+          done
+          echo "::endgroup::"
+        }
 
-        echo "::group::Wait for deployment/calico-kube-controllers"
-        kubectl rollout status --watch --timeout=5m deployment/calico-kube-controllers -n kube-system
-        echo "::endgroup::"
-
-        echo "::group::Wait for deployment/coredns"
-        kubectl rollout status --watch --timeout=5m deployment/coredns -n kube-system
-        echo "::endgroup::"
+        wait_for_rollout daemonset calico-node
+        wait_for_rollout deployment calico-kube-controllers
+        wait_for_rollout deployment coredns
 
         echo "::group::Wait for deployment/metrics-server"
         if [[ "${{ inputs.metrics-enabled }}" == true ]]; then

@@ -1,12 +1,17 @@
+{{- if and .Values.redis.tls.enabled (ne .Values.taskManager.backend "redis") }}
+{{- fail "redis.tls.enabled requires taskManager.backend=redis (the CA is only consumed by the Redis task manager)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ark-completions
-  namespace: {{ .Values.namespace }}
+  name: {{ include "ark-completions.fullname" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
   labels:
     app: ark-completions
 spec:
-  replicas: 1
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       app: ark-completions
@@ -14,8 +19,19 @@ spec:
     metadata:
       labels:
         app: ark-completions
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.targetPort | quote }}
+        prometheus.io/path: /metrics
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
-      serviceAccountName: {{ .Values.serviceAccountName }} # NOSONAR - RBAC defined in ark-controller chart
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ include "ark-completions.serviceAccountName" . }}
       automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
@@ -25,6 +41,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "--addr=:{{ .Values.targetPort }}"
+            - "--shutdown-timeout={{ .Values.gracefulShutdown.shutdownTimeoutSeconds }}s"
           ports:
             - containerPort: {{ .Values.targetPort }}
               protocol: TCP
@@ -33,9 +50,49 @@ spec:
             value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"
+          {{- range $key, $value := .Values.env }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+          {{- end }}
+          {{- if .Values.namespaceScopedDiscovery }}
+          # Per-tenant pods are authorized by a namespaced Role, which cannot
+          # satisfy the cluster-wide List that broker/target discovery does by
+          # default. Scope discovery to this pod's own namespace, where its
+          # ark-broker/ark-config-broker live.
+          - name: ARK_DISCOVERY_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- end }}
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
+          {{- end }}
+          {{- if eq .Values.taskManager.backend "redis" }}
+          - name: REDIS_URL
+            {{- if .Values.redis.urlSecretRef.name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.redis.urlSecretRef.name }}
+                key: {{ .Values.redis.urlSecretRef.key | default "redis-url" }}
+            {{- else }}
+            value: {{ .Values.redis.url | quote }}
+            {{- end }}
+          {{- if .Values.redis.passwordSecretRef.name }}
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.redis.passwordSecretRef.name }}
+                key: {{ .Values.redis.passwordSecretRef.key | default "redis-password" }}
+          {{- end }}
+          {{- if gt (int .Values.redis.taskExpirySeconds) 0 }}
+          - name: REDIS_TASK_EXPIRY_SECONDS
+            value: {{ .Values.redis.taskExpirySeconds | quote }}
+          {{- end }}
+          {{- if .Values.redis.tls.enabled }}
+          - name: REDIS_TLS_CA_CERT_PATH
+            value: {{ printf "%s/%s" .Values.redis.tls.mountPath .Values.redis.tls.key | quote }}
+          {{- end }}
           {{- end }}
           envFrom:
           - configMapRef:
@@ -53,11 +110,15 @@ spec:
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: {{ .Values.targetPort }}
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "{{ .Values.gracefulShutdown.preStopSleepSeconds }}"]
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
@@ -65,18 +126,41 @@ spec:
             capabilities:
               drop:
                 - "ALL"
-          {{- if .Values.customCACert.enabled }}
+          {{- if or .Values.customCACert.enabled .Values.redis.tls.enabled .Values.extraVolumeMounts }}
           volumeMounts:
+            {{- if .Values.customCACert.enabled }}
             - name: custom-ca-cert
               mountPath: /etc/ssl/certs/custom-ca
               readOnly: true
+            {{- end }}
+            {{- if .Values.redis.tls.enabled }}
+            - name: redis-ca-cert
+              mountPath: {{ .Values.redis.tls.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- if .Values.customCACert.enabled }}
+      {{- if or .Values.customCACert.enabled .Values.redis.tls.enabled .Values.extraVolumes }}
       volumes:
+        {{- if .Values.customCACert.enabled }}
         - name: custom-ca-cert
           secret:
             secretName: {{ .Values.customCACert.secretName }}
             items:
               - key: {{ .Values.customCACert.key }}
                 path: {{ .Values.customCACert.key }}
+        {{- end }}
+        {{- if .Values.redis.tls.enabled }}
+        - name: redis-ca-cert
+          secret:
+            secretName: {{ required "redis.tls.secretName is required when redis.tls.enabled=true" .Values.redis.tls.secretName }}
+            items:
+              - key: {{ .Values.redis.tls.key }}
+                path: {{ .Values.redis.tls.key }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}

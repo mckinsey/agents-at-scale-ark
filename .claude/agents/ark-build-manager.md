@@ -349,6 +349,34 @@ pytest -sv tests/test_file_gateway.py
 kind delete cluster --name ark-e2e-test
 ```
 
+## Documentation Updates
+
+When fixing builds or making changes that affect how Ark is built, deployed, or configured, check whether the documentation in `./docs` needs updating. The docs site is built with Next.js and MDX.
+
+### When to update docs
+- CI/CD workflow changes (`.github/workflows/`) — update the CI/CD reference docs
+- New service endpoints or API changes — update API reference
+- Build process changes (Makefiles, Dockerfiles, devspace configs) — update setup/deployment guides
+- New CRDs or config options (helm values, env vars) — update configuration reference
+- New skills or agent definitions — update the developer tooling docs
+
+### How to update docs
+```bash
+cd docs/
+npm install    # if needed
+make docs      # runs the docs site with live-reload for preview
+```
+
+Key directories:
+- `docs/pages/` — MDX content pages
+- `docs/pages/guides/` — how-to guides
+- `docs/pages/reference/` — API and configuration reference
+
+### Keep CLAUDE.md files current
+When changes affect build instructions, project structure, or development workflows, update the relevant `CLAUDE.md` files:
+- Root `CLAUDE.md` — project-wide build instructions, structure overview
+- Service-level `CLAUDE.md` (e.g. `services/ark-api/CLAUDE.md`) — service-specific guidelines
+
 ## Core Principles
 
 - **Full picture first**: Check all runs from the current day, not just the latest failure
@@ -359,3 +387,4 @@ kind delete cluster --name ark-e2e-test
 - **Distinguish flaky from broken**: A test that passes on retry is flaky, not broken
 - **Don't mask failures**: Fix root causes, don't disable tests or skip checks
 - **Report clearly**: The user needs to understand what's broken, why, and what to do
+- **Update docs alongside fixes**: When a fix changes build/deploy/config behavior, update `./docs` and `CLAUDE.md` files in the same PR

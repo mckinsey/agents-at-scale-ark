@@ -84,19 +84,35 @@ class BasePage:
         except Exception as e:
             logger.info(f"Selector {selector} not hidden: {e}")
     
+    def wait_for_animations_complete(self, locator, timeout: int = 5000) -> None:
+        try:
+            handle = locator.element_handle(timeout=timeout)
+            if handle:
+                self.page.evaluate(
+                    "el => Promise.allSettled(el.getAnimations({subtree: true}).map(a => a.finished))",
+                    handle
+                )
+        except Exception as e:
+            logger.warning(f"Animation wait failed, proceeding anyway: {e}")
+
     def wait_for_dropdown_options(self, timeout: int = 5000) -> None:
-        self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first.wait_for(state="visible", timeout=timeout)
+        locator = self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first
+        locator.wait_for(state="visible", timeout=timeout)
+        self.wait_for_animations_complete(locator)
     
     def wait_for_modal_open(self, timeout: int = 10000) -> None:
         self.page.locator("[data-slot='dialog-overlay'], [role='dialog'], [data-slot='dialog-content']").first.wait_for(state="visible", timeout=timeout)
     
     def wait_for_modal_close(self, timeout: int = 10000) -> None:
+        # No Escape fallback: a modal that doesn't close on its own means the
+        # submit click didn't reach its handler, which is a real failure.
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=timeout)
-        except:
-            logger.info("Modal did not close")
-            self.page.keyboard.press("Escape")
-            self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']")
+        except Exception:
+            logger.exception("Modal did not close within %dms (submit click likely didn't reach its handler)", timeout)
+            page_name = urlsplit(self.page.url).path.replace("/", "_")
+            self._capture_failure_debug(f"modal_did_not_close{page_name}")
+            raise
     
     def reload(self) -> None:
         self.page.reload()

@@ -1,0 +1,38 @@
+name: OpenSpec Flow — Prune Comments
+description: >
+  Deletes all prior agent summary comments from an issue or PR whose body
+  contains the AGENT_COMMENT_MARKER environment variable value.
+  Callers must supply AGENT_COMMENT_MARKER in the workflow-level env block.
+
+inputs:
+  gh-token:
+    description: GitHub token with issues write permission
+    required: true
+  repo:
+    description: Repository in owner/name format
+    required: true
+  issue-number:
+    description: Issue or PR number to prune comments from
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Prune prior agent summary comments
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+      run: |
+        # Pipe to jq so --arg reaches jq. `gh api --jq` takes a single
+        # expression string and does not forward --arg.
+        ids=$(gh api --paginate "repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+          | jq -r --arg m "$AGENT_COMMENT_MARKER" \
+            '.[] | select(.body | contains($m)) | .id')
+        [ -z "$ids" ] && { echo "No prior agent comments."; exit 0; }
+        while read -r id; do
+          [ -z "$id" ] && continue
+          gh api --method DELETE "repos/$REPO/issues/comments/$id" >/dev/null 2>&1 \
+            || echo "::warning::Failed to delete comment $id"
+        done <<< "$ids"

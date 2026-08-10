@@ -86,5 +86,46 @@ var _ = Describe("Model Controller", func() {
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
+
+		It("should not error when updating status of a deleted model", func() {
+			const deletedModelName = "test-deleted-status-model"
+
+			deletedModel := &arkv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      deletedModelName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.ModelSpec{
+					Provider: "openai",
+					Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+					Config: arkv1alpha1.ModelConfig{
+						OpenAI: &arkv1alpha1.OpenAIModelConfig{
+							BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com/v1"},
+							APIKey:  arkv1alpha1.ValueSource{Value: "test-key"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deletedModel)).To(Succeed())
+
+			controllerReconciler := &ModelReconciler{
+				Client:    k8sClient,
+				Scheme:    k8sClient.Scheme(),
+				Telemetry: noop.NewProvider(),
+				Eventing:  eventnoop.NewProvider(),
+			}
+
+			By("reconciling to initialize status")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: deletedModelName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("deleting the model")
+			Expect(k8sClient.Delete(ctx, deletedModel)).To(Succeed())
+
+			By("calling updateStatus on the deleted model should not error")
+			Expect(controllerReconciler.updateStatus(ctx, deletedModel)).To(Succeed())
+		})
 	})
 })

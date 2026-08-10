@@ -6,7 +6,8 @@ images:
     image: ark-dashboard
     dockerfile: Dockerfile
     context: .
-    buildKit: {}
+    docker:
+      useBuildKit: true
 
 pipelines:
   deploy: |-
@@ -14,6 +15,11 @@ pipelines:
     create_deployments --all
   dev: |-
     create_deployments --all
+
+    # Patch deployment to add PVCs for node modules and the npm cache
+    kubectl patch deployment ark-dashboard -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
+      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-dashboard-node-modules"}},{"name":"npm-cache","persistentVolumeClaim":{"claimName":"ark-dashboard-npm-cache"}}],"containers":[{"name":"ark-dashboard","volumeMounts":[{"name":"node-modules","mountPath":"/app/ark-dashboard/node_modules"},{"name":"npm-cache","mountPath":"/npm-cache"}]}]}}}}' || true
+
     start_dev --all
 
 deployments:
@@ -30,7 +36,7 @@ deployments:
           # Override resources for local development
           resources:
             limits:
-              memory: "3072Mi"
+              memory: "10240Mi"
               cpu: "2000m"
             requests:
               memory: "256Mi"
@@ -53,6 +59,20 @@ deployments:
                 - DAC_OVERRIDE
         httpRoute:
           enabled: true
+        extraPVCs:
+          - name: ark-dashboard-node-modules
+            size: 2Gi
+          - name: ark-dashboard-npm-cache
+            size: 2Gi
+  # Local-dev only: bind the chart's marketplace-source-editor Role to ark-api-sa
+  # so marketplace source editing works in devspace (impersonation is off, so the
+  # service account is the effective identity). Not part of the chart — production
+  # binds the Role per user/namespace via impersonation instead.
+  marketplace-source-editor-dev-binding:
+    namespace: default
+    kubectl:
+      manifests:
+        - dev/marketplace-source-editor-binding.yaml
 
 dev:
   ark-dashboard:
@@ -61,11 +81,13 @@ dev:
     env:
       - name: NODE_ENV
         value: development
+      - name: npm_config_cache
+        value: /npm-cache
     command:
       [
         "sh",
         "-c",
-        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
+        "cd /app/ark-dashboard && npm install --prefer-offline --no-audit --no-fund && npm run dev 2>&1",
       ]
     namespace: default
     # Stream logs instead of terminal
@@ -77,6 +99,8 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
+        excludePaths:
+          - ark-dashboard/node_modules/
     # Enable SSH for IDE integration
     ssh:
       enabled: true

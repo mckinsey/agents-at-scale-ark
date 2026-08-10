@@ -1,7 +1,9 @@
 """Kubernetes-related response models."""
 from typing import List, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from ..annotations import filter_ark_annotations
 
 
 class NamespaceResponse(BaseModel):
@@ -32,6 +34,11 @@ class SecretResponse(BaseModel):
     id: str
     annotations: Optional[Dict[str, str]] = None
 
+    @field_validator("annotations")
+    @classmethod
+    def _filter_annotations(cls, value: Optional[Dict[str, str]]) -> Dict[str, str]:
+        return filter_ark_annotations(value)
+
 
 class SecretListResponse(BaseModel):
     """List of secrets response model."""
@@ -57,4 +64,10 @@ class SecretDetailResponse(BaseModel):
     id: str
     type: str
     secret_length: int  # Total length of all secret data in bytes
+    keys: List[str] = []  # Names of the keys in the secret data (never the values)
     annotations: Optional[Dict[str, str]] = None
+
+    @field_validator("annotations")
+    @classmethod
+    def _filter_annotations(cls, value: Optional[Dict[str, str]]) -> Dict[str, str]:
+        return filter_ark_annotations(value)

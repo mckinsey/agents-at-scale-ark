@@ -1,10 +1,14 @@
 """Kubernetes A2A tasks API endpoints."""
+import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.a2a_tasks import (
     A2ATaskResponse,
@@ -16,7 +20,9 @@ from ...models.a2a_tasks import (
     A2ATaskStatus,
     A2ATaskArtifact,
     A2ATaskPart,
-    A2ATaskMessage
+    A2ATaskMessage,
+    ApprovalSubmissionRequest,
+    ApprovalSubmissionResponse,
 )
 from .exceptions import handle_k8s_errors
 
@@ -103,9 +109,11 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
             conditions=status.get("conditions")
         )
 
+    # a2aServerRef is optional (not present for HITL approval tasks)
     a2a_server_ref_data = spec.get("a2aServerRef")
-    if not a2a_server_ref_data or "name" not in a2a_server_ref_data:
-        raise ValueError("Missing required field 'a2aServerRef.name' in spec")
+    a2a_server_ref = None
+    if a2a_server_ref_data and "name" in a2a_server_ref_data:
+        a2a_server_ref = A2AServerRef(**a2a_server_ref_data)
 
     agent_ref_data = spec.get("agentRef")
     if not agent_ref_data or "name" not in agent_ref_data:
@@ -119,7 +127,7 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         taskId=spec.get("taskId", ""),
-        a2aServerRef=A2AServerRef(**a2a_server_ref_data),
+        a2aServerRef=a2a_server_ref,
         agentRef=AgentRef(**agent_ref_data),
         queryRef=QueryRef(**query_ref_data),
         contextId=spec.get("contextId"),
@@ -136,7 +144,7 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
 
 @router.get("", response_model=A2ATaskListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a task")
-async def list_a2a_tasks(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2ATaskListResponse:
+async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
     """
     List all A2ATask CRs in a namespace.
 
@@ -146,7 +154,7 @@ async def list_a2a_tasks(namespace: Optional[str] = Query(None, description="Nam
     Returns:
         A2ATaskListResponse: List of all A2A tasks in the namespace
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         tasks = await ark_client.a2atasks.a_list()
 
         task_list = []
@@ -161,7 +169,7 @@ async def list_a2a_tasks(namespace: Optional[str] = Query(None, description="Nam
 
 @router.get("/{task_name}", response_model=A2ATaskDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="a2a task")
-async def get_a2a_task(task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2ATaskDetailResponse:
+async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskDetailResponse:
     """
     Get a specific A2ATask CR by name.
 
@@ -172,7 +180,7 @@ async def get_a2a_task(task_name: str, namespace: Optional[str] = Query(None, de
     Returns:
         A2ATaskDetailResponse: The A2A task details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         task = await ark_client.a2atasks.a_get(task_name)
 
         return a2a_task_to_detail_response(task.to_dict())
@@ -180,7 +188,7 @@ async def get_a2a_task(task_name: str, namespace: Optional[str] = Query(None, de
 
 @router.delete("/{task_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="a2a task")
-async def delete_a2a_task(task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete an A2ATask CR by name.
 
@@ -188,5 +196,47 @@ async def delete_a2a_task(task_name: str, namespace: Optional[str] = Query(None,
         namespace: The namespace containing the A2A task
         task_name: The name of the A2A task
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.a2atasks.a_delete(task_name)
+
+
+@router.post("/{task_name}/approval", response_model=ApprovalSubmissionResponse)
+@handle_k8s_errors(operation="update", resource_type="a2a task approval")
+async def submit_a2a_task_approval(
+    task_name: str,
+    body: ApprovalSubmissionRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> ApprovalSubmissionResponse:
+    """
+    Submit an approval decision for a HITL A2ATask.
+
+    The task must be in the 'input-required' phase. The decision is written to
+    spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+    controller picks it up and transitions the task to completed or failed.
+    """
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+        task = await ark_client.a2atasks.a_get(task_name)
+        task_dict = task.to_dict()
+
+        phase = task_dict.get("status", {}).get("phase")
+        if phase != "input-required":
+            raise HTTPException(
+                status_code=409,
+                detail=f"A2ATask {task_name} is not awaiting approval (phase: {phase})",
+            )
+
+        decision_json = json.dumps({"decision": body.decision.value})
+        actual_namespace = task_dict["metadata"]["namespace"]
+        await ark_client.a2atasks.a_patch(
+            task_name,
+            {"spec": {"input": decision_json}},
+            actual_namespace,
+        )
+
+        return ApprovalSubmissionResponse(
+            name=task_name,
+            namespace=actual_namespace,
+            taskId=task_dict.get("spec", {}).get("taskId", ""),
+            decision=body.decision,
+        )

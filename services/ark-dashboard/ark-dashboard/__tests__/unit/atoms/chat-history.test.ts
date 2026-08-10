@@ -41,6 +41,7 @@ describe('Chat History Atoms', () => {
         prompt_tokens: 100,
         completion_tokens: 50,
         total_tokens: 150,
+        cached_tokens: 0,
       };
       const session: ChatSession = {
         messages: [],
@@ -54,8 +55,18 @@ describe('Chat History Atoms', () => {
 
     it('should store a chat session with messageTokenUsage', () => {
       const msgUsage: Record<number, TokenUsage> = {
-        1: { prompt_tokens: 50, completion_tokens: 25, total_tokens: 75 },
-        3: { prompt_tokens: 80, completion_tokens: 40, total_tokens: 120 },
+        1: {
+          prompt_tokens: 50,
+          completion_tokens: 25,
+          total_tokens: 75,
+          cached_tokens: 0,
+        },
+        3: {
+          prompt_tokens: 80,
+          completion_tokens: 40,
+          total_tokens: 120,
+          cached_tokens: 0,
+        },
       };
       const session: ChatSession = {
         messages: [],
@@ -82,7 +93,12 @@ describe('Chat History Atoms', () => {
       const initial: ChatSession = {
         messages: [],
         sessionId: 'session-1',
-        tokenUsage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        tokenUsage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          cached_tokens: 10,
+        },
       };
       store.set(chatHistoryAtom, { 'agent-test': initial });
 
@@ -97,6 +113,7 @@ describe('Chat History Atoms', () => {
               prompt_tokens: current.prompt_tokens + 200,
               completion_tokens: current.completion_tokens + 100,
               total_tokens: current.total_tokens + 300,
+              cached_tokens: current.cached_tokens + 20,
             },
           },
         };
@@ -107,19 +124,42 @@ describe('Chat History Atoms', () => {
         prompt_tokens: 300,
         completion_tokens: 150,
         total_tokens: 450,
+        cached_tokens: 30,
       });
+    });
+
+    it('should restore sessions from sessionStorage on a new store (page refresh)', () => {
+      const session: ChatSession = {
+        messages: [{ role: 'user', content: 'Hello' }],
+        sessionId: 'session-1',
+      };
+      store.set(chatHistoryAtom, { 'agent-test': session });
+
+      const newStore = createStore();
+      const restored = newStore.get(chatHistoryAtom);
+      expect(restored['agent-test']).toEqual(session);
     });
 
     it('should store multiple sessions independently', () => {
       const session1: ChatSession = {
         messages: [],
         sessionId: 'session-1',
-        tokenUsage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        tokenUsage: {
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          total_tokens: 15,
+          cached_tokens: 0,
+        },
       };
       const session2: ChatSession = {
         messages: [],
         sessionId: 'session-2',
-        tokenUsage: { prompt_tokens: 200, completion_tokens: 100, total_tokens: 300 },
+        tokenUsage: {
+          prompt_tokens: 200,
+          completion_tokens: 100,
+          total_tokens: 300,
+          cached_tokens: 0,
+        },
       };
       store.set(chatHistoryAtom, { 'agent-a': session1, 'agent-b': session2 });
 
@@ -130,14 +170,24 @@ describe('Chat History Atoms', () => {
   });
 
   describe('createNewSessionId', () => {
-    it('should return a string starting with session-', () => {
-      const id = createNewSessionId();
-      expect(id).toMatch(/^session-\d+$/);
+    it('should return chat-<name>-<shortsha> format', () => {
+      const id = createNewSessionId('coding-team');
+      expect(id).toMatch(/^chat-coding-team-[0-9a-f]{7}$/);
     });
 
-    it('should return unique session IDs', () => {
-      const ids = new Set(Array.from({ length: 10 }, () => createNewSessionId()));
-      expect(ids.size).toBeGreaterThanOrEqual(1);
+    it('should return unique session IDs for the same name', () => {
+      const ids = new Set(
+        Array.from({ length: 10 }, () => createNewSessionId('planner')),
+      );
+      expect(ids.size).toBe(10);
+    });
+
+    it('should embed the chat name so distinct chats produce distinct ids', () => {
+      const a = createNewSessionId('coding-team');
+      const b = createNewSessionId('code-reviewer');
+      expect(a).not.toEqual(b);
+      expect(a.startsWith('chat-coding-team-')).toBe(true);
+      expect(b.startsWith('chat-code-reviewer-')).toBe(true);
     });
   });
 });

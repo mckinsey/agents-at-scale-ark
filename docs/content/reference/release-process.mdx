@@ -1,0 +1,552 @@
+---
+title: Release Process and Artifacts
+description: Ark's dual-track release process (RC and stable), published artifacts, and configuration management
+---
+
+# Release Process and Artifacts
+
+This page documents Ark's release process, published artifacts, and configuration item (CI) management. It serves as both an operator reference and a citable statement of practice for audits.
+
+Ark uses a dual-track release process:
+- **RC releases** — Continuous pre-release versions published from `main`, tested in non-production environments
+- **Stable releases** — Promoted RC versions with full publishing to registries (npm, PyPI, GitHub Pages)
+
+## Release Process Overview
+
+Ark uses [Release Please](https://github.com/googleapis/release-please) with dual configurations to support both release tracks. The process is fully automated through GitHub Actions, requiring only merge approval at key decision points.
+
+### Key Concepts
+
+**Release Please** analyzes conventional commits on `main` and automatically:
+- Determines semantic version bumps based on commit types (`feat:`, `fix:`, `BREAKING CHANGE:`)
+- Creates release PRs with updated changelogs and synchronized versions across all artifacts
+- Tags releases and triggers downstream deployment jobs
+
+**Dual configuration** enables two parallel release tracks:
+- `.github/release-please-config-rc.json` — Generates pre-release versions (e.g., `v0.1.61-rc`, `v0.1.61-rc.1`)
+- `.github/release-please-config.json` — Generates stable versions (e.g., `v0.1.61`) when promoted
+
+**Version synchronization** ensures consistency across all artifacts. Release Please updates versions in:
+- Root `version.txt` and `ark/version.txt`
+- Python packages: 3 `pyproject.toml` files (ark-sdk, ark-api, overlay)
+- Helm charts: 8 `Chart.yaml` files with both `version` and `appVersion` fields
+- Node.js packages: `package.json` for ark-cli, ark-broker, docs site
+- Kubernetes manifests: `ark/config/manager/manager.yaml`
+- Marketplace metadata: `.claude-plugin/marketplace.json`
+
+Total: 42+ tracked files across the monorepo.
+
+## RC Release Cycle
+
+The RC cycle runs continuously as changes merge to `main`. RC releases are published to GitHub with attached artifacts but not to public registries (npm, PyPI, docs site).
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Main as main branch
+    participant CI as CI/CD Pipeline
+    participant RP as Release Please
+    participant GH as GitHub Release
+
+    Dev->>Main: Merge PR with conventional commit
+    Main->>CI: Trigger cicd.yaml workflow
+    CI->>CI: Run all checks (lint, test, e2e, scan)
+    CI->>RP: check-release job with RC config
+    RP->>RP: Analyze commits since last release
+    RP->>GH: Create/update RC release PR
+
+    Note over GH: PR title: "chore(main): release X.X.X-rc.N"<br/>Contains: updated CHANGELOG.md + version bumps
+
+    Dev->>GH: Review and merge RC release PR
+    GH->>CI: Trigger cicd.yaml on merge
+    CI->>CI: Run all checks again
+    CI->>RP: check-release job (RC config)
+    RP->>GH: Create GitHub release + tag (v0.1.61-rc)
+    CI->>CI: Attach artifacts to release
+    CI->>GH: Attach libraries (Python wheels)
+    CI->>GH: Attach Helm charts (.tgz)
+    CI->>GH: Attach ark-cli package
+    CI->>GH: Attach fark binaries (via GoReleaser)
+
+    Note over GH: RC release published<br/>NOT deployed to npm/PyPI/docs
+```
+
+### RC Release Steps
+
+1. **Continuous Development**
+   - Changes merge to `main` with conventional commit messages (`feat:`, `fix:`, `docs:`, etc.)
+   - Each merge triggers the full CI/CD pipeline (`.github/workflows/cicd.yaml`)
+
+2. **Release PR Creation** (Automatic)
+   - After all CI checks pass, the `check-release` job runs
+   - Release Please (with RC config) analyzes commits since last release
+   - Creates or updates a release PR titled `chore(main): release X.X.X-rc.N`
+   - PR contains:
+     - Updated `.github/CHANGELOG.md` with all changes since last release
+     - Version bumps across all 58+ tracked files in the monorepo
+   - Version format: `v0.1.61-rc` for first RC, `v0.1.61-rc.1`, `v0.1.61-rc.2` for subsequent iterations
+
+3. **Release PR Review and Merge** (Manual approval required)
+   - Team reviews the changelog and version updates
+   - Merge the release PR (requires CODEOWNERS approval per repository ruleset)
+
+4. **RC Artifact Publishing** (Automatic on merge)
+   - CI/CD pipeline runs again on the merge commit
+   - `check-release` job detects that the merge was a Release Please PR
+   - Creates GitHub release with tag (e.g., `v0.1.61-rc`)
+   - Attaches artifacts to the GitHub release:
+     - **Python wheels** — 3 packages built from `lib/` and `services/` (job: `release-libs`)
+     - **Helm charts** — 8 packaged charts as `.tgz` files (job: `release-charts`)
+     - **ark-cli package** — npm tarball (job: `release-ark-cli`)
+     - **fark binaries** — Linux/macOS/Windows builds with checksums (job: `release-fark`)
+   - **Does NOT** publish to public registries (npm, PyPI) or deploy documentation site
+
+5. **RC Testing** (Manual)
+   - Install the RC version in test environments:
+     ```bash
+     ark install --ark-version 0.1.61-rc
+     ```
+   - Run validation tests, integration tests, and smoke tests
+   - Gather feedback from early adopters
+
+6. **Iteration** (Repeat as needed)
+   - Additional changes merge to `main` (bug fixes, minor improvements)
+   - Release Please creates `v0.1.61-rc.1`, then `v0.1.61-rc.2`, etc.
+   - Each iteration follows steps 2-5
+   - Multiple RC versions can be released for the same base version
+
+## Stable Release Cycle
+
+The stable release cycle promotes a tested RC version to a stable release with full publishing to all registries.
+
+```mermaid
+sequenceDiagram
+    participant Ops as Operator
+    participant GHA as GitHub Actions
+    participant Main as main branch
+    participant CI as CI/CD Pipeline
+    participant RP as Release Please
+    participant Deploy as Deploy Workflow
+    participant Reg as Registries (npm/PyPI/Pages)
+
+    Ops->>GHA: Run "Promote to Stable" workflow
+    GHA->>GHA: Read current RC version from manifest
+    GHA->>GHA: Remove -rc suffix → stable version
+    GHA->>Main: Create promotion PR (promote/X.X.X branch)
+
+    Note over Main: PR updates manifest: 0.1.61-rc → 0.1.61<br/>Adds release-as to stable config
+
+    Ops->>Main: Review and merge promotion PR
+    Main->>CI: Trigger cicd.yaml workflow
+    CI->>RP: check-release detects promotion scenario
+
+    Note over RP: Conditions:<br/>1. Manifest is stable (no -rc)<br/>2. RC tags exist (v0.1.61-rc*)<br/>3. Stable tag doesn't exist yet
+
+    RP->>Main: Create stable release PR
+
+    Note over Main: PR title: "chore(main): release X.X.X"<br/>Contains: final CHANGELOG.md + version bumps
+
+    Ops->>Main: Review and merge stable release PR
+    Main->>CI: Trigger cicd.yaml workflow
+    CI->>CI: Run all checks
+    CI->>RP: check-release job (stable config)
+    RP->>CI: Create stable GitHub release (v0.1.61)
+    CI->>Deploy: Trigger deploy.yml workflow
+    Deploy->>Reg: Publish multi-arch containers (amd64/arm64)
+    Deploy->>Reg: Publish Helm charts to OCI registry
+    Deploy->>Reg: Publish ark-cli to npm (with OIDC)
+    Deploy->>Reg: Publish Python packages to PyPI
+    Deploy->>Reg: Deploy docs to GitHub Pages
+    Deploy->>Main: Create bootstrap PR (bootstrap/X.X.X branch)
+
+    Note over Main: Bootstrap PR removes release-as<br/>from both config files
+
+    Ops->>Main: Merge bootstrap PR
+
+    Note over Main: Ready for next RC cycle<br/>(v0.1.62-rc)
+```
+
+### Stable Release Steps
+
+1. **Promotion Trigger** (Manual workflow dispatch)
+   - Operator runs the "Promote to Stable" workflow (`.github/workflows/promote-to-stable.yaml`)
+   - Workflow reads current version from `.github/release-please-manifest.json`
+   - Validates current version is RC (contains `-rc` suffix)
+   - Extracts stable version by removing `-rc.*` suffix (e.g., `0.1.61-rc.2` → `0.1.61`)
+
+2. **Promotion PR Creation** (Automatic)
+   - Creates branch `promote/{stable_version}`
+   - Updates `.github/release-please-manifest.json`: RC version → stable version
+   - Adds `release-as: X.X.X` to `.github/release-please-config.json` (required for manifest mode)
+   - Commits: `chore: promote v0.1.61-rc to v0.1.61`
+   - Opens PR against `main` with detailed description
+
+3. **Promotion PR Review and Merge** (Manual approval required)
+   - Team reviews the promotion (confirms RC testing is complete)
+   - Merge the promotion PR (requires CODEOWNERS approval)
+
+4. **Stable Release PR Creation** (Automatic on promotion merge)
+   - CI/CD pipeline runs on the merge commit
+   - `check-release` job detects promotion scenario:
+     - Manifest version is stable (no `-rc` suffix)
+     - RC tags exist for this version (e.g., `v0.1.61-rc*`)
+     - Stable tag does not exist yet (no `v0.1.61`)
+   - Release Please uses stable config (`.github/release-please-config.json`)
+   - Creates stable release PR titled `chore(main): release X.X.X`
+   - PR contains final changelog and version synchronization
+
+5. **Stable Release PR Review and Merge** (Manual approval required)
+   - Team reviews the stable release PR
+   - Merge the stable release PR (requires CODEOWNERS approval)
+
+6. **Stable Artifact Publishing** (Automatic on merge)
+   - CI/CD pipeline runs on the merge commit
+   - `check-release` job creates GitHub release with stable tag (e.g., `v0.1.61`)
+   - Attaches all artifacts to GitHub release (same as RC)
+   - Triggers `run-deploy-workflow` job, which invokes `.github/workflows/deploy.yml`
+
+7. **Full Deployment** (Automatic via deploy.yml)
+   - **Multi-arch containers** — Builds and pushes to configured registry (default: GHCR) for amd64 and arm64
+     - Images: `ark-controller`, `ark-completions`, `ark-api`, `ark-dashboard`, `ark-mcp`, `ark-broker`, `ark-cli`, `ark-tools`
+   - **Helm charts** — Pushes to OCI registry under `/charts` path
+     - Charts: `ark-controller`, `ark-apiserver`, `ark-completions`, `ark-api`, `ark-dashboard`, `ark-mcp`, `ark-broker`, `localhost-gateway`, `ark-tenant`, `argo-workflows`
+   - **ark-cli** — Publishes to npm registry (uses OIDC trusted publishing)
+   - **Python packages** — Publishes 8 packages to PyPI
+   - **Documentation** — Deploys to GitHub Pages
+
+8. **Bootstrap PR Creation** (Automatic after stable release)
+   - The `run-deploy-workflow` job creates a cleanup/bootstrap PR
+   - Creates branch `bootstrap/{next_version}` (e.g., `bootstrap/0.1.62`)
+   - Removes `release-as` from both `.github/release-please-config.json` and `.github/release-please-config-rc.json`
+   - Commits: `chore: bootstrap v0.1.62 RC cycle after v0.1.61 stable release`
+   - Opens PR with description of the next development cycle
+
+9. **Bootstrap PR Merge** (Manual approval required)
+   - Team reviews the bootstrap PR
+   - Merge the bootstrap PR (requires CODEOWNERS approval)
+   - **Next RC cycle begins** — Release Please will now create `v0.1.62-rc` from conventional commits
+
+### RC Version Sequences
+
+RC versions follow a specific pattern:
+
+1. **First RC for a version**: `v0.1.61-rc` (no numeric suffix)
+2. **Subsequent RCs**: `v0.1.61-rc.1`, `v0.1.61-rc.2`, `v0.1.61-rc.3`, etc.
+3. **Stable release**: `v0.1.61` (removes `-rc.*` suffix entirely)
+
+Release Please automatically increments the RC suffix for each new release while the base version remains unchanged.
+
+## Published Artifacts
+
+Ark publishes multiple artifact types to different registries. The artifact inventory is defined implicitly in CI/CD workflows rather than a central manifest.
+
+### Container Images
+
+Built and published via `.github/workflows/cicd.yaml` (build-containers job) and `.github/workflows/deploy.yml` (deploy job).
+
+| Image | Registry Path | Architectures | Source Location | Purpose |
+|-------|--------------|---------------|-----------------|---------|
+| `ark-controller` | `{registry}/ark-controller` | amd64, arm64 | `ark/` | Kubernetes operator reconciling CRDs |
+| `ark-completions` | `{registry}/ark-completions` | amd64, arm64 | `ark/` (Dockerfile.completions) | Default execution engine |
+| `ark-api` | `{registry}/ark-api` | amd64, arm64 | `services/ark-api/` | REST API gateway with streaming |
+| `ark-dashboard` | `{registry}/ark-dashboard` | amd64, arm64 | `services/ark-dashboard/` | Web UI (Next.js) |
+| `ark-mcp` | `{registry}/ark-mcp` | amd64, arm64 | `services/ark-mcp/` | MCP server host service |
+| `ark-broker` | `{registry}/ark-broker` | amd64, arm64 | `services/ark-broker/ark-broker/` | Event bus for messages/traces |
+| `ark-cli` | `{registry}/ark-cli` | amd64, arm64 | `tools/ark-cli/` | CLI tool container image |
+| `ark-tools` | `{registry}/ark-tools` | amd64, arm64 | `images/ark-tools/` | Utility image with ark + fark CLI |
+
+**Registry**: Default is `ghcr.io/{owner}/{repo}`. Configurable via `DOCKER_REGISTRY` and `DOCKER_CICD_CACHE_REGISTRY` variables (see [Build Pipelines](/operations-guide/build-pipelines#configuration)).
+
+**Image tagging**:
+- **Version tags**: `v0.1.61`, `v0.1.61-rc`, etc. (created by Release Please)
+- **SHA tags**: `{git-sha}` (used for CI/CD caching)
+- **Latest tag**: Optionally applied during manual deploy workflow
+
+### Helm Charts
+
+Built and published via `.github/workflows/cicd.yaml` (build-charts job) and pushed to OCI registry.
+
+| Chart | OCI Path | Source Location | Description |
+|-------|----------|-----------------|-------------|
+| `ark-controller` | `{registry}/charts/ark-controller` | `ark/dist/chart/` | Kubernetes operator deployment |
+| `ark-apiserver` | `{registry}/charts/ark-apiserver` | `ark/dist/chart-apiserver/` | API server extension |
+| `ark-completions` | `{registry}/charts/ark-completions` | `ark/executors/completions/chart/` | Default executor deployment |
+| `ark-api` | `{registry}/charts/ark-api` | `services/ark-api/chart/` | REST API gateway deployment |
+| `ark-dashboard` | `{registry}/charts/ark-dashboard` | `services/ark-dashboard/chart/` | Web UI deployment |
+| `ark-mcp` | `{registry}/charts/ark-mcp` | `services/ark-mcp/chart/` | MCP service deployment |
+| `ark-broker` | `{registry}/charts/ark-broker` | `services/ark-broker/chart/` | Event broker deployment |
+| `localhost-gateway` | `{registry}/charts/localhost-gateway` | `services/localhost-gateway/chart/` | Local development gateway |
+| `ark-tenant` | `{registry}/charts/ark-tenant` | `charts/ark-tenant/` | Multi-tenant configuration |
+| `argo-workflows` | `{registry}/charts/argo-workflows` | `services/argo-workflows/chart/` | Workflow engine integration |
+
+Each chart is packaged as `.tgz` and pushed to the OCI registry under `/charts` path. Charts are also attached to GitHub releases.
+
+### Python Packages
+
+Built and published via `.github/workflows/cicd.yaml` (build-and-test-services job) and deployed to PyPI via `.github/workflows/deploy.yml`.
+
+| Package | PyPI Name | Source Location | Description |
+|---------|-----------|-----------------|-------------|
+| ark-sdk | `ark_sdk` | `lib/ark-sdk/` | Generated SDK from CRDs + hand-written overlay |
+| ark-sdk overlay | `ark_sdk` | `lib/ark-sdk/gen_sdk/overlay/python/` | Hand-written executor interfaces |
+| ark-api | `ark-api` | `services/ark-api/ark-api/` | FastAPI service for REST gateway |
+
+**Registry**: PyPI (production). TestPyPI used for validation before production publish.
+
+**Stable releases only**: Python packages are NOT published to PyPI for RC releases (artifacts attached to GitHub release only).
+
+### Node.js Packages
+
+Built and published via `.github/workflows/cicd.yaml` and deployed to npm via `.github/workflows/deploy.yml`.
+
+| Package | npm Name | Source Location | Description |
+|---------|----------|-----------------|-------------|
+| ark-cli | `@agents-at-scale/ark` | `tools/ark-cli/` | Interactive CLI for Ark operations |
+
+**Registry**: npmjs.com via OIDC trusted publishing (no long-lived tokens).
+
+**Stable releases only**: npm packages are NOT published for RC releases.
+
+### Binary Distributions
+
+| Binary | Platforms | Source Location | Distribution Method |
+|--------|-----------|-----------------|---------------------|
+| fark | Linux, macOS, Windows (amd64/arm64) | `tools/fark/` | GoReleaser attaches to GitHub release |
+
+Built via GoReleaser (`.goreleaser.yaml`) with checksums. Attached to GitHub releases for both RC and stable.
+
+### Documentation Site
+
+| Artifact | URL | Source Location | Deployment |
+|----------|-----|-----------------|------------|
+| Docs site | GitHub Pages | `docs/` | Built with Next.js/MDX, deployed via `.github/workflows/deploy.yml` |
+
+**Stable releases only**: Documentation is NOT deployed for RC releases.
+
+### Bundles and Distribution
+
+| Bundle | Source Location | Purpose |
+|--------|-----------------|---------|
+| Demo bundle | `services/bundles/` | Packaged sample configurations as `.zip` |
+
+Bundles are defined in `services/bundles/manifest.yaml` and packaged via `bundles.mk`.
+
+## Asset and Configuration Management
+
+Ark's software and configuration items (CIs) are version-controlled in Git and tracked through Release Please.
+
+### Version Tracking
+
+All version strings are synchronized atomically by Release Please on every release:
+
+**Root versions**:
+- `version.txt` (root)
+- `ark/version.txt` (controller)
+
+**Python packages** (3 locations):
+- `lib/ark-sdk/pyproject.toml`
+- `lib/ark-sdk/gen_sdk/overlay/python/pyproject.toml`
+- `services/ark-api/ark-api/pyproject.toml`
+
+**Helm charts** (10 locations, both `version` and `appVersion` fields):
+- `ark/dist/chart/Chart.yaml` (ark-controller)
+- `ark/dist/chart-apiserver/Chart.yaml`
+- `ark/executors/completions/chart/Chart.yaml`
+- `services/ark-api/chart/Chart.yaml`
+- `services/ark-dashboard/chart/Chart.yaml`
+- `services/ark-mcp/chart/Chart.yaml`
+- `services/ark-broker/chart/Chart.yaml`
+- `services/localhost-gateway/chart/Chart.yaml`
+- `charts/ark-tenant/Chart.yaml`
+- `services/argo-workflows/chart/Chart.yaml`
+
+**Node.js packages** (3 locations):
+- `tools/ark-cli/package.json`
+- `services/ark-broker/ark-broker/package.json`
+- `docs/package.json`
+
+**Kubernetes manifests**:
+- `ark/config/manager/manager.yaml` (operator image tag)
+
+**Marketplace metadata**:
+- `.claude-plugin/marketplace.json` (plugin version)
+
+All files are listed in the `extra-files` section of both `.github/release-please-config.json` and `.github/release-please-config-rc.json`.
+
+### Asset Inventory Discovery
+
+The component set is discovered from code rather than a central manifest:
+
+**Container images**: Defined in `.github/workflows/cicd.yaml` build-containers matrix and `.github/workflows/deploy.yml` deploy matrix.
+
+**Helm charts**: Defined in `.github/workflows/cicd.yaml` build-charts matrix and release-charts matrix.
+
+**Python packages**: Listed in `extra-files` of release-please configs; built via Makefile targets in each service directory.
+
+**Services**: Discovered from `services/services.mk` and individual `services/*/build.mk` fragments.
+
+**Bundles**: Defined in `services/bundles/.../manifest.yaml` and packaged via `bundles.mk`.
+
+No central asset register or software bill of materials (SBOM) is generated. The authoritative source is the CI/CD workflow matrices and Makefile structure.
+
+### CMDB Integration
+
+**Status**: None. Git and GitHub are the system of record for all configuration items.
+
+**Implications**:
+- No external CMDB or ServiceNow integration
+- Asset lifecycle (add/remove) is tracked through Git history and pull requests
+- Release metadata is available via GitHub Releases API and Git tags
+
+## Maintenance Process
+
+### Adding New Assets
+
+To add a new released component to Ark:
+
+1. **Container image**:
+   - Add entry to `.github/workflows/cicd.yaml` `build-containers` matrix (includes path, image name, optional prebuild)
+   - Add entry to `.github/workflows/cicd.yaml` `xray-container-scan` matrix (security scanning)
+   - Add entry to `.github/workflows/deploy.yml` deploy matrix (multi-arch builds)
+
+2. **Helm chart**:
+   - Add entry to `.github/workflows/cicd.yaml` `build-charts` matrix (chart name and path)
+   - Add entry to `release-charts` job matrix (for attaching to GitHub releases)
+
+3. **Python package**:
+   - Add `pyproject.toml` path to `extra-files` in both `.github/release-please-config.json` and `.github/release-please-config-rc.json`
+   - Ensure package build is triggered in relevant CI job (e.g., `build-and-test-services`)
+
+4. **Node.js package**:
+   - Add `package.json` path to `extra-files` in both release-please configs
+   - Add publish step to deploy workflow if public distribution is required
+
+5. **Binary distribution** (e.g., Go CLI):
+   - Update `.goreleaser.yaml` with build targets
+   - Ensure release job triggers GoReleaser on release creation
+
+All changes require pull request approval from CODEOWNERS.
+
+### Removing Obsolete Assets
+
+To deprecate or remove a component:
+
+1. Remove entries from CI/CD workflow matrices (reverse of addition steps above)
+2. Remove version file paths from `extra-files` in both release-please configs
+3. Archive or remove source code directories
+4. Document deprecation in `CHANGELOG.md` and release notes
+5. Consider migration guide for users (especially for stable-released components)
+
+No formal deprecation process is currently documented beyond these technical steps.
+
+### Dependency Updates
+
+Dependabot opens weekly pull requests across five ecosystems:
+- Go modules (`go.mod`)
+- Python packages (`pyproject.toml`, `requirements.txt`)
+- npm packages (`package.json`, `package-lock.json`)
+- GitHub Actions workflows (`.github/workflows/*.yaml`)
+- Docker base images (`Dockerfile`)
+
+Configuration: `.github/dependabot.yaml`
+
+Each Dependabot PR runs through full CI/CD (lint, test, scan) and requires CODEOWNERS approval. See [Vulnerability Management](/reference/vulnerability-management#dependency-updates--dependabot) for the full dependency update process.
+
+## Roles and Responsibilities
+
+### Release Approvals
+
+Required for all merge gates:
+- **CODEOWNERS** approval (enforced by repository ruleset) — see `.github/CODEOWNERS` for area-specific owners
+- **Pull request template** checklist completion — contributor responsibility
+- **CI/CD checks** must be passing — reviewers verify status before approval
+
+Approval authority varies by path (root/CRDs require tech leads + PM; dashboard requires UI lead).
+
+### Manual Workflow Triggers
+
+Certain workflows require manual dispatch with write permissions:
+
+| Workflow | Trigger | Required Permission | Purpose |
+|----------|---------|---------------------|---------|
+| Promote to Stable | `workflow_dispatch` | write on `main` | Initiate stable release promotion |
+| Deploy | `workflow_dispatch` | write on `main` | Manual deployment to registries/environments |
+
+Only repository maintainers with write permissions can trigger these workflows.
+
+### Release Process Roles
+
+| Role | Responsibilities |
+|------|------------------|
+| Contributors | Write conventional commits; ensure local `make lint` and `make test` pass before pushing |
+| Reviewers / CODEOWNERS | Review release PRs; verify changelog accuracy; approve merge |
+| Maintainers | Trigger "Promote to Stable" workflow; merge bootstrap PRs; monitor deployment status |
+| CI/CD | Automated creation of release PRs, tagging, artifact publishing, deployment |
+
+## Troubleshooting
+
+### RC Release Not Created
+
+**Symptom**: Release Please did not create or update a release PR after merging to `main`.
+
+**Causes**:
+- Commits since last release do not include any version-bumping types (`feat:`, `fix:`, `BREAKING CHANGE:`)
+- Only `docs:`, `chore:`, `refactor:`, or other non-bumping types were used
+- CI checks failed before `check-release` job ran
+
+**Resolution**:
+- Verify commit messages follow conventional commit format: `type(scope): description`
+- Check CI/CD workflow run logs for failures in jobs that `check-release` depends on
+- Use `feat:` or `fix:` commit types to trigger version bumps
+
+### Stable Release Not Detected
+
+**Symptom**: After merging promotion PR, Release Please still uses RC config instead of stable config.
+
+**Causes**:
+- RC tags do not exist for the base version (e.g., missing `v0.1.61-rc` or `v0.1.61-rc.*`)
+- Stable tag already exists (e.g., `v0.1.61` was manually created)
+- Manifest version still contains `-rc` suffix
+
+**Resolution**:
+- Verify RC tags exist: `git tag --list "v{version}-rc*"`
+- Verify stable tag does not exist: `git tag --list "v{version}"`
+- Check `.github/release-please-manifest.json` has stable version (no `-rc`)
+
+### Deploy Workflow Fails
+
+**Symptom**: Deploy workflow triggered but artifacts fail to publish.
+
+**Causes**:
+- Registry authentication failure (missing or invalid credentials)
+- npm or PyPI token expired or missing
+- OIDC trusted publishing not configured for npm
+- Multi-arch build platform unavailable
+
+**Resolution**:
+- Verify registry secrets are set: `DOCKER_REGISTRY_USERNAME`, `DOCKER_REGISTRY_PASSWORD`
+- For npm: Confirm trusted publishing is configured on npmjs.com (see [Build Pipelines → Trusted Publishing](/operations-guide/build-pipelines#trusted-publishing-for-npm))
+- For PyPI: Verify `PYPI_API_TOKEN` secret is valid and has publish permissions
+- Check deploy workflow logs for specific authentication or build errors
+
+### Bootstrap PR Not Created
+
+**Symptom**: After stable release, no bootstrap PR appears to clean up `release-as`.
+
+**Causes**:
+- Bootstrap PR already exists from a previous run
+- `run-deploy-workflow` job failed or was skipped
+- Insufficient GitHub token permissions
+
+**Resolution**:
+- Check for existing PR with `gh pr list --base main --head "bootstrap/*"`
+- Review `run-deploy-workflow` job logs in CI/CD workflow run
+- Verify `GITHUB_TOKEN` has `contents: write` and `pull-requests: write` permissions
+
+## See Also
+
+- [Build Pipelines](/operations-guide/build-pipelines) — CI/CD pipeline architecture, secrets, and configuration
+- [Secure Software Development Lifecycle](/reference/secure-sdlc) — Change management and versioning narrative
+- [Vulnerability Management](/reference/vulnerability-management) — CVE handling, dependency updates, and security patching
+- [Upgrading](/reference/upgrading) — Semantic versioning policy and version-specific migration steps
+- [Contributing Guide](https://github.com/mckinsey/agents-at-scale-ark/blob/main/CONTRIBUTING.md) — Conventional commits and release principles

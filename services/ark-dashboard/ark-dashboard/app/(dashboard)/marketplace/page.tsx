@@ -9,9 +9,10 @@ import {
   Server,
   SquarePlay,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
+import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,18 @@ export default function MarketplacePage() {
 
   const { data, isPending } = useGetMarketplaceItems(filters);
 
+  // Silent migration: discard the legacy per-browser source list. Sources now
+  // live in the cluster (marketplace-sources ConfigMap). One-shot and
+  // idempotent — subsequent loads find no key and noop.
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      localStorage.getItem('marketplace-sources') !== null
+    ) {
+      localStorage.removeItem('marketplace-sources');
+    }
+  }, []);
+
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -50,13 +63,20 @@ export default function MarketplacePage() {
 
   const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      setFilters(prev => ({
+        ...prev,
+        search: searchQuery || undefined,
+      }));
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const handleSearch = (value: string) => {
     setSearchQuery(value);
-    setCurrentPage(1); // Reset to first page on search
-    setFilters(prev => ({
-      ...prev,
-      search: value || undefined,
-    }));
   };
 
   const handleCategoryChange = (category: string) => {
@@ -174,6 +194,12 @@ export default function MarketplacePage() {
             Installed
           </Button>
         </div>
+
+        {!isPending && (
+          <div className="mb-4">
+            <MarketplaceSourceErrors errors={data?.sourceErrors} />
+          </div>
+        )}
 
         {/* Loading state */}
         {isPending && (

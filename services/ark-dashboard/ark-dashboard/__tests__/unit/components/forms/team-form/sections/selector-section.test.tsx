@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as z from 'zod';
 
 import { SelectorSection } from '@/components/forms/team-form/sections/selector-section';
@@ -78,14 +78,15 @@ function Wrapper({
 }
 
 describe('SelectorSection', () => {
+  afterEach(async () => {
+    if (document.querySelector('[role="option"]')) {
+      await userEvent.keyboard('{Escape}');
+    }
+  });
+
   it('should render nothing when strategy is not selector', () => {
     const { container } = render(<Wrapper strategy="round-robin" />);
     expect(container.innerHTML).toBe('');
-  });
-
-  it('should render selector configuration for selector strategy', () => {
-    render(<Wrapper />);
-    expect(screen.getByText('Selector Configuration')).toBeInTheDocument();
   });
 
   it('should render selector agent dropdown', () => {
@@ -215,8 +216,12 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByRole('option', { name: 'agent-1' })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: 'agent-2' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'agent-1' }),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'agent-2' }),
+      ).toBeInTheDocument();
     });
 
     it('should include a None (Unset) option', async () => {
@@ -225,7 +230,9 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByRole('option', { name: 'None (Unset)' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'None (Unset)' }),
+      ).toBeInTheDocument();
     });
 
     it('should be disabled when form is disabled', () => {
@@ -248,7 +255,9 @@ describe('SelectorSection', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox')).toHaveClass('border-red-500');
+      expect(screen.getByRole('combobox')).toHaveClass(
+        'border-b-stroke-status-error',
+      );
     });
 
     it('should not apply red border when selected agent is available', () => {
@@ -259,7 +268,7 @@ describe('SelectorSection', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox')).not.toHaveClass('border-red-500');
+      expect(screen.getByRole('combobox')).not.toHaveClass('border-b-stroke-status-error');
     });
 
     it('should show unavailable agent with (Unavailable) label in the dropdown', async () => {
@@ -273,7 +282,9 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByRole('option', { name: 'missing-agent (Unavailable)' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'missing-agent (Unavailable)' }),
+      ).toBeInTheDocument();
     });
 
     it('should not show the (Unavailable) option when the selected agent is available', async () => {
@@ -287,6 +298,7 @@ describe('SelectorSection', () => {
 
       await user.click(screen.getByRole('combobox'));
 
+      await screen.findByRole('option', { name: 'agent-1' });
       expect(screen.queryByText(/Unavailable/)).not.toBeInTheDocument();
     });
   });

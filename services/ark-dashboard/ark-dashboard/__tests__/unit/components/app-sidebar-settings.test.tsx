@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
@@ -5,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppSidebar } from '@/components/app-sidebar';
-import { SettingsModal } from '@/components/settings-modal';
 import { SidebarProvider } from '@/components/ui/sidebar';
 
 vi.mock('next/navigation', () => ({
@@ -71,6 +71,28 @@ vi.mock('@/lib/services/workflow-templates-hooks', () => ({
   })),
 }));
 
+vi.mock('@/lib/services/namespaces-hooks', () => ({
+  useGetAllNamespaces: vi.fn(() => ({
+    data: [{ name: 'default' }],
+    isPending: false,
+  })),
+}));
+
+const renderSidebar = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>
+    </QueryClientProvider>,
+  );
+};
+
 describe('AppSidebar - Settings Menu Item', () => {
   const mockPush = vi.fn();
 
@@ -83,30 +105,17 @@ describe('AppSidebar - Settings Menu Item', () => {
   });
 
   it('should show Settings button in sidebar', async () => {
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-      </JotaiProvider>,
-    );
+    renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText('Settings')).toBeInTheDocument();
     });
   });
 
-  it('should open settings modal when Settings is clicked', async () => {
+  it('should navigate to settings page when Settings is clicked', async () => {
     const user = userEvent.setup();
 
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-        <SettingsModal />
-      </JotaiProvider>,
-    );
+    renderSidebar();
 
     await waitFor(() => {
       expect(screen.getByText('Settings')).toBeInTheDocument();
@@ -115,8 +124,6 @@ describe('AppSidebar - Settings Menu Item', () => {
     const settingsButton = screen.getByText('Settings');
     await user.click(settingsButton);
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument();
-    });
+    expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 });

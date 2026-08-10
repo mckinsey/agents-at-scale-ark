@@ -242,9 +242,130 @@ class TestA2ATasksEndpoint(unittest.TestCase):
         mock_client = AsyncMock()
         mock_client.a2atasks.a_delete = AsyncMock(side_effect=Exception("Unexpected error"))
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         response = self.client.delete("/v1/a2a-tasks/task-1?namespace=default")
-        
+
         self.assertEqual(response.status_code, 500)
         data = response.json()
         self.assertEqual(data["detail"], "Internal server error")
+
+
+class TestA2ATaskApproval(unittest.TestCase):
+    """Tests for POST /v1/a2a-tasks/{task_name}/approval."""
+
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    def _mock_task(self, phase="input-required", task_id="task-123", namespace="default"):
+        task = Mock()
+        task.to_dict.return_value = {
+            "metadata": {"name": f"a2a-task-{task_id}", "namespace": namespace},
+            "spec": {"taskId": task_id},
+            "status": {"phase": phase},
+        }
+        return task
+
+    @patch('ark_api.api.v1.a2a_tasks.with_ark_client')
+    def test_submit_approval_approved(self, mock_ark_client):
+        """Approved decision patches spec.input with {decision: approved}."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.a2atasks.a_get = AsyncMock(return_value=self._mock_task())
+        mock_client.a2atasks.a_patch = AsyncMock(return_value=None)
+
+        response = self.client.post(
+            "/v1/a2a-tasks/a2a-task-task-123/approval?namespace=default",
+            json={"decision": "approved"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, {
+            "name": "a2a-task-task-123",
+            "namespace": "default",
+            "taskId": "task-123",
+            "decision": "approved",
+        })
+
+        mock_client.a2atasks.a_patch.assert_awaited_once()
+        args, _ = mock_client.a2atasks.a_patch.call_args
+        self.assertEqual(args[0], "a2a-task-task-123")
+        self.assertEqual(args[1], {"spec": {"input": '{"decision": "approved"}'}})
+        self.assertEqual(args[2], "default")
+
+    @patch('ark_api.api.v1.a2a_tasks.with_ark_client')
+    def test_submit_approval_rejected(self, mock_ark_client):
+        """Rejected decision patches spec.input with {decision: rejected}."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.a2atasks.a_get = AsyncMock(return_value=self._mock_task(task_id="task-999"))
+        mock_client.a2atasks.a_patch = AsyncMock(return_value=None)
+
+        response = self.client.post(
+            "/v1/a2a-tasks/a2a-task-task-999/approval?namespace=default",
+            json={"decision": "rejected"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["decision"], "rejected")
+
+        args, _ = mock_client.a2atasks.a_patch.call_args
+        self.assertEqual(args[1], {"spec": {"input": '{"decision": "rejected"}'}})
+
+    @patch('ark_api.api.v1.a2a_tasks.with_ark_client')
+    def test_submit_approval_task_not_found(self, mock_ark_client):
+        """Returns 404 when task does not exist."""
+        from kubernetes_asyncio.client.rest import ApiException
+
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.a2atasks.a_get = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+
+        response = self.client.post(
+            "/v1/a2a-tasks/a2a-task-missing/approval?namespace=default",
+            json={"decision": "approved"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    @patch('ark_api.api.v1.a2a_tasks.with_ark_client')
+    def test_submit_approval_wrong_phase(self, mock_ark_client):
+        """Returns 409 when task is not in input-required phase."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.a2atasks.a_get = AsyncMock(return_value=self._mock_task(phase="completed"))
+
+        response = self.client.post(
+            "/v1/a2a-tasks/a2a-task-task-123/approval?namespace=default",
+            json={"decision": "approved"},
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("not awaiting approval", response.json()["detail"])
+
+    @patch('ark_api.api.v1.a2a_tasks.with_ark_client')
+    def test_submit_approval_uses_task_namespace(self, mock_ark_client):
+        """Patch is sent against the task's own metadata.namespace."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.a2atasks.a_get = AsyncMock(
+            return_value=self._mock_task(namespace="custom-namespace", task_id="task-111")
+        )
+        mock_client.a2atasks.a_patch = AsyncMock(return_value=None)
+
+        response = self.client.post(
+            "/v1/a2a-tasks/a2a-task-task-111/approval?namespace=custom-namespace",
+            json={"decision": "approved"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["namespace"], "custom-namespace")
+        args, _ = mock_client.a2atasks.a_patch.call_args
+        self.assertEqual(args[2], "custom-namespace")
+
+    def test_submit_approval_invalid_decision(self):
+        """Returns 422 when decision is not approved/rejected."""
+        response = self.client.post(
+            "/v1/a2a-tasks/a2a-task-x/approval?namespace=default",
+            json={"decision": "maybe"},
+        )
+        self.assertEqual(response.status_code, 422)

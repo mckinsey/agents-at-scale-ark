@@ -20,10 +20,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
+
+var toolHTTPClient = &http.Client{Transport: common.NewSharedTransport()}
 
 type ToolDefinition struct {
 	Name        string         `json:"name"`
@@ -96,19 +99,14 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		method = "GET"
 	}
 
-	// Handle request body for POST/PUT/PATCH requests
-	var requestBody io.Reader
-	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
-		if err != nil {
-			log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
-			return ToolResult{
-				ID:    call.ID,
-				Name:  call.Function.Name,
-				Error: fmt.Sprintf("failed to resolve body template: %v", err),
-			}, fmt.Errorf("failed to resolve body template: %w", err)
-		}
-		requestBody = strings.NewReader(bodyContent)
+	requestBody, err := h.resolveRequestBody(ctx, httpSpec, method, tool.Namespace, arguments)
+	if err != nil {
+		log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to resolve body template: %v", err),
+		}, fmt.Errorf("failed to resolve body template: %w", err)
 	}
 
 	// Create HTTP request
@@ -134,9 +132,10 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		req.Header.Set(header.Name, value)
 	}
 
-	// Set timeout
+	// Set timeout — shallow-copy the shared client to override only Timeout.
 	timeout := h.getTimeout(httpSpec.Timeout)
-	httpClient := &http.Client{Timeout: timeout}
+	httpClient := *toolHTTPClient
+	httpClient.Timeout = timeout
 
 	// Make the request
 	log.Info("making HTTP request", "method", method, "url", parsedURL.String())
@@ -161,14 +160,17 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		}, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body — limit to 10 MB to prevent unbounded allocation.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
 			Error: fmt.Sprintf("failed to read response: %v", err),
 		}, fmt.Errorf("failed to read response: %w", err)
+	}
+	if len(body) == 10<<20 {
+		log.Info("HTTP tool response may have been truncated", "url", parsedURL.String(), "limit", "10MB")
 	}
 
 	log.Info("HTTP request completed", "status", resp.StatusCode, "responseSize", len(body))
@@ -178,6 +180,17 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 		Name:    call.Function.Name,
 		Content: string(body),
 	}, nil
+}
+
+func (h *HTTPExecutor) resolveRequestBody(ctx context.Context, httpSpec *arkv1alpha1.HTTPSpec, method, namespace string, arguments map[string]any) (io.Reader, error) {
+	if httpSpec.Body == "" || (method != "POST" && method != "PUT" && method != "PATCH") {
+		return nil, nil
+	}
+	bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
+	if err != nil {
+		return nil, err
+	}
+	return strings.NewReader(bodyContent), nil
 }
 
 type ToolRegistry struct {
@@ -193,7 +206,7 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 	return &ToolRegistry{
 		tools:             make(map[string]ToolDefinition),
 		executors:         make(map[string]ToolExecutor),
-		mcpPool:           arkmcp.NewMCPClientPool(),
+		mcpPool:           arkmcp.NewMCPClientPool(arkmcp.WithToolCallRetry(mcpToolCallRetryConfig())),
 		mcpSettings:       mcpSettings,
 		telemetryRecorder: telemetryRecorder,
 		eventingRecorder:  eventingRecorder,
@@ -203,6 +216,16 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) {
 	tr.tools[def.Name] = def
 	tr.executors[def.Name] = executor
+}
+
+func (tr *ToolRegistry) RemoveTool(name string) {
+	delete(tr.tools, name)
+	delete(tr.executors, name)
+}
+
+func (tr *ToolRegistry) ClearTools() {
+	clear(tr.tools)
+	clear(tr.executors)
 }
 
 func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {
@@ -221,9 +244,11 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 
 	switch executor.(type) {
 	case *NoopExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
 	case *TerminateExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
+	case *SelectNextSpeakerExecutor:
+		return ToolTypeBuiltin
 	case *HTTPExecutor:
 		return "custom"
 	case *MCPExecutor:
@@ -260,10 +285,14 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolRes
 	result, err := executor.Execute(ctx, call)
 	if err != nil {
 		tr.telemetryRecorder.RecordError(span, err)
-		if IsTerminateTeam(err) {
+		switch {
+		case IsTerminateTeam(err):
 			operationData["terminationMessage"] = "TerminateTeam"
 			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with termination", operationData)
-		} else {
+		case IsSelectionMade(err):
+			operationData["selectionResult"] = "SelectionMade"
+			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with selection", operationData)
+		default:
 			tr.eventingRecorder.Fail(ctx, "ToolCall", fmt.Sprintf("Tool execution failed: %v", err), err, operationData)
 		}
 		return result, err
@@ -367,6 +396,46 @@ func GetTerminateTool() ToolDefinition {
 				},
 			},
 			"required": []string{"response"},
+		},
+	}
+}
+
+type SelectNextSpeakerExecutor struct{}
+
+func (s *SelectNextSpeakerExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	var arguments map[string]any
+	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("failed to parse arguments: %w", err)
+	}
+	nameArg, exists := arguments["name"]
+	if !exists {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("name parameter is required")
+	}
+	nameStr, ok := nameArg.(string)
+	if !ok {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("name parameter must be a string")
+	}
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: nameStr}, &SelectionMade{SelectedName: nameStr}
+}
+
+func GetSelectNextSpeakerTool(candidates []string) ToolDefinition {
+	enumValues := make([]any, len(candidates))
+	for i, c := range candidates {
+		enumValues[i] = c
+	}
+	return ToolDefinition{
+		Name:        BuiltinToolSelectNextSpeaker,
+		Description: "Select the next speaker to respond in the conversation",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "The name of the next speaker to respond",
+					"enum":        enumValues,
+				},
+			},
+			"required": []string{"name"},
 		},
 	}
 }

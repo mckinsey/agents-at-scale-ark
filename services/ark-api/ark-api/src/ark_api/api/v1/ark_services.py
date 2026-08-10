@@ -3,11 +3,13 @@ import logging
 from typing import Optional, List
 from dataclasses import dataclass
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.k8s import get_context
+from ark_sdk.impersonation import ImpersonationConfig
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.ark_services import (
     ArkService,
@@ -28,6 +30,7 @@ from ...constants.annotations import (
     LOCALHOST_GATEWAY_PORT_ANNOTATION
 )
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from .client_utils import get_impersonating_api_client
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +83,9 @@ async def get_port_for_gateway(gateway_name: str) -> int:
     return 80
 
 
-async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> List[HTTPRouteInfo]:
+async def get_httproutes_for_ark_service(namespace: str, release_name: str, impersonation: Optional[ImpersonationConfig] = None) -> List[HTTPRouteInfo]:
     """Find HTTPRoutes that have Helm release annotations matching the release name."""
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = client.CustomObjectsApi(api_client)
         
         # List HTTPRoutes in the namespace
@@ -137,7 +140,8 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> L
 @router.get("", response_model=ArkServiceListResponse)
 async def list_ark_services(
     list_all_services: Optional[bool] = Query(False, description="List all Helm releases, not just ARK services"),
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> ArkServiceListResponse:
     """
     List ARK services (Helm releases) in a namespace.
@@ -174,7 +178,7 @@ async def list_ark_services(
             continue
         
         # Get HTTPRoutes for this ARK service using release name
-        httproutes = await get_httproutes_for_ark_service(namespace, release_name)
+        httproutes = await get_httproutes_for_ark_service(namespace, release_name, impersonation=impersonation)
         
         ark_service = ArkService(
             name=release_name,
@@ -245,7 +249,8 @@ async def list_marketplace_items(
 @router.get("/{service_name}", response_model=ArkService)
 async def get_ark_service(
     service_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> ArkService:
     """
     Get a specific ARK service (Helm release) by name.
@@ -258,7 +263,7 @@ async def get_ark_service(
         ArkService: The ARK service details
     """
     # Reuse the existing logic by getting all services and filtering
-    services_response = await list_ark_services(list_all_services=True, namespace=namespace)
+    services_response = await list_ark_services(list_all_services=True, namespace=namespace, impersonation=impersonation)
 
     # Find the service by name
     for service in services_response.items:

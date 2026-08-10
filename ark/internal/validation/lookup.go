@@ -51,6 +51,17 @@ func (l *WebhookLookup) GetConfigMap(ctx context.Context, namespace, name string
 	return cm, nil
 }
 
+// GetArkConfig fetches the cluster-wide ArkConfig singleton. Callers
+// must treat any error as "no global config" and fall back to
+// hardcoded defaults — never block admission due to a config read.
+func (l *WebhookLookup) GetArkConfig(ctx context.Context) (*arkv1alpha1.ArkConfig, error) {
+	cfg := &arkv1alpha1.ArkConfig{}
+	if err := l.Client.Get(ctx, types.NamespacedName{Name: ArkConfigSingletonName}, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
 type StorageLookup struct {
 	Backend   storage.Backend
 	K8sClient client.Client
@@ -75,6 +86,9 @@ func (l *StorageLookup) GetConfigMap(ctx context.Context, namespace, name string
 	}
 	return cm, nil
 }
+
+// Compile-time interface satisfaction.
+var _ ArkConfigLookup = (*WebhookLookup)(nil)
 
 func newArkObject(kind string) client.Object {
 	switch kind {

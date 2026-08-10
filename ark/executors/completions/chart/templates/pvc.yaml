@@ -1,0 +1,14 @@
+{{- range .Values.extraPVCs }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}
+  namespace: {{ include "ark-completions.namespace" $ }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .size | default "2Gi" }}
+---
+{{- end }}

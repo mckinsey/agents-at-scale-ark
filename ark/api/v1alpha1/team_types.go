@@ -8,6 +8,7 @@ import (
 
 type TeamMember struct {
 	Name string `json:"name"`
+	// +kubebuilder:validation:Enum=agent;team
 	Type string `json:"type"`
 }
 
@@ -28,11 +29,12 @@ type TeamGraphSpec struct {
 }
 
 type TeamSpec struct {
-	Members     []TeamMember `json:"members"`
-	Strategy    string       `json:"strategy"`
-	Description string       `json:"description,omitempty"`
+	Members []TeamMember `json:"members"`
+	// +kubebuilder:validation:Enum=sequential;round-robin;selector;graph
+	Strategy    string `json:"strategy"`
+	Description string `json:"description,omitempty"`
 	// +kubebuilder:default=false
-	Loops    bool              `json:"loops"`
+	Loops    *bool             `json:"loops,omitempty"`
 	MaxTurns *int              `json:"maxTurns,omitempty"`
 	Selector *TeamSelectorSpec `json:"selector,omitempty"`
 	Graph    *TeamGraphSpec    `json:"graph,omitempty"`

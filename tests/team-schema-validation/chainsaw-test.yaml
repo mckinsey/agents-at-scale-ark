@@ -1,0 +1,95 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-schema-validation
+  labels:
+    etcd-only: "true"
+spec:
+  description: >
+    Team strategy and member type are constrained by the CRD OpenAPI schema
+    (apiserver-enforced), so invalid values are rejected at apply time. The
+    negative steps assert the rejection carries the apiserver schema signature
+    ("Unsupported value ... supported values"), proving the enum is enforced by
+    the schema rather than the webhook.
+
+  steps:
+  - name: setup-agent
+    try:
+    - apply:
+        file: manifests/*.yaml
+
+  - name: valid-team-accepted
+    try:
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: valid-team
+          spec:
+            strategy: sequential
+            members:
+            - name: agent-a
+              type: agent
+
+  - name: reject-invalid-strategy
+    try:
+    - script:
+        content: |
+          if OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: bad-strategy-team
+          spec:
+            strategy: bogus
+            members:
+            - name: agent-a
+              type: agent
+          EOF
+          ); then
+            echo "FAIL: invalid strategy was accepted"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "spec.strategy" && echo "$OUTPUT" | grep -q "Unsupported value"; then
+            echo "PASS: apiserver schema rejected invalid strategy"
+          else
+            echo "FAIL: rejected, but not by the schema enum"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: reject-invalid-member-type
+    try:
+    - script:
+        content: |
+          if OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: bad-member-team
+          spec:
+            strategy: sequential
+            members:
+            - name: agent-a
+              type: robot
+          EOF
+          ); then
+            echo "FAIL: invalid member type was accepted"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "spec.members" && echo "$OUTPUT" | grep -q "Unsupported value"; then
+            echo "PASS: apiserver schema rejected invalid member type"
+          else
+            echo "FAIL: rejected, but not by the schema enum"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

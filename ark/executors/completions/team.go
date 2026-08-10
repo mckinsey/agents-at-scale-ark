@@ -16,8 +16,9 @@ import (
 
 // SelectorAgentInterface defines the interface for selector agents (used for testing)
 type SelectorAgentInterface interface {
-	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
+	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	FullName() string
+	GetToolRegistry() *ToolRegistry
 }
 
 type Team struct {
@@ -47,7 +48,18 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
-func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (t *Team) Close() {
+	for _, member := range t.Members {
+		switch m := member.(type) {
+		case *Agent:
+			m.Close()
+		case *Team:
+			m.Close()
+		}
+	}
+}
+
+func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
@@ -58,12 +70,10 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 
 	var execFunc func(context.Context, Message, []Message) ([]Message, error)
 	switch t.Strategy {
-	case "sequential", "round-robin":
+	case "sequential":
 		execFunc = t.executeSequential
 	case "selector":
 		execFunc = t.executeSelector
-	case "graph":
-		execFunc = t.executeGraph
 	default:
 		return nil, fmt.Errorf("unsupported strategy %s for team %s", t.Strategy, t.FullName())
 	}
@@ -73,7 +83,7 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	loops := t.Loops || t.Strategy == "round-robin"
+	loops := t.Loops
 
 	if loops {
 		return t.executeSequentialWithLoops(ctx, userInput, history)
@@ -96,25 +106,26 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", i, t.Name), operationData)
 
-		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {
 			t.telemetryRecorder.RecordError(turnSpan, err)
 			turnSpan.End()
 			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
-			if IsTerminateTeam(err) {
-				return newMessages, nil
-			}
 			return newMessages, err
 		}
 
 		t.telemetryRecorder.RecordSuccess(turnSpan)
 		turnSpan.End()
 		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", i), operationData)
+
+		if _, ok := signal.(*TerminateSignal); ok {
+			return newMessages, nil
+		}
 	}
 
 	return newMessages, nil
@@ -149,25 +160,26 @@ func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", messageCount, t.Name), operationData)
 
-		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
 		}
 
 		if err != nil {
 			t.telemetryRecorder.RecordError(turnSpan, err)
 			turnSpan.End()
 			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
-			if IsTerminateTeam(err) {
-				return newMessages, nil
-			}
 			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
 		}
 
 		t.telemetryRecorder.RecordSuccess(turnSpan)
 		turnSpan.End()
 		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", messageCount), operationData)
+
+		if _, ok := signal.(*TerminateSignal); ok {
+			return newMessages, nil
+		}
 
 		messageCount++
 		memberIndex = (memberIndex + 1) % len(t.Members)
@@ -192,12 +204,13 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 		return nil, err
 	}
 
+	loops := crd.Spec.Loops != nil && *crd.Spec.Loops
 	return &Team{
 		Name:              crd.Name,
 		Members:           members,
 		Strategy:          crd.Spec.Strategy,
 		Description:       crd.Spec.Description,
-		Loops:             crd.Spec.Loops,
+		Loops:             loops,
 		MaxTurns:          crd.Spec.MaxTurns,
 		Selector:          crd.Spec.Selector,
 		Graph:             crd.Spec.Graph,
@@ -260,9 +273,7 @@ func (t *Team) executeWithTracking(execFunc func(context.Context, Message, []Mes
 	return result, err
 }
 
-// executeMemberAndAccumulate executes a member and accumulates new messages
-func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) error {
-	// Add team and current member to execution metadata for streaming
+func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) (Signal, error) {
 	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
 		"team":  t.Name,
 		"agent": member.GetName(),
@@ -277,23 +288,22 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 	}
 	ctx = t.eventingRecorder.Start(ctx, "TeamMember", fmt.Sprintf("Executing member %s in team %s", member.GetName(), t.Name), operationData)
 
-	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
+	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream, ExecuteOptions{})
 	if err != nil {
-		// Still accumulate messages even on error if result is not nil
 		if result != nil {
 			messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
 			*messages = append(*messages, messagesWithName...)
 			*newMessages = append(*newMessages, messagesWithName...)
 		}
 		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member execution failed: %v", err), err, operationData)
-		return err
+		return nil, err
 	}
 
 	messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
 	*messages = append(*messages, messagesWithName...)
 	*newMessages = append(*newMessages, messagesWithName...)
 	t.eventingRecorder.Complete(ctx, "TeamMember", "Team member execution completed successfully", operationData)
-	return nil
+	return result.Signal, nil
 }
 
 func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec arkv1alpha1.TeamMember, namespace, teamName string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (TeamMember, error) {

@@ -7,13 +7,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { chatService } from '@/lib/services/chat';
 
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
+    startStreamChatResponse: vi.fn(),
+    streamQueryStatus: vi.fn().mockResolvedValue(() => {}),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
+  },
+}));
+
+vi.mock('@/lib/services/agents', () => ({
+  agentsService: {
+    getByName: vi.fn().mockResolvedValue({ parameters: [] }),
   },
 }));
 
@@ -37,21 +46,23 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-global.EventSource = vi.fn(() => ({
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  close: vi.fn(),
-  readyState: 0,
-  url: '',
-  withCredentials: false,
-  CONNECTING: 0,
-  OPEN: 1,
-  CLOSED: 2,
-  onerror: null,
-  onmessage: null,
-  onopen: null,
-  dispatchEvent: vi.fn(),
-})) as unknown as typeof EventSource;
+global.EventSource = vi.fn(function () {
+  return {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    readyState: 0,
+    url: '',
+    withCredentials: false,
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSED: 2,
+    onerror: null,
+    onmessage: null,
+    onopen: null,
+    dispatchEvent: vi.fn(),
+  };
+}) as unknown as typeof EventSource;
 
 global.fetch = vi.fn(() =>
   Promise.resolve({
@@ -78,6 +89,18 @@ beforeEach(() => {
       json: () => Promise.resolve({ items: [], total: 0, hasMore: false }),
     } as Response),
   );
+
+  vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+    async (...args: unknown[]) => ({
+      queryName: 'test-query',
+      chunks: (
+        chatService.streamChatResponse as (
+          ...a: unknown[]
+        ) => AsyncGenerator<Record<string, unknown>>
+      )(...args),
+    }),
+  );
+  vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});
 });
 
 function renderEmbeddedChatPanel(props: {
@@ -94,7 +117,10 @@ function renderEmbeddedChatPanel(props: {
 }
 
 describe('EmbeddedChatPanel', () => {
-  it('should use persisted conversation ID as sessionId when available', () => {
+  it('should not reuse a persisted conversation ID from another chat', () => {
+    // The old behavior bled the global lastConversationId into every new chat
+    // popup, so two distinct chats ended up with the same broker sessionId.
+    // Each chat popup should now mint its own chat-<name>-<sha> id.
     sessionStorage.setItem(
       'last-conversation-id',
       JSON.stringify('persisted-session-123'),
@@ -103,13 +129,14 @@ describe('EmbeddedChatPanel', () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
     const atomValue = store.get(lastConversationIdAtom);
-    expect(atomValue).toBe('persisted-session-123');
+    expect(atomValue).toMatch(/^chat-test-agent-[0-9a-f]{7}$/);
+    expect(atomValue).not.toBe('persisted-session-123');
   });
 
   it('should persist new sessionId to atom on new chat creation', async () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
-    const newChatButton = screen.getByText(/New Chat/i);
+    const newChatButton = screen.getByRole('button', { name: /new chat/i });
     expect(newChatButton).toBeInTheDocument();
   });
 
@@ -173,7 +200,9 @@ describe('EmbeddedChatPanel', () => {
     const chatTab = screen.getByRole('tab', { name: /Chat/i });
     await user.click(chatTab);
 
-    const newChatButton = await screen.findByText(/New Chat/i);
+    const newChatButton = await screen.findByRole('button', {
+      name: /new chat/i,
+    });
     expect(newChatButton).not.toBeDisabled();
 
     await user.click(newChatButton);

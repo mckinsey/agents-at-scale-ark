@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/openai/openai-go"
@@ -25,6 +26,7 @@ type HTTPMemory struct {
 	name             string
 	namespace        string
 	headers          map[string]string
+	ttlSeconds       *int64
 	eventingRecorder eventing.MemoryRecorder
 }
 
@@ -45,7 +47,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 	}
 
 	// Create HTTP client with timeout for memory operations
-	httpClient := common.NewHTTPClientWithLogging(ctx)
+	httpClient := common.NewHTTPClientWithLogging()
 	if config.Timeout > 0 {
 		httpClient.Timeout = config.Timeout
 	}
@@ -72,6 +74,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		name:             memoryName,
 		namespace:        namespace,
 		headers:          headers,
+		ttlSeconds:       config.TtlSeconds,
 		eventingRecorder: memoryRecorder,
 	}, nil
 }
@@ -182,6 +185,7 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		ConversationID: m.conversationId,
 		QueryID:        queryID,
 		Messages:       openaiMessages,
+		TtlSeconds:     m.ttlSeconds,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
@@ -229,23 +233,74 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	return nil
 }
 
-// GetMessages retrieves messages from the memory backend
+// GetMessages retrieves the full conversation history from the memory backend,
+// following the broker's cursor pagination until no pages remain.
 func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	ctx = m.eventingRecorder.Start(ctx, "MemoryGetMessages", "Getting messages from memory", nil)
 
 	// Resolve address dynamically
 	if err := m.resolveAndUpdateAddress(ctx); err != nil {
-		operationData := map[string]string{"result": fmt.Sprintf("Failed to resolve memory address: %v", err)}
-		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-		return nil, err
+		return nil, m.failGetMessages(ctx, fmt.Sprintf("Failed to resolve memory address: %v", err), err)
 	}
 
-	requestURL := fmt.Sprintf("%s%s?conversation_id=%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.conversationId))
+	var messages []Message
+	var cursor *int64
+
+	for page := 0; page < MessagesMaxPages; page++ {
+		response, err := m.fetchMessagePage(ctx, cursor)
+		if err != nil {
+			return nil, err
+		}
+
+		pageMessages, err := m.decodeMessagePage(ctx, response.Items, len(messages))
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, pageMessages...)
+
+		if !response.HasMore {
+			operationData := map[string]string{
+				"messages": fmt.Sprintf("%d", len(messages)),
+				"pages":    fmt.Sprintf("%d", page+1),
+				"result":   "Memory get messages completed successfully",
+			}
+			m.eventingRecorder.Complete(ctx, "MemoryGetMessages", operationData["result"], operationData)
+			return messages, nil
+		}
+
+		if response.NextCursor == nil {
+			err := fmt.Errorf("memory backend reported more messages after %d but returned no nextCursor", len(messages))
+			return nil, m.failGetMessages(ctx, err.Error(), err)
+		}
+		if cursor != nil && *response.NextCursor <= *cursor {
+			err := fmt.Errorf("memory backend returned non-advancing nextCursor %d (previous %d)", *response.NextCursor, *cursor)
+			return nil, m.failGetMessages(ctx, err.Error(), err)
+		}
+		cursor = response.NextCursor
+	}
+
+	err := fmt.Errorf("memory backend still reported more messages after %d pages of %d", MessagesMaxPages, MessagesPageLimit)
+	return nil, m.failGetMessages(ctx, err.Error(), err)
+}
+
+func (m *HTTPMemory) failGetMessages(ctx context.Context, result string, err error) error {
+	operationData := map[string]string{"result": result}
+	m.eventingRecorder.Fail(ctx, "MemoryGetMessages", result, err, operationData)
+	return err
+}
+
+func (m *HTTPMemory) fetchMessagePage(ctx context.Context, cursor *int64) (*MessagesResponse, error) {
+	query := url.Values{}
+	query.Set("conversation_id", m.conversationId)
+	query.Set("limit", strconv.Itoa(MessagesPageLimit))
+	if cursor != nil {
+		query.Set("cursor", strconv.FormatInt(*cursor, 10))
+	}
+
+	requestURL := fmt.Sprintf("%s%s?%s", m.baseURL, MessagesEndpoint, query.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		operationData := map[string]string{"result": fmt.Sprintf("Failed to create request: %v", err)}
-		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, m.failGetMessages(ctx, fmt.Sprintf("Failed to create request: %v", err), fmt.Errorf("failed to create request: %w", err))
 	}
 
 	req.Header.Set("Accept", ContentTypeJSON)
@@ -258,42 +313,35 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		operationData := map[string]string{"result": fmt.Sprintf("HTTP request failed: %v", err)}
-		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, m.failGetMessages(ctx, fmt.Sprintf("HTTP request failed: %v", err), fmt.Errorf("HTTP request failed: %w", err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
-		operationData := map[string]string{"result": err.Error()}
-		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-		return nil, err
+		return nil, m.failGetMessages(ctx, err.Error(), err)
 	}
 
 	var response MessagesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		operationData := map[string]string{"result": fmt.Sprintf("Failed to decode response: %v", err)}
-		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, m.failGetMessages(ctx, fmt.Sprintf("Failed to decode response: %v", err), fmt.Errorf("failed to decode response: %w", err))
 	}
 
-	messages := make([]Message, 0, len(response.Items))
-	for i, record := range response.Items {
+	return &response, nil
+}
+
+func (m *HTTPMemory) decodeMessagePage(ctx context.Context, records []MessageRecord, offset int) ([]Message, error) {
+	messages := make([]Message, 0, len(records))
+	for i, record := range records {
 		openaiMessage, err := unmarshalMessageRobust(record.Message)
 		if err != nil {
-			operationData := map[string]string{"result": fmt.Sprintf("Failed to unmarshal message at index %d: %v", i, err)}
-			m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
+			index := offset + i
+			return nil, m.failGetMessages(ctx,
+				fmt.Sprintf("Failed to unmarshal message at index %d: %v", index, err),
+				fmt.Errorf("failed to unmarshal message at index %d: %w", index, err))
 		}
 		messages = append(messages, Message(openaiMessage))
 	}
-
-	operationData := map[string]string{
-		"messages": fmt.Sprintf("%d", len(messages)),
-		"result":   "Memory get messages completed successfully",
-	}
-	m.eventingRecorder.Complete(ctx, "MemoryGetMessages", operationData["result"], operationData)
 	return messages, nil
 }
 
@@ -310,6 +358,36 @@ func (m *HTTPMemory) GetBaseURL() string {
 // GetName returns the memory resource name
 func (m *HTTPMemory) GetName() string {
 	return m.name
+}
+
+// DeleteQuery removes all messages for the given query from the memory backend.
+func (m *HTTPMemory) DeleteQuery(ctx context.Context, queryID string) error {
+	if err := m.resolveAndUpdateAddress(ctx); err != nil {
+		return fmt.Errorf("failed to resolve memory address: %w", err)
+	}
+
+	requestURL := fmt.Sprintf("%s"+common.QueryMessagesEndpointFmt, m.baseURL, url.PathEscape(queryID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("broker at %s returned HTTP %d deleting messages for query %s", requestURL, resp.StatusCode, queryID)
+	}
+
+	return nil
 }
 
 // Close closes the HTTP client connections

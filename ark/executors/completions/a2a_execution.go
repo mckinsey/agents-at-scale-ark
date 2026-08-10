@@ -57,15 +57,11 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	if a2aServer.Spec.Timeout != "" {
-		timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
-		}
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+	ctx, cancel, err := withA2AExecutionTimeout(ctx, &a2aServer)
+	if err != nil {
+		return nil, err
 	}
+	defer cancel()
 
 	content := ""
 	if userInput.OfUser != nil && userInput.OfUser.Content.OfString.Value != "" {
@@ -95,16 +91,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	responseMessage := NewAssistantMessage(a2aResponse.Content)
 
-	if eventStream != nil {
-		completionID := getQueryID(ctx)
-		chunk := NewContentChunk(completionID, modelID, a2aResponse.Content)
-		chunk.Choices[0].Delta.Role = RoleAssistant
-		chunk.Choices[0].FinishReason = "stop"
-		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
-		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
-			log.Error(err, "failed to send A2A response chunk to event stream")
-		}
-	}
+	streamFinalResponseChunk(ctx, eventStream, modelID, a2aResponse.Content)
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
@@ -158,6 +145,47 @@ type a2aStreamContext struct {
 	queryName    string
 }
 
+const defaultA2AExecutionTimeout = 5 * time.Minute
+
+func resolveA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) (time.Duration, error) {
+	if a2aServer != nil && a2aServer.Spec.Timeout != "" {
+		timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
+		}
+		return timeout, nil
+	}
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return 0, nil
+	}
+	return defaultA2AExecutionTimeout, nil
+}
+
+func withA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) (context.Context, context.CancelFunc, error) {
+	timeout, err := resolveA2AExecutionTimeout(ctx, a2aServer)
+	if err != nil {
+		return nil, nil, err
+	}
+	if timeout <= 0 {
+		ctx, cancel := context.WithCancel(ctx)
+		return ctx, cancel, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	return ctx, cancel, nil
+}
+
+var defaultA2AStreamIdleTimeout = 8 * time.Minute
+
+func effectiveIdleTimeout(a2aServer *arkv1prealpha1.A2AServer) time.Duration {
+	if a2aServer != nil && a2aServer.Spec.Timeout != "" {
+		if d, err := time.ParseDuration(a2aServer.Spec.Timeout); err == nil && d < defaultA2AStreamIdleTimeout {
+			return d
+		}
+	}
+	return defaultA2AStreamIdleTimeout
+}
+
 func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
 	var content strings.Builder
 	var response arka2a.A2AResponse
@@ -174,10 +202,16 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 		queryName:    queryName,
 	}
 
+	idleTimeout := effectiveIdleTimeout(a2aServer)
+	idleTimer := time.NewTimer(idleTimeout)
+	defer idleTimer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-idleTimer.C:
+			return nil, fmt.Errorf("a2a streaming idle timeout: no events received for %s (agent=%s, namespace=%s)", idleTimeout, agentName, namespace)
 		case event, ok := <-events:
 			if !ok {
 				if !received {
@@ -185,6 +219,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				}
 				return buildA2AStreamResult(&content, &response), nil
 			}
+			idleTimer.Reset(idleTimeout)
 			received = true
 			if event.Result == nil {
 				continue
@@ -273,6 +308,20 @@ func streamContentChunk(ctx context.Context, eventStream EventStreamInterface, c
 	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
 	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to send A2A streaming chunk")
+	}
+}
+
+func streamFinalResponseChunk(ctx context.Context, eventStream EventStreamInterface, modelID, content string) {
+	if eventStream == nil {
+		return
+	}
+
+	chunk := NewContentChunk(getQueryID(ctx), modelID, content)
+	chunk.Choices[0].Delta.Role = RoleAssistant
+	chunk.Choices[0].FinishReason = "stop"
+	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to send A2A response chunk to event stream")
 	}
 }
 

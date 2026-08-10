@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
@@ -69,6 +70,28 @@ vi.mock('@/lib/services/workflow-templates-hooks', () => ({
   })),
 }));
 
+vi.mock('@/lib/services/namespaces-hooks', () => ({
+  useGetAllNamespaces: vi.fn(() => ({
+    data: [{ name: 'default' }],
+    isPending: false,
+  })),
+}));
+
+const renderSidebar = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>
+    </QueryClientProvider>,
+  );
+};
+
 describe('AppSidebar - A2A Tasks Menu Item', () => {
   const mockPush = vi.fn();
 
@@ -80,60 +103,61 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     });
   });
 
-  it('should show A2A Tasks in More menu', async () => {
+  it('should show A2A tasks and A2A servers in Other group', async () => {
     const user = userEvent.setup();
 
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-      </JotaiProvider>,
-    );
+    renderSidebar();
 
-    const moreButton = await screen.findByRole('button', { name: /more/i });
-    await user.click(moreButton);
+    const otherButton = await screen.findByRole('button', { name: /other/i });
+    await user.click(otherButton);
 
     await waitFor(() => {
-      expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
+      expect(screen.getByText('A2A tasks')).toBeInTheDocument();
     });
+    expect(screen.getByText('A2A servers')).toBeInTheDocument();
   });
 
-  it('should navigate to /tasks when A2A Tasks is clicked', async () => {
+  it('should navigate to /tasks when A2A tasks is clicked', async () => {
     const user = userEvent.setup();
 
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-      </JotaiProvider>,
-    );
+    renderSidebar();
 
-    const moreButton = await screen.findByRole('button', { name: /more/i });
-    await user.click(moreButton);
+    const otherButton = await screen.findByRole('button', { name: /other/i });
+    await user.click(otherButton);
 
     await waitFor(() => {
-      expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
+      expect(screen.getByText('A2A tasks')).toBeInTheDocument();
     });
 
-    const tasksButton = screen.getByText('A2A Tasks');
+    const tasksButton = screen.getByRole('button', { name: /a2a tasks/i });
     await user.click(tasksButton);
 
     expect(mockPush).toHaveBeenCalledWith('/tasks');
   });
 
-  it('should render sidebar without errors', async () => {
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-      </JotaiProvider>,
-    );
+  it('should navigate to /a2a when A2A servers is clicked', async () => {
+    const user = userEvent.setup();
+
+    renderSidebar();
+
+    const otherButton = await screen.findByRole('button', { name: /other/i });
+    await user.click(otherButton);
 
     await waitFor(() => {
-      expect(screen.getByText('ARK Dashboard')).toBeInTheDocument();
+      expect(screen.getByText('A2A servers')).toBeInTheDocument();
+    });
+
+    const serversButton = screen.getByRole('button', { name: /a2a servers/i });
+    await user.click(serversButton);
+
+    expect(mockPush).toHaveBeenCalledWith('/a2a');
+  });
+
+  it('should render sidebar without errors', async () => {
+    renderSidebar();
+
+    await waitFor(() => {
+      expect(screen.getByText('ARK')).toBeInTheDocument();
     });
   });
 });

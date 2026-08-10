@@ -1,6 +1,6 @@
 ---
 name: issue-creation
-description: Structured workflow for drafting NEW GitHub issues with codebase research, duplicate detection, task breakdowns, and testing approach. Always asks clarifying questions and shows the draft for approval before creating. For searching, listing, viewing, or updating existing issues, use the "issues" skill instead.
+description: Structured workflow for drafting NEW GitHub issues with codebase research, duplicate detection, and testing approach. Always asks clarifying questions and shows the draft for approval before creating. For searching, listing, viewing, or updating existing issues, use the "issues" skill instead.
 ---
 
 # Issue Creation
@@ -36,7 +36,9 @@ Before writing anything, investigate the relevant code:
 - Identify the scope and blast radius of the problem
 - Note relevant file paths and code references
 
-Use Grep, Glob, Read, and the Explore agent as needed. Include key findings in the issue body so reviewers have context without re-doing the research.
+Use Grep, Glob, Read, and the Explore agent as needed. Include key findings in the issue's Context section so reviewers can orient themselves without re-doing the research.
+
+**Important:** The purpose of research is to understand the problem's scope and surface area — NOT to prescribe a solution. Do not let research findings leak into prescriptive implementation steps. Knowing which files are involved helps the implementer orient; telling them what to change in those files anchors them on a path that may be wrong.
 
 ### Step 3: Check for duplicates and dependencies
 
@@ -82,12 +84,6 @@ Use this template:
 
 - #N — [brief description of relationship]
 
-## Task Breakdown
-
-- [ ] [Discrete, actionable task 1]
-- [ ] [Discrete, actionable task 2]
-- [ ] ...
-
 ## Testing Approach
 
 - [How to verify the problem is fixed]
@@ -100,7 +96,6 @@ Use this template:
 ALWAYS present the full draft (title + body) to the user before creating the issue. Use AskUserQuestion to ask:
 - Does the draft look good?
 - Any sections to add, remove, or reword?
-- Is the task breakdown accurate?
 
 Do NOT create the issue until the user approves. If they request edits, apply them and show the updated draft again.
 
@@ -123,10 +118,11 @@ Title must use conventional commit prefix: `feat:`, `fix:`, `docs:`, `chore:`, `
 ## Rules
 
 1. **Always ask clarifying questions first.** Never skip straight to research or drafting. Confirm understanding before proceeding.
-2. **Focus on the problem.** Never propose a design or solution unless the user explicitly asks for one.
-3. **Research first.** Every issue must include codebase research findings.
-4. **No duplicates.** Always check existing issues before creating.
-5. **Task breakdown required.** Break the work into discrete, actionable tasks.
-6. **Testing approach required.** Suggest how to verify the fix/feature.
-7. **Always add "needs grooming" label.** Every issue created by this skill gets this label.
-8. **Link dependencies.** Reference related issues when they exist.
+2. **Focus on the problem, not the solution.** The issue author's job is to be the expert on the problem. Never propose a design, implementation approach, or specific code changes unless the user explicitly asks for one.
+3. **Research informs scope, not implementation.** Codebase research belongs in the Context section to help the implementer orient. It must NOT become prescriptive implementation steps. Knowing which files are involved is useful context; telling the implementer what to change in those files anchors them on a path that may be wrong.
+4. **No uninformed specificity.** Implementation details written by someone without deep codebase knowledge create false confidence and anchoring bias. A vague-but-accurate issue is more useful than a specific-but-wrong one.
+5. **Research first.** Every issue must include codebase research findings.
+6. **No duplicates.** Always check existing issues before creating.
+7. **Testing approach required.** Suggest how to verify the fix/feature.
+8. **Always add "needs grooming" label.** Every issue created by this skill gets this label.
+9. **Link dependencies.** Reference related issues when they exist.

@@ -366,3 +366,41 @@ var _ = Describe("Team Controller", func() {
 		})
 	})
 })
+
+var _ = Describe("Team Controller IsNotFound", func() {
+	ctx := context.Background()
+
+	It("should not error when updating status of a deleted team", func() {
+		const deletedTeamName = "test-deleted-status-team"
+
+		deletedTeam := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      deletedTeamName,
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.TeamSpec{
+				Members:  []arkv1alpha1.TeamMember{{Name: "agent-one", Type: "agent"}},
+				Strategy: "sequential",
+			},
+		}
+		Expect(k8sClient.Create(ctx, deletedTeam)).To(Succeed())
+
+		controllerReconciler := &TeamReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		By("reconciling to initialize status")
+		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: deletedTeamName, Namespace: "default"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("deleting the team")
+		Expect(k8sClient.Delete(ctx, deletedTeam)).To(Succeed())
+
+		By("calling updateStatus on the deleted team should not error")
+		Expect(controllerReconciler.updateStatus(ctx, deletedTeam)).To(Succeed())
+	})
+})

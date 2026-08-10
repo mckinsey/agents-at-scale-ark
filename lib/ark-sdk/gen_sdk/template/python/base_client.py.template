@@ -12,8 +12,7 @@ import logging
 import asyncio
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
-from kubernetes.client.rest import ApiException
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, create_sync_api_client
 import yaml
 import json
 
@@ -52,15 +51,32 @@ def init_k8s():
             raise
 
 class ARKResourceClient(Generic[T]):
-    """Generic client for ARK custom resources"""
-    
+    """Generic client for ARK custom resources
+
+    Error Handling Contract:
+        All CRUD methods propagate kubernetes.client.rest.ApiException unchanged,
+        preserving the status code and exception type. This allows SDK consumers
+        to programmatically distinguish between error conditions:
+        - 404: Resource not found
+        - 403: RBAC/permission denied
+        - 409: Resource conflict (already exists)
+        - 422: Validation error
+        - 5xx: Cluster/server errors
+
+        SDK consumers should catch ApiException and inspect the .status attribute
+        to implement error-specific handling (retries, fallbacks, user messaging).
+        See issue #2373 for rationale.
+    """
+
     def __init__(
         self,
         api_version: str,
         kind: str,
         plural: str,
         model_class: Type[T],
-        namespace: str = "default"
+        namespace: str = "default",
+        default_headers: Optional[Dict[str, str]] = None,
+        user_agent: Optional[str] = None
     ):
         self.api_version = api_version
         self.kind = kind
@@ -68,41 +84,62 @@ class ARKResourceClient(Generic[T]):
         self.model_class = model_class
         self.namespace = namespace
         self.group, self.version = api_version.split('/')
-       
+
         init_k8s()
 
-        self.api_client = client.ApiClient()
+        self.api_client = create_sync_api_client()
+        if user_agent:
+            self.api_client.user_agent = user_agent
+        if default_headers:
+            for header_name, header_value in default_headers.items():
+                self.api_client.set_default_header(header_name, header_value)
         self.custom_api = client.CustomObjectsApi(self.api_client)
     
     def create(self, resource: T, namespace: Optional[str] = None) -> T:
-        """Create a new resource"""
+        """Create a new resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 409: Resource already exists
+                - 403: Permission denied (RBAC)
+                - 422: Validation error
+        """
         ns = namespace or self.namespace
-        
+
         # Convert the typed model to dict
         body = self._model_to_dict(resource)
-        
+
         # Ensure required fields are set
         body['apiVersion'] = self.api_version
         body['kind'] = self.kind
-        
-        try:
-            result = self.custom_api.create_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                body=body
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            raise Exception(f"Failed to create {self.kind}: {e}")
+
+        result = self.custom_api.create_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            body=body
+        )
+        return self._dict_to_model(result)
     
     def get(self, name: str, namespace: Optional[str] = None) -> T:
-        """Get a resource by name"""
+        """Get a resource by name
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+        """
         ns = namespace or self.namespace
-        
+
+        # Create fresh client for GET to avoid caching stale data
+        fresh_api_client = client.ApiClient()
+        fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
+
         try:
-            result = self.custom_api.get_namespaced_custom_object(
+            result = fresh_custom_api.get_namespaced_custom_object(
                 group=self.group,
                 version=self.version,
                 namespace=ns,
@@ -110,35 +147,53 @@ class ARKResourceClient(Generic[T]):
                 name=name
             )
             return self._dict_to_model(result)
-        except ApiException as e:
-            if e.status == 404:
-                raise Exception(f"{self.kind} '{name}' not found in namespace '{ns}'")
-            raise Exception(f"Failed to get {self.kind}: {e}")
+        finally:
+            fresh_api_client.close()
     
     def list(self, namespace: Optional[str] = None, label_selector: Optional[str] = None) -> List[T]:
-        """List all resources"""
+        """List all resources
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 403: Permission denied (RBAC)
+                - 404: Namespace not found
+        """
         ns = namespace or self.namespace
-        
+
+        kwargs = {}
+        if label_selector:
+            kwargs['label_selector'] = label_selector
+
+        # Create fresh client for LIST to avoid caching stale data
+        fresh_api_client = client.ApiClient()
+        fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
+
         try:
-            kwargs = {}
-            if label_selector:
-                kwargs['label_selector'] = label_selector
-            
-            result = self.custom_api.list_namespaced_custom_object(
+            result = fresh_custom_api.list_namespaced_custom_object(
                 group=self.group,
                 version=self.version,
                 namespace=ns,
                 plural=self.plural,
                 **kwargs
             )
-            
+
             items = result.get('items', [])
             return [self._dict_to_model(item) for item in items]
-        except ApiException as e:
-            raise Exception(f"Failed to list {self.kind}s: {e}")
+        finally:
+            fresh_api_client.close()
     
     def update(self, resource: T, namespace: Optional[str] = None) -> T:
-        """Update an existing resource"""
+        """Update an existing resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+                - 409: Resource conflict (concurrent modification)
+                - 422: Validation error
+        """
         ns = namespace or self.namespace
         
         # Convert the typed model to dict
@@ -153,52 +208,56 @@ class ARKResourceClient(Generic[T]):
         if not name:
             raise ValueError("Resource must have metadata.name for update")
         
-        try:
-            result = self.custom_api.replace_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name,
-                body=body
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            raise Exception(f"Failed to update {self.kind}: {e}")
+        result = self.custom_api.replace_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name,
+            body=body
+        )
+        return self._dict_to_model(result)
     
     def patch(self, name: str, patch_data: Dict[str, Any], namespace: Optional[str] = None) -> T:
-        """Patch a resource"""
+        """Patch a resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+                - 422: Validation error
+        """
         ns = namespace or self.namespace
-        
-        try:
-            result = self.custom_api.patch_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name,
-                body=patch_data
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            raise Exception(f"Failed to patch {self.kind}: {e}")
+
+        result = self.custom_api.patch_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name,
+            body=patch_data
+        )
+        return self._dict_to_model(result)
     
     def delete(self, name: str, namespace: Optional[str] = None) -> None:
-        """Delete a resource"""
+        """Delete a resource
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 404: Resource not found
+                - 403: Permission denied (RBAC)
+        """
         ns = namespace or self.namespace
-        
-        try:
-            self.custom_api.delete_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name
-            )
-        except ApiException as e:
-            if e.status == 404:
-                raise Exception(f"{self.kind} '{name}' not found in namespace '{ns}'")
-            raise Exception(f"Failed to delete {self.kind}: {e}")
+
+        self.custom_api.delete_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name
+        )
     
     def _model_to_dict(self, model: T) -> Dict[str, Any]:
         """Convert a typed model to a dictionary"""
@@ -250,7 +309,9 @@ class ARKResourceClient(Generic[T]):
 class _ARKClient:
     """Base ARK client class"""
 
-    def __init__(self, namespace: Optional[str] = None):
+    def __init__(self, namespace: Optional[str] = None, default_headers: Optional[Dict[str, str]] = None, user_agent: Optional[str] = None):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
+        self.default_headers = default_headers
+        self.user_agent = user_agent

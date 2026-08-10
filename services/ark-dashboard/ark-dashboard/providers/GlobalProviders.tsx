@@ -1,10 +1,12 @@
 import { Provider as JotaiProvider } from 'jotai';
 import { Suspense } from 'react';
 import type { PropsWithChildren } from 'react';
-import { Toaster } from 'sonner';
 
+import { NavigationTracker } from '@/components/navigation-tracker';
+import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';
+import { Toaster } from '@/components/ui/sonner';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
-import { ChatProvider } from '@/lib/chat-context';
+import { ContextProvider } from '@/providers/ContextProvider';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
 
 import { OpenModeProvider, SSOModeProvider } from './AuthProviders';
@@ -26,15 +28,17 @@ export function GlobalProviders({ children }: PropsWithChildren) {
                   Loading...
                 </div>
               }>
-              <NamespaceProvider>
-                <AnalyticsProvider>
-                  <ChatProvider>{children}</ChatProvider>
-                </AnalyticsProvider>
-              </NamespaceProvider>
+              <ContextProvider enabled={isSSOEnabled}>
+                <NamespaceProvider>
+                  <AnalyticsProvider>{children}</AnalyticsProvider>
+                </NamespaceProvider>
+              </ContextProvider>
             </Suspense>
           </QueryClientProvider>
         </AuthProvider>
-        <Toaster richColors closeButton visibleToasts={5} />
+        <SettingsKeyboardShortcut />
+        <NavigationTracker />
+        <Toaster visibleToasts={5} position="top-right" />
       </ThemeProvider>
     </JotaiProvider>
   );

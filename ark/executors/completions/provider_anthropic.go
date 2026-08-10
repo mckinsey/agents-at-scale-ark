@@ -7,12 +7,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
+	"mckinsey.com/ark/internal/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const defaultAnthropicVersion = "2023-06-01"
+
+var anthropicHTTPClient = &http.Client{
+	Timeout:   60 * time.Second,
+	Transport: common.NewSharedTransport(),
+}
 
 type AnthropicProvider struct {
 	Model      string
@@ -31,16 +39,11 @@ func (ap *AnthropicProvider) SetOutputSchema(schema *runtime.RawExtension, schem
 	ap.schemaName = schemaName
 }
 
-func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	var toolsParam []openai.ChatCompletionToolParam
-	if len(tools) > 0 {
-		toolsParam = tools[0]
-	}
-
+func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
-	anthropicTools := convertToolsToAnthropic(toolsParam)
+	anthropicTools := convertToolsToAnthropic(tools)
 
-	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, ap.Properties)
+	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, ap.Properties)
 	request.Model = ap.Model
 
 	version := ap.Version
@@ -67,15 +70,18 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 		httpReq.Header.Set(k, v)
 	}
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := anthropicHTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic API request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Anthropic response: %w", err)
+	}
+	if len(body) == 10<<20 {
+		logf.FromContext(ctx).Info("Anthropic response may have been truncated", "limit", "10MB")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -87,11 +93,17 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 		return nil, fmt.Errorf("failed to unmarshal Anthropic response: %w", err)
 	}
 
+	logf.FromContext(ctx).Info("anthropic token usage",
+		"input", response.Usage.InputTokens,
+		"cacheCreation", response.Usage.CacheCreationInputTokens,
+		"cacheRead", response.Usage.CacheReadInputTokens,
+		"output", response.Usage.OutputTokens)
+
 	return convertAnthropicResponse(response), nil
 }
 
-func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	completion, err := ap.ChatCompletion(ctx, messages, n, tools...)
+func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+	completion, err := ap.ChatCompletion(ctx, messages, n, tools, toolChoice)
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +131,6 @@ func (ap *AnthropicProvider) BuildConfig() map[string]any {
 
 func (ap *AnthropicProvider) HealthCheck(ctx context.Context) error {
 	testMessages := []Message{NewUserMessage("Hello")}
-	_, err := ap.ChatCompletion(ctx, testMessages, 1)
+	_, err := ap.ChatCompletion(ctx, testMessages, 1, nil, ToolChoiceUnset)
 	return err
 }

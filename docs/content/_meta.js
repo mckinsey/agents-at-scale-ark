@@ -1,9 +1,9 @@
 export default {
   index: 'Introduction',
   quickstart: 'Quickstart',
-  tutorials: 'Tutorials',
-  'how-to-guides': 'How-to Guides',
   'core-concepts': 'Core Concepts',
+  'how-to-guides': 'How-to Guides',
+  tutorials: 'Tutorials',
   reference: 'Reference',
   
   // Hide legacy folder structure (content is linked from new sections)

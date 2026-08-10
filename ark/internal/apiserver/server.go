@@ -4,6 +4,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -35,70 +36,179 @@ var (
 	ParameterCodec = runtime.NewParameterCodec(Scheme)
 )
 
+type jsonOnlyNegotiatedSerializer struct {
+	serializer.CodecFactory
+}
+
+func (s jsonOnlyNegotiatedSerializer) SupportedMediaTypes() []runtime.SerializerInfo {
+	all := s.CodecFactory.SupportedMediaTypes()
+	result := make([]runtime.SerializerInfo, 0, len(all))
+	for _, info := range all {
+		if info.MediaType != runtime.ContentTypeProtobuf {
+			result = append(result, info)
+		}
+	}
+	return result
+}
+
 func init() {
 	utilruntime.Must(arkv1alpha1.AddToScheme(Scheme))
 	utilruntime.Must(arkv1prealpha1.AddToScheme(Scheme))
 	utilruntime.Must(metav1.AddMetaToScheme(Scheme))
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Group: "", Version: "v1"})
+
+	// Register external types as internal versions to enable patch operations.
+	// Since ARK only has one version per API group, we use the external types
+	// as the internal representation (no conversion needed).
+	// Without this, kubectl patch fails with "no kind X is registered for internal version".
+	internalGV := schema.GroupVersion{Group: arkv1alpha1.GroupVersion.Group, Version: runtime.APIVersionInternal}
+	Scheme.AddKnownTypes(
+		internalGV,
+		&arkv1alpha1.Agent{},
+		&arkv1alpha1.AgentList{},
+		&arkv1alpha1.Team{},
+		&arkv1alpha1.TeamList{},
+		&arkv1alpha1.Query{},
+		&arkv1alpha1.QueryList{},
+		&arkv1alpha1.Model{},
+		&arkv1alpha1.ModelList{},
+		&arkv1alpha1.Tool{},
+		&arkv1alpha1.ToolList{},
+		&arkv1alpha1.MCPServer{},
+		&arkv1alpha1.MCPServerList{},
+		&arkv1alpha1.Memory{},
+		&arkv1alpha1.MemoryList{},
+		&arkv1alpha1.A2ATask{},
+		&arkv1alpha1.A2ATaskList{},
+		&arkv1alpha1.ArkConfig{},
+		&arkv1alpha1.ArkConfigList{},
+	)
+	Scheme.AddKnownTypes(
+		internalGV,
+		&arkv1prealpha1.A2AServer{},
+		&arkv1prealpha1.A2AServerList{},
+		&arkv1prealpha1.ExecutionEngine{},
+		&arkv1prealpha1.ExecutionEngineList{},
+	)
 }
+
+const (
+	AuthModeDelegated = "delegated"
+	AuthModeOff       = "off"
+)
 
 type Config struct {
-	PostgresHost string
-	PostgresPort int
-	PostgresDB   string
-	PostgresUser string
-	PostgresPass string
-	PostgresSSL  string
-	BindPort     int
-	K8sClient    client.Client
+	PostgresHost    string
+	PostgresPort    int
+	PostgresDB      string
+	PostgresUser    string
+	PostgresPass    string
+	PostgresSSL     string
+	PostgresSSLRoot string
+	PostgresSSLCert string
+	PostgresSSLKey  string
+	BindPort        int
+	AuthMode        string
+	TLSCertFile     string
+	TLSKeyFile      string
+	K8sClient       client.Client
 }
 
+const readyzPingTimeout = 2 * time.Second
+
 type Server struct {
-	config  Config
-	backend storage.Backend
-	stopCh  chan struct{}
+	config       Config
+	backend      *postgresql.PostgreSQLBackend
+	backendReady chan struct{}
+	stopCh       chan struct{}
 }
 
 func New(cfg Config) *Server {
 	if cfg.BindPort == 0 {
 		cfg.BindPort = 6443
 	}
+	if cfg.AuthMode == "" {
+		cfg.AuthMode = AuthModeDelegated
+	}
 	return &Server{
-		config: cfg,
-		stopCh: make(chan struct{}),
+		config:       cfg,
+		backendReady: make(chan struct{}),
+		stopCh:       make(chan struct{}),
+	}
+}
+
+// walConsumer starts the backend's WAL consumer once this replica holds the
+// leader lease. The replication slot is single-consumer: without this gate,
+// extra replicas error-loop trying to acquire the slot.
+type walConsumer struct {
+	ready <-chan struct{}
+	start func()
+}
+
+func (w *walConsumer) Start(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-w.ready:
+	}
+	klog.Info("Leader lease acquired; starting WAL consumer")
+	w.start()
+	<-ctx.Done()
+	return nil
+}
+
+func (w *walConsumer) NeedLeaderElection() bool {
+	return true
+}
+
+func (s *Server) WALConsumer() *walConsumer {
+	return &walConsumer{
+		ready: s.backendReady,
+		start: func() { s.backend.StartWALConsumer() },
 	}
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	if s.config.AuthMode != AuthModeDelegated && s.config.AuthMode != AuthModeOff {
+		return fmt.Errorf("invalid auth mode %q: must be %q or %q", s.config.AuthMode, AuthModeDelegated, AuthModeOff)
+	}
+
 	klog.Info("Starting embedded Ark API Server")
 
 	converter := NewRegistryTypeConverter()
 	var err error
 
 	cfg := postgresql.Config{
-		Host:     s.config.PostgresHost,
-		Port:     s.config.PostgresPort,
-		Database: s.config.PostgresDB,
-		User:     s.config.PostgresUser,
-		Password: s.config.PostgresPass,
-		SSLMode:  s.config.PostgresSSL,
+		Host:        s.config.PostgresHost,
+		Port:        s.config.PostgresPort,
+		Database:    s.config.PostgresDB,
+		User:        s.config.PostgresUser,
+		Password:    s.config.PostgresPass,
+		SSLMode:     s.config.PostgresSSL,
+		SSLRootCert: s.config.PostgresSSLRoot,
+		SSLCert:     s.config.PostgresSSLCert,
+		SSLKey:      s.config.PostgresSSLKey,
 	}
 	s.backend, err = postgresql.New(cfg, converter)
 	if err != nil {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
+	close(s.backendReady)
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
 	secureServing.BindPort = s.config.BindPort
 	secureServing.HTTP2MaxStreamsPerConnection = 1000
 	secureServing.ServerCert.CertDirectory = "/tmp/ark-apiserver-certs"
+	secureServing.ServerCert.CertKey.CertFile = s.config.TLSCertFile
+	secureServing.ServerCert.CertKey.KeyFile = s.config.TLSKeyFile
 
 	if err := secureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, nil); err != nil {
 		return fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
 
 	serverConfig := genericapiserver.NewConfig(Codecs)
+	serverConfig.Serializer = jsonOnlyNegotiatedSerializer{Codecs}
 	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
 	serverConfig.RequestTimeout = 24 * time.Hour
 	serverConfig.MinRequestTimeout = 86400
@@ -116,6 +226,20 @@ func (s *Server) Start(ctx context.Context) error {
 
 	if err := secureServing.ApplyTo(&serverConfig.SecureServing, &serverConfig.LoopbackClientConfig); err != nil {
 		return err
+	}
+
+	if s.config.AuthMode == AuthModeDelegated {
+		authn := genericoptions.NewDelegatingAuthenticationOptions()
+		if err := authn.ApplyTo(&serverConfig.Authentication, serverConfig.SecureServing, serverConfig.OpenAPIConfig); err != nil {
+			return fmt.Errorf("failed to apply delegated authentication: %w", err)
+		}
+		authz := genericoptions.NewDelegatingAuthorizationOptions()
+		if err := authz.ApplyTo(&serverConfig.Authorization); err != nil {
+			return fmt.Errorf("failed to apply delegated authorization: %w", err)
+		}
+		klog.Info("Delegated authentication and authorization enabled")
+	} else {
+		klog.Warning("Request authentication and authorization are DISABLED (auth mode 'off'); any client that can reach the service can read and write all Ark resources")
 	}
 
 	completedConfig := serverConfig.Complete(nil)
@@ -140,6 +264,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, converter storage.TypeConverter) error {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
+	apiGroupInfo.NegotiatedSerializer = jsonOnlyNegotiatedSerializer{Codecs}
 
 	printerColumns := GetPrinterColumnRegistry()
 
@@ -185,4 +310,33 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 
 func (s *Server) NeedLeaderElection() bool {
 	return false
+}
+
+func (s *Server) Readyz(r *http.Request) error {
+	return storageReady(r.Context(), s.backendReady, func(ctx context.Context) error { return s.backend.Ping(ctx) })
+}
+
+func storageReady(parent context.Context, ready <-chan struct{}, ping func(context.Context) error) error {
+	select {
+	case <-ready:
+	default:
+		return errors.New("storage backend not initialized")
+	}
+	ctx, cancel := context.WithTimeout(parent, readyzPingTimeout)
+	defer cancel()
+
+	// The ping runs on its own goroutine because lib/pq observes only its connect_timeout
+	// while establishing a connection: against an unreachable or wedged database the ping
+	// ignores ctx and returns after connect_timeout, 5x readyzPingTimeout. Waiting on ctx
+	// here keeps the probe response bounded and lets kubelet-side cancellation land, while
+	// the abandoned ping releases its pool connection when the driver gives up.
+	done := make(chan error, 1)
+	go func() { done <- ping(ctx) }()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("storage backend ping did not complete: %w", ctx.Err())
+	}
 }

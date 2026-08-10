@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-set-based-selector
+spec:
+  input: What is the weather like today and what mathematical concepts should I know?
+  # Forces the uncached impersonated client so the selector reaches the server.
+  serviceAccount: query-selector-sa
+  selector:
+    matchExpressions:
+    - key: type
+      operator: In
+      values: [specialist]
+    - key: environment
+      operator: NotIn
+      values: [development]

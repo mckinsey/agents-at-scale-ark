@@ -1,9 +1,12 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -106,7 +109,7 @@ func TestNewMCPClient(t *testing.T) {
 					_ = mcpClient.Client.Close()
 				}
 
-				_ = mcpServerMock.Shutdown(t.Context())
+				_ = mcpServerMock.Shutdown(context.Background())
 			})
 
 			go func() {
@@ -183,10 +186,23 @@ func (m *mcpServerMock) ListenAndServe(t *testing.T) error {
 }
 
 func (m *mcpServerMock) Shutdown(ctx context.Context) error {
+	m.closeSessions()
 	if m.httpServer != nil {
 		return m.httpServer.Shutdown(ctx)
 	}
 	return nil
+}
+
+// closeSessions terminates any live server-side sessions. The go-sdk
+// streamable-HTTP handler keeps a per-session Read goroutine alive until the
+// session is closed, so tests must close sessions explicitly to satisfy goleak.
+func (m *mcpServerMock) closeSessions() {
+	if m.server == nil {
+		return
+	}
+	for session := range m.server.Sessions() {
+		_ = session.Close()
+	}
 }
 
 func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcpsdk.Server {
@@ -205,6 +221,76 @@ func (m *mcpServerMock) sayHi(ctx context.Context, req *mcpsdk.CallToolRequest, 
 			&mcpsdk.TextContent{Text: "Hi " + args.Name},
 		},
 	}, nil, nil
+}
+
+func TestNewMCPClientBoundsConnectionByTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if bytes.Contains(body, []byte(`"method":"initialize"`)) {
+			<-r.Context().Done()
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(server.Close)
+
+	start := time.Now()
+	client, err := NewMCPClient(t.Context(), server.URL, nil, httpTransport, 300*time.Millisecond, MCPSettings{})
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Less(t, elapsed, 30*time.Second, "connection establishment must be bounded by the configured timeout")
+}
+
+func TestNewMCPClientSessionOutlivesConnectTimeout(t *testing.T) {
+	for _, transportType := range []string{httpTransport, sseTransport} {
+		t.Run(transportType, func(t *testing.T) {
+			mcpServerMock := mcpServerMock{}.New(t, mcpConnectionOps{transport: transportType})
+
+			var handler http.Handler
+			switch transportType {
+			case sseTransport:
+				handler = mcpsdk.NewSSEHandler(mcpServerMock.getServerFn(), nil)
+			default:
+				handler = mcpsdk.NewStreamableHTTPHandler(mcpServerMock.getServerFn(), nil)
+			}
+
+			server := httptest.NewServer(handler)
+			t.Cleanup(server.Close)
+			t.Cleanup(mcpServerMock.closeSessions)
+
+			connectTimeout := 500 * time.Millisecond
+			client, err := NewMCPClient(t.Context(), server.URL, nil, transportType, connectTimeout, MCPSettings{})
+			require.NoError(t, err)
+			require.NotNil(t, client)
+			t.Cleanup(func() { _ = client.Client.Close() })
+
+			time.Sleep(2 * connectTimeout)
+
+			tools, err := client.ListTools(t.Context())
+			require.NoError(t, err, "session must survive expiry of the connection timeout")
+			require.Equal(t, "greet", tools[0].Name)
+		})
+	}
+}
+
+func TestCreateTransportHasNoClientTimeout(t *testing.T) {
+	for _, transportType := range []string{sseTransport, httpTransport} {
+		t.Run(transportType, func(t *testing.T) {
+			transport, _, err := createTransport("http://localhost:8888", nil, transportType)
+			require.NoError(t, err)
+
+			switch tr := transport.(type) {
+			case *mcpsdk.SSEClientTransport:
+				require.Zero(t, tr.HTTPClient.Timeout, "http.Client.Timeout must be zero; it would kill long-lived SSE streams")
+			case *mcpsdk.StreamableClientTransport:
+				require.Zero(t, tr.HTTPClient.Timeout, "http.Client.Timeout must be zero; it would kill the standalone SSE stream of the Streamable-HTTP transport")
+			default:
+				t.Fatalf("unexpected transport type %T", transport)
+			}
+		})
+	}
 }
 
 func waitForServer(t *testing.T, ctx context.Context, url string, timeout time.Duration) error {

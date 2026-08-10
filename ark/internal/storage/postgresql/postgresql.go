@@ -5,8 +5,10 @@ package postgresql
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,7 +17,10 @@ import (
 
 	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/fields"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog/v2"
 
@@ -24,30 +29,129 @@ import (
 
 const jsonNull = "null"
 
-func parseLabelSelector(selector string) (map[string]string, error) {
+// fieldPredicate is a validated (column, op, value) triple derived from a client-
+// supplied field selector. columns come from supportedFieldColumns (never client
+// input), so composing SQL by concatenating column and op is safe from injection.
+type fieldPredicate struct {
+	column string
+	op     string
+	value  string
+}
+
+// supportedFieldColumns maps k8s field selectors to the resources table
+// column they filter on. Resource-specific fields (e.g. status.phase) are
+// rejected pending typed field indexers — not permanently forbidden.
+var supportedFieldColumns = map[string]string{
+	"metadata.name":      "name",
+	"metadata.namespace": "namespace",
+}
+
+var supportedFieldOps = map[selection.Operator]string{
+	selection.Equals:       "=",
+	selection.DoubleEquals: "=",
+	selection.NotEquals:    "<>",
+}
+
+func supportedFieldsList() string {
+	keys := make([]string, 0, len(supportedFieldColumns))
+	for k := range supportedFieldColumns {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+func supportedFieldOpsList() string {
+	keys := make([]string, 0, len(supportedFieldOps))
+	for k := range supportedFieldOps {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+// parseFieldSelector validates opts.FieldSelector and returns SQL predicates for
+// supported metadata fields. Unsupported fields or operators produce storage.ErrInvalidRequest.
+// Additional fields can be added by extending supportedFieldColumns.
+func parseFieldSelector(selector string) ([]fieldPredicate, error) {
 	if selector == "" {
 		return nil, nil
 	}
-	result := map[string]string{}
-	for _, part := range strings.Split(selector, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if strings.Contains(part, "!=") || strings.Contains(part, " in ") || strings.Contains(part, " notin ") || strings.HasPrefix(part, "!") {
-			return nil, fmt.Errorf("unsupported label selector operator in %q, only equality (=, ==) is supported", part)
-		}
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid label selector %q", part)
-		}
-		key := strings.TrimSuffix(strings.TrimSpace(kv[0]), "=")
-		result[strings.TrimSpace(key)] = strings.TrimSpace(kv[1])
+	sel, err := fields.ParseSelector(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid field selector %q: %v", storage.ErrInvalidRequest, selector, err)
 	}
-	if len(result) == 0 {
+	if sel.Empty() {
 		return nil, nil
 	}
-	return result, nil
+	reqs := sel.Requirements()
+	preds := make([]fieldPredicate, 0, len(reqs))
+	for _, req := range reqs {
+		col, ok := supportedFieldColumns[req.Field]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector on %q is not yet implemented for the PostgreSQL backend (currently supported: %s)", storage.ErrInvalidRequest, req.Field, supportedFieldsList())
+		}
+		op, ok := supportedFieldOps[req.Operator]
+		if !ok {
+			return nil, fmt.Errorf("%w: field selector operator %q is not yet implemented (currently supported: %s)", storage.ErrInvalidRequest, req.Operator, supportedFieldOpsList())
+		}
+		preds = append(preds, fieldPredicate{column: col, op: op, value: req.Value})
+	}
+	return preds, nil
+}
+
+func parseLabelSelector(selector string) (k8slabels.Selector, error) {
+	if selector == "" {
+		return nil, nil
+	}
+	sel, err := k8slabels.Parse(selector)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid label selector %q: %v", storage.ErrInvalidRequest, selector, err)
+	}
+	if sel.Empty() {
+		return nil, nil
+	}
+	return sel, nil
+}
+
+// labelSelectorSQL emits " AND ..." clauses and appends bind values to *args.
+// Placeholders are len(*args)+1 at each use, so the caller passes the same
+// slice and doesn't track an index. Values are bound; operators are fixed.
+func labelSelectorSQL(sel k8slabels.Selector, args *[]interface{}) string {
+	if sel == nil || sel.Empty() {
+		return ""
+	}
+	reqs, _ := sel.Requirements()
+	var sb strings.Builder
+	for _, req := range reqs {
+		key := req.Key()
+		op := req.Operator()
+		vals := req.Values().List()
+		p := len(*args) + 1
+		switch op {
+		case selection.Equals, selection.DoubleEquals:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = $%d`, p, p+1)
+			*args = append(*args, key, vals[0])
+		case selection.NotEquals:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> $%d)`, p, p, p+1)
+			*args = append(*args, key, vals[0])
+		case selection.In:
+			fmt.Fprintf(&sb, ` AND labels->>$%d = ANY($%d::text[])`, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
+		case selection.NotIn:
+			fmt.Fprintf(&sb, ` AND (labels->>$%d IS NULL OR labels->>$%d <> ALL($%d::text[]))`, p, p, p+1)
+			*args = append(*args, key, pq.Array(vals))
+		case selection.Exists:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NOT NULL`, p)
+			*args = append(*args, key)
+		case selection.DoesNotExist:
+			fmt.Fprintf(&sb, ` AND labels->>$%d IS NULL`, p)
+			*args = append(*args, key)
+		default:
+			panic(fmt.Sprintf("labelSelectorSQL: unhandled operator %q from k8slabels.Parse output", op))
+		}
+	}
+	return sb.String()
 }
 
 type Config struct {
@@ -57,6 +161,9 @@ type Config struct {
 	User         string
 	Password     string
 	SSLMode      string
+	SSLRootCert  string
+	SSLCert      string
+	SSLKey       string
 	MaxOpenConns int
 	MaxIdleConns int
 }
@@ -65,25 +172,59 @@ type PostgreSQLBackend struct {
 	db        *sql.DB
 	connStr   string
 	converter storage.TypeConverter
-	watchers  map[string][]*postgresWatcher
-	mu        sync.RWMutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	cachedRV  atomic.Int64
+	// broadcasters holds one in-process watch cache per kind (see broadcaster.go).
+	// mu guards the map; a broadcaster is created lazily on first Watch of a kind
+	// and removed when its last watcher unsubscribes.
+	broadcasters map[string]*kindBroadcaster
+	mu           sync.RWMutex
+	ctx          context.Context
+	cancel       context.CancelFunc
+	cachedRV     atomic.Int64
+	walOnce      sync.Once
+}
+
+var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+
+func quoteConnValue(v string) string {
+	return "'" + connValueEscaper.Replace(v) + "'"
+}
+
+const (
+	connectTimeoutSeconds = 10
+	startupPingTimeout    = 30 * time.Second
+)
+
+func buildConnString(cfg Config) string {
+	parts := []string{
+		"host=" + quoteConnValue(cfg.Host),
+		"port=" + strconv.Itoa(cfg.Port),
+		"user=" + quoteConnValue(cfg.User),
+		"password=" + quoteConnValue(cfg.Password),
+		"dbname=" + quoteConnValue(cfg.Database),
+		"sslmode=" + quoteConnValue(cfg.SSLMode),
+		fmt.Sprintf("connect_timeout=%d", connectTimeoutSeconds),
+	}
+	if cfg.SSLRootCert != "" {
+		parts = append(parts, "sslrootcert="+quoteConnValue(cfg.SSLRootCert))
+	}
+	if cfg.SSLCert != "" {
+		parts = append(parts, "sslcert="+quoteConnValue(cfg.SSLCert))
+	}
+	if cfg.SSLKey != "" {
+		parts = append(parts, "sslkey="+quoteConnValue(cfg.SSLKey))
+	}
+	return strings.Join(parts, " ")
 }
 
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
 	if cfg.SSLMode == "" {
-		cfg.SSLMode = "disable"
+		cfg.SSLMode = "require"
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 5432
 	}
 
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
+	connStr := buildConnString(cfg)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -101,19 +242,21 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 
-	if err := db.Ping(); err != nil {
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), startupPingTimeout)
+	defer cancelPing()
+	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	backend := &PostgreSQLBackend{
-		db:        db,
-		connStr:   connStr,
-		converter: converter,
-		watchers:  make(map[string][]*postgresWatcher),
-		ctx:       ctx,
-		cancel:    cancel,
+		db:           db,
+		connStr:      connStr,
+		converter:    converter,
+		broadcasters: make(map[string]*kindBroadcaster),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 
 	if err := backend.initSchema(); err != nil {
@@ -123,11 +266,20 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	}
 
 	backend.warmPool()
-	go backend.listenForNotifications()
 	go backend.refreshBookmarkLoop()
 	go backend.cleanupLoop()
 
 	return backend, nil
+}
+
+// StartWALConsumer starts the logical-replication consumer that drives the
+// watch stream. New never starts it: the slot is single-consumer, so the caller
+// decides when this replica may take it (the apiserver gates it behind leader
+// election). Repeated calls are no-ops.
+func (p *PostgreSQLBackend) StartWALConsumer() {
+	p.walOnce.Do(func() {
+		go p.startWALConsumer()
+	})
 }
 
 func (p *PostgreSQLBackend) warmPool() {
@@ -146,6 +298,15 @@ func (p *PostgreSQLBackend) warmPool() {
 	}
 	wg.Wait()
 }
+
+// schemaInitLockKey serializes concurrent schema initialization. Postgres DDL is
+// not atomic against a simultaneous creator (IF NOT EXISTS only helps if the object
+// already exists at check time), so multiple replicas starting against a fresh
+// database race on the resources row-type. The advisory lock makes them serialize.
+// The value is an arbitrary application-chosen constant: pg_advisory_xact_lock keys
+// are raw int64s with no registry, so it only has to be stable and not collide with
+// other advisory-lock users of the same database.
+const schemaInitLockKey int64 = 8626421043
 
 func (p *PostgreSQLBackend) initSchema() error {
 	schema := `
@@ -168,6 +329,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 	);
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS owner_references JSONB DEFAULT '[]';
+	ALTER TABLE resources ADD COLUMN IF NOT EXISTS deletion_timestamp TIMESTAMPTZ;
 
 	ALTER TABLE resources DROP CONSTRAINT IF EXISTS resources_kind_namespace_name_key;
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_unique_active ON resources(kind, namespace, name) WHERE deleted_at IS NULL;
@@ -178,82 +340,31 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
 	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
 
-	CREATE OR REPLACE FUNCTION notify_resource_change()
-	RETURNS TRIGGER AS $$
-	BEGIN
-		PERFORM pg_notify('ark_resources', json_build_object(
-			'kind', NEW.kind,
-			'namespace', NEW.namespace,
-			'name', NEW.name,
-			'resource_version', NEW.resource_version
-		)::text);
-		RETURN NEW;
-	END;
-	$$ LANGUAGE plpgsql;
-
 	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
-	CREATE TRIGGER resource_change_trigger
-	AFTER INSERT OR UPDATE ON resources
-	FOR EACH ROW EXECUTE FUNCTION notify_resource_change();
+	DROP FUNCTION IF EXISTS notify_resource_change();
+
+	DO $$ BEGIN
+		IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'ark_cdc') THEN
+			CREATE PUBLICATION ark_cdc FOR TABLE resources;
+		END IF;
+	END $$;
 	`
-	_, err := p.db.Exec(schema)
-	return err
-}
-
-func (p *PostgreSQLBackend) listenForNotifications() {
-	backoff := time.Second
-	maxBackoff := 30 * time.Second
-
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		default:
-		}
-
-		listener := pq.NewListener(p.connStr, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
-			if err != nil {
-				klog.Errorf("PostgreSQL listener error: %v", err)
-			}
-		})
-
-		if err := listener.Listen("ark_resources"); err != nil {
-			_ = listener.Close()
-			klog.Errorf("Failed to listen for notifications, retrying in %v: %v", backoff, err)
-			select {
-			case <-p.ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-			backoff = min(backoff*2, maxBackoff)
-			continue
-		}
-
-		backoff = time.Second
-		p.runListener(listener)
-		_ = listener.Close()
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
 	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("SELECT pg_advisory_xact_lock($1)", schemaInitLockKey); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(schema); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-func (p *PostgreSQLBackend) runListener(listener *pq.Listener) {
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case n := <-listener.Notify:
-			if n == nil {
-				klog.Warning("PostgreSQL listener connection lost, reconnecting")
-				return
-			}
-			p.nudgeWatchers(n.Extra)
-		case <-time.After(90 * time.Second):
-			if err := listener.Ping(); err != nil {
-				klog.Warningf("Failed to ping listener, reconnecting: %v", err)
-				return
-			}
-		}
-	}
-}
+// startWALConsumer and runWALConsumer are in wal_consumer.go
 
 func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 	ticker := time.NewTicker(10 * time.Second)
@@ -348,6 +459,9 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 		RETURNING resource_version, generation, created_at
 	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON).Scan(&rv, &generation, &createdAt)
 	if err != nil {
+		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "23505" {
+			return storage.ErrAlreadyExists
+		}
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
 
@@ -356,7 +470,7 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at
+		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name)
 
@@ -364,20 +478,109 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 	var uid string
 	var spec, status, labels, annotations, finalizers, ownerRefs []byte
 	var createdAt, updatedAt time.Time
+	var deletionTimestamp sql.NullTime
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt, &deletionTimestamp); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 }
 
+type listContinueToken struct {
+	Snapshot string `json:"s"`
+	Cursor   int64  `json:"c"`
+}
+
+func encodeListContinueToken(tok listContinueToken) string {
+	raw, err := json.Marshal(tok)
+	if err != nil {
+		panic(fmt.Errorf("encode continue token: %w", err))
+	}
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+// decodeListContinueToken also accepts the legacy plain-integer form emitted
+// before snapshot-based pagination, so in-flight clients survive the upgrade.
+func decodeListContinueToken(s string) (listContinueToken, error) {
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		// Empty Snapshot signals cursor-only pagination for legacy callers.
+		return listContinueToken{Cursor: n}, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return listContinueToken{}, fmt.Errorf("invalid continue token: %w", err)
+	}
+	var tok listContinueToken
+	if err := json.Unmarshal(raw, &tok); err != nil {
+		return listContinueToken{}, fmt.Errorf("invalid continue token payload: %w", err)
+	}
+	return tok, nil
+}
+
+// List returns resources in descending resource_version order. Page 1 captures
+// pg_current_snapshot() and the continue token carries it forward so later
+// pages filter to rows visible in that snapshot, keeping the paginated view
+// consistent under concurrent inserts.
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
-	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
+	var contTok listContinueToken
+	if opts.Continue != "" {
+		var err error
+		contTok, err = decodeListContinueToken(opts.Continue)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	query, args, err := p.buildListQuery(kind, namespace, opts, contTok)
+	if err != nil {
+		return nil, "", err
+	}
+
+	rows, err := p.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to query resources: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	firstPage := contTok.Snapshot == ""
+	objects, resourceVersions, pageSnapshot, err := p.scanListRows(rows, kind, firstPage)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if firstPage && pageSnapshot == "" {
+		if err := p.db.QueryRowContext(ctx, "SELECT pg_current_snapshot()::text").Scan(&pageSnapshot); err != nil {
+			return nil, "", fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
+		}
+	}
+	if !firstPage {
+		pageSnapshot = contTok.Snapshot
+	}
+
+	var continueToken string
+	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
+		objects = objects[:opts.Limit]
+		resourceVersions = resourceVersions[:opts.Limit]
+		continueToken = encodeListContinueToken(listContinueToken{
+			Snapshot: pageSnapshot,
+			Cursor:   resourceVersions[len(resourceVersions)-1],
+		})
+	}
+
+	return objects, continueToken, nil
+}
+
+func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
+	selectCols := "resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deletion_timestamp"
+	if contTok.Snapshot == "" {
+		selectCols += ", pg_current_snapshot()::text"
+	}
+
+	query := `SELECT ` + selectCols + `
 		FROM resources
 		WHERE kind = $1 AND deleted_at IS NULL`
 	args := []interface{}{kind}
@@ -389,55 +592,68 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		argIndex++
 	}
 
-	if opts.LabelSelector != "" {
-		labelMap, err := parseLabelSelector(opts.LabelSelector)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to parse label selector: %w", err)
-		}
-		if labelMap != nil {
-			labelJSON, _ := json.Marshal(labelMap)
-			query += fmt.Sprintf(" AND labels @> $%d::jsonb", argIndex)
-			args = append(args, string(labelJSON))
-			argIndex++
-		}
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
+	if err != nil {
+		return "", nil, err
+	}
+	if labelSel != nil {
+		query += labelSelectorSQL(labelSel, &args)
+		argIndex = len(args) + 1
 	}
 
-	if opts.Continue != "" {
-		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
-		if err == nil && cursor > 0 {
-			query += fmt.Sprintf(" AND resource_version < $%d", argIndex)
-			args = append(args, cursor)
-			argIndex++
-		}
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return "", nil, err
+	}
+	for _, pred := range fieldPreds {
+		query += fmt.Sprintf(" AND %s %s $%d", pred.column, pred.op, argIndex)
+		args = append(args, pred.value)
+		argIndex++
+	}
+
+	if contTok.Cursor > 0 {
+		query += fmt.Sprintf(" AND resource_version < $%d", argIndex)
+		args = append(args, contTok.Cursor)
+		argIndex++
+	}
+	if contTok.Snapshot != "" {
+		query += fmt.Sprintf(" AND pg_visible_in_snapshot(xmin::text::xid8, $%d::pg_snapshot)", argIndex)
+		args = append(args, contTok.Snapshot)
+		argIndex++
 	}
 
 	query += " ORDER BY resource_version DESC"
-
 	if opts.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argIndex)
 		args = append(args, opts.Limit+1)
 	}
+	return query, args, nil
+}
 
-	rows, err := p.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to query resources: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
+func (p *PostgreSQLBackend) scanListRows(rows *sql.Rows, kind string, firstPage bool) ([]runtime.Object, []int64, string, error) {
 	var objects []runtime.Object
 	var resourceVersions []int64
-
+	var pageSnapshot string
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
+		var deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt); err != nil {
-			return nil, "", fmt.Errorf("failed to scan row: %w", err)
+		scanTargets := []interface{}{&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletionTimestamp}
+		var snap string
+		if firstPage {
+			scanTargets = append(scanTargets, &snap)
+		}
+		if err := rows.Scan(scanTargets...); err != nil {
+			return nil, nil, "", fmt.Errorf("failed to scan row: %w", err)
+		}
+		if firstPage && pageSnapshot == "" {
+			pageSnapshot = snap
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -446,15 +662,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		objects = append(objects, obj)
 		resourceVersions = append(resourceVersions, rv)
 	}
-
-	var continueToken string
-	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
-		objects = objects[:opts.Limit]
-		resourceVersions = resourceVersions[:opts.Limit]
-		continueToken = fmt.Sprintf("%d", resourceVersions[len(resourceVersions)-1])
-	}
-
-	return objects, continueToken, nil
+	return objects, resourceVersions, pageSnapshot, nil
 }
 
 func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -465,11 +673,12 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 
 	var resource struct {
 		Metadata struct {
-			ResourceVersion string            `json:"resourceVersion"`
-			Labels          map[string]string `json:"labels"`
-			Annotations     map[string]string `json:"annotations"`
-			Finalizers      []string          `json:"finalizers"`
-			OwnerReferences json.RawMessage   `json:"ownerReferences"`
+			ResourceVersion   string            `json:"resourceVersion"`
+			Labels            map[string]string `json:"labels"`
+			Annotations       map[string]string `json:"annotations"`
+			Finalizers        []string          `json:"finalizers"`
+			OwnerReferences   json.RawMessage   `json:"ownerReferences"`
+			DeletionTimestamp *string           `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -496,6 +705,14 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		ownerRefsJSON = "[]"
 	}
 
+	// deletionTimestamp is set-once: once a graceful delete records it, normal
+	// updates that omit it (most reconciles) must not clear it. COALESCE in the
+	// UPDATE keeps the stored value whenever the incoming object has none.
+	var deletionTS interface{}
+	if resource.Metadata.DeletionTimestamp != nil && *resource.Metadata.DeletionTimestamp != "" {
+		deletionTS = *resource.Metadata.DeletionTimestamp
+	}
+
 	specJSON := string(resource.Spec)
 	if specJSON == "" || specJSON == jsonNull {
 		specJSON = "{}"
@@ -518,19 +735,29 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	var uid string
 	var createdAt time.Time
 	var updated bool
+	// generation bumps on the two transitions upstream Kubernetes bumps on: a
+	// spec change, and the first time deletionTimestamp is set (rest.BeforeDelete).
+	// The CASE reads OLD row values on the RHS (per PostgreSQL SET semantics),
+	// so `deletion_timestamp IS NULL` detects the marking transition; a reconcile
+	// that re-sends an existing timestamp does not bump. jsonb equality is
+	// structural, so re-marshalled specs with reordered keys don't false-bump.
 	err = p.db.QueryRowContext(ctx, `
 		WITH upd AS (
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
-			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10 AND deleted_at IS NULL
+			    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
+			    generation = CASE WHEN spec IS DISTINCT FROM $1::jsonb
+			                       OR ($7::timestamptz IS NOT NULL AND deletion_timestamp IS NULL)
+			                      THEN generation + 1 ELSE generation END,
+			    resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
 		SELECT resource_version, generation, uid, created_at, true FROM upd
 		UNION ALL
 		SELECT 0, 0, '', NOW(), false WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -626,33 +853,60 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 }
 
 func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
-	key := fmt.Sprintf("%s/%s", kind, namespace)
-
-	labelFilter, err := parseLabelSelector(opts.LabelSelector)
+	labelSel, err := parseLabelSelector(opts.LabelSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+		return nil, err
+	}
+
+	fieldPreds, err := parseFieldSelector(opts.FieldSelector)
+	if err != nil {
+		return nil, err
 	}
 
 	w := &postgresWatcher{
-		outCh:       make(chan watch.Event, 100),
-		nudgeCh:     make(chan struct{}, 1),
-		backend:     p,
-		key:         key,
-		kind:        kind,
-		ns:          namespace,
-		labelFilter: labelFilter,
-		ctx:         ctx,
-		done:        make(chan struct{}),
-		initialList: true,
+		outCh:      make(chan watch.Event, 100),
+		inputCh:    make(chan *changeRow, 256),
+		backend:    p,
+		kind:       kind,
+		ns:         namespace,
+		labelSel:   labelSel,
+		fieldPreds: fieldPreds,
+		ctx:        ctx,
+		done:       make(chan struct{}),
+		seenRVs:    make(map[string]int64),
 	}
 
-	p.mu.Lock()
-	p.watchers[key] = append(p.watchers[key], w)
-	p.mu.Unlock()
+	// The broadcaster is a shared per-kind singleton that outlives any single
+	// Watch request; its relist deliberately uses the backend lifetime context
+	// (cancelled on Close), not this request ctx — inheriting ctx would let one
+	// watcher's disconnect break relists for every other watcher of the kind.
+	b := p.getOrCreateBroadcasterAndSubscribe(kind, w) //nolint:contextcheck // broadcaster owns its lifetime via backend.ctx, not the request ctx
+	w.bc = b
 
 	go w.run()
 
 	return w, nil
+}
+
+func (p *PostgreSQLBackend) getOrCreateBroadcasterAndSubscribe(kind string, w *postgresWatcher) *kindBroadcaster {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	b := p.broadcasters[kind]
+	if b == nil || b.isDone() {
+		b = newKindBroadcaster(p, kind)
+		p.broadcasters[kind] = b
+		go b.run()
+	}
+	b.subscribe(w)
+	return b
+}
+
+func (p *PostgreSQLBackend) currentMaxRV() int64 {
+	rv, err := p.getMaxResourceVersion()
+	if err != nil {
+		return 0
+	}
+	return rv
 }
 
 func (p *PostgreSQLBackend) GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error) {
@@ -668,7 +922,18 @@ func (p *PostgreSQLBackend) Close() error {
 	return p.db.Close()
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time) (runtime.Object, error) {
+func (p *PostgreSQLBackend) Ping(ctx context.Context) error {
+	return p.db.PingContext(ctx)
+}
+
+func nullTimePtr(t sql.NullTime) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Time
+}
+
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time, deletionTimestamp *time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
 	var finalizersList []string
@@ -694,6 +959,9 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	if len(ownerRefsList) > 0 {
 		metadata["ownerReferences"] = ownerRefsList
 	}
+	if deletionTimestamp != nil {
+		metadata["deletionTimestamp"] = deletionTimestamp.UTC().Format(time.RFC3339)
+	}
 
 	obj := map[string]interface{}{
 		"apiVersion": p.converter.APIVersion(kind),
@@ -716,44 +984,32 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	return p.converter.Decode(kind, data)
 }
 
-func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
-	var notification struct {
-		Kind      string `json:"kind"`
-		Namespace string `json:"namespace"`
-	}
-	if err := json.Unmarshal([]byte(payload), &notification); err != nil {
-		return
-	}
-
-	key := fmt.Sprintf("%s/%s", notification.Kind, notification.Namespace)
-	allKey := fmt.Sprintf("%s/", notification.Kind)
-
+// nudgeKind wakes the broadcaster for a single kind (one relist), if one exists.
+// Namespace is irrelevant for selecting the broadcaster — broadcasters are keyed by
+// kind and route to the right watchers by namespace at fan-out.
+func (p *PostgreSQLBackend) nudgeKind(kind string) {
 	p.mu.RLock()
-	watchers := make([]*postgresWatcher, 0, len(p.watchers[key])+len(p.watchers[allKey]))
-	watchers = append(watchers, p.watchers[key]...)
-	if notification.Namespace != "" {
-		watchers = append(watchers, p.watchers[allKey]...)
-	}
+	b := p.broadcasters[kind]
 	p.mu.RUnlock()
-
-	for _, w := range watchers {
-		select {
-		case w.nudgeCh <- struct{}{}:
-		default:
-		}
+	if b != nil {
+		b.nudge()
 	}
 }
 
-func (p *PostgreSQLBackend) removeWatcher(key string, w *postgresWatcher) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// nudgeWatchersByKindNamespace is kept as the WAL consumer's entry point; the
+// namespace argument is now only informational since the broadcaster is per-kind.
+func (p *PostgreSQLBackend) nudgeWatchersByKindNamespace(kind, namespace string) {
+	_ = namespace
+	p.nudgeKind(kind)
+}
 
-	watchers := p.watchers[key]
-	for i, existing := range watchers {
-		if existing == w {
-			p.watchers[key] = append(watchers[:i], watchers[i+1:]...)
-			break
-		}
+// nudgeAllWatchers relists every kind's broadcaster — called once on WAL reconnect
+// so no committed change is missed across the gap.
+func (p *PostgreSQLBackend) nudgeAllWatchers() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, b := range p.broadcasters {
+		b.nudge()
 	}
 }
 
@@ -770,27 +1026,43 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 }
 
 type postgresWatcher struct {
-	outCh           chan watch.Event
-	nudgeCh         chan struct{}
-	backend         *PostgreSQLBackend
-	key             string
-	kind            string
-	ns              string
-	labelFilter     map[string]string
-	ctx             context.Context
-	done            chan struct{}
-	stopped         atomic.Bool
-	closed          sync.Once
-	lastSeenRV      atomic.Int64
-	initialList     bool
+	// outCh is the public watch stream. Its SOLE writer is run(); the broadcaster
+	// never touches it, which keeps close() race-free.
+	outCh chan watch.Event
+	// inputCh carries fan-out rows from the kind's broadcaster. Written by the
+	// broadcaster (non-blocking) and never closed; drained by run().
+	inputCh    chan *changeRow
+	backend    *PostgreSQLBackend
+	bc         *kindBroadcaster
+	kind       string
+	ns         string
+	labelSel   k8slabels.Selector
+	fieldPreds []fieldPredicate
+	ctx        context.Context
+	done       chan struct{}
+	stopped    atomic.Bool
+	closed     sync.Once
+	lastSeenRV atomic.Int64
+	// behind is set by the broadcaster when this watcher's inputCh is full and a row
+	// was dropped; run() then does a private catch-up relist to recover it.
+	behind          atomic.Bool
 	initialListDone bool
+	// seenRVs maps a resource UID to the highest rv we've already emitted for it.
+	// Combined with the lookback window in relist(), this lets us re-fetch rows that
+	// might have been invisible during a prior relist (because their txn was still
+	// in flight) without re-emitting events the consumer already saw. It also dedups
+	// the initial relist against broadcaster fan-out.
+	seenMu  sync.Mutex
+	seenRVs map[string]int64
 }
 
 func (w *postgresWatcher) Stop() {
 	if w.stopped.Swap(true) {
 		return
 	}
-	w.backend.removeWatcher(w.key, w)
+	if w.bc != nil {
+		w.bc.unsubscribe(w)
+	}
 	w.closed.Do(func() {
 		close(w.done)
 	})
@@ -801,16 +1073,22 @@ func (w *postgresWatcher) ResultChan() <-chan watch.Event {
 }
 
 func (w *postgresWatcher) run() {
+	// Stop() (deferred first, runs first) unsubscribes from the broadcaster so no
+	// further fan-out targets this watcher, THEN close(outCh) (runs last) is safe
+	// because run() is the only writer to outCh.
 	defer close(w.outCh)
+	defer w.Stop()
 
-	w.relist()
+	// Initial population: full current state via this watcher's filters. On
+	// failure, arm `behind` so the bookmark tick retries — otherwise the watcher
+	// would start permanently empty until the first fanned-out change.
+	if err := w.relist(); err != nil {
+		w.behind.Store(true)
+	}
 	w.sendBookmark()
 
 	bookmarkTicker := time.NewTicker(30 * time.Second)
 	defer bookmarkTicker.Stop()
-
-	relistTicker := time.NewTicker(120 * time.Second)
-	defer relistTicker.Stop()
 
 	for {
 		select {
@@ -819,12 +1097,60 @@ func (w *postgresWatcher) run() {
 		case <-w.ctx.Done():
 			return
 		case <-bookmarkTicker.C:
+			// Also retry any catch-up that failed on a previous tick/row, so
+			// recovery doesn't stall on a quiescent kind (no new inputCh rows).
+			w.recoverIfBehind()
 			w.sendBookmark()
-		case <-relistTicker.C:
-			w.relist()
-		case <-w.nudgeCh:
-			w.relist()
+		case row := <-w.inputCh:
+			if !w.forwardRow(row) {
+				return
+			}
+			// If the broadcaster dropped rows into a full inputCh, recover them
+			// with a private filtered relist (runs in this goroutine, so it
+			// respects outCh backpressure and never blocks other watchers).
+			w.recoverIfBehind()
 		}
+	}
+}
+
+// recoverIfBehind drains a pending "behind" flag by running a private catch-up
+// relist. `behind` is cleared first so a drop concurrent with the relist re-arms
+// it; on relist error it is re-armed so the next row/tick retries. This is the
+// only recovery path — the broadcaster's seenRVs suppress re-fanning a row it
+// already dropped, so a dropped event is lost if this never succeeds.
+func (w *postgresWatcher) recoverIfBehind() {
+	if w.behind.Swap(false) {
+		if err := w.relist(); err != nil {
+			w.behind.Store(true)
+		}
+	}
+}
+
+// forwardRow emits one broadcaster fan-out row, deduped against this watcher's
+// seenRVs and deep-copied so the broadcaster's shared object is never mutated.
+// Returns false if the watcher is shutting down.
+func (w *postgresWatcher) forwardRow(row *changeRow) bool {
+	uidNew := !w.hasSeenUID(row.uid)
+	if w.markSeen(row.uid, row.rv) {
+		return true
+	}
+	var eventType watch.EventType
+	switch {
+	case row.deleted:
+		eventType = watch.Deleted
+	case uidNew:
+		eventType = watch.Added
+	default:
+		eventType = watch.Modified
+	}
+	w.advanceRV(row.rv)
+	select {
+	case w.outCh <- watch.Event{Type: eventType, Object: row.obj.DeepCopyObject()}:
+		return true
+	case <-w.done:
+		return false
+	case <-w.ctx.Done():
+		return false
 	}
 }
 
@@ -865,14 +1191,52 @@ func (w *postgresWatcher) advanceRV(rv int64) {
 	}
 }
 
-func (w *postgresWatcher) relist() {
-	lastRV := w.lastSeenRV.Load()
+// markSeen returns true if rv should be skipped because we've already emitted
+// this uid at the same or higher rv. Otherwise records rv as the latest.
+func (w *postgresWatcher) markSeen(uid string, rv int64) bool {
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	if seen, ok := w.seenRVs[uid]; ok && seen >= rv {
+		return true
+	}
+	w.seenRVs[uid] = rv
+	return false
+}
+
+func (w *postgresWatcher) hasSeenUID(uid string) bool {
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	_, ok := w.seenRVs[uid]
+	return ok
+}
+
+// pruneSeen drops seenRVs entries far below the current cursor, bounding memory.
+func (w *postgresWatcher) pruneSeen() {
+	pruneFloor := w.lastSeenRV.Load() - 5000
+	if pruneFloor <= 0 {
+		return
+	}
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	for uid, rv := range w.seenRVs {
+		if rv < pruneFloor {
+			delete(w.seenRVs, uid)
+		}
+	}
+}
+
+func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
+	const lookback int64 = 500
+	queryFromRV := w.lastSeenRV.Load() - lookback
+	if queryFromRV < 0 {
+		queryFromRV = 0
+	}
 
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND resource_version > $2`
-	args := []interface{}{w.kind, lastRV}
+	args := []interface{}{w.kind, queryFromRV}
 	argIndex := 3
 
 	if w.ns != "" {
@@ -880,19 +1244,66 @@ func (w *postgresWatcher) relist() {
 		args = append(args, w.ns)
 		argIndex++
 	}
-
-	if w.labelFilter != nil {
-		labelJSON, _ := json.Marshal(w.labelFilter)
-		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
-		args = append(args, string(labelJSON))
-		_ = argIndex
+	if w.labelSel != nil {
+		query += labelSelectorSQL(w.labelSel, &args)
+		argIndex = len(args) + 1
 	}
-
+	for _, p := range w.fieldPreds {
+		query += fmt.Sprintf(` AND %s %s $%d`, p.column, p.op, argIndex)
+		args = append(args, p.value)
+		argIndex++
+	}
 	query += ` ORDER BY resource_version ASC`
+	return query, args
+}
 
+// emitRow sends a single relist row downstream. Returns false if the watcher
+// should stop iterating (done/cancelled).
+func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
+	uidNew := !w.hasSeenUID(uid)
+	if w.markSeen(uid, rv) {
+		return true
+	}
+	obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+	if err != nil {
+		return true
+	}
+	var eventType watch.EventType
+	switch {
+	case deletedAt.Valid:
+		eventType = watch.Deleted
+	case uidNew:
+		eventType = watch.Added
+	default:
+		eventType = watch.Modified
+	}
+	w.advanceRV(rv)
+	select {
+	case w.outCh <- watch.Event{Type: eventType, Object: obj}:
+		return true
+	case <-w.done:
+		return false
+	case <-w.ctx.Done():
+		return false
+	}
+}
+
+// relist re-queries this watcher's slice and emits any rows it hasn't seen. It
+// returns an error if the query itself failed, so callers recovering dropped
+// events (run()) can tell a real failure from a clean pass and re-arm. A nil
+// return where the loop stopped early because the watcher is shutting down is
+// intentional: there is nothing left to recover.
+func (w *postgresWatcher) relist() error {
+	// FIX: BIGSERIAL resource_versions are assigned at INSERT statement time, but row
+	// visibility depends on COMMIT time. Two concurrent INSERTs can commit in the
+	// opposite order from rv assignment, so a strict `rv > lastSeenRV` cursor can skip
+	// past an in-flight rv permanently. Mitigation: re-query with a lookback window,
+	// then dedup by (uid, rv) using w.seenRVs to avoid double-emitting.
+	query, args := w.buildRelistQuery()
 	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
 	if err != nil {
-		return
+		watcherRelistFailures.WithLabelValues(w.kind).Inc()
+		return err
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -901,38 +1312,22 @@ func (w *postgresWatcher) relist() {
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
-		var deletedAt sql.NullTime
+		var deletedAt, deletionTimestamp sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt); err != nil {
-			return
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
+			// Partial read: do NOT advance/prune, so the next relist re-reads
+			// the same window and nothing is permanently skipped.
+			watcherRelistFailures.WithLabelValues(w.kind).Inc()
+			return err
 		}
-
-		obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
-		if err != nil {
-			continue
-		}
-
-		var eventType watch.EventType
-		switch {
-		case deletedAt.Valid:
-			eventType = watch.Deleted
-		case w.initialList:
-			eventType = watch.Added
-		default:
-			eventType = watch.Modified
-		}
-
-		w.advanceRV(rv)
-		select {
-		case w.outCh <- watch.Event{Type: eventType, Object: obj}:
-		case <-w.done:
-			return
-		case <-w.ctx.Done():
-			return
+		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
+			return nil // watcher shutting down, not a relist failure
 		}
 	}
-
-	if w.initialList {
-		w.initialList = false
+	if err := rows.Err(); err != nil {
+		watcherRelistFailures.WithLabelValues(w.kind).Inc()
+		return err
 	}
+	w.pruneSeen()
+	return nil
 }

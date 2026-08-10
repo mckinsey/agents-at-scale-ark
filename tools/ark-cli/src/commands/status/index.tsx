@@ -14,6 +14,12 @@ import {
   waitForServicesReady,
   type WaitProgress,
 } from '../../lib/waitForReady.js';
+import {
+  runReadinessChecks,
+  describeStorageBackend,
+  type ReadinessCheckResult,
+  type BackendDetection,
+} from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
 import output from '../../lib/output.js';
@@ -67,9 +73,33 @@ function enrichServiceDetails(service: ServiceStatus): {
   };
 }
 
+function backendStatusLine(detection: BackendDetection) {
+  const display: Record<
+    BackendDetection['status'],
+    {color: StatusColor; details: string}
+  > = {
+    etcd: {color: 'green', details: 'etcd'},
+    postgresql: {color: 'green', details: 'postgresql'},
+    'not-installed': {color: 'yellow', details: 'not installed'},
+    unreachable: {color: 'yellow', details: 'cluster unreachable'},
+    forbidden: {color: 'yellow', details: 'access denied'},
+    undetermined: {color: 'yellow', details: 'undetermined'},
+  };
+  const {color, details} = display[detection.status];
+  return {
+    icon: '●',
+    iconColor: color,
+    status: 'storage backend',
+    statusColor: color,
+    name: '',
+    details,
+  };
+}
+
 function buildStatusSections(
   data: StatusData & {clusterAccess?: boolean; clusterInfo?: any},
-  versionInfo?: ArkVersionInfo
+  versionInfo?: ArkVersionInfo,
+  backend?: BackendDetection
 ): StatusSection[] {
   const sections: StatusSection[] = [];
 
@@ -275,6 +305,10 @@ function buildStatusSections(
       }
     }
   }
+  if (backend) {
+    arkStatusLines.push(backendStatusLine(backend));
+  }
+
   sections.push({title: 'ark status:', lines: arkStatusLines});
 
   return sections;
@@ -300,13 +334,31 @@ export async function checkStatus(
       fetchVersionInfo(),
     ]);
 
+    // Only probe for the storage backend if the cluster is reachable; probing an
+    // unreachable cluster would just retry to its timeout.
+    const detection: BackendDetection = statusData.clusterAccess
+      ? await describeStorageBackend()
+      : {
+          backend: 'unknown',
+          status: 'unreachable',
+          message:
+            'Cluster is not reachable — cannot determine the storage backend.',
+        };
+
     spinner.stop();
 
-    const sections = buildStatusSections(statusData, versionInfo);
+    const sections = buildStatusSections(statusData, versionInfo, detection);
     StatusFormatter.printSections(sections);
 
     if (options?.waitForReady) {
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
+      const backend = detection.backend;
+
+      if (backend === 'unknown') {
+        output.warning(
+          `${detection.message} Skipping backend-specific readiness checks.`
+        );
+      }
 
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
@@ -318,7 +370,8 @@ export async function checkStatus(
             (s): s is ArkService =>
               s !== undefined &&
               s.k8sDeploymentName !== undefined &&
-              s.namespace !== undefined
+              s.namespace !== undefined &&
+              (!s.requiresBackend || s.requiresBackend === backend)
           );
 
         if (servicesToWait.length === 0) {
@@ -333,7 +386,8 @@ export async function checkStatus(
             s.enabled &&
             s.category === 'core' &&
             s.k8sDeploymentName &&
-            s.namespace
+            s.namespace &&
+            (!s.requiresBackend || s.requiresBackend === backend)
         );
       }
 
@@ -365,15 +419,32 @@ export async function checkStatus(
         }
       );
 
-      if (result) {
-        waitSpinner.succeed('All services are ready');
-        process.exit(0);
-      } else {
+      if (!result) {
         waitSpinner.fail(
           `Services did not become ready within ${timeoutSeconds} seconds`
         );
         process.exit(1);
       }
+
+      waitSpinner.succeed('All services are ready');
+
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      const remainingSeconds = Math.max(1, timeoutSeconds - elapsedSeconds);
+      const deepResults = await runReadinessChecks(
+        remainingSeconds,
+        backend,
+        (r: ReadinessCheckResult) => {
+          const icon = r.passed ? chalk.green('✓') : chalk.red('✗');
+          const dur = `${(r.durationMs / 1000).toFixed(1)}s`;
+          const suffix = r.message ? ` — ${r.message}` : '';
+          console.log(`  ${icon} ${r.name} (${dur})${suffix}`);
+        }
+      );
+
+      if (deepResults.some((r) => !r.passed)) {
+        process.exit(1);
+      }
+      process.exit(0);
     }
 
     process.exit(0);

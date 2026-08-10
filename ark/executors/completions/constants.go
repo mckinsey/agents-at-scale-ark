@@ -46,6 +46,7 @@ const (
 	RoleAssistant = "assistant"
 	RoleSystem    = "system"
 	RoleTool      = "tool"
+	RoleUnknown   = "unknown"
 )
 
 // Tool type constants
@@ -64,6 +65,7 @@ const (
 
 // Built-in tool name constants
 const (
-	BuiltinToolNoop      = "noop"
-	BuiltinToolTerminate = "terminate"
+	BuiltinToolNoop              = "noop"
+	BuiltinToolTerminate         = "terminate"
+	BuiltinToolSelectNextSpeaker = "select-next-speaker"
 )

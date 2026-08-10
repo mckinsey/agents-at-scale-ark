@@ -1,27 +1,20 @@
 'use client';
 
-import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import type React from 'react';
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useState,
-} from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { SecretEditor } from '@/components/editors';
-import { SecretRow } from '@/components/rows/secret-row';
-import { Button } from '@/components/ui/button';
+import { Shield } from '@/components/icons';
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceNoResults,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
+import { SecretsTable } from '@/components/sections/secrets-table';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import { type Model, modelsService } from '@/lib/services';
 import {
@@ -31,24 +24,18 @@ import {
   useUpdateSecret,
 } from '@/lib/services/secrets-hooks';
 import type { Secret } from '@/lib/services/secrets';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
-interface SecretsSectionProps {
-  namespace: string;
-}
-
-export const SecretsSection = forwardRef<
-  { openAddEditor: () => void },
-  SecretsSectionProps
->(function SecretsSection({ namespace }, ref) {
+export function SecretsSection() {
+  const { readOnlyMode, namespace } = useNamespace();
   const [models, setModels] = useState<Model[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [secretEditorOpen, setSecretEditorOpen] = useState(false);
   const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
 
-  // Use React Query hooks
   const {
     data: secrets = [],
     isLoading: secretsLoading,
-    error: secretsError,
   } = useGetAllSecrets();
 
   const createSecretMutation = useCreateSecret({
@@ -69,20 +56,10 @@ export const SecretsSection = forwardRef<
 
   const showLoading = useDelayedLoading(secretsLoading);
 
-  const handleOpenAddEditor = useCallback(() => {
-    setEditingSecret(null);
-    setSecretEditorOpen(true);
-  }, []);
-
-  useImperativeHandle(ref, () => ({
-    openAddEditor: handleOpenAddEditor,
-  }));
-
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const modelsData = await modelsService.getAll();
-        setModels(modelsData);
+        setModels(await modelsService.getAll());
       } catch (error) {
         console.error('Failed to load models:', error);
       }
@@ -91,15 +68,24 @@ export const SecretsSection = forwardRef<
     loadModels();
   }, [namespace]);
 
-  const handleSaveSecret = (name: string, password: string) => {
-    // Check if this is an update (secret with this name already exists)
-    const existingSecret = secrets.find(s => s.name === name);
+  const filteredSecrets = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      return secrets;
+    }
+    return secrets.filter(secret => secret.name.toLowerCase().includes(q));
+  }, [secrets, searchQuery]);
 
+  const handleOpenAddEditor = () => {
+    setEditingSecret(null);
+    setSecretEditorOpen(true);
+  };
+
+  const handleSaveSecret = (name: string, password: string) => {
+    const existingSecret = secrets.find(s => s.name === name);
     if (existingSecret) {
-      // Use the update mutation hook
       updateSecretMutation.mutate({ name, password });
     } else {
-      // Use the create mutation hook
       createSecretMutation.mutate({ name, password });
     }
   };
@@ -109,72 +95,75 @@ export const SecretsSection = forwardRef<
     if (!secret) {
       return;
     }
-
-    // Use the delete mutation hook
     deleteSecretMutation.mutate(secret.name);
   };
 
+  const isEmpty = !secretsLoading && secrets.length === 0;
+
   return (
-    <>
-      {showLoading ? (
-        <div className="flex h-full items-center justify-center">
+    <div className="flex h-full w-full content-shell flex-col">
+      <ResourcePageHeader
+        icon={<Shield className="size-full" />}
+        title="Secrets"
+        description="Create and manage secrets for models and services"
+        actions={
+          !isEmpty && (
+            <Button onClick={handleOpenAddEditor} disabled={readOnlyMode}>
+              Add secret
+            </Button>
+          )
+        }
+      />
+
+      {showLoading && (
+        <div className="mt-5 flex flex-1 items-center justify-center">
           <div className="py-8 text-center">Loading...</div>
         </div>
-      ) : secrets.length === 0 && !secretsLoading ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <DASHBOARD_SECTIONS.secrets.icon />
-            </EmptyMedia>
-            <EmptyTitle>No Secrets Yet</EmptyTitle>
-            <EmptyDescription>
-              You haven&apos;t added any secrets yet. Get started by adding your
-              first secret.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button onClick={handleOpenAddEditor}>
-              <Plus className="h-4 w-4" />
-              Add Secret
-            </Button>
-          </EmptyContent>
-          <Button
-            variant="link"
-            asChild
-            className="text-muted-foreground"
-            size="sm">
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-ark/"
-              target="_blank">
-              Learn More <ArrowUpRightIcon />
-            </a>
-          </Button>
-        </Empty>
-      ) : (
-        <div className="flex h-full flex-col">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex-1" />
-            <Button onClick={handleOpenAddEditor} variant="default">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Secret
-            </Button>
+      )}
+      {!showLoading && isEmpty && (
+        <ResourceEmptyState
+          icon={<Shield className="size-full" />}
+          title="No secrets yet"
+          description={
+            <>
+              <p className="mb-2">You haven&apos;t added any secrets yet.</p>
+              <p>Get started by adding your first secret.</p>
+            </>
+          }
+          actions={
+            <>
+              <Button onClick={handleOpenAddEditor} disabled={readOnlyMode}>
+                Add secret
+              </Button>
+              <LearnMoreButton href={DOCS_URLS.root} />
+            </>
+          }
+        />
+      )}
+      {!showLoading && !isEmpty && (
+        <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          <div className="flex flex-none items-end gap-3">
+            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
           </div>
-          <main className="mt-3 flex-1 overflow-auto">
-            <div className="flex flex-row flex-wrap gap-2 pb-6">
-              {secrets.map(secret => (
-                <SecretRow
-                  key={secret.id}
-                  secret={secret}
-                  models={models}
-                  onEdit={secretToEdit => {
-                    setEditingSecret(secretToEdit);
-                    setSecretEditorOpen(true);
-                  }}
-                  onDelete={handleDeleteSecret}
-                />
-              ))}
-            </div>
-          </main>
+
+          {filteredSecrets.length === 0 ? (
+            <ResourceNoResults
+              icon={<Shield className="size-full" />}
+              message="No secrets match your search."
+            />
+          ) : (
+            <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+              <SecretsTable
+                secrets={filteredSecrets}
+                models={models}
+                onEdit={secretToEdit => {
+                  setEditingSecret(secretToEdit);
+                  setSecretEditorOpen(true);
+                }}
+                onDelete={handleDeleteSecret}
+              />
+            </ScrollArea>
+          )}
         </div>
       )}
 
@@ -190,6 +179,6 @@ export const SecretsSection = forwardRef<
         onSave={handleSaveSecret}
         existingSecrets={secrets}
       />
-    </>
+    </div>
   );
-});
+}

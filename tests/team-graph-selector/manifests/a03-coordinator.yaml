@@ -4,7 +4,7 @@ metadata:
   name: coordinator
 spec:
   modelRef:
-    name: test-model
+    name: test-model-mock
   prompt: "You are the coordinator. If there is a satisfactory final report, repeat it, then use the terminate tool to end the conversation."
   tools:
     - name: terminate

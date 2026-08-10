@@ -22,10 +22,21 @@ app:
       host: "ark-api"
       port: "80"
       protocol: "http"
+    # URL prefix under which the dashboard is served. Set when hosting under
+    # a subpath (e.g. multi-tenant "/namespace1") so emitted asset URLs,
+    # client navigation, and API calls are prefixed correctly. Default ""
+    # serves at the domain root. Substituted at container startup; no rebuild
+    # required to change the value.
+    basePath: ""
   
   # Other environment variables
   env:
-    # Authentication configuration
+    # Authentication configuration.
+    # NOTE: When app.config.basePath is set, these URLs SHOULD include the
+    # basepath so OIDC callback redirects resolve under the tenant prefix.
+    # Example for basePath "/namespace1":
+    #   BASE_URL: "https://mydomain.com/namespace1"
+    #   AUTH_URL: "https://mydomain.com/namespace1/api/auth"
     - name: BASE_URL
       value: ""
     - name: AUTH_URL
@@ -42,6 +53,8 @@ app:
       value: ""
     - name: OIDC_PROVIDER_ID
       value: ""
+    - name: OIDC_SCOPES
+      value: ""  # Space-separated OAuth scopes; defaults to "openid email profile". Add "offline_access" for refresh tokens (e.g. Dex).
     - name: SESSION_MAX_AGE
       value: ""
     - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
@@ -50,7 +63,11 @@ app:
       value: "1800000" #30 mins
     - name: AUTH_MODE
       value: "open"
-  
+    # Base URL of the Argo UI that "Open in Argo" links point at. Defaults to the
+    # Argo server exposed through the localhost gateway; override per environment.
+    - name: NEXT_PUBLIC_ARGO_URL
+      value: "http://argo.default.127.0.0.1.nip.io:8080" # NOSONAR - local development gateway URL, overridden per environment
+
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:
@@ -99,6 +116,9 @@ service:
 # Ingress configuration (legacy routing method)
 # Disabled by default. Use this for traditional Kubernetes Ingress routing.
 # For newer deployments, consider using HTTPRoute (below) with Gateway API instead.
+#
+# Multi-tenant hosting: set app.config.basePath and configure this Ingress
+# with a path rule for that prefix. See values-multi-tenant.example.yaml.
 ingress:
   enabled: false
   className: ""  # e.g., "nginx", "traefik", "kong"
@@ -149,3 +169,35 @@ httpRoute:
   #     backendRefs:
   #       - name: ark-dashboard
   #         port: 3000
+
+# Seeded into the `marketplace-sources` ConfigMap. Set to [] to skip.
+# Optional `auth` block = authenticated fetch. The token is NEVER templated here:
+# it lives in a pre-existing Secret (External Secrets / sealed-secrets / SOPS / Vault);
+# only `scheme` + `secretRef` are seeded. Grant viewers `get` on that Secret to use it
+# (see samples/marketplace/authenticated-source-rbac.yaml).
+marketplaceSources:
+  - name: agents-at-scale-marketplace
+    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    displayName: "Ark Marketplace"
+  # - name: internal-mirror
+  #   url: https://internal.example.com/marketplace.json
+  #   displayName: "Internal Mirror"
+  #   namespace: team-a
+  #   auth:
+  #     scheme: bearer                                     # GitHub/GHES/artifact stores
+  #     secretRef: marketplace-source-internal-mirror-auth # pre-existing Secret, key `value`
+  # - name: azure-devops-mirror
+  #   url: https://dev.azure.com/org/_apis/git/repositories/repo/items?path=/marketplace.json
+  #   displayName: "Azure DevOps Mirror"
+  #   namespace: team-a
+  #   auth:
+  #     scheme: basic                                       # Azure DevOps PAT (empty user)
+  #     secretRef: marketplace-source-azure-devops-mirror-auth
+
+marketplaceSourcesSeed:
+  image: alpine/k8s:1.35.5
+
+# Edit access to the marketplace-sources ConfigMap + per-source credential
+# Secrets; a namespace-scoped Role bound per namespace (never a ClusterRole).
+marketplaceSourceEditorRole:
+  create: true

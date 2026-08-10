@@ -10,18 +10,9 @@ spec:
   - name: deploy-mock-llm-and-setup
     try:
     - script:
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml \
-            --wait --timeout=120s
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -75,14 +66,14 @@ spec:
 
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-test-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-test-query
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
     catch:
     - events: {}
     - describe:
@@ -99,7 +90,6 @@ spec:
           metadata:
             name: query-overrides-test-query
           status:
-            (response != null): true
             (response.target.name): 'query-overrides-test-agent'
     - script:
         env:
@@ -140,6 +130,14 @@ spec:
     try:
     - apply:
         file: manifests/a06-query-tool.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-test-query-tool
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -147,41 +145,9 @@ spec:
           metadata:
             name: query-overrides-test-query-tool
           status:
-            phase: done
-    - script:
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: |
-          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-test-query-tool -o jsonpath='{.status.response.content}')
-
-          echo "=== Query Tool Response Content ==="
-          echo "$RESPONSE"
-          echo "=========================="
-
-          if echo "$RESPONSE" | grep -qi "x-query-override-mcp-static"; then
-            echo "✓ Tool response contains x-query-override-mcp-static header"
-          else
-            echo "✗ Tool response missing x-query-override-mcp-static header"
-            exit 1
-          fi
-
-          if echo "$RESPONSE" | grep -qi "query-mcp-override-secret-value"; then
-            echo "✓ Tool response contains x-query-override-mcp-secret header value"
-          else
-            echo "✗ Tool response missing x-query-override-mcp-secret header value"
-            exit 1
-          fi
-
-          if echo "$RESPONSE" | grep -qi "query-mcp-override-configmap"; then
-            echo "✓ Tool response contains x-query-override-mcp-configmap header value"
-          else
-            echo "✗ Tool response missing x-query-override-mcp-configmap header value"
-            exit 1
-          fi
-
-          echo ""
-          echo "✅ All query MCP override headers verified via tool"
+            (contains(response.content, 'x-query-override-mcp-static')): true
+            (contains(response.content, 'query-mcp-override-secret-value')): true
+            (contains(response.content, 'query-mcp-override-configmap')): true
     catch:
     - events: {}
     - describe:
@@ -193,14 +159,14 @@ spec:
     try:
     - apply:
         file: manifests/a07-query-precedence.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-precedence-test
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-precedence-test
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
     - script:
         env:
         - name: NAMESPACE
@@ -232,7 +198,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

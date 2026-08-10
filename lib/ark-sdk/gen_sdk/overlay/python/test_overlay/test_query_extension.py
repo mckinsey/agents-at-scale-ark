@@ -12,6 +12,8 @@ from ark_sdk.extensions.query import (
     extract_query_ref,
     resolve_query,
     _resolve_value_source,
+    _parse_go_duration_to_seconds,
+    _resolve_from_query,
 )
 
 
@@ -260,6 +262,116 @@ class TestResolveModelWithSecrets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.agent.model.config["openai"]["apiKey"], "sk-test-key")
         self.assertEqual(request.agent.model.config["openai"]["baseUrl"], "https://api.example.com/v1")
         self.assertEqual(request.agent.model.config["openai"]["properties"]["temperature"], 0.7)
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_resolves_azure_model_with_api_version(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_azure_config = MagicMock()
+        mock_azure_config.api_key = SimpleNamespace(value="azure-key", value_from=None)
+        mock_azure_config.base_url = SimpleNamespace(value="https://my-resource.openai.azure.com", value_from=None)
+        mock_azure_config.api_version = SimpleNamespace(value="2024-04-01-preview", value_from=None)
+        mock_azure_config.apiVersion = None
+        mock_azure_config.properties = None
+
+        mock_model_spec = MagicMock()
+        mock_model_spec.model = SimpleNamespace(value="gpt-4o", value_from=None)
+        mock_model_spec.provider = "azure"
+        mock_model_spec.config = MagicMock()
+        mock_model_spec.config.azure = mock_azure_config
+
+        mock_model_crd = MagicMock()
+        mock_model_crd.spec = mock_model_spec
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = MagicMock()
+        mock_agent.spec.model_ref.name = "azure-model"
+        mock_agent.spec.model_ref.namespace = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.models.a_get = AsyncMock(return_value=mock_model_crd)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(request.agent.model.type, "azure")
+        self.assertEqual(request.agent.model.config["azure"]["apiKey"], "azure-key")
+        self.assertEqual(request.agent.model.config["azure"]["baseUrl"], "https://my-resource.openai.azure.com")
+        self.assertEqual(request.agent.model.config["azure"]["apiVersion"], "2024-04-01-preview")
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_azure_model_without_api_version_omits_key(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_azure_config = MagicMock()
+        mock_azure_config.api_key = SimpleNamespace(value="azure-key", value_from=None)
+        mock_azure_config.base_url = SimpleNamespace(value="https://my-resource.openai.azure.com", value_from=None)
+        mock_azure_config.api_version = None
+        mock_azure_config.apiVersion = None
+        mock_azure_config.properties = None
+
+        mock_model_spec = MagicMock()
+        mock_model_spec.model = SimpleNamespace(value="gpt-4o", value_from=None)
+        mock_model_spec.provider = "azure"
+        mock_model_spec.config = MagicMock()
+        mock_model_spec.config.azure = mock_azure_config
+
+        mock_model_crd = MagicMock()
+        mock_model_crd.spec = mock_model_spec
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = MagicMock()
+        mock_agent.spec.model_ref.name = "azure-model"
+        mock_agent.spec.model_ref.namespace = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.models.a_get = AsyncMock(return_value=mock_model_crd)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(request.agent.model.type, "azure")
+        self.assertNotIn("apiVersion", request.agent.model.config.get("azure", {}))
 
 
 class TestConversationIdPassthrough(unittest.IsolatedAsyncioTestCase):
@@ -626,6 +738,66 @@ class TestExtensionConstants(unittest.TestCase):
     def test_metadata_key_derived_from_uri(self):
         self.assertTrue(QUERY_EXTENSION_METADATA_KEY.startswith(QUERY_EXTENSION_URI))
         self.assertTrue(QUERY_EXTENSION_METADATA_KEY.endswith("/ref"))
+
+
+class TestParseGoDurationToSeconds(unittest.TestCase):
+    def test_1h(self):
+        self.assertEqual(_parse_go_duration_to_seconds("1h"), 3600)
+
+    def test_720h0m0s(self):
+        self.assertEqual(_parse_go_duration_to_seconds("720h0m0s"), 2592000)
+
+    def test_1h30m(self):
+        self.assertEqual(_parse_go_duration_to_seconds("1h30m"), 5400)
+
+    def test_90s(self):
+        self.assertEqual(_parse_go_duration_to_seconds("90s"), 90)
+
+    def test_none_returns_none(self):
+        self.assertIsNone(_parse_go_duration_to_seconds(None))
+
+    def test_empty_string_returns_none(self):
+        self.assertIsNone(_parse_go_duration_to_seconds(""))
+
+
+class TestResolveTtlFromQuery(unittest.IsolatedAsyncioTestCase):
+    def _make_mock_objects(self, ttl_value):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+        mock_query.spec.ttl = ttl_value
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        return mock_ark, mock_query
+
+    async def test_ttl_1h0m0s_sets_3600(self):
+        mock_ark, mock_query = self._make_mock_objects("1h0m0s")
+        request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
+        self.assertEqual(request.message_ttl_seconds, 3600)
+
+    async def test_ttl_720h_sets_2592000(self):
+        mock_ark, mock_query = self._make_mock_objects("720h0m0s")
+        request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
+        self.assertEqual(request.message_ttl_seconds, 2592000)
+
+    async def test_ttl_none_sets_message_ttl_seconds_none(self):
+        mock_ark, mock_query = self._make_mock_objects(None)
+        request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
+        self.assertIsNone(request.message_ttl_seconds)
 
 
 if __name__ == "__main__":

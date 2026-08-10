@@ -2,18 +2,22 @@
 import logging
 import yaml
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import Optional
-from kubernetes_asyncio.client.api_client import ApiClient
+from kubernetes_asyncio import client
 from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.dynamic import DynamicClient
 from ark_sdk.k8s import get_context
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ...auth.dependencies import get_impersonation_config
 from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
 )
+from ...models.resources import AccessReviewRequest, AccessReviewResponse
+from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -38,7 +42,8 @@ async def get_core_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Get a core Kubernetes resource by name.
@@ -59,7 +64,7 @@ async def get_core_resource(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -79,7 +84,8 @@ async def list_core_resources(
     version: str,
     kind: str,
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION)
+    label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     List core Kubernetes resources.
@@ -101,7 +107,7 @@ async def list_core_resources(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -122,7 +128,8 @@ async def get_grouped_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Get a grouped Kubernetes resource by name.
@@ -148,7 +155,7 @@ async def get_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Getting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -172,7 +179,8 @@ async def list_grouped_resources(
     label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
-    status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
+    status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     List grouped Kubernetes resources with optional filtering.
@@ -202,7 +210,7 @@ async def list_grouped_resources(
 
     api_version = f"{group}/{version}"
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -257,7 +265,8 @@ async def create_core_resource(
     version: str,
     kind: str,
     body: dict,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Create a core Kubernetes resource.
@@ -278,7 +287,7 @@ async def create_core_resource(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -299,7 +308,8 @@ async def create_grouped_resource(
     version: str,
     kind: str,
     body: dict,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Create a grouped Kubernetes resource.
@@ -325,7 +335,7 @@ async def create_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Creating resource: api_version={api_version}, kind={kind}, namespace={namespace}")
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -338,13 +348,170 @@ async def create_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
+@router.put("/api/{version}/{kind}/{resource_name}")
+@handle_k8s_errors(operation="update", resource_type="resource")
+async def update_core_resource(
+    request: Request,
+    version: str,
+    kind: str,
+    resource_name: str,
+    body: dict,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
+) -> Response:
+    """
+    Update (replace) a core Kubernetes resource by name.
+
+    Honours a caller-supplied resourceVersion for optimistic concurrency; only
+    when the caller omits it do we inject the live object's resourceVersion so
+    the replace succeeds (last-write-wins convenience). The URL path name is
+    authoritative for the target resource.
+
+    Args:
+        version: API version (e.g., 'v1')
+        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+        resource_name: The name of the resource
+        body: The resource definition as JSON
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: The updated Kubernetes resource as JSON
+
+    Examples:
+        - PUT /v1/resources/api/v1/ConfigMap/my-config
+        - PUT /v1/resources/api/v1/Service/my-service
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=version,
+            kind=kind
+        )
+
+        metadata = body.setdefault("metadata", {})
+        if not metadata.get("resourceVersion"):
+            existing = await api_resource.get(name=resource_name, namespace=namespace)
+            metadata["resourceVersion"] = existing.metadata.resourceVersion
+
+        resource = await api_resource.replace(name=resource_name, body=body, namespace=namespace)
+
+        return _create_resource_response(resource.to_dict(), request)
+
+
+@router.put("/apis/{group}/{version}/{kind}/{resource_name}")
+@handle_k8s_errors(operation="update", resource_type="resource")
+async def update_grouped_resource(
+    request: Request,
+    group: str,
+    version: str,
+    kind: str,
+    resource_name: str,
+    body: dict,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
+) -> Response:
+    """
+    Update (replace) a grouped Kubernetes resource by name.
+
+    Honours a caller-supplied resourceVersion for optimistic concurrency; only
+    when the caller omits it do we inject the live object's resourceVersion so
+    the replace succeeds (last-write-wins convenience). The URL path name is
+    authoritative for the target resource.
+
+    Args:
+        group: API group (e.g., 'apps', 'batch', 'argoproj.io')
+        version: API version (e.g., 'v1', 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        resource_name: The name of the resource
+        body: The resource definition as JSON
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: The updated Kubernetes resource as JSON
+
+    Examples:
+        - PUT /v1/resources/apis/apps/v1/Deployment/my-deployment
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    api_version = f"{group}/{version}"
+    logger.info(f"Updating resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
+
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=api_version,
+            kind=kind
+        )
+
+        metadata = body.setdefault("metadata", {})
+        if not metadata.get("resourceVersion"):
+            existing = await api_resource.get(name=resource_name, namespace=namespace)
+            metadata["resourceVersion"] = existing.metadata.resourceVersion
+
+        resource = await api_resource.replace(name=resource_name, body=body, namespace=namespace)
+
+        return _create_resource_response(resource.to_dict(), request)
+
+
+@router.post("/access-review", response_model=AccessReviewResponse)
+@handle_k8s_errors(operation="create", resource_type="access review")
+async def create_access_review(
+    body: AccessReviewRequest,
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
+) -> AccessReviewResponse:
+    """
+    Check whether the caller may perform a verb on a resource via SelfSubjectAccessReview.
+
+    Runs under the impersonated identity, so the result reflects the user's RBAC.
+    When impersonation is disabled it runs as the service account.
+
+    Args:
+        body: group, resource, and verb to review
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        AccessReviewResponse: {"allowed": <bool>}
+
+    Examples:
+        - POST /v1/resources/access-review
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with get_impersonating_api_client(impersonation) as api:
+        review = client.V1SelfSubjectAccessReview(
+            spec=client.V1SelfSubjectAccessReviewSpec(
+                resource_attributes=client.V1ResourceAttributes(
+                    namespace=namespace,
+                    verb=body.verb,
+                    group=body.group,
+                    resource=body.resource,
+                )
+            )
+        )
+        result = await client.AuthorizationV1Api(api).create_self_subject_access_review(review)
+        allowed = bool(result.status and result.status.allowed)
+
+        return AccessReviewResponse(allowed=allowed)
+
+
 @router.delete("/api/{version}/{kind}/{resource_name}")
 @handle_k8s_errors(operation="delete", resource_type="resource")
 async def delete_core_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Delete a core Kubernetes resource by name.
@@ -365,7 +532,7 @@ async def delete_core_resource(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -385,7 +552,8 @@ async def delete_grouped_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
     Delete a grouped Kubernetes resource by name.
@@ -411,7 +579,7 @@ async def delete_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Deleting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
         api_resource = await dynamic_client.resources.get(
@@ -432,6 +600,7 @@ async def get_pod_logs(
     container: Optional[str] = Query(None, description="Container name (defaults to first container)"),
     tail_lines: Optional[int] = Query(1000, alias="tailLines", description="Number of lines to tail"),
     follow: Optional[bool] = Query(False, description="Follow log stream"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> PlainTextResponse:
     """
     Get logs from a pod.
@@ -450,7 +619,7 @@ async def get_pod_logs(
         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log
         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log?container=main&tailLines=100
     """
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
         
         try:
@@ -474,6 +643,7 @@ async def get_workflow_logs(
     namespace: str,
     container: Optional[str] = Query("main", description="Container name"),
     tail_lines: Optional[int] = Query(1000, description="Number of lines to tail"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> PlainTextResponse:
     """
     Get logs for a workflow node by fetching directly from the pod.
@@ -492,7 +662,7 @@ async def get_workflow_logs(
     Examples:
         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log
     """
-    async with ApiClient() as api:
+    async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
         
         try:
