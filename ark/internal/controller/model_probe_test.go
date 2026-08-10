@@ -81,6 +81,16 @@ func TestExtractStableError_UnrecognisedErrors(t *testing.T) {
 			expected: "Probe failed (service unavailable)",
 		},
 		{
+			name:     "anthropic json request id is stripped",
+			err:      errors.New(`anthropic API returned status 404: {"type":"error","error":{"type":"not_found_error","message":"model: claude-x"},"request_id":"req_011CQabcDEF123"}`),
+			expected: `Probe failed (anthropic API returned status 404: {"type":"error","error":{"type":"not_found_error","message":"model: claude-x"},})`,
+		},
+		{
+			name:     "json request id with spaced separator is stripped",
+			err:      errors.New(`upstream rejected {"request_id": "req_99", "code": 503}`),
+			expected: `Probe failed (upstream rejected {, "code": 503})`,
+		},
+		{
 			name:     "uuid inside a url path is preserved",
 			err:      errors.New(`POST "https://gateway.example.com/ead325ff-fca1-493c-8043-8c7cfdb0ddb8/v1/chat/completions": 403 Forbidden`),
 			expected: `Probe failed (POST "https://gateway.example.com/ead325ff-fca1-493c-8043-8c7cfdb0ddb8/v1/chat/completions": 403 Forbidden)`,
@@ -108,6 +118,19 @@ func TestExtractStableError_IsStableAcrossAttempts(t *testing.T) {
 
 	require.Equal(t, firstMessage, secondMessage)
 	require.Equal(t, "Probe failed (AADSTS7000215: Invalid client secret provided.)", firstMessage)
+}
+
+func TestExtractStableError_IsStableAcrossAnthropicAttempts(t *testing.T) {
+	body := `anthropic API returned status 429: {"type":"error","error":{"type":"rate_limit_error","message":"rate limited"},"request_id":%q}`
+	first := fmt.Errorf(body, "req_011CQabcDEF123")
+	second := fmt.Errorf(body, "req_011CQzzz999XY")
+
+	firstMessage := extractStableError(first, testProbeTimeout)
+	secondMessage := extractStableError(second, testProbeTimeout)
+
+	require.Equal(t, firstMessage, secondMessage)
+	require.NotContains(t, firstMessage, "req_011")
+	require.Contains(t, firstMessage, "rate_limit_error")
 }
 
 func TestExtractStableError_TruncatesLongMessages(t *testing.T) {

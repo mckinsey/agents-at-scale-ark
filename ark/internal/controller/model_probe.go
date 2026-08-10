@@ -22,7 +22,7 @@ import (
 const maxProbeErrorLength = 256
 
 var volatileTokenPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(^|\s)(?:trace|correlation|request|activity|client-request)[ _-]?id\s*[:=]\s*\S+`),
+	regexp.MustCompile(`(?i)(^|[\s",{])"?(?:trace|correlation|request|activity|client-request)[ _-]?id"?\s*[:=]\s*"?[^",}\s]*"?`),
 	regexp.MustCompile(`(?i)(^|\s)timestamp\s*[:=]\s*\d{4}-\d{2}-\d{2}[ t]\d{2}:\d{2}:\d{2}z?`),
 	regexp.MustCompile(`(?i)(^|\s)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`),
 	regexp.MustCompile(`(?i)(^|\s)[0-9a-f]{16,}\b`),
