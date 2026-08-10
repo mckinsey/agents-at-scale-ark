@@ -23,9 +23,15 @@ const maxProbeErrorLength = 256
 
 var volatileTokenPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(^|[\s",{])"?(?:trace|correlation|request|activity|client-request)[ _-]?id"?\s*[:=]\s*"?[^",}\s]*"?`),
-	regexp.MustCompile(`(?i)(^|\s)timestamp\s*[:=]\s*\d{4}-\d{2}-\d{2}[ t]\d{2}:\d{2}:\d{2}z?`),
+	regexp.MustCompile(`(?i)(^|[\s",{])"?timestamp"?\s*[:=]\s*"?\d{4}-\d{2}-\d{2}[ t]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:z|[+-]\d{2}:?\d{2})?"?`),
 	regexp.MustCompile(`(?i)(^|\s)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`),
 	regexp.MustCompile(`(?i)(^|\s)[0-9a-f]{16,}\b`),
+}
+
+var separatorCleanupPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`([{\[])\s*,\s*`),
+	regexp.MustCompile(`,\s*([}\]])`),
+	regexp.MustCompile(`,\s*(,)`),
 }
 
 type ProbeResult struct {
@@ -85,6 +91,9 @@ func extractStableError(err error, timeout time.Duration) string {
 func stabilizeProbeError(err error) string {
 	msg := err.Error()
 	for _, pattern := range volatileTokenPatterns {
+		msg = pattern.ReplaceAllString(msg, "${1}")
+	}
+	for _, pattern := range separatorCleanupPatterns {
 		msg = pattern.ReplaceAllString(msg, "${1}")
 	}
 	msg = strings.Join(strings.Fields(msg), " ")

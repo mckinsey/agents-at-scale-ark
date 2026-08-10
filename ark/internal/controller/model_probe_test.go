@@ -83,12 +83,27 @@ func TestExtractStableError_UnrecognisedErrors(t *testing.T) {
 		{
 			name:     "anthropic json request id is stripped",
 			err:      errors.New(`anthropic API returned status 404: {"type":"error","error":{"type":"not_found_error","message":"model: claude-x"},"request_id":"req_011CQabcDEF123"}`),
-			expected: `Probe failed (anthropic API returned status 404: {"type":"error","error":{"type":"not_found_error","message":"model: claude-x"},})`,
+			expected: `Probe failed (anthropic API returned status 404: {"type":"error","error":{"type":"not_found_error","message":"model: claude-x"}})`,
 		},
 		{
 			name:     "json request id with spaced separator is stripped",
 			err:      errors.New(`upstream rejected {"request_id": "req_99", "code": 503}`),
-			expected: `Probe failed (upstream rejected {, "code": 503})`,
+			expected: `Probe failed (upstream rejected {"code": 503})`,
+		},
+		{
+			name:     "rfc3339 timestamp with fractional seconds is stripped",
+			err:      errors.New("AADSTS50126: Invalid credentials. Timestamp: 2026-08-10T11:22:33.1234567Z"),
+			expected: "Probe failed (AADSTS50126: Invalid credentials.)",
+		},
+		{
+			name:     "rfc3339 timestamp with timezone offset is stripped",
+			err:      errors.New("AADSTS50126: Invalid credentials. Timestamp: 2026-08-10T11:22:33.123+05:30"),
+			expected: "Probe failed (AADSTS50126: Invalid credentials.)",
+		},
+		{
+			name:     "json timestamp is stripped",
+			err:      errors.New(`gateway error {"code":"unavailable","timestamp":"2026-08-10T11:22:33.123Z"}`),
+			expected: `Probe failed (gateway error {"code":"unavailable"})`,
 		},
 		{
 			name:     "uuid inside a url path is preserved",
@@ -131,6 +146,19 @@ func TestExtractStableError_IsStableAcrossAnthropicAttempts(t *testing.T) {
 	require.Equal(t, firstMessage, secondMessage)
 	require.NotContains(t, firstMessage, "req_011")
 	require.Contains(t, firstMessage, "rate_limit_error")
+}
+
+func TestExtractStableError_IsStableAcrossFractionalTimestamps(t *testing.T) {
+	template := "AADSTS50126: Invalid username or password. Timestamp: %s"
+	first := fmt.Errorf(template, "2026-08-10T11:22:33.1234567Z")
+	second := fmt.Errorf(template, "2026-08-10T11:22:34.9876543Z")
+
+	firstMessage := extractStableError(first, testProbeTimeout)
+	secondMessage := extractStableError(second, testProbeTimeout)
+
+	require.Equal(t, firstMessage, secondMessage)
+	require.NotContains(t, firstMessage, "2026-08-10")
+	require.Equal(t, "Probe failed (AADSTS50126: Invalid username or password.)", firstMessage)
 }
 
 func TestExtractStableError_TruncatesLongMessages(t *testing.T) {
