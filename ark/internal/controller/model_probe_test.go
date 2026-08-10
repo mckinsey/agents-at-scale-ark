@@ -111,6 +111,11 @@ func TestExtractStableError_UnrecognisedErrors(t *testing.T) {
 			expected: `Probe failed (gateway error {"code":503})`,
 		},
 		{
+			name:     "adjacent volatile fields between other fields leave valid json",
+			err:      errors.New(`gateway error {"code":503,"request_id":"a","timestamp":"2026-08-10T11:22:33Z","x":1}`),
+			expected: `Probe failed (gateway error {"code":503,"x":1})`,
+		},
+		{
 			name:     "adjacent volatile fields at the tail leave valid json",
 			err:      errors.New(`gateway error {"code":503,"request_id":"a","timestamp":"2026-08-10T11:22:33Z"}`),
 			expected: `Probe failed (gateway error {"code":503})`,
@@ -180,6 +185,12 @@ func TestExtractStableError_TruncatesLongMessages(t *testing.T) {
 	message := extractStableError(errors.New(strings.Repeat("x", 500)), testProbeTimeout)
 
 	require.Equal(t, "Probe failed ("+strings.Repeat("x", maxProbeErrorLength)+"...)", message)
+}
+
+func TestExtractStableError_TruncationTrimsTrailingSpace(t *testing.T) {
+	message := extractStableError(errors.New(strings.Repeat("abc ", 100)), testProbeTimeout)
+
+	require.Equal(t, "Probe failed ("+strings.TrimSpace(strings.Repeat("abc ", 64))+"...)", message)
 }
 
 func TestExtractStableError_TruncationIsRuneSafe(t *testing.T) {
