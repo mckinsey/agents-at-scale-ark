@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/configurations", tags=["configurations"])
 
-VERSION = "v1alpha1"
-
 @router.get("", response_model=ConfigurationListResponse)
 @handle_k8s_errors(operation="list", resource_type="configuration")
 async def list_configurations(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationListResponse:
@@ -86,16 +84,19 @@ async def list_configuration_references(configuration_name: str, namespace: Opti
     await client.get_configuration(configuration_name)
 
     references = []
-    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        for kind, attribute in REFERRING_RESOURCES:
-            for resource in await getattr(ark_client, attribute).a_list():
-                resource_dict = resource.to_dict()
-                spec = resource_dict.get("spec") or {}
-                for field in find_config_map_references(spec, configuration_name):
-                    references.append(ConfigurationReference(
-                        kind=kind,
-                        name=resource_dict.get("metadata", {}).get("name"),
-                        field=field
-                    ))
+    for version in sorted({version for _, _, version in REFERRING_RESOURCES}):
+        async with with_ark_client(namespace, version, impersonation=impersonation) as ark_client:
+            for kind, attribute, resource_version in REFERRING_RESOURCES:
+                if resource_version != version:
+                    continue
+                for resource in await getattr(ark_client, attribute).a_list():
+                    resource_dict = resource.to_dict()
+                    spec = resource_dict.get("spec") or {}
+                    for field in find_config_map_references(spec, configuration_name):
+                        references.append(ConfigurationReference(
+                            kind=kind,
+                            name=resource_dict.get("metadata", {}).get("name"),
+                            field=field
+                        ))
 
     return ConfigurationReferenceListResponse(items=references, count=len(references))
