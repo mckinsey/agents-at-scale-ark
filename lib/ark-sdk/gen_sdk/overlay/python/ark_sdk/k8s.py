@@ -357,7 +357,7 @@ class ConfigurationClient:
             "value": (config_map.data or {}).get(CONFIGURATION_DATA_KEY),
             "description": annotations.get(DESCRIPTION_ANNOTATION),
             "alias": annotations.get(ALIAS_ANNOTATION),
-            "tags": labels_to_tags(config_map.metadata.labels),
+            "labels": labels_to_tags(config_map.metadata.labels),
         }
 
     @staticmethod
@@ -365,13 +365,13 @@ class ConfigurationClient:
         name: str,
         description: Optional[str],
         alias: Optional[str],
-        tags: Optional[List[str]],
+        labels: Optional[List[str]],
         existing_labels: Optional[Dict[str, str]] = None,
         existing_annotations: Optional[Dict[str, str]] = None,
     ) -> 'client.V1ObjectMeta':
-        labels = strip_ark_labels(existing_labels)
-        labels[ARK_RESOURCE_TYPE_LABEL] = CONFIGURATION_RESOURCE_TYPE
-        labels.update(tags_to_labels(tags))
+        k8s_labels = strip_ark_labels(existing_labels)
+        k8s_labels[ARK_RESOURCE_TYPE_LABEL] = CONFIGURATION_RESOURCE_TYPE
+        k8s_labels.update(tags_to_labels(labels))
 
         annotations = {
             key: value
@@ -383,7 +383,7 @@ class ConfigurationClient:
         if alias:
             annotations[ALIAS_ANNOTATION] = alias
 
-        return client.V1ObjectMeta(name=name, labels=labels, annotations=annotations)
+        return client.V1ObjectMeta(name=name, labels=k8s_labels, annotations=annotations)
 
     async def _read_configuration(self, v1, name: str):
         """Read a ConfigMap, refusing any that Ark does not own as a configuration."""
@@ -425,7 +425,7 @@ class ConfigurationClient:
         value: str,
         description: Optional[str] = None,
         alias: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        labels: Optional[List[str]] = None,
     ):
         """Create a new configuration."""
         await init_k8s()
@@ -436,7 +436,7 @@ class ConfigurationClient:
             config_map = client.V1ConfigMap(
                 api_version="v1",
                 kind="ConfigMap",
-                metadata=self._build_metadata(name, description, alias, tags),
+                metadata=self._build_metadata(name, description, alias, labels),
                 data={CONFIGURATION_DATA_KEY: value}
             )
 
@@ -452,7 +452,7 @@ class ConfigurationClient:
         value: str,
         description: Optional[str] = None,
         alias: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        labels: Optional[List[str]] = None,
     ):
         """Update an existing configuration."""
         await init_k8s()
@@ -465,7 +465,7 @@ class ConfigurationClient:
                 name,
                 description,
                 alias,
-                tags,
+                labels,
                 existing_labels=existing.metadata.labels,
                 existing_annotations=existing.metadata.annotations,
             )

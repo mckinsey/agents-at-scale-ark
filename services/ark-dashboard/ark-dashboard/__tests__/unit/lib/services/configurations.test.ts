@@ -17,7 +17,7 @@ const CONFIGURATION: Configuration = {
   value: 'https://example.test/mcp/',
   description: 'GitHub remote MCP endpoint',
   alias: 'github-mcp',
-  tags: ['mcp'],
+  labels: ['mcp'],
 };
 
 describe('configurationsService', () => {
@@ -65,7 +65,7 @@ describe('configurationsService', () => {
         value: 'https://example.test/mcp/',
         description: 'GitHub remote MCP endpoint',
         alias: 'github-mcp',
-        tags: ['mcp'],
+        labels: ['mcp'],
       };
 
       const result = await configurationsService.create(request);
@@ -81,7 +81,7 @@ describe('configurationsService', () => {
         configurationsService.create({
           name: 'github-mcp-url',
           value: 'x',
-          tags: [],
+          labels: [],
         }),
       ).rejects.toThrow('Conflict');
     });
@@ -93,7 +93,7 @@ describe('configurationsService', () => {
         .spyOn(apiClient, 'put')
         .mockResolvedValue(CONFIGURATION);
 
-      const request = { value: 'https://new.test/mcp/', tags: [] };
+      const request = { value: 'https://new.test/mcp/', labels: [] };
       await configurationsService.update('github-mcp-url', request);
 
       expect(mockPut).toHaveBeenCalledWith(

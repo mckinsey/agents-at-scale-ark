@@ -2,20 +2,20 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TagsField } from '@/components/forms/configuration-form/tags-field';
+import { LabelsField } from '@/components/forms/configuration-form/labels-field';
 
 const onChange = vi.fn();
 
 function renderField(value: string[] = []) {
-  return render(<TagsField value={value} onChange={onChange} />);
+  return render(<LabelsField value={value} onChange={onChange} />);
 }
 
-describe('TagsField', () => {
+describe('LabelsField', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('adds a tag on Enter', async () => {
+  it('adds a label on Enter', async () => {
     const user = userEvent.setup();
     renderField();
 
@@ -24,7 +24,7 @@ describe('TagsField', () => {
     expect(onChange).toHaveBeenCalledWith(['mcp']);
   });
 
-  it('adds a tag on comma', async () => {
+  it('adds a label on comma', async () => {
     const user = userEvent.setup();
     renderField();
 
@@ -33,7 +33,7 @@ describe('TagsField', () => {
     expect(onChange).toHaveBeenCalledWith(['mcp']);
   });
 
-  it('adds the pending tag on blur so it is not silently lost', async () => {
+  it('adds the pending label on blur so it is not silently lost', async () => {
     const user = userEvent.setup();
     renderField();
 
@@ -43,7 +43,7 @@ describe('TagsField', () => {
     expect(onChange).toHaveBeenCalledWith(['mcp']);
   });
 
-  it('rejects a tag Kubernetes would refuse as a label segment', async () => {
+  it('rejects a label Kubernetes would refuse as a label key segment', async () => {
     const user = userEvent.setup();
     renderField();
 
@@ -55,7 +55,7 @@ describe('TagsField', () => {
     ).toBeInTheDocument();
   });
 
-  it('rejects a duplicate tag', async () => {
+  it('rejects a duplicate label', async () => {
     const user = userEvent.setup();
     renderField(['mcp']);
 
@@ -74,7 +74,7 @@ describe('TagsField', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('removes the last tag on Backspace when the input is empty', async () => {
+  it('removes the last label on Backspace when the input is empty', async () => {
     const user = userEvent.setup();
     renderField(['mcp', 'prod']);
 
@@ -84,7 +84,7 @@ describe('TagsField', () => {
     expect(onChange).toHaveBeenCalledWith(['mcp']);
   });
 
-  it('renders existing tags', () => {
+  it('renders existing labels', () => {
     renderField(['mcp', 'prod']);
 
     expect(screen.getByText('mcp')).toBeInTheDocument();

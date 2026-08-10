@@ -6,54 +6,54 @@ import { FieldDescription, FieldError } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Tag } from '@/components/ui/tag';
 
-import { tagSchema } from './types';
+import { labelSchema } from './types';
 
-interface TagsFieldProps {
+interface LabelsFieldProps {
   value: string[];
-  onChange: (tags: string[]) => void;
+  onChange: (labels: string[]) => void;
   disabled?: boolean;
 }
 
-export function TagsField({
+export function LabelsField({
   value,
   onChange,
   disabled,
-}: Readonly<TagsFieldProps>) {
+}: Readonly<LabelsFieldProps>) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const addTag = () => {
-    const tag = draft.trim();
-    if (!tag) {
+  const addLabel = () => {
+    const label = draft.trim();
+    if (!label) {
       return;
     }
-    if (value.includes(tag)) {
-      setError(`"${tag}" has already been added`);
+    if (value.includes(label)) {
+      setError(`"${label}" has already been added`);
       return;
     }
-    const parsed = tagSchema.safeParse(tag);
+    const parsed = labelSchema.safeParse(label);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
       return;
     }
-    onChange([...value, tag]);
+    onChange([...value, label]);
     setDraft('');
     setError(null);
   };
 
-  const removeTag = (tag: string) => {
-    onChange(value.filter(existing => existing !== tag));
+  const removeLabel = (label: string) => {
+    onChange(value.filter(existing => existing !== label));
     setError(null);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' || event.key === ',') {
       event.preventDefault();
-      addTag();
+      addLabel();
       return;
     }
     if (event.key === 'Backspace' && !draft && value.length > 0) {
-      removeTag(value[value.length - 1]);
+      removeLabel(value[value.length - 1]);
     }
   };
 
@@ -61,14 +61,14 @@ export function TagsField({
     <>
       {value.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {value.map(tag => (
+          {value.map(label => (
             <Tag
-              key={tag}
+              key={label}
               variant="primary"
               size="sm"
               disabled={disabled}
-              onRemove={() => removeTag(tag)}>
-              {tag}
+              onRemove={() => removeLabel(label)}>
+              {label}
             </Tag>
           ))}
         </div>
@@ -84,7 +84,7 @@ export function TagsField({
           setError(null);
         }}
         onKeyDown={handleKeyDown}
-        onBlur={addTag}
+        onBlur={addLabel}
       />
       <FieldDescription>
         Labels group related configurations. Letters, digits, &apos;-&apos;,

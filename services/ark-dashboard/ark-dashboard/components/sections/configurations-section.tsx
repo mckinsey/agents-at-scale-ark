@@ -14,6 +14,7 @@ import {
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
@@ -22,6 +23,27 @@ import {
   useGetAllConfigurations,
 } from '@/lib/services/configurations-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+function ConfigurationsSkeleton() {
+  return (
+    <div
+      aria-hidden
+      className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+      <Skeleton className="h-9 w-[280px]" />
+      <div className="flex flex-col gap-4 pt-4">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4">
+            <Skeleton className="h-5 w-[280px]" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-5 w-[240px]" />
+            <Skeleton className="h-5 w-[220px]" />
+            <Skeleton className="h-5 w-[100px]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function ConfigurationsSection() {
   const { readOnlyMode } = useNamespace();
@@ -42,7 +64,7 @@ export function ConfigurationsSection() {
         configuration.name,
         configuration.alias ?? '',
         configuration.description ?? '',
-        ...configuration.tags,
+        ...configuration.labels,
       ].some(field => field.toLowerCase().includes(query)),
     );
   }, [configurations, searchQuery]);
@@ -64,11 +86,7 @@ export function ConfigurationsSection() {
         actions={!isEmpty && createButton}
       />
 
-      {showLoading && (
-        <div className="mt-5 flex flex-1 items-center justify-center">
-          <div className="py-8 text-center">Loading...</div>
-        </div>
-      )}
+      {showLoading && <ConfigurationsSkeleton />}
       {!showLoading && isEmpty && (
         <ResourceEmptyState
           icon={<Tune className="size-full" />}

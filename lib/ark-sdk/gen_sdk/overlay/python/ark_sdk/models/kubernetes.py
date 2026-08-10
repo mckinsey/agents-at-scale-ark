@@ -81,7 +81,7 @@ class ConfigurationResponse(BaseModel):
     value: Optional[str] = None
     description: Optional[str] = None
     alias: Optional[str] = None
-    tags: List[str] = []
+    labels: List[str] = []
 
 
 class ConfigurationListResponse(BaseModel):
@@ -96,12 +96,12 @@ class ConfigurationCreateRequest(BaseModel):
     value: str
     description: Optional[str] = None
     alias: Optional[str] = None
-    tags: List[str] = []
+    labels: List[str] = []
 
-    @field_validator("tags")
+    @field_validator("labels")
     @classmethod
-    def _validate_tags(cls, value: List[str]) -> List[str]:
-        return [validate_tag(tag) for tag in value]
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        return [validate_tag(label) for label in value]
 
 
 class ConfigurationUpdateRequest(BaseModel):
@@ -109,12 +109,12 @@ class ConfigurationUpdateRequest(BaseModel):
     value: str
     description: Optional[str] = None
     alias: Optional[str] = None
-    tags: List[str] = []
+    labels: List[str] = []
 
-    @field_validator("tags")
+    @field_validator("labels")
     @classmethod
-    def _validate_tags(cls, value: List[str]) -> List[str]:
-        return [validate_tag(tag) for tag in value]
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        return [validate_tag(label) for label in value]
 
 
 class ConfigurationReference(BaseModel):

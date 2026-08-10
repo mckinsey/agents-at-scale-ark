@@ -2,13 +2,13 @@ import * as z from 'zod';
 
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
-export const TAG_MAX_LENGTH = 57;
+export const LABEL_MAX_LENGTH = 57;
 
-export const tagSchema = z
+export const labelSchema = z
   .string()
   .min(1, { message: 'Label cannot be empty' })
-  .max(TAG_MAX_LENGTH, {
-    message: `Label must be ${TAG_MAX_LENGTH} characters or less`,
+  .max(LABEL_MAX_LENGTH, {
+    message: `Label must be ${LABEL_MAX_LENGTH} characters or less`,
   })
   .regex(/^[a-zA-Z0-9]([-_.a-zA-Z0-9]*[a-zA-Z0-9])?$/, {
     message:
@@ -18,9 +18,12 @@ export const tagSchema = z
 export const configurationFormSchema = z.object({
   name: kubernetesNameSchema,
   value: z.string().min(1, { message: 'Value is required' }),
-  description: z.string().optional(),
+  description: z
+    .string()
+    .max(256, { message: 'Description must be 256 characters or less' })
+    .optional(),
   alias: z.string().optional(),
-  tags: z.array(tagSchema),
+  labels: z.array(labelSchema),
 });
 
 export type ConfigurationFormValues = z.infer<typeof configurationFormSchema>;

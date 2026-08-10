@@ -1,5 +1,7 @@
 'use client';
 
+import { useId } from 'react';
+
 import { ChevronLeft, Info } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
@@ -11,6 +13,7 @@ import {
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -20,7 +23,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { TagsField } from './tags-field';
+import { LabelsField } from './labels-field';
 import { type ConfigurationFormProps } from './types';
 import { useConfigurationForm } from './use-configuration-form';
 
@@ -36,19 +39,28 @@ export function ConfigurationForm({
   onSuccess,
 }: Readonly<ConfigurationFormProps>) {
   const { readOnlyMode } = useNamespace();
+  const nameFieldId = useId();
+  const valueFieldId = useId();
   const { form, isEdit, loading, saving, onSubmit } = useConfigurationForm({
     mode,
     configurationName,
     onSuccess,
   });
 
-  const isDisabled = saving || loading;
+  const isDisabled = saving || loading || readOnlyMode;
   const heading = isEdit ? 'Edit configuration' : 'New configuration';
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <Spinner className="size-6" />
+      <div
+        aria-hidden
+        className="flex w-full content-shell flex-1 flex-col gap-6 pt-16">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="flex w-[576px] flex-col gap-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -77,9 +89,7 @@ export function ConfigurationForm({
             <NamespacedLink href="/configurations">
               <Button variant="outline">Cancel</Button>
             </NamespacedLink>
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={isDisabled || readOnlyMode}>
+            <Button onClick={form.handleSubmit(onSubmit)} disabled={isDisabled}>
               {saving && <Spinner className="mr-2 h-4 w-4" />}
               {isEdit ? 'Save' : 'Create'}
             </Button>
@@ -102,13 +112,15 @@ export function ConfigurationForm({
                     Name <RequiredMarker />
                   </FieldTitle>
                   <Input
+                    id={nameFieldId}
                     variant="inline"
                     placeholder="e.g., github-mcp-url"
                     disabled={isDisabled || isEdit}
                     aria-invalid={!!fieldState.error}
+                    aria-describedby={`${nameFieldId}-description`}
                     {...field}
                   />
-                  <FieldDescription>
+                  <FieldDescription id={`${nameFieldId}-description`}>
                     Resources reference the configuration by this name. It
                     cannot be changed after creation.
                   </FieldDescription>
@@ -126,13 +138,15 @@ export function ConfigurationForm({
                     Value <RequiredMarker />
                   </FieldTitle>
                   <Textarea
+                    id={valueFieldId}
                     rows={4}
                     placeholder="e.g., https://api.githubcopilot.com/mcp/"
                     disabled={isDisabled}
                     aria-invalid={!!fieldState.error}
+                    aria-describedby={`${valueFieldId}-description`}
                     {...field}
                   />
-                  <FieldDescription>
+                  <FieldDescription id={`${valueFieldId}-description`}>
                     Stored in plain text. Use a Secret for anything sensitive.
                   </FieldDescription>
                   <FieldError>{fieldState.error?.message}</FieldError>
@@ -195,11 +209,11 @@ export function ConfigurationForm({
 
             <FormField
               control={form.control}
-              name="tags"
+              name="labels"
               render={({ field }) => (
                 <FieldSet className="gap-2">
                   <FieldTitle>Labels</FieldTitle>
-                  <TagsField
+                  <LabelsField
                     value={field.value}
                     onChange={field.onChange}
                     disabled={isDisabled}

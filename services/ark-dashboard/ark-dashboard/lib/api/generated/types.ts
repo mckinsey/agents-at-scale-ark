@@ -3288,13 +3288,13 @@ export interface components {
             alias?: string | null;
             /** Description */
             description?: string | null;
-            /** Name */
-            name: string;
             /**
-             * Tags
+             * Labels
              * @default []
              */
-            tags: string[];
+            labels: string[];
+            /** Name */
+            name: string;
             /** Value */
             value: string;
         };
@@ -3341,13 +3341,13 @@ export interface components {
             description?: string | null;
             /** Id */
             id: string;
-            /** Name */
-            name: string;
             /**
-             * Tags
+             * Labels
              * @default []
              */
-            tags: string[];
+            labels: string[];
+            /** Name */
+            name: string;
             /** Value */
             value?: string | null;
         };
@@ -3361,10 +3361,10 @@ export interface components {
             /** Description */
             description?: string | null;
             /**
-             * Tags
+             * Labels
              * @default []
              */
-            tags: string[];
+            labels: string[];
             /** Value */
             value: string;
         };

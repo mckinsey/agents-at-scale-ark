@@ -36,7 +36,7 @@ function configuration(overrides: Partial<Configuration> = {}): Configuration {
     value: 'https://example.test/mcp/',
     description: 'GitHub remote MCP endpoint',
     alias: null,
-    tags: [],
+    labels: [],
     ...overrides,
   };
 }
@@ -94,11 +94,11 @@ describe('ConfigurationsTable', () => {
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 
-  it('collapses tags beyond the third into an overflow chip', () => {
+  it('collapses labels beyond the third into an overflow chip', () => {
     render(
       <ConfigurationsTable
         configurations={[
-          configuration({ tags: ['a', 'b', 'c', 'd', 'e'] }),
+          configuration({ labels: ['a', 'b', 'c', 'd', 'e'] }),
         ]}
         onEdit={onEdit}
         onDelete={onDelete}

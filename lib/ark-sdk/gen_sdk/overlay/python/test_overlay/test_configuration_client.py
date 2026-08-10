@@ -132,7 +132,7 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
             "value": "https://example.test/mcp/",
             "description": "GitHub remote MCP endpoint",
             "alias": "github-mcp",
-            "tags": ["mcp"],
+            "labels": ["mcp"],
         })
 
     @patch('ark_sdk.k8s.ApiClient')
@@ -166,7 +166,7 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
             value="https://example.test/mcp/",
             description="GitHub remote MCP endpoint",
             alias="github-mcp",
-            tags=["mcp"],
+            labels=["mcp"],
         )
 
         body = mock_api_instance.create_namespaced_config_map.call_args.kwargs["body"]
@@ -206,7 +206,7 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
             name="github-mcp-url",
             value="https://new.test/mcp/",
             description="new",
-            tags=["mcp"],
+            labels=["mcp"],
         )
 
         body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]

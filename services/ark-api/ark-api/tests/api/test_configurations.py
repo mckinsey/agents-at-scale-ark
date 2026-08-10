@@ -16,7 +16,7 @@ CONFIGURATION = {
     "value": "https://example.test/mcp/",
     "description": "GitHub remote MCP endpoint",
     "alias": "github-mcp",
-    "tags": ["mcp"],
+    "labels": ["mcp"],
 }
 
 
@@ -97,7 +97,7 @@ class TestConfigurationsApi(unittest.TestCase):
             "value": "https://example.test/mcp/",
             "description": "GitHub remote MCP endpoint",
             "alias": "github-mcp",
-            "tags": ["mcp"],
+            "labels": ["mcp"],
         })
 
         self.assertEqual(response.status_code, 200)
@@ -106,14 +106,14 @@ class TestConfigurationsApi(unittest.TestCase):
             value="https://example.test/mcp/",
             description="GitHub remote MCP endpoint",
             alias="github-mcp",
-            tags=["mcp"],
+            labels=["mcp"],
         )
 
-    def test_create_configuration_rejects_invalid_tag(self):
+    def test_create_configuration_rejects_invalid_label(self):
         response = self.client.post("/v1/configurations", json={
             "name": "github-mcp-url",
             "value": "https://example.test/mcp/",
-            "tags": ["mcp servers"],
+            "labels": ["mcp servers"],
         })
 
         self.assertEqual(response.status_code, 422)
@@ -125,7 +125,7 @@ class TestConfigurationsApi(unittest.TestCase):
 
         response = self.client.put("/v1/configurations/github-mcp-url", json={
             "value": "https://new.test/mcp/",
-            "tags": [],
+            "labels": [],
         })
 
         self.assertEqual(response.status_code, 200)
@@ -134,7 +134,7 @@ class TestConfigurationsApi(unittest.TestCase):
             value="https://new.test/mcp/",
             description=None,
             alias=None,
-            tags=[],
+            labels=[],
         )
 
     @patch('ark_api.api.v1.configurations.ConfigurationClient')

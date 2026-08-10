@@ -22,7 +22,7 @@ const EMPTY_VALUES: ConfigurationFormValues = {
   value: '',
   description: '',
   alias: '',
-  tags: [],
+  labels: [],
 };
 
 export function useConfigurationForm({
@@ -52,7 +52,7 @@ export function useConfigurationForm({
       value: configuration.value ?? '',
       description: configuration.description ?? '',
       alias: configuration.alias ?? '',
-      tags: configuration.tags,
+      labels: configuration.labels,
     });
   }, [configuration, reset]);
 
@@ -64,7 +64,7 @@ export function useConfigurationForm({
       value: values.value,
       description: values.description || null,
       alias: values.alias || null,
-      tags: values.tags,
+      labels: values.labels,
     };
 
     if (isEdit && configurationName) {

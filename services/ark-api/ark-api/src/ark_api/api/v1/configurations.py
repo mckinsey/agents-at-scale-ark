@@ -44,7 +44,7 @@ async def create_configuration(body: ConfigurationCreateRequest, namespace: Opti
         value=body.value,
         description=body.description,
         alias=body.alias,
-        tags=body.tags
+        labels=body.labels
     )
     return ConfigurationResponse(**result)
 
@@ -66,7 +66,7 @@ async def update_configuration(configuration_name: str, body: ConfigurationUpdat
         value=body.value,
         description=body.description,
         alias=body.alias,
-        tags=body.tags
+        labels=body.labels
     )
     return ConfigurationResponse(**result)
 
