@@ -220,6 +220,19 @@ func TestResolveAuthorizationMaterialTrimsExpiresAtWhitespace(t *testing.T) {
 	assert.Equal(t, 2030, material.ExpiresAt.Year())
 }
 
+func TestResolveAuthorizationMaterialTrimsAccessTokenWhitespace(t *testing.T) {
+	secret := newAuthTestSecret(map[string][]byte{
+		arkv1alpha1.DefaultAccessTokenKey: []byte("  tok-abc\n"),
+	})
+	server := newAuthTestMCPServer(&arkv1alpha1.TokenSecretReference{Name: testAuthSecretName})
+
+	material, _, err := ResolveAuthorizationMaterial(context.Background(), newAuthTestReader(secret), server)
+
+	require.NoError(t, err)
+	require.NotNil(t, material)
+	assert.Equal(t, "tok-abc", material.AccessToken)
+}
+
 func TestResolveAuthorizationMaterialGetErrorPropagates(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)

@@ -147,7 +147,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		return nil, fmt.Errorf("failed to resolve authorization for MCP server %v: %w", mcpServerKey, err)
 	}
 	for _, warning := range authWarnings {
-		logf.FromContext(ctx).Info(warning, "mcpServer", mcpServerKey.String(), "tool", tool.Name)
+		logf.FromContext(ctx).V(1).Info(warning, "mcpServer", mcpServerKey.String(), "tool", tool.Name)
 	}
 	authMaterial.ApplyBearer(headers)
 

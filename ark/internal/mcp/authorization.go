@@ -59,7 +59,7 @@ func ResolveAuthorizationMaterial(ctx context.Context, reader client.Reader, mcp
 	warnings := missingOverriddenKeyWarnings(secret, ref)
 
 	if raw, ok := secret.Data[ref.ResolvedAccessTokenKey()]; ok {
-		material.AccessToken = string(raw)
+		material.AccessToken = strings.TrimSpace(string(raw))
 	}
 
 	expiresKey := ref.ResolvedExpiresAtKey()
