@@ -803,8 +803,11 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 }
 
 // TestWatchResumeFromResourceVersion_Integration asserts item 1 of #2680: a watch
-// opened with a concrete resourceVersion delivers only deltas after it, instead of
-// replaying every existing object as Added on every (re)connect.
+// opened with a concrete resourceVersion does not re-list the whole table on
+// (re)connect. Resume re-emits at most a lookback window below the resume point (so
+// out-of-order commits self-heal); objects older than that window are never
+// replayed. The pre-existing objects here are pushed well below the window to prove
+// that guarantee.
 func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
 	cfg := testConfig(t)
 
@@ -831,12 +834,24 @@ func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
 		return obj
 	}
 
-	// Baseline: three objects that exist BEFORE the watch is opened.
+	// Old state: three objects created BEFORE the watch is opened.
 	preexisting := []string{"resume-1", "resume-2", "resume-3"}
 	for i, name := range preexisting {
 		if err := backend.Create(ctx, testKind, testNS, name, mkObj(name, fmt.Sprintf("uid-%d", i+1))); err != nil {
 			t.Fatalf("Create %s failed: %v", name, err)
 		}
+	}
+
+	// Advance the global rv sequence past a full lookback window, then create an
+	// anchor. The pre-existing objects now sit more than relistLookbackRVs below the
+	// anchor's rv, so resuming from the anchor must not reach back to them.
+	if _, err := backend.db.ExecContext(ctx,
+		"SELECT nextval('resources_resource_version_seq') FROM generate_series(1, $1)",
+		relistLookbackRVs+100); err != nil {
+		t.Fatalf("advance rv sequence: %v", err)
+	}
+	if err := backend.Create(ctx, testKind, testNS, "resume-anchor", mkObj("resume-anchor", "uid-anchor")); err != nil {
+		t.Fatalf("Create anchor failed: %v", err)
 	}
 
 	var baselineRV int64
@@ -846,7 +861,7 @@ func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
 		t.Fatalf("read baseline resourceVersion: %v", err)
 	}
 
-	// Resume from the baseline: the three pre-existing objects must NOT be replayed.
+	// Resume from the anchor: the three older pre-existing objects must NOT be replayed.
 	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
 		ResourceVersion: strconv.FormatInt(baselineRV, 10),
 	})
@@ -893,7 +908,7 @@ func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
 
 	for _, name := range preexisting {
 		if seen[name] {
-			t.Errorf("resume from resourceVersion=%d replayed pre-existing object %q; expected only deltas", baselineRV, name)
+			t.Errorf("resume from resourceVersion=%d replayed object %q that is older than the lookback window; expected only recent rows + deltas", baselineRV, name)
 		}
 	}
 
@@ -989,7 +1004,9 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 	// Block until the watcher's initial relist finishes, proven by the Bookmark it
 	// emits immediately afterwards. This makes lost-row's invisibility during the
 	// initial relist a guarantee (its txn is still open here) rather than a timing
-	// bet: only after this do we commit it.
+	// bet: only after this do we commit it. The initial relist may replay seen-row
+	// (it sits inside the lookback window); lost-row cannot appear here since it is
+	// still uncommitted, so we simply drain until the bookmark.
 	bookmarkDeadline := time.After(10 * time.Second)
 	for {
 		gotBookmark := false
@@ -1000,8 +1017,8 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 			}
 			if ev.Type == watch.Bookmark {
 				gotBookmark = true
-			} else if obj, _ := ev.Object.(*integrationTestObject); obj != nil {
-				t.Fatalf("initial relist emitted %q before any commit; resume boundary leaked pre-existing state", obj.Metadata.Name)
+			} else if obj, _ := ev.Object.(*integrationTestObject); obj != nil && obj.Metadata.Name == lostName {
+				t.Fatalf("lost-row emitted before its txn committed (rv=%d) — impossible unless a dirty read occurred", rvLost)
 			}
 		case <-bookmarkDeadline:
 			t.Fatal("timeout waiting for initial relist bookmark")
