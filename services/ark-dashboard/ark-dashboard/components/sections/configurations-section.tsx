@@ -102,7 +102,7 @@ export function ConfigurationsSection() {
           actions={
             <>
               {createButton}
-              <LearnMoreButton href={DOCS_URLS.root} />
+              <LearnMoreButton href={DOCS_URLS.configurations} />
             </>
           }
         />
