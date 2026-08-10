@@ -42,6 +42,17 @@ func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto
 			klog.Errorf("WAL parse keepalive: %v", err)
 			return nil
 		}
+		// Advance our position to the server's current WAL end. When the published
+		// `resources` table is idle but the database keeps writing WAL (autovacuum,
+		// checkpoints, other activity), the server streams keepalives rather than row
+		// data. If we only ever acknowledged row-change positions, confirmed_flush_lsn
+		// would freeze at the last change and the slot would pin every WAL segment
+		// since — growing without bound until the volume fills. Confirming ServerWALEnd
+		// is what lets Postgres recycle WAL on a quiet cluster. It is safe: the server
+		// holds restart_lsn back for any still-running transaction regardless of what
+		// we confirm, and this consumer relists watchers on reconnect rather than
+		// replaying missed WAL, so it never needs WAL below the current position.
+		advanceLSN(state, msg.ServerWALEnd)
 		if msg.ReplyRequested {
 			if err := p.sendStandbyStatus(conn, state.lastWriteLSN); err != nil {
 				return fmt.Errorf("standby status reply: %w", err)
@@ -57,10 +68,24 @@ func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto
 		}
 
 		p.processWALData(xld.WALData, state.relations)
-		state.lastWriteLSN = xld.WALStart + pglogrepl.LSN(len(xld.WALData))
+		// Track the furthest server position we've observed — the end of this data
+		// chunk and the server's reported WAL end — so status updates keep advancing
+		// across stretches of WAL that decode to nothing for our publication.
+		advanceLSN(state, xld.WALStart+pglogrepl.LSN(len(xld.WALData)))
+		advanceLSN(state, xld.ServerWALEnd)
 	}
 
 	return nil
+}
+
+// advanceLSN moves the consumer's acknowledged position forward, never backward.
+// lastWriteLSN is reported to the server as the write/flush/apply position in
+// standby status updates, which is what drives confirmed_flush_lsn and lets the
+// server recycle WAL.
+func advanceLSN(state *walStreamState, lsn pglogrepl.LSN) {
+	if lsn > state.lastWriteLSN {
+		state.lastWriteLSN = lsn
+	}
 }
 
 func (p *PostgreSQLBackend) processWALData(data []byte, relations map[uint32]*pglogrepl.RelationMessage) {

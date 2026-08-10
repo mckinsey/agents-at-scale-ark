@@ -349,6 +349,36 @@ func TestHandleWALMessageKeepaliveNoReply(t *testing.T) {
 	}
 }
 
+// TestHandleWALMessageKeepaliveAdvancesLSN is the WAL-retention regression guard.
+// A keepalive carries no row data, but it reports the server's current WAL end. If
+// the consumer fails to advance on keepalives, confirmed_flush_lsn stays pinned at
+// the last row change whenever the published table is idle, and the slot retains WAL
+// without bound until the disk fills. So a keepalive MUST move lastWriteLSN forward
+// (the value reported as the flush position), and must never move it backward.
+func TestHandleWALMessageKeepaliveAdvancesLSN(t *testing.T) {
+	backend, _ := newTestBackendWithBroadcasters()
+	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
+
+	// Server reports WAL end ahead of our zero position, no reply requested (so no
+	// conn is needed): we must still advance so the slot can release WAL.
+	keepalive := encodePrimaryKeepalive(5000, false)
+	if err := backend.handleWALMessage(nil, &pgproto3.CopyData{Data: keepalive}, state); err != nil {
+		t.Fatalf("keepalive should not error: %v", err)
+	}
+	if state.lastWriteLSN != pglogrepl.LSN(5000) {
+		t.Fatalf("keepalive did not advance lastWriteLSN: got %d want 5000", state.lastWriteLSN)
+	}
+
+	// A keepalive reporting an older position must not move us backward.
+	older := encodePrimaryKeepalive(4000, false)
+	if err := backend.handleWALMessage(nil, &pgproto3.CopyData{Data: older}, state); err != nil {
+		t.Fatalf("keepalive should not error: %v", err)
+	}
+	if state.lastWriteLSN != pglogrepl.LSN(5000) {
+		t.Errorf("lastWriteLSN regressed on older keepalive: got %d want 5000", state.lastWriteLSN)
+	}
+}
+
 func TestHandleWALMessageXLogDataInsert(t *testing.T) {
 	backend, bcs := newTestBackendWithBroadcasters("Agent")
 
