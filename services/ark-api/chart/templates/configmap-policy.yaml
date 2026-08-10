@@ -1,0 +1,61 @@
+{{- if and .Values.serviceAccount.create .Values.configMapPolicy.enabled }}
+{{- if not (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
+{{- fail "configMapPolicy.enabled requires ValidatingAdmissionPolicy (Kubernetes 1.30+). Set configMapPolicy.enabled=false to install without it." }}
+{{- end }}
+# Limits ark-api to the configmaps it owns. RBAC cannot: rules have no label
+# selector, and resourceNames cannot restrict create.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  annotations:
+    {{- with .Values.global.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["configmaps"]
+  matchConditions:
+    - name: only-ark-api
+      expression: >-
+        request.userInfo.username ==
+        'system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.serviceAccount.name }}'
+  variables:
+    # object is null on DELETE.
+    - name: target
+      expression: "object == null ? oldObject : object"
+    - name: labels
+      expression: >-
+        has(variables.target.metadata.labels) ? variables.target.metadata.labels : {}
+  validations:
+    # Marker matches ARK_RESOURCE_TYPE_LABEL in ark_sdk/labels.py.
+    # Indexing an absent CEL key errors, so test with `in` first.
+    - expression: >-
+        variables.target.metadata.name in ['ark-export-metadata', 'marketplace-sources'] ||
+        ('ark.mckinsey.com/resource-type' in variables.labels &&
+         variables.labels['ark.mckinsey.com/resource-type'] == 'configuration')
+      messageExpression: >-
+        'ark-api may only write configmaps labelled ark.mckinsey.com/resource-type=configuration, ' +
+        'ark-export-metadata or marketplace-sources; got ' + variables.target.metadata.name
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  annotations:
+    {{- with .Values.global.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  policyName: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ .Release.Namespace }}
+{{- end }}

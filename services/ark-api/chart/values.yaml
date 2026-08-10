@@ -177,6 +177,11 @@ impersonation:
   groupsClaim: groups
   prefix: ""
 
+# Restricts ark-api's configmap writes to the ones it owns - RBAC cannot.
+# Requires Kubernetes 1.30+. Off by default: denies writes permitted today.
+configMapPolicy:
+  enabled: false
+
 # Network policy configuration
 networkPolicy:
   enabled: false
