@@ -1,42 +1,6 @@
 # Code Ownership
 #
-# Owners are nominated from authorship depth and recency per area, not role.
-# GitHub ignores any owner without write access to this repository, so every
-# handle below must have at least write permission.
-#
-# Order matters: the last matching rule wins.
 #
 
-# Root fallback - active leads only.
-* @dwmkerr @Nab-0 @amanvr @CDimonaco
-
-# --- Operator (Go) ---
-/ark/api/                      @amanvr @skazinka
-/ark/config/crd/               @amanvr @CDimonaco
-/ark/internal/controller/      @dwmkerr @amanvr @CDimonaco
-/ark/internal/webhook/         @giorgio-acquati-mck @skazinka
-/ark/internal/validation/      @giorgio-acquati-mck @skazinka
-/ark/internal/eventing/        @CDimonaco @skazinka
-/ark/internal/a2a/             @giorgio-acquati-mck @CDimonaco
-/ark/internal/mcp/             @giorgio-acquati-mck @CDimonaco
-/ark/executors/                @amanvr @CDimonaco
-
-# --- SDK ---
-/lib/ark-sdk/                  @amanvr
-
-# --- Services ---
-/services/ark-api/             @amanvr @skazinka
-/services/ark-broker/          @CDimonaco
-/services/ark-dashboard/       @peter-kismarczi @giorgio-acquati-mck
-/services/ark-mcp/             @giorgio-acquati-mck @amanvr
-/services/ark-landing-page/    @skazinka @amanvr
-/services/argo-workflows/      @giorgio-acquati-mck
-
-# --- Tools ---
-/tools/ark-cli/                @skazinka @peter-kismarczi
-/tools/fark/                   @skazinka
-
-# --- Docs, tests, CI ---
-/docs/                         @Nab-0 @skazinka
-/tests/                        @skazinka @hbachala
-/.github/                      @skazinka @amanvr
+# Root - active team members, so any of them can unblock a review on
+* @dwmkerr @Nab-0 @amanvr @CDimonaco @anuarora1990 @belavaishali @giorgio-acquati-mck @hbachala @mayumisiano @peter-kismarczi @sam-nf @skazinka
