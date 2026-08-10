@@ -19,7 +19,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
@@ -751,8 +753,33 @@ func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runt
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.MCPServer{}).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToMCPServers)).
 		Named("mcpserver").
 		Complete(r)
+}
+
+func (r *MCPServerReconciler) mapConfigMapToMCPServers(ctx context.Context, obj client.Object) []reconcile.Request {
+	return mapDependencyRequests(ctx, r.Client, obj, &arkv1alpha1.MCPServerList{},
+		func(l *arkv1alpha1.MCPServerList) []arkv1alpha1.MCPServer { return l.Items },
+		func(s arkv1alpha1.MCPServer) bool {
+			return mcpServerReferencesConfigMap(s, obj.GetName())
+		},
+		func(s arkv1alpha1.MCPServer) types.NamespacedName {
+			return types.NamespacedName{Name: s.Name, Namespace: s.Namespace}
+		})
+}
+
+func mcpServerReferencesConfigMap(server arkv1alpha1.MCPServer, configMapName string) bool {
+	if vf := server.Spec.Address.ValueFrom; vf != nil && vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName {
+		return true
+	}
+	for _, header := range server.Spec.Headers {
+		vf := header.Value.ValueFrom
+		if vf != nil && vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName {
+			return true
+		}
+	}
+	return false
 }
 
 // parseTimeout returns the MCPServer spec timeout as a duration,
