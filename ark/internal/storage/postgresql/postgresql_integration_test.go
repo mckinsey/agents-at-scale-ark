@@ -899,3 +899,165 @@ func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
 
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
 }
+
+// TestWatchResumeDoesNotDropOutOfOrderCommit_Integration guards the resume boundary
+// against the out-of-order-commit race that the relist() lookback exists to defend
+// against. BIGSERIAL assigns resource_version at INSERT statement time but a row is
+// only visible at commit time, so a lower rv can commit AFTER a higher one.
+//
+// Timeline the test forces deterministically:
+//  1. txLost inserts "lost-row", taking the lower rv, and stays open (uncommitted).
+//  2. txSeen inserts "seen-row", taking the higher rv, and commits.
+//  3. A client that Listed here would see only seen-row and resume watch from its rv
+//     (setListItems computes the list rv as the max over rows returned).
+//  4. txLost commits: lost-row becomes visible with an rv BELOW the resume point.
+//
+// The broadcaster's lookback re-reads lost-row and fans it to the watcher, so the
+// resume boundary must not silently discard it. A regression drops it at forwardRow
+// (rv <= startRV) and it never self-heals — only a fresh List recovers it.
+func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
+	withFastRelist(t, 500*time.Millisecond)
+
+	cfg := testConfig(t)
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "ResumeRaceResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	defer func() {
+		_, _ = backend.db.ExecContext(context.Background(), "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	// insertTx inserts one row within tx and returns the rv the sequence assigned at
+	// statement time. Defaults cover the remaining NOT NULL / JSONB columns.
+	insertTx := func(tx *sql.Tx, name, uid string) int64 {
+		t.Helper()
+		var rv int64
+		if err := tx.QueryRowContext(ctx,
+			`INSERT INTO resources (kind, namespace, name, uid) VALUES ($1, $2, $3, $4) RETURNING resource_version`,
+			testKind, testNS, name, uid).Scan(&rv); err != nil {
+			t.Fatalf("insert %s: %v", name, err)
+		}
+		return rv
+	}
+
+	// Step 1: lost-row takes the lower rv but is held uncommitted.
+	txLost, err := backend.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin txLost: %v", err)
+	}
+	lostCommitted := false
+	defer func() {
+		if !lostCommitted {
+			_ = txLost.Rollback()
+		}
+	}()
+	const lostName = "lost-row"
+	rvLost := insertTx(txLost, lostName, "uid-lost")
+
+	// Step 2: seen-row takes the higher rv and commits first.
+	txSeen, err := backend.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin txSeen: %v", err)
+	}
+	rvSeen := insertTx(txSeen, "seen-row", "uid-seen")
+	if err := txSeen.Commit(); err != nil {
+		t.Fatalf("commit txSeen: %v", err)
+	}
+	if rvLost >= rvSeen {
+		t.Fatalf("expected rvLost < rvSeen to model the race, got rvLost=%d rvSeen=%d", rvLost, rvSeen)
+	}
+
+	// Step 3: resume from seen-row's rv, exactly as a client that Listed here would.
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(rvSeen, 10),
+	})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	// Block until the watcher's initial relist finishes, proven by the Bookmark it
+	// emits immediately afterwards. This makes lost-row's invisibility during the
+	// initial relist a guarantee (its txn is still open here) rather than a timing
+	// bet: only after this do we commit it.
+	bookmarkDeadline := time.After(10 * time.Second)
+	for {
+		gotBookmark := false
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before initial bookmark")
+			}
+			if ev.Type == watch.Bookmark {
+				gotBookmark = true
+			} else if obj, _ := ev.Object.(*integrationTestObject); obj != nil {
+				t.Fatalf("initial relist emitted %q before any commit; resume boundary leaked pre-existing state", obj.Metadata.Name)
+			}
+		case <-bookmarkDeadline:
+			t.Fatal("timeout waiting for initial relist bookmark")
+		}
+		if gotBookmark {
+			break
+		}
+	}
+
+	// Step 4: lost-row commits with an rv below the resume point.
+	if err := txLost.Commit(); err != nil {
+		t.Fatalf("commit txLost: %v", err)
+	}
+	lostCommitted = true
+
+	// Sentinel is created after the race resolves; its rv is above the resume point,
+	// so it always streams through. Relist emits ascending by rv, so if lost-row is
+	// going to be delivered at all it arrives no later than the sentinel — making the
+	// sentinel a sound, deterministic stop condition.
+	const sentinelName = "sentinel-row"
+	sentinel := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	sentinel.Metadata.Name = sentinelName
+	sentinel.Metadata.Namespace = testNS
+	sentinel.Metadata.UID = "uid-sentinel"
+	sentinel.Spec = map[string]interface{}{"k": "v"}
+	if err := backend.Create(ctx, testKind, testNS, sentinelName, sentinel); err != nil {
+		t.Fatalf("Create sentinel failed: %v", err)
+	}
+
+	deadline := time.After(15 * time.Second)
+	sawLost := false
+	for {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before sentinel arrived")
+			}
+			if ev.Type == watch.Bookmark {
+				continue
+			}
+			obj, _ := ev.Object.(*integrationTestObject)
+			if obj == nil {
+				continue
+			}
+			switch obj.Metadata.Name {
+			case lostName:
+				sawLost = true
+			case sentinelName:
+				if !sawLost {
+					t.Fatalf("resume from resourceVersion=%d silently dropped out-of-order commit %q (rv=%d, below resume point); "+
+						"the lookback window must floor at startRV-relistLookbackRVs, not at startRV", rvSeen, lostName, rvLost)
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatalf("timeout waiting for sentinel; sawLost=%v", sawLost)
+		}
+	}
+}

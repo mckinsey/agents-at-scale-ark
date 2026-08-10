@@ -874,10 +874,14 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	// deltas after it, rather than re-adding every object on reconnect. See #2680.
 	var startRV int64
 	if opts.ResourceVersion != "" && opts.ResourceVersion != "0" {
-		startRV, err = strconv.ParseInt(opts.ResourceVersion, 10, 64)
-		if err != nil {
+		// ParseUint (not ParseInt) so a signed value like "-5" or "+100" is rejected
+		// rather than parsed: a negative startRV would slip past every resume floor
+		// and silently degrade to replay-all. Matches setListItems' rv parsing.
+		rv, perr := strconv.ParseUint(opts.ResourceVersion, 10, 63)
+		if perr != nil {
 			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
 		}
+		startRV = int64(rv)
 	}
 
 	w := &postgresWatcher{
@@ -1066,8 +1070,8 @@ type postgresWatcher struct {
 	// rows with resource_version > startRV. Zero means replay all current state.
 	startRV int64
 	// firstRelistDone flips true after the first successful relist. Until then the
-	// relist floors strictly at startRV (the resume boundary is exact, and seenRVs
-	// is empty so the lookback window would re-emit already-seen rows as Added).
+	// relist has no steady-state cursor to look back from, so it queries directly
+	// from resumeFloor(); afterwards it looks back from lastSeenRV instead.
 	firstRelistDone atomic.Bool
 	// behind is set by the broadcaster when this watcher's inputCh is full and a row
 	// was dropped; run() then does a private catch-up relist to recover it.
@@ -1157,9 +1161,11 @@ func (w *postgresWatcher) recoverIfBehind() {
 // Returns false if the watcher is shutting down.
 func (w *postgresWatcher) forwardRow(row *changeRow) bool {
 	// The shared broadcaster fans out its whole relist window to every subscriber;
-	// a resuming watcher must drop anything at or below its resume point rather than
-	// re-emit state the client already has.
-	if row.rv <= w.startRV {
+	// a resuming watcher drops rows below its resume floor rather than re-emit state
+	// the client already has. The floor sits a lookback window below startRV (not at
+	// startRV) so an out-of-order commit just under the resume point is recovered
+	// rather than silently lost; seenRVs dedups the small overlap the client saw.
+	if row.rv <= w.resumeFloor() {
 		return true
 	}
 	uidNew := !w.hasSeenUID(row.uid)
@@ -1242,6 +1248,17 @@ func (w *postgresWatcher) hasSeenUID(uid string) bool {
 	return ok
 }
 
+// resumeFloor is the lowest resource_version this watcher will (re-)emit: a full
+// lookback window below the client's resume point. forwardRow and buildRelistQuery
+// share it so their boundaries can't drift. Zero (no resume) leaves the floor at 0,
+// preserving replay-all.
+func (w *postgresWatcher) resumeFloor() int64 {
+	if floor := w.startRV - relistLookbackRVs; floor > 0 {
+		return floor
+	}
+	return 0
+}
+
 // pruneSeen drops seenRVs entries far below the current cursor, bounding memory.
 func (w *postgresWatcher) pruneSeen() {
 	pruneFloor := w.lastSeenRV.Load() - 5000
@@ -1258,17 +1275,21 @@ func (w *postgresWatcher) pruneSeen() {
 }
 
 func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
+	// resumeFloor is the lowest rv this watcher will (re-)emit. It sits a lookback
+	// window below the client's resume point so a row whose txn committed out of rv
+	// order just under startRV — the race relistLookbackRVs exists to cover — is
+	// recovered rather than silently dropped; seenRVs dedups the client's overlap.
+	floor := w.resumeFloor()
 	var queryFromRV int64
 	if w.firstRelistDone.Load() {
-		// Steady-state relist: look back to catch rows whose txn was still
-		// in-flight near the cursor tip; seenRVs dedups the overlap. Never dip
-		// below startRV — the client already has everything up to its resume point.
-		if queryFromRV = w.lastSeenRV.Load() - relistLookbackRVs; queryFromRV < w.startRV {
-			queryFromRV = w.startRV
+		// Steady-state relist: look back from the cursor tip to catch in-flight
+		// commits; seenRVs dedups. Never dip below the resume floor.
+		if queryFromRV = w.lastSeenRV.Load() - relistLookbackRVs; queryFromRV < floor {
+			queryFromRV = floor
 		}
 	} else {
-		// Resume/initial relist: the boundary is exact, so no lookback.
-		queryFromRV = w.startRV
+		// Resume/initial relist: no steady-state cursor yet, so query from the floor.
+		queryFromRV = floor
 	}
 
 	query := `
@@ -1338,6 +1359,7 @@ func (w *postgresWatcher) relist() error {
 	// opposite order from rv assignment, so a strict `rv > lastSeenRV` cursor can skip
 	// past an in-flight rv permanently. Mitigation: re-query with a lookback window,
 	// then dedup by (uid, rv) using w.seenRVs to avoid double-emitting.
+	isInitialRelist := !w.firstRelistDone.Load()
 	query, args := w.buildRelistQuery()
 	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
 	if err != nil {
@@ -1358,6 +1380,16 @@ func (w *postgresWatcher) relist() error {
 			// the same window and nothing is permanently skipped.
 			watcherRelistFailures.WithLabelValues(w.kind).Inc()
 			return err
+		}
+		// On the first relist the lookback window dips below startRV to cover
+		// out-of-order commits, but rows at/below startRV that are ALREADY visible
+		// here are the state the client got from its List. Seed them into seenRVs so
+		// neither this relist nor later broadcaster fan-out re-emits them, without
+		// suppressing a genuinely late commit (invisible now, so never seeded).
+		if isInitialRelist && rv <= w.startRV {
+			w.advanceRV(rv)
+			w.markSeen(uid, rv)
+			continue
 		}
 		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
 			return nil // watcher shutting down, not a relist failure
