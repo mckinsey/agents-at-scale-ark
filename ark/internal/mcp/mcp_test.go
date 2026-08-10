@@ -109,7 +109,7 @@ func TestNewMCPClient(t *testing.T) {
 					_ = mcpClient.Client.Close()
 				}
 
-				_ = mcpServerMock.Shutdown(t.Context())
+				_ = mcpServerMock.Shutdown(context.Background())
 			})
 
 			go func() {
@@ -186,10 +186,23 @@ func (m *mcpServerMock) ListenAndServe(t *testing.T) error {
 }
 
 func (m *mcpServerMock) Shutdown(ctx context.Context) error {
+	m.closeSessions()
 	if m.httpServer != nil {
 		return m.httpServer.Shutdown(ctx)
 	}
 	return nil
+}
+
+// closeSessions terminates any live server-side sessions. The go-sdk
+// streamable-HTTP handler keeps a per-session Read goroutine alive until the
+// session is closed, so tests must close sessions explicitly to satisfy goleak.
+func (m *mcpServerMock) closeSessions() {
+	if m.server == nil {
+		return
+	}
+	for session := range m.server.Sessions() {
+		_ = session.Close()
+	}
 }
 
 func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcpsdk.Server {
@@ -245,6 +258,7 @@ func TestNewMCPClientSessionOutlivesConnectTimeout(t *testing.T) {
 
 			server := httptest.NewServer(handler)
 			t.Cleanup(server.Close)
+			t.Cleanup(mcpServerMock.closeSessions)
 
 			connectTimeout := 500 * time.Millisecond
 			client, err := NewMCPClient(t.Context(), server.URL, nil, transportType, connectTimeout, MCPSettings{})
