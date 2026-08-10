@@ -84,6 +84,21 @@ Giving a configuration the alias `old-name` therefore does not make a manifest r
 
 Deleting a configuration is allowed even when resources reference it. The dashboard first lists what would break: every `Agent`, `Model`, `Tool`, `Memory`, `MCPServer`, `A2AServer`, and `ExecutionEngine` that names it, with the field that reads it. Queries are not scanned. A resource whose reference no longer resolves reports the failure on its status.
 
+## Restrict what Ark can write
+
+Managing configurations requires `create`, `update`, and `delete` on ConfigMaps, so the Ark API's role grants them across the namespaces it serves. RBAC cannot narrow this further: a rule has no label selector, and `resourceNames` cannot restrict `create` — the name does not exist yet. The Ark API checks the marker label before every write, but that check lives in the application.
+
+To enforce the same boundary at admission, enable the ValidatingAdmissionPolicy that ships with the chart:
+
+```yaml
+configMapPolicy:
+  enabled: true
+```
+
+It denies every ConfigMap write by the Ark API service account except configurations, `ark-export-metadata`, and `marketplace-sources`. Enable it if your operators rely on ConfigMaps the Ark API has no business touching.
+
+It is off by default for two reasons: it requires Kubernetes 1.30 or later, and it denies writes that are permitted today, so turning it on is a deliberate change rather than an upgrade side effect.
+
 ## Related
 
 - [Creating Tools and MCP Servers](/user-guide/tools)
