@@ -25,6 +25,8 @@ from ...models.a2a_tasks import (
     ApprovalSubmissionResponse,
 )
 from .exceptions import handle_k8s_errors
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -144,32 +146,35 @@ def a2a_task_to_detail_response(task: dict) -> A2ATaskDetailResponse:
 
 @router.get("", response_model=A2ATaskListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a task")
-async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
+async def list_a2a_tasks(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskListResponse:
     """
-    List all A2ATask CRs in a namespace.
+    List a page of A2ATask CRs in a namespace.
 
     Args:
         namespace: The namespace to list A2A tasks from
+        pagination: limit and continue token for server-side pagination
 
     Returns:
-        A2ATaskListResponse: List of all A2A tasks in the namespace
+        A2ATaskListResponse: One page of A2A tasks plus the continuation token
     """
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        tasks = await ark_client.a2atasks.a_list()
+        page = await ark_client.a2atasks.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
 
-        task_list = []
-        for task in tasks:
-            task_list.append(a2a_task_to_response(task.to_dict()))
+        task_list = [a2a_task_to_response(task.to_dict()) for task in page.items]
 
         return A2ATaskListResponse(
             items=task_list,
-            count=len(task_list)
+            count=len(task_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
 @router.get("/{task_name}", response_model=A2ATaskDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="a2a task")
-async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskDetailResponse:
+async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2ATaskDetailResponse:
     """
     Get a specific A2ATask CR by name.
 
@@ -188,7 +193,7 @@ async def get_a2a_task(request: Request, task_name: str, namespace: Optional[str
 
 @router.delete("/{task_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="a2a task")
-async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete an A2ATask CR by name.
 
@@ -205,7 +210,7 @@ async def delete_a2a_task(request: Request, task_name: str, namespace: Optional[
 async def submit_a2a_task_approval(
     task_name: str,
     body: ApprovalSubmissionRequest,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> ApprovalSubmissionResponse:
     """

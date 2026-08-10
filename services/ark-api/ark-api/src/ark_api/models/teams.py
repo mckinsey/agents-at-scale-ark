@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Any
 
 from pydantic import BaseModel, Field
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class TeamMember(BaseModel):
@@ -46,10 +46,9 @@ class TeamResponse(BaseModel):
     status: Optional[str] = None
 
 
-class TeamListResponse(BaseModel):
+class TeamListResponse(PaginatedListResponse):
     """List of teams response model."""
     items: List[TeamResponse]
-    count: int
 
 
 class TeamCreateRequest(BaseModel):
