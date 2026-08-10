@@ -101,6 +101,21 @@ func TestExtractStableError_UnrecognisedErrors(t *testing.T) {
 			expected: "Probe failed (AADSTS50126: Invalid credentials.)",
 		},
 		{
+			name:     "two adjacent volatile json fields leave valid json",
+			err:      errors.New(`gateway error {"request_id":"req_99","timestamp":"2026-08-10T11:22:33.123Z","code":503}`),
+			expected: `Probe failed (gateway error {"code":503})`,
+		},
+		{
+			name:     "three adjacent volatile json fields leave valid json",
+			err:      errors.New(`gateway error {"request_id":"a","trace_id":"b","timestamp":"2026-08-10T11:22:33Z","code":503}`),
+			expected: `Probe failed (gateway error {"code":503})`,
+		},
+		{
+			name:     "adjacent volatile fields at the tail leave valid json",
+			err:      errors.New(`gateway error {"code":503,"request_id":"a","timestamp":"2026-08-10T11:22:33Z"}`),
+			expected: `Probe failed (gateway error {"code":503})`,
+		},
+		{
 			name:     "json timestamp is stripped",
 			err:      errors.New(`gateway error {"code":"unavailable","timestamp":"2026-08-10T11:22:33.123Z"}`),
 			expected: `Probe failed (gateway error {"code":"unavailable"})`,

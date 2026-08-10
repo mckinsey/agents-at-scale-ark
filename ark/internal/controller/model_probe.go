@@ -19,7 +19,10 @@ import (
 	completions "mckinsey.com/ark/executors/completions"
 )
 
-const maxProbeErrorLength = 256
+const (
+	maxProbeErrorLength       = 256
+	maxSeparatorCleanupPasses = 8
+)
 
 var volatileTokenPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(^|[\s",{])"?(?:trace|correlation|request|activity|client-request)[ _-]?id"?\s*[:=]\s*"?[^",}\s]*"?`),
@@ -88,14 +91,26 @@ func extractStableError(err error, timeout time.Duration) string {
 	return fmt.Sprintf("Probe failed (%s)", stabilizeProbeError(err))
 }
 
+func cleanupSeparators(msg string) string {
+	for range maxSeparatorCleanupPasses {
+		cleaned := msg
+		for _, pattern := range separatorCleanupPatterns {
+			cleaned = pattern.ReplaceAllString(cleaned, "${1}")
+		}
+		if cleaned == msg {
+			break
+		}
+		msg = cleaned
+	}
+	return msg
+}
+
 func stabilizeProbeError(err error) string {
 	msg := err.Error()
 	for _, pattern := range volatileTokenPatterns {
 		msg = pattern.ReplaceAllString(msg, "${1}")
 	}
-	for _, pattern := range separatorCleanupPatterns {
-		msg = pattern.ReplaceAllString(msg, "${1}")
-	}
+	msg = cleanupSeparators(msg)
 	msg = strings.Join(strings.Fields(msg), " ")
 	msg = strings.TrimRight(msg, " ,;:-")
 	if msg == "" {
