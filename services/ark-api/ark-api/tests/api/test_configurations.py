@@ -1,4 +1,5 @@
 """Tests for the configurations API and its reverse-reference lookup."""
+import inspect
 import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -6,9 +7,13 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 os.environ["AUTH_MODE"] = "open"
 os.environ["READ_ONLY_MODE"] = "false"
 
+from ark_sdk import versions
 from fastapi.testclient import TestClient
 
-from ark_api.services.configuration_references import find_config_map_references
+from ark_api.services.configuration_references import (
+    REFERRING_RESOURCES,
+    find_config_map_references
+)
 
 CONFIGURATION = {
     "name": "github-mcp-url",
@@ -158,11 +163,7 @@ class TestConfigurationReferencesEndpoint(unittest.TestCase):
     @staticmethod
     def _ark_client(resources):
         ark_client = MagicMock()
-        for _, attribute in [
-            ("Model", "models"), ("Agent", "agents"), ("Tool", "tools"),
-            ("Memory", "memories"), ("MCPServer", "mcpservers"),
-            ("A2AServer", "a2aservers"), ("ExecutionEngine", "executionengines"),
-        ]:
+        for _, attribute, _ in REFERRING_RESOURCES:
             getattr(ark_client, attribute).a_list = AsyncMock(
                 return_value=resources.get(attribute, [])
             )
@@ -206,6 +207,23 @@ class TestConfigurationReferencesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"items": [], "count": 0})
+
+
+class TestReferringResourceVersions(unittest.TestCase):
+    """Every referring resource must exist on the client for its declared version."""
+
+    def test_attributes_exist_on_their_client(self):
+        clients = {
+            "v1alpha1": versions.ARKClientV1alpha1,
+            "v1prealpha1": versions.ARKClientV1prealpha1,
+        }
+        for kind, attribute, version in REFERRING_RESOURCES:
+            source = inspect.getsource(clients[version].__init__)
+            self.assertIn(
+                f"self.{attribute} = ",
+                source,
+                f"{kind} is declared as {version} but {version} has no '{attribute}'",
+            )
 
 
 if __name__ == '__main__':

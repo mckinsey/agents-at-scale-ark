@@ -5,13 +5,13 @@ CONFIG_MAP_KEY_REF = "configMapKeyRef"
 VALUE_FROM_SUFFIX = ".valueFrom"
 
 REFERRING_RESOURCES = (
-    ("Model", "models"),
-    ("Agent", "agents"),
-    ("Tool", "tools"),
-    ("Memory", "memories"),
-    ("MCPServer", "mcpservers"),
-    ("A2AServer", "a2aservers"),
-    ("ExecutionEngine", "executionengines"),
+    ("Model", "models", "v1alpha1"),
+    ("Agent", "agents", "v1alpha1"),
+    ("Tool", "tools", "v1alpha1"),
+    ("Memory", "memories", "v1alpha1"),
+    ("MCPServer", "mcpservers", "v1alpha1"),
+    ("A2AServer", "a2aservers", "v1prealpha1"),
+    ("ExecutionEngine", "executionengines", "v1prealpha1"),
 )
 
 
