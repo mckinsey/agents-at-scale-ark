@@ -75,7 +75,7 @@ Set `app.nodeOptions` to override the computed value. If `app.resources.limits.m
   `app.nodeOptions` **replaces** the computed value rather than adding to it. Setting it for an unrelated flag drops the heap cap and returns V8 to its host-derived default — the failure this section exists to prevent. Include the flag yourself whenever you set it, as in `nodeOptions: "--max-old-space-size=870 --enable-source-maps"`.
 </Callout>
 
-Heap pressure scales with the in-memory stores, so `limits.maxMessages`, `limits.maxChunks`, `limits.maxSpans` and `limits.maxEvents` are the other lever. Moving messages to Postgres or chunks to Redis takes those stores off the heap; traces and sessions stay in memory regardless. The sessions index has no size limit — it grows with the queries it has seen until `DELETE /sessions` purges it.
+Heap pressure scales with the in-memory stores, so `limits.maxMessages`, `limits.maxChunks`, `limits.maxSpans` and `limits.maxEvents` are the other lever. Moving messages or sessions to Postgres, or chunks to Redis, takes those stores off the heap; traces stay in memory regardless. On the default in-memory backend the sessions index has no size limit — it grows with the queries it has seen until `DELETE /sessions` purges it, which is the one heap consumer with no cap.
 
 ## Metrics
 
@@ -90,7 +90,7 @@ The broker exposes Prometheus metrics at `GET /metrics` on the service port:
 | `broker_sessions_count` | Sessions in the in-process sessions index |
 | `broker_session_queries_count` | Queries held across all sessions |
 
-A gauge is registered only for stores actually held in the heap — with `MESSAGE_BACKEND=postgres`, `broker_messages_count` is absent rather than reported as zero. Traces and sessions have no backend to move to, so their gauges are always present.
+A gauge is registered only for stores actually held in the heap — with `MESSAGE_BACKEND=postgres`, `broker_messages_count` is absent rather than reported as zero, and the two session gauges are absent under `SESSIONS_BACKEND=postgres`. Traces have no backend to move to, so `broker_spans_count` is always present.
 
 Session heap use tracks queries rather than sessions: each session holds every query it has seen, plus derived conversation and participant summaries. A small `broker_sessions_count` alongside a large `broker_session_queries_count` means a few long-lived sessions are holding the memory.
 

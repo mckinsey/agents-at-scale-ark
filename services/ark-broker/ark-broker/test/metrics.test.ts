@@ -7,6 +7,7 @@ import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 import {createMetricsRegistry} from '../src/metrics/registry.js';
 
 const logger = createLogger({level: 'silent', pretty: false});
@@ -20,6 +21,7 @@ function buildMemoryBackedApp(): Express {
     messageStream: createMessageStream(config, logger),
     chunkStream: createChunkStream(config, logger),
     eventStream: createEventStream(config, logger),
+    sessionsStorage: createSessionsStorage(config, logger),
   }).app;
 }
 
@@ -116,6 +118,8 @@ describe('createMetricsRegistry', () => {
     expect(body).not.toContain('broker_messages_count');
     expect(body).not.toContain('broker_chunks_count');
     expect(body).not.toContain('broker_events_count');
+    expect(body).not.toContain('broker_sessions_count');
+    expect(body).not.toContain('broker_session_queries_count');
   });
 
   test('reports the current count on each scrape', async () => {
