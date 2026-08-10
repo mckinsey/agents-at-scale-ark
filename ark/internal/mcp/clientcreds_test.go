@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -368,5 +369,71 @@ func TestRequestTokenHonoursCancellation(t *testing.T) {
 		TokenEndpoint: "http://127.0.0.1:1/token", Assertion: "x",
 	}); err == nil {
 		t.Fatal("expected an error from a cancelled context")
+	}
+}
+
+func TestValidateEndpointURL(t *testing.T) {
+	cases := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"https", "https://auth.example.com/token", false},
+		{"http loopback by name", "http://localhost:8090/token", false},
+		{"http loopback v4", "http://127.0.0.1:8090/token", false},
+		{"http loopback v4 non-canonical", "http://127.1.2.3:8090/token", false},
+		{"http loopback v6", "http://[::1]:8090/token", false},
+		{"http public host", "http://auth.example.com/token", true},
+		{"http public IP", "http://203.0.113.10/token", true},
+		// 0.0.0.0 routes to localhost on Linux and macOS, so it would
+		// reach a loopback listener - but it is not a loopback address
+		// and must not be treated as the development carve-out.
+		{"http unspecified address", "http://0.0.0.0:8090/token", true},
+		{"no host", "https:///token", true},
+		{"empty", "", true},
+		{"not a URL", "://nope", true},
+		{"non-http scheme", "ftp://auth.example.com/token", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateEndpointURL("tokenEndpoint", tc.url)
+			if tc.wantErr && err == nil {
+				t.Errorf("ValidateEndpointURL(%q) = nil, want an error", tc.url)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("ValidateEndpointURL(%q) = %v, want nil", tc.url, err)
+			}
+		})
+	}
+}
+
+// TestRequestTokenRefusesPlaintextEndpoint is the defence-in-depth check.
+// Admission rejects a plaintext override, but the Helm chart exposes
+// webhook.failurePolicy, so a spec can be admitted without ever reaching
+// the validator. RequestToken is where the signed assertion leaves the
+// process, so the guarantee has to hold there too.
+//
+// The endpoint points at a live listener via 0.0.0.0, which routes to
+// loopback: if the check were dropped, the assertion really would be
+// delivered. An empty captured form proves nothing went on the wire.
+func TestRequestTokenRefusesPlaintextEndpoint(t *testing.T) {
+	key, _ := newTestKey(t)
+	srv, form := tokenServer(t, &key.PublicKey, 3600)
+	endpoint := strings.Replace(srv.URL, "127.0.0.1", "0.0.0.0", 1)
+
+	_, err := RequestToken(context.Background(), TokenRequestParams{
+		TokenEndpoint: endpoint,
+		Assertion:     "signed.client.assertion",
+		ClientID:      testClientID,
+	})
+	if err == nil {
+		t.Fatal("expected RequestToken to refuse a plaintext non-loopback endpoint")
+	}
+	if !strings.Contains(err.Error(), "must use https") {
+		t.Errorf("error = %v, want it to name the https requirement", err)
+	}
+	if len(*form) != 0 {
+		t.Errorf("token endpoint received %v; the assertion must not leave the process", *form)
 	}
 }

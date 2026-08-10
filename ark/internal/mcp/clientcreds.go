@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -47,6 +48,9 @@ const (
 	// ClientAssertionTypeJWTBearer is the fixed RFC 7523 §2.2 value for
 	// the `client_assertion_type` token request parameter.
 	ClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+
+	schemeHTTPS = "https"
+	schemeHTTP  = "http"
 
 	// assertionTTL bounds the lifetime of a client assertion. The
 	// assertion is consumed immediately by the token endpoint, so this
@@ -222,12 +226,71 @@ func (e *TokenError) Error() string {
 	return fmt.Sprintf("token endpoint returned HTTP %d", e.StatusCode)
 }
 
+// ValidateEndpointURL enforces the transport requirement OAuth 2.1 and
+// MCP Authorization place on endpoints in this flow: https, with
+// loopback exempted for development.
+//
+// field is the name to report in the error; callers pass whatever path
+// makes sense to their reader, fully qualified for admission and bare
+// for the mint path.
+//
+// This is applied in two places by design. Admission rejects a bad
+// override early with a clear message; RequestToken applies it again
+// immediately before the assertion goes on the wire. The second
+// application is not redundant — the Helm chart exposes
+// webhook.failurePolicy, so an operator can set Ignore and admit specs
+// that never reached the validator. The mint path is where the
+// credential actually leaves the process, so that is where the
+// guarantee has to hold.
+func ValidateEndpointURL(field, value string) error {
+	u, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("%s is not a valid URL: %w", field, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%s must include a host", field)
+	}
+	if u.Scheme == schemeHTTPS {
+		return nil
+	}
+	// The client assertion is a credential in flight. Anyone on-path who
+	// captures it inside its 60s window can replay it and receive an
+	// access token as this client, unless the authorization server
+	// enforces jti replay protection — which cannot be assumed. The
+	// issued token then returns over the same cleartext channel, so a
+	// plaintext endpoint exposes both halves.
+	if u.Scheme == schemeHTTP && isLoopbackHost(u.Hostname()) {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s must use https (got %q); plaintext is permitted only for loopback addresses",
+		field, value)
+}
+
+// isLoopbackHost reports whether host is a loopback address or the
+// literal "localhost", matching the development carve-out OAuth 2.1 and
+// the MCP authorization spec allow.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
 // RequestToken exchanges a signed client assertion for an access token.
 //
 // The response body is never logged or wrapped into the returned error
 // on success paths, and TokenError carries only the RFC 6749 error code
 // and description — never the token itself.
 func RequestToken(ctx context.Context, p TokenRequestParams) (*TokenResponse, error) {
+	// Checked here rather than trusting admission: see ValidateEndpointURL.
+	if err := ValidateEndpointURL("tokenEndpoint", p.TokenEndpoint); err != nil {
+		return nil, err
+	}
+
 	form := url.Values{}
 	form.Set("grant_type", GrantTypeClientCredentials)
 	form.Set("client_assertion_type", ClientAssertionTypeJWTBearer)

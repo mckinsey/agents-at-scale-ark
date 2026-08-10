@@ -3,14 +3,11 @@ package validation
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
 	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkmcp "mckinsey.com/ark/internal/mcp"
 )
-
-const schemeHTTPS = "https"
 
 func (v *Validator) ValidateMCPServer(ctx context.Context, mcpserver *arkv1alpha1.MCPServer) ([]string, error) {
 	if _, err := v.ResolveValueSource(ctx, mcpserver.Spec.Address, mcpserver.GetNamespace()); err != nil {
@@ -68,48 +65,18 @@ func validateClientCredentials(auth *arkv1alpha1.MCPServerAuthorizationSpec) err
 		{"tokenEndpoint", cc.TokenEndpoint},
 		{"resource", cc.Resource},
 	}
+	// Same check the mint path applies before putting the assertion on
+	// the wire (arkmcp.ValidateEndpointURL). Shared rather than
+	// reimplemented so admission cannot come to disagree with the
+	// behaviour it is meant to predict.
 	for _, o := range overrides {
 		if o.value == "" {
 			continue
 		}
-		u, err := url.Parse(o.value)
-		if err != nil {
-			return fmt.Errorf("authorization.clientCredentials.%s is not a valid URL: %w", o.field, err)
-		}
-		if u.Host == "" {
-			return fmt.Errorf("authorization.clientCredentials.%s must include a host", o.field)
-		}
-		// The client assertion is a credential in flight. Anyone on-path
-		// who captures it inside its 60s window can replay it and receive
-		// an access token as this client, unless the authorization server
-		// enforces jti replay protection — which cannot be assumed. The
-		// issued token then returns over the same cleartext channel, so a
-		// plaintext endpoint exposes both halves.
-		//
-		// OAuth 2.1 and MCP Authorization both require HTTPS here, with
-		// loopback exempted for development.
-		if u.Scheme != schemeHTTPS && !isLoopbackHost(u.Hostname()) {
-			return fmt.Errorf(
-				"authorization.clientCredentials.%s must use https (got %q); plaintext is permitted only for loopback addresses",
-				o.field, o.value)
-		}
-		if u.Scheme != schemeHTTPS && u.Scheme != schemeHTTP {
-			return fmt.Errorf("authorization.clientCredentials.%s must be an http or https URL, got scheme %q", o.field, u.Scheme)
+		if err := arkmcp.ValidateEndpointURL("authorization.clientCredentials."+o.field, o.value); err != nil {
+			return err
 		}
 	}
 
 	return nil
-}
-
-// isLoopbackHost reports whether host is a loopback address or the
-// literal "localhost", matching the development carve-out OAuth 2.1 and
-// the MCP authorization spec allow.
-func isLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-	return false
 }
