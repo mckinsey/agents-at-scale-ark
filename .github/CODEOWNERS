@@ -1,19 +1,15 @@
 # Code Ownership
 #
-# Per-area owners are nominated from authorship depth and recency, not role.
-# The root rule lists the whole write team as a fallback for unowned paths.
-#
+# Owners are nominated from authorship depth and recency per area, not role.
 # GitHub ignores any owner without write access to this repository, so every
 # handle below must have at least write permission.
 #
-# Order matters: the last matching rule wins, so a path matched by a rule
-# below is owned by that rule alone - not by the root team list.
+# Order matters: the last matching rule wins.
 #
 
-# Root fallback - every member of the agents-at-scale-ark-write team, so any
-# teammate can unblock a review on a path with no specific owner below.
-# Keep in sync when team membership changes.
-* @dwmkerr @Nab-0 @amanvr @CDimonaco @anuarora1990 @arvin-seo @barvarga @belavaishali @carolinastaumck @daniele-marostica @david-gombos @DebanjanBanerjeeQB @drew-foxall @dylankearnsnearform @Gab-Bak-ZH @gabrieleblue @giorgio-acquati-mck @hbachala @iamhassaan @isabel-brolhato @isha2912 @JoshKneale @jskeates @leonnallamuthu @lucaromagnoli @marwamahf @mayumisiano @mmalmsten @nataliatch @Nishanth-McK @peter-kismarczi @poornimanagQB @sam-nf @skazinka @skokaina @StarkNDJ @tynandebold @wim-qb
+# Root fallback - active team members, so any of them can unblock a review on
+# a path with no specific owner below. Keep in sync as the team changes.
+* @dwmkerr @Nab-0 @amanvr @CDimonaco @anuarora1990 @belavaishali @giorgio-acquati-mck @hbachala @mayumisiano @peter-kismarczi @sam-nf @skazinka
 
 # --- Operator (Go) ---
 /ark/api/                      @amanvr @skazinka
