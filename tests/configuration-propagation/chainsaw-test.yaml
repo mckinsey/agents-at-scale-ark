@@ -1,0 +1,105 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: configuration-propagation
+spec:
+  description: A configuration update reaches an MCPServer that resolves its address from it
+  steps:
+  - name: install-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-configuration-and-mcpserver
+    try:
+    - apply:
+        file: manifests/a01-configuration.yaml
+    - apply:
+        file: manifests/a02-mcpserver.yaml
+
+  - name: assert-stale-address-in-effect
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: config-driven-mcp
+          status:
+            resolvedAddress: http://wrong-address.invalid/mcp
+            (conditions[?type == 'Available']):
+            - status: "False"
+
+  - name: update-configuration
+    try:
+    - script:
+        content: |
+          kubectl patch configmap mcp-endpoint \
+            --namespace "$NAMESPACE" \
+            --type merge \
+            --patch "{\"data\":{\"value\":\"http://mock-llm.$NAMESPACE.svc.cluster.local:6556/mcp\"}}"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: assert-new-address-in-effect
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: config-driven-mcp
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: config-driven-mcp
+          status:
+            (resolvedAddress != 'http://wrong-address.invalid/mcp'): true
+            (ends_with(resolvedAddress, '.svc.cluster.local:6556/mcp')): true
+            (toolCount > `0`): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            labels:
+              mcp/server: config-driven-mcp
+            ownerReferences:
+            - apiVersion: ark.mckinsey.com/v1alpha1
+              kind: MCPServer
+              name: config-driven-mcp
+          status:
+            state: Ready
+
+  - name: assert-configuration-metadata-survives-update
+    try:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: mcp-endpoint
+            labels:
+              ark.mckinsey.com/resource-type: configuration
+              ark.mckinsey.com/label.mcp: "true"
+            annotations:
+              ark.mckinsey.com/description: MCP endpoint for this environment
+              ark.mckinsey.com/alias: mcp-url
