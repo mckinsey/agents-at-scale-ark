@@ -4,6 +4,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -142,6 +143,8 @@ type Config struct {
 	// configurations have to be suppressed first or Ark's validation runs twice.
 	ThirdPartyWebhooks bool
 }
+
+const readyzPingTimeout = 2 * time.Second
 
 type Server struct {
 	config       Config
@@ -652,4 +655,33 @@ func validatingAdmissionPolicyServed(d discovery.DiscoveryInterface) (bool, erro
 		}
 	}
 	return false, nil
+}
+
+func (s *Server) Readyz(r *http.Request) error {
+	return storageReady(r.Context(), s.backendReady, func(ctx context.Context) error { return s.backend.Ping(ctx) })
+}
+
+func storageReady(parent context.Context, ready <-chan struct{}, ping func(context.Context) error) error {
+	select {
+	case <-ready:
+	default:
+		return errors.New("storage backend not initialized")
+	}
+	ctx, cancel := context.WithTimeout(parent, readyzPingTimeout)
+	defer cancel()
+
+	// The ping runs on its own goroutine because lib/pq observes only its connect_timeout
+	// while establishing a connection: against an unreachable or wedged database the ping
+	// ignores ctx and returns after connect_timeout, 5x readyzPingTimeout. Waiting on ctx
+	// here keeps the probe response bounded and lets kubelet-side cancellation land, while
+	// the abandoned ping releases its pool connection when the driver gives up.
+	done := make(chan error, 1)
+	go func() { done <- ping(ctx) }()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("storage backend ping did not complete: %w", ctx.Err())
+	}
 }

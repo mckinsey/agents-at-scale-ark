@@ -51,6 +51,18 @@ one #2684 calls out as completely unprotected.
 
 ## Running
 
+In CI this runs in its own job, `E2E Third-Party Webhooks (postgresql)`, rather than in the
+standard matrix. The standard legs leave `policy.thirdPartyWebhooks` off so their ~60 tests
+exercise the shipped default; enabling it there would put every Ark write in that leg on the
+webhook admission path. The test carries the `third-party-webhooks` label, which the standard
+legs exclude and the dedicated job selects.
+
+Locally, set the flag up front and then select this test:
+
 ```bash
-chainsaw test
+./.github/actions/setup-e2e/setup-local.sh \
+  --storage-backend postgresql \
+  --enable-third-party-webhooks
+
+cd tests && chainsaw test --config .chainsaw.yaml --selector 'third-party-webhooks'
 ```

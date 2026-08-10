@@ -17,6 +17,9 @@ INSTALL_COVERAGE="false"
 INSTALL_BROKER="false"
 STORAGE_BACKEND="etcd"
 PREFETCH_TEST_IMAGES="false"
+# Off by default so the standard legs exercise the shipped default. Only the
+# dedicated third-party-webhooks job turns this on.
+ENABLE_THIRD_PARTY_WEBHOOKS="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -37,12 +40,17 @@ while [[ $# -gt 0 ]]; do
       PREFETCH_TEST_IMAGES="true"
       shift
       ;;
+    --enable-third-party-webhooks)
+      ENABLE_THIRD_PARTY_WEBHOOKS="true"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images]"
+      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--enable-third-party-webhooks]"
       echo "  --install-coverage      Install coverage collection components"
       echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
       echo "  --storage-backend       Storage backend to use (default: etcd)"
       echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
+      echo "  --enable-third-party-webhooks  Set policy.thirdPartyWebhooks=true on the apiserver (postgresql only)"
       exit 0
       ;;
     *)
@@ -220,7 +228,8 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     --set postgresql.passwordSecretName=ark-storage-dev-password \
     --set postgresql.sslMode=verify-full \
     --set postgresql.sslSecretName=ark-storage-dev-tls \
-    --set postgresql.sslRootCertKey=ca.crt
+    --set postgresql.sslRootCertKey=ca.crt \
+    --set policy.thirdPartyWebhooks="${ENABLE_THIRD_PARTY_WEBHOOKS}"
 fi
 
 echo "=== Installing ARK Completions (background) ==="
@@ -253,6 +262,7 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
       --set memory.createMemoryCRD=false
       --set backends.message=postgres
       --set backends.event=postgres
+      --set backends.sessions=postgres
       --set "database.url=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=verify-full"
       --set "database.migrateUrl=postgres://postgres:${POSTGRES_PASSWORD}@ark-storage-dev.ark-system.svc.cluster.local:5432/ark?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt"
       --set database.tls.enabled=true

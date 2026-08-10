@@ -3,7 +3,10 @@ kind: Test
 metadata:
   name: apiserver-third-party-webhooks
   labels:
-    postgresql: "true"
+    # Not "postgresql": this needs policy.thirdPartyWebhooks=true, which the standard
+    # legs deliberately leave off so they exercise the shipped default. Run by the
+    # dedicated E2E Third-Party Webhooks job.
+    third-party-webhooks: "true"
 spec:
   description: >
     With policy.thirdPartyWebhooks enabled, ARK's aggregated apiserver runs the webhook

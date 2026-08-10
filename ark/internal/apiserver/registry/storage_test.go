@@ -1102,6 +1102,62 @@ func TestGenericStorage_Delete_RefreshAfterConflictReportsNotFound(t *testing.T)
 	}
 }
 
+// flakyRefreshBackend conflicts on the first Update, then fails the re-read with a transient
+// storage error rather than a genuine miss.
+type flakyRefreshBackend struct {
+	*mockBackend
+	updates int
+	gets    int
+}
+
+func (b *flakyRefreshBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	b.updates++
+	if b.updates == 1 {
+		return storage.ErrConflict
+	}
+	return b.mockBackend.Update(ctx, kind, namespace, name, obj)
+}
+
+func (b *flakyRefreshBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
+	b.gets++
+	if b.gets > 1 {
+		return nil, errors.New("connection reset by peer")
+	}
+	return b.mockBackend.Get(ctx, kind, namespace, name)
+}
+
+// A storage failure during the post-conflict re-read must not be reported as NotFound. For a
+// delete, 404 reads as success, so the client would believe an object that is still present —
+// finalizers set, no deletionTimestamp — had been removed.
+func TestGenericStorage_Delete_RefreshStorageFailureIsNotNotFound(t *testing.T) {
+	t.Parallel()
+
+	backend := &flakyRefreshBackend{mockBackend: newMockBackend()}
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	config := ResourceConfig{
+		Kind: "Agent", Resource: "agents", SingularName: "agent",
+		NewFunc:     func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	gs := NewGenericStorage(backend, &mockConverter{}, config, nil)
+
+	_, deleted, err := gs.Delete(contextWithNamespace(testNS()), testAgentName, nil, &metav1.DeleteOptions{})
+	if err == nil {
+		t.Fatal("expected an error when the re-read fails, got nil")
+	}
+	if apierrors.IsNotFound(err) {
+		t.Fatalf("storage failure reported as NotFound, which reads as a successful delete: %v", err)
+	}
+	if deleted {
+		t.Error("deleted = true, want false")
+	}
+}
+
 // Admission is re-run against the refreshed object, so a policy that rejects the version we ended
 // up marking must block the delete rather than be overridden by the earlier pass.
 func TestGenericStorage_Delete_RefreshRejectedByAdmission(t *testing.T) {

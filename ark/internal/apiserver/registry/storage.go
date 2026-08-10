@@ -451,7 +451,14 @@ func (s *GenericStorage) markForDeletion(ctx, sctx context.Context, namespace, n
 func (s *GenericStorage) refreshForDeletion(ctx, sctx context.Context, namespace, name string, deleteValidation rest.ValidateObjectFunc) (runtime.Object, error) {
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
-		// The winner of the race finished the delete outright.
+		// Only a genuine miss means the winner of the race finished the delete outright.
+		// Reporting NotFound for anything else — a timeout on the shared sctx budget, a
+		// dropped connection — tells the client the object is gone when it is still there
+		// with finalizers and no deletionTimestamp, since 404 reads as success for a delete.
+		if !errors.Is(err, storage.ErrNotFound) {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "error")
+			return nil, fmt.Errorf("failed to re-read %s during delete: %w", s.config.SingularName, err)
+		}
 		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
 		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
 		return nil, apierrors.NewNotFound(gr, name)
