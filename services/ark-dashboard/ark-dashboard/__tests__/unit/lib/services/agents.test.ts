@@ -1,17 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { agentsService } from '@/lib/services/agents'
-import { apiClient } from '@/lib/api/client'
+import { apiClient, APIError } from '@/lib/api/client'
 import type { AgentDetailResponse, AgentListResponse } from '@/lib/services/agents'
 
-// Mock the API client
-vi.mock('@/lib/api/client', () => ({
-  apiClient: {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
-}))
+// Mock the API client, keeping the real APIError so instanceof checks work
+vi.mock('@/lib/api/client', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/api/client')>()
+  return {
+    ...actual,
+    apiClient: {
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn(),
+    },
+  }
+})
 
 describe('agentsService', () => {
   const mockAgent: AgentDetailResponse = {
@@ -69,8 +73,7 @@ describe('agentsService', () => {
     })
 
     it('should return null for 404 errors', async () => {
-      const error = new Error('Not found') as any
-      error.response = { status: 404 }
+      const error = new APIError('Not found', 404)
       vi.mocked(apiClient.get).mockRejectedValueOnce(error)
 
       const result = await agentsService.getByName('non-existent')
@@ -159,8 +162,7 @@ describe('agentsService', () => {
     })
 
     it('should return null for 404 errors', async () => {
-      const error = new Error('Not found') as any
-      error.response = { status: 404 }
+      const error = new APIError('Not found', 404)
       vi.mocked(apiClient.put).mockRejectedValueOnce(error)
 
       const result = await agentsService.update('non-existent', {})
@@ -196,8 +198,7 @@ describe('agentsService', () => {
     })
 
     it('should return false for 404 errors', async () => {
-      const error = new Error('Not found') as any
-      error.response = { status: 404 }
+      const error = new APIError('Not found', 404)
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error)
 
       const result = await agentsService.delete('non-existent')

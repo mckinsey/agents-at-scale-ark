@@ -1,7 +1,3 @@
-import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
-import {dirname} from 'node:path';
-import {EventEmitter} from 'node:events';
-import type {Logger} from '@ark-broker/logging/logger.js';
 import type {PaginationParams, PaginatedList} from './pagination.js';
 
 export type QueryPhase =
@@ -68,7 +64,11 @@ export interface QueryEntry {
   createdAt: string;
   /** ISO timestamp when the query reached a terminal phase */
   completedAt?: string;
-  /** ISO timestamp of the most recent event for this query */
+  /**
+   * ISO timestamp of the most recent event for this query. Events only: this is
+   * what elects whose phase becomes the session status, so a write that cannot
+   * change a phase must not move it.
+   */
   lastActivity: string;
 }
 
@@ -343,153 +343,78 @@ export class SessionsBroker {
         session.status = 'idle';
       }
     }
+export interface SessionsFilter {
+  status?: 'active' | 'idle' | 'error';
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}
 
-    this.recalculateConversations(sessionId);
-    this.recalculateParticipants(sessionId);
-  }
+export interface SessionsSort {
+  field: 'date' | 'name' | 'conversations';
+  direction: 'asc' | 'desc';
+}
 
-  private updateExistingQuery(
-    existing: QueryEntry,
-    phase: QueryPhase,
+export interface SessionsStorage {
+  /**
+   * `sequence` is the event's position in the events stream, used as an
+   * idempotency watermark by backends that apply the mutation in a separate
+   * transaction from the event insert, so concurrent replicas can't let an
+   * older event regress state a later one already applied. The in-memory
+   * backend ignores it: single process, no reorder risk.
+   */
+  applyEvent(
     eventData: Partial<SessionEventData>,
-    errorMsg?: string
-  ): void {
-    const now = new Date().toISOString();
-    existing.lastActivity = now;
+    sequence?: number
+  ): Promise<void>;
+  /** `sequence` is the message's position in the messages stream; see applyEvent. */
+  applyMessage(
+    conversationId: string,
+    queryId: string,
+    sequence?: number
+  ): Promise<void>;
+  getAll(): Promise<SessionsStore>;
+  getSession(sessionId: string): Promise<SessionEntry | undefined>;
+  paginate(
+    params: PaginationParams,
+    filters?: SessionsFilter,
+    sort?: SessionsSort
+  ): Promise<PaginatedSessionsList>;
+  getQueryByConversationId(
+    conversationId: string
+  ): Promise<(QueryEntry & {sessionId: string}) | undefined>;
+  save(): Promise<void>;
+  delete(): Promise<void>;
+  subscribe(
+    callback: (data: {sessionId: string; queryName: string}) => void
+  ): () => void;
+}
 
-    if (eventData.conversationId && !existing.conversationId) {
-      existing.conversationId = eventData.conversationId;
-    }
-    if (eventData.agent && !existing.agent) {
-      existing.agent = eventData.agent;
-    }
-    if (eventData.team && !existing.team) {
-      existing.team = eventData.team;
-    }
-    if (eventData.tool && !existing.tool) {
-      existing.tool = eventData.tool;
-    }
-    if (eventData.targetType && existing.targetType === 'agent') {
-      existing.targetType = eventData.targetType;
-    }
+/**
+ * Live materialized index of sessions and queries, enriched as events and
+ * messages flow through the broker. Consumers can subscribe via SSE to watch
+ * sessions mutate in real-time, or poll/GET for post-hoc analysis.
+ */
+export class SessionsBroker {
+  constructor(private readonly storage: SessionsStorage) {}
 
-    if (phase === QueryPhases.Error) {
-      existing.phase = QueryPhases.Error;
-      existing.error = errorMsg;
-      existing.completedAt = now;
-    } else if (
-      phase === QueryPhases.Canceled &&
-      existing.phase !== QueryPhases.Error
-    ) {
-      existing.phase = QueryPhases.Canceled;
-      existing.completedAt = now;
-    } else if (
-      phase === QueryPhases.Done &&
-      existing.phase !== QueryPhases.Canceled
-    ) {
-      // A later 'done' supersedes a prior 'error'. A query that paused for
-      // tool approval is transiently recorded as error; once it completes
-      // successfully the error must be cleared so errorCount reflects reality.
-      existing.phase = QueryPhases.Done;
-      existing.error = undefined;
-      existing.completedAt = now;
-    }
+  async applyEvent(
+    eventData: Partial<SessionEventData>,
+    sequence?: number
+  ): Promise<void> {
+    return this.storage.applyEvent(eventData, sequence);
   }
 
-  applyEvent(eventData: Partial<SessionEventData>): void {
-    const {sessionId, queryName} = eventData;
-    if (!sessionId || !queryName) {
-      this.logger.warn(
-        {sessionId, queryName},
-        'dropping event: missing sessionId or queryName'
-      );
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const {queryNamespace} = eventData;
-    const reason = eventData._reason || '';
-    const errorMsg = eventData.error;
-
-    // Map toolName to tool for backward compatibility with completions executor
-    const normalizedEventData = {
-      ...eventData,
-      tool:
-        eventData.tool ||
-        (eventData as Partial<SessionEventData> & {toolName?: string}).toolName,
-    };
-
-    if (!this.store.sessions[sessionId]) {
-      this.store.sessions[sessionId] = {
-        sessionId,
-        name: sessionId.startsWith('session-')
-          ? sessionId.substring(8)
-          : sessionId,
-        queries: {},
-        status: 'idle',
-        errorCount: 0,
-        createdAt: now,
-        lastActivity: now,
-      };
-    }
-
-    const session = this.store.sessions[sessionId];
-    session.lastActivity = now;
-
-    const queryPhase = this.resolveQueryPhase(reason, errorMsg);
-
-    const existing = session.queries[queryName];
-    if (existing) {
-      this.updateExistingQuery(
-        existing,
-        queryPhase,
-        normalizedEventData,
-        errorMsg
-      );
-    } else {
-      session.queries[queryName] = {
-        name: queryName,
-        namespace: queryNamespace,
-        conversationId: normalizedEventData.conversationId || undefined,
-        agent: normalizedEventData.agent,
-        team: normalizedEventData.team,
-        tool: normalizedEventData.tool,
-        targetType: normalizedEventData.targetType || 'agent',
-        phase: queryPhase,
-        error: errorMsg,
-        createdAt: now,
-        completedAt: queryPhase === QueryPhases.Running ? undefined : now,
-        lastActivity: now,
-      };
-      this.queryToSession.set(queryName, sessionId);
-    }
-
-    this.recalculateSessionStatus(sessionId);
-
-    this.deferredSave();
-    this.emitter.emit('upsert', {sessionId, queryName});
+  async applyMessage(
+    conversationId: string,
+    queryId: string,
+    sequence?: number
+  ): Promise<void> {
+    return this.storage.applyMessage(conversationId, queryId, sequence);
   }
 
-  applyMessage(conversationId: string, queryId: string): void {
-    const sessionId = this.queryToSession.get(queryId);
-    if (!sessionId) return;
-
-    const session = this.store.sessions[sessionId];
-    if (!session) return;
-
-    const query = session.queries[queryId];
-    if (!query) return;
-
-    query.lastActivity = new Date().toISOString();
-    if (!query.conversationId) {
-      query.conversationId = conversationId;
-    }
-    session.lastActivity = query.lastActivity;
-    this.deferredSave();
-  }
-
-  getAll(): SessionsStore {
-    return this.store;
+  async getAll(): Promise<SessionsStore> {
+    return this.storage.getAll();
   }
 
   cachedItemCount(): number {
@@ -505,154 +430,35 @@ export class SessionsBroker {
 
   getSession(sessionId: string): SessionEntry | undefined {
     return this.store.sessions[sessionId];
+  async getSession(sessionId: string): Promise<SessionEntry | undefined> {
+    return this.storage.getSession(sessionId);
   }
 
-  /**
-   * Paginate sessions with filtering and sorting.
-   *
-   * NOTE: Uses offset-based pagination (not true cursor pagination).
-   * The cursor is just an array index, which means:
-   * - Results may include duplicates or skip items if sessions are added/deleted between pages
-   * - Changing sort order or filters invalidates previous cursors
-   * - Not suitable for reliable iteration over the full dataset
-   */
-  paginate(
+  async paginate(
     params: PaginationParams,
-    filters?: {
-      status?: 'active' | 'idle' | 'error';
-      dateFrom?: string;
-      dateTo?: string;
-      search?: string;
-    },
-    sort?: {
-      field: 'date' | 'name' | 'conversations';
-      direction: 'asc' | 'desc';
-    }
-  ): PaginatedSessionsList {
-    let sessions = Object.values(this.store.sessions);
-
-    if (filters?.status) {
-      sessions = sessions.filter((s) => {
-        const sessionStatus = s.status ?? 'idle';
-        return sessionStatus === filters.status;
-      });
-    }
-
-    if (filters?.dateFrom) {
-      const from = new Date(filters.dateFrom).getTime();
-      sessions = sessions.filter(
-        (s) => new Date(s.lastActivity).getTime() >= from
-      );
-    }
-
-    if (filters?.dateTo) {
-      const to = new Date(filters.dateTo).getTime();
-      sessions = sessions.filter(
-        (s) => new Date(s.lastActivity).getTime() <= to
-      );
-    }
-
-    if (filters?.search) {
-      const search = filters.search.toLowerCase();
-      sessions = sessions.filter(
-        (s) =>
-          s.sessionId.toLowerCase().includes(search) ||
-          s.name.toLowerCase().includes(search) ||
-          Object.values(s.queries).some(
-            (q) =>
-              (q.agent?.toLowerCase() || '').includes(search) ||
-              (q.team?.toLowerCase() || '').includes(search) ||
-              (q.tool?.toLowerCase() || '').includes(search)
-          )
-      );
-    }
-
-    if (sort) {
-      sessions.sort((a, b) => {
-        let comparison = 0;
-        if (sort.field === 'date') {
-          comparison =
-            new Date(a.lastActivity).getTime() -
-            new Date(b.lastActivity).getTime();
-        } else if (sort.field === 'name') {
-          comparison = a.name.localeCompare(b.name);
-        } else if (sort.field === 'conversations') {
-          const firstSessionConversationCount = new Set(
-            Object.values(a.queries)
-              .map((q) => q.conversationId)
-              .filter(Boolean)
-          ).size;
-          const secondSessionConversationCount = new Set(
-            Object.values(b.queries)
-              .map((q) => q.conversationId)
-              .filter(Boolean)
-          ).size;
-          comparison =
-            firstSessionConversationCount - secondSessionConversationCount;
-        }
-        return sort.direction === 'asc' ? comparison : -comparison;
-      });
-    }
-
-    const total = sessions.length;
-
-    // Calculate status counts from the filtered result set
-    const statusCounts = {
-      active: sessions.filter((s) => s.status === 'active').length,
-      idle: sessions.filter((s) => (s.status ?? 'idle') === 'idle').length,
-      error: sessions.filter((s) => s.status === 'error').length,
-    };
-
-    const startIndex = params.cursor || 0;
-    const endIndex = startIndex + params.limit;
-    const items = sessions.slice(startIndex, endIndex);
-    const hasMore = endIndex < total;
-    // nextCursor is the array offset for the next page (not a stable cursor)
-    const nextCursor = hasMore ? endIndex : undefined;
-
-    return {
-      items,
-      total,
-      hasMore,
-      nextCursor,
-      statusCounts,
-    };
+    filters?: SessionsFilter,
+    sort?: SessionsSort
+  ): Promise<PaginatedSessionsList> {
+    return this.storage.paginate(params, filters, sort);
   }
 
-  getQueryByConversationId(
+  async getQueryByConversationId(
     conversationId: string
-  ): (QueryEntry & {sessionId: string}) | undefined {
-    for (const [sessionId, session] of Object.entries(this.store.sessions)) {
-      for (const query of Object.values(session.queries)) {
-        if (query.conversationId === conversationId) {
-          return {...query, sessionId};
-        }
-      }
-    }
-    return undefined;
+  ): Promise<(QueryEntry & {sessionId: string}) | undefined> {
+    return this.storage.getQueryByConversationId(conversationId);
   }
 
-  save(): void {
-    if (!this.path) return;
-    try {
-      const dir = dirname(this.path);
-      if (!existsSync(dir)) mkdirSync(dir, {recursive: true});
-      writeFileSync(this.path, JSON.stringify(this.store, null, 2));
-    } catch (err) {
-      this.logger.error({err}, 'failed to save');
-    }
+  async save(): Promise<void> {
+    return this.storage.save();
   }
 
-  delete(): void {
-    this.store = {sessions: {}};
-    this.queryToSession.clear();
-    this.save();
+  async delete(): Promise<void> {
+    return this.storage.delete();
   }
 
   subscribe(
     callback: (data: {sessionId: string; queryName: string}) => void
   ): () => void {
-    this.emitter.on('upsert', callback);
-    return () => this.emitter.off('upsert', callback);
+    return this.storage.subscribe(callback);
   }
 }

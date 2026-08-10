@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,11 +37,15 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 		log.Info("Error parsing tool arguments", "ToolCall", call)
 	}
 
-	response, err := m.MCPClient.Client.CallTool(ctx, &mcpsdk.CallToolParams{
+	response, err := m.MCPClient.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name:      m.ToolName,
 		Arguments: arguments,
 	})
 	if err != nil {
+		if errors.Is(err, arkmcp.ErrToolCallTimeout) {
+			log.Error(err, "tool call exceeded toolCallTimeout", "tool", m.ToolName)
+			return ToolResult{ID: call.ID, Name: call.Function.Name, Content: "", Error: err.Error()}, err
+		}
 		log.Info("tool call error", "tool", m.ToolName, "error", err, "errorType", fmt.Sprintf("%T", err))
 		return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, err
 	}
