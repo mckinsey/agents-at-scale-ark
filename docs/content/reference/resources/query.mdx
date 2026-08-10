@@ -244,7 +244,7 @@ When a `Query` is deleted, a controller finalizer removes the messages and opera
 - The controller discovers the broker endpoint from the `ark-config-broker` ConfigMap and issues `DELETE /events/{queryId}` directly against it. If no broker is configured for the namespace, cleanup is skipped.
 - Events are keyed by the Query's **UID**, not its name (unlike messages), so `{queryId}` here is the UID.
 
-Both cleanups run independently and either can fail without blocking the other. A backend that does not implement a delete endpoint returns `404`/`405`, which the controller treats as "not supported" and skips. **Scope:** messages and events only — chunks and traces are not affected. **Failure policy:** if a backend is unreachable the finalizer retries every 15s; after a 5-minute grace period it gives up and removes itself, so a Query is never stuck in `Deleting`.
+Both cleanups run independently and either can fail without blocking the other. A backend that does not implement a delete endpoint returns `404`/`405`, which the controller treats as "not supported" and skips. **Scope:** messages and events only — chunks, traces, and the broker's [sessions read model](/developer-guide/services/ark-broker#sessions-backend-postgres) are not affected. **Failure policy:** if a backend is unreachable the finalizer retries every 15s; after a 5-minute grace period it gives up and removes itself, so a Query is never stuck in `Deleting`.
 
 This is complementary to `spec.ttl`: TTL expires history on a timer, while deletion cleans it up immediately when the Query is removed.
 
