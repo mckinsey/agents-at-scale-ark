@@ -1,4 +1,5 @@
 import request from 'supertest';
+import type {Test} from 'supertest';
 import type {Express} from 'express';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
@@ -55,6 +56,8 @@ describe('GET /metrics', () => {
       'broker_chunks_count',
       'broker_spans_count',
       'broker_events_count',
+      'broker_sessions_count',
+      'broker_session_queries_count',
     ]) {
       expect(sampleValue(response.text, metric)).toBeDefined();
     }
@@ -80,6 +83,24 @@ describe('GET /metrics', () => {
     );
 
     expect(after).toBe(before! + 1);
+  });
+
+  test('tracks sessions and their queries as events arrive', async () => {
+    const postEvent = (sessionId: string, queryName: string): Test =>
+      request(app)
+        .post('/events')
+        .send({
+          reason: 'AgentExecutionStart',
+          data: {queryId: queryName, sessionId, queryName},
+        });
+
+    await postEvent('metrics-session', 'metrics-query-a');
+    await postEvent('metrics-session', 'metrics-query-b');
+
+    const body = (await request(app).get('/metrics')).text;
+
+    expect(sampleValue(body, 'broker_sessions_count')).toBe(1);
+    expect(sampleValue(body, 'broker_session_queries_count')).toBe(2);
   });
 });
 

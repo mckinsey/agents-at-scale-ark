@@ -371,4 +371,63 @@ describe('SessionsBroker', () => {
       expect(received).toHaveLength(0);
     });
   });
+
+  describe('cache size accessors', () => {
+    test('starts empty', () => {
+      expect(broker.cachedItemCount()).toBe(0);
+      expect(broker.cachedQueryCount()).toBe(0);
+    });
+
+    test('counts sessions and queries independently', () => {
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q2'});
+      broker.applyEvent({sessionId: 'sess-2', queryName: 'q3'});
+
+      expect(broker.cachedItemCount()).toBe(2);
+      expect(broker.cachedQueryCount()).toBe(3);
+    });
+
+    test('repeated events for a known query do not inflate the count', () => {
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      broker.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'q1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      expect(broker.cachedQueryCount()).toBe(1);
+    });
+
+    test('counts the same query name reused across sessions', () => {
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'shared'});
+      broker.applyEvent({sessionId: 'sess-2', queryName: 'shared'});
+
+      expect(broker.cachedItemCount()).toBe(2);
+      expect(broker.cachedQueryCount()).toBe(2);
+    });
+
+    test('resets on delete', () => {
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      broker.delete();
+
+      expect(broker.cachedItemCount()).toBe(0);
+      expect(broker.cachedQueryCount()).toBe(0);
+    });
+
+    test('follows removals from the store', () => {
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      broker.applyEvent({sessionId: 'sess-1', queryName: 'q2'});
+      broker.applyEvent({sessionId: 'sess-2', queryName: 'q3'});
+
+      const store = broker.getAll();
+      delete store.sessions['sess-1'].queries['q2'];
+
+      expect(broker.cachedQueryCount()).toBe(2);
+
+      delete store.sessions['sess-1'];
+
+      expect(broker.cachedItemCount()).toBe(1);
+      expect(broker.cachedQueryCount()).toBe(1);
+    });
+  });
 });

@@ -5,6 +5,8 @@ export type CacheSizeSources = {
   chunks?: () => number;
   spans?: () => number;
   events?: () => number;
+  sessions?: () => number;
+  sessionQueries?: () => number;
 };
 
 const GAUGES: Record<keyof CacheSizeSources, {name: string; help: string}> = {
@@ -23,6 +25,14 @@ const GAUGES: Record<keyof CacheSizeSources, {name: string; help: string}> = {
   events: {
     name: 'broker_events_count',
     help: 'Operation events currently held in the in-process event cache',
+  },
+  sessions: {
+    name: 'broker_sessions_count',
+    help: 'Sessions currently held in the in-process sessions index',
+  },
+  sessionQueries: {
+    name: 'broker_session_queries_count',
+    help: 'Queries held across all sessions in the in-process sessions index',
   },
 };
 

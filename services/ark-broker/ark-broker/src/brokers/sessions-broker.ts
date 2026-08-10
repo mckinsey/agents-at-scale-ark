@@ -147,10 +147,11 @@ export class SessionsBroker {
           this.store = data;
           this.rebuildIndex();
 
-          const sessionCount = Object.keys(this.store.sessions).length;
-          const queryCount = this.queryToSession.size;
           this.logger.info(
-            {sessions: sessionCount, queries: queryCount},
+            {
+              sessions: this.cachedItemCount(),
+              queries: this.cachedQueryCount(),
+            },
             'loaded'
           );
         }
@@ -491,6 +492,17 @@ export class SessionsBroker {
     return this.store;
   }
 
+  cachedItemCount(): number {
+    return Object.keys(this.store.sessions).length;
+  }
+
+  cachedQueryCount(): number {
+    return Object.values(this.store.sessions).reduce(
+      (total, session) => total + Object.keys(session.queries).length,
+      0
+    );
+  }
+
   getSession(sessionId: string): SessionEntry | undefined {
     return this.store.sessions[sessionId];
   }
@@ -633,6 +645,7 @@ export class SessionsBroker {
 
   delete(): void {
     this.store = {sessions: {}};
+    this.queryToSession.clear();
     this.save();
   }
 

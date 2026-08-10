@@ -82,6 +82,8 @@ export function buildApp(deps: {
     chunks: chunkStream.cachedItemCount?.bind(chunkStream),
     spans: traces.cachedItemCount.bind(traces),
     events: eventStream.cachedItemCount?.bind(eventStream),
+    sessions: sessions.cachedItemCount.bind(sessions),
+    sessionQueries: sessions.cachedQueryCount.bind(sessions),
   });
 
   logger.info('brokers initialized');

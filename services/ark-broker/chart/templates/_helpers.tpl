@@ -90,7 +90,10 @@ OOMKilled: 85% covers large limits, and limit-128Mi covers small ones, where a
 percentage alone leaves too little for non-heap memory. Every size keeps at
 least ~100MB clear of the limit.
 
-Renders empty at limits of 128Mi and below, where no value leaves useful headroom.
+Renders empty below a 256Mi limit. The limit-128Mi term dominates under ~853Mi, so
+smaller limits compute a heap too small for the process to start (160Mi would yield
+32MB). 256Mi is the smallest limit that produces a usable value, and the floor below
+is what enforces that — without it the flag renders at 1MB for a 129Mi limit.
 
 app.nodeOptions overrides the computed value verbatim. Renders empty when neither
 app.nodeOptions nor a memory limit is set.
@@ -103,7 +106,7 @@ app.nodeOptions nor a memory limit is set.
 {{- if $limit -}}
 {{- $limitMi := include "ark-broker.memoryToMi" $limit | float64 -}}
 {{- $heapMi := min (int64 (mulf $limitMi 0.85)) (int64 (subf $limitMi 128.0)) -}}
-{{- if gt $heapMi 0 -}}
+{{- if ge $heapMi (int64 128) -}}
 {{- printf "--max-old-space-size=%d" $heapMi -}}
 {{- end -}}
 {{- end -}}

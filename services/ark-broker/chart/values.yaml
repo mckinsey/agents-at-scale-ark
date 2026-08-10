@@ -100,14 +100,18 @@ app:
 
   # NODE_OPTIONS for the broker container.
   # Leave empty to derive --max-old-space-size from resources.limits.memory, as the
-  # lesser of 85% and limit-128Mi (870MB at the 1024Mi default). V8 sizes its default
+  # lesser of 85% and limit-128Mi (870MB at the 1024Mi default), omitted entirely below
+  # a 256Mi limit where the result would be too small to start. V8 sizes its default
   # heap from host memory, not the container limit, so without this the process can
   # exhaust its heap while the container still has headroom. Bumping limits.memory is
   # enough — the heap follows.
   # The margin is not slack: V8's total heap ceiling sits ~24MB above the value set
   # here, and non-heap memory (native buffers, sockets) sits above that. Raising it
   # risks a kernel OOMKill in place of a clean V8 heap limit.
-  # Set explicitly only to override the computed value.
+  # Set explicitly only to override the computed value. This REPLACES it rather than
+  # adding to it, so always include --max-old-space-size when setting other flags —
+  # omitting it drops the heap cap back to V8's host-derived default:
+  #   nodeOptions: "--max-old-space-size=870 --enable-source-maps"
   nodeOptions: ""
 
 server:
@@ -140,6 +144,12 @@ limits:
   maxSpans: 100000
   # Max events to persist (~100MB at 200k events)
   maxEvents: 200000
+
+# Prometheus ServiceMonitor for the broker's GET /metrics endpoint.
+# Requires the Prometheus Operator (monitoring.coreos.com/v1) in the cluster.
+prometheus:
+  enable: false
+  interval: 30s
 
 # Streaming configuration
 streaming:
