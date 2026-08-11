@@ -50,7 +50,7 @@ The guard marks sub-target invocations in the context and executes locally inste
 
 `MakeAgent` and `executeAgent` share the same predicate (`dispatchesToEngine`) so model loading and execution routing cannot disagree.
 
-This rests on one invariant worth naming: the executor stamps `target` on its own outbound dispatch even though the controller does not (Decision 2). A top-level Query on a self-dispatching agent therefore arrives with no target and dispatches once, then returns to the engine *with* a target — hop two runs locally and the chain ends. Remove that stamp and the guard silently becomes the infinite loop it exists to prevent. `dispatchesToEngine`'s unit table drives the predicate from a synthetic context, so it does not cover this; 10.8 (chart injects the engine's own name) is the admission-time backstop.
+This rests on one invariant worth naming: the executor stamps `target` on its own outbound dispatch even though the controller does not (Decision 2). A top-level Query on a self-dispatching agent therefore arrives with no target and dispatches once, then returns to the engine *with* a target — hop two runs locally and the chain ends. Remove that stamp and the guard silently becomes the infinite loop it exists to prevent. A unit table over `dispatchesToEngine` cannot catch that: it drives the predicate from a synthetic context and never sees what the executor puts on the wire. The stamp has to be asserted on the outbound message itself (8.3), and 10.8 (chart injects the engine's own name) is the admission-time backstop.
 
 ### 5. A sub-target must not touch the parent Query — enforced structurally
 

@@ -71,7 +71,7 @@
 
 - [ ] 8.1 Byte-equality against the legacy metadata literal; target, extensions, contextID
 - [ ] 8.2 `IsNamedEngine` table; `ResolveExecutionEngineAddress` against a fake client
-- [ ] 8.3 `NamedExecutionEngine` wire format and errors; `executeAgent` routing; recursion guard
+- [ ] 8.3 `NamedExecutionEngine` wire format and errors; `executeAgent` routing; recursion guard. The wire-format assertion must include `target.name` equal to the dispatched agent: that stamp is the only thing that makes hop two run locally, so a predicate test alone leaves the loop unguarded (Decision 4)
 - [ ] 8.4 `renderEngineInput` including the system-message case
 - [ ] 8.5 Selector: exact / case-insensitive / whole-name / ambiguous / no-match; termination with and without payload; custom terminate prompt
 - [ ] 8.6 Sub-target: input source, Noop memory, nil stream, resumption exclusion
