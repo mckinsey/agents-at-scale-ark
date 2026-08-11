@@ -6,6 +6,7 @@
 - [ ] 1.4 Refactor `sendQueryA2A` and `resolveDispatchAddress` onto the helpers
 - [ ] 1.5 Adopt `IsNamedEngine` at all five duplicated call sites
 - [ ] 1.6 Name `input-required` explicitly in `ExtractTextFromTask`, so both A2A transports report unsupported HITL rather than a generic protocol error
+- [ ] 1.7 Return a real recorder from the noop eventing provider's `A2aRecorder()`, which is `nil` today while both A2A paths dereference it unconditionally
 
 ## 2. Executor-side dispatch
 
@@ -21,6 +22,7 @@
 - [ ] 3.2 `NoopMemory` substituted, neutralising all four parent-memory write paths and the read
 - [ ] 3.3 No broker stream created, so no chunk publishing or stream finalisation
 - [ ] 3.4 Excluded from HITL resumption, which is keyed off the parent Query's A2A task
+- [ ] 3.5 Unmarshal the inbound payload into the shared `QueryExtensionRef` rather than re-declaring it, retiring the receive-side `arkMetadata`/`queryRef`/`metadataTarget` types so the wire contract is defined once
 
 ## 4. Engine-backed selectors
 
