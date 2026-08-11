@@ -157,6 +157,44 @@ describe('ChatMessageList', () => {
         container.querySelector('.animate-bounce'),
       ).not.toBeInTheDocument();
     });
+
+    it('should show statusText next to the typing indicator when processing', () => {
+      renderChatMessageList({ isProcessing: true, statusText: 'Analyzing request...' });
+
+      expect(screen.getByText('Analyzing request...')).toBeInTheDocument();
+    });
+
+    it('should prefer statusText over the provisioning phase text', () => {
+      renderChatMessageList({
+        isProcessing: true,
+        statusText: 'Working on it...',
+        processingPhase: 'provisioning',
+      });
+
+      expect(screen.getByText('Working on it...')).toBeInTheDocument();
+      expect(
+        screen.queryByText('Preparing new workspace...'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('should fall back to provisioning phase text when statusText is absent', () => {
+      renderChatMessageList({
+        isProcessing: true,
+        processingPhase: 'provisioning',
+      });
+
+      expect(
+        screen.getByText('Preparing new workspace...'),
+      ).toBeInTheDocument();
+    });
+
+    it('should not show any status label when neither statusText nor provisioning phase is set', () => {
+      renderChatMessageList({ isProcessing: true });
+
+      expect(
+        screen.queryByText('Preparing new workspace...'),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('termination events', () => {

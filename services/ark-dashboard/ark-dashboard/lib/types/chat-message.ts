@@ -39,6 +39,14 @@ export interface ToolApprovalRequest {
   receivedAtMs?: number;
 }
 
+export interface A2AStatusEvent {
+  type: 'a2a_status';
+  taskId?: string;
+  state?: string;
+  message?: string;
+  agentName?: string;
+}
+
 export type ArkExtendedChunk =
   | (ChatCompletionChunk & {
       error?: { message?: string; code?: string };
@@ -48,7 +56,8 @@ export type ArkExtendedChunk =
         systemMessage?: string;
       };
     })
-  | ToolApprovalRequest;
+  | ToolApprovalRequest
+  | A2AStatusEvent;
 
 export interface GraphEdge {
   from: string;
