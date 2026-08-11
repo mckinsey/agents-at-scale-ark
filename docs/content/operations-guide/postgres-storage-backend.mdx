@@ -81,7 +81,7 @@ On first start, `ark-apiserver` creates:
 - Indexes on `(kind, namespace)`, `(kind, namespace, name)`, a GIN index on `labels`, and a unique partial index on active (non-deleted) rows.
 - A publication and a logical replication slot, both named `ark_cdc`. The slot is what powers `kubectl get -w` and controller informers.
 
-The slot is **persistent**: it survives apiserver restarts and is not removed by `helm uninstall`. See [Uninstall and cleanup](#uninstall-and-cleanup) below.
+The slot is **persistent**: it survives apiserver restarts. It is dropped automatically on `helm uninstall` — see [Uninstall and cleanup](#uninstall-and-cleanup) below.
 
 ## Installing PostgreSQL mode
 
@@ -251,7 +251,14 @@ Treat the `resources` table like any other application table:
 
 `helm uninstall` runs a `post-delete` hook Job that drops the `ark_cdc` replication slot and publication. Without this cleanup, an orphaned slot would pin WAL retention and can fill the disk. The Job connects with the same credentials as the apiserver, so the password secret must still exist when you uninstall.
 
-If the hook Job could not run (for example the database was unreachable, or you removed the release with `--no-hooks`), drop the slot manually:
+Confirm in the database that the slot is gone rather than trusting the Job's log line — both queries should return no rows:
+
+```sql
+SELECT slot_name, active, wal_status FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
+SELECT pubname FROM pg_publication WHERE pubname = 'ark_cdc';
+```
+
+If the hook Job could not run (for example the database was unreachable, you removed the release with `--no-hooks`, or the password secret was deleted first), drop the slot manually:
 
 ```sql
 SELECT pg_drop_replication_slot('ark_cdc');
