@@ -1421,12 +1421,41 @@ func TestSelectMember_EngineBackedSelectorTerminates(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "analyst", member.GetName())
 	})
+
+	t.Run("a member named terminate is selectable", func(t *testing.T) {
+		team, selector := newEngineSelectorTeam("terminate")
+		team.Members = append(team.Members, &mockTeamMember{name: "terminate"})
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		member, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst, terminate", "researcher, analyst, terminate", nil)
+		require.NoError(t, err, "naming a member must route to it, not silently end the run")
+		require.NotNil(t, member)
+		assert.Equal(t, "terminate", member.GetName())
+
+		system := selector.capturedHistory[0].OfSystem.Content.OfString.String()
+		assert.Contains(t, system, engineTerminateFallbackToken,
+			"the selector must be asked for a token that cannot be a member name")
+	})
+
+	t.Run("a team with a member named terminate can still terminate", func(t *testing.T) {
+		team, _ := newEngineSelectorTeam(engineTerminateFallbackToken + ": all done")
+		team.Members = append(team.Members, &mockTeamMember{name: "terminate"})
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		_, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst, terminate", "researcher, analyst, terminate", nil)
+		require.Error(t, err)
+
+		var withResponse *TerminateTeamWithResponse
+		require.True(t, errors.As(err, &withResponse))
+		assert.Equal(t, "all done", withResponse.Response)
+	})
 }
 
 func TestParseEngineTerminate(t *testing.T) {
 	tests := []struct {
 		name         string
 		reply        string
+		token        string
 		wantResponse string
 		wantTerm     bool
 	}{
@@ -1439,15 +1468,42 @@ func TestParseEngineTerminate(t *testing.T) {
 		{name: "a name merely starting with the token is not a termination", reply: "terminated-agent", wantTerm: false},
 		{name: "a plain name is not a termination", reply: "researcher", wantTerm: false},
 		{name: "empty reply", reply: "", wantTerm: false},
+		{
+			name:  "the member name is not the token once the fallback is in use",
+			reply: "terminate", token: engineTerminateFallbackToken, wantTerm: false,
+		},
+		{
+			name:  "the fallback token terminates",
+			reply: "TERMINATE_TEAM", token: engineTerminateFallbackToken, wantTerm: true,
+		},
+		{
+			name:  "the fallback token carries a payload",
+			reply: "terminate_team: all done", token: engineTerminateFallbackToken,
+			wantResponse: "all done", wantTerm: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			response, terminated := parseEngineTerminate(tt.reply)
+			token := tt.token
+			if token == "" {
+				token = engineTerminateToken
+			}
+			response, terminated := parseEngineTerminate(tt.reply, token)
 			assert.Equal(t, tt.wantTerm, terminated)
 			assert.Equal(t, tt.wantResponse, response)
 		})
 	}
+}
+
+// A member may legitimately be called "terminate". Reading its name as the
+// control token would silently end the run instead of routing to it, so the
+// prompt asks for a token that cannot be a resource name.
+func TestEngineTerminateTokenAvoidsMemberNameCollision(t *testing.T) {
+	assert.Equal(t, engineTerminateToken, engineTerminateTokenFor([]string{"researcher", "analyst"}))
+	assert.Equal(t, engineTerminateFallbackToken, engineTerminateTokenFor([]string{"researcher", "terminate"}))
+	assert.Equal(t, engineTerminateToken, engineTerminateTokenFor([]string{"terminate-agent", "terminated"}),
+		"only an exact name collides; the parser already rejects these as terminations")
 }
 
 func TestSelectMember_EngineSelectorTerminateCarriesResponse(t *testing.T) {
@@ -1550,7 +1606,7 @@ func TestTerminatePromptForHonoursCustomPrompt(t *testing.T) {
 
 	t.Run("engine-backed keeps the configured prompt and adds the mechanism", func(t *testing.T) {
 		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{TerminatePrompt: custom}}
-		got := team.terminatePromptFor(true)
+		got := team.terminatePromptFor(true, engineTerminateToken)
 		assert.Contains(t, got, custom, "the author's terminate condition must not be discarded")
 		assert.Contains(t, got, engineTerminateToken)
 		assert.NotContains(t, got, "terminate tool", "an engine has no tools to call")
@@ -1558,18 +1614,18 @@ func TestTerminatePromptForHonoursCustomPrompt(t *testing.T) {
 
 	t.Run("local keeps the configured prompt unchanged", func(t *testing.T) {
 		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{TerminatePrompt: custom}}
-		assert.Equal(t, custom, team.terminatePromptFor(false))
+		assert.Equal(t, custom, team.terminatePromptFor(false, engineTerminateToken))
 	})
 
 	t.Run("engine-backed default mentions no tool", func(t *testing.T) {
 		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{}}
-		got := team.terminatePromptFor(true)
+		got := team.terminatePromptFor(true, engineTerminateToken)
 		assert.NotContains(t, got, "terminate tool")
 		assert.Contains(t, got, engineTerminateToken)
 	})
 
 	t.Run("local default is unchanged", func(t *testing.T) {
 		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{}}
-		assert.Equal(t, defaultTerminatePrompt, team.terminatePromptFor(false))
+		assert.Equal(t, defaultTerminatePrompt, team.terminatePromptFor(false, engineTerminateToken))
 	})
 }

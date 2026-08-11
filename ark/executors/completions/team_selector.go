@@ -35,8 +35,33 @@ const defaultTerminatePrompt = `If the most recent user message has been given a
 // terminate tool.
 const engineTerminateToken = "TERMINATE"
 
+// engineTerminateFallbackToken replaces the default token when a candidate is
+// itself called "terminate". Kubernetes resource names are RFC 1123 —
+// lowercase alphanumerics, '-' and '.' — so a token containing '_' can never
+// collide with a member name.
+const engineTerminateFallbackToken = "TERMINATE_TEAM"
+
+// engineTerminateTokenFor picks the control token to ask the selector for. The
+// match is case-insensitive because "terminate" is the only legal casing for a
+// resource name, and the parser folds case when reading the reply back.
+//
+// Without this, a member named "terminate" is unreachable: the reply naming it
+// parses as the control token and the team stops instead of routing to it. The
+// ambiguity is in the prompt rather than the parser, so it is resolved here,
+// before the selector is ever asked.
+func engineTerminateTokenFor(candidateNames []string) string {
+	for _, name := range candidateNames {
+		if strings.EqualFold(name, engineTerminateToken) {
+			return engineTerminateFallbackToken
+		}
+	}
+	return engineTerminateToken
+}
+
 // parseEngineTerminate reports whether an engine-backed selector's reply asks to
-// terminate, and returns any closing response that followed the token.
+// terminate, and returns any closing response that followed the token. Pass the
+// token from engineTerminateTokenFor — the same one the selector was prompted
+// with.
 //
 // Supported forms are "TERMINATE", "TERMINATE: text" and "TERMINATE text".
 // The token must stand alone or be followed by whitespace or a colon. A hyphen is
@@ -44,13 +69,13 @@ const engineTerminateToken = "TERMINATE"
 // accepting it would read a member called "terminate-agent" as a termination
 // command carrying the response "agent". Anything else following the token is
 // preserved verbatim as part of the response.
-func parseEngineTerminate(reply string) (string, bool) {
+func parseEngineTerminate(reply, token string) (string, bool) {
 	trimmed := strings.TrimSpace(reply)
-	if len(trimmed) < len(engineTerminateToken) || !strings.EqualFold(trimmed[:len(engineTerminateToken)], engineTerminateToken) {
+	if len(trimmed) < len(token) || !strings.EqualFold(trimmed[:len(token)], token) {
 		return "", false
 	}
 
-	rest := trimmed[len(engineTerminateToken):]
+	rest := trimmed[len(token):]
 	if rest == "" {
 		return "", true
 	}
@@ -156,7 +181,7 @@ const defaultEngineTerminatePrompt = `If the most recent user message has been g
 // a local selector calls the terminate tool, an engine-backed one has no tools
 // and must say so in text. Previously the engine branch discarded the configured
 // prompt entirely and used a hard-coded sentence.
-func (t *Team) terminatePromptFor(engineBacked bool) string {
+func (t *Team) terminatePromptFor(engineBacked bool, terminateToken string) string {
 	prompt := defaultTerminatePrompt
 	if engineBacked {
 		prompt = defaultEngineTerminatePrompt
@@ -168,7 +193,7 @@ func (t *Team) terminatePromptFor(engineBacked bool) string {
 	if !engineBacked {
 		return prompt
 	}
-	return fmt.Sprintf("%s\n\nYou have no tools available. To stop, reply with %s instead of a name, optionally followed by a colon and a closing response to the user.", prompt, engineTerminateToken)
+	return fmt.Sprintf("%s\n\nYou have no tools available. To stop, reply with %s instead of a name, optionally followed by a colon and a closing response to the user.", prompt, terminateToken)
 }
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
@@ -236,11 +261,6 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		selectorMessage += "\n\nUse the select-next-speaker tool to express your next speaker selection."
 	}
 
-	terminateEnabled := t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool
-	if terminateEnabled {
-		selectorMessage = selectorMessage + "\n\n" + t.terminatePromptFor(engineBacked)
-	}
-
 	membersToSearch := t.Members
 	if candidateMembers != nil {
 		membersToSearch = candidateMembers
@@ -253,12 +273,22 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	if len(candidateNames) == 0 {
 		return nil, NewTerminateTeamWithReason("no candidates available for selection")
 	}
+
+	// Derived before the prompts are built, so the token the selector is asked
+	// for is the same one its reply is parsed with.
+	terminateToken := engineTerminateTokenFor(candidateNames)
+
+	terminateEnabled := t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool
+	if terminateEnabled {
+		selectorMessage = selectorMessage + "\n\n" + t.terminatePromptFor(engineBacked, terminateToken)
+	}
+
 	userPrompt := "Select the next speaker to respond using the select-next-speaker tool."
 	opts := ExecuteOptions{ToolChoice: ToolChoiceRequired}
 	if engineBacked {
 		userPrompt = "Reply with only the name of the next speaker to respond."
 		if terminateEnabled {
-			userPrompt = fmt.Sprintf("Reply with only the name of the next speaker to respond, or %s (optionally followed by a colon and a closing response) if the original question has been answered.", engineTerminateToken)
+			userPrompt = fmt.Sprintf("Reply with only the name of the next speaker to respond, or %s (optionally followed by a colon and a closing response) if the original question has been answered.", terminateToken)
 		}
 		opts = ExecuteOptions{}
 	} else {
@@ -276,7 +306,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	if engineBacked && result.Signal == nil {
-		return t.resolveEngineSelection(ctx, result, terminateEnabled, candidateNames, membersToSearch)
+		return t.resolveEngineSelection(ctx, result, terminateEnabled, terminateToken, candidateNames, membersToSearch)
 	}
 
 	if result.Signal == nil {
@@ -345,11 +375,11 @@ func matchSelectedName(response string, candidates []string) (string, error) {
 // a termination (optionally carrying a closing response), or the name of the next
 // speaker. An engine cannot call the select-next-speaker or terminate tools, so
 // both outcomes have to be expressed in, and read back out of, plain text.
-func (t *Team) resolveEngineSelection(ctx context.Context, result *ExecutionResult, terminateEnabled bool, candidateNames []string, membersToSearch []TeamMember) (TeamMember, error) {
+func (t *Team) resolveEngineSelection(ctx context.Context, result *ExecutionResult, terminateEnabled bool, terminateToken string, candidateNames []string, membersToSearch []TeamMember) (TeamMember, error) {
 	reply := ExtractLastAssistantMessageContent(result.Messages)
 
 	if terminateEnabled {
-		if response, terminated := parseEngineTerminate(reply); terminated {
+		if response, terminated := parseEngineTerminate(reply, terminateToken); terminated {
 			if response != "" {
 				// Carry the parsed response, not the raw reply. These messages are
 				// appended to the team transcript and become the query's final
