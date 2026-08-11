@@ -31,7 +31,7 @@ See [schema.json](./schema.json) for the formal JSON Schema definition.
 
 The completions engine sends it when dispatching one member of a team, because the Query targets the team rather than the member. The controller never sends it for a top-level dispatch, where `spec.target` is authoritative.
 
-An engine that does not understand `target` ignores it and reads `spec.target`, so a top-level dispatch is unaffected. Resolving a team member requires ark-sdk >= 0.1.68.
+An engine that does not understand `target` ignores it and reads `spec.target`, so a top-level dispatch is unaffected. Resolving a team member requires an ark-sdk release that supports the field.
 
 A `target` invocation is a sub-request: the calling engine owns the Query's status, memory and broker stream, so the receiving engine must not write to any of them.
 

@@ -46,6 +46,20 @@ class QueryRef:
     target: Optional[QueryTargetRef] = None
 
 
+def _sdk_version() -> str:
+    """Installed ark-sdk version, for error messages.
+
+    Read from distribution metadata rather than ark_sdk.__version__, which is the
+    OpenAPI generator's placeholder and does not track the released version.
+    """
+    try:
+        from importlib.metadata import version
+
+        return version("ark-sdk")
+    except Exception:
+        return "unknown"
+
+
 def _parse_go_duration_to_seconds(duration: str) -> Optional[int]:
     if not duration:
         return None
@@ -145,7 +159,8 @@ async def _resolve_from_query(
             raise ValueError(
                 f"Query extension resolution only supports agent targets, got '{target_type}'. "
                 "Executing a member of a team requires the caller to send a query extension "
-                "target, which requires ark >= 0.1.68."
+                "'target', which this ark-sdk supports but the caller did not send; upgrading "
+                f"Ark provides it. This engine runs ark-sdk {_sdk_version()}."
             )
         raise ValueError(
             f"Query extension target override only supports agent targets, got '{target_type}'"

@@ -192,7 +192,10 @@ class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError) as ctx:
             await resolve_query(ref, "hello")
         self.assertIn("agent targets", str(ctx.exception))
-        self.assertIn("ark >= 0.1.68", str(ctx.exception))
+        # Deliberately not asserting a version number: release tooling picks it,
+        # and a stale literal here would outlive the release it named.
+        self.assertIn("requires the caller to send a query extension", str(ctx.exception))
+        self.assertIn("This engine runs ark-sdk", str(ctx.exception))
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
