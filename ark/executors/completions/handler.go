@@ -208,6 +208,15 @@ func (h *Handler) ProcessMessage(
 		// Check if this is an approval required error
 		var approvalErr *ApprovalRequiredError
 		if errors.As(err, &approvalErr) {
+			// A sub-target cannot pause for approval: the approval cycle is keyed to
+			// the parent Query, which the calling engine owns, and the caller has no
+			// way to resume us. Fail here rather than encoding the request as a task
+			// carrying the parent's conversation — this is the only place that knows
+			// which agent and tool are involved.
+			if state.isSubTarget {
+				return nil, fmt.Errorf("agent %s requires approval for %s, which is not supported for agents executed over A2A",
+					state.target.Name, approvalToolNames(approvalErr))
+			}
 			h.saveInputMessagesToMemory(ctx, state)
 			return h.handleApprovalRequired(ctx, state, approvalErr), nil
 		}
