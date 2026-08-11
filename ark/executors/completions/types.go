@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -40,10 +41,24 @@ type TeamMember interface {
 }
 
 type ToolResult struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Content string `json:"content,omitempty"`
-	Error   string `json:"error,omitempty"`
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	Content string            `json:"content,omitempty"`
+	Images  []ToolResultImage `json:"images,omitempty"`
+	Error   string            `json:"error,omitempty"`
+}
+
+type ToolResultImage struct {
+	MediaType string `json:"mediaType"`
+	Data      []byte `json:"data"`
+}
+
+func (i ToolResultImage) DataURL() string {
+	return "data:" + i.MediaType + ";base64," + base64.StdEncoding.EncodeToString(i.Data)
+}
+
+func (i ToolResultImage) Base64() string {
+	return base64.StdEncoding.EncodeToString(i.Data)
 }
 
 type ToolExecutor interface {
