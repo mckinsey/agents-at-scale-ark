@@ -1733,7 +1733,7 @@ func TestSubTargetSkipsResumption(t *testing.T) {
 // names in the error.
 func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
 	approvalErr := &ApprovalRequiredError{
-		ToolCalls: []ToolCall{{Function: ToolCallFunction{Name: "delete-database"}}},
+		ToolCalls: []ToolCall{{Function: openai.ChatCompletionMessageToolCallFunction{Name: "delete-database"}}},
 	}
 
 	assert.Equal(t, "tool delete-database", approvalToolNames(approvalErr))
