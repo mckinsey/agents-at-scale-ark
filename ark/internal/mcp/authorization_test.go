@@ -50,9 +50,6 @@ func newAuthTestSecret(data map[string][]byte) *corev1.Secret {
 	}
 }
 
-// A nil spec.authorization must short-circuit before the reader is touched.
-// The MCPServer reconciler is constructed without an APIReader in some tests,
-// so dereferencing it on this path would panic.
 func TestResolveAuthorizationMaterialNilSpecNeverReadsSecret(t *testing.T) {
 	material, warnings, err := ResolveAuthorizationMaterial(context.Background(), nil, newAuthTestMCPServer(nil))
 
@@ -100,9 +97,6 @@ func TestResolveAuthorizationMaterialCustomKeys(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
-// A missing Secret is the expected pre-authorization state, not an error - the
-// caller falls through to the unauthenticated path and lands in Required via
-// the 401 flow.
 func TestResolveAuthorizationMaterialSecretNotFound(t *testing.T) {
 	server := newAuthTestMCPServer(&arkv1alpha1.TokenSecretReference{Name: testAuthSecretName})
 

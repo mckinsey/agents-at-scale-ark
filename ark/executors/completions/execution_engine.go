@@ -15,11 +15,6 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 )
 
-// NamedExecutionEngine dispatches a single agent to an external ExecutionEngine
-// over A2A, carrying the Ark query extension so the engine can resolve the agent
-// from the cluster itself.
-//
-// Query extension spec: ark/api/extensions/query/v1/
 type NamedExecutionEngine struct {
 	client           client.Client
 	eventingRecorder eventing.A2aRecorder
@@ -32,9 +27,6 @@ func NewNamedExecutionEngine(k8sClient client.Client, eventingRecorder eventing.
 	}
 }
 
-// dispatchesToEngine reports whether an agent will be dispatched over A2A rather
-// than executed by the local agentic loop. MakeAgent and executeAgent both use it
-// so that model loading and execution routing can never disagree.
 func dispatchesToEngine(ctx context.Context, ref *arkv1alpha1.ExecutionEngineRef, agentName string) bool {
 	if ref == nil {
 		return false
@@ -42,8 +34,6 @@ func dispatchesToEngine(ctx context.Context, ref *arkv1alpha1.ExecutionEngineRef
 	if !arka2a.IsNamedEngine(ref) {
 		return true
 	}
-	// This engine was handed this agent explicitly; running it locally is what
-	// terminates the chain.
 	return GetSubTargetAgent(ctx) != agentName
 }
 
@@ -80,8 +70,6 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 
 	modelID := fmt.Sprintf("agent/%s", req.AgentName)
 
-	// No A2AServer here: a nil server inherits the caller's deadline when one is
-	// set (the query timeout applied by the controller), else the default.
 	ctx, cancel, err := withA2AExecutionTimeout(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -116,8 +104,6 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 		return nil, err
 	}
 
-	// streamBlockingA2AResponse does not guard against a nil stream, and a
-	// sub-target invocation deliberately has none.
 	if req.EventStream != nil {
 		streamBlockingA2AResponse(ctx, req.EventStream, a2aResponse, modelID)
 	}
@@ -130,12 +116,6 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 	}, nil
 }
 
-// renderEngineInput folds the accumulated team transcript into the text sent to
-// an execution engine. Engines receive only a QueryRef over the wire, and a
-// team's intra-run messages are not written to memory until the query completes,
-// so without this a sequential team's members would never see each other's
-// output. Returns the bare user text when there is no history, keeping
-// single-agent dispatch unchanged.
 func renderEngineInput(userInput Message, history []Message) string {
 	content := ""
 	if userInput.OfUser != nil {
@@ -150,16 +130,6 @@ func renderEngineInput(userInput Message, history []Message) string {
 	return fmt.Sprintf("%s\n\n%s", transcript, content)
 }
 
-// renderEngineHistory renders history for an execution engine. It matches
-// buildHistory's format for user and assistant messages, and additionally
-// renders system messages, which carry instructions the engine must see — a
-// team selector passes its entire prompt (roles, participants, transcript) as a
-// system message, and dropping it leaves the engine nothing to select from.
-//
-// buildHistory itself is deliberately left alone: it also renders the local
-// selector's {{.History}}, where team transcripts legitimately accumulate system
-// messages (selection warnings, the max-turns notice) that have never been shown
-// to a selector and should not start appearing now.
 func renderEngineHistory(messages []Message) string {
 	var rendered []string
 	for _, msg := range messages {

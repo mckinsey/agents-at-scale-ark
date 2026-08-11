@@ -12,13 +12,7 @@ const (
 	queryNameKey    contextKey = "queryName"
 	a2aContextIDKey contextKey = "a2aContextId"
 	// QueryContextKey is used to pass the Query resource through context to agents
-	QueryContextKey contextKey = "queryContext"
-	// subTargetAgentKey names the agent an explicit query extension target
-	// dispatched to this engine. That agent must run locally rather than being
-	// dispatched onwards, otherwise an agent whose execution engine resolves back
-	// to a completions engine would delegate to itself forever. It is scoped to
-	// the named agent so other engine-backed agents reached during the same
-	// request (for example via an agent tool) still dispatch normally.
+	QueryContextKey   contextKey = "queryContext"
 	subTargetAgentKey contextKey = "subTargetAgent"
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,

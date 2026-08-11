@@ -247,8 +247,6 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	return httpClient.Do(req)
 }
 
-// ExtractResponseFromMessageResult converts an A2A send result into an
-// A2AResponse, recording an A2ATask resource when the peer returned a Task.
 func ExtractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
 	log := logf.FromContext(ctx)
 	if result == nil {
@@ -311,11 +309,7 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 		return "", fmt.Errorf("%s", errorMsg)
 
 	case TaskStateInputRequired:
-		// Applies to both A2A transports: an approval raised by a peer cannot be
-		// forwarded to the orchestrator that owns the Query, so the run cannot
-		// continue. Named explicitly because the generic message below reads as a
-		// protocol error rather than an unsupported capability.
-		return "", fmt.Errorf("task %s is in state '%s': human-in-the-loop approval is not supported for agents executed over A2A", task.ID, TaskStateInputRequired)
+		return "", fmt.Errorf("task %s is in state '%s': human-in-the-loop approval is not supported for an agent invoked over A2A by the executor, which cannot forward the approval request", task.ID, TaskStateInputRequired)
 
 	default:
 		return "", fmt.Errorf("task in state '%s' (expected %s or %s)", task.Status.State, TaskStateCompleted, TaskStateFailed)

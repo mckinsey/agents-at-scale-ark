@@ -548,7 +548,6 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 		conversationId = query.Status.ConversationId
 	}
 
-	// No Target: for a top-level dispatch the Query's own target is authoritative.
 	message := arka2a.NewQueryExtensionMessage(
 		extractUserInput(ctx, query, r.Client),
 		conversationId,

@@ -13,16 +13,10 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 )
 
-// QueryExtensionRef is the request-side payload carried at
-// QueryExtensionMetadataKey. Schema: ark/api/extensions/query/v1/schema.json
 type QueryExtensionRef struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	// Target optionally names the resource inside the Query that the engine
-	// should execute. It is set when dispatching a single team member, whose
-	// Query targets the team rather than the member. When absent, engines fall
-	// back to the Query's own target.
-	Target *QueryExtensionTarget `json:"target,omitempty"`
+	Name      string                `json:"name"`
+	Namespace string                `json:"namespace"`
+	Target    *QueryExtensionTarget `json:"target,omitempty"`
 }
 
 type QueryExtensionTarget struct {
@@ -30,8 +24,6 @@ type QueryExtensionTarget struct {
 	Name string `json:"name"`
 }
 
-// NewQueryExtensionMessage builds the A2A user message carrying the Ark query
-// extension. contextID becomes the A2A context id when non-empty.
 func NewQueryExtensionMessage(text, contextID string, ref QueryExtensionRef) protocol.Message {
 	parts := []protocol.Part{protocol.NewTextPart(text)}
 
@@ -48,7 +40,6 @@ func NewQueryExtensionMessage(text, contextID string, ref QueryExtensionRef) pro
 	return message
 }
 
-// SendQueryExtensionMessage performs a blocking message/send of msg to address.
 func SendQueryExtensionMessage(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, agentName string, msg protocol.Message, a2aRecorder eventing.A2aRecorder) (*protocol.MessageResult, error) {
 	a2aClient, err := CreateA2AClient(ctx, k8sClient, address, headers, namespace, agentName, a2aRecorder)
 	if err != nil {

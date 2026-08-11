@@ -66,7 +66,6 @@ func (m *mockSelectorAgent) Execute(_ context.Context, _ Message, history []Mess
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
 	}
-	// An engine-backed selector answers in prose: no tools, so no signal.
 	if m.returnText != "" {
 		return &ExecutionResult{Messages: []Message{NewAssistantMessage(m.returnText)}}, nil
 	}

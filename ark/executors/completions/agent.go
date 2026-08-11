@@ -345,7 +345,6 @@ func (a *Agent) GetDescription() string {
 
 // ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
 func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
-	// Reserved 'a2a' execution engine (internal) has no ExecutionEngine resource
 	if !arka2a.IsNamedEngine(executionEngine) {
 		return nil
 	}
@@ -448,17 +447,10 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 
 	var resolvedModel *Model
 
-	// Agents dispatched over A2A never run the local agentic loop, so they need no
-	// model: A2A agents delegate to an A2AServer, named-engine agents to an
-	// ExecutionEngine that resolves the model itself.
 	if !dispatchesToEngine(ctx, crd.Spec.ExecutionEngine, crd.Name) {
 		var err error
 		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {
-			// An agent pinned local by the recursion guard was configured to run on
-			// an engine that resolves back to this one. It has to run here, which
-			// needs a model — say so, rather than reporting a bare lookup failure
-			// for a model the author never expected to be used.
 			if arka2a.IsNamedEngine(crd.Spec.ExecutionEngine) {
 				return nil, fmt.Errorf("agent %s/%s has execution engine %q, which resolves back to this completions engine, so it must run locally and needs a usable modelRef: %w",
 					crd.Namespace, crd.Name, crd.Spec.ExecutionEngine.Name, err)

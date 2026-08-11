@@ -42,8 +42,6 @@ func engineTestClient(t *testing.T, objects ...client.Object) client.Client {
 	return fake.NewClientBuilder().WithScheme(engineTestScheme(t)).WithObjects(objects...).Build()
 }
 
-// engineStub serves A2A message/send, capturing the request body so tests can
-// assert on the wire format, and replying with a fixed agent message.
 func engineStub(t *testing.T, reply string, captured *map[string]any) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -279,9 +277,6 @@ func TestRenderEngineInput(t *testing.T) {
 	}
 }
 
-// executeAgent's branch is the wiring between dispatchesToEngine and the two
-// transports. The predicate and each transport are tested separately; this pins
-// that the branch actually reaches the right one.
 func TestExecuteAgentRouting(t *testing.T) {
 	t.Run("named engine reaches the execution engine", func(t *testing.T) {
 		var captured map[string]any
@@ -321,8 +316,6 @@ func TestExecuteAgentRouting(t *testing.T) {
 
 		_, err := agent.executeAgent(engineQueryContext(t), NewUserMessage("hi"), nil, nil, &mockEventStream{}, ExecuteOptions{})
 		require.Error(t, err)
-		// The A2AServer path is annotation-driven; reaching this error proves the
-		// branch was not diverted to the named-engine path.
 		assert.Contains(t, err.Error(), "annotation")
 	})
 
@@ -338,18 +331,11 @@ func TestExecuteAgentRouting(t *testing.T) {
 		ctx := WithSubTargetAgent(engineQueryContext(t), "member-a")
 		_, err := agent.executeAgent(ctx, NewUserMessage("hi"), nil, nil, &mockEventStream{}, ExecuteOptions{})
 
-		// No ExecutionEngine resource exists, so a dispatch would fail resolving
-		// it. Reaching the local loop's nil-model guard instead is what proves
-		// the guard stopped the agent from delegating to itself.
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "has no model configured")
 	})
 }
 
-// A selector passes its entire prompt — roles, participants, transcript — as a
-// system message in history. The interface-level mocks cannot catch it being
-// dropped, because they never look at the messages, so this asserts on the bytes
-// that actually reach the engine.
 func TestRenderEngineInputKeepsSystemMessages(t *testing.T) {
 	rendered := renderEngineInput(
 		NewUserMessage("Reply with only the name of the next speaker."),
@@ -379,7 +365,6 @@ func TestNamedExecutionEngineSendsSelectorPrompt(t *testing.T) {
 		eventing:        eventnoop.NewProvider(),
 	}
 
-	// Exactly how Team.selectMember calls its selector.
 	_, err := agent.executeAgent(
 		engineQueryContext(t),
 		NewUserMessage("Reply with only the name of the next speaker to respond."),
@@ -393,10 +378,6 @@ func TestNamedExecutionEngineSendsSelectorPrompt(t *testing.T) {
 		"an engine selector that never sees the candidate names cannot select one")
 }
 
-// An agent pinned local by the recursion guard has to run here, which needs a
-// model. Its author configured it for an engine and may have left modelRef
-// pointing at nothing, so the error must explain the situation rather than
-// report a bare model lookup failure.
 func TestMakeAgentSelfDispatchingEngineExplainsModelRequirement(t *testing.T) {
 	agentCRD := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{Name: "member-a", Namespace: "default"},

@@ -10,8 +10,6 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-// Both A2A transports — the A2AServer path and the named-engine path — funnel
-// through here, so the limitation and its wording must be stated once.
 func TestExtractTextFromTaskInputRequired(t *testing.T) {
 	task := &protocol.Task{
 		ID:     "task-1",

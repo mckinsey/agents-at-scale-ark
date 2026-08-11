@@ -256,8 +256,6 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 	})
 }
 
-// validateNoMixedTeam had no test before the IsNamedEngine refactor. These pin
-// its behaviour so the shared helper cannot silently change classification.
 func TestValidateNoMixedTeam(t *testing.T) {
 	engineAgent := func(engine string) *arkv1alpha1.Agent {
 		agent := &arkv1alpha1.Agent{}

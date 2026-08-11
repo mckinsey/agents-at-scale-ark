@@ -67,10 +67,7 @@ type executionState struct {
 	// memoryDegraded is true when a Memory backend was reachable but reading the
 	// conversation history from it failed, so the query ran without prior context.
 	memoryDegraded bool
-	// isSubTarget is true when an execution engine dispatched a single resource of
-	// this Query to us. The calling engine owns the Query's input, memory and
-	// broker stream for the whole run, so we must not write to any of them.
-	isSubTarget bool
+	isSubTarget    bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -144,11 +141,6 @@ func (h *Handler) ProcessMessage(
 
 	log := logf.FromContext(ctx)
 
-	// Check if this is a resumption from HITL approval or rejection.
-	// Never for a sub-target: resumption is keyed off the parent Query's A2A task,
-	// which belongs to the orchestrator's approval cycle. A member invocation that
-	// happened to arrive while such a task exists would replay the approval instead
-	// of running the member it was asked to run.
 	//nolint:nestif // TODO: Refactor to reduce nesting complexity
 	if isResumption, a2aTask := h.checkResumptionForState(ctx, state, query); isResumption {
 		state.isResumption = true
@@ -208,14 +200,8 @@ func (h *Handler) ProcessMessage(
 		// Check if this is an approval required error
 		var approvalErr *ApprovalRequiredError
 		if errors.As(err, &approvalErr) {
-			// A sub-target cannot pause for approval: the approval cycle is keyed to
-			// the parent Query, which the calling engine owns, and the caller has no
-			// way to resume us. Fail here rather than encoding the request as a task
-			// carrying the parent's conversation — this is the only place that knows
-			// which agent and tool are involved.
 			if state.isSubTarget {
-				return nil, fmt.Errorf("agent %s requires approval for %s, which is not supported for agents executed over A2A",
-					state.target.Name, approvalToolNames(approvalErr))
+				return nil, subTargetApprovalError(state.target.Name, approvalErr)
 			}
 			h.saveInputMessagesToMemory(ctx, state)
 			return h.handleApprovalRequired(ctx, state, approvalErr), nil
@@ -248,9 +234,6 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 		return nil, nil, fmt.Errorf("failed to get query %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	// An explicit target from the caller wins over the Query's own target: the
-	// caller is an engine dispatching one member of a team, whose Query targets
-	// the team rather than the member.
 	var target *arkv1alpha1.QueryTarget
 	if ref.Target != nil {
 		target = &arkv1alpha1.QueryTarget{
@@ -293,9 +276,6 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		ctx = WithA2AContextID(ctx, a2aContextID)
 	}
 
-	// A sub-target runs against the text the calling engine sent, not the Query's
-	// own input: that text carries the accumulated team transcript, and the
-	// Query's input is the question posed to the team as a whole.
 	var inputMessages []Message
 	if isSubTarget {
 		inputMessages = []Message{NewUserMessage(inboundText)}
@@ -312,11 +292,6 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	if conversationId == "" {
 		conversationId = query.Spec.ConversationId
 	}
-	// A sub-target must not touch the parent Query's memory at all: the calling
-	// engine persists the whole run when it finishes, and there are several write
-	// paths here (final messages, error messages, pre-approval saves). Swapping in
-	// NoopMemory neutralises every one of them, and the read too — the transcript
-	// already arrives in the inbound text.
 	var memory MemoryInterface
 	if isSubTarget {
 		memory = NewNoopMemory()
@@ -345,9 +320,6 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		memoryDegraded = true
 	}
 
-	// No broker stream for a sub-target. Chunks are keyed by query name, so a
-	// member publishing here would interleave with — and complete — the stream the
-	// calling engine owns for the same Query.
 	var eventStream EventStreamInterface
 	if !isSubTarget {
 		var err error
@@ -671,9 +643,6 @@ func firstItemName[T any, PT interface {
 }
 
 // Query extension spec: ark/api/extensions/query/v1/
-// extractQueryRef reads the Ark query extension payload from an inbound A2A
-// message. It unmarshals into the same type the sender builds, so the two sides
-// of the wire contract cannot drift.
 func extractQueryRef(message protocol.Message) (*arka2a.QueryExtensionRef, error) {
 	if message.Metadata == nil {
 		return nil, fmt.Errorf("message has no metadata")
@@ -701,9 +670,6 @@ func extractQueryRef(message protocol.Message) (*arka2a.QueryExtensionRef, error
 	return &ref, nil
 }
 
-// subTargetAgent returns the agent named by an explicit query extension target,
-// or "" when the caller sent none. Such an agent runs locally instead of being
-// dispatched onwards; see dispatchesToEngine.
 func subTargetAgent(message protocol.Message) string {
 	ref, err := extractQueryRef(message)
 	if err != nil || ref.Target == nil || ref.Target.Type != ToolTypeAgent {
@@ -813,7 +779,6 @@ func (h *Handler) handleApprovalRequired(
 }
 
 // checkResumption checks if this query execution is a resumption from HITL approval or rejection
-// checkResumptionForState is checkResumption with the sub-target exclusion applied.
 func (h *Handler) checkResumptionForState(ctx context.Context, state *executionState, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
 	if state.isSubTarget {
 		return false, nil
@@ -1061,9 +1026,6 @@ func (h *Handler) saveErrorMessagesToMemory(ctx context.Context, state *executio
 
 // saveFinalMessagesToMemory saves final messages to memory after successful execution
 func (h *Handler) saveFinalMessagesToMemory(ctx context.Context, state *executionState, responseMessages []Message) {
-	// The calling engine writes the whole run to memory when it completes; a
-	// sub-target writing here would duplicate its own turn into the parent's
-	// conversation.
 	if state.memory == nil || len(responseMessages) == 0 || state.isSubTarget {
 		return
 	}

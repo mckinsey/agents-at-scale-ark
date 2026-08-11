@@ -184,9 +184,6 @@ func TestExecuteSequential_ContextCancelled(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-// A sequential team accumulates its transcript and hands it to each member. An
-// engine-backed member only ever sees text, so losing this would make every
-// member answer the original question in isolation.
 func TestExecuteSequential_ForwardsTranscriptToMembers(t *testing.T) {
 	var secondMemberHistory []Message
 
@@ -237,8 +234,6 @@ func TestMakeTeam_EngineMemberNeedsNoModel(t *testing.T) {
 	k8sClient := engineTestClient(t, agent, engine)
 	ctx := engineQueryContext(t)
 
-	// No Model exists in the cluster, and the member declares no modelRef: an
-	// engine-backed member never runs the local loop, so it must not need one.
 	team, err := MakeTeam(ctx, k8sClient, teamCRD, telemetrynoop.NewProvider(), eventingnoop.NewProvider())
 	require.NoError(t, err)
 	require.Len(t, team.Members, 1)

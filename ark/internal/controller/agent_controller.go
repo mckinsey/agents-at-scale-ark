@@ -104,10 +104,6 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	}
 
 	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
-	// An agent that delegates to an execution engine is judged on the engine, not
-	// on a model it never uses: the mutating webhook defaults modelRef to
-	// 'default', so checking it here would report such an agent unavailable
-	// whenever no Model named 'default' happens to exist.
 	switch {
 	case !agentRequiresModel(agent):
 	case agent.Spec.ModelRef != nil:

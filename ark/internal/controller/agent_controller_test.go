@@ -276,9 +276,6 @@ var _ = Describe("Agent Controller", func() {
 			}()
 
 			By("creating an engine-backed agent whose modelRef points at a Model that does not exist")
-			// This mirrors what the mutating webhook produces: it defaults
-			// modelRef to 'default' for any agent without one, including agents
-			// that delegate to an execution engine and never load a model.
 			engineAgent := &arkv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      engineAgentName,

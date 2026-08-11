@@ -1496,9 +1496,6 @@ func TestParseEngineTerminate(t *testing.T) {
 	}
 }
 
-// A member may legitimately be called "terminate". Reading its name as the
-// control token would silently end the run instead of routing to it, so the
-// prompt asks for a token that cannot be a resource name.
 func TestEngineTerminateTokenAvoidsMemberNameCollision(t *testing.T) {
 	assert.Equal(t, engineTerminateToken, engineTerminateTokenFor([]string{"researcher", "analyst"}))
 	assert.Equal(t, engineTerminateFallbackToken, engineTerminateTokenFor([]string{"researcher", "terminate"}))
@@ -1522,9 +1519,6 @@ func TestSelectMember_EngineSelectorTerminateCarriesResponse(t *testing.T) {
 	assert.Equal(t, "everything the user asked has been covered", withResponse.Response)
 }
 
-// The terminate token is control text, not content. It must not reach the team
-// transcript, which becomes the query's final status.response.content — the
-// stream already receives the parsed response, and the two must agree.
 func TestEngineTerminateResponseReachesTranscriptWithoutToken(t *testing.T) {
 	tmpl, err := template.New("test").Parse("test template")
 	require.NoError(t, err)
@@ -1546,8 +1540,6 @@ func TestEngineTerminateResponseReachesTranscriptWithoutToken(t *testing.T) {
 	assert.NotContains(t, final, engineTerminateToken, "the control token must never surface to the user")
 }
 
-// The reported case: a member legitimately called "terminate-agent" must be
-// selectable, not swallowed as a termination command.
 func TestEngineSelectorPicksMemberNamedLikeTheTerminateToken(t *testing.T) {
 	tmpl, err := template.New("test").Parse("test template")
 	require.NoError(t, err)
@@ -1594,7 +1586,6 @@ func TestContainsWholeName(t *testing.T) {
 }
 
 func TestMatchSelectedNameRejectsPartialWords(t *testing.T) {
-	// "ana" is a real member; "analysis" merely contains those letters.
 	_, err := matchSelectedName("let us run the analysis first", []string{"ana", "researcher"})
 	require.Error(t, err)
 	var invalidAgentErr *InvalidAgentError

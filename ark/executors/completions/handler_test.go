@@ -1591,9 +1591,6 @@ func TestHandleApprovalRequired_OnTimeoutProceed(t *testing.T) {
 	assert.Equal(t, "proceed", task.Metadata["onTimeout"])
 }
 
-// A sub-target invocation is one member of the caller's orchestration. The
-// calling engine owns the Query's input, memory and broker stream for the whole
-// run, so this run must read the inbound text and write none of them.
 func TestSetupExecutionSubTarget(t *testing.T) {
 	query := &arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
@@ -1654,9 +1651,6 @@ func TestSubTargetDoesNotWriteParentMemory(t *testing.T) {
 	assert.NotEmpty(t, memory.added, "a top-level run must still persist its messages")
 }
 
-// The guarantee is structural: a sub-target is never handed the parent's broker
-// stream or memory in the first place, so every publish and write path below is
-// a no-op without needing a guard of its own.
 func TestSetupExecutionSubTargetIsolation(t *testing.T) {
 	query := &arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
@@ -1682,7 +1676,6 @@ func TestSetupExecutionSubTargetIsolation(t *testing.T) {
 
 	assert.False(t, state.memoryUnavailable, "the Noop memory is deliberate, not a degraded backend")
 
-	// A nil stream makes finalize a no-op with no extra guard needed.
 	state.finalizeStream(context.Background(), []Message{NewAssistantMessage("out")}, arkv1alpha1.TokenUsage{})
 }
 
@@ -1698,9 +1691,6 @@ func (m *recordingMemory) GetMessages(_ context.Context) ([]Message, error) { re
 func (m *recordingMemory) DeleteQuery(_ context.Context, _ string) error    { return nil }
 func (m *recordingMemory) Close() error                                     { return nil }
 
-// Resumption is keyed off the parent Query's A2A task, which belongs to the
-// orchestrator's approval cycle. A member invocation arriving while such a task
-// exists must run the member, not replay the approval.
 func TestSubTargetSkipsResumption(t *testing.T) {
 	query := &arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
@@ -1727,10 +1717,6 @@ func TestSubTargetSkipsResumption(t *testing.T) {
 	})
 }
 
-// A sub-target cannot pause for approval: the approval cycle is keyed to the
-// parent Query, which the calling engine owns and which has no way to resume us.
-// Failing here rather than at the caller is what preserves the agent and tool
-// names in the error.
 func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
 	approvalErr := &ApprovalRequiredError{
 		ToolCalls: []ToolCall{{Function: openai.ChatCompletionMessageToolCallFunction{Name: "delete-database"}}},
@@ -1739,11 +1725,10 @@ func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
 	assert.Equal(t, "tool delete-database", approvalToolNames(approvalErr))
 
 	t.Run("names the agent and the tool", func(t *testing.T) {
-		err := fmt.Errorf("agent %s requires approval for %s, which is not supported for agents executed over A2A",
-			"member-b", approvalToolNames(approvalErr))
+		err := subTargetApprovalError("member-b", approvalErr)
 		assert.Contains(t, err.Error(), "member-b")
 		assert.Contains(t, err.Error(), "delete-database")
-		assert.Contains(t, err.Error(), "not supported for agents executed over A2A")
+		assert.Contains(t, err.Error(), "invoked as a sub-target")
 	})
 
 	t.Run("falls back to a count when no tool name is present", func(t *testing.T) {

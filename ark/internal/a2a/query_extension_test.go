@@ -11,9 +11,6 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-// The controller sent this literal before the helper existed. A top-level
-// dispatch must keep producing exactly these bytes, or every engine pinned to an
-// older ark-sdk breaks.
 func legacyMetadata(name, namespace string) map[string]any {
 	return map[string]any{
 		QueryExtensionMetadataKey: map[string]string{
